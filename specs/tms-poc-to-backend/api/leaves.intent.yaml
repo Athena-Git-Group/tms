@@ -1,0 +1,12 @@
+api: leaves
+schema_version: "3.3"
+entity: leaves
+title: 請假 API
+description: 登記請假即觸發連鎖：該員 accepted 單自動退池、doing 單標中斷並回傳受影響清單給主管收尾。
+
+exposes:
+  standard: [list, create]
+
+source_evidence:
+  - "specify/spec.md#故事 8（請假與中斷連鎖）"
+  - "db_table/erm.dbml#Table:leaves"

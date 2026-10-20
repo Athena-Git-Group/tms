@@ -1,0 +1,396 @@
+/*
+ * TMS POC — 共用設計 token ＋ 元件樣式
+ *
+ * 字體角色：
+ *   --font-display  Fraunces  —— 只用在數字／房號／品牌字（拉丁字元），帶一點
+ *                               飯店銅牌刻字的個性，中文一律不走這套。
+ *   --font-body     Noto Sans TC —— 介面本文與所有中文，涵蓋 CJK，不另造字重規則。
+ *   --font-mono     IBM Plex Mono —— 事件日誌、enum 代號、時間戳等「資料感」文字。
+ *
+ * 顏色只在這份檔案的 token 層定義；元件一律吃 var(--color-*)，不得在元件規則或
+ * @media / [data-theme] 區塊內直接寫字面色碼（亮暗主題才不會各吃一半規則而壞掉）。
+ */
+
+:root {
+  --color-surface: #F7F9FA;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-sunken: #EDF1F4;
+  --color-ink: #1B2A33;
+  --color-ink-muted: #56687A;
+  --color-ink-faint: #8A96A0;
+  --color-line: #C6D0D8;
+  --color-line-strong: #AAB6BF;
+
+  --color-accent: #15705A;
+  --color-accent-strong: #0F5445;
+  --color-accent-soft: #DFF2EC;
+  --color-accent-ink: #FFFFFF;
+
+  --color-state-triage: #56687A;      --color-state-triage-soft: #E0E6EA;
+  --color-state-pool: #8A6210;        --color-state-pool-soft: #F7EDD3;
+  --color-state-accepted: #33608A;    --color-state-accepted-soft: #E4EDF5;
+  --color-state-doing: #6D4AA6;       --color-state-doing-soft: #EEE8F7;
+  --color-state-done: #15705A;        --color-state-done-soft: #DFF2EC;
+  --color-state-inspected: #0F5445;   --color-state-inspected-soft: #CFE8E1;
+  --color-state-deferred: #8A7B6C;    --color-state-deferred-soft: #EFEAE3;
+  --color-state-interrupted: #B33D2B; --color-state-interrupted-soft: #FBE9E5;
+  --color-state-cancelled: #78848D;   --color-state-cancelled-soft: #EDF1F4;
+
+  --color-success: #15705A;
+  --color-warning: #8A6210;
+  --color-error: #B33D2B;
+  --color-info: #33608A;
+
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-card: 0 1px 2px rgba(27, 42, 51, 0.06), 0 6px 16px rgba(27, 42, 51, 0.06);
+  --shadow-raised: 0 4px 10px rgba(27, 42, 51, 0.10), 0 16px 32px rgba(27, 42, 51, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-surface: #0F171C;
+    --color-surface-raised: #17222A;
+    --color-surface-sunken: #0B1216;
+    --color-ink: #E8EEF0;
+    --color-ink-muted: #9FB0BA;
+    --color-ink-faint: #71838D;
+    --color-line: #2B3940;
+    --color-line-strong: #3C4C55;
+
+    --color-accent: #2FBE9B;
+    --color-accent-strong: #52D6B5;
+    --color-accent-soft: #163029;
+    --color-accent-ink: #06221B;
+
+    --color-state-triage: #9FB0BA;      --color-state-triage-soft: #202B33;
+    --color-state-pool: #D9A94B;        --color-state-pool-soft: #332710;
+    --color-state-accepted: #6FA3D1;    --color-state-accepted-soft: #1C2B38;
+    --color-state-doing: #B49BDE;       --color-state-doing-soft: #2A2238;
+    --color-state-done: #3FCBA0;        --color-state-done-soft: #113028;
+    --color-state-inspected: #52D6B5;   --color-state-inspected-soft: #0D2A22;
+    --color-state-deferred: #C4B29E;    --color-state-deferred-soft: #2B2520;
+    --color-state-interrupted: #E07A62; --color-state-interrupted-soft: #391C16;
+    --color-state-cancelled: #9FB0BA;   --color-state-cancelled-soft: #222A2F;
+
+    --color-success: #3FCBA0;
+    --color-warning: #D9A94B;
+    --color-error: #E07A62;
+    --color-info: #6FA3D1;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+    --shadow-raised: 0 6px 16px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-surface: #0F171C;
+  --color-surface-raised: #17222A;
+  --color-surface-sunken: #0B1216;
+  --color-ink: #E8EEF0;
+  --color-ink-muted: #9FB0BA;
+  --color-ink-faint: #71838D;
+  --color-line: #2B3940;
+  --color-line-strong: #3C4C55;
+
+  --color-accent: #2FBE9B;
+  --color-accent-strong: #52D6B5;
+  --color-accent-soft: #163029;
+  --color-accent-ink: #06221B;
+
+  --color-state-triage: #9FB0BA;      --color-state-triage-soft: #202B33;
+  --color-state-pool: #D9A94B;        --color-state-pool-soft: #332710;
+  --color-state-accepted: #6FA3D1;    --color-state-accepted-soft: #1C2B38;
+  --color-state-doing: #B49BDE;       --color-state-doing-soft: #2A2238;
+  --color-state-done: #3FCBA0;        --color-state-done-soft: #113028;
+  --color-state-inspected: #52D6B5;   --color-state-inspected-soft: #0D2A22;
+  --color-state-deferred: #C4B29E;    --color-state-deferred-soft: #2B2520;
+  --color-state-interrupted: #E07A62; --color-state-interrupted-soft: #391C16;
+  --color-state-cancelled: #9FB0BA;   --color-state-cancelled-soft: #222A2F;
+
+  --color-success: #3FCBA0;
+  --color-warning: #D9A94B;
+  --color-error: #E07A62;
+  --color-info: #6FA3D1;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-raised: 0 6px 16px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; margin: 0 0 0.4em; text-wrap: balance; }
+p { margin: 0 0 0.8em; color: var(--color-ink); }
+a { color: var(--color-accent); }
+code, .mono { font-family: var(--font-mono); }
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+button { font-family: inherit; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+.container { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+.stack { display: flex; flex-direction: column; }
+.cluster { display: flex; flex-wrap: wrap; align-items: center; }
+
+/* 頂部識別列：四個角色頁共用，品牌字用 display 字體＋角色標籤區分身分 */
+.tms-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-line);
+}
+.tms-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--color-ink);
+}
+.tms-brand-mark {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.tms-brand-role {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  padding: 3px 9px;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+}
+.tms-topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+.btn-primary:hover:not(:disabled) { background: var(--color-accent-strong); border-color: var(--color-accent-strong); }
+.btn-secondary { background: var(--color-surface-raised); border-color: var(--color-line-strong); color: var(--color-ink); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--color-ink-muted); }
+.btn-ghost:hover:not(:disabled) { color: var(--color-ink); }
+.btn-danger { background: var(--color-surface-raised); border-color: var(--color-error); color: var(--color-error); }
+.btn-danger:hover:not(:disabled) { background: var(--color-state-interrupted-soft); }
+.btn-block { width: 100%; }
+.btn-lg { padding: 14px 18px; font-size: 16px; border-radius: var(--radius-md); }
+
+/* 九態徽章：中文標籤 + enum 全名小字，顏色只來自 --color-state-* token */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-dot { width: 7px; height: 7px; border-radius: 50%; }
+.badge-enum { font-size: 10.5px; font-weight: 500; opacity: 0.75; font-family: var(--font-mono); }
+.badge-triage { background: var(--color-state-triage-soft); color: var(--color-state-triage); }
+.badge-pool { background: var(--color-state-pool-soft); color: var(--color-state-pool); }
+.badge-accepted { background: var(--color-state-accepted-soft); color: var(--color-state-accepted); }
+.badge-doing { background: var(--color-state-doing-soft); color: var(--color-state-doing); }
+.badge-done { background: var(--color-state-done-soft); color: var(--color-state-done); }
+.badge-inspected { background: var(--color-state-inspected-soft); color: var(--color-state-inspected); }
+.badge-deferred { background: var(--color-state-deferred-soft); color: var(--color-state-deferred); }
+.badge-interrupted { background: var(--color-state-interrupted-soft); color: var(--color-state-interrupted); }
+.badge-cancelled { background: var(--color-state-cancelled-soft); color: var(--color-state-cancelled); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--color-state-cancelled) 60%, transparent); }
+.badge-triage .badge-dot { background: var(--color-state-triage); }
+.badge-pool .badge-dot { background: var(--color-state-pool); }
+.badge-accepted .badge-dot { background: var(--color-state-accepted); }
+.badge-doing .badge-dot { background: var(--color-state-doing); }
+.badge-done .badge-dot { background: var(--color-state-done); }
+.badge-inspected .badge-dot { background: var(--color-state-inspected); }
+.badge-deferred .badge-dot { background: var(--color-state-deferred); }
+.badge-interrupted .badge-dot { background: var(--color-state-interrupted); }
+.badge-cancelled .badge-dot { background: var(--color-state-cancelled); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-surface-sunken);
+  color: var(--color-ink-muted);
+}
+.tag-muted { background: var(--color-surface-sunken); color: var(--color-ink-faint); }
+.tag-type { background: var(--color-surface-sunken); color: var(--color-ink); }
+.tag-dept-housekeeping { background: var(--color-state-done-soft); color: var(--color-state-done); }
+.tag-dept-maintenance { background: var(--color-state-doing-soft); color: var(--color-state-doing); }
+.tag-dept-desk { background: var(--color-state-accepted-soft); color: var(--color-state-accepted); }
+.tag-rule { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.tag-warning { background: var(--color-state-interrupted-soft); color: var(--color-state-interrupted); }
+.tag-assignee { background: var(--color-surface-sunken); color: var(--color-ink); }
+.tag-time { color: var(--color-ink-faint); background: transparent; font-weight: 500; }
+
+/* 任務卡：四頁共用的最小單位，左側用狀態色做一道細窄的語意提示，不做滿版色條 */
+.task-card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-state-pool);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.task-card-triage { border-left-color: var(--color-state-triage); }
+.task-card-pool { border-left-color: var(--color-state-pool); }
+.task-card-accepted { border-left-color: var(--color-state-accepted); }
+.task-card-doing { border-left-color: var(--color-state-doing); }
+.task-card-done { border-left-color: var(--color-state-done); }
+.task-card-inspected { border-left-color: var(--color-state-inspected); }
+.task-card-deferred { border-left-color: var(--color-state-deferred); }
+.task-card-interrupted { border-left-color: var(--color-state-interrupted); }
+.task-card-cancelled { border-left-color: var(--color-state-cancelled); opacity: 0.7; }
+.task-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-room { font-family: var(--font-display); font-size: 17px; font-weight: 600; margin-right: 2px; }
+.task-title { font-size: 15px; font-weight: 700; margin: 0; }
+.task-detail { font-size: 13.5px; color: var(--color-ink-muted); margin: 0; white-space: pre-line; }
+.task-meta-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.task-extra-meta { font-size: 13px; color: var(--color-ink-muted); margin: 0; }
+.task-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+
+.empty-state {
+  color: var(--color-ink-faint);
+  font-size: 13.5px;
+  padding: 18px 8px;
+  text-align: center;
+  border: 1px dashed var(--color-line);
+  border-radius: var(--radius-md);
+}
+
+/* Toast：三個錯誤態（already_taken / 403 / invalid_transition）共用這組視覺 */
+.tms-toast-host {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  width: min(92vw, 420px);
+  pointer-events: none;
+}
+.tms-toast {
+  background: var(--color-ink);
+  color: var(--color-surface);
+  padding: 11px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tms-toast.is-visible { opacity: 1; transform: translateY(0); }
+.tms-toast-error { background: var(--color-error); color: #FFFFFF; }
+.tms-toast-success { background: var(--color-success); color: #FFFFFF; }
+.tms-toast-warning { background: var(--color-warning); color: #FFFFFF; }
+.tms-toast-info { background: var(--color-ink); color: var(--color-surface); }
+
+.star-row { display: flex; gap: 4px; }
+.star-row .star {
+  background: none;
+  border: none;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--color-line-strong);
+  cursor: pointer;
+  padding: 2px;
+}
+.star-row .star.is-filled { color: var(--color-state-pool); }
+.star-row .star:disabled { cursor: default; }
+
+/* 表單元件：住客/櫃檯/房務/主管頁共用的輸入外觀 */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; font-weight: 600; color: var(--color-ink-muted); }
+.field textarea,
+.field input[type="text"],
+.field select {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-ink);
+}
+.field textarea:focus,
+.field input:focus,
+.field select:focus { border-color: var(--color-accent); }
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  cursor: pointer;
+}
+.checkbox-row input { width: 18px; height: 18px; accent-color: var(--color-accent); }
+
+.panel {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+.scroll-x { overflow-x: auto; }
+
+/* 遺失物照片：清單縮圖＋點擊放大的燈箱 */
+.lf-thumb {
+  width: 42px; height: 42px; object-fit: cover; flex-shrink: 0;
+  border-radius: 6px; border: 1px solid var(--color-line); cursor: zoom-in;
+  background: var(--color-surface-sunken);
+}
+.tms-photo-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(10, 16, 20, 0.78);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; cursor: zoom-out;
+}
+.tms-photo-overlay img {
+  max-width: min(92vw, 720px); max-height: 85vh;
+  border-radius: 10px; box-shadow: var(--shadow-raised);
+}
+
+.kbd-hint { font-family: var(--font-mono); font-size: 12px; color: var(--color-ink-faint); }

@@ -1,0 +1,620 @@
+<title>不只 Flexkeeping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F2F4F3; --surface:#FFFFFF; --surface-2:#E9EEED;
+  --ink:#16292B; --ink-2:#4B5D5E; --ink-3:#7C8C8D;
+  --rule:#D6DEDD; --rule-strong:#B9C4C3;
+  --brass:#8F6519; --brass-tint:#F2E7CF;
+  --crit:#96382B; --crit-tint:#F7E6E2;
+  --warn:#9C7220; --warn-tint:#F7EDD5;
+  --ok:#2C6A59; --ok-tint:#DCEBE6;
+  --shadow:0 1px 2px rgba(22,41,43,.06), 0 8px 24px -16px rgba(22,41,43,.2);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1415; --surface:#171F20; --surface-2:#1F2A2A;
+    --ink:#E7ECEA; --ink-2:#A6B5B4; --ink-3:#7C8C8C;
+    --rule:#293434; --rule-strong:#3C4949;
+    --brass:#DCAC50; --brass-tint:#33280F;
+    --crit:#D9836F; --crit-tint:#3A211B;
+    --warn:#DCAC50; --warn-tint:#33280F;
+    --ok:#63AE97; --ok-tint:#19302A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1415; --surface:#171F20; --surface-2:#1F2A2A;
+  --ink:#E7ECEA; --ink-2:#A6B5B4; --ink-3:#7C8C8C;
+  --rule:#293434; --rule-strong:#3C4949;
+  --brass:#DCAC50; --brass-tint:#33280F;
+  --crit:#D9836F; --crit-tint:#3A211B;
+  --warn:#DCAC50; --warn-tint:#33280F;
+  --ok:#63AE97; --ok-tint:#19302A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:"Source Serif 4","Songti TC","Noto Serif TC",Georgia,serif;
+  font-size:16.5px;line-height:1.68;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px;margin:0 auto;padding:0 22px 96px}
+h1,h2,h3,.eyebrow{font-family:"Archivo","PingFang TC","Noto Sans TC",system-ui,sans-serif}
+.mono,code,th{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+h1{font-size:clamp(2.1rem,5vw,3.2rem);line-height:1.04;font-weight:700;letter-spacing:-.02em;margin:.12em 0 0}
+h2{font-size:1.3rem;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h3{font-size:1.02rem;font-weight:600;margin:0}
+p{margin:0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.69rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+code{font-size:.85em;background:var(--surface-2);padding:1px 5px}
+
+header{padding:70px 0 36px;border-bottom:1px solid var(--rule)}
+.thesis{margin-top:22px;max-width:64ch;font-size:1.13rem;line-height:1.6;color:var(--ink-2);display:flex;flex-direction:column;gap:12px}
+.thesis b{color:var(--ink);font-weight:600}
+
+section{padding-top:60px}
+.s-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.s-head::after{content:"";flex:1 1 40px;height:1px;background:var(--rule);align-self:center}
+.lede{max-width:66ch;color:var(--ink-2);margin-bottom:20px}
+.body-col{max-width:66ch;display:flex;flex-direction:column;gap:13px}
+.body-col b{font-weight:600}
+
+figure{margin:26px 0 0}
+.board{background:#14171A;color:#ECEEF0;padding:22px 16px;border:1px solid #262B2F;overflow-x:auto}
+.board svg{display:block;max-width:100%;height:auto;margin:0 auto}
+.board svg text{font-family:"PingFang TC","Noto Sans TC","Helvetica Neue",sans-serif;fill:currentColor}
+.b-grid{stroke:#262B2F;stroke-width:1}
+.b-axline{stroke:#485157;stroke-width:1.5}
+.b-t{font-size:13px;font-weight:500}
+.b-s{font-size:10.5px;fill:#98A0A6}
+.b-l{font-size:10.5px;fill:#98A0A6}
+.b-dot{fill:#98A0A6}
+.b-hi{fill:#E8B457}.b-hs{stroke:#E8B457}
+.b-cr{fill:#E08A72}.b-cs{stroke:#E08A72}
+.b-zone{fill:none;stroke:#E8B457;stroke-width:1.5;stroke-dasharray:6 5;opacity:.75}
+figcaption{
+  padding:16px 18px;background:var(--surface);border:1px solid var(--rule);border-top:0;
+  font-size:.89rem;line-height:1.62;color:var(--ink-2);
+}
+figcaption b{color:var(--ink);font-weight:600}
+
+.tbl-scroll{overflow-x:auto;border:1px solid var(--rule);background:var(--surface);box-shadow:var(--shadow);margin-top:6px}
+table{border-collapse:collapse;width:100%;min-width:820px;font-size:.88rem}
+th{font-size:.62rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:11px 12px;border-bottom:1px solid var(--rule-strong);background:var(--surface-2);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.5}
+tbody tr:last-child td{border-bottom:0}
+td.nm{font-family:"Archivo",sans-serif;font-weight:600;white-space:nowrap}
+td.pr{font-family:"IBM Plex Mono",monospace;font-size:.78rem;white-space:nowrap;color:var(--ink-2);font-variant-numeric:tabular-nums}
+td.rk{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.hl td{background:var(--brass-tint)}
+
+.tag{font-family:"IBM Plex Mono",monospace;font-size:.64rem;font-weight:600;padding:1px 6px;border:1px solid currentColor;white-space:nowrap;display:inline-block}
+.t-crit{color:var(--crit)}.t-warn{color:var(--warn)}.t-ok{color:var(--ok)}.t-dim{color:var(--ink-3)}
+
+.callout{margin-top:24px;padding:20px 22px;border-left:3px solid var(--crit);background:var(--crit-tint);max-width:72ch;display:flex;flex-direction:column;gap:10px}
+.callout.ok{border-left-color:var(--ok);background:var(--ok-tint)}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-tint)}
+.callout .eyebrow{color:var(--crit)}
+.callout.ok .eyebrow{color:var(--ok)}
+.callout.warn .eyebrow{color:var(--warn)}
+.callout p{font-size:.96rem;line-height:1.62}
+
+.rings{display:flex;flex-direction:column;gap:14px;margin-top:20px}
+.ring{
+  background:var(--surface);border:1px solid var(--rule);box-shadow:var(--shadow);
+  border-left:4px solid var(--rc,var(--rule-strong));padding:16px 20px;
+  display:flex;flex-direction:column;gap:9px;
+}
+.ring-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ring-hd .r{font-family:"IBM Plex Mono",monospace;font-size:.68rem;font-weight:600;color:var(--ink-3);letter-spacing:.1em}
+.ring-hd .t{font-family:"Archivo",sans-serif;font-weight:600;font-size:1.04rem}
+.ring-hd .str{margin-left:auto}
+.ring .names{font-family:"Archivo",sans-serif;font-size:.95rem;line-height:1.72;color:var(--ink)}
+.ring .names span{color:var(--ink-3);font-weight:400}
+.ring .w{font-size:.92rem;line-height:1.6;color:var(--ink-2);padding-top:8px;border-top:1px dashed var(--rule)}
+.ring .w b{color:var(--ink);font-weight:600}
+
+.cards{display:flex;flex-direction:column;gap:13px;margin-top:20px}
+.card{background:var(--surface);border:1px solid var(--rule);padding:16px 18px;display:flex;flex-direction:column;gap:7px;box-shadow:var(--shadow)}
+.card-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.card-hd .n{font-family:"Archivo",sans-serif;font-weight:600;font-size:1rem}
+.card-hd .meta{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink-3)}
+.card-hd .str{margin-left:auto}
+.card .w{font-size:.92rem;line-height:1.6;color:var(--ink-2)}
+.card .w b{color:var(--ink);font-weight:600}
+
+.fixes{display:flex;flex-direction:column;gap:16px;margin-top:20px}
+.fix{background:var(--surface);border:1px solid var(--rule);border-left:4px solid var(--crit);padding:18px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
+.fix .old{font-size:.9rem;color:var(--ink-3);line-height:1.55;padding-left:12px;border-left:2px solid var(--rule-strong)}
+.fix .new{font-size:.95rem;line-height:1.62}
+.fix .new b{font-weight:600}
+.fix .so{font-size:.88rem;color:var(--ink-2);line-height:1.55;padding-top:8px;border-top:1px dashed var(--rule)}
+
+.nots{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:18px}
+.not{padding:14px 16px;background:var(--surface-2);border:1px solid var(--rule);display:flex;flex-direction:column;gap:6px}
+.not .t{font-family:"Archivo",sans-serif;font-weight:600;font-size:.94rem}
+.not .w{font-size:.85rem;color:var(--ink-2);line-height:1.5}
+
+ol.todo{margin:18px 0 0;padding-left:0;list-style:none;counter-reset:q;display:flex;flex-direction:column;gap:12px;max-width:70ch}
+ol.todo li{counter-increment:q;display:flex;gap:14px;font-size:.95rem;line-height:1.6;color:var(--ink-2)}
+ol.todo li::before{content:"Q" counter(q);font-family:"IBM Plex Mono",monospace;font-size:.7rem;font-weight:600;color:var(--brass);padding-top:4px;flex:0 0 auto}
+ol.todo li b{color:var(--ink);font-weight:600}
+
+footer{margin-top:72px;padding-top:22px;border-top:1px solid var(--rule);font-size:.83rem;color:var(--ink-3);max-width:74ch;line-height:1.65}
+footer a{color:var(--brass)}
+a:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+@media (max-width:640px){body{font-size:15.5px}header{padding-top:48px}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">TMS · 競品名冊 · 2026-09-16 · 08 的續篇</p>
+  <h1>不只 Flexkeeping</h1>
+  <div class="thesis">
+    <p>直接同類至少 <b>十四家</b>。但把名冊查完之後，最該擔心的那一家不是 Flexkeeping——
+    是 <b>hotelkit</b>：$1–3／房／月、跨部門廣度和 Flexkeeping 同級、2026 年房務與工務兩個榜都在前段。
+    它站的正是你打算站的位置：<b>低價 × 高廣度</b>。</p>
+    <p>另外，08 有三處事實要更正，其中一處會影響「第一市場」的推論強度。</p>
+  </div>
+</header>
+
+<section>
+  <div class="s-head"><p class="eyebrow">01 — 名冊</p><h2>十四家，分成四環</h2></div>
+  <p class="lede">依「會不會出現在你的案子裡」排，不是依知名度排。環一才是真的競品。</p>
+
+  <div class="rings">
+
+    <div class="ring" style="--rc:var(--crit)">
+      <div class="ring-hd">
+        <span class="r">環一</span>
+        <span class="t">核心直接競品</span>
+        <span class="str"><span class="tag t-crit">會同場競標</span></span>
+      </div>
+      <p class="names">ALICE（Actabl） · hotelkit · Flexkeeping（Mews） · Optii（MCR Hotels） · HotSOS（Amadeus） · Knowcross（Unifocus）</p>
+      <p class="w">六家都做<b>跨部門營運任務</b>：房務派工＋工務報修＋住客需求＋SLA 升級，而且都主打四五星。
+      這一環裡沒有一家是新創——最年輕的 Flexkeeping 也從 2012 年開始。</p>
+    </div>
+
+    <div class="ring" style="--rc:var(--warn)">
+      <div class="ring-hd">
+        <span class="r">環二</span>
+        <span class="t">同類但區隔不同</span>
+        <span class="str"><span class="tag t-warn">偶爾會遇到</span></span>
+      </div>
+      <p class="names">Sweeply <span>小型旅館</span> · Snapfix <span>拍照報修單點</span> · Lodgistics <span>美國連鎖</span> ·
+      hub OS <span>西班牙</span> · Hoxell <span>義瑞</span> · Nuvola <span>度假村／賭場</span> ·
+      Breezeway <span>短租與渡假屋</span> · Faundit <span>失物招領</span></p>
+      <p class="w">這些要嘛只做其中一段（Snapfix 只做報修、Faundit 只做失物），要嘛客群跟你不重疊
+      （Breezeway 在短租市場、Sweeply 在小型旅館）。<b>它們是你功能設計的參考，不是你的對手。</b></p>
+    </div>
+
+    <div class="ring" style="--rc:var(--brass)">
+      <div class="ring-hd">
+        <span class="r">環三</span>
+        <span class="t">PMS 自帶模組</span>
+        <span class="str"><span class="tag t-warn">結構性威脅</span></span>
+      </div>
+      <p class="names">Mews ＋ Flexkeeping · Oracle OPERA · Shiji <span>Cambridge PMS</span> · Cloudbeds · RMS ·
+      以及台灣本地 PMS <span>（含你們自己）</span></p>
+      <p class="w">這一環不會在單一標案上跟你比功能，但它決定<b>這個類別還能單獨存在多久</b>。
+      Mews 併 Flexkeeping 是第一槍；PMS 自帶像樣房務模組正在變成標配。</p>
+    </div>
+
+    <div class="ring" style="--rc:var(--ok)">
+      <div class="ring-hd">
+        <span class="r">環四</span>
+        <span class="t">真正的在位者</span>
+        <span class="str"><span class="tag t-ok">你第一家客戶要換掉的東西</span></span>
+      </div>
+      <p class="names">LINE 群組 · 紙本房卡 · 對講機 · Excel 排班表 · 房務主管的腦袋</p>
+      <p class="w">你的第一家客戶不會從 Optii 換到你這裡，他們會<b>從沒有系統換到有系統</b>。
+      所以 demo 的對照組應該是「現在群組裡找不到誰接了那杯水」，不是「Optii 的 ML 有多準」。
+      這一環也是<b>最難贏的</b>——LINE 群組零成本、零學習曲線、沒有導入期。</p>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">02 — 排行與定價</p><h2>2026 年的真實座次</h2></div>
+  <p class="lede">Hotel Tech Report 2026 房務類排名與公開定價。注意第一欄：<b>Flexkeeping 不是第一名。</b></p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead>
+        <tr><th>2026 排名</th><th>產品</th><th>母公司／歸屬</th><th>定價</th><th>主戰客群</th><th>規模與一句話</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="rk">#1</td>
+          <td class="nm">ALICE Housekeeping</td>
+          <td>Actabl</td>
+          <td class="pr">$8–10 / 房 / 月</td>
+          <td>豪華 · 精品 · 度假村（北美主場）</td>
+          <td>約 1,800 家、60+ 國。這個類別目前的量體冠軍</td>
+        </tr>
+        <tr class="hl">
+          <td class="rk">#2</td>
+          <td class="nm">hotelkit</td>
+          <td>hotelkit GmbH（奧地利）</td>
+          <td class="pr">$1–3 / 房 / 月</td>
+          <td>城市型 · 精品 · 連鎖（德奧瑞主場）</td>
+          <td>約 600–700 家、50+ 國。同時是 2026 工務類 #1。<b>價格帶與廣度最接近你</b></td>
+        </tr>
+        <tr>
+          <td class="rk">#3</td>
+          <td class="nm">Flexkeeping</td>
+          <td>Mews（2025-10 併購）</td>
+          <td class="pr">$3–5 / 房 / 月</td>
+          <td>精品 · 豪華 · 度假村</td>
+          <td>跨部門最完整、200+ 語言翻譯。併購後<b>仍公開承諾獨立運作</b></td>
+        </tr>
+        <tr>
+          <td class="rk">#4</td>
+          <td class="nm">Sweeply</td>
+          <td>Sweeply（冰島）</td>
+          <td class="pr">$1–3 / 房 / 月</td>
+          <td>小型旅館 · B&amp;B · 長住型</td>
+          <td>約 30 家物件。可不接 PMS 獨立跑，新整合 2–3 週</td>
+        </tr>
+        <tr>
+          <td class="rk">#5</td>
+          <td class="nm">Snapfix</td>
+          <td>Snapfix（愛爾蘭）</td>
+          <td class="pr">約 $129 / 月起</td>
+          <td>不分星級，工務為主</td>
+          <td>2026 工務類 #3。<b>拍照 → 紅黃綠燈</b>，介面極簡，只做報修這一段</td>
+        </tr>
+        <tr>
+          <td class="rk">#7</td>
+          <td class="nm">Optii</td>
+          <td>MCR Hotels（2021 併購）</td>
+          <td class="pr">per-room · 不公開</td>
+          <td>upscale 以上 · 度假村</td>
+          <td>ML 預測清潔時間＋走動路線最佳化。<b>老闆是美國第四大飯店業主</b></td>
+        </tr>
+        <tr>
+          <td class="rk">#8</td>
+          <td class="nm">Lodgistics</td>
+          <td>Lodgistics</td>
+          <td class="pr">$0 起（有免費層）</td>
+          <td>品牌連鎖 · 機場會議型</td>
+          <td>約 60 則評論。免費層是這一環裡唯一的</td>
+        </tr>
+        <tr>
+          <td class="rk">#9 / #10</td>
+          <td class="nm">Hoxell · hub OS</td>
+          <td>義瑞 / 西班牙</td>
+          <td class="pr">不公開</td>
+          <td>歐洲中大型</td>
+          <td>南歐區域型玩家。亞太幾乎沒有足跡</td>
+        </tr>
+        <tr>
+          <td class="rk">榜外</td>
+          <td class="nm">Knowcross</td>
+          <td>Unifocus</td>
+          <td class="pr">不公開</td>
+          <td>100 房以上豪華與連鎖</td>
+          <td><b>歐洲＋亞太</b>（中國、香港、菲律賓、泰國、日本都有客戶）。離台灣最近的一家</td>
+        </tr>
+        <tr>
+          <td class="rk">榜外</td>
+          <td class="nm">HotSOS</td>
+          <td>Amadeus</td>
+          <td class="pr">$20–45 / 使用者 / 月</td>
+          <td>大型集團 · 175 國</td>
+          <td>企業級最重、最貴。300 房配 100 使用者 ≈ 每月 $2,000–4,500</td>
+        </tr>
+        <tr>
+          <td class="rk">另一市場</td>
+          <td class="nm">Breezeway</td>
+          <td>Breezeway（波士頓）</td>
+          <td class="pr">首間免費 / $19.99 起</td>
+          <td>短租 · 渡假屋管理公司</td>
+          <td>不是飯店市場，但<b>清潔＋檢查＋溝通的流程設計值得抄</b></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <p class="eyebrow">定價這件事要改口徑</p>
+    <p>08 用的是 <b>per-user／月</b>（HotSOS 的 $20–45），那是這個類別最貴的一家的口徑。
+    整個類別的主流其實是 <b>per-room／月，使用者不限</b>：$1–3（hotelkit、Sweeply）、$3–5（Flexkeeping）、$8–10（ALICE）。</p>
+    <p>對 300 房的四五星換算：hotelkit 約 <b>每月 $300–900</b>，Flexkeeping 約 $900–1,500，ALICE 約 $2,400–3,000。
+    <b>你的 bundle 定價要跟 $300–900 這一格比，不是跟 HotSOS 的 $2,000–4,500 比。</b>
+    後者會讓你誤以為自己有兩個數量級的價格優勢——實際上沒有。</p>
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">03 — 定位</p><h2>價格 × 廣度：你想站的位置有人了</h2></div>
+  <p class="lede">橫軸是價格帶與客群層級，縱軸是產品廣度（只做一件事 → 整個營運層）。位置依公開定價與功能範圍估放，量級參考用，不是精確座標。</p>
+
+  <figure>
+    <div class="board">
+      <svg viewBox="0 0 900 520" role="img" aria-labelledby="mapTitle mapDesc">
+        <title id="mapTitle">競品定位圖：價格帶與產品廣度</title>
+        <desc id="mapDesc">十三家競品依價格帶（橫軸）與產品廣度（縱軸）分布。低價高廣度的區塊已被 hotelkit 佔據，而那正是 TMS 打算進入的位置。</desc>
+
+        <line class="b-grid" x1="90" y1="120" x2="860" y2="120"></line>
+        <line class="b-grid" x1="90" y1="200" x2="860" y2="200"></line>
+        <line class="b-grid" x1="90" y1="280" x2="860" y2="280"></line>
+        <line class="b-grid" x1="90" y1="360" x2="860" y2="360"></line>
+        <line class="b-grid" x1="282" y1="40" x2="282" y2="440"></line>
+        <line class="b-grid" x1="475" y1="40" x2="475" y2="440"></line>
+        <line class="b-grid" x1="668" y1="40" x2="668" y2="440"></line>
+
+        <rect class="b-zone" x="110" y="58" width="295" height="132"></rect>
+        <text class="b-l b-hi" x="115" y="50" fill="#E8B457">低價 × 高廣度 — 你想站的格子</text>
+
+        <line class="b-axline" x1="90" y1="440" x2="866" y2="440"></line>
+        <line class="b-axline" x1="90" y1="40" x2="90" y2="440"></line>
+        <text class="b-s" x="90" y="466">低價 · 中小型</text>
+        <text class="b-s" x="866" y="466" text-anchor="end">高價 · 大型集團 →</text>
+        <text class="b-s" x="82" y="48" text-anchor="end">廣</text>
+        <text class="b-s" x="82" y="440" text-anchor="end">窄</text>
+        <text class="b-s" x="478" y="490" text-anchor="middle">價格帶與客群層級</text>
+
+        <circle class="b-hi" cx="190" cy="136" r="8"></circle>
+        <circle class="b-hs" cx="190" cy="136" r="15" fill="none" stroke-dasharray="4 4"></circle>
+        <text class="b-t b-hi" x="208" y="133" fill="#E8B457">你們（TMS）</text>
+        <text class="b-s" x="208" y="148">PMS bundle 價 · 目標是整個營運層</text>
+
+        <circle class="b-cr" cx="290" cy="88" r="7"></circle>
+        <text class="b-t b-cr" x="304" y="85" fill="#E08A72">hotelkit</text>
+        <text class="b-s" x="304" y="100">$1–3／房 · 跨部門最廣</text>
+
+        <circle class="b-dot" cx="460" cy="104" r="6"></circle>
+        <text class="b-t" x="474" y="101">Flexkeeping</text>
+        <text class="b-s" x="474" y="116">$3–5／房</text>
+
+        <circle class="b-dot" cx="737" cy="96" r="6"></circle>
+        <text class="b-t" x="723" y="93" text-anchor="end">ALICE（Actabl）</text>
+        <text class="b-s" x="723" y="108" text-anchor="end">$8–10／房</text>
+
+        <circle class="b-dot" cx="806" cy="64" r="6"></circle>
+        <text class="b-t" x="792" y="61" text-anchor="end">HotSOS（Amadeus）</text>
+
+        <circle class="b-dot" cx="706" cy="150" r="6"></circle>
+        <text class="b-t" x="692" y="147" text-anchor="end">Knowcross（Unifocus）</text>
+        <text class="b-s" x="692" y="162" text-anchor="end">亞太有客戶</text>
+
+        <circle class="b-dot" cx="490" cy="176" r="6"></circle>
+        <text class="b-t" x="504" y="173">hub OS</text>
+
+        <circle class="b-dot" cx="344" cy="208" r="6"></circle>
+        <text class="b-t" x="358" y="205">Breezeway</text>
+        <text class="b-s" x="358" y="220">短租市場</text>
+
+        <circle class="b-dot" cx="413" cy="248" r="6"></circle>
+        <text class="b-t" x="427" y="245">Hoxell</text>
+
+        <circle class="b-dot" cx="537" cy="272" r="6"></circle>
+        <text class="b-t" x="551" y="269">Nuvola</text>
+
+        <circle class="b-dot" cx="644" cy="240" r="6"></circle>
+        <text class="b-t" x="658" y="237">Optii</text>
+        <text class="b-s" x="658" y="252">深但窄：房務最佳化</text>
+
+        <circle class="b-dot" cx="152" cy="264" r="6"></circle>
+        <text class="b-t" x="166" y="261">Lodgistics</text>
+
+        <circle class="b-dot" cx="206" cy="324" r="6"></circle>
+        <text class="b-t" x="220" y="321">Sweeply</text>
+
+        <circle class="b-dot" cx="244" cy="380" r="6"></circle>
+        <text class="b-t" x="258" y="377">Snapfix</text>
+        <text class="b-s" x="258" y="392">只做拍照報修</text>
+      </svg>
+    </div>
+    <figcaption>
+      你原本的敘事是「HotSOS 太貴、Optii 太高端，所以低價這一格空著」。<b>那一格沒有空著。</b>
+      hotelkit 用 $1–3／房／月做到和 Flexkeeping 同級的跨部門廣度，而且它同時是 2026 年房務與工務兩個類別的前段班。
+      好消息是：hotelkit 是德奧瑞為主的歐洲產品，<b>亞太幾乎沒有足跡，也沒有繁中與 LINE</b>。
+      所以你的護城河依然成立，但它<b>完全是在地護城河</b>，不是價格或功能護城河——這件事要在對老闆的敘事裡講清楚。
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">04 — 更正</p><h2>08 有三處要改</h2></div>
+  <p class="lede">三處都查得到公開來源。第一處會削弱 08 的結論，另外兩處只是把畫面補完整。</p>
+
+  <div class="fixes">
+
+    <div class="fix">
+      <div class="card-hd">
+        <span class="n">更正一：Flexkeeping 不會退出非 Mews 市場</span>
+        <span class="str"><span class="tag t-crit">影響結論</span></span>
+      </div>
+      <p class="old">08 寫：「已被 Mews 併購，往後會跟著 Mews 的客戶群走，不會服務非 Mews 陣營。」</p>
+      <p class="new">Mews 與 Flexkeeping 雙方的公開說法都是 <b>Flexkeeping 維持獨立平台、繼續支援旅宿在用的各家 PMS</b>。
+      而且 2026 年要推的第一個大版本是 <b>Workflow Builder</b>——給飯店自己拉的無程式碼自動化：
+      依訂單、住客狀態、加購服務、住宿長度、房價代碼、訂房來源、延遲退房等條件自動開任務。</p>
+      <p class="so">影響：08 有一句「Flexkeeping 進不來（沒有可整合的 PMS）」現在更站不住了——
+      它不但沒退出，還正在把「規則引擎自動開單」這件事做成賣點，<b>那正是你 TMS 的核心機制</b>。
+      你的規則引擎不再是差異化，是入場券。</p>
+    </div>
+
+    <div class="fix">
+      <div class="card-hd">
+        <span class="n">更正二：類別第一名是 ALICE，不是 Flexkeeping</span>
+        <span class="str"><span class="tag t-warn">補完</span></span>
+      </div>
+      <p class="old">08 把 Flexkeeping 當成這一層的代表玩家，沒有提到 ALICE 與 hotelkit。</p>
+      <p class="new">2026 年房務類排名：<b>#1 ALICE（Actabl）、#2 hotelkit、#3 Flexkeeping</b>。
+      ALICE 約 1,800 家物件、60+ 國；hotelkit 約 600–700 家、50+ 國，同時是工務類第一名。
+      Flexkeeping 在量體上是第三名。</p>
+      <p class="so">影響：對外簡報如果只提 Flexkeeping，懂行的人會覺得你功課沒做完。
+      而且<b>真正要對標的產品是 hotelkit</b>（價格帶與廣度最像），不是 Flexkeeping。</p>
+    </div>
+
+    <div class="fix">
+      <div class="card-hd">
+        <span class="n">更正三：Optii 的老闆是飯店業主，不是 PMS</span>
+        <span class="str"><span class="tag t-dim">修正模型</span></span>
+      </div>
+      <p class="old">08 的核心論述是：「中間那層沒有資料主權，最後會被擁有資料的 PMS 買走或碾壓。」</p>
+      <p class="new">Optii 早在 <b>2021 年就被 MCR Hotels 併購</b>——美國第四大飯店業主兼營運商，不是 PMS 廠商。
+      Optii 併購後維持獨立品牌與原經營團隊營運至今。</p>
+      <p class="so">影響：「被 PMS 吃掉」不是這一層的唯一命運，<b>被大型業主買走當內部工具</b>是另一條。
+      08 的三層論述方向對，但因果講得太死——中間層真正的問題是<b>沒有自己的通路</b>，
+      不只是沒有資料主權。這反而強化你的結論：你有 450 家既有客戶，那就是通路。</p>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">05 — 新面孔</p><h2>08 沒寫到的幾家，各自的重點</h2></div>
+
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-hd"><span class="n">hotelkit</span><span class="meta">奧地利 · 2012 · 約 600–700 家</span>
+      <span class="str"><span class="tag t-crit">最該研究的一家</span></span></div>
+      <p class="w">它的產品定義跟其他家不一樣：<b>從「員工溝通平台」長出來的營運工具</b>——內部動態牆、即時訊息、
+      交班紀錄、知識庫（SOP／手冊）、然後才是房務派工與工務報修。Radisson、洲際、25hours 都是客戶。
+      這個順序很重要：它<b>先取代群組聊天，再順勢取代紙本派工</b>——這跟你要對付「LINE 群組」這個在位者是同一條路。
+      弱點在評論裡也寫得很清楚：與 OPERA 的雙向介接不夠深、資產管理與預防保養偏弱。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="n">ALICE（Actabl）</span><span class="meta">美國 · 約 1,800 家 · 60+ 國</span>
+      <span class="str"><span class="tag t-warn">量體冠軍</span></span></div>
+      <p class="w">Actabl 是把 ALICE、Hotel Effectiveness（人力）、ProfitSword（BI）併在一起的集團，
+      所以 ALICE 賣的是<b>「營運＋人力＋財務」一整包</b>，不是單一房務工具。2026 年 5 月才補上員工訊息功能
+      （分部門頻道），代表<b>連第一名都是最近才把「聊天」這件事做進去的</b>。
+      評論抱怨集中在介面雜、偶爾卡頓、與舊系統介接有問題、離線功能有限——<b>離線這點你要特別記下來</b>，
+      你的 F2 假設（電梯、樓梯間、地下室）就是打這裡。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="n">Knowcross（Unifocus）</span><span class="meta">印度起家 · 現屬 Unifocus</span>
+      <span class="str"><span class="tag t-warn">離台灣最近</span></span></div>
+      <p class="w">名冊裡<b>唯一在亞太有實績的一家</b>：公開評論來自中國、香港、菲律賓、泰國、日本、沙烏地。
+      客群是 100 房以上的豪華與連鎖。Unifocus 本業是排班與人力管理，併了 Knowcross 之後變成
+      「人力＋營運」雙軸——跟 Actabl 是同一個打法。<b>弱點對你很有利</b>：評論明確抱怨
+      <b>缺中文與阿拉伯文介面</b>、歷史報表資料有限、失物招領與升級模組藏太深。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="n">Snapfix</span><span class="meta">愛爾蘭 · 工務類 #3</span>
+      <span class="str"><span class="tag t-ok">UI 值得抄</span></span></div>
+      <p class="w">只做一件事：<b>拍張照就是一張工單</b>，狀態用紅／黃／綠燈表示，不需要打字。
+      這是整個名冊裡對「基層員工不想學系統」這件事回答得最直接的產品。
+      你的 LINE LIFF 員工端<b>應該對標 Snapfix 的互動密度，不是對標 ALICE 的功能表</b>。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="n">Breezeway</span><span class="meta">波士頓 · 短租與渡假屋</span>
+      <span class="str"><span class="tag t-dim">不同市場</span></span></div>
+      <p class="w">不是飯店競品，但它處理的問題跟你一模一樣：<b>房間分散、清潔人員不在現場、每次入住前後都要跑一套流程</b>。
+      定價模式也最激進（第一間免費）。如果你們的第二市場真的要做中小型旅宿，Breezeway 是那個市場的教科書。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><span class="n">hub OS · Hoxell · Nuvola · Lodgistics · Faundit</span><span class="meta">區域型與單點型</span>
+      <span class="str"><span class="tag t-dim">知道就好</span></span></div>
+      <p class="w">南歐與北美的區域玩家，或只做其中一段（Faundit 只做失物招領）。
+      <b>亞太沒有足跡，公開資料也少。</b>列在名冊上是為了完整性，不需要花時間研究。</p>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">06 — 亞洲</p><h2>台灣這一格的實際狀況</h2></div>
+  <p class="lede">08 說「查無公開資料，不要當成護城河」。這次查得更細一點，結論可以講得更準。</p>
+
+  <div class="body-col">
+    <p><b>十四家裡，只有 Knowcross 在亞太有明確客戶足跡</b>（中港菲泰日），而且它自己的使用者在抱怨缺中文介面。
+    其餘各家的整合清單裡沒有任何一家台灣或華語 PMS。</p>
+    <p><b>中國是另一個獨立生態系，不會外溢過來。</b>那邊的格局是石基（Cambridge PMS）、綠雲、
+    別樣紅（美團）、住哲（同程）在打，全部是 PMS 本體帶房務模組的打法，
+    而且綁在本地生態（美團、同程的訂房通路）上。<b>它們不會來台灣，你也進不去。</b></p>
+    <p><b>台灣的 PMS 層是你自己的主場。</b>德安、靈知、旅安、大師、旅宿E管家這些本地系統
+    普遍都有「房務管理」，但從公開的功能描述看，停在<b>房況顯示與清潔提醒</b>，
+    沒有走到派工最佳化、SLA 逾時升級、跨部門轉單、工時量測。</p>
+  </div>
+
+  <div class="callout ok">
+    <p class="eyebrow">所以在地護城河的正確講法</p>
+    <p>不是「國外競品做不到」——他們做得到，只是<b>投報率不成立</b>：為了台灣市場重做繁中介面、
+    LINE LIFF 員工端、串本地 PMS，對一家歐洲公司不划算。</p>
+    <p>也不是「台灣沒人做」——本地 PMS 都有房務模組，<b>只是都很淺</b>。
+    你的競爭是「比本地 PMS 的房務模組深一個層級」，不是「從零開拓一個空白市場」。
+    這個敘事對老闆比較難聽，但它是對的，而且<b>它反而讓你的路比較短</b>：你不用贏 ALICE，你只要比隔壁的房務模組好用。</p>
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">07 — 排序</p><h2>真正該盯的，按威脅程度</h2></div>
+
+  <div class="rings">
+    <div class="ring" style="--rc:var(--crit)">
+      <div class="ring-hd"><span class="r">威脅 1</span><span class="t">LINE 群組</span>
+      <span class="str"><span class="tag t-crit">最難贏</span></span></div>
+      <p class="w">零成本、零學習曲線、沒有導入期，而且房務主管已經習慣了。
+      <b>你的第一場仗是打這個，不是打 Flexkeeping。</b>hotelkit 的成功路徑（先取代群組聊天，再取代紙本派工）證明這條路走得通。</p>
+    </div>
+    <div class="ring" style="--rc:var(--crit)">
+      <div class="ring-hd"><span class="r">威脅 2</span><span class="t">你們自己的 PMS 推不推得出事件</span>
+      <span class="str"><span class="tag t-crit">內部未知</span></span></div>
+      <p class="w">這件事 08 就列出來了，到現在還沒查。<b>它比任何一家競品都更能決定這個專案的成敗與規模。</b>
+      能訂閱事件，Adapter 很薄；只能輪詢或匯出報表，工作量差好幾倍。</p>
+    </div>
+    <div class="ring" style="--rc:var(--warn)">
+      <div class="ring-hd"><span class="r">威脅 3</span><span class="t">hotelkit</span>
+      <span class="str"><span class="tag t-warn">同位置</span></span></div>
+      <p class="w">價格帶與廣度跟你打算做的完全重疊，而且已經做了十幾年。
+      現在不在亞太，<b>但它是這個名冊裡最可能決定要進亞太的一家</b>（歐洲中型市場已經很滿）。</p>
+    </div>
+    <div class="ring" style="--rc:var(--warn)">
+      <div class="ring-hd"><span class="r">威脅 4</span><span class="t">Mews ＋ Flexkeeping 的 Workflow Builder</span>
+      <span class="str"><span class="tag t-warn">功能撞車</span></span></div>
+      <p class="w">無程式碼規則引擎自動開單，2026 年推出。<b>你的規則引擎從差異化降級成入場券。</b>
+      只有當台灣四五星大量換到 Mews 時才會直接威脅到你，但它設定了功能基準線。</p>
+    </div>
+    <div class="ring" style="--rc:var(--ok)">
+      <div class="ring-hd"><span class="r">不必盯</span><span class="t">ALICE · Optii · HotSOS · Knowcross</span>
+      <span class="str"><span class="tag t-ok">不會出現在你的案子裡</span></span></div>
+      <p class="w">價格帶差太遠、客群是國際連鎖、在台灣沒有經銷與在地支援。
+      <b>它們是你的功能參考書，不是你的對手。</b>唯一例外：客戶是國際品牌加盟店、總部指定系統時會遇到。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">08 — 下一步</p><h2>這份分析查不到、得靠人問的五件事</h2></div>
+  <ol class="todo">
+    <li><b>自家 PMS 能不能推事件？</b>問自家 RD，一個下午就有答案。這是唯一會改變架構規模的未知，已經掛著兩份文件了。</li>
+    <li><b>台灣有沒有四五星在用這名冊上的任何一家？</b>問業務與同業。如果有，去問他們為什麼買、用得怎樣——這比任何二手資料都值錢。</li>
+    <li><b>hotelkit 有沒有亞太經銷或繁中計畫？</b>它是最可能來的一家。官網語言清單與徵才頁面通常會透露。</li>
+    <li><b>本地 PMS 的房務模組實際有多深？</b>本文依公開功能描述推斷「停在房況顯示」，沒有實機驗證。找一家同業的實際畫面看一眼。</li>
+    <li><b>LINE 推播的實際成本。</b>08 就列了，還沒算。300 員工 × 8 條 × 30 天 × 10 店 ≈ 72 萬則／月，直接決定定價模型。</li>
+  </ol>
+</section>
+
+<footer>
+  <p><b>查證日期 2026-09-16。</b>資料來源：Hotel Tech Report 2026 房務／工務類排名與各家產品頁
+  （ALICE、hotelkit、Flexkeeping、Sweeply、Knowcross、Snapfix、hub OS、Hoxell、Lodgistics）、
+  Mews 併購 Flexkeeping 官方公告與 2026 產品藍圖、MCR Hotels 併購 Optii 公告、
+  Actabl 官網、Unifocus 官網、Breezeway 與 Snapfix 第三方定價頁、
+  石基集團與中國酒店 SaaS 市場報導、台灣本地 PMS 廠商官網公開功能說明。</p>
+  <p><b>可信度說明：</b>定價多為第三方估算或起價，Optii、Knowcross、hub OS、Hoxell、Nuvola 不公開報價。
+  各家自稱的物件數在同一頁上就有互相打架的數字，本文只取量級。
+  定位圖的座標是依公開定價與功能範圍估放，不是量測值。
+  台灣本地 PMS 的房務深度<b>未經實機驗證</b>，依官網功能描述推斷，請以實際看過畫面為準。</p>
+  <p>本文是 <code>08-competitive-map.html</code>（2026-09-11）的續篇：08 講三層結構與差異化論述，
+  本文補名冊、排名、定價口徑與三處更正。兩份要一起看。</p>
+</footer>
+
+</div>

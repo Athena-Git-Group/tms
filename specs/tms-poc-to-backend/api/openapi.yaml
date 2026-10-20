@@ -1,0 +1,3075 @@
+openapi: 3.0.3
+info:
+  title: TMS 任務交辦系統 API
+  version: 1.0.0
+servers:
+- url: /api/v1
+tags:
+- name: 主管手動上報 API
+  description: 「出事才響」的第二個來源：主管手動上報，排 owner 推播進 outbox。無持久化實體（事件與推播留痕）。
+- name: 排房計畫 API
+  description: 查當日計畫、手動調整（If-Match 版本，衝突 409 附最新）、發佈（同交易切換＋任務對帳）、重產（新草稿與現行並存）、人力缺口試算。
+- name: 老闆儀表板 API
+  description: 讀 worker 預算好的每日數字卡片與摘要，API 只讀不現算；取消單一律排除。
+- name: 住客掃碼 API
+  description: 掃房間 QR 換住客 session。空房或 token 已作廢回 409 room_vacant；驗證=未過期且未撤銷。
+- name: 交班單 API
+  description: 查看凍結快照（班末排程產生、之後任務再變快照不變）與簽收。
+- name: 查房 API
+  description: 主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；自清自查 403；原清房者已下班→連動退池。
+- name: 請假 API
+  description: 登記請假即觸發連鎖：該員 accepted 單自動退池、doing 單標中斷並回傳受影響清單給主管收尾。
+- name: 遺失物 API
+  description: 櫃檯登記拾獲（拾獲人留痕；照片外存、事件只記 hasPhoto）與歸還結案。
+- name: 通知板 API
+  description: 櫃檯發通知（部門/個人混選，推播經 outbox 展開一人一封）、收件人開啟即記已讀、發送者查已讀名單。
+- name: 訂房檔副本與房態匯入 API
+  description: PMS 唯讀快取查詢＋Excel/CSV 今日房態匯入（入住＋退房；逐列驗房號；reservation_ref 合成 excel:日期:房號）。
+- name: 房間記憶與問一下 API
+  description: 查這間房的往事（修過什麼、偏好）；ask 為 MVP 降級版（room_memory＋SOP 關鍵字比對，LLM 留椿）。
+- name: 房間 QR 憑證 API
+  description: 列印現行 QR 與重產輪替。輪替同一交易作廢舊 token 並連坐撤銷該房全部住客 session（E-18）。
+- name: 房間 API
+  description: 房間主檔查詢（房況板）。hk_state 由任務引擎改、occupancy 由 PMS 同步改，本 API 只讀。
+- name: SOP 與查房項目 API
+  description: 唯讀清單（applies_to 區分 cleaning/inspection）；寫入走租戶設定門面，不另開寫入端點以免雙寫。
+- name: 員工帳號與登入 API
+  description: 帳密登入換 JWT（TTL 12h），同時登記推播裝置（同裝置去重）；帳號停用即不能登入但歷史保留。
+- name: 任務事件流水帳 API
+  description: 只進不改的事件歷程查詢（單任務歷程、全序排查）。增量訂閱一律走 Kafka，本 API 僅供查閱。
+- name: 任務 API
+  description: 任務建立、認領/開始/完成兩段回報、櫃檯判讀、住客收回與評分、主管改派/退池/延後/取消。所有狀態轉移經任務引擎守衛（非法轉移 409 state_conflict）。
+- name: 租戶設定 API
+  description: 封閉鍵集合的讀寫（含住客資訊頁 guest-home 的前台讀取面）；sop_items/inspection_items 兩鍵為 sop_items 表的門面。
+paths:
+  /alerts:
+    post:
+      operationId: createAlerts
+      summary: create alerts
+      tags:
+      - 主管手動上報 API
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /cleaning-plans:
+    get:
+      operationId: listCleaningPlans
+      summary: list cleaning_plans
+      tags:
+      - 排房計畫 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/cleaning_plans'
+  /cleaning-plans/{id}:
+    get:
+      operationId: readCleaningPlans
+      summary: read cleaning_plans
+      tags:
+      - 排房計畫 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cleaning_plans'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updateCleaningPlans
+      summary: update cleaning_plans
+      tags:
+      - 排房計畫 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/cleaning_plansRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cleaning_plans'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /cleaning-plans/{id}/publish:
+    post:
+      operationId: cleaningPlansPublish
+      summary: publish
+      tags:
+      - 排房計畫 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/cleaning_plansRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cleaning_plans'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /cleaning-plans/{id}/regenerate:
+    post:
+      operationId: cleaningPlansRegenerate
+      summary: regenerate
+      tags:
+      - 排房計畫 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/cleaning_plansRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cleaning_plans'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /cleaning-plans/capacity:
+    get:
+      operationId: cleaningPlansCapacity
+      summary: capacity
+      tags:
+      - 排房計畫 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cleaning_plans'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /daily-stats:
+    get:
+      operationId: listStatsDaily
+      summary: list stats_daily
+      tags:
+      - 老闆儀表板 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/stats_daily'
+  /daily-stats/dashboard:
+    get:
+      operationId: statsDailyDashboard
+      summary: dashboard
+      tags:
+      - 老闆儀表板 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/stats_daily'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /guest-sessions/scan:
+    post:
+      operationId: guestSessionsScan
+      summary: scan
+      tags:
+      - 住客掃碼 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/guest_sessionsRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/guest_sessions'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /handovers:
+    get:
+      operationId: listHandovers
+      summary: list handovers
+      tags:
+      - 交班單 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/handovers'
+  /handovers/{id}:
+    get:
+      operationId: readHandovers
+      summary: read handovers
+      tags:
+      - 交班單 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/handovers'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /handovers/{id}/sign:
+    post:
+      operationId: handoversSign
+      summary: sign
+      tags:
+      - 交班單 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/handoversRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/handovers'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /inspections:
+    get:
+      operationId: listInspections
+      summary: list inspections
+      tags:
+      - 查房 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/inspections'
+    post:
+      operationId: createInspections
+      summary: create inspections
+      tags:
+      - 查房 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/inspectionsRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inspections'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /leaves:
+    get:
+      operationId: listLeaves
+      summary: list leaves
+      tags:
+      - 請假 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/leaves'
+    post:
+      operationId: createLeaves
+      summary: create leaves
+      tags:
+      - 請假 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/leavesRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/leaves'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /lost-items:
+    get:
+      operationId: listLostItems
+      summary: list lost_items
+      tags:
+      - 遺失物 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/lost_items'
+    post:
+      operationId: createLostItems
+      summary: create lost_items
+      tags:
+      - 遺失物 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/lost_itemsRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/lost_items'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /lost-items/{id}/return:
+    post:
+      operationId: lostItemsReturn
+      summary: return
+      tags:
+      - 遺失物 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/lost_itemsRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/lost_items'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /notices:
+    get:
+      operationId: listNotices
+      summary: list notices
+      tags:
+      - 通知板 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/notices'
+    post:
+      operationId: createNotices
+      summary: create notices
+      tags:
+      - 通知板 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noticesRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/notices'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /notices/{id}/mark-read:
+    post:
+      operationId: noticesMarkRead
+      summary: mark read
+      tags:
+      - 通知板 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noticesRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/notices'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /notices/{id}/reads:
+    get:
+      operationId: noticesReads
+      summary: reads
+      tags:
+      - 通知板 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/notices'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /reservations:
+    get:
+      operationId: listReservationsCache
+      summary: list reservations_cache
+      tags:
+      - 訂房檔副本與房態匯入 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/reservations_cache'
+  /reservations/import:
+    post:
+      operationId: reservationsCacheImportOccupancy
+      summary: import occupancy
+      tags:
+      - 訂房檔副本與房態匯入 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/reservations_cacheRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/reservations_cache'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /room-memories:
+    get:
+      operationId: listRoomMemory
+      summary: list room_memory
+      tags:
+      - 房間記憶與問一下 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/room_memory'
+  /room-memories/ask:
+    post:
+      operationId: roomMemoryAsk
+      summary: ask
+      tags:
+      - 房間記憶與問一下 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/room_memoryRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/room_memory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /room-qr-tokens:
+    get:
+      operationId: listRoomQrTokens
+      summary: list room_qr_tokens
+      tags:
+      - 房間 QR 憑證 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/room_qr_tokens'
+  /room-qr-tokens/{id}:
+    get:
+      operationId: readRoomQrTokens
+      summary: read room_qr_tokens
+      tags:
+      - 房間 QR 憑證 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/room_qr_tokens'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /room-qr-tokens/{id}/rotate:
+    post:
+      operationId: roomQrTokensRotate
+      summary: rotate
+      tags:
+      - 房間 QR 憑證 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/room_qr_tokensRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/room_qr_tokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /rooms:
+    get:
+      operationId: listRooms
+      summary: list rooms
+      tags:
+      - 房間 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/rooms'
+  /rooms/{id}:
+    get:
+      operationId: readRooms
+      summary: read rooms
+      tags:
+      - 房間 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/rooms'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /sop-items:
+    get:
+      operationId: listSopItems
+      summary: list sop_items
+      tags:
+      - SOP 與查房項目 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/sop_items'
+  /staff-accounts:
+    get:
+      operationId: listStaffAccounts
+      summary: list staff_accounts
+      tags:
+      - 員工帳號與登入 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/staff_accounts'
+  /staff-accounts/login:
+    post:
+      operationId: staffAccountsLogin
+      summary: login
+      tags:
+      - 員工帳號與登入 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/staff_accountsRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/staff_accounts'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /task-events:
+    get:
+      operationId: listTaskEvents
+      summary: list task_events
+      tags:
+      - 任務事件流水帳 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/task_events'
+  /tasks:
+    get:
+      operationId: listTasks
+      summary: list tasks
+      tags:
+      - 任務 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/tasks'
+    post:
+      operationId: createTasks
+      summary: create tasks
+      tags:
+      - 任務 API
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /tasks/{id}:
+    get:
+      operationId: readTasks
+      summary: read tasks
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tasks/{id}/claim:
+    post:
+      operationId: tasksClaim
+      summary: claim
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/start:
+    post:
+      operationId: tasksStart
+      summary: start
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/complete:
+    post:
+      operationId: tasksComplete
+      summary: complete
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/cancel:
+    post:
+      operationId: tasksCancel
+      summary: cancel
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/rate:
+    post:
+      operationId: tasksRate
+      summary: rate
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/triage:
+    post:
+      operationId: tasksTriage
+      summary: triage
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/sop-check:
+    post:
+      operationId: tasksSopCheck
+      summary: sop check
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/requeue:
+    post:
+      operationId: tasksRequeue
+      summary: requeue
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/reassign:
+    post:
+      operationId: tasksReassign
+      summary: reassign
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/defer:
+    post:
+      operationId: tasksDefer
+      summary: defer
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tasks/{id}/undefer:
+    post:
+      operationId: tasksUndefer
+      summary: undefer
+      tags:
+      - 任務 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tasksRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tasks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tenant-configs:
+    get:
+      operationId: listTenantConfig
+      summary: list tenant_config
+      tags:
+      - 租戶設定 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/tenant_config'
+  /tenant-configs/{id}:
+    put:
+      operationId: updateTenantConfig
+      summary: update tenant_config
+      tags:
+      - 租戶設定 API
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tenant_configRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tenant_config'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /tenant-configs/guest-home:
+    get:
+      operationId: tenantConfigGuestHome
+      summary: guest home
+      tags:
+      - 租戶設定 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/tenant_config'
+        '409':
+          $ref: '#/components/responses/Conflict'
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          example: VALIDATION_FAILED
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              issue:
+                type: string
+    tenants:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 即各表 tenant_id（docs/12 例外二：集中開設、量少，8 bytes 省索引）
+        name:
+          type: string
+          description: 飯店名
+        createdAt:
+          type: string
+          format: date-time
+      description: 租戶（飯店）主檔。v1 由營運人工開設。
+      required:
+      - id
+      - name
+      - createdAt
+    tenantsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 飯店名
+      required:
+      - name
+    tenant_config:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        key:
+          type: string
+          description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days
+        value:
+          type: string
+          description: 結構依 key 而異
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+          format: uuid
+          description: → staff_accounts；設定變更要能追
+      description: 「什麼都可調」的落地。inspection_items/sop_items 兩鍵為 sop_items 表的門面（讀寫轉進表）。
+      required:
+      - tenantId
+      - key
+      - value
+      - updatedAt
+    tenant_configRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        key:
+          type: string
+          description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days
+        value:
+          type: string
+          description: 結構依 key 而異
+      required:
+      - tenantId
+      - key
+      - value
+    staff_accounts:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: PII：離職去識別化換不可回推代號
+        loginId:
+          type: string
+          description: PII；UNIQUE (tenant_id, login_id)
+        passwordHash:
+          type: string
+          description: bcrypt/argon2，絕不存明文
+        role:
+          type: string
+          description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+        dept:
+          type: string
+          description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+        active:
+          type: boolean
+          description: 停用=不能登入，歷史保留
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      description: 員工帳號。角色×動作矩陣在程式/設定，不在表裡（docs/11 需求 15）。
+      required:
+      - id
+      - tenantId
+      - name
+      - loginId
+      - passwordHash
+      - role
+      - active
+      - createdAt
+      - updatedAt
+    staff_accountsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: PII：離職去識別化換不可回推代號
+        loginId:
+          type: string
+          description: PII；UNIQUE (tenant_id, login_id)
+        passwordHash:
+          type: string
+          description: bcrypt/argon2，絕不存明文
+        role:
+          type: string
+          description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+        dept:
+          type: string
+          description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+        active:
+          type: boolean
+          description: 停用=不能登入，歷史保留
+      required:
+      - tenantId
+      - name
+      - loginId
+      - passwordHash
+      - role
+      - active
+    staff_devices:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        staffId:
+          type: string
+          format: uuid
+        deviceFingerprint:
+          type: string
+          description: 只做去重，不做綁定（docs/11 不在範圍內）
+        pushToken:
+          type: string
+          description: APNS/FCM 地址；權限被關即空
+        registeredAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          description: 登出或推播服務回報失效時標記
+      description: 推播地址簿：一列=一台裝置。登入不驗裝置、多機合法。
+      required:
+      - id
+      - tenantId
+      - staffId
+      - deviceFingerprint
+      - registeredAt
+    staff_devicesRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        staffId:
+          type: string
+          format: uuid
+        deviceFingerprint:
+          type: string
+          description: 只做去重，不做綁定（docs/11 不在範圍內）
+        pushToken:
+          type: string
+          description: APNS/FCM 地址；權限被關即空
+        registeredAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          description: 登出或推播服務回報失效時標記
+      required:
+      - tenantId
+      - staffId
+      - deviceFingerprint
+      - registeredAt
+    rooms:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        roomNo:
+          type: string
+          description: 房號「305」
+        floor:
+          type: integer
+          format: int32
+          description: v1 排房演算法排序鍵
+        roomType:
+          type: string
+          description: 平均打掃分鐘按它統計
+        hkState:
+          type: string
+          description: 'TMS 擁有。CHECK: dirty|cleaned|inspected|out_of_order'
+        occupancy:
+          type: string
+          description: 'PMS 擁有（同步唯讀）。CHECK: occupied|vacant'
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - tenantId
+      - roomNo
+      - floor
+      - roomType
+      - hkState
+      - occupancy
+      - updatedAt
+    roomsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        roomNo:
+          type: string
+          description: 房號「305」
+        floor:
+          type: integer
+          format: int32
+          description: v1 排房演算法排序鍵
+        roomType:
+          type: string
+          description: 平均打掃分鐘按它統計
+        hkState:
+          type: string
+          description: 'TMS 擁有。CHECK: dirty|cleaned|inspected|out_of_order'
+        occupancy:
+          type: string
+          description: 'PMS 擁有（同步唯讀）。CHECK: occupied|vacant'
+      required:
+      - tenantId
+      - roomNo
+      - floor
+      - roomType
+      - hkState
+      - occupancy
+    room_qr_tokens:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        roomId:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: ≥128 bit 隨機 base62 約 22 字元，不含房號資訊；全域 UNIQUE
+        status:
+          type: string
+          description: 'CHECK: active|revoked'
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - tenantId
+      - roomId
+      - token
+      - status
+      - createdAt
+    room_qr_tokensRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        roomId:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: ≥128 bit 隨機 base62 約 22 字元，不含房號資訊；全域 UNIQUE
+        status:
+          type: string
+          description: 'CHECK: active|revoked'
+        revokedAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - roomId
+      - token
+      - status
+    guest_sessions:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        sessionToken:
+          type: string
+          description: 住客瀏覽器憑證；全域 UNIQUE
+        roomId:
+          type: string
+          format: uuid
+        reservationId:
+          type: string
+          format: uuid
+          description: 綁簽發當下訂單——換住客舊 session 自然失效
+        expiresAt:
+          type: string
+          format: date-time
+          description: =退房時間
+        revokedAt:
+          type: string
+          format: date-time
+          description: QR 輪替/提前退房/訂單取消時整批標上
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+      description: 不變條件：驗證=expires_at > now() AND revoked_at IS NULL，缺一即 401（E-17）。
+      required:
+      - id
+      - tenantId
+      - sessionToken
+      - roomId
+      - reservationId
+      - expiresAt
+      - createdAt
+    guest_sessionsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        sessionToken:
+          type: string
+          description: 住客瀏覽器憑證；全域 UNIQUE
+        roomId:
+          type: string
+          format: uuid
+        reservationId:
+          type: string
+          format: uuid
+          description: 綁簽發當下訂單——換住客舊 session 自然失效
+        expiresAt:
+          type: string
+          format: date-time
+          description: =退房時間
+        revokedAt:
+          type: string
+          format: date-time
+          description: QR 輪替/提前退房/訂單取消時整批標上
+        lastSeenAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - sessionToken
+      - roomId
+      - reservationId
+      - expiresAt
+    reservations_cache:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        reservationRef:
+          type: string
+          description: PMS 訂單編號；Excel 匯入列合成 excel:日期:房號
+        roomId:
+          type: string
+          format: uuid
+        guestName:
+          type: string
+          description: PII：去識別化範圍
+        lang:
+          type: string
+          description: 住客端語言
+        attrs:
+          type: string
+          description: VIP/親子/寵物/紀念日——自動開準備工單依據
+        checkinAt:
+          type: string
+          format: date-time
+        checkoutAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          description: 'CHECK: pms|excel'
+        syncedAt:
+          type: string
+          format: date-time
+        supersededAt:
+          type: string
+          format: date-time
+          description: PMS 恢復比對到住期重疊真訂單時標上；當前訂單查詢一律 IS NULL
+      required:
+      - id
+      - tenantId
+      - reservationRef
+      - roomId
+      - checkinAt
+      - checkoutAt
+      - source
+      - syncedAt
+    reservations_cacheRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        reservationRef:
+          type: string
+          description: PMS 訂單編號；Excel 匯入列合成 excel:日期:房號
+        roomId:
+          type: string
+          format: uuid
+        guestName:
+          type: string
+          description: PII：去識別化範圍
+        lang:
+          type: string
+          description: 住客端語言
+        attrs:
+          type: string
+          description: VIP/親子/寵物/紀念日——自動開準備工單依據
+        checkinAt:
+          type: string
+          format: date-time
+        checkoutAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          description: 'CHECK: pms|excel'
+        syncedAt:
+          type: string
+          format: date-time
+        supersededAt:
+          type: string
+          format: date-time
+          description: PMS 恢復比對到住期重疊真訂單時標上；當前訂單查詢一律 IS NULL
+      required:
+      - tenantId
+      - reservationRef
+      - roomId
+      - checkinAt
+      - checkoutAt
+      - source
+      - syncedAt
+    tasks:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        type:
+          type: string
+          description: 'CHECK: amenity|repair|cleaning|other'
+        source:
+          type: string
+          description: 'CHECK: guest|desk|system'
+        roomId:
+          type: string
+          format: uuid
+        reservationId:
+          type: string
+          format: uuid
+          description: guest 來源必填；住客查詢一律以它過濾（不按房號）
+        dept:
+          type: string
+          description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
+        state:
+          type: string
+          description: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled'
+        eventSeq:
+          type: integer
+          format: int32
+          description: 事件取號器：守衛 UPDATE 同句 +1 RETURNING
+        assigneeId:
+          type: string
+          format: uuid
+          description: 池中為空
+        title:
+          type: string
+        note:
+          type: string
+          description: 住客原文/翻譯/交代/當場回答——PII 去識別化範圍
+        estMin:
+          type: integer
+          format: int32
+          description: 排房帶入；credit 換算屬 Q1 未決
+        startedAt:
+          type: string
+          format: date-time
+          description: 查房退回清空重計
+        doneAt:
+          type: string
+          format: date-time
+          description: 實際分鐘=done_at−started_at（derived，不落欄）
+        redoCount:
+          type: integer
+          format: int32
+        rating:
+          type: integer
+          format: int32
+          description: CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）
+        planId:
+          type: string
+          format: uuid
+          description: 打掃任務回鏈排房計畫
+        workDate:
+          type: string
+          format: date
+          description: 打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描
+        slaMin:
+          type: integer
+          format: int32
+          description: 保留欄位，SLA 升級鏈啟用前不寫
+        escLevel:
+          type: integer
+          format: int32
+          description: 保留欄位
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - tenantId
+      - type
+      - source
+      - roomId
+      - dept
+      - state
+      - eventSeq
+      - title
+      - redoCount
+      - createdAt
+      - updatedAt
+    tasksRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        type:
+          type: string
+          description: 'CHECK: amenity|repair|cleaning|other'
+        source:
+          type: string
+          description: 'CHECK: guest|desk|system'
+        roomId:
+          type: string
+          format: uuid
+        reservationId:
+          type: string
+          format: uuid
+          description: guest 來源必填；住客查詢一律以它過濾（不按房號）
+        dept:
+          type: string
+          description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
+        state:
+          type: string
+          description: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled'
+        eventSeq:
+          type: integer
+          format: int32
+          description: 事件取號器：守衛 UPDATE 同句 +1 RETURNING
+        assigneeId:
+          type: string
+          format: uuid
+          description: 池中為空
+        title:
+          type: string
+        note:
+          type: string
+          description: 住客原文/翻譯/交代/當場回答——PII 去識別化範圍
+        estMin:
+          type: integer
+          format: int32
+          description: 排房帶入；credit 換算屬 Q1 未決
+        startedAt:
+          type: string
+          format: date-time
+          description: 查房退回清空重計
+        doneAt:
+          type: string
+          format: date-time
+          description: 實際分鐘=done_at−started_at（derived，不落欄）
+        redoCount:
+          type: integer
+          format: int32
+        rating:
+          type: integer
+          format: int32
+          description: CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）
+        planId:
+          type: string
+          format: uuid
+          description: 打掃任務回鏈排房計畫
+        workDate:
+          type: string
+          format: date
+          description: 打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描
+        slaMin:
+          type: integer
+          format: int32
+          description: 保留欄位，SLA 升級鏈啟用前不寫
+        escLevel:
+          type: integer
+          format: int32
+          description: 保留欄位
+      required:
+      - tenantId
+      - type
+      - source
+      - roomId
+      - dept
+      - state
+      - eventSeq
+      - title
+      - redoCount
+    task_events:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 全館依序，但非訂閱書籤（增量一律走 Kafka）；僅離線重放/排查排序用
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int32
+          description: 這個任務的第幾步；取自 tasks.event_seq 的 RETURNING
+        type:
+          type: string
+          description: '18 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled（可擴充，加值不改表）'
+        actorRole:
+          type: string
+          description: guest|frontdesk|housekeeping|engineering|manager|system
+        actorId:
+          type: string
+          format: uuid
+          description: 住客與系統為空
+        payload:
+          type: string
+          description: 會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - tenantId
+      - taskId
+      - seq
+      - type
+      - actorRole
+      - createdAt
+    task_eventsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int32
+          description: 這個任務的第幾步；取自 tasks.event_seq 的 RETURNING
+        type:
+          type: string
+          description: '18 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled（可擴充，加值不改表）'
+        actorRole:
+          type: string
+          description: guest|frontdesk|housekeeping|engineering|manager|system
+        actorId:
+          type: string
+          format: uuid
+          description: 住客與系統為空
+        payload:
+          type: string
+          description: 會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded
+      required:
+      - tenantId
+      - taskId
+      - seq
+      - type
+      - actorRole
+    outbox:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tenantId:
+          type: integer
+          format: int64
+        aggregateKey:
+          type: string
+          description: Kafka 分區鍵：task_event/push 用 task:<uuid>；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）
+        kind:
+          type: string
+          description: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）'
+        payload:
+          type: string
+        idempotencyKey:
+          type: string
+          description: 下游去重：重送不重做
+        status:
+          type: string
+          description: 'CHECK: pending|sent|failed（重試用盡等人工）'
+        attempts:
+          type: integer
+          format: int32
+        nextRetryAt:
+          type: string
+          format: date-time
+          description: 指數退避
+        createdAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - tenantId
+      - aggregateKey
+      - kind
+      - payload
+      - idempotencyKey
+      - status
+      - attempts
+      - createdAt
+    outboxRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        aggregateKey:
+          type: string
+          description: Kafka 分區鍵：task_event/push 用 task:<uuid>；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）
+        kind:
+          type: string
+          description: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）'
+        payload:
+          type: string
+        idempotencyKey:
+          type: string
+          description: 下游去重：重送不重做
+        status:
+          type: string
+          description: 'CHECK: pending|sent|failed（重試用盡等人工）'
+        attempts:
+          type: integer
+          format: int32
+        nextRetryAt:
+          type: string
+          format: date-time
+          description: 指數退避
+        sentAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - aggregateKey
+      - kind
+      - payload
+      - idempotencyKey
+      - status
+      - attempts
+    processed_ops:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        opId:
+          type: string
+          description: 客戶端 Idempotency-Key（UUID）
+        resultRef:
+          type: string
+          description: 狀態碼＋精簡回應，重送原樣回放
+        createdAt:
+          type: string
+          format: date-time
+          description: 7 天後排程清
+      description: 弱網重送去重簿（GR-002/E-11）。
+      required:
+      - tenantId
+      - opId
+      - resultRef
+      - createdAt
+    processed_opsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        opId:
+          type: string
+          description: 客戶端 Idempotency-Key（UUID）
+        resultRef:
+          type: string
+          description: 狀態碼＋精簡回應，重送原樣回放
+      required:
+      - tenantId
+      - opId
+      - resultRef
+    cleaning_plans:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        workDate:
+          type: string
+          format: date
+        shift:
+          type: string
+          description: 值域從租戶設定 shift_times 來
+        status:
+          type: string
+          description: 'CHECK: draft|published|superseded'
+        generatedBy:
+          type: string
+          description: 'CHECK: system|manager'
+        algoVersion:
+          type: string
+          description: v1=樓層×工時一層一人；Q4 v2 對照用
+        generatedAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - tenantId
+      - workDate
+      - shift
+      - status
+      - generatedBy
+      - algoVersion
+      - generatedAt
+    cleaning_plansRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        workDate:
+          type: string
+          format: date
+        shift:
+          type: string
+          description: 值域從租戶設定 shift_times 來
+        status:
+          type: string
+          description: 'CHECK: draft|published|superseded'
+        generatedBy:
+          type: string
+          description: 'CHECK: system|manager'
+        algoVersion:
+          type: string
+          description: v1=樓層×工時一層一人；Q4 v2 對照用
+        generatedAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - workDate
+      - shift
+      - status
+      - generatedBy
+      - algoVersion
+      - generatedAt
+    plan_rooms:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        planId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+          description: 誰在哪天負責哪些房查這張
+        estMin:
+          type: integer
+          format: int32
+          description: 抄自 cleaning_time_stats，樣本<20 用標準工時
+        routeSeq:
+          type: integer
+          format: int32
+          description: 建議打掃順序（v1=照樓層）
+        taskId:
+          type: string
+          format: uuid
+          description: 發佈後回填對應打掃任務
+      description: 計畫明細（Plan×Room×Staff junction）。
+      required:
+      - id
+      - tenantId
+      - planId
+      - roomId
+      - staffId
+      - estMin
+      - routeSeq
+    plan_roomsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        planId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+          description: 誰在哪天負責哪些房查這張
+        estMin:
+          type: integer
+          format: int32
+          description: 抄自 cleaning_time_stats，樣本<20 用標準工時
+        routeSeq:
+          type: integer
+          format: int32
+          description: 建議打掃順序（v1=照樓層）
+        taskId:
+          type: string
+          format: uuid
+          description: 發佈後回填對應打掃任務
+      required:
+      - tenantId
+      - planId
+      - roomId
+      - staffId
+      - estMin
+      - routeSeq
+    cleaning_time_stats:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        roomType:
+          type: string
+        avgActualMin:
+          type: number
+          format: decimal
+          description: derived：流水帳 completed−started 平均（退回以最後一輪為準）
+        sampleCount:
+          type: integer
+          format: int32
+          description: <20 時排房用標準工時
+        updatedAt:
+          type: string
+          format: date-time
+      description: 投影（可重算）。只到房型層級、不含個人（個人工時受分級可見與保留期限管）。
+      required:
+      - tenantId
+      - roomType
+      - avgActualMin
+      - sampleCount
+      - updatedAt
+    cleaning_time_statsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        roomType:
+          type: string
+        avgActualMin:
+          type: number
+          format: decimal
+          description: derived：流水帳 completed−started 平均（退回以最後一輪為準）
+        sampleCount:
+          type: integer
+          format: int32
+          description: <20 時排房用標準工時
+      required:
+      - tenantId
+      - roomType
+      - avgActualMin
+      - sampleCount
+    sop_items:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        appliesTo:
+          type: string
+          description: 'CHECK: cleaning|inspection——SOP 項目與查房項目同構共表'
+        itemKey:
+          type: string
+        label:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      description: 每家飯店自設的 SOP/查房項目（reference）。/admin/settings 的 sop_items/inspection_items 鍵為本表門面。
+      required:
+      - id
+      - tenantId
+      - appliesTo
+      - itemKey
+      - label
+      - sortOrder
+      - active
+      - createdAt
+    sop_itemsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        appliesTo:
+          type: string
+          description: 'CHECK: cleaning|inspection——SOP 項目與查房項目同構共表'
+        itemKey:
+          type: string
+        label:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        active:
+          type: boolean
+      required:
+      - tenantId
+      - appliesTo
+      - itemKey
+      - label
+      - sortOrder
+      - active
+    task_sop_checks:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        itemKey:
+          type: string
+        label:
+          type: string
+          description: 建單當下快照（項目日後改名不影響歷史單）
+        checked:
+          type: boolean
+        skipped:
+          type: boolean
+          description: CHECK NOT (checked AND skipped)；跳過不擋流程但留痕
+        checkedBy:
+          type: string
+          format: uuid
+        checkedAt:
+          type: string
+          format: date-time
+      description: 投影：查房退回時歸零重來；「誰在幾點勾過什麼」的歷史在 task_events（sop_checked）。
+      required:
+      - id
+      - tenantId
+      - taskId
+      - itemKey
+      - label
+      - checked
+      - skipped
+    task_sop_checksRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        itemKey:
+          type: string
+        label:
+          type: string
+          description: 建單當下快照（項目日後改名不影響歷史單）
+        checked:
+          type: boolean
+        skipped:
+          type: boolean
+          description: CHECK NOT (checked AND skipped)；跳過不擋流程但留痕
+        checkedBy:
+          type: string
+          format: uuid
+        checkedAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - taskId
+      - itemKey
+      - label
+      - checked
+      - skipped
+    inspections:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        inspectorId:
+          type: string
+          format: uuid
+          description: 守衛：inspector ≠ 原清房者（403）
+        result:
+          type: string
+          description: 'CHECK: passed|failed'
+        items:
+          type: string
+          description: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）'
+        createdAt:
+          type: string
+          format: date-time
+      description: 查房記錄（history，一次查房一列；退回重查會有多列）。
+      required:
+      - id
+      - tenantId
+      - taskId
+      - inspectorId
+      - result
+      - items
+      - createdAt
+    inspectionsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        inspectorId:
+          type: string
+          format: uuid
+          description: 守衛：inspector ≠ 原清房者（403）
+        result:
+          type: string
+          description: 'CHECK: passed|failed'
+        items:
+          type: string
+          description: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）'
+      required:
+      - tenantId
+      - taskId
+      - inspectorId
+      - result
+      - items
+    handovers:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        dept:
+          type: string
+          description: 'CHECK: housekeeping|engineering|frontdesk'
+        shift:
+          type: string
+        workDate:
+          type: string
+          format: date
+        snapshot:
+          type: string
+          description: 交班當下任務清單定格——之後任務再變，快照不變
+        generatedBy:
+          type: string
+          description: 'CHECK: system|manager（班末掃描產生，主管可手動；假設 A8）'
+        createdAt:
+          type: string
+          format: date-time
+      description: 交班單凍結快照（history，永不 UPDATE）。
+      required:
+      - id
+      - tenantId
+      - dept
+      - shift
+      - workDate
+      - snapshot
+      - generatedBy
+      - createdAt
+    handoversRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        dept:
+          type: string
+          description: 'CHECK: housekeeping|engineering|frontdesk'
+        shift:
+          type: string
+        workDate:
+          type: string
+          format: date
+        snapshot:
+          type: string
+          description: 交班當下任務清單定格——之後任務再變，快照不變
+        generatedBy:
+          type: string
+          description: 'CHECK: system|manager（班末掃描產生，主管可手動；假設 A8）'
+      required:
+      - tenantId
+      - dept
+      - shift
+      - workDate
+      - snapshot
+      - generatedBy
+    handover_signs:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        handoverId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+        signedAt:
+          type: string
+          format: date-time
+      description: 簽收（junction）；簽收另寫事件。
+      required:
+      - tenantId
+      - handoverId
+      - staffId
+      - signedAt
+    handover_signsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        handoverId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+        signedAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - handoverId
+      - staffId
+      - signedAt
+    notices:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        senderId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        recipients:
+          type: string
+          description: 部門/個人混選 {"depts":[…],"staff_ids":[…]}；推播經 outbox 展開一人一封
+        createdAt:
+          type: string
+          format: date-time
+      description: 通知板。逾時未讀升級屬 SLA 家族，v1 不做。
+      required:
+      - id
+      - tenantId
+      - senderId
+      - title
+      - body
+      - recipients
+      - createdAt
+    noticesRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        senderId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        recipients:
+          type: string
+          description: 部門/個人混選 {"depts":[…],"staff_ids":[…]}；推播經 outbox 展開一人一封
+      required:
+      - tenantId
+      - senderId
+      - title
+      - body
+      - recipients
+    notice_reads:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        noticeId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+        readAt:
+          type: string
+          format: date-time
+      description: 已讀（junction）。
+      required:
+      - tenantId
+      - noticeId
+      - staffId
+      - readAt
+    notice_readsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        noticeId:
+          type: string
+          format: uuid
+        staffId:
+          type: string
+          format: uuid
+        readAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - noticeId
+      - staffId
+      - readAt
+    lost_items:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        roomId:
+          type: string
+          format: uuid
+          description: 公共區拾獲可空
+        location:
+          type: string
+          description: 房外位置描述
+        itemDesc:
+          type: string
+        photoRef:
+          type: string
+          description: 照片外存引用；事件 payload 只記 hasPhoto
+        status:
+          type: string
+          description: 'CHECK: held|returned'
+        foundBy:
+          type: string
+          format: uuid
+          description: 拾獲人（追責與對帳）
+        foundAt:
+          type: string
+          format: date-time
+        returnedAt:
+          type: string
+          format: date-time
+        returnedTo:
+          type: string
+          description: PII：領回人稱謂——去識別化範圍
+        createdAt:
+          type: string
+          format: date-time
+      description: 遺失物：櫃檯登記、歸還結案。
+      required:
+      - id
+      - tenantId
+      - itemDesc
+      - status
+      - foundBy
+      - foundAt
+      - createdAt
+    lost_itemsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        roomId:
+          type: string
+          format: uuid
+          description: 公共區拾獲可空
+        location:
+          type: string
+          description: 房外位置描述
+        itemDesc:
+          type: string
+        photoRef:
+          type: string
+          description: 照片外存引用；事件 payload 只記 hasPhoto
+        status:
+          type: string
+          description: 'CHECK: held|returned'
+        foundBy:
+          type: string
+          format: uuid
+          description: 拾獲人（追責與對帳）
+        foundAt:
+          type: string
+          format: date-time
+        returnedAt:
+          type: string
+          format: date-time
+        returnedTo:
+          type: string
+          description: PII：領回人稱謂——去識別化範圍
+      required:
+      - tenantId
+      - itemDesc
+      - status
+      - foundBy
+      - foundAt
+    leaves:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        staffId:
+          type: string
+          format: uuid
+        fromAt:
+          type: string
+          format: date-time
+        toAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+          description: 登記的主管
+        createdAt:
+          type: string
+          format: date-time
+      description: 請假。登記當下觸發連鎖：accepted→pool、doing→interrupted（效果記事件，不回寫本表）。
+      required:
+      - id
+      - tenantId
+      - staffId
+      - fromAt
+      - toAt
+      - createdBy
+      - createdAt
+    leavesRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        staffId:
+          type: string
+          format: uuid
+        fromAt:
+          type: string
+          format: date-time
+        toAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - staffId
+      - fromAt
+      - toAt
+    room_memory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: integer
+          format: int64
+        roomId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          description: 'CHECK: repair|preference|incident'
+        summary:
+          type: string
+          description: 可能含住客線索——去識別化範圍
+        sourceTaskId:
+          type: string
+          format: uuid
+          description: 追溯來源任務
+        occurredAt:
+          type: string
+          format: date-time
+      description: 投影（可重算）：這間房的往事，餵「問一下」。
+      required:
+      - id
+      - tenantId
+      - roomId
+      - kind
+      - summary
+      - occurredAt
+    room_memoryRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        roomId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          description: 'CHECK: repair|preference|incident'
+        summary:
+          type: string
+          description: 可能含住客線索——去識別化範圍
+        sourceTaskId:
+          type: string
+          format: uuid
+          description: 追溯來源任務
+        occurredAt:
+          type: string
+          format: date-time
+      required:
+      - tenantId
+      - roomId
+      - kind
+      - summary
+      - occurredAt
+    stats_daily:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        statDate:
+          type: string
+          format: date
+        sellable:
+          type: integer
+          format: int32
+          description: 可賣房數
+        avgResponseMin:
+          type: number
+          format: decimal
+          description: 平均回應分鐘
+        ratingAvg:
+          type: number
+          format: decimal
+          description: 住客評分均值
+        inspectionReturns:
+          type: integer
+          format: int32
+          description: 查房退回次數
+        completedCount:
+          type: integer
+          format: int32
+        summary:
+          type: string
+          description: 一行當日摘要
+        updatedAt:
+          type: string
+          format: date-time
+      description: 投影（worker 預算好，API 只讀不現算）。不變條件：取消單一律排除（E-15/SC-007）。
+      required:
+      - tenantId
+      - statDate
+      - sellable
+      - avgResponseMin
+      - ratingAvg
+      - inspectionReturns
+      - completedCount
+      - summary
+      - updatedAt
+    stats_dailyRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        statDate:
+          type: string
+          format: date
+        sellable:
+          type: integer
+          format: int32
+          description: 可賣房數
+        avgResponseMin:
+          type: number
+          format: decimal
+          description: 平均回應分鐘
+        ratingAvg:
+          type: number
+          format: decimal
+          description: 住客評分均值
+        inspectionReturns:
+          type: integer
+          format: int32
+          description: 查房退回次數
+        completedCount:
+          type: integer
+          format: int32
+        summary:
+          type: string
+          description: 一行當日摘要
+      required:
+      - tenantId
+      - statDate
+      - sellable
+      - avgResponseMin
+      - ratingAvg
+      - inspectionReturns
+      - completedCount
+      - summary
+    phrase_counter:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        phrase:
+          type: string
+          description: 住客常打字句——PII 風險，去識別化範圍
+        count:
+          type: integer
+          format: int32
+        lastSeenAt:
+          type: string
+          format: date-time
+        suggested:
+          type: boolean
+          description: 已建議轉按鈕
+      description: 投影（可重算）：高頻自由文字排行，餵「建議轉成按鈕」。
+      required:
+      - tenantId
+      - phrase
+      - count
+      - lastSeenAt
+      - suggested
+    phrase_counterRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        phrase:
+          type: string
+          description: 住客常打字句——PII 風險，去識別化範圍
+        count:
+          type: integer
+          format: int32
+        lastSeenAt:
+          type: string
+          format: date-time
+        suggested:
+          type: boolean
+          description: 已建議轉按鈕
+      required:
+      - tenantId
+      - phrase
+      - count
+      - lastSeenAt
+      - suggested
+  responses:
+    BadRequest:
+      description: 請求參數錯誤
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 資源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 衝突（樂觀鎖 / 唯一鍵 / 狀態機）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

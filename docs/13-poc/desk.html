@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 櫃檯看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  .desk-layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; padding: 20px; align-items: start; }
+  .board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); gap: 14px; }
+  .board-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .board-col-head { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 2px 8px; border-bottom: 2px solid var(--color-line); }
+  .board-col-head h2 { font-size: 14px; margin: 0; }
+  .board-col-head .count { font-family: var(--font-mono); font-size: 13px; color: var(--color-ink-faint); }
+  .board-col-body { display: flex; flex-direction: column; gap: 10px; min-height: 60px; }
+
+  .rail { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 76px; }
+  .rail .panel h2 { font-size: 15px; }
+  .notice-item { padding: 10px 0; border-top: 1px dashed var(--color-line); font-size: 13px; }
+  .notice-item:first-child { border-top: none; }
+  .notice-item .notice-msg { font-weight: 600; margin: 0 0 4px; }
+  .notice-item .notice-meta { color: var(--color-ink-faint); font-size: 12px; }
+  .read-pill-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .read-pill { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
+  .read-pill.unread { background: var(--color-surface-sunken); color: var(--color-ink-faint); }
+
+  .lf-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px dashed var(--color-line); font-size: 13px; }
+  .lf-item:first-child { border-top: none; }
+  .lf-item .lf-status-returned { color: var(--color-ink-faint); text-decoration: line-through; }
+  .lf-item .lf-found-by { color: var(--color-ink-faint); font-size: 12px; }
+
+  .board-area { min-width: 0; }
+  .board-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .board-toolbar input {
+    width: min(380px, 100%); font-family: inherit; font-size: 14px; padding: 9px 12px;
+    border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong);
+    background: var(--color-surface-raised); color: var(--color-ink);
+  }
+  .board-toolbar .search-count { font-family: var(--font-mono); font-size: 12.5px; color: var(--color-ink-faint); white-space: nowrap; }
+
+  @media (max-width: 1100px) {
+    .desk-layout { grid-template-columns: 1fr; }
+    .board { grid-template-columns: repeat(2, 1fr); }
+    .rail { position: static; }
+  }
+</style>
+</head>
+<body>
+
+<div class="tms-topbar">
+  <span class="tms-brand">
+    <span class="tms-brand-mark">TMS</span>
+    <span class="tms-brand-role">櫃檯 · 小陳</span>
+  </span>
+  <div class="tms-topbar-actions">
+    <a class="btn btn-secondary" href="events.html" target="_blank" rel="noopener">事件流水帳</a>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+</div>
+
+<div class="desk-layout">
+  <section class="board-area">
+    <div class="board-toolbar">
+      <input type="search" id="board-search" placeholder="搜尋房號、房務員或任務名稱…" aria-label="搜尋任務">
+      <span class="search-count" id="search-count"></span>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <aside class="rail">
+    <section class="panel">
+      <h2>通知板</h2>
+      <div class="field">
+        <label for="notice-input">發送給全體員工</label>
+        <textarea id="notice-input" style="min-height:52px;" placeholder="例如：3 樓電梯保養，請改走安全梯"></textarea>
+      </div>
+      <button class="btn btn-primary btn-block" id="notice-send" type="button" style="margin-top:8px;">發送通知</button>
+      <div id="notice-list" style="margin-top:10px;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>遺失物登記</h2>
+      <div class="field">
+        <label for="lf-room">房號</label>
+        <input type="text" id="lf-room" placeholder="301">
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label for="lf-item">物品</label>
+        <input type="text" id="lf-item" placeholder="藍色行動電源">
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label for="lf-photo">照片（選填，認領比對用）</label>
+        <input type="file" id="lf-photo" accept="image/*" capture="environment">
+      </div>
+      <div id="lf-photo-preview" style="display:flex;gap:8px;align-items:center;margin-top:8px;"></div>
+      <button class="btn btn-secondary btn-block" id="lf-add" type="button" style="margin-top:8px;">登記遺失物</button>
+      <div id="lf-list" style="margin-top:10px;"></div>
+    </section>
+  </aside>
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+  var ACTOR = '小陳';
+
+  var COLUMNS = [
+    { key: 'triage', title: '待判讀', match: function (t) { return t.state === 'triage'; } },
+    { key: 'pool', title: '待接池', match: function (t) { return t.state === 'pool'; } },
+    { key: 'inprogress', title: '處理中', match: function (t) { return t.state === 'accepted' || t.state === 'doing' || t.state === 'deferred' || t.state === 'interrupted'; } },
+    { key: 'closed', title: '已結束', match: function (t) { return t.state === 'done' || t.state === 'inspected' || t.state === 'cancelled'; } }
+  ];
+
+  function staffName(id) { return E.resolveStaffName(E.getState(), id); }
+
+  function triageActions(task) {
+    return [
+      {
+        label: '給房務', variant: 'secondary',
+        onClick: function () {
+          var r = E.deskTriage(task.id, 'housekeeping', ACTOR);
+          if (r.ok) C.toast('已轉給房務待接池', 'success'); else C.toastFromResult(r);
+        }
+      },
+      {
+        label: '給工務', variant: 'secondary',
+        onClick: function () {
+          var r = E.deskTriage(task.id, 'maintenance', ACTOR);
+          if (r.ok) C.toast('已轉給工務待接池', 'success'); else C.toastFromResult(r);
+        }
+      },
+      {
+        label: '當場回答', variant: 'primary',
+        onClick: function () {
+          var answer = window.prompt('輸入要回覆住客的內容（送出後直接結案為「已完成」）：');
+          if (answer === null) return;
+          if (!answer.trim()) { C.toast('請輸入回覆內容', 'warning'); return; }
+          var r = E.deskAnswer(task.id, answer.trim(), ACTOR);
+          if (r.ok) C.toast('已回覆並結案', 'success'); else C.toastFromResult(r);
+        }
+      }
+    ];
+  }
+
+  function renderBoard(state) {
+    var board = document.getElementById('board');
+    board.innerHTML = '';
+    // 搜尋框是靜態 DOM、值不隨重繪消失；每次重繪重新套用過濾，遠端事件進來也保持過濾狀態。
+    var q = (document.getElementById('board-search').value || '').trim().toLowerCase();
+    function matchesQuery(t) {
+      if (!q) return true;
+      var hay = [
+        t.roomNo, t.title, t.detail || '',
+        t.assigneeId ? staffName(t.assigneeId) : '',
+        E.TYPE_LABELS[t.type] || '', E.STATE_LABELS[t.state] || ''
+      ].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }
+    var totalMatched = 0;
+    COLUMNS.forEach(function (col) {
+      var tasks = state.tasks.filter(col.match).filter(matchesQuery)
+        .sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+      totalMatched += tasks.length;
+      var colEl = C.el('div', 'board-col');
+      var head = C.el('div', 'board-col-head');
+      head.appendChild(C.el('h2', null, col.title));
+      head.appendChild(C.el('span', 'count', String(tasks.length)));
+      colEl.appendChild(head);
+      var body = C.el('div', 'board-col-body');
+      if (!tasks.length) {
+        body.appendChild(C.emptyState(q ? '沒有符合搜尋的任務' : '目前沒有任務'));
+      } else {
+        tasks.forEach(function (t) {
+          var opts = { showAssignee: true, staffName: staffName };
+          if (col.key === 'triage') opts.actions = triageActions(t);
+          body.appendChild(C.taskCard(t, opts));
+        });
+      }
+      colEl.appendChild(body);
+      board.appendChild(colEl);
+    });
+    document.getElementById('search-count').textContent = q ? '符合 ' + totalMatched + ' 筆' : '';
+  }
+
+  function renderNotices(state) {
+    var wrap = document.getElementById('notice-list');
+    wrap.innerHTML = '';
+    var staffNames = state.staff.filter(function (s) { return s.role !== 'manager' && s.role !== 'desk'; }).map(function (s) { return s.name; });
+    (state.notices || []).forEach(function (n) {
+      var item = C.el('div', 'notice-item');
+      item.appendChild(C.el('p', 'notice-msg', n.message));
+      item.appendChild(C.el('p', 'notice-meta', n.actor + ' · ' + new Date(n.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })));
+      var pills = C.el('div', 'read-pill-row');
+      staffNames.forEach(function (name) {
+        var read = n.readBy.indexOf(name) !== -1;
+        pills.appendChild(C.el('span', 'read-pill' + (read ? '' : ' unread'), name + (read ? ' 已讀' : ' 未讀')));
+      });
+      item.appendChild(pills);
+      wrap.appendChild(item);
+    });
+    if (!(state.notices || []).length) wrap.appendChild(C.emptyState('尚未發送任何通知'));
+  }
+
+  function renderLostFound(state) {
+    var wrap = document.getElementById('lf-list');
+    wrap.innerHTML = '';
+    (state.lostFound || []).forEach(function (rec) {
+      var item = C.el('div', 'lf-item');
+      if (rec.photo) item.appendChild(C.photoThumb(rec.photo));
+      var box = C.el('span');
+      box.style.flex = '1';
+      box.appendChild(C.el('span', rec.status === 'returned' ? 'lf-status-returned' : null, rec.roomNo + ' · ' + rec.item));
+      if (rec.foundBy) box.appendChild(C.el('span', 'lf-found-by', '　' + rec.foundBy + ' 拾獲'));
+      item.appendChild(box);
+      if (rec.status === 'returned') {
+        item.appendChild(C.el('span', 'tag tag-muted', '已歸還'));
+      } else {
+        var btn = C.el('button', 'btn btn-ghost', '標記歸還');
+        btn.type = 'button';
+        btn.addEventListener('click', function () { E.returnLostFound(rec.id, ACTOR); });
+        item.appendChild(btn);
+      }
+      wrap.appendChild(item);
+    });
+    if (!(state.lostFound || []).length) wrap.appendChild(C.emptyState('尚無遺失物登記'));
+  }
+
+  function renderAll() {
+    var state = E.getState();
+    renderBoard(state);
+    renderNotices(state);
+    renderLostFound(state);
+  }
+
+  document.getElementById('notice-send').addEventListener('click', function () {
+    var input = document.getElementById('notice-input');
+    if (!input.value.trim()) { C.toast('請輸入通知內容', 'warning'); return; }
+    E.sendNotice(input.value.trim(), ACTOR);
+    input.value = '';
+    C.toast('已發送通知', 'success');
+  });
+
+  var lostFoundPhoto = null;
+
+  function renderPhotoPreview() {
+    var wrap = document.getElementById('lf-photo-preview');
+    wrap.innerHTML = '';
+    if (!lostFoundPhoto) return;
+    wrap.appendChild(C.photoThumb(lostFoundPhoto));
+    var removeBtn = C.el('button', 'btn btn-ghost', '移除照片');
+    removeBtn.type = 'button';
+    removeBtn.addEventListener('click', function () {
+      lostFoundPhoto = null;
+      document.getElementById('lf-photo').value = '';
+      renderPhotoPreview();
+    });
+    wrap.appendChild(removeBtn);
+  }
+
+  document.getElementById('lf-photo').addEventListener('change', function (ev) {
+    var f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    C.compressImage(f, 320, function (dataUrl) {
+      if (!dataUrl) { C.toast('照片讀取失敗，換一張試試', 'error'); return; }
+      lostFoundPhoto = dataUrl;
+      renderPhotoPreview();
+    });
+  });
+
+  document.getElementById('lf-add').addEventListener('click', function () {
+    var room = document.getElementById('lf-room');
+    var item = document.getElementById('lf-item');
+    if (!room.value.trim() || !item.value.trim()) { C.toast('請填寫房號與物品', 'warning'); return; }
+    E.logLostFound(room.value.trim(), item.value.trim(), ACTOR, lostFoundPhoto);
+    room.value = ''; item.value = '';
+    lostFoundPhoto = null;
+    document.getElementById('lf-photo').value = '';
+    renderPhotoPreview();
+    C.toast('已登記遺失物', 'success');
+  });
+
+  document.getElementById('board-search').addEventListener('input', renderAll);
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  renderAll();
+  E.subscribe(renderAll);
+  setInterval(renderAll, 20000);
+})();
+</script>
+</body>
+</html>

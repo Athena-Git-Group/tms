@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 任務流 Demo 導覽</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  .hero {
+    padding: 56px 20px 40px;
+    text-align: center;
+  }
+  .hero-eyebrow {
+    display: inline-block;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--color-accent-strong);
+    background: var(--color-accent-soft);
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+  .hero p.lede {
+    max-width: 640px;
+    margin: 0 auto;
+    color: var(--color-ink-muted);
+    font-size: 16px;
+  }
+  .role-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+    margin: 32px 0;
+  }
+  .role-card {
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .role-card-glyph {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 600;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+  }
+  .role-card h2 { font-size: 18px; margin: 0; }
+  .role-card .role-sub { font-size: 12.5px; color: var(--color-ink-faint); margin: -8px 0 0; }
+  .role-card p { font-size: 13.5px; color: var(--color-ink-muted); flex: 1; margin: 0; }
+  .role-card .story-count { font-size: 12.5px; color: var(--color-accent-strong); font-weight: 700; }
+  .section-title { font-size: 20px; margin: 48px 0 6px; }
+  .section-sub { color: var(--color-ink-muted); font-size: 14px; margin: 0 0 18px; }
+  .diff-note {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 28px 0;
+  }
+  .scope-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .scope-item {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-raised);
+    font-size: 13.5px;
+  }
+  .scope-item .scope-what { font-weight: 700; color: var(--color-ink); }
+  .scope-item .scope-why { color: var(--color-ink-muted); }
+  footer.tms-footer {
+    text-align: center;
+    padding: 40px 20px 60px;
+    color: var(--color-ink-faint);
+    font-size: 13px;
+  }
+  @media (max-width: 560px) {
+    .scope-item { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="tms-topbar">
+  <span class="tms-brand">
+    <span class="tms-brand-mark">TMS</span>
+    <span class="tms-brand-role">導覽</span>
+  </span>
+  <div class="tms-topbar-actions">
+    <a class="btn btn-secondary" href="settings.html">租戶設定</a>
+    <a class="btn btn-secondary" href="demo.html">並排展演模式</a>
+    <a class="btn btn-secondary" href="events.html">事件流水帳</a>
+    <button class="btn btn-danger" id="reset-btn" type="button">重置示範資料</button>
+  </div>
+</div>
+
+<main class="container">
+
+  <section class="hero">
+    <span class="hero-eyebrow">互動 POC · 五視角</span>
+    <h1>一支掃碼需求，怎麼變成一間查驗合格的房間</h1>
+    <p class="lede">
+      這是一個分角色的產品原型：住客在手機上提需求、櫃檯判讀分流、房務搶單處理、
+      主管查房把關、老闆遠端看數字——五個視角共用同一套瀏覽器端模擬任務引擎，跨分頁即時連動。
+    </p>
+  </section>
+
+  <div class="diff-note">
+    與 05 派單沙盤的差異：那份是單頁可切換的沙盤模擬器；這裡是分角色的獨立產品頁面，
+    狀態一律採九態正式命名（triage / pool / accepted / doing / done / inspected /
+    deferred / interrupted / cancelled），不用沙盤裡的簡化命名。
+  </div>
+
+  <section>
+    <h2 class="section-title">五個視角，請各開一個分頁</h2>
+    <p class="section-sub">
+      建議依序開啟：住客 → 櫃檯 → 房務（可留主管分頁備用），操作後互相切換就能看到即時連動。
+      只有一個螢幕的話，改用右上角的「並排展演模式」，三個視角同畫面連動。
+      住客頁顯示的資訊、需求選單與流程規則（例如打掃要不要查房）都能在「租戶設定」即時調整。
+    </p>
+
+    <div class="role-grid">
+
+      <article class="role-card">
+        <span class="role-card-glyph" style="background:var(--color-state-accepted-soft); color:var(--color-state-accepted);">客</span>
+        <h2>住客</h2>
+        <p class="role-sub">guest.html · 手機寬度</p>
+        <p>掃碼看入住資訊、勾選常見需求或打字留言、追蹤處理進度、完成後評分，必要時收回需求。</p>
+        <span class="story-count">5 則可操作故事</span>
+        <a class="btn btn-primary" href="guest.html" target="_blank" rel="noopener">開啟住客頁（新分頁）</a>
+      </article>
+
+      <article class="role-card">
+        <span class="role-card-glyph" style="background:var(--color-state-done-soft); color:var(--color-state-done);">櫃</span>
+        <h2>櫃檯</h2>
+        <p class="role-sub">desk.html · 寬螢幕看板</p>
+        <p>把待判讀需求分流給房務／工務，或當場回答結案；發送通知給全員並追蹤已讀；登記與歸還遺失物。</p>
+        <span class="story-count">3 則可操作故事</span>
+        <a class="btn btn-primary" href="desk.html" target="_blank" rel="noopener">開啟櫃檯頁（新分頁）</a>
+      </article>
+
+      <article class="role-card">
+        <span class="role-card-glyph" style="background:var(--color-state-doing-soft); color:var(--color-state-doing);">房</span>
+        <h2>房務／工務</h2>
+        <p class="role-sub">housekeeping.html · App 風格</p>
+        <p>在部門待接池搶單、看班前自動排房、開始與完成兩段回報、SOP 逐項打勾、隨時「問一下」求救；打掃時拾獲的遺失物直接登記（可附拍照），交櫃檯保管歸還。</p>
+        <span class="story-count">6 則可操作故事</span>
+        <a class="btn btn-primary" href="housekeeping.html" target="_blank" rel="noopener">開啟房務頁（新分頁）</a>
+      </article>
+
+      <article class="role-card">
+        <span class="role-card-glyph" style="background:var(--color-state-inspected-soft); color:var(--color-state-inspected);">主</span>
+        <h2>主管</h2>
+        <p class="role-sub">schedule.html＋manager.html</p>
+        <p>排房：從 PMS 或 Excel（CSV）拉今日房態、自動分配（樓層聚合）後發佈即指派、未開始可改派；查房：逐項判定，任一不過整間退回重掃。</p>
+        <span class="story-count">4 則可操作故事</span>
+        <a class="btn btn-primary" href="schedule.html" target="_blank" rel="noopener">開啟排房頁（新分頁）</a>
+        <a class="btn btn-secondary" href="manager.html" target="_blank" rel="noopener">開啟查房頁（新分頁）</a>
+      </article>
+
+      <article class="role-card">
+        <span class="role-card-glyph" style="background:var(--color-state-pool-soft); color:var(--color-state-pool);">闆</span>
+        <h2>老闆</h2>
+        <p class="role-sub">owner.html · 手機總覽（唯讀）</p>
+        <p>四張數字卡：可賣房、回應速度、住客評分、查房退回，加一行當日摘要；只在出事（住客評低分）時出現通知。</p>
+        <span class="story-count">2 則唯讀故事</span>
+        <a class="btn btn-primary" href="owner.html" target="_blank" rel="noopener">開啟老闆頁（新分頁）</a>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">這個 POC 刻意沒做的部分</h2>
+    <p class="section-sub">範圍外清單——略過的理由寫在旁邊，不是忘了做。</p>
+    <ul class="scope-list">
+      <li class="scope-item">
+        <span class="scope-what">交班單檢視簽收</span>
+        <span class="scope-why">跨班次狀態在單一 demo session 裡很難自然展示，而且不在「掃碼→查房」這條黃金路徑上。</span>
+      </li>
+      <li class="scope-item">
+        <span class="scope-what">主管的請假退池／工時缺口試算</span>
+        <span class="scope-why">功能範圍大，且不是這次要展演的黃金路徑；排房與查房已覆蓋主管視角的核心戲碼。</span>
+      </li>
+      <li class="scope-item">
+        <span class="scope-what">排房的拖曳操作與真 .xlsx 解析</span>
+        <span class="scope-why">改派用下拉選單就能演完故事，拖曳是互動糖衣；Excel 匯入以 CSV 文字示意，真 .xlsx 要再拉解析庫，留正式版。</span>
+      </li>
+      <li class="scope-item">
+        <span class="scope-what">租戶設定的其餘可調項</span>
+        <span class="scope-why">已做：資訊頁、需求選單（含自建項目）、流程開關、標準工時、SLA 時限、班次容量、SOP／查房項目、自動分配策略、老闆通知門檻。留給正式版：多語內容、責任區與 VIP 排序、顯示層自訂（狀態改名、語意類別下加子狀態）。</span>
+      </li>
+      <li class="scope-item">
+        <span class="scope-what">老闆通知的「主管手動上報」來源</span>
+        <span class="scope-why">老闆頁的出事通知 v1 有兩個來源：住客評低分、主管手動上報。這裡示範前者（評 2 星以下自動出現），後者需要在主管端加上報流程，不在這條黃金路徑上。</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+
+<footer class="tms-footer">
+  本機以 <code class="mono">python3 -m http.server</code> 開啟，線上版直接點分頁連結 · 狀態全存在瀏覽器 localStorage，重置即清空重來
+</footer>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    TMS_ENGINE.resetAll();
+    TMS_COMPONENTS.toast('已重置示範資料，所有分頁會自動同步回起點', 'success');
+  });
+</script>
+</body>
+</html>

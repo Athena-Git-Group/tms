@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 並排展演</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  /* 並排模式把三個角色頁以 iframe 同畫面展示：同一份文件內的 iframe 之間
+     BroadcastChannel 一定互通，不依賴瀏覽器的跨分頁行為——這是跨分頁展演的保險版。 */
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; background: var(--color-surface-sunken); }
+  .demo-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(330px, 390px) minmax(480px, 1fr) minmax(380px, 460px);
+    gap: 12px;
+    padding: 12px 16px 16px;
+    min-height: 0;
+  }
+  .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .pane-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 4px 8px;
+  }
+  .pane-head h2 { font-size: 13.5px; margin: 0; color: var(--color-ink-muted); font-weight: 700; }
+  .pane-switch { display: flex; gap: 4px; }
+  .pane-switch button {
+    font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--color-line-strong); background: var(--color-surface-raised);
+    color: var(--color-ink-muted); cursor: pointer;
+  }
+  .pane-switch button.is-active { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .pane iframe {
+    flex: 1; width: 100%; border: 1px solid var(--color-line);
+    border-radius: var(--radius-md); background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+  .demo-hint {
+    padding: 0 16px 12px; margin: 0; font-size: 12.5px; color: var(--color-ink-faint);
+  }
+  @media (max-width: 1180px) {
+    body { height: auto; }
+    .demo-grid { grid-template-columns: 1fr; }
+    .pane iframe { min-height: 70vh; }
+  }
+</style>
+</head>
+<body>
+
+<div class="tms-topbar">
+  <span class="tms-brand">
+    <span class="tms-brand-mark">TMS</span>
+    <span class="tms-brand-role">並排展演</span>
+  </span>
+  <div class="tms-topbar-actions">
+    <a class="btn btn-secondary" href="index.html">回導覽頁</a>
+    <button class="btn btn-danger" id="reset-btn" type="button">重置示範資料</button>
+  </div>
+</div>
+
+<p class="demo-hint">
+  一個螢幕演完整條路：左邊住客送需求、中間櫃檯判讀、右邊房務處理——右欄可切成主管查房、老闆總覽或事件流水帳。
+  想演「兩個人搶同一張單」，另開一個房務分頁換人操作即可。
+</p>
+
+<div class="demo-grid">
+  <div class="pane">
+    <div class="pane-head"><h2>住客</h2></div>
+    <iframe src="guest.html" title="住客頁"></iframe>
+  </div>
+  <div class="pane">
+    <div class="pane-head"><h2>櫃檯</h2></div>
+    <iframe src="desk.html" title="櫃檯頁"></iframe>
+  </div>
+  <div class="pane">
+    <div class="pane-head">
+      <h2>第三視角</h2>
+      <div class="pane-switch" id="pane-switch">
+        <button data-src="housekeeping.html" class="is-active" type="button">房務</button>
+        <button data-src="schedule.html" type="button">排房</button>
+        <button data-src="manager.html" type="button">主管查房</button>
+        <button data-src="owner.html" type="button">老闆</button>
+        <button data-src="settings.html" type="button">設定</button>
+        <button data-src="events.html" type="button">事件流水</button>
+      </div>
+    </div>
+    <iframe src="housekeeping.html" id="third-pane" title="第三視角"></iframe>
+  </div>
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var frame = document.getElementById('third-pane');
+  document.querySelectorAll('#pane-switch button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('#pane-switch button').forEach(function (b) { b.classList.remove('is-active'); });
+      btn.classList.add('is-active');
+      frame.src = btn.dataset.src;
+    });
+  });
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    TMS_ENGINE.resetAll();
+    TMS_COMPONENTS.toast('已重置示範資料，三個視窗會同步回起點', 'success');
+  });
+})();
+</script>
+</body>
+</html>

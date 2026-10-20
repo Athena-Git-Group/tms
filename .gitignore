@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Claude / Athena 工作目錄（本機工具狀態，不進 repo）
+.agents/
+.athena/
+.claude/
+CLAUDE.md
+DISCOVERY-PLAN.md
+INDEX.md
+skills-lock.json
+plans/
+points/
+reviews/

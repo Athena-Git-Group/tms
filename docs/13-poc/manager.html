@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 查房檢核</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  body { background: var(--color-surface-sunken); }
+  .manager-layout { max-width: 640px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+
+  .inspector-bar { display: flex; align-items: center; gap: 10px; padding: 14px 16px; }
+  .inspector-bar label { font-size: 13px; font-weight: 700; color: var(--color-ink-muted); }
+  .inspector-bar select { flex: 1; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); font-weight: 700; }
+
+  .self-warning { font-size: 12.5px; color: var(--color-warning); font-weight: 700; margin: -4px 0 0; }
+
+  .clipboard { padding: 20px; }
+  .clipboard-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .clipboard-head .room { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
+  .clipboard-sub { font-size: 13px; color: var(--color-ink-muted); margin: 0 0 14px; }
+
+  .check-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .check-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 14px; border: 1px solid var(--color-line); border-radius: var(--radius-sm);
+  }
+  .check-item.is-pass { border-color: var(--color-state-done); background: var(--color-state-done-soft); }
+  .check-item.is-fail { border-color: var(--color-state-interrupted); background: var(--color-state-interrupted-soft); }
+  .check-toggle { display: flex; gap: 6px; }
+  .check-toggle button { padding: 6px 12px; font-size: 12.5px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink-muted); font-weight: 700; cursor: pointer; }
+  .check-toggle button.is-active-pass.is-active { background: var(--color-state-done); border-color: var(--color-state-done); color: #fff; }
+  .check-toggle button.is-active-fail.is-active { background: var(--color-state-interrupted); border-color: var(--color-state-interrupted); color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="tms-topbar">
+  <span class="tms-brand">
+    <span class="tms-brand-mark">TMS</span>
+    <span class="tms-brand-role">主管查房</span>
+  </span>
+  <div class="tms-topbar-actions">
+    <a class="btn btn-secondary" href="schedule.html">排房頁</a>
+    <a class="btn btn-secondary" href="events.html" target="_blank" rel="noopener">事件流水帳</a>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+</div>
+
+<div class="manager-layout">
+
+  <section class="panel inspector-bar">
+    <label for="inspector-select">目前查房者</label>
+    <select id="inspector-select"></select>
+  </section>
+
+  <section id="task-list" class="stack" style="gap:16px;"></section>
+
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+  var INSPECTOR_KEY = 'tms_poc_inspector';
+  // taskId → 未送出的查房判定草稿；送出成功後清除（見 renderTaskList 內的說明）。
+  var draftResults = {};
+  // 查房者下拉刻意把房務人員也放進來——這樣才能實機示範「清房者不得查自己清的房」403。
+  var INSPECTOR_POOL_IDS = ['mg1', 'hk1', 'hk2'];
+
+  function currentInspectorId() {
+    var v = sessionStorage.getItem(INSPECTOR_KEY);
+    return v || 'mg1';
+  }
+  function setInspector(id) { sessionStorage.setItem(INSPECTOR_KEY, id); }
+
+  function buildInspectorSelect(state) {
+    var sel = document.getElementById('inspector-select');
+    sel.innerHTML = '';
+    INSPECTOR_POOL_IDS.forEach(function (id) {
+      var s = state.staff.filter(function (x) { return x.id === id; })[0];
+      if (!s) return;
+      var o = document.createElement('option');
+      o.value = id; o.textContent = s.name + (s.role === 'manager' ? '（主管）' : '（房務）');
+      sel.appendChild(o);
+    });
+    sel.value = currentInspectorId();
+  }
+
+  function renderTaskList(state) {
+    var wrap = document.getElementById('task-list');
+    wrap.innerHTML = '';
+    var tasks = state.tasks.filter(function (t) { return t.state === 'done' && t.type === 'cleaning'; })
+      .sort(function (a, b) { return a.updatedAt - b.updatedAt; });
+
+    if (!tasks.length) {
+      var flow = state.settings.flow || {};
+      wrap.appendChild(C.emptyState(flow.requireInspection === false
+        ? '流程設定目前是「打掃免查房」：完成即自動合格，不會出現待查任務（可到租戶設定頁改回）'
+        : '目前沒有待查房的任務（打掃完成後會出現在這裡）'));
+      return;
+    }
+
+    var inspectorId = currentInspectorId();
+    var inspectorName = E.resolveStaffName(state, inspectorId);
+
+    tasks.forEach(function (task) {
+      var card = C.el('article', 'panel clipboard');
+      var head = C.el('div', 'clipboard-head');
+      head.appendChild(C.el('span', 'room', task.roomNo + ' 號房'));
+      card.appendChild(head);
+
+      var assigneeName = E.resolveStaffName(state, task.assigneeId);
+      var subParts = [task.title, '清潔人員：' + assigneeName];
+      if (task.redoCount) subParts.push('已重掃 ' + task.redoCount + ' 次');
+      card.appendChild(C.el('p', 'clipboard-sub', subParts.join(' · ')));
+
+      if (task.assigneeId === inspectorId && !(state.settings.flow && state.settings.flow.allowSelfInspect)) {
+        card.appendChild(C.el('p', 'self-warning', '你正是這間房的清潔人員——送出會被系統擋下（403）。'));
+      }
+
+      // 未送出的判定存頁面變數（draftResults）：整頁重繪（20 秒計時、跨分頁事件）
+      // 會重建這張卡，存在 DOM 上的勾選會被靜默重置回全「通過」，
+      // 主管動作稍慢就可能把該退回的房誤送成合格。
+      // 檢核清單照任務自己的 SOP 快照（與引擎 inspectTask 同一準則）——
+      // 租戶設定後來改了項目，不影響已建立任務的查房依據。
+      var sopItems = (task.sop && task.sop.length) ? task.sop : E.INSPECTION_ITEMS;
+
+      var results = draftResults[task.id];
+      if (!results) {
+        results = {};
+        sopItems.forEach(function (i) { results[i.key] = true; });
+        draftResults[task.id] = results;
+      }
+
+      var list = C.el('div', 'check-list');
+      sopItems.forEach(function (item) {
+        var row = C.el('div', 'check-item');
+        row.appendChild(C.el('span', null, item.label));
+        var toggle = C.el('div', 'check-toggle');
+        var passBtn = C.el('button', 'is-active-pass', '通過');
+        var failBtn = C.el('button', 'is-active-fail', '不過');
+        passBtn.type = 'button'; failBtn.type = 'button';
+        function setState(pass) {
+          results[item.key] = pass;
+          row.className = 'check-item ' + (pass ? 'is-pass' : 'is-fail');
+          passBtn.classList.toggle('is-active', pass);
+          failBtn.classList.toggle('is-active', !pass);
+        }
+        passBtn.addEventListener('click', function () { setState(true); });
+        failBtn.addEventListener('click', function () { setState(false); });
+        toggle.appendChild(passBtn); toggle.appendChild(failBtn);
+        row.appendChild(toggle);
+        list.appendChild(row);
+        setState(results[item.key]);
+      });
+      card.appendChild(list);
+
+      var submit = C.el('button', 'btn btn-primary btn-block btn-lg', '送出查房結果');
+      submit.type = 'button';
+      submit.addEventListener('click', function () {
+        var r = E.inspectTask(task.id, results, inspectorId, inspectorName);
+        if (!r.ok) { C.toastFromResult(r); return; }
+        delete draftResults[task.id];
+        if (r.task.state === 'inspected') {
+          C.toast(task.roomNo + ' 號房查驗合格，已排 PMS 回寫', 'success');
+        } else {
+          C.toast(task.roomNo + ' 號房查驗不過，已退回 ' + assigneeName + ' 重掃（第 ' + r.task.redoCount + ' 次）', 'warning');
+        }
+      });
+      card.appendChild(submit);
+
+      wrap.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    var state = E.getState();
+    buildInspectorSelect(state);
+    renderTaskList(state);
+  }
+
+  document.getElementById('inspector-select').addEventListener('change', function (e) {
+    setInspector(e.target.value);
+    renderAll();
+  });
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  renderAll();
+  E.subscribe(renderAll);
+  setInterval(renderAll, 20000);
+})();
+</script>
+</body>
+</html>

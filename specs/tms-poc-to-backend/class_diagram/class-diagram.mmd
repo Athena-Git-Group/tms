@@ -1,0 +1,160 @@
+classDiagram
+%% TMS 三層式物件設計（對齊 data-model.md 實體集合與 docs/11 §4 模組表）
+%% Controller 按 API 前綴；Service 按模組；DAO=Spring Data Repository（每實體一個，圖中按模組聚合標示）
+
+%% ===== Controllers =====
+class AuthController { +login(LoginRequest) TokenResponse }
+class GuestController {
+  +scan(ScanRequest) ScanResponse
+  +home() HomeResponse
+  +createRequest(CreateRequestDto) TaskDto
+  +listRequests() List~TaskDto~
+  +cancel(id) TaskDto
+  +rate(id, RatingDto) TaskDto
+  +stream() SseEmitter
+}
+class StaffController {
+  +pool() List~TaskDto~
+  +claim(id) TaskDto
+  +start(id) TaskDto
+  +complete(id) TaskDto
+  +sopCheck(id, item, SopCheckDto) TaskDto
+  +schedule() ScheduleDto
+  +handovers() List~HandoverDto~
+  +signHandover(id)
+  +kbAsk(KbQuery) KbAnswer
+  +stream() SseEmitter
+}
+class DeskController {
+  +triageList() List~TaskDto~
+  +triage(id, TriageDecisionDto) TaskDto
+  +notices() / createNotice(NoticeDto)
+  +noticeReads(id) List~ReadDto~
+  +lostItems() / registerLostItem(LostItemDto) / returnLostItem(id)
+}
+class AdminController {
+  +plans(date) PlanDto
+  +updatePlan(date, PlanUpdateDto, ifMatch) PlanDto
+  +publishPlan(date, shift) PublishResultDto
+  +regeneratePlan(date, shift) PlanDto
+  +importOccupancy(file) ImportResultDto
+  +inspect(taskId, InspectionDto) InspectionResultDto
+  +leaves(LeaveDto) LeaveResultDto
+  +requeue(id, NoteDto) / reassign(id, ReassignDto) / defer(id) / undefer(id) / cancel(id, ReasonDto)
+  +capacity() CapacityDto
+  +qr(roomNo) QrDto / rotateQr(roomNo) QrDto
+  +settings() / putSetting(key, value)
+  +alert(AlertDto)
+}
+class OwnerController { +dashboard() DashboardDto }
+
+%% ===== Services（模組邊界 = docs/11 模組表）=====
+class TaskEngine {
+  <<任務狀態變更唯一入口>>
+  +transition(taskId, action, actor, payload) TaskDto
+  -guardUpdate() 條件式UPDATE+event_seq取號
+  -appendEvent() -enqueueOutbox() 同一交易
+}
+class DispatchService {
+  +createGuestRequest() +triageDecision()
+  +claim() +requeue() +reassign() +defer() +cancel()
+  +onLeaveRegistered() 請假連鎖
+  +capacity()
+}
+class ClassificationService {
+  +classify(text, lang) RuleHit
+  規則引擎優先、LLM僅建議留稽核
+}
+class SchedulingService {
+  +generatePlan(date, shift) +adjustPlan(ifMatch)
+  +publishPlan() 同交易: 切換+對帳三分支
+  +endOfShiftSweep() +reactivateDeferred()
+}
+class InspectionService { +inspect(taskId, items) 全過/退回+下班連動 }
+class GuestAccessService {
+  +issueToken(room) +rotate(room) 同交易連坐撤銷
+  +scan(token) GuestSession +validateSession()
+}
+class IdentityService { +login() JWT +authorize(role, action) +registerDevice() }
+class CollaborationService { +sendNotice() +markRead() +lostItem() +handoverSnapshot() +sign() }
+class KnowledgeService { +ask(roomNo, keyword) room_memory+sop_items 比對 }
+class ReportingService { +dashboard() 只讀 stats_daily }
+class ConfigService { +get(key) +put(key, value) SopItem 門面 }
+class RealtimePushService {
+  +subscribe(scope) SseEmitter
+  +onKafkaEvent() 按租戶/部門/房分發
+  stream_pos 連號、15s 心跳、degraded 通知
+}
+
+%% ===== Worker（背景模組，MVP 同程序 profile 可拆）=====
+class OutboxRelay { +poll() 同鍵串行搬上Kafka +markSent() 指數退避 }
+class PmsSyncJob { +sync() adapter 拉訂房/房況 +autoPrepTasks() +reconcileImports() }
+class ProjectionUpdater { +onKafkaEvent() 刷新 stats_daily/room_memory/phrase_counter/cleaning_time_stats }
+class PushConsumer { +onKafkaPush() MVP: 日誌+資料列 }
+class PmsWritebackConsumer { +onKafkaPmsStatus() 重試到成功 }
+class HousekeepingJobs { +preShiftPlan() +endOfShiftSweep() +cleanupJobs() +deidentifyJob() Quartz 租戶感知 }
+
+%% ===== OCP 擴充點（需求明示的變化點）=====
+class SchedulingAlgorithm { <<interface>> +plan(rooms, staff, stats) PlanDraft }
+class FloorBasedAlgorithm { v1: 樓層×工時一層一人 }
+class PmsAdapter { <<interface>> +fetchReservations() +pushRoomStatus() 事件訂閱優先/輪詢兜底 }
+class SimulatedPmsAdapter { MVP 模擬 }
+class LlmClient { <<interface>> +translate() +suggestDept() +answer() }
+class NoopLlmClient { MVP 留椿 }
+class PushSender { <<interface>> +send(deviceToken, payload) }
+class LogPushSender { MVP 落日誌 }
+SchedulingAlgorithm <|.. FloorBasedAlgorithm
+PmsAdapter <|.. SimulatedPmsAdapter
+LlmClient <|.. NoopLlmClient
+PushSender <|.. LogPushSender
+
+%% ===== 橫切 =====
+class TenantContext { 自憑證解析 tenant_id；資料層強制 scope }
+class IdempotencyFilter { Idempotency-Key → processed_ops 回放 }
+
+%% ===== 依賴 =====
+AuthController --> IdentityService
+GuestController --> GuestAccessService
+GuestController --> DispatchService
+GuestController --> RealtimePushService
+StaffController --> DispatchService
+StaffController --> TaskEngine
+StaffController --> CollaborationService
+StaffController --> KnowledgeService
+StaffController --> SchedulingService
+StaffController --> RealtimePushService
+DeskController --> DispatchService
+DeskController --> CollaborationService
+AdminController --> SchedulingService
+AdminController --> InspectionService
+AdminController --> DispatchService
+AdminController --> GuestAccessService
+AdminController --> ConfigService
+OwnerController --> ReportingService
+DispatchService --> TaskEngine
+DispatchService --> ClassificationService
+InspectionService --> TaskEngine
+SchedulingService --> TaskEngine
+SchedulingService --> SchedulingAlgorithm
+ClassificationService --> LlmClient
+PmsSyncJob --> PmsAdapter
+PmsWritebackConsumer --> PmsAdapter
+PushConsumer --> PushSender
+HousekeepingJobs --> SchedulingService
+OutboxRelay ..> TaskEngine : 讀 outbox
+ProjectionUpdater ..> ReportingService : 供數
+RealtimePushService ..> OutboxRelay : 經 Kafka 訂閱
+IdempotencyFilter ..> GuestController
+IdempotencyFilter ..> StaffController
+IdempotencyFilter ..> AdminController
+TenantContext ..> TaskEngine
+
+%% ===== Entity/DTO 對齊 data-model.md =====
+class Entities {
+  <<package>> Tenant StaffAccount StaffDevice Room RoomQrToken
+  GuestSession ReservationCache Task TaskEvent Outbox ProcessedOp
+  CleaningPlan PlanRoom CleaningTimeStat SopItem TaskSopCheck
+  Inspection Handover HandoverSign Notice NoticeRead LostItem
+  Leave RoomMemory StatsDaily PhraseCounter TenantConfig
+}
+TaskEngine --> Entities : via DAO(Repository)

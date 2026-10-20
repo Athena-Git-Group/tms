@@ -1,0 +1,14 @@
+api: room-qr-tokens
+schema_version: "3.3"
+entity: room_qr_tokens
+title: 房間 QR 憑證 API
+description: 列印現行 QR 與重產輪替。輪替同一交易作廢舊 token 並連坐撤銷該房全部住客 session（E-18）。
+
+exposes:
+  standard: [list, read]
+  operations:
+    - { name: rotate, method: POST, path: "/{id}/rotate" }
+
+source_evidence:
+  - "specify/spec.md#故事 6（QR 簽發與輪替連坐）"
+  - "db_table/erm.dbml#Table:room_qr_tokens"

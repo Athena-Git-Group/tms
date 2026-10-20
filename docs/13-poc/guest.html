@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 住客服務</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  body { background: var(--color-surface-sunken); }
+  .phone-shell { max-width: 430px; margin: 0 auto; min-height: 100vh; background: var(--color-surface); box-shadow: var(--shadow-raised); }
+  .phone-content { padding: 18px 18px 48px; display: flex; flex-direction: column; gap: 18px; }
+
+  .scan-strip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: var(--color-accent-soft); color: var(--color-accent-strong);
+    font-size: 13px; font-weight: 600;
+  }
+  .scan-strip select {
+    font-family: var(--font-mono); font-weight: 700; border: 1px solid var(--color-accent-strong);
+    background: var(--color-surface-raised); color: var(--color-accent-strong); border-radius: 6px; padding: 3px 8px;
+  }
+
+  .hotel-card { border-radius: var(--radius-lg); padding: 20px; background: linear-gradient(165deg, var(--color-accent), var(--color-accent-strong)); color: var(--color-accent-ink); box-shadow: var(--shadow-raised); }
+  .hotel-card .hotel-name { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .hotel-card .room-no { font-family: var(--font-display); font-size: 15px; opacity: 0.9; margin: 0 0 14px; }
+  .hotel-info-row { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.25); font-size: 13.5px; }
+  .hotel-info-row:first-of-type { border-top: none; }
+  .hotel-info-row b { font-weight: 700; display: block; margin-bottom: 2px; }
+
+  .section-label { font-size: 13px; font-weight: 700; color: var(--color-ink-muted); letter-spacing: 0.03em; margin: 4px 0 2px; }
+
+  .checklist { display: flex; flex-direction: column; gap: 8px; }
+  .request-form textarea { min-height: 70px; resize: vertical; }
+
+  .progress-list { display: flex; flex-direction: column; gap: 10px; }
+  .rate-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 4px; border-top: 1px dashed var(--color-line); }
+  .rate-row .rated-note { font-size: 13px; color: var(--color-success); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="phone-shell">
+
+  <div class="tms-topbar">
+    <span class="tms-brand">
+      <span class="tms-brand-mark">TMS</span>
+      <span class="tms-brand-role">住客</span>
+    </span>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+
+  <div class="scan-strip">
+    <span>目前房號（模擬掃碼入住）</span>
+    <select id="room-select"></select>
+  </div>
+
+  <div class="phone-content">
+
+    <section class="hotel-card">
+      <p class="hotel-name" id="hotel-name">—</p>
+      <p class="room-no" id="room-label">房號 —</p>
+      <div id="hotel-info-list"></div>
+    </section>
+
+    <section class="panel request-form">
+      <p class="section-label">有什麼需要幫忙的嗎？</p>
+      <div class="checklist" id="checklist"></div>
+
+      <div class="field" style="margin-top:4px;">
+        <label for="freetext">也可以直接打字告訴我們</label>
+        <textarea id="freetext" placeholder="例如：冷氣聲音很大、想多要一份拖鞋……"></textarea>
+      </div>
+      <button class="btn btn-primary btn-lg btn-block" id="submit-btn" type="button">送出需求</button>
+      <p class="kbd-hint" id="rule-hint" style="margin-top:8px;"></p>
+    </section>
+
+    <section>
+      <p class="section-label">我的進度</p>
+      <div class="progress-list" id="progress-list"></div>
+    </section>
+
+  </div>
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+  var ROOM_KEY = 'tms_poc_guest_room';
+  var KNOWN_ROOMS = ['301', '302', '303', '305', '502', '503'];
+
+  var CHECKLIST_OPTIONS = [
+    { key: 'towel', label: '加毛巾' },
+    { key: 'extra_bed', label: '加床' },
+    { key: 'toiletries', label: '補備品（牙刷／刮鬍刀）' },
+    { key: 'ac_repair', label: '冷氣故障' },
+    { key: 'plumbing', label: '水電問題' }
+  ];
+
+  function currentRoom() {
+    return localStorage.getItem(ROOM_KEY) || '301';
+  }
+
+  function buildRoomSelect() {
+    var sel = document.getElementById('room-select');
+    sel.innerHTML = '';
+    KNOWN_ROOMS.forEach(function (r) {
+      var o = document.createElement('option');
+      o.value = r; o.textContent = r + ' 號房';
+      sel.appendChild(o);
+    });
+    sel.value = currentRoom();
+    sel.addEventListener('change', function () {
+      localStorage.setItem(ROOM_KEY, sel.value);
+      renderAll();
+    });
+  }
+
+  function renderHotel(state) {
+    var settings = state.settings;
+    document.getElementById('hotel-name').textContent = settings.hotelName || state.hotel.name;
+    document.getElementById('room-label').textContent = '房號 ' + currentRoom();
+    var list = document.getElementById('hotel-info-list');
+    list.innerHTML = '';
+    (settings.infoItems || []).filter(function (i) { return i.enabled; }).forEach(function (item) {
+      var row = C.el('div', 'hotel-info-row');
+      row.appendChild(C.el('span', null, item.icon || 'ℹ️'));
+      var box = C.el('div');
+      box.appendChild(C.el('b', null, item.title));
+      box.appendChild(C.el('span', null, item.content));
+      row.appendChild(box);
+      list.appendChild(row);
+    });
+  }
+
+  function renderChecklist(state) {
+    var wrap = document.getElementById('checklist');
+    // 這塊每次重繪都整個重建，先把勾到一半的選項抄下來再放回去，
+    // 不然別的分頁一有動靜，住客勾好的需求就被清掉。
+    var checkedKeys = Array.prototype.slice.call(wrap.querySelectorAll('.checklist-input:checked'))
+      .map(function (cb) { return cb.value; });
+    wrap.innerHTML = '';
+    var enabled = {};
+    (state.settings.menuItems || []).forEach(function (m) { enabled[m.key] = m.enabled; });
+    var shown = CHECKLIST_OPTIONS.filter(function (opt) { return enabled[opt.key] !== false; })
+      .concat((state.settings.customMenuItems || [])
+        .filter(function (c) { return c.enabled !== false; })
+        .map(function (c) { return { key: c.key, label: c.title }; }));
+    shown.forEach(function (opt) {
+      var row = C.el('label', 'checkbox-row');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = opt.key; cb.className = 'checklist-input';
+      cb.checked = checkedKeys.indexOf(opt.key) !== -1;
+      row.appendChild(cb);
+      row.appendChild(C.el('span', null, opt.label));
+      wrap.appendChild(row);
+    });
+    if (!shown.length) {
+      wrap.appendChild(C.emptyState('需求選單已全部停用，仍可在下方打字留言'));
+    }
+  }
+
+  function renderProgress(state) {
+    var wrap = document.getElementById('progress-list');
+    wrap.innerHTML = '';
+    var room = currentRoom();
+    var mine = state.tasks
+      .filter(function (t) { return t.roomNo === room && (t.source === 'guest_checklist' || t.source === 'guest_freetext'); })
+      .sort(function (a, b) { return b.createdAt - a.createdAt; });
+
+    if (!mine.length) {
+      wrap.appendChild(C.emptyState('目前沒有提出任何需求。勾選上方項目或打字留言試試看。'));
+      return;
+    }
+
+    mine.forEach(function (task) {
+      var canWithdraw = task.state === 'triage' || task.state === 'pool';
+      var actions = [{
+        label: canWithdraw ? '收回需求' : '收回需求（請洽櫃檯）',
+        variant: canWithdraw ? 'secondary' : 'ghost',
+        onClick: function () {
+          var r = E.guestWithdraw(task.id);
+          if (r.ok) C.toast('已收回需求', 'info');
+          else C.toastFromResult(r);
+        }
+      }];
+      var card = C.taskCard(task, { showRoom: false, actions: actions });
+
+      if (task.state === 'done' || task.state === 'inspected') {
+        var rateRow = C.el('div', 'rate-row');
+        if (task.rating) {
+          rateRow.appendChild(C.el('span', 'rated-note', '已評分 ' + task.rating + ' 星，謝謝您！'));
+        } else {
+          rateRow.appendChild(C.el('span', null, '幫我們評分：'));
+          rateRow.appendChild(C.starRow(task.rating, function (n) {
+            var r = E.guestRate(task.id, n);
+            if (r.ok) C.toast('感謝您的評分！', 'success');
+            else C.toastFromResult(r);
+          }));
+        }
+        card.appendChild(rateRow);
+      }
+      wrap.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    var state = E.getState();
+    document.getElementById('room-select').value = currentRoom();
+    renderHotel(state);
+    renderChecklist(state);
+    renderProgress(state);
+  }
+
+  document.getElementById('submit-btn').addEventListener('click', function () {
+    var room = currentRoom();
+    var checked = Array.prototype.slice.call(document.querySelectorAll('.checklist-input:checked'));
+    var text = document.getElementById('freetext').value;
+    var hits = [];
+    var any = false;
+
+    checked.forEach(function (cb) {
+      var r = E.guestSubmitChecklist(room, cb.value);
+      if (r.ok) { any = true; hits.push(r.task.ruleHit); }
+      cb.checked = false;
+    });
+
+    if (text && text.trim()) {
+      var r2 = E.guestSubmitFreetext(room, text);
+      if (r2.ok) any = true;
+      document.getElementById('freetext').value = '';
+    }
+
+    if (!any) {
+      C.toast('請至少勾選一項需求或輸入留言', 'warning');
+      return;
+    }
+    document.getElementById('rule-hint').textContent = hits.length ? hits.join('；') : '留言已送交櫃檯判讀（triage）';
+    C.toast('已送出，可在下方「我的進度」追蹤', 'success');
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  buildRoomSelect();
+  renderAll();
+  E.subscribe(renderAll);
+  setInterval(renderAll, 20000);
+})();
+</script>
+</body>
+</html>

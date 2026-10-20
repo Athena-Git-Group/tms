@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 房務工作台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  body { background: var(--color-surface-sunken); padding-bottom: 76px; }
+  .app-shell { max-width: 520px; margin: 0 auto; background: var(--color-surface); min-height: 100vh; box-shadow: var(--shadow-raised); }
+
+  .operator-bar { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: var(--color-surface-raised); border-bottom: 1px solid var(--color-line); }
+  .operator-row { display: flex; align-items: center; gap: 8px; }
+  .operator-row label, .operator-row > span:first-child { font-size: 12.5px; color: var(--color-ink-muted); width: 68px; flex-shrink: 0; }
+  .segmented { display: flex; gap: 6px; flex: 1; }
+  .segmented button { flex: 1; padding: 8px 6px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink-muted); font-weight: 700; font-size: 13px; cursor: pointer; }
+  .segmented button.is-active { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+  .operator-row select { flex: 1; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); font-weight: 700; }
+
+  .app-content { padding: 16px; display: flex; flex-direction: column; gap: 14px; min-height: 50vh; }
+
+  .bottom-tabs {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    max-width: 520px; margin: 0 auto;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--color-surface-raised); border-top: 1px solid var(--color-line);
+    box-shadow: 0 -4px 14px rgba(0,0,0,0.06);
+  }
+  .bottom-tabs button {
+    padding: 13px 4px; background: none; border: none; font-size: 13px; font-weight: 700;
+    color: var(--color-ink-faint); cursor: pointer; border-top: 3px solid transparent;
+  }
+  .bottom-tabs button.is-active { color: var(--color-accent); border-top-color: var(--color-accent); }
+
+  .sop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .sop-item { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line); font-size: 13px; cursor: pointer; }
+  .sop-item.is-checked { background: var(--color-accent-soft); border-color: var(--color-accent); color: var(--color-accent-strong); font-weight: 700; }
+  .sop-item input { width: 16px; height: 16px; accent-color: var(--color-accent); }
+
+  .ask-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .ask-chip { font-size: 12px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink-muted); cursor: pointer; }
+  .ask-answer { margin-top: 8px; padding: 10px 12px; background: var(--color-accent-soft); color: var(--color-accent-strong); border-radius: var(--radius-sm); font-size: 13px; }
+
+  .secondary-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <div class="tms-topbar">
+    <span class="tms-brand">
+      <span class="tms-brand-mark">TMS</span>
+      <span class="tms-brand-role">房務／工務</span>
+    </span>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+
+  <div class="operator-bar">
+    <div class="operator-row">
+      <span id="dept-switch-label">部門</span>
+      <div class="segmented" id="dept-switch" role="group" aria-labelledby="dept-switch-label">
+        <button data-dept="housekeeping" type="button">房務</button>
+        <button data-dept="maintenance" type="button">工務</button>
+      </div>
+    </div>
+    <div class="operator-row">
+      <label for="operator-select">目前操作者</label>
+      <select id="operator-select"></select>
+    </div>
+  </div>
+
+  <div class="app-content" id="app-content"></div>
+
+  <nav class="bottom-tabs">
+    <button data-tab="pool" type="button">待接池</button>
+    <button data-tab="mine" type="button">我的任務</button>
+    <button data-tab="lostfound" type="button">遺失物</button>
+    <button data-tab="notice" type="button">通知</button>
+  </nav>
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+  var DEPT_KEY = 'tms_poc_dept';
+  var OPERATOR_KEY = 'tms_poc_operator';
+  var TAB_KEY = 'tms_poc_hk_tab';
+
+  function currentDept() { return sessionStorage.getItem(DEPT_KEY) || 'housekeeping'; }
+  function setDept(d) { sessionStorage.setItem(DEPT_KEY, d); if (!operatorsForDept(d).some(function (s) { return s.id === currentOperatorId(); })) { setOperator(operatorsForDept(d)[0].id); } }
+
+  function operatorsForDept(dept) {
+    return E.getState().staff.filter(function (s) { return s.dept === dept; });
+  }
+  function currentOperatorId() { return sessionStorage.getItem(OPERATOR_KEY) || operatorsForDept(currentDept())[0].id; }
+  function setOperator(id) { sessionStorage.setItem(OPERATOR_KEY, id); }
+  function currentOperatorName() { return E.resolveStaffName(E.getState(), currentOperatorId()); }
+
+  function currentTab() { return sessionStorage.getItem(TAB_KEY) || 'pool'; }
+  function setTab(t) { sessionStorage.setItem(TAB_KEY, t); }
+
+  function renderChrome() {
+    document.querySelectorAll('#dept-switch button').forEach(function (btn) {
+      btn.classList.toggle('is-active', btn.dataset.dept === currentDept());
+    });
+    document.querySelectorAll('.bottom-tabs button').forEach(function (btn) {
+      btn.classList.toggle('is-active', btn.dataset.tab === currentTab());
+    });
+    var sel = document.getElementById('operator-select');
+    sel.innerHTML = '';
+    operatorsForDept(currentDept()).forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s.id; o.textContent = s.name;
+      sel.appendChild(o);
+    });
+    sel.value = currentOperatorId();
+  }
+
+  function renderPoolTab(state, content) {
+    var dept = currentDept();
+    var tasks = state.tasks.filter(function (t) { return t.state === 'pool' && t.dept === dept; })
+      .sort(function (a, b) { return a.createdAt - b.createdAt; });
+    content.appendChild(C.el('p', 'section-label', (dept === 'housekeeping' ? '房務' : '工務') + '待接池'));
+    if (!tasks.length) { content.appendChild(C.emptyState('目前沒有待接的任務')); return; }
+    tasks.forEach(function (t) {
+      var card = C.taskCard(t, {
+        actions: [{
+          label: '搶單', variant: 'primary',
+          onClick: function () {
+            var r = E.claimTask(t.id, currentOperatorId(), currentOperatorName(), t.version);
+            if (r.ok) C.toast('搶單成功，已進入「我的任務」', 'success'); else C.toastFromResult(r);
+          }
+        }]
+      });
+      content.appendChild(card);
+    });
+  }
+
+  function sopBlock(task) {
+    if (!task.sop || !task.sop.length) return null;
+    var wrap = C.el('div', 'sop-grid');
+    task.sop.forEach(function (item) {
+      var row = C.el('label', 'sop-item' + (item.checked ? ' is-checked' : ''));
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = item.checked;
+      cb.disabled = task.state !== 'doing';
+      cb.addEventListener('change', function () { E.toggleSop(task.id, item.key, currentOperatorName()); });
+      row.appendChild(cb);
+      row.appendChild(C.el('span', null, item.label));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
+  // 回覆存頁面變數而不是 DOM：askQuestion 會寫事件並觸發整頁重繪，
+  // 存在 DOM 上的答案會在顯示的同一瞬間被重繪洗掉。
+  var askAnswers = {};
+
+  function askBlock(task) {
+    var wrap = C.el('div');
+    var chips = C.el('div', 'ask-row');
+    E.CANNED_ANSWERS.forEach(function (c) {
+      var chip = C.el('button', 'ask-chip', c.q);
+      chip.type = 'button';
+      chip.addEventListener('click', function () {
+        askAnswers[task.id] = E.askQuestion(task.id, c.q, currentOperatorName());
+        renderAll();
+      });
+      chips.appendChild(chip);
+    });
+    wrap.appendChild(C.el('p', 'task-extra-meta', '問一下（罐頭 SOP 問答）：'));
+    wrap.appendChild(chips);
+    if (askAnswers[task.id]) {
+      wrap.appendChild(C.el('div', 'ask-answer', askAnswers[task.id]));
+    }
+    return wrap;
+  }
+
+  // 「我的任務」依操作頻率排：正在掃的最上面、中斷待恢復次之、還沒開始的再來、
+  // 延後的沉底；同狀態內舊的在前（先接的先做）。
+  var MINE_STATE_ORDER = { doing: 0, interrupted: 1, accepted: 2, deferred: 3 };
+
+  function renderMineTab(state, content) {
+    var opId = currentOperatorId();
+    var tasks = state.tasks.filter(function (t) {
+      return t.assigneeId === opId && ['accepted', 'doing', 'deferred', 'interrupted'].indexOf(t.state) !== -1;
+    }).sort(function (a, b) {
+      var d = MINE_STATE_ORDER[a.state] - MINE_STATE_ORDER[b.state];
+      return d !== 0 ? d : a.updatedAt - b.updatedAt;
+    });
+
+    content.appendChild(C.el('p', 'section-label', currentOperatorName() + ' 的任務（含班前排房）'));
+    if (!tasks.length) { content.appendChild(C.emptyState('目前沒有指派給你的任務')); return; }
+
+    tasks.forEach(function (t) {
+      var actions = [];
+      if (t.state === 'accepted') {
+        actions.push({ label: '開始處理', variant: 'primary', onClick: function () { E.startTask(t.id, currentOperatorName()); } });
+        actions.push({ label: '延後', variant: 'ghost', onClick: function () {
+          var reason = window.prompt('延後原因（例如：住客在房內）：'); if (reason === null) return;
+          E.deferTask(t.id, reason, currentOperatorName());
+        } });
+      }
+      if (t.state === 'doing') {
+        actions.push({ label: '完成', variant: 'primary', onClick: function () {
+          var r = E.completeTask(t.id, currentOperatorName());
+          if (!r.ok) { C.toastFromResult(r); return; }
+          C.toast(r.task.state === 'inspected'
+            ? '已完成；依流程設定免查房，直接合格'
+            : '已完成，等待查房', 'success');
+        } });
+        actions.push({ label: '中斷', variant: 'ghost', onClick: function () {
+          var reason = window.prompt('中斷原因（例如：缺備品）：'); if (reason === null) return;
+          E.interruptTask(t.id, reason, currentOperatorName());
+        } });
+      }
+      if (t.state === 'deferred') {
+        actions.push({ label: '重新啟用', variant: 'secondary', onClick: function () { E.reactivateTask(t.id, currentOperatorName()); } });
+      }
+      if (t.state === 'interrupted') {
+        actions.push({ label: '恢復處理', variant: 'secondary', onClick: function () { E.resumeTask(t.id, currentOperatorName()); } });
+      }
+      var card = C.taskCard(t, { actions: actions });
+      var sop = sopBlock(t);
+      if (sop) card.appendChild(sop);
+      card.appendChild(askBlock(t));
+      content.appendChild(card);
+    });
+  }
+
+  // 表單值存頁面變數：這個分頁每次重繪整個重建，打到一半的房號/物品
+  // 不能被跨分頁事件洗掉（與查房草稿同一類坑）。
+  var lostFoundDraft = { roomNo: '', item: '', photo: null };
+
+  function renderLostFoundTab(state, content) {
+    content.appendChild(C.el('p', 'section-label', '拾獲登記（打掃時發現的物品，登記後由櫃檯保管與歸還）'));
+
+    var form = C.el('div', 'panel');
+    form.style.padding = '14px';
+    form.style.display = 'flex';
+    form.style.flexDirection = 'column';
+    form.style.gap = '10px';
+
+    function draftInput(field, label, placeholder) {
+      var wrap = C.el('div', 'field');
+      var lab = C.el('label', null, label);
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder;
+      input.value = lostFoundDraft[field];
+      input.setAttribute('aria-label', label);
+      input.addEventListener('input', function () { lostFoundDraft[field] = input.value; });
+      wrap.appendChild(lab);
+      wrap.appendChild(input);
+      return wrap;
+    }
+    form.appendChild(draftInput('roomNo', '房號', '例如：502'));
+    form.appendChild(draftInput('item', '物品', '例如：黑色水壺'));
+
+    var photoField = C.el('div', 'field');
+    photoField.appendChild(C.el('label', null, '照片（選填，認領比對與交接存證用）'));
+    var fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.setAttribute('capture', 'environment');
+    fileInput.setAttribute('aria-label', '拍照或選擇照片');
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      C.compressImage(f, 320, function (dataUrl) {
+        if (!dataUrl) { C.toast('照片讀取失敗，換一張試試', 'error'); return; }
+        lostFoundDraft.photo = dataUrl;
+        renderAll();
+      });
+    });
+    photoField.appendChild(fileInput);
+    if (lostFoundDraft.photo) {
+      var preview = C.el('div');
+      preview.style.display = 'flex';
+      preview.style.gap = '8px';
+      preview.style.alignItems = 'center';
+      preview.appendChild(C.photoThumb(lostFoundDraft.photo));
+      var removeBtn = C.el('button', 'btn btn-ghost', '移除照片');
+      removeBtn.type = 'button';
+      removeBtn.addEventListener('click', function () {
+        lostFoundDraft.photo = null;
+        renderAll();
+      });
+      preview.appendChild(removeBtn);
+      photoField.appendChild(preview);
+    }
+    form.appendChild(photoField);
+
+    var btn = C.el('button', 'btn btn-primary btn-block', '登記拾獲（以 ' + currentOperatorName() + ' 名義）');
+    btn.type = 'button';
+    btn.addEventListener('click', function () {
+      if (!lostFoundDraft.roomNo.trim() || !lostFoundDraft.item.trim()) {
+        C.toast('請填寫房號與物品', 'warning');
+        return;
+      }
+      E.logLostFound(lostFoundDraft.roomNo.trim(), lostFoundDraft.item.trim(), currentOperatorName(), lostFoundDraft.photo);
+      lostFoundDraft.roomNo = '';
+      lostFoundDraft.item = '';
+      lostFoundDraft.photo = null;
+      C.toast('已登記拾獲，櫃檯會接手保管與歸還', 'success');
+    });
+    form.appendChild(btn);
+    content.appendChild(form);
+
+    content.appendChild(C.el('p', 'section-label', '登記紀錄'));
+    var records = state.lostFound || [];
+    if (!records.length) {
+      content.appendChild(C.emptyState('目前沒有遺失物登記'));
+      return;
+    }
+    records.forEach(function (rec) {
+      var card = C.el('article', 'panel');
+      card.style.padding = '12px 14px';
+      var rowEl = C.el('div');
+      rowEl.style.display = 'flex';
+      rowEl.style.gap = '10px';
+      rowEl.style.alignItems = 'flex-start';
+      if (rec.photo) rowEl.appendChild(C.photoThumb(rec.photo));
+      var info = C.el('div');
+      info.style.flex = '1';
+      info.appendChild(C.el('p', null, rec.roomNo + ' · ' + rec.item));
+      var meta = C.el('div', 'task-meta-row');
+      meta.appendChild(C.el('span', rec.status === 'returned' ? 'tag tag-muted' : 'tag tag-dept-housekeeping',
+        rec.status === 'returned' ? '已歸還' : '保管中'));
+      if (rec.foundBy) meta.appendChild(C.el('span', 'tag tag-assignee', '拾獲：' + rec.foundBy));
+      meta.appendChild(C.el('span', 'tag tag-time', new Date(rec.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })));
+      info.appendChild(meta);
+      rowEl.appendChild(info);
+      card.appendChild(rowEl);
+      content.appendChild(card);
+    });
+  }
+
+  function renderNoticeTab(state, content) {
+    content.appendChild(C.el('p', 'section-label', '通知板'));
+    var notices = state.notices || [];
+    if (!notices.length) { content.appendChild(C.emptyState('目前沒有通知')); return; }
+    notices.forEach(function (n) {
+      var card = C.el('article', 'panel');
+      card.style.padding = '12px 14px';
+      card.appendChild(C.el('p', null, n.message));
+      var read = n.readBy.indexOf(currentOperatorName()) !== -1;
+      var meta = C.el('div', 'task-meta-row');
+      meta.appendChild(C.el('span', 'tag tag-time', n.actor + ' · ' + new Date(n.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })));
+      meta.appendChild(C.el('span', read ? 'tag tag-dept-housekeeping' : 'tag tag-warning', read ? '你已回覆收到' : '尚未回覆收到'));
+      card.appendChild(meta);
+      if (!read) {
+        var btn = C.el('button', 'btn btn-secondary', '收到');
+        btn.type = 'button';
+        btn.style.marginTop = '8px';
+        btn.addEventListener('click', function () { E.readNotice(n.id, currentOperatorName()); });
+        card.appendChild(btn);
+      }
+      content.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    renderChrome();
+    var state = E.getState();
+    var content = document.getElementById('app-content');
+    content.innerHTML = '';
+    var tab = currentTab();
+    if (tab === 'pool') renderPoolTab(state, content);
+    else if (tab === 'mine') renderMineTab(state, content);
+    else if (tab === 'lostfound') renderLostFoundTab(state, content);
+    else renderNoticeTab(state, content);
+  }
+
+  document.querySelectorAll('#dept-switch button').forEach(function (btn) {
+    btn.addEventListener('click', function () { setDept(btn.dataset.dept); renderAll(); });
+  });
+  document.getElementById('operator-select').addEventListener('change', function (e) { setOperator(e.target.value); renderAll(); });
+  document.querySelectorAll('.bottom-tabs button').forEach(function (btn) {
+    btn.addEventListener('click', function () { setTab(btn.dataset.tab); renderAll(); });
+  });
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  renderAll();
+  E.subscribe(renderAll);
+  setInterval(renderAll, 20000);
+})();
+</script>
+</body>
+</html>

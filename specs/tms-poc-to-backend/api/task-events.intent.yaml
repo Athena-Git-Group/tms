@@ -1,0 +1,12 @@
+api: task-events
+schema_version: "3.3"
+entity: task_events
+title: 任務事件流水帳 API
+description: 只進不改的事件歷程查詢（單任務歷程、全序排查）。增量訂閱一律走 Kafka，本 API 僅供查閱。
+
+exposes:
+  standard: [list]
+
+source_evidence:
+  - "specify/spec.md#GR-004（事件流唯一真相）"
+  - "db_table/erm.dbml#Table:task_events"

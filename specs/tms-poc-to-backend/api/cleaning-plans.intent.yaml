@@ -1,0 +1,16 @@
+api: cleaning-plans
+schema_version: "3.3"
+entity: cleaning_plans
+title: 排房計畫 API
+description: 查當日計畫、手動調整（If-Match 版本，衝突 409 附最新）、發佈（同交易切換＋任務對帳）、重產（新草稿與現行並存）、人力缺口試算。
+
+exposes:
+  standard: [list, read, update]
+  operations:
+    - { name: publish, method: POST, path: "/{id}/publish" }
+    - { name: regenerate, method: POST, path: "/{id}/regenerate" }
+    - { name: capacity, method: GET, path: "/capacity" }
+
+source_evidence:
+  - "specify/spec.md#故事 7（FR-060~062）、E-08 E-09、故事 11（FR-100）"
+  - "db_table/erm.dbml#Table:cleaning_plans"

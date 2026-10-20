@@ -1,0 +1,389 @@
+<title>TMS 資料模型</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#FAF8F5; --surface:#FFFFFF; --ink:#24282B; --muted:#6C6862;
+  --line:#E2DDD4; --accent:#0E6B60; --accent-ink:#0A544B;
+  --accent-soft:rgba(14,107,96,.08); --warn:#B4552D; --warn-soft:rgba(180,85,45,.10);
+  --chip:#F1EEE8; --code:#F1EEE8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16191B; --surface:#1D2124; --ink:#E8E5DF; --muted:#9C9891;
+    --line:#33383C; --accent:#53B6A8; --accent-ink:#6FC7BA;
+    --accent-soft:rgba(83,182,168,.12); --warn:#DB8A5F; --warn-soft:rgba(219,138,95,.14);
+    --chip:#24292D; --code:#24292D;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16191B; --surface:#1D2124; --ink:#E8E5DF; --muted:#9C9891;
+  --line:#33383C; --accent:#53B6A8; --accent-ink:#6FC7BA;
+  --accent-soft:rgba(83,182,168,.12); --warn:#DB8A5F; --warn-soft:rgba(219,138,95,.14);
+  --chip:#24292D; --code:#24292D;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Noto Sans TC",-apple-system,"PingFang TC",sans-serif;
+  font-size:15.5px; line-height:1.8;
+}
+.wrap{max-width:1060px; margin:0 auto; padding:56px 28px 96px}
+header.doc p, section>p{max-width:46em}
+.eyebrow{
+  font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.08em;
+  color:var(--muted); text-transform:uppercase; margin:0 0 14px;
+}
+.eyebrow b{color:var(--accent); font-weight:600}
+h1{
+  font-family:"Noto Serif TC",serif; font-weight:700; font-size:36px;
+  line-height:1.3; margin:0 0 12px; text-wrap:balance;
+}
+.stand{color:var(--muted); font-size:16px; margin:0 0 8px}
+nav.toc{
+  display:flex; flex-wrap:wrap; gap:8px 18px; margin:28px 0 0;
+  padding:14px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  font-size:13.5px;
+}
+nav.toc a{color:var(--accent-ink); text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{text-decoration:underline}
+nav.toc .n{font-family:"JetBrains Mono",monospace; color:var(--muted); margin-right:4px}
+section{margin-top:64px}
+h2{
+  font-family:"Noto Serif TC",serif; font-weight:700; font-size:24px;
+  line-height:1.35; margin:0 0 6px; text-wrap:balance;
+}
+h2 .n{font-family:"JetBrains Mono",monospace; font-size:15px; color:var(--accent); margin-right:10px; font-weight:600}
+h3{font-size:17px; font-weight:700; margin:40px 0 4px}
+h3 code{font-size:15px}
+.lede{color:var(--muted); margin:0 0 20px}
+.tdesc{color:var(--muted); font-size:14px; margin:0 0 10px; max-width:46em}
+a{color:var(--accent-ink)}
+code,.st{
+  font-family:"JetBrains Mono",monospace; font-size:.86em;
+  background:var(--code); border-radius:4px; padding:1px 6px;
+}
+.st{color:var(--accent-ink)}
+.tablewrap{overflow-x:auto; margin:10px 0 6px}
+table{border-collapse:collapse; width:100%; font-size:14px}
+th{
+  text-align:left; font-weight:700; font-size:12.5px; letter-spacing:.04em;
+  color:var(--muted); padding:8px 12px; border-bottom:2px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+td.id{font-family:"JetBrains Mono",monospace; font-size:12.5px; white-space:nowrap; color:var(--accent-ink); font-weight:600}
+td.ty{font-family:"JetBrains Mono",monospace; font-size:12px; white-space:nowrap; color:var(--muted)}
+td.rq{font-size:12.5px; white-space:nowrap}
+tr:hover td{background:var(--accent-soft)}
+.keys{
+  font-size:13px; color:var(--muted); margin:8px 0 0; padding:10px 14px;
+  background:var(--surface); border:1px solid var(--line); border-radius:8px; max-width:60em;
+}
+.keys b{color:var(--ink)}
+ul.rules{margin:14px 0; padding-left:2px; list-style:none; max-width:48em}
+ul.rules li{font-size:14.5px; padding-left:24px; position:relative; margin:9px 0}
+ul.rules li::before{content:"§"; position:absolute; left:2px; color:var(--muted); font-family:"JetBrains Mono",monospace; font-size:12px; top:2px}
+.callout{
+  margin:20px 0; padding:14px 18px; border-left:3px solid var(--accent);
+  background:var(--accent-soft); border-radius:0 8px 8px 0; font-size:14px; max-width:52em;
+}
+.callout.warn{border-left-color:var(--warn); background:var(--warn-soft)}
+footer.doc{
+  margin-top:80px; padding-top:20px; border-top:1px solid var(--line);
+  font-size:13px; color:var(--muted); max-width:52em;
+}
+</style>
+
+<div class="wrap">
+
+<header class="doc">
+  <p class="eyebrow">TMS 任務交辦系統 · 文件 <b>12</b> · 2026-10-07</p>
+  <h1>資料模型完整版</h1>
+  <p class="stand">文件 11 §5 最終設計只到「表的職責與關鍵欄位」；本文件把 11 附錄 A 需求對照動到的 17 張表做到<b>逐欄位</b>：型別、必填、預設、值域（全名不縮寫）、鍵與索引、誰寫誰讀。實體表主鍵一律 UUIDv7（§1）。06 的資料模型章節已過期（缺本文件大半的表、狀態名舊制），逐欄位規格以本文件為準。</p>
+  <nav class="toc" aria-label="目錄">
+    <a href="#s1"><span class="n">1</span>全文件慣例</a>
+    <a href="#s2"><span class="n">2</span>核心：流水帳・小抄・待寄信匣</a>
+    <a href="#s3"><span class="n">3</span>住客與憑證</a>
+    <a href="#s4"><span class="n">4</span>排房與工時</a>
+    <a href="#s5"><span class="n">5</span>通知</a>
+    <a href="#s6"><span class="n">6</span>身分與設定</a>
+    <a href="#s7"><span class="n">7</span>待補清單</a>
+  </nav>
+</header>
+
+<section id="s1">
+  <h2><span class="n">1</span>全文件慣例</h2>
+  <ul class="rules">
+    <li><b>每張業務表第一欄都是 <code>tenant_id</code></b>（哪家飯店的資料），所有唯一鍵與索引以它開頭；下面各表不再重複列，一律視為存在</li>
+    <li><b>多租戶隔離</b>：應用層每條查詢強制帶 tenant 過濾為主，Postgres RLS 當第二道保險（Row-Level Security，資料庫內建的列級門禁：查詢沒帶對 tenant_id，連撈都撈不到別家的列）——詳 11 §4 深入探討第六題</li>
+    <li><b>實體表主鍵一律 <code>id uuid</code>，用 UUIDv7 產生</b>（一種開頭帶出生時間的隨機編號：排起來跟自動遞增一樣由舊到新，但任何一台機器不用先問資料庫就能自己產號、保證全系統不撞）——為未來分庫或多寫入點鋪路；趁文件階段零資料時改，成本最低。app 層產號即可，Postgres 18 起也有內建 <code>uuidv7()</code>。外鍵以 <code>_id</code> 結尾，型別跟著對方的主鍵走，且<b>一律宣告成複合外鍵 <code>(tenant_id, xxx_id) REFERENCES 對方(tenant_id, id)</code></b>——外鍵檢查不經過 RLS，單欄外鍵擋不住程式 bug 填進別家租戶的 id；被引用表補一條 <code>UNIQUE (tenant_id, id)</code> 給複合外鍵當落點（主鍵本來就唯一，這條純粹是外鍵的靶）</li>
+    <li><b>例外一：事件與流水表（<code>task_events</code>、<code>outbox</code>）保留 <code>id bigint</code> 自動遞增</b>——但這個序號不是給訂閱者當「給我第 N 號之後的」書籤用的：序號是交易一開始取號時配發，那一列要等交易 commit 才真正看得到，兩者順序可能顛倒（先取到小號的反而晚 commit）；拿 id 當增量輪詢書籤，會永久漏掉那些晚 commit 的小號事件。所以<b>增量訂閱一律走 Kafka</b>（relay 轉送進度靠 outbox 的 <code>status</code> 欄位推進、不拿 id 當書籤，所以 relay 不會踩這個坑）；id 只用在離線全表重放與排查時當排序欄位。分庫後各庫自己編號即可：訂閱按租戶走、同一租戶不跨庫</li>
+    <li><b>例外二：<code>tenants.id</code>（即各表的 tenant_id）保留 bigint</b>——租戶由我們集中開設，量少、又不會多台機器同時產生，沒有撞號問題；而它出現在每張表每條索引的開頭，8 bytes 比 16 bytes 省一半索引空間</li>
+    <li>時間一律 <code>timestamptz</code>（含時區）、純日期用 <code>date</code></li>
+    <li><b>值域一律全名、不縮寫</b>：狀態九值見 11 §3 的任務狀態機；值域用 <code>text</code>＋CHECK 限制，不用原生 ENUM（以後加值不用改型別）</li>
+    <li>「值域由 DB 擋、轉移由程式擋」：CHECK 只保證值合法；「done 不能跳回 doing」這類轉移規則由任務引擎擋（11 §2 API 共同約定的 409）</li>
+    <li><b>狀態轉移的並發規範</b>：守衛一律寫成一句條件式 UPDATE（例：<code>UPDATE tasks SET state='accepted', assignee_id=…, event_seq=event_seq+1 WHERE id=? AND state='pool' RETURNING event_seq</code>），更新到 0 列就回 409；這個事件的 <code>seq</code> 就用這句 UPDATE 回傳的 <code>event_seq</code>。禁止「先 SELECT 檢查再 UPDATE」與「SELECT max(seq)+1」——前者兩人同一秒認領同一個任務會雙雙成功，後者在並發下會撞唯一鍵、整筆交易回滾</li>
+    <li>小抄表（投影）＝可清空由 <code>task_events</code> 重算的表，每張都會標注</li>
+    <li>彈性欄位用 <code>jsonb</code>，但只放「結構會因飯店而異」的東西（訂房屬性、事件細節、設定值）；查詢條件要用的欄位一律開正式欄位</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2><span class="n">2</span>核心：流水帳・小抄・待寄信匣</h2>
+  <p class="lede">對應 11 附錄 A 需求 2、4、6、7、11。四張表在建單與每次狀態變更時<b>同一筆交易</b>寫入——事件是真相、任務是小抄，待寄信匣同車進站。</p>
+
+  <h3><code>tasks</code>——每個任務目前的狀態（小抄，可重算）</h3>
+  <p class="tdesc">一個任務一列，只記「現在的樣子」。查房退回會直接覆寫（清計時、redo+1），歷史都在流水帳。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">type</td><td class="ty">text</td><td class="rq">必填</td><td>任務種類：<code>amenity</code>（備品）｜<code>repair</code>（修繕）｜<code>cleaning</code>（打掃）｜<code>other</code>（其他，自由文字先掛這）</td></tr>
+      <tr><td class="id">source</td><td class="ty">text</td><td class="rq">必填</td><td>來源：<code>guest</code>（住客掃碼）｜<code>desk</code>（櫃檯）｜<code>system</code>（排房、訂房屬性準備工單）</td></tr>
+      <tr><td class="id">room_id</td><td class="ty">uuid → rooms</td><td class="rq">必填</td><td>哪間房</td></tr>
+      <tr><td class="id">reservation_id</td><td class="ty">uuid → reservations_cache</td><td class="rq">可空</td><td>住客來源的任務必填：綁建單當下的訂單。住客「看這次住宿的需求」一律以它過濾，不以房號——按房號撈會讓新住客看到前一位住客的需求原文</td></tr>
+      <tr><td class="id">dept</td><td class="ty">text</td><td class="rq">必填</td><td>目前負責部門：<code>housekeeping</code>（房務）｜<code>engineering</code>（工務）｜<code>frontdesk</code>（櫃檯，待判讀時掛這）</td></tr>
+      <tr><td class="id">state</td><td class="ty">text</td><td class="rq">必填</td><td>九值全名（11 §3 的任務狀態機）：<code>triage</code>｜<code>pool</code>｜<code>accepted</code>｜<code>doing</code>｜<code>done</code>｜<code>inspected</code>｜<code>deferred</code>｜<code>interrupted</code>｜<code>cancelled</code>（取消，終點：住客撤回、主管作廢誤建單、計畫重產收回未開始的打掃單——統計一律排除取消單）。沒有獨立的 answered 狀態：櫃檯當場回答直接結案為 done、事件記 <code>answered</code>、回覆存 note。deferred 延後不是不做——主管可隨時拉回（undefer），worker 隔日班前也會自動把它重新入池（事件記 <code>returned_to_pool</code>，payload 註明原因）</td></tr>
+      <tr><td class="id">event_seq</td><td class="ty">int，預設 0</td><td class="rq">必填</td><td>事件取號器：每次狀態轉移在同一句 UPDATE 裡 +1 並回傳，回傳值就是該事件在 task_events 的 seq——取號、行鎖、狀態守衛三件事合在同一句（見 §1 慣例）</td></tr>
+      <tr><td class="id">assignee_id</td><td class="ty">uuid → staff_accounts</td><td class="rq">可空</td><td>負責人；任務先進部門待接池、不直接指派給人，所以在池中時為空</td></tr>
+      <tr><td class="id">title / note</td><td class="ty">text</td><td class="rq">必填／可空</td><td>一句話標題（選單項名或判讀後命名）；備註（住客原文、翻譯、交代事項、當場回答的回覆）</td></tr>
+      <tr><td class="id">est_min</td><td class="ty">int</td><td class="rq">可空</td><td>預估分鐘（打掃任務由排房帶入；credit 換算屬 Q1 未決）</td></tr>
+      <tr><td class="id">started_at / done_at</td><td class="ty">timestamptz</td><td class="rq">可空</td><td>開始／完成時間戳；實際分鐘＝兩者相減；查房退回會清空重計</td></tr>
+      <tr><td class="id">redo_count</td><td class="ty">int，預設 0</td><td class="rq">必填</td><td>查房退回次數</td></tr>
+      <tr><td class="id">rating</td><td class="ty">int，CHECK 1–5</td><td class="rq">可空</td><td>住客評分（done 之後）；低分觸發老闆推播</td></tr>
+      <tr><td class="id">plan_id</td><td class="ty">uuid → cleaning_plans</td><td class="rq">可空</td><td>打掃任務回鏈到它所屬的排房計畫</td></tr>
+      <tr><td class="id">work_date</td><td class="ty">date</td><td class="rq">可空</td><td>打掃任務必填、發佈時抄自排房計畫的日期——支撐「一房一天只有一筆未完成打掃」的約束與班末掃描</td></tr>
+      <tr><td class="id">sla_min / esc_level</td><td class="ty">int</td><td class="rq">可空</td><td>保留欄位，SLA 升級鏈啟用前不寫（11 §4 深入探討第八題）</td></tr>
+      <tr><td class="id">created_at / updated_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>建立／最後更新</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；<code>(tenant_id, dept, state)</code> 餵待接池與看板；<code>(tenant_id, assignee_id, state)</code> 查個人在手任務；<code>(tenant_id, room_id, created_at)</code> 查單房歷程；<code>(tenant_id, reservation_id, created_at)</code> 查住客本次住宿的需求；partial unique <code>(tenant_id, room_id, work_date) WHERE type='cleaning' AND state NOT IN ('done','inspected','cancelled')</code>——計畫重產或匯入重複時，資料庫擋住同房同日第二筆未完成打掃單。<b>寫</b>：只有任務引擎。<b>讀</b>：所有人。</p>
+
+  <h3><code>task_events</code>——只進不改的流水帳（唯一真相）</h3>
+  <p class="tdesc">每件事記一行、照順序排。資料庫權限直接收走 UPDATE／DELETE，連程式 bug 都改不了歷史。唯一的例外是一條受控的去識別化函式：抹除 payload 裡的個資欄位、連動把對應的員工帳號列去識別化（姓名與登入帳號換成不可回推的代號，事件列的 actor_id 從此指不回真人），執行本身也記一筆事件——個人資料「保留期限到了要能刪」靠這條路徑成立，不是刪列。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">id</td><td class="ty">bigint 自動遞增</td><td class="rq">必填</td><td>全館依序編號，但不是給訂閱者當書籤用的（§1 例外一）：增量訂閱一律走 Kafka，這個序號只用在離線全表重放與排查時排序</td></tr>
+      <tr><td class="id">task_id</td><td class="ty">uuid → tasks</td><td class="rq">必填</td><td>屬於哪個任務</td></tr>
+      <tr><td class="id">seq</td><td class="ty">int</td><td class="rq">必填</td><td>這個任務的第幾步（1、2、3…）</td></tr>
+      <tr><td class="id">type</td><td class="ty">text</td><td class="rq">必填</td><td>發生什麼事（全名）：<code>created</code>｜<code>triaged</code>｜<code>assigned</code>（排房指派到人）｜<code>claimed</code>｜<code>started</code>｜<code>completed</code>｜<code>inspection_passed</code>｜<code>inspection_failed</code>｜<code>reassigned</code>｜<code>returned_to_pool</code>｜<code>interrupted</code>｜<code>deferred</code>｜<code>answered</code>｜<code>rated</code>｜<code>sop_checked</code>｜<code>plan_adjusted</code>｜<code>checkout_imported</code>｜<code>cancelled</code>（payload 帶原因：guest_withdrew｜manager_void｜plan_superseded）…（可擴充，加值不改表）</td></tr>
+      <tr><td class="id">actor_role / actor_id</td><td class="ty">text / uuid</td><td class="rq">必填／可空</td><td>誰做的：角色（guest｜frontdesk｜housekeeping｜engineering｜manager｜system）＋員工 id（住客與系統為空）</td></tr>
+      <tr><td class="id">payload</td><td class="ty">jsonb</td><td class="rq">可空</td><td>細節，也是重建投影的原料：會改動 tasks 欄位的事件 payload 必填且帶齊對應值——<code>created</code> 帶建立快照（種類、來源、房號、訂單、標題、預估分鐘）、<code>triaged</code> 帶部門與命名、<code>reassigned</code> 帶新負責人、<code>inspection_failed</code> 帶不過項目、<code>rated</code> 帶分數；純標記類（<code>started</code> 這種從 actor 與時間就能還原的）才可空。驗法：CI 定期在影子庫清空 tasks 重放、與線上比對</td></tr>
+      <tr><td class="id">created_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>發生時間</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（bigint 序號，§1 例外一）；UNIQUE <code>(tenant_id, task_id, seq)</code> 讀單任務歷程；<code>(tenant_id, id)</code> 供離線重放與排查——增量訂閱一律走 Kafka，不拿 id 當輪詢書籤（§1 例外一）。<b>寫</b>：只有任務引擎（append）。<b>讀</b>：Kafka 下游（知識庫、儀表板投影、即時推送）一律從 Kafka 消費；直接讀本表的只有離線重放重建與排查。</p>
+
+  <h3><code>outbox</code>——待寄信匣</h3>
+  <p class="tdesc">所有要上輸送帶的事件與副作用（任務事件、推播、PMS 房況回寫）先放這裡，和狀態變更同一筆交易落庫——交易護欄；relay 掃到後轉送 Kafka，推播、SSE 即時推送、PMS 回寫都從 Kafka 消費——tasks 是同步投影，在交易內就更新完，不走 Kafka。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">aggregate_key</td><td class="ty">text</td><td class="rq">必填</td><td>relay 轉送 Kafka 時的分區鍵（排隊的隊伍名），跟著<b>被寫入對象的一致性邊界</b>走，不是跟著觸發它的任務走：<code>task_event</code> 用任務鍵 <code>task:0199c7a2-…</code>（任務的 uuid）；<code>pms_status</code> 一律用房鍵 <code>room:1:0199c7a2-…</code>（<code>tenant_id:房間uuid</code>）——同一間房的回寫不論由打掃還是修繕任務觸發，都要進同一條分區，否則「查房通過」與「冷氣報廢停用」兩筆回寫誰先誰後看運氣，壞房可能被標成可賣；<code>push</code> 沿用任務鍵。同鍵進同一條分區、照順序消費，卡住只擋同一條分區</td></tr>
+      <tr><td class="id">kind</td><td class="ty">text</td><td class="rq">必填</td><td>要送什麼：<code>task_event</code>（任務領域事件——與 task_events 同一筆交易入匣，轉送 Kafka 後供 SSE 即時推送與 room_memory、stats_daily 等衍生投影訂閱；Kafka 下游一律不回寫 tasks——它由任務引擎在交易內同步更新）｜<code>push</code>（APNS／FCM 推播）｜<code>pms_status</code>（房況 Inspected／OOO 回寫）。minibar 計費移出 v1，啟用時加 <code>pms_minibar</code></td></tr>
+      <tr><td class="id">payload</td><td class="ty">jsonb</td><td class="rq">必填</td><td>信的內容（收件 token、回寫的房號與狀態…）</td></tr>
+      <tr><td class="id">idempotency_key</td><td class="ty">text</td><td class="rq">必填</td><td>防重複編號：下游消費者用它判斷「這筆處理過了」，重送不會做兩次</td></tr>
+      <tr><td class="id">status</td><td class="ty">text，預設 pending</td><td class="rq">必填</td><td><code>pending</code>（待轉送）｜<code>sent</code>（已轉送 Kafka）｜<code>failed</code>（重試用盡，等人工）</td></tr>
+      <tr><td class="id">attempts / next_retry_at</td><td class="ty">int，預設 0 / timestamptz</td><td class="rq">必填／可空</td><td>試了幾次、下次幾點重試（指數退避）</td></tr>
+      <tr><td class="id">created_at / sent_at</td><td class="ty">timestamptz</td><td class="rq">必填／可空</td><td>進匣／轉送時間</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（bigint 序號，§1 例外一）；UNIQUE <code>(tenant_id, kind, idempotency_key)</code>；partial index <code>(aggregate_key, id) WHERE status='pending'</code> 給 relay 依鍵輪詢。<b>寫</b>：任務引擎（入匣）、relay（改狀態）。<b>讀</b>：relay——下游（推播、SSE 即時推送、PMS 回寫、衍生投影）不直接讀這張表，一律從 Kafka 消費。relay 同鍵串行：某鍵最早一筆還沒送成功（含排隊等重試）時，不取該鍵的後續列；Kafka 分區只保證「進去的順序」，進去的順序由 relay 負責。<code>sent</code> 的列保留 3 天供排查後由排程清除——outbox 是轉運匣不是歷史，事件的永久歷史在 task_events 與 Kafka。</p>
+
+  <h3><code>processed_ops</code>——弱網重送的去重簿</h3>
+  <p class="tdesc">客戶端每個寫入請求帶操作編號（11 §2 API 共同約定的 Idempotency-Key）；同一編號再來，直接回上次結果、不重做。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">op_id</td><td class="ty">text</td><td class="rq">必填</td><td>客戶端產生的操作編號（UUID）</td></tr>
+      <tr><td class="id">result_ref</td><td class="ty">jsonb</td><td class="rq">必填</td><td>當時回了什麼（狀態碼＋精簡回應），重送時原樣回放</td></tr>
+      <tr><td class="id">created_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>第一次處理時間；過期資料由排程清（例如 7 天）</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>(tenant_id, op_id)</code>。<b>寫</b>：API 層。<b>讀</b>：API 層。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="n">3</span>住客與憑證</h2>
+  <p class="lede">對應 11 附錄 A 需求 1、2、3、8。兩層憑證的機制見 11 §4 深入探討第五題〈住客憑證〉。</p>
+
+  <h3><code>rooms</code>——房間主檔</h3>
+  <p class="tdesc">一張房兩系統各管一半：清潔狀態 TMS 擁有、住否 PMS 擁有，不共用欄位。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">room_no</td><td class="ty">text</td><td class="rq">必填</td><td>房號（「305」）；UNIQUE (tenant_id, room_no)</td></tr>
+      <tr><td class="id">floor</td><td class="ty">int</td><td class="rq">必填</td><td>樓層——v1 排房演算法的排序鍵</td></tr>
+      <tr><td class="id">room_type</td><td class="ty">text</td><td class="rq">必填</td><td>房型（標準雙人、套房…）；平均打掃分鐘按它統計</td></tr>
+      <tr><td class="id">hk_state</td><td class="ty">text</td><td class="rq">必填</td><td>清潔狀態（<b>TMS 擁有</b>）：<code>dirty</code>（待打掃）｜<code>cleaned</code>（掃完等查房）｜<code>inspected</code>（查房通過可賣）｜<code>out_of_order</code>（故障停賣）</td></tr>
+      <tr><td class="id">occupancy</td><td class="ty">text</td><td class="rq">必填</td><td>住否（<b>PMS 擁有</b>，同步進來唯讀）：<code>occupied</code>（住人）｜<code>vacant</code>（空房）</td></tr>
+      <tr><td class="id">updated_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>最後變動</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；UNIQUE <code>(tenant_id, room_no)</code>。<b>寫</b>：hk_state＝任務引擎（查房通過／退回）、occupancy＝worker（PMS 同步）。<b>讀</b>：排房、房況板、Guest Access。</p>
+
+  <h3><code>room_qr_tokens</code>——房間 QR 憑證（Guest Access 擁有）</h3>
+  <p class="tdesc">一房一枚長期有效；貼紙被撕走就重產：發新的一版、舊的立即標作廢。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">room_id</td><td class="ty">uuid → rooms</td><td class="rq">必填</td><td>對應房間</td></tr>
+      <tr><td class="id">token</td><td class="ty">text</td><td class="rq">必填</td><td>貼紙網址裡那串亂碼：至少 128 bit 隨機（base62 編碼約 22 個字元），不可預測、不含房號等可推測的資訊——例如 <code>t.tms.tw/r/8fQ2hL9xKpD3vRw1sTzUjm</code> 裡 <code>8fQ2hL9xKpD3vRw1sTzUjm</code> 這一整段；全域 UNIQUE</td></tr>
+      <tr><td class="id">version</td><td class="ty">int</td><td class="rq">必填</td><td>第幾版；重產＋1</td></tr>
+      <tr><td class="id">status</td><td class="ty">text</td><td class="rq">必填</td><td><code>active</code>（現行）｜<code>revoked</code>（已作廢，掃到顯示「請洽櫃檯」）</td></tr>
+      <tr><td class="id">created_at / revoked_at</td><td class="ty">timestamptz</td><td class="rq">必填／可空</td><td>簽發／作廢時間</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；UNIQUE <code>(token)</code>；partial UNIQUE <code>(tenant_id, room_id) WHERE status='active'</code>——一房同時只有一枚現行。<b>寫</b>：Guest Access（簽發／輪替／撤銷）。<b>讀</b>：Guest Access 解析、內部 Web 列印。掃碼端點另有 IP 層級限流與失敗計數（11 §4 深入探討第五題）。</p>
+
+  <h3><code>guest_sessions</code>——住客 session</h3>
+  <p class="tdesc">掃碼簽發、退房自動失效，QR 輪替或提前退房／訂單取消時立即撤銷；住客端所有請求都靠它認人。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">session_token</td><td class="ty">text</td><td class="rq">必填</td><td>發給住客瀏覽器的憑證字串；全域 UNIQUE</td></tr>
+      <tr><td class="id">room_id</td><td class="ty">uuid → rooms</td><td class="rq">必填</td><td>綁哪間房</td></tr>
+      <tr><td class="id">reservation_id</td><td class="ty">uuid → reservations_cache</td><td class="rq">必填</td><td>綁簽發當下的訂單——換住客後舊 session 自然失效</td></tr>
+      <tr><td class="id">expires_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>到期＝退房時間</td></tr>
+      <tr><td class="id">revoked_at</td><td class="ty">timestamptz</td><td class="rq">可空</td><td>撤銷時間：QR 輪替、提前退房、訂單取消時，同一筆交易把該房所有未撤銷 session 一併標上——只看 expires_at 關不掉已經簽發出去的 session</td></tr>
+      <tr><td class="id">created_at / last_seen_at</td><td class="ty">timestamptz</td><td class="rq">必填／可空</td><td>簽發／最後活動</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；UNIQUE <code>(session_token)</code>；<code>(tenant_id, room_id)</code>。<b>寫</b>：Guest Access（簽發、以及輪替／提前退房／訂單取消時的撤銷）。<b>讀</b>：每個 /guest 請求，驗證條件為 <code>expires_at > now()</code> 且 <code>revoked_at IS NULL</code>，兩者缺一都視為無效。</p>
+
+  <h3><code>reservations_cache</code>——訂房檔副本（真相在 PMS）</h3>
+  <p class="tdesc">worker 定期從 PMS 抄來的唯讀副本；PMS 接不上時由 Excel 匯入補位（來源欄位區分）。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">reservation_ref</td><td class="ty">text</td><td class="rq">必填</td><td>PMS 的訂單編號；UNIQUE (tenant_id, reservation_ref)。Excel 匯入列用「excel:日期:房號」合成</td></tr>
+      <tr><td class="id">room_id</td><td class="ty">uuid → rooms</td><td class="rq">必填</td><td>住哪間</td></tr>
+      <tr><td class="id">guest_name / lang</td><td class="ty">text</td><td class="rq">可空</td><td>稱謂用；住客端語言</td></tr>
+      <tr><td class="id">attrs</td><td class="ty">jsonb</td><td class="rq">可空</td><td>訂房屬性：VIP／親子／寵物／紀念日…——自動開準備工單的依據</td></tr>
+      <tr><td class="id">checkin_at / checkout_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>住期——判斷空房掃描、session 到期、今日退房清單</td></tr>
+      <tr><td class="id">source</td><td class="ty">text</td><td class="rq">必填</td><td><code>pms</code>（同步）｜<code>excel</code>（匯入今日房態，含入住與退房）</td></tr>
+      <tr><td class="id">synced_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>這筆副本幾點抄的</td></tr>
+      <tr><td class="id">superseded_at</td><td class="ty">timestamptz</td><td class="rq">可空</td><td>作廢時間：PMS 恢復同步、比對到同一間房住期重疊的真訂單時，自動把 Excel 匯入列標上——否則同一住宿兩列並存，掃碼可能綁到假的那筆、之後 PMS 的屬性更新全對不上。所有「當前訂單」查詢（掃碼、排房、準備工單）一律加 <code>superseded_at IS NULL</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；UNIQUE <code>(tenant_id, reservation_ref)</code>；<code>(tenant_id, room_id, checkout_at)</code> 查今日退房與當前訂單；EXCLUDE 約束（Postgres 的區間互斥：同一房、住期區間重疊、皆未作廢 → 拒絕寫入）——同一間房同一時刻只能有一筆有效訂單，資料庫層面擋死。<b>寫</b>：worker（PMS 同步）、匯入 API。<b>讀</b>：Guest Access、排房、準備工單。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="n">4</span>排房與工時</h2>
+  <p class="lede">對應 11 附錄 A 需求 7、8、9、10。計畫是獨立實體：任務開出來之前就要能預覽、請假要能新舊對照、缺口試算要拿它對比班次容量。</p>
+
+  <h3><code>cleaning_plans</code>——排房計畫（一天一班一份）</h3>
+  <p class="tdesc">發佈新計畫與收回舊計畫在同一筆交易：兩份計畫都有的房、舊任務未開始（pool／accepted）時改掛新計畫並更新負責人與順序（事件記 <code>reassigned</code>）；舊有新無的房，未開始任務取消（事件記 <code>cancelled</code>，原因 <code>plan_superseded</code>）；做到一半（doing）的不自動動，列給主管處理。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">work_date / shift</td><td class="ty">date / text</td><td class="rq">必填</td><td>哪一天、哪個班次（早班／晚班，值域從租戶設定來）</td></tr>
+      <tr><td class="id">status</td><td class="ty">text</td><td class="rq">必填</td><td><code>draft</code>（草稿，可調；可與已發佈計畫並存，重產對照用）｜<code>published</code>（已發佈，任務已開出）｜<code>superseded</code>（被重產的新計畫取代，留著對照）</td></tr>
+      <tr><td class="id">version</td><td class="ty">int，預設 0</td><td class="rq">必填</td><td>每次調整 +1；<code>PUT /admin/plans/{date}</code> 要帶 If-Match 版本號，不符回 409 並附最新內容——兩位主管同時調整，後存的不會無聲蓋掉先存的</td></tr>
+      <tr><td class="id">generated_by</td><td class="ty">text</td><td class="rq">必填</td><td><code>system</code>（worker 班前自動）｜<code>manager</code>（主管手動重產）</td></tr>
+      <tr><td class="id">algo_version</td><td class="ty">text</td><td class="rq">必填</td><td>排的時候用哪版演算法（v1＝樓層×工時、一層一人）——日後 Q4 v2 對照用</td></tr>
+      <tr><td class="id">generated_at / published_at</td><td class="ty">timestamptz</td><td class="rq">必填／可空</td><td>產生／發佈時間</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；partial UNIQUE <code>(tenant_id, work_date, shift) WHERE status='published'</code>——同一班同時只有一份已發佈計畫；草稿不受唯一限制——重產時新草稿與現行已發佈計畫並存對照，發佈新的那一刻舊的才標 superseded。<b>寫</b>：worker（產生）、主管（調整／發佈）。<b>讀</b>：/staff/schedule、/admin/plans、人力試算。</p>
+
+  <h3><code>plan_rooms</code>——計畫明細（誰負責哪間房）</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">plan_id</td><td class="ty">uuid → cleaning_plans</td><td class="rq">必填</td><td>屬於哪份計畫</td></tr>
+      <tr><td class="id">room_id</td><td class="ty">uuid → rooms</td><td class="rq">必填</td><td>哪間房；UNIQUE (tenant_id, plan_id, room_id)</td></tr>
+      <tr><td class="id">staff_id</td><td class="ty">uuid → staff_accounts</td><td class="rq">必填</td><td>分給哪位清潔人員——「誰在哪天負責哪些房」就是查這張</td></tr>
+      <tr><td class="id">est_min</td><td class="ty">int</td><td class="rq">必填</td><td>這間房的預估分鐘（抄自 cleaning_time_stats，沒數據用標準工時）</td></tr>
+      <tr><td class="id">route_seq</td><td class="ty">int</td><td class="rq">必填</td><td>建議打掃順序（v1＝照樓層）</td></tr>
+      <tr><td class="id">task_id</td><td class="ty">uuid → tasks</td><td class="rq">可空</td><td>發佈後回填對應的打掃任務</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>id</code>（uuid）；UNIQUE <code>(tenant_id, plan_id, room_id)</code>；<code>(tenant_id, plan_id, staff_id)</code> 查個人當日清單。<b>寫</b>：worker、主管調整。<b>讀</b>：員工班前畫面、人力試算。</p>
+
+  <h3><code>cleaning_time_stats</code>——平均打掃分鐘（小抄，可重算）</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">room_type</td><td class="ty">text</td><td class="rq">必填</td><td>哪種房型；PK (tenant_id, room_type)</td></tr>
+      <tr><td class="id">avg_actual_min</td><td class="ty">numeric</td><td class="rq">必填</td><td>平均實際分鐘＝流水帳裡 completed−started 的平均（查房退回重計的以最後一輪為準）</td></tr>
+      <tr><td class="id">sample_count</td><td class="ty">int</td><td class="rq">必填</td><td>樣本數——沒累積夠（例如 &lt;20）之前，排房先用租戶設定的標準工時</td></tr>
+      <tr><td class="id">updated_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>worker 最後刷新時間</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：PK <code>(tenant_id, room_type)</code>。<b>寫</b>：worker（從流水帳聚合）。<b>讀</b>：排房、人力缺口試算。<b>注意</b>：個人層級的工時統計受分級可見與保留期限管（11 §1 非功能需求的個資約束），本表只到房型層級、不含個人。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="n">5</span>通知</h2>
+  <p class="lede">對應 11 附錄 A 需求 5。櫃檯主動發、自選對象、追已讀。</p>
+
+  <h3><code>notices</code> ＋ <code>notice_reads</code></h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">notices.sender_id</td><td class="ty">uuid → staff_accounts</td><td class="rq">必填</td><td>誰發的（櫃檯／主管）</td></tr>
+      <tr><td class="id">notices.title / body</td><td class="ty">text</td><td class="rq">必填</td><td>標題與內容</td></tr>
+      <tr><td class="id">notices.recipients</td><td class="ty">jsonb</td><td class="rq">必填</td><td>收件對象，部門或個人混選：<code>{"depts":["housekeeping"], "staff_ids":["0199c7a2-…","0199d04e-…"]}</code>；推播經 outbox 展開成一人一封</td></tr>
+      <tr><td class="id">notices.created_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>發送時間</td></tr>
+      <tr><td class="id">notice_reads.notice_id / staff_id</td><td class="ty">uuid</td><td class="rq">必填</td><td>誰讀了哪則；PK (notice_id, staff_id)——打開即記一筆，重開不重記</td></tr>
+      <tr><td class="id">notice_reads.read_at</td><td class="ty">timestamptz</td><td class="rq">必填</td><td>已讀時間</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：notices PK <code>id</code>（uuid）、<code>(tenant_id, created_at)</code>；notice_reads PK <code>(notice_id, staff_id)</code>。<b>寫</b>：協作模組。<b>讀</b>：通知板、已讀名單。「逾時未讀升級」是 SLA 升級鏈的延後項（11 §4 深入探討第八題）。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="n">6</span>身分與設定</h2>
+  <p class="lede">對應 11 附錄 A 需求 3、14、15。RBAC 的資料面；檢查本身在每個 API 進來時做（伺服器端強制）。</p>
+
+  <h3><code>staff_accounts</code> ＋ <code>staff_devices</code></h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">staff_accounts.name / login_id</td><td class="ty">text</td><td class="rq">必填</td><td>姓名；登入帳號，UNIQUE (tenant_id, login_id)</td></tr>
+      <tr><td class="id">staff_accounts.password_hash</td><td class="ty">text</td><td class="rq">必填</td><td>密碼雜湊（bcrypt／argon2），絕不存明文</td></tr>
+      <tr><td class="id">staff_accounts.role</td><td class="ty">text</td><td class="rq">必填</td><td>角色（RBAC 的 R）：<code>frontdesk</code>（櫃檯）｜<code>housekeeping</code>（房務）｜<code>engineering</code>（工務）｜<code>manager</code>（主管）｜<code>owner</code>（老闆）——角色×動作矩陣定義在程式／設定，不在表裡</td></tr>
+      <tr><td class="id">staff_accounts.dept</td><td class="ty">text</td><td class="rq">可空</td><td>所屬部門（接池用）；主管／老闆可空</td></tr>
+      <tr><td class="id">staff_accounts.active</td><td class="ty">boolean，預設 true</td><td class="rq">必填</td><td>停用＝不能登入，但歷史記錄保留</td></tr>
+      <tr><td class="id">staff_devices.staff_id / device_fingerprint</td><td class="ty">uuid / text</td><td class="rq">必填</td><td>推播地址簿：一列＝一台收推播的裝置。登入不驗裝置、同一人多台都合法（11 §1 不在範圍內）；device_fingerprint 只拿來去重——同一台重複登入不重複登記，UNIQUE (tenant_id, staff_id, device_fingerprint)</td></tr>
+      <tr><td class="id">staff_devices.push_token</td><td class="ty">text</td><td class="rq">可空</td><td>APNS／FCM 推播地址；權限被關就是空，推播降級看板（Q6）</td></tr>
+      <tr><td class="id">staff_devices.registered_at / revoked_at</td><td class="ty">timestamptz</td><td class="rq">必填／可空</td><td>登記／失效時間（登出或推播服務回報 token 失效時標記）</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：各 PK <code>id</code>（uuid）；上列 UNIQUE。<b>寫</b>：Identity（登入驗帳密、順手登記推播地址；token 失效時標 revoked）。<b>讀</b>：/auth/login 與每個 API 的權限檢查只讀 staff_accounts；推播展開讀 staff_devices。</p>
+
+  <h3><code>tenants</code> ＋ <code>tenant_config</code></h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>欄位</th><th>型別</th><th>必填</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td class="id">tenants.name</td><td class="ty">text</td><td class="rq">必填</td><td>飯店名；PK <code>id</code> 就是全系統的 tenant_id 來源（保留 bigint，§1 例外二）</td></tr>
+      <tr><td class="id">tenant_config.key</td><td class="ty">text</td><td class="rq">必填</td><td>設定鍵（全名）：<code>standard_cleaning_minutes</code>｜<code>shift_capacity</code>｜<code>inspection_items</code>｜<code>sop_items</code>｜<code>guest_info_pages</code>（資訊頁）｜<code>request_menu</code>（選單）｜<code>minutes_per_credit</code>（Q1 換算率）…；UNIQUE (tenant_id, key)</td></tr>
+      <tr><td class="id">tenant_config.value</td><td class="ty">jsonb</td><td class="rq">必填</td><td>設定值——結構依 key 而異，所以用 jsonb</td></tr>
+      <tr><td class="id">tenant_config.updated_at / updated_by</td><td class="ty">timestamptz / uuid</td><td class="rq">必填</td><td>誰、何時改的——設定變更也要能追</td></tr>
+    </tbody>
+  </table></div>
+  <p class="keys"><b>鍵與索引</b>：tenant_config UNIQUE <code>(tenant_id, key)</code>。<b>寫</b>：/admin/settings。<b>讀</b>：所有模組（「什麼都可調」的落地）。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="n">7</span>待補清單</h2>
+  <p class="lede">11 §5 最終設計已定職責、本文件尚未逐欄位展開的表——動工前再補：</p>
+  <ul class="rules">
+    <li><code>sop_items</code> ＋ <code>task_sop_checks</code>（SOP 項目與打勾記錄）</li>
+    <li><code>inspections</code>（查房逐項判定）</li>
+    <li><code>handovers</code> ＋ <code>handover_signs</code>（交班快照與簽收）</li>
+    <li><code>lost_items</code>（遺失物）、<code>leaves</code>（請假）</li>
+    <li><code>room_memory</code>、<code>stats_daily</code>、<code>phrase_counter</code>（小抄三張）</li>
+  </ul>
+  <div class="callout warn">
+    <b>與 06 的關係：</b>06〈task engine〉的資料模型章節已過期：缺本文件大半的表、任務種類與狀態名也是舊制——<b>資料模型一律以本文件為準</b>，06 待整修。表的職責總覽與資料庫白板圖在 11 §5 最終設計；需求→表的對照在 11 附錄 A。
+  </div>
+</section>
+
+<footer class="doc">
+  <p>依據：文件 11（§2 API 共同約定、§3 任務狀態機、§5 最終設計、附錄 A 需求對照）。涵蓋附錄 A 需求對照動到的 17 張表；其餘見 §7 待補清單。</p>
+</footer>
+
+</div>

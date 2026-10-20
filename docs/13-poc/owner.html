@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 老闆總覽</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  body { background: var(--color-surface-sunken); }
+  .phone-shell { max-width: 430px; margin: 0 auto; min-height: 100vh; background: var(--color-surface); box-shadow: var(--shadow-raised); }
+  .phone-content { padding: 18px 18px 48px; display: flex; flex-direction: column; gap: 18px; }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat-card {
+    background: var(--color-surface-raised); border: 1px solid var(--color-line);
+    border-radius: var(--radius-md); padding: 14px 16px; box-shadow: var(--shadow-card);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .stat-card .stat-label { font-size: 12.5px; font-weight: 700; color: var(--color-ink-muted); }
+  .stat-card .stat-value { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 600; line-height: 1.2; }
+  .stat-card .stat-unit { font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--color-ink-muted); margin-left: 2px; }
+  .stat-card .stat-sub { font-size: 12px; color: var(--color-ink-faint); }
+
+  .daily-line {
+    background: var(--color-surface-raised); border: 1px solid var(--color-line);
+    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-md); padding: 12px 14px; font-size: 13.5px; margin: 0;
+  }
+
+  .alert-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px 13px; border: 1px solid var(--color-state-interrupted);
+    background: var(--color-state-interrupted-soft); color: var(--color-state-interrupted);
+    border-radius: var(--radius-md); font-size: 13.5px; font-weight: 600;
+  }
+  .alert-item time { font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; white-space: nowrap; margin-left: auto; }
+  .alert-note { font-size: 12px; color: var(--color-ink-faint); margin: 4px 0 0; }
+</style>
+</head>
+<body>
+<div class="phone-shell">
+
+  <div class="tms-topbar">
+    <span class="tms-brand">
+      <span class="tms-brand-mark">TMS</span>
+      <span class="tms-brand-role">老闆</span>
+    </span>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+
+  <div class="phone-content">
+
+    <section>
+      <p class="section-label" style="font-size:13px;font-weight:700;color:var(--color-ink-muted);margin:4px 0 8px;">今日四個數字</p>
+      <div class="stat-grid" id="stat-grid"></div>
+    </section>
+
+    <p class="daily-line" id="daily-line">—</p>
+
+    <section>
+      <p class="section-label" style="font-size:13px;font-weight:700;color:var(--color-ink-muted);margin:4px 0 8px;">出事才會響</p>
+      <div id="alert-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <p class="alert-note" id="alert-note"></p>
+    </section>
+
+  </div>
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+
+  // 老闆頁是唯讀投影：所有數字都從引擎狀態現算，不寫入任何東西（對應 /owner 只讀）。
+  function computeStats(state) {
+    var cleaning = state.tasks.filter(function (t) { return t.type === 'cleaning' && t.state !== 'cancelled'; });
+    var inspected = cleaning.filter(function (t) { return t.state === 'inspected'; }).length;
+
+    var claimTs = {};
+    state.events.forEach(function (ev) {
+      if (ev.type === 'claim' && !(ev.taskId in claimTs)) claimTs[ev.taskId] = ev.ts;
+    });
+    var responseMins = state.tasks
+      .filter(function (t) { return (t.source === 'guest_checklist' || t.source === 'guest_freetext') && claimTs[t.id]; })
+      .map(function (t) { return (claimTs[t.id] - t.createdAt) / 60000; });
+    var avgResponse = responseMins.length
+      ? responseMins.reduce(function (a, b) { return a + b; }, 0) / responseMins.length
+      : null;
+
+    var ratings = state.tasks.filter(function (t) { return t.rating != null; }).map(function (t) { return t.rating; });
+    var avgRating = ratings.length
+      ? ratings.reduce(function (a, b) { return a + b; }, 0) / ratings.length
+      : null;
+
+    var redoTotal = state.events.filter(function (ev) { return ev.type === 'inspect_fail'; }).length;
+
+    return {
+      cleaningTotal: cleaning.length,
+      inspected: inspected,
+      avgResponse: avgResponse,
+      responseCount: responseMins.length,
+      avgRating: avgRating,
+      ratingCount: ratings.length,
+      redoTotal: redoTotal
+    };
+  }
+
+  function statCard(label, value, unit, sub) {
+    var card = C.el('div', 'stat-card');
+    card.appendChild(C.el('span', 'stat-label', label));
+    var v = C.el('span', 'stat-value', value);
+    if (unit) v.appendChild(C.el('span', 'stat-unit', unit));
+    card.appendChild(v);
+    if (sub) card.appendChild(C.el('span', 'stat-sub', sub));
+    return card;
+  }
+
+  function fmt1(n) { return (Math.round(n * 10) / 10).toString(); }
+
+  function renderStats(s) {
+    var grid = document.getElementById('stat-grid');
+    grid.innerHTML = '';
+    grid.appendChild(statCard('可賣房', s.inspected + ' / ' + s.cleaningTotal, '', '今日打掃房中已查驗合格'));
+    grid.appendChild(statCard('回應速度', s.avgResponse == null ? '—' : fmt1(s.avgResponse), s.avgResponse == null ? '' : '分', s.responseCount ? '住客需求平均多久有人接手' : '今天還沒有住客需求被接手'));
+    grid.appendChild(statCard('住客評分', s.avgRating == null ? '—' : fmt1(s.avgRating), s.avgRating == null ? '' : '星', s.ratingCount ? '共 ' + s.ratingCount + ' 筆評分' : '今天還沒收到評分'));
+    grid.appendChild(statCard('查房退回', String(s.redoTotal), '次', '退回越少，第一次就清對的比例越高'));
+  }
+
+  function renderDailyLine(s) {
+    var parts = [];
+    parts.push('今日 ' + s.cleaningTotal + ' 間打掃房有 ' + s.inspected + ' 間查驗合格');
+    parts.push(s.avgResponse == null ? '還沒有住客需求被接手' : '住客需求平均 ' + fmt1(s.avgResponse) + ' 分鐘有人接手');
+    parts.push(s.avgRating == null ? '尚無評分' : '評分平均 ' + fmt1(s.avgRating) + ' 星');
+    parts.push('查房退回 ' + s.redoTotal + ' 次');
+    document.getElementById('daily-line').textContent = parts.join('；') + '。';
+  }
+
+  function renderAlerts(state) {
+    var wrap = document.getElementById('alert-list');
+    wrap.innerHTML = '';
+    var maxStars = state.settings.ownerAlertMaxStars || 2;
+    document.getElementById('alert-note').textContent =
+      'v1 通知來源是「住客評低分」與「主管手動上報」；這裡示範前者（' + maxStars +
+      ' 星以下自動出現，門檻可在租戶設定調），手動上報不在這份 POC。';
+    var lowRatings = state.events
+      .filter(function (ev) { return ev.type === 'guest_rate' && ev.payload && ev.payload.stars != null && ev.payload.stars <= maxStars; })
+      .sort(function (a, b) { return b.ts - a.ts; });
+    if (!lowRatings.length) {
+      wrap.appendChild(C.emptyState('目前沒有需要你操心的事'));
+      return;
+    }
+    lowRatings.forEach(function (ev) {
+      var t = E.findTask(state, ev.taskId);
+      var item = C.el('div', 'alert-item');
+      item.appendChild(C.el('span', null, (t ? t.roomNo + ' 號房' : ev.taskId) + ' 住客評了 ' + ev.payload.stars + ' 星' + (t && t.title ? '（' + t.title + '）' : '')));
+      var time = document.createElement('time');
+      time.textContent = new Date(ev.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+      item.appendChild(time);
+      wrap.appendChild(item);
+    });
+  }
+
+  function renderAll() {
+    var state = E.getState();
+    var s = computeStats(state);
+    renderStats(s);
+    renderDailyLine(s);
+    renderAlerts(state);
+  }
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  renderAll();
+  E.subscribe(renderAll);
+  setInterval(renderAll, 20000);
+})();
+</script>
+</body>
+</html>

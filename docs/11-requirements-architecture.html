@@ -1,0 +1,1513 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TMS 需求規格與架構</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<style>
+:root{
+  --bg:#FAF8F5; --surface:#FFFFFF; --ink:#24282B; --muted:#6C6862;
+  --line:#E2DDD4; --accent:#0E6B60; --accent-ink:#0A544B;
+  --accent-soft:rgba(14,107,96,.08); --warn:#B4552D; --warn-soft:rgba(180,85,45,.10);
+  --chip:#F1EEE8; --code:#F1EEE8;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16191B; --surface:#1D2124; --ink:#E8E5DF; --muted:#9C9891;
+    --line:#33383C; --accent:#53B6A8; --accent-ink:#6FC7BA;
+    --accent-soft:rgba(83,182,168,.12); --warn:#DB8A5F; --warn-soft:rgba(219,138,95,.14);
+    --chip:#24292D; --code:#24292D;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16191B; --surface:#1D2124; --ink:#E8E5DF; --muted:#9C9891;
+  --line:#33383C; --accent:#53B6A8; --accent-ink:#6FC7BA;
+  --accent-soft:rgba(83,182,168,.12); --warn:#DB8A5F; --warn-soft:rgba(219,138,95,.14);
+  --chip:#24292D; --code:#24292D;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Noto Sans TC",-apple-system,"PingFang TC",sans-serif;
+  font-size:15.5px; line-height:1.85;
+}
+.wrap{max-width:1060px; margin:0 auto; padding:56px 28px 96px}
+header.doc p, section>p, section>ul li, section>ol li{max-width:44em}
+.eyebrow{
+  font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.06em;
+  color:var(--muted); margin:0 0 14px;
+}
+h1{
+  font-family:"Noto Serif TC",serif; font-weight:700; font-size:36px;
+  line-height:1.3; margin:0 0 12px; text-wrap:balance;
+}
+.stand{color:var(--muted); font-size:16px; margin:0 0 8px}
+nav.toc{
+  display:flex; flex-wrap:wrap; gap:8px 18px; margin:28px 0 0;
+  padding:14px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  font-size:13.5px;
+}
+nav.toc a{color:var(--accent-ink); text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{text-decoration:underline}
+nav.toc .n{font-family:"JetBrains Mono",monospace; color:var(--muted); margin-right:4px}
+section{margin-top:64px}
+h2{
+  font-family:"Noto Serif TC",serif; font-weight:700; font-size:26px;
+  line-height:1.35; margin:0 0 6px; text-wrap:balance;
+}
+h2 .n{font-family:"JetBrains Mono",monospace; font-size:15px; color:var(--accent); margin-right:10px; font-weight:600}
+h3{font-size:18px; font-weight:700; margin:40px 0 10px; line-height:1.4}
+h4.sub{font-size:14.5px; font-weight:700; margin:22px 0 4px}
+.lede{color:var(--muted); margin:0 0 20px}
+a{color:var(--accent-ink)}
+p{margin:0 0 12px}
+code,.st{
+  font-family:"JetBrains Mono",monospace; font-size:.86em;
+  background:var(--code); border-radius:4px; padding:1px 6px;
+}
+.st{color:var(--accent-ink)}
+.tablewrap{overflow-x:auto; margin:14px 0 6px}
+table{border-collapse:collapse; width:100%; font-size:14px}
+th{
+  text-align:left; font-weight:700; font-size:12.5px; letter-spacing:.04em;
+  color:var(--muted); padding:8px 12px; border-bottom:2px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+td.id{font-family:"JetBrains Mono",monospace; font-size:12.5px; white-space:nowrap; color:var(--accent-ink); font-weight:600}
+tr:hover td{background:var(--accent-soft)}
+
+/* 角色使用者故事卡 */
+.roles{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; margin:18px 0}
+.role{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 20px}
+.role h4{margin:0 0 10px; font-size:15.5px}
+.role h4 .who{
+  display:inline-block; background:var(--accent-soft); color:var(--accent-ink);
+  border-radius:6px; padding:1px 10px;
+}
+.role ul{margin:0; padding-left:2px; list-style:none}
+.role li{font-size:14px; padding-left:22px; position:relative; margin:7px 0; line-height:1.65}
+.role li::before{content:"✓"; position:absolute; left:0; color:var(--accent); font-weight:700}
+/* 系統規則清單 */
+ul.rules{margin:10px 0; padding-left:2px; list-style:none; max-width:48em}
+ul.rules li{font-size:14.5px; padding-left:24px; position:relative; margin:9px 0}
+ul.rules li::before{content:"§"; position:absolute; left:2px; color:var(--muted); font-family:"JetBrains Mono",monospace; font-size:12px; top:2px}
+
+/* 需求清單：核心需求用編號，因為後面會一條一條照順序走 */
+ol.req{margin:10px 0 6px; padding-left:1.7em; max-width:46em}
+ol.req li{margin:9px 0; padding-left:4px}
+ol.req li::marker{font-family:"JetBrains Mono",monospace; color:var(--accent); font-weight:600}
+ol.req li b{color:var(--accent-ink)}
+ul.plain{margin:10px 0; padding-left:1.4em; max-width:46em}
+ul.plain li{margin:6px 0}
+ul.below{margin:10px 0; padding-left:2px; list-style:none; max-width:46em}
+ul.below li{font-size:14.5px; padding-left:22px; position:relative; margin:7px 0; color:var(--muted)}
+ul.below li::before{content:"—"; position:absolute; left:2px; color:var(--muted)}
+
+/* 流程步驟 */
+ol.flow{margin:10px 0 18px; padding-left:1.9em; max-width:46em}
+ol.flow li{margin:9px 0; padding-left:6px}
+ol.flow li::marker{font-family:"JetBrains Mono",monospace; color:var(--muted)}
+
+/* API 區塊 */
+pre.api{
+  background:var(--code); border:1px solid var(--line); border-radius:8px;
+  padding:14px 18px; overflow-x:auto; font-family:"JetBrains Mono",monospace;
+  font-size:13px; line-height:1.65; margin:12px 0 18px; max-width:58em; white-space:pre;
+}
+pre.api .c{color:var(--muted)}
+pre.api .k{color:var(--accent-ink); font-weight:600}
+
+/* 深入探討的方案卡 */
+.opt{margin:18px 0; padding:16px 20px; background:var(--surface); border:1px solid var(--line); border-radius:10px; max-width:58em}
+.opt.great{border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent)}
+.opt h4{margin:0 0 8px; font-size:15.5px; line-height:1.5}
+.opt h4 .tag{
+  display:inline-block; font-size:12.5px; border-radius:6px; padding:1px 9px;
+  margin-right:8px; vertical-align:1px; font-weight:600;
+}
+.opt.bad h4 .tag{background:var(--warn-soft); color:var(--warn)}
+.opt.ok h4 .tag{background:var(--chip); color:var(--muted)}
+.opt.great h4 .tag{background:var(--accent-soft); color:var(--accent-ink)}
+.opt p{margin:8px 0; font-size:14.5px}
+.opt p b.lbl{color:var(--muted); margin-right:6px}
+.opt ol,.opt ul{margin:6px 0 8px; padding-left:1.7em; font-size:14.5px}
+.opt li{margin:5px 0}
+.opt pre.api{margin:10px 0; font-size:12.5px}
+
+/* 核心實體 */
+.ents{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:10px; margin:14px 0 6px}
+.ent{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:14px; line-height:1.65}
+.ent b{display:block; margin-bottom:3px; font-size:14.5px}
+.ent code{font-size:.82em}
+
+/* 狀態說明 */
+dl.states{margin:14px 0; max-width:46em; display:grid; grid-template-columns:max-content 1fr; gap:6px 16px; font-size:14.5px}
+dl.states dt{font-family:"JetBrains Mono",monospace; color:var(--accent-ink); font-weight:600; font-size:13px}
+dl.states dd{margin:0}
+
+figure{margin:26px 0; padding:22px 20px; background:var(--surface); border:1px solid var(--line); border-radius:10px}
+figure .figwrap{overflow-x:auto}
+figure svg{display:block; min-width:720px; max-width:100%; height:auto; margin:0 auto}
+figure svg.sm{min-width:560px}
+figcaption{font-size:13px; color:var(--muted); margin-top:14px; max-width:60em}
+
+/* 幾何圖（狀態機） */
+.sv-box{fill:var(--surface); stroke:var(--ink); stroke-width:1.2}
+.sv-box-acc{fill:var(--accent-soft); stroke:var(--accent); stroke-width:1.4}
+.sv-chip{fill:var(--chip); stroke:var(--line); stroke-width:1}
+.sv-chip-warn{fill:var(--warn-soft); stroke:var(--warn); stroke-width:1}
+.sv-edge{stroke:var(--ink); stroke-width:1.3; fill:none}
+.sv-edge-warn{stroke:var(--warn); stroke-width:1.5; fill:none}
+.sv-t{font-family:"Noto Sans TC",sans-serif; font-size:13px; fill:var(--ink)}
+.sv-t-b{font-weight:700}
+.sv-t-s{font-size:11px; fill:var(--muted)}
+.sv-t-warn{font-size:11.5px; fill:var(--warn); font-weight:700}
+.sv-mono{font-family:"JetBrains Mono",monospace; font-size:11.5px; fill:var(--accent-ink); font-weight:600}
+/* 手繪白板風（架構圖） */
+.sk-shape{fill:none; stroke:var(--ink); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
+.sk-edge{fill:none; stroke:var(--ink); stroke-width:1.4; stroke-linecap:round}
+.sk-edge-warn{fill:none; stroke:var(--warn); stroke-width:1.6; stroke-linecap:round}
+.sk-t{font-family:"LXGW WenKai TC","Noto Sans TC",sans-serif; fill:var(--ink); font-size:14px}
+.sk-t-b{font-size:16.5px; font-weight:700}
+.sk-t-s{font-family:"LXGW WenKai TC","Noto Sans TC",sans-serif; fill:var(--muted); font-size:12px}
+.sk-t-lb{font-family:"LXGW WenKai TC","Noto Sans TC",sans-serif; fill:var(--ink); font-size:12.5px}
+.sk-t-warn{font-family:"LXGW WenKai TC","Noto Sans TC",sans-serif; fill:var(--warn); font-size:12.5px; font-weight:700}
+
+.callout{
+  margin:20px 0; padding:14px 18px; border-left:3px solid var(--accent);
+  background:var(--accent-soft); border-radius:0 8px 8px 0; font-size:14.5px; max-width:52em;
+}
+.callout.warn{border-left-color:var(--warn); background:var(--warn-soft)}
+.callout p{margin:0 0 8px; max-width:none}
+.callout p:last-child{margin-bottom:0}
+footer.doc{
+  margin-top:80px; padding-top:20px; border-top:1px solid var(--line);
+  font-size:13px; color:var(--muted); max-width:52em;
+}
+footer.doc p{max-width:none}
+@media (prefers-reduced-motion:no-preference){ a{transition:color .15s} }
+@media (max-width:640px){
+  .wrap{padding:36px 18px 72px}
+  h1{font-size:30px}
+  dl.states{grid-template-columns:1fr; gap:2px 0}
+  dl.states dd{margin-bottom:8px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <p class="eyebrow">TMS 任務交辦系統 · 系統設計 · 2026-10-07</p>
+  <h1>設計一套飯店任務交辦系統</h1>
+  <p class="stand">住客掃碼提需求，系統派給房務和工務，主管查房把關，老闆看當日數字。這份文件從需求出發，一步一步推到架構、API 與資料模型。</p>
+  <nav class="toc" aria-label="目錄">
+    <a href="#s1"><span class="n">1</span>理解問題</a>
+    <a href="#s2"><span class="n">2</span>準備工作：核心實體與 API</a>
+    <a href="#s3"><span class="n">3</span>高階設計</a>
+    <a href="#s4"><span class="n">4</span>深入探討</a>
+    <a href="#s5"><span class="n">5</span>最終設計</a>
+    <a href="#a1"><span class="n">A</span>需求 × API × 資料表</a>
+    <a href="#a2"><span class="n">B</span>開放問題</a>
+  </nav>
+</header>
+
+<section id="s1">
+  <h2><span class="n">1</span>理解問題</h2>
+
+  <p><b>🏨 什麼是 TMS？</b> TMS 是給四五星飯店用的任務交辦系統。住客在房間掃 QR 就能提需求（要毛巾、冷氣壞了），系統把需求送到對的部門，房務或工務認領處理，主管查房把關，老闆打開手機看今天的數字。它取代的是現在用對講機、LINE 群組和紙本交班單串起來的流程。TMS 是雲端服務：我們統一託管一套系統，飯店開通帳號就能用，店內不用裝任何伺服器。也不挑 PMS（飯店管理系統，管訂房與房況的那套）——每一種 PMS 做一個轉接頭（adapter）接上來就能用：PMS 能主動推事件就走事件訂閱，不能就輪詢兜底；自家的 PMS 是第一個 adapter。</p>
+
+  <p>單一飯店的規模不大：幾百間房、每天幾千個事件、同時在線的員工幾十人。但所有飯店共用同一朵雲，事件量和吃事件的下游（推播、看板、PMS 回寫⋯⋯）會跟著飯店數一起長。所以設計重點有兩個：對單一飯店，<b>每一單都不能掉、每一步都要留痕</b>；對整個平台，<b>一份事件要能同時餵飽很多讀者</b>。這兩個觀察會貫穿整份文件——前者決定了我們用資料庫 outbox 當交易護欄，後者決定了事件走一條所有下游共用的輸送帶（Kafka）；而「單體不拆微服務」的結論，兩個視角下都成立。</p>
+
+  <h3>功能需求</h3>
+  <p>先把「誰能做什麼」列清楚。TMS 的使用者就五種人，需求按角色列成使用者故事——一條就是一件「可以做的事」，全部都是 v1 要交付的能力。</p>
+
+  <div class="roles">
+    <div class="role">
+      <h4><span class="who">住客</span></h4>
+      <ul>
+        <li>可以從選單勾選常見需求（毛巾、加床…），不用打字</li>
+        <li>可以用自由文字描述需求</li>
+        <li>掃碼進來先看到<b>資訊頁</b>（早餐時間、Wi-Fi…），不用開口問</li>
+        <li>可以看到需求的處理進度，完成後給評分</li>
+        <li>免安裝 App，用 Web 就能用</li>
+      </ul>
+    </div>
+    <div class="role">
+      <h4><span class="who">櫃檯</span></h4>
+      <ul>
+        <li>可以看到「待判讀」的自由文字需求，並三選一：給房務／給工務／當場回答</li>
+        <li>可以發送通知到通知板，並看到誰已讀</li>
+        <li>可以登記遺失物與歸還</li>
+      </ul>
+    </div>
+    <div class="role">
+      <h4><span class="who">房務員／工務</span></h4>
+      <ul>
+        <li>可以在部門待接池認領臨時需求</li>
+        <li>班前可以看到系統自動排好的清潔房</li>
+        <li>可以用「開始」「完成」兩段回報任務</li>
+        <li>清潔時可以逐項打勾 SOP（跳過不擋流程）</li>
+        <li>可以查看交班單（交班當下凍結的快照）並簽收</li>
+        <li>可以「問一下」查 SOP 或這間房的過往記錄</li>
+      </ul>
+    </div>
+    <div class="role">
+      <h4><span class="who">主管</span></h4>
+      <ul>
+        <li>可以拖曳改派任務</li>
+        <li>可以查房、逐項判定，任一項不過整間退回</li>
+        <li>員工請假時，可以看到被中斷的任務與進度，連同「做到哪」的交代退回待接池（優先通知同樓層接手）</li>
+        <li>缺人時可以看到工時缺口試算，自己決定延後哪些空房巡</li>
+        <li>PMS 接不上時，可以用 Excel 匯入今日房態（入住＋退房），照常排房、住客也照常掃得了碼</li>
+      </ul>
+    </div>
+    <div class="role">
+      <h4><span class="who">老闆</span></h4>
+      <ul>
+        <li>打開就看到一格一格的數字卡片（可賣房、回應速度、評分、查房退回…）＋一行當日摘要</li>
+        <li>只在出事時收到推播</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4 class="sub">系統規則</h4>
+  <p>另外有幾條約束不屬於任何角色的能力——是系統自己要守的規則。它們和上面的使用者故事合起來，就是 v1 的完整功能範圍：</p>
+  <ul class="rules">
+    <li>清潔任務班前<b>自動排房</b>：樓層 × 工時、一層一人——v1 先用這個簡化演算法，責任區、趕房、VIP 順序留給 v2</li>
+    <li>查房全過才把房況回寫 PMS；清這間房的人不能查這間房</li>
+    <li>員工請假時：已接還沒開始的任務<b>自動退回待接池</b>；做到一半的標記中斷，由主管附上「做到哪」的交代退回待接池，優先通知同樓層的人接手</li>
+    <li>系統讀訂房屬性（VIP、親子、寵物、紀念日）<b>自動開準備工單</b>，住客沒開口就備妥</li>
+    <li>資訊內容（早餐時間、Wi-Fi…）在住客 Web <b>前台直接提供</b>、不進任務流；打字問到的資訊類問題由櫃檯「當場回答」結案——v1 不做自動回答</li>
+    <li>高頻的自由文字輸入，系統自動<b>建議轉成按鈕</b></li>
+    <li>房間 QR 是<b>可輪替的憑證</b>：貼紙被撕走或遺失由主管重產、舊的立即作廢；查房項目裡有「QR 貼紙在位」這一項檢查（機制見深入探討第五題）</li>
+  </ul>
+
+  <h4 class="sub">核心需求</h4>
+  <p>故事和規則裡，有七條會直接決定架構的形狀。把它們抽出來編號，後面會一條一條照順序設計——第 2 章對著它們定 API，第 3 章逐條走通：</p>
+  <ol class="req">
+    <li><b>住客</b>可以掃房間 QR 提出需求——勾選單（毛巾、加床）或打字描述——然後看處理進度，完成後給評分。</li>
+    <li><b>房務和工務</b>可以在部門待接池認領需求，用「開始」「完成」兩段回報。</li>
+    <li>自由文字的需求猜不準部門時，<b>櫃檯</b>可以判讀：轉房務、轉工務，或當場回答結案。</li>
+    <li><b>系統</b>在班前自動排好當天的清潔房；主管可以手動調整。</li>
+    <li><b>主管</b>可以查房逐項判定——任一項不過整間退回重做；全過才把房況回寫 PMS。</li>
+    <li>員工請假時，手上還沒開始的任務自動退回待接池；做到一半的標記中斷，由<b>主管</b>附上進度交代後退回待接池。</li>
+    <li><b>老闆</b>打開 App 就看到當天的數字卡片（可賣房、回應速度、評分、查房退回次數）；只在出事時收到推播。</li>
+  </ol>
+
+  <h4 class="sub">不在範圍內</h4>
+  <ul class="below">
+    <li>SLA 逾時升級鏈：逾時通知櫃檯、值班主管接手、自動建客訴</li>
+    <li>跨部門轉單的完整權責、minibar 計費、夜床、業務履約報告、住客自報遺失。minibar 計費日後啟用時，帳款訊息必帶防重複編號——重複送達就是重複扣款</li>
+    <li>候補人力調度、續住清降級——缺人時 v1 能動的只有「延後空房巡」</li>
+    <li>MICE／宴會、智慧門鎖、OTA channel manager、業績 BI、集團多物件報表</li>
+    <li>自助開通與計費——v1 的租戶（飯店）由我們人工開設與設定，帳務走合約請款；線上自助註冊、刷卡訂閱之後再說</li>
+  </ul>
+  <p>這些功能不是不重要，而是會增加複雜度卻不改變核心架構。SLA 升級鏈是其中最接近的一個——資料模型現在就先留欄位，啟用時只是背景 worker 多一種排程掃描，架構不用動；為什麼先不做、之後怎麼加，深入探討第八題講。</p>
+
+  <h3>非功能需求</h3>
+  <p>功能需求講系統「做什麼」，非功能需求講系統「怎麼運作」——快不快、會不會掉、安不安全。這些需求決定架構的形狀，深入探討會一條一條回來對。</p>
+
+  <h4 class="sub">核心需求</h4>
+  <ol class="req">
+    <li><b>即時</b>：住客送出需求後 2 秒內出現在內部看板；內部按完成，住客畫面自己更新，不用重新整理。</li>
+    <li><b>不掉單</b>：員工在電梯間、地下室按的「完成」不能丟；每一則推播、每一次 PMS 回寫都要送達，而且不會因為重試而執行兩次。</li>
+    <li><b>歷史不滅</b>：任何狀態變更都留痕。查房退回會清掉計時和 SOP 勾記，但誰在幾點勾過什麼要能回溯。</li>
+    <li><b>權限在伺服器端強制</b>：住客只能看自己房、員工只能看自己部門、主管只能看自己店；前端把按鈕灰掉只是提示，不算數。</li>
+    <li><b>部署簡單</b>：整套由我們統一在雲端託管，一個人就能運維——一台應用、一個背景 worker、一個 Postgres，加一條代管的 Kafka。所有飯店共用同一套系統、同一個資料庫，但零跨店洩漏；飯店端什麼都不用裝。</li>
+    <li><b>什麼都可調</b>：標準工時、SOP 項目、查房項目、班次容量，都是每家飯店自己的設定，不寫死在程式裡。</li>
+  </ol>
+
+  <h4 class="sub">不在範圍內</h4>
+  <ul class="below">
+    <li>微服務拆分與獨立擴展——就算全平台的事件加總，離一台單體的上限也還遠得很（深入探討第七題）</li>
+    <li>離線衝突的欄位級合併——v1 先到先贏，通知後到的人</li>
+    <li>個人工時用於績效考核——統計分級可見（本人／主管／老闆）、保留期限可設、預設不作考核。保留期限到了不是刪掉流水帳，而是把那些列去識別化（怎麼做到見深入探討第四題）</li>
+    <li>裝置綁定（登入綁死特定手機）——員工多半用自己的手機、換機又頻繁，綁定帶來的導入阻力大於它擋得住的風險。登入只驗帳號密碼與角色，裝置只在登入時登記成推播收件地址</li>
+  </ul>
+
+  <div class="callout">
+    <p>最值得注意的是第 2 條和第 3 條。一般 CRUD 系統的做法是「改一筆 tasks 的 state 欄位，順便呼叫推播 API」，但這在兩個地方會出事：應用在寫完資料庫、還沒呼叫推播之間當掉，通知就掉了；查房退回直接覆寫 state，「做到一半被退回」的歷史就沒了。</p>
+    <p>這兩條需求會把我們推向「事件流只加不改」加上「資料庫 outbox」的設計。先記住這個方向，深入探討會細講。</p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="n">2</span>準備工作：核心實體與 API</h2>
+
+  <h3>核心實體</h3>
+  <p>先列出系統裡的主要東西，對齊名稱就好。這個階段不需要每個欄位都定下來，完整的資料模型留到最終設計再展開。</p>
+  <div class="ents">
+    <div class="ent"><b>任務 Task</b>一件要做的事。四種：備品、修繕、打掃、其他。有房號、部門、狀態、負責人，以及來源（住客掃碼／櫃檯／系統）。訂房屬性自動開的準備工單歸在備品、來源記為系統。</div>
+    <div class="ent"><b>任務事件 TaskEvent</b>任務的每一步變化：建立、認領、開始、打勾、完成、退回……一件事一列，只進不改。</div>
+    <div class="ent"><b>房間 Room</b>樓層、清潔狀態（TMS 管）、住了沒（PMS 管）。一間房兩個系統各管一半。</div>
+    <div class="ent"><b>住客 session</b>住客掃碼後拿到的憑證，綁房號和這次住宿期間，退房自動失效；QR 輪替或訂單取消時整批撤銷。</div>
+    <div class="ent"><b>員工 Staff</b>帳號、角色（櫃檯／房務／工務／主管／老闆）、部門、收推播的裝置。</div>
+    <div class="ent"><b>排房計畫 CleaningPlan</b>某一天某個班次，誰負責哪幾間房、每間預估幾分鐘。</div>
+    <div class="ent"><b>查房記錄 Inspection</b>查的是哪個任務、誰查的、每一項過不過、整間結果。</div>
+    <div class="ent"><b>待送匣 Outbox</b>等著上輸送帶的事件與副作用：任務事件、推播、PMS 回寫。和狀態變更同一筆交易寫入，再由 relay 轉送 Kafka。為什麼需要它，深入探討第一題會講。</div>
+  </div>
+
+  <h3>API</h3>
+  <p>接下來一條一條對著核心需求定 API。多數需求對應一到兩個端點，少數需要幾個。全部是 REST，單體對外只有一組 HTTP API，按使用者分前綴：<code>/guest</code> 住客（不登入）、<code>/staff</code> 房務與工務、<code>/desk</code> 櫃檯、<code>/admin</code> 主管、<code>/owner</code> 老闆（只讀）。</p>
+
+  <p>有四個共同約定先講清楚，後面就不重複：</p>
+  <ul class="plain">
+    <li><b>寫入都帶操作編號。</b>所有 POST 都帶 <code>Idempotency-Key</code>——客戶端自己產生的唯一編號。伺服器記錄處理過的編號，同一個編號再送來就直接回上次結果。這是弱網重送不產生重複單的基礎。</li>
+    <li><b>路徑裡不帶店別。</b>從憑證解析出是哪家飯店，跨店的資源一律回 404，當作不存在。</li>
+    <li><b>狀態轉移全部經過狀態機守衛。</b>守衛不是「先查目前狀態、再決定要不要改」，而是<b>一句原子的條件式 UPDATE</b>——所謂條件式 UPDATE，就是把「目前必須是什麼狀態」寫進 UPDATE 的條件裡，讓資料庫在同一個動作裡檢查舊狀態、寫入新狀態，並把這個任務的事件取號器 <code>event_seq</code> 加一。更新到 0 列，代表條件不成立，直接回 <code>409 state_conflict</code>。兩個房務同一秒按「認領」，資料庫只會讓其中一句 UPDATE 成功，另一個拿到 409，畫面顯示「這單已被某某認領」。事件寫進任務歷程時的序號 <code>seq</code> 就用這句 UPDATE 回傳的 <code>event_seq</code>——取號、鎖住這一列、守衛轉移是同一個動作，沒有額外成本。</li>
+    <li><b>員工登入、住客不登入。</b>員工 <code>POST /auth/login</code> 帳號密碼換登入憑證，之後每個請求都驗登入態與「角色 × 動作」。登入成功時順手把這台裝置的推播地址（APNS／FCM token）登記起來——那只是收件地址，不是第二道門檻：登入不綁裝置、同一人換機多機都合法（為什麼不做裝置綁定，見 §1 不在範圍內）。住客掃 QR 換 session，不用帳號。</li>
+  </ul>
+
+  <h4 class="sub">需求 1：住客掃碼提需求、看進度、評分</h4>
+<pre class="api"><span class="c">// 掃 QR 換住客 session，順便拿資訊頁和選單</span>
+<span class="k">POST</span> /guest/scan
+{ "token": "8fQ2hL9xKpD3vRw1sTzUjm" }
+->
+{ "session": "…", "room": "305", "home": { "breakfast": "07:00–10:00", "wifi": "…", "menu": [ … ] } }
+<span class="c">// 空房或 token 已作廢 → 409 room_vacant，畫面顯示「請洽櫃檯」</span>
+<span class="k">GET</span>  /guest/home            <span class="c">// 資訊頁與選單，重新整理時用；不進任務流</span>
+
+<span class="c">// 建立需求，二選一</span>
+<span class="k">POST</span> /guest/requests
+{ "itemId": "towel", "qty": 2 }            <span class="c">// 勾選單</span>
+{ "text": "冷氣不冷", "lang": "zh-TW" }      <span class="c">// 自由文字</span>
+->
+{ "taskId": "t_1234", "state": "pool" }    <span class="c">// 自由文字猜不準時 state 是 triage</span>
+<span class="c">// 同一房 10 分鐘超過 3 筆 → 429</span>
+
+<span class="c">// 看進度</span>
+<span class="k">GET</span>  /guest/requests        <span class="c">// 這次住宿的所有需求與狀態</span>
+<span class="c">// 以 session 綁的那張訂單（tasks.reservation_id）過濾，不是按房號撈</span>
+<span class="c">// ——按房號撈，新住客會看到前一位住客的需求原文</span>
+<span class="k">GET</span>  /guest/stream          <span class="c">// SSE，自己房的任務狀態一變就推</span>
+
+<span class="c">// 手滑點錯了，自己收回——只限還沒有人認領（triage 或 pool）</span>
+<span class="k">POST</span> /guest/requests/{id}/cancel
+<span class="c">// 已經有人認領 → 409 state_conflict，畫面改提示「請洽櫃檯」</span>
+
+<span class="c">// 完成後評分</span>
+<span class="k">POST</span> /guest/requests/{id}/rating
+{ "score": 4 }</pre>
+
+  <h4 class="sub">需求 2：員工認領、開始、完成</h4>
+<pre class="api"><span class="k">GET</span>  /staff/pool                       <span class="c">// 本部門待接池</span>
+<span class="k">POST</span> /staff/tasks/{id}/claim           <span class="c">// pool → accepted</span>
+<span class="k">POST</span> /staff/tasks/{id}/start           <span class="c">// accepted → doing</span>
+<span class="k">POST</span> /staff/tasks/{id}/complete        <span class="c">// doing → done</span>
+<span class="k">POST</span> /staff/tasks/{id}/sop/{item}      <span class="c">// 打勾或跳過一個 SOP 項目</span>
+{ "checked": true }   或   { "skipped": true }
+<span class="k">GET</span>  /staff/stream                     <span class="c">// SSE，本部門待接池與我的任務</span></pre>
+
+  <h4 class="sub">需求 3：櫃檯判讀自由文字</h4>
+<pre class="api"><span class="k">GET</span>  /desk/triage                      <span class="c">// 待判讀清單</span>
+<span class="k">POST</span> /desk/triage/{id}
+{ "action": "assign", "dept": "housekeeping" }      <span class="c">// triage → pool</span>
+{ "action": "answer", "note": "早餐 07:00–10:00" }  <span class="c">// triage → done，回覆存在任務備註</span></pre>
+  <p><code>dept</code> 和任務本身的部門欄位用同一套值，之後加部門不用改 API 的形狀。</p>
+
+  <h4 class="sub">需求 4：班前排房</h4>
+<pre class="api"><span class="k">GET</span>  /staff/schedule                   <span class="c">// 我今天負責哪些房</span>
+<span class="k">GET</span>  /admin/plans/{date}               <span class="c">// 當天的排房計畫</span>
+<span class="k">PUT</span>  /admin/plans/{date}               <span class="c">// 手動調整誰負責哪些房；帶 If-Match：打開畫面時那份計畫的版本號</span>
+<span class="c">// 版本不符 → 409 並附最新內容，兩位主管同時調整不會互吃；計畫每被調整一次版本 +1</span>
+<span class="k">POST</span> /admin/occupancy/import           <span class="c">// 上傳今日房態（入住＋退房）Excel／CSV，PMS 接不上時用</span></pre>
+  <p>排房本身沒有「建立」的 API——它是背景 worker 在班前自動跑的。發佈後任務已經開出來了，要換人改用需求 6 的改派。</p>
+
+  <h4 class="sub">需求 5：主管查房</h4>
+<pre class="api"><span class="k">POST</span> /admin/inspections/{taskId}
+{ "items": [ { "id": "bed", "pass": true }, { "id": "bathroom", "pass": false } ] }
+->
+<span class="c">// 全過：done → inspected，並排一筆「回寫 PMS」進待送匣</span>
+<span class="c">// 任一不過：退回 accepted 給原清房者，redo +1，清空計時與 SOP 勾記</span>
+<span class="c">// 同一筆交易再查原清房者還在不在班（照租戶設定的班次時間）</span>
+<span class="c">//   已下班或已請假 → 連動退回待接池 accepted → pool，優先推播同樓層</span>
+<span class="c">// 清這間房的人不能查這間房 → 403</span></pre>
+
+  <h4 class="sub">需求 6：請假與中斷</h4>
+<pre class="api"><span class="k">POST</span> /admin/leaves
+{ "staffId": "s_12", "from": "2026-10-07T08:00", "to": "2026-10-07T17:00" }
+->
+{ "requeued": [ "t_1201", "t_1205" ], "interrupted": [ "t_1234" ] }   <span class="c">// 回傳被影響的任務</span>
+
+<span class="k">POST</span> /admin/tasks/{id}/requeue         <span class="c">// interrupted → pool</span>
+{ "progressNote": "浴室洗好了，床還沒鋪" }   <span class="c">// 進度交代跟著單走，優先推播同樓層</span>
+
+<span class="k">POST</span> /admin/tasks/{id}/reassign        <span class="c">// pool 或 accepted 的任務換人</span>
+{ "assignee": "s_34", "note": "…" }
+
+<span class="k">POST</span> /admin/tasks/{id}/defer           <span class="c">// pool → deferred，延後空房巡</span>
+<span class="k">POST</span> /admin/tasks/{id}/undefer         <span class="c">// deferred → pool，主管隨時拉回；worker 隔日班前也會自動回池</span>
+
+<span class="k">POST</span> /admin/tasks/{id}/cancel          <span class="c">// 任何還沒完成的狀態 → cancelled，必附原因</span>
+{ "reason": "manager_void" }                <span class="c">// manager_void 作廢／plan_superseded 計畫重產收回</span>
+
+<span class="k">GET</span>  /admin/capacity                   <span class="c">// 工時缺口試算</span></pre>
+
+  <h4 class="sub">需求 7：老闆儀表板</h4>
+<pre class="api"><span class="k">GET</span>  /owner/dashboard
+->
+{ "cards": { "sellable": 42, "avgResponseMin": 6, "rating": 4.6, "inspectionReturns": 2 },
+  "summary": "今日 38 間清完、2 間退回重做，住客評分 4.6" }</pre>
+  <p>數字是背景 worker 預先算好存在資料庫的，API 只讀、不現算。老闆的推播沒有 API——那是待送匣送到 APNS／FCM 的事。還有一條算法上的規矩：<b>取消掉的單不進任何數字</b>——不算完成數、不進平均工時、不進評分。住客手滑建了又收回、主管作廢、計畫重產收走的單，都不該讓當天的成績變好看或變難看。</p>
+
+  <p>其他端點（通知板、遺失物、交班單、問答、QR 輪替、租戶設定）在<a href="#a1">附錄 A</a> 的對照表裡。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="n">3</span>高階設計</h2>
+  <p class="lede">先用最少的元件把七條功能需求一條一條走通。非功能需求（即時、不掉單、歷史不滅……）留到深入探討再一層一層加上去。</p>
+
+  <p>起手式只有三個元件：</p>
+  <figure>
+    <div class="figwrap">
+    <svg class="sm" viewBox="0 0 800 220" role="img" aria-label="起手式：Clients 與 TMS 應用以 REST 與 SSE 雙向溝通，TMS 應用讀寫唯一的 Postgres">
+      <defs>
+        <marker id="sk0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="sk-shape" x="30" y="50" width="206" height="130" rx="16"/>
+      <text class="sk-t sk-t-b" x="48" y="82">Clients</text>
+      <text class="sk-t-lb" x="48" y="108">- 住客 Web（掃 QR 免安裝）</text>
+      <text class="sk-t-lb" x="48" y="130">- 內部 App（Flutter）</text>
+      <text class="sk-t-lb" x="48" y="152">- 內部 Web（櫃檯・主管）</text>
+
+      <path class="sk-edge" d="M 240 110 Q 280 102 318 108" marker-start="url(#sk0)" marker-end="url(#sk0)"/>
+      <text class="sk-t-lb" x="279" y="88" text-anchor="middle">REST ＋ SSE</text>
+
+      <rect class="sk-shape" x="322" y="50" width="214" height="130" rx="16"/>
+      <text class="sk-t sk-t-b" x="340" y="82">TMS 應用</text>
+      <text class="sk-t-lb" x="340" y="108">- 建單・分類・待接池</text>
+      <text class="sk-t-lb" x="340" y="130">- 狀態機・查房・排房</text>
+      <text class="sk-t-lb" x="340" y="152">- 權限（伺服器端強制）</text>
+
+      <path class="sk-edge" d="M 540 112 Q 578 104 614 110" marker-start="url(#sk0)" marker-end="url(#sk0)"/>
+      <text class="sk-t-lb" x="577" y="90" text-anchor="middle">讀寫</text>
+
+      <circle class="sk-shape" cx="692" cy="115" r="66"/>
+      <text class="sk-t sk-t-b" x="692" y="112" text-anchor="middle">Postgres</text>
+      <text class="sk-t-s" x="692" y="136" text-anchor="middle">唯一的資料庫</text>
+    </svg>
+    </div>
+    <figcaption>起手式。Clients 包含三種載體：住客用 Web（掃 QR 就能用，不用裝 App）、第一線房務與工務用 Flutter App（一套碼出 iOS 和 Android，方便快速回報和收推播）、櫃檯與主管用 Web 大畫面。內部端的 Web 和 App 功能對等——不存在「只有 App 才能做」的操作，差別只在哪個載體用起來順手。TMS 應用是單一部署單位，所有業務邏輯都在這裡。</figcaption>
+  </figure>
+
+  <p>這三件是起手式，也是把功能需求走通夠用的全部。完整形態還有三個角色，深入探討第一題會加進來：<b>背景 worker</b>、<b>待送匣（outbox）</b>，和事件骨幹 <b>Kafka</b>——白話說，它是一條可以重播的事件輸送帶：寫進去的事件照順序排好，誰要用誰來讀，讀到哪自己記到哪。任務的每一步變化都先落匣，由 relay 搬上輸送帶，推播、SSE 即時推送、PMS 回寫全部從輸送帶訂閱。現在先假設「通知會送到」。</p>
+  <p>部署的形狀：整套由我們統一在雲端託管，所有飯店連同一朵雲、店內不裝任何伺服器。自營的元件就是單體應用、背景 worker、一個 Postgres，加一條代管的 Kafka。外部依賴有三個：各家 PMS（訂房與房況，經 adapter 對接——自家 PMS 是第一個 adapter）、推播服務（APNS／FCM）、LLM API（翻譯與分類建議）。</p>
+
+  <h3>1) 住客掃碼提需求、看進度、評分</h3>
+  <p>住客走進房間，掃床頭的 QR：</p>
+  <ol class="flow">
+    <li>QR 裡是一個綁房號的 token（例如 <code>t.tms.tw/r/8fQ2hL9xKpD3vRw1sTzUjm</code> 對應 305 房）。瀏覽器開啟後打 <code>POST /guest/scan</code>。</li>
+    <li>應用驗 token 是否存在、是否已作廢，然後用房號查 PMS 快取裡「現在住這間房的訂單」。查不到就是空房，直接回 <code>409 room_vacant</code>，畫面顯示「請洽櫃檯」。<b>空房掃碼不建單</b>，這一步就擋掉撿到貼紙亂建單的情況。</li>
+    <li>查得到就簽發住客 session，綁房號和這次住宿期間，退房自動失效。之後住客的每個請求只帶 session，QR token 不再出現。</li>
+    <li>回資訊頁（早餐時間、Wi-Fi）和需求選單。資訊頁的內容來自這家飯店的租戶設定，<b>不進任務流</b>——住客看一眼就好，不需要有人處理。</li>
+  </ol>
+
+  <p>住客勾了「毛巾 ×2」送出：</p>
+  <ol class="flow" start="5">
+    <li>應用建一筆任務：種類＝備品、房號＝305、來源＝住客掃碼。選單的每一項都預先對應到部門，所以直接進房務的待接池（狀態 <span class="st">pool</span>）。</li>
+    <li>同一房 10 分鐘內最多 3 筆，超過回 429——防誤觸也防惡作劇。</li>
+    <li>看板上房務部門的人立刻看到這一單。怎麼做到「立刻」，深入探討第三題講。</li>
+  </ol>
+
+  <p>如果住客是打字「冷氣不冷」：</p>
+  <ol class="flow" start="8">
+    <li>應用先過<b>規則引擎</b>——關鍵字命中「冷氣」「不冷」就歸工務。規則引擎記錄命中了哪一條規則，分類可解釋。猜不準的（沒命中、或命中多個部門）掛「其他」停在 <span class="st">triage</span>，等櫃檯判讀（需求 3）。</li>
+    <li>LLM 只做兩件事：外語翻譯，以及猜不準時給一個建議供櫃檯參考。它不直接改任務歸屬，建議會留稽核。</li>
+  </ol>
+
+  <p>為什麼分類不直接交給 LLM？因為規則引擎可預測、可解釋、不用等外部 API 回應。飯店常見需求就那幾十種，規則覆蓋得了；高頻的自由文字系統還會自動建議「轉成按鈕」，讓規則覆蓋率越來越高。</p>
+
+  <p>送出後反悔也很常見——點錯品項、或者只是手滑。所以住客自己就能收回 <code>POST /guest/requests/{id}/cancel</code>，但只限還沒有人認領的時候（<span class="st">triage</span> 或 <span class="st">pool</span>）。已經有人接了就擋下來、請他洽櫃檯：人都已經拿著毛巾往房間走了，單卻在半路消失，比不能收回更糟。收回的單走到 <span class="st">cancelled</span>，不進當天任何數字。</p>
+  <p>任務完成後住客評分 1–5。低分會推播給老闆，這是「出事才響」的來源之一。</p>
+
+  <h3>2) 員工在待接池認領、開始、完成</h3>
+  <p>這裡要先講一個關鍵決定：<b>任務先進部門待接池，不直接指派到人</b>。</p>
+  <p>理由很實際。飯店的人力狀況每天都在變——有人請假、交班、臨時被叫去支援。如果任務建立時就綁到某個人，那個人一不在，任務就卡住，主管得一筆一筆改派。先進池、再由人認領，請假和交班都不會斷線。班前排房是唯一的例外——它開出來的清潔任務建立那一刻就已經指派到人、狀態直接是 <span class="st">accepted</span>，不經過待接池，因為那本來就是「今天你負責這幾間」的意思。</p>
+
+  <p>任務的一生用一個狀態機描述，四種任務共用：</p>
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 960 430" role="img" aria-label="任務狀態機（九個狀態）：triage 經櫃檯判讀進入 pool，由員工認領成 accepted，依序 doing、done，查房通過到 inspected；排房發佈的清潔任務建立即 accepted，不經過 pool；查房退回從 done 回到 accepted；請假或班末掃描使 accepted 退回 pool、doing 進入 interrupted；interrupted 由主管附上進度交代退回 pool；triage 也可由櫃檯當場回答直接結案到 done；pool 可延後為 deferred，再由 undefer 或隔日自動回池；pool 可因住客撤回或主管取消進入終點 cancelled，主管也可從任何未完成狀態取消">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <path class="sv-edge-warn" d="M 714 150 Q 550 52 402 148" marker-end="url(#ar2)"/>
+      <text class="sv-t-warn" x="558" y="76" text-anchor="middle">查房任一項不過：退回重做</text>
+      <text class="sv-t-s" x="558" y="94" text-anchor="middle">redo+1・清空計時・SOP 重打・房況回 dirty</text>
+
+      <rect class="sv-chip-warn" x="180" y="30" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="240" y="54" text-anchor="middle">cancelled</text>
+      <text class="sv-t-s" x="240" y="72" text-anchor="middle">取消・不進統計</text>
+      <line class="sv-edge-warn" x1="240" y1="150" x2="240" y2="88" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="252" y="122">住客撤回／主管取消</text>
+      <text class="sv-t-s" x="312" y="50">主管可從任何未完成狀態取消</text>
+      <text class="sv-t-s" x="312" y="68">（一律附原因）</text>
+
+      <rect class="sv-chip" x="20" y="150" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="80" y="174" text-anchor="middle">triage</text>
+      <text class="sv-t-s" x="80" y="192" text-anchor="middle">待判讀（自由文字）</text>
+
+      <rect class="sv-chip" x="180" y="150" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="240" y="174" text-anchor="middle">pool</text>
+      <text class="sv-t-s" x="240" y="192" text-anchor="middle">部門待接池</text>
+
+      <rect class="sv-chip" x="340" y="150" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="400" y="174" text-anchor="middle">accepted</text>
+      <text class="sv-t-s" x="400" y="192" text-anchor="middle">已接單</text>
+
+      <rect class="sv-chip" x="500" y="150" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="560" y="174" text-anchor="middle">doing</text>
+      <text class="sv-t-s" x="560" y="192" text-anchor="middle">進行中</text>
+
+      <rect class="sv-chip" x="660" y="150" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="720" y="174" text-anchor="middle">done</text>
+      <text class="sv-t-s" x="720" y="192" text-anchor="middle">完成（打掃：等查房）</text>
+
+      <rect class="sv-box-acc" x="820" y="150" width="120" height="56" rx="9"/>
+      <text class="sv-mono" x="880" y="174" text-anchor="middle">inspected</text>
+      <text class="sv-t-s" x="880" y="192" text-anchor="middle">查房通過・可賣</text>
+
+      <line class="sv-edge" x1="140" y1="178" x2="180" y2="178" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="160" y="142" text-anchor="middle">櫃檯判讀</text>
+      <line class="sv-edge" x1="300" y1="178" x2="340" y2="178" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="320" y="146" text-anchor="middle">員工認領</text>
+      <line class="sv-edge" x1="460" y1="178" x2="500" y2="178" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="480" y="146" text-anchor="middle">開始</text>
+      <line class="sv-edge" x1="620" y1="178" x2="660" y2="178" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="640" y="146" text-anchor="middle">完成</text>
+      <line class="sv-edge" x1="780" y1="178" x2="820" y2="178" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="800" y="146" text-anchor="middle">查房全過</text>
+      <text class="sv-t-s" x="800" y="230" text-anchor="middle">回寫 PMS</text>
+
+      <polyline class="sv-edge" points="60,206 60,390 700,390 700,208" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="390" y="380" text-anchor="middle">櫃檯當場回答・直接結案</text>
+
+      <circle class="sv-box" cx="420" cy="300" r="7"/>
+      <line class="sv-edge" x1="420" y1="293" x2="420" y2="208" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="436" y="296">排房發佈</text>
+      <text class="sv-t-s" x="436" y="312">建立即指派到人</text>
+
+      <rect class="sv-chip-warn" x="180" y="320" width="120" height="50" rx="9"/>
+      <text class="sv-mono" x="240" y="342" text-anchor="middle">deferred</text>
+      <text class="sv-t-s" x="240" y="358" text-anchor="middle">延後（空房巡）</text>
+      <line class="sv-edge" x1="240" y1="206" x2="240" y2="320" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="252" y="286">主管延後</text>
+      <polyline class="sv-edge" points="180,345 150,345 150,228 216,228 216,206" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="142" y="282" text-anchor="end">undefer</text>
+      <text class="sv-t-s" x="142" y="298" text-anchor="end">隔日自動回池</text>
+
+      <rect class="sv-chip-warn" x="470" y="320" width="120" height="50" rx="9"/>
+      <text class="sv-mono" x="530" y="342" text-anchor="middle">interrupted</text>
+      <text class="sv-t-s" x="530" y="358" text-anchor="middle">中斷（請假）</text>
+      <polyline class="sv-edge-warn" points="560,206 560,345 590,345" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="572" y="262">請假中斷</text>
+      <polyline class="sv-edge" points="470,345 400,345 400,250 200,250 200,206" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="412" y="296">主管退回池・帶進度交代</text>
+      <text class="sv-t-s" x="412" y="312">優先同樓層接手</text>
+
+      <path class="sv-edge-warn" d="M 350 220 Q 300 262 250 220" marker-end="url(#ar2)"/>
+      <text class="sv-t-s" x="300" y="262" text-anchor="middle">請假退回・班末掃描退池</text>
+    </svg>
+    </div>
+    <figcaption>任務狀態機。走到底有兩個終點：綠色的 <span class="st">inspected</span>（房況可賣、回寫 PMS），和橘色的 <span class="st">cancelled</span>（這單不做了，也不進任何統計）。橘色轉移是「任務上的資料被覆寫」的地方——退回重做會清空計時與 SOP 勾記。圖上只畫了 <span class="st">pool</span> 到 <span class="st">cancelled</span> 這一條取消邊，但主管的取消對任何還沒完成的狀態都成立，畫滿六條只會讓圖變難讀。<span class="st">accepted</span> 下方那個小圓點是排房發佈的起點：清潔任務建立那一刻就是 <span class="st">accepted</span>，不經過待接池。備品、修繕、其他這三種任務在 <span class="st">done</span> 收評分就結束，不進查房；只有打掃要走到 <span class="st">inspected</span>。</figcaption>
+  </figure>
+
+  <dl class="states">
+    <dt>triage</dt><dd>自由文字猜不準部門，等櫃檯判讀</dd>
+    <dt>pool</dt><dd>在部門待接池，還沒有人認領</dd>
+    <dt>accepted</dt><dd>有人認領了，或排房指派了</dd>
+    <dt>doing</dt><dd>開始做了，開始時間記下來</dd>
+    <dt>done</dt><dd>做完了。備品、修繕、其他到這裡收評分；打掃還要等查房</dd>
+    <dt>inspected</dt><dd>查房全過，房況可賣</dd>
+    <dt>interrupted</dt><dd>做到一半，負責的人請假了</dd>
+    <dt>deferred</dt><dd>主管決定延後（通常是空房巡）</dd>
+    <dt>cancelled</dt><dd>取消了——住客撤回、主管作廢，或計畫重產收回；不進任何統計</dd>
+  </dl>
+
+  <p>九個狀態裡有兩個容易被誤會，先講清楚。<span class="st">deferred</span> 是「<b>今天先不做</b>」，不是「不做」：主管按延後只是把這單移出今天的待接池，任何時候都可以按「拉回」把它放回池裡，就算主管忘了，背景 worker 隔日班前也會自動把它重新入池。這兩條回池的路和請假退回、班末退池共用同一種事件 <code>returned_to_pool</code>，差別寫在事件的內容裡，統計時才分得出這單是被誰、為什麼放回去的。</p>
+  <p><span class="st">cancelled</span> 才是「<b>這單不做了</b>」。事件記成 <code>cancelled</code>，原因三選一：<code>guest_withdrew</code>（住客自己撤回）、<code>manager_void</code>（主管作廢）、<code>plan_superseded</code>（排房重產把這間房的單收回）。它是和 <span class="st">inspected</span> 平行的另一個終點，差別在它不留下任何成績：完成數、平均工時、評分都不算它。</p>
+
+  <p>員工端的流程：</p>
+  <ol class="flow">
+    <li>打開 App 看本部門待接池 <code>GET /staff/pool</code>。</li>
+    <li>按「認領」→ <span class="st">pool → accepted</span>。跨部門不能認領。</li>
+    <li>到了房間按「開始」→ <span class="st">accepted → doing</span>，開始時間記下來。</li>
+    <li>清潔時逐項打勾 SOP。跳過不擋流程，但會記錄——誰常跳過哪一項的統計分級可見。</li>
+    <li>按「完成」→ <span class="st">doing → done</span>。實際打掃分鐘＝完成時間減開始時間，不用另外填。</li>
+  </ol>
+  <p>每一次轉移都經過狀態機守衛，守衛在伺服器端。還沒開始就按完成、認領別部門的單，一律 <code>409 state_conflict</code>；前端把按鈕灰掉只是提示。</p>
+
+  <h3>3) 櫃檯判讀自由文字</h3>
+  <p>櫃檯的畫面有一個「待判讀」清單，全部是停在 <span class="st">triage</span> 的自由文字需求。每一筆三選一：</p>
+  <ol class="flow">
+    <li><b>給房務</b>或<b>給工務</b>：<span class="st">triage → pool</span>，進對應部門的待接池，之後走需求 2 的流程。</li>
+    <li><b>當場回答</b>：住客問的是「早餐幾點」這種資訊類問題，櫃檯打一句回覆就結案 <span class="st">triage → done</span>。回覆存在任務備註，住客畫面會看到。事件記成 <code>answered</code>，統計時才分得出這一單是回答掉的、不是做掉的。</li>
+  </ol>
+  <p>櫃檯同時看得到所有單，不只待判讀的。這是防重複建單的機制——住客打電話來問的時候，櫃檯一眼就知道「你剛才的毛巾已經有人接了」。</p>
+
+  <h3>4) 班前自動排房</h3>
+  <p>清潔任務和臨時需求不一樣：它不是住客提的，是系統每天班前自己開的。</p>
+  <ol class="flow">
+    <li>背景 worker 在班前（例如早上 8:00）跑排房。輸入是「今天要掃哪些房」——來自 PMS 同步的今日房態。PMS 接不上時，主管用 <code>POST /admin/occupancy/import</code> 上傳今日房態的 Excel，逐列檢查房號存在才收。兩條路最後都變成同一份「今日待掃清單」。等 PMS 恢復同步，系統會拿真訂單和匯入列比對：同一間房、住期重疊的，匯入的那列自動標作廢。這樣同一段住宿永遠只有一筆有效訂單，住客掃碼也不會綁到假的那筆。</li>
+    <li>演算法 v1 很簡單：<b>樓層 × 工時，一層一人</b>。每間房按房型的標準工時估分鐘數（累積到歷史平均後就用平均），把同一層的房分給同一個人，直到那個人的班次工時填滿。責任區、趕房、VIP 優先順序留給 v2——演算法做成可替換的元件，資料模型先留欄位。</li>
+    <li>排好的計畫存起來。主管在發佈前可以 <code>PUT /admin/plans/{date}</code> 手動調整。調整時要帶打開畫面時那份計畫的版本號（<code>If-Match</code>）；版本不符就回 409 並附上最新內容，請他在新的基礎上重改。兩位主管同時在調，誰也不會把對方的調整默默蓋掉。</li>
+    <li>發佈：逐間開清潔任務（種類＝打掃、來源＝系統），建立那一刻就指派到人、狀態直接是 <span class="st">accepted</span>。這是狀態機裡唯一不從待接池出發的起點。</li>
+    <li>房務開 App 看 <code>GET /staff/schedule</code>，就是今天的房。</li>
+  </ol>
+  <p>發佈之後這份計畫就是當天的現行版本。要換某一間的人，用改派 <code>POST /admin/tasks/{id}/reassign</code>；手動調整都寫事件留痕。</p>
+
+  <h4 class="sub">有人請假，整天的排班要重來</h4>
+  <p>但有時候要改的不是一兩間房，是整張表：早上八點半有人臨時請假，或者突然多出十間提前退房。這時候主管按的是「重產」——讓 worker 照新的人力和房態重排一次。</p>
+  <p>重產最容易做錯的地方，是急著用新計畫把舊的覆蓋掉。主管還沒看過新表，舊表已經沒了，他連「哪裡不一樣」都比不出來。所以重產<b>只產生一份新草稿，和現行已發佈的那份並存</b>，主管可以兩邊對照著看。唯一約束只鎖已發佈的那份——同一天同一個班次只能有一份已發佈的計畫，草稿要幾份都行。</p>
+  <p>真正的切換發生在主管按下「發佈」的那一刻，而且是同一筆交易裡做完三件事：新計畫生效、舊計畫標成 <code>superseded</code>（被取代）、然後<b>任務對帳</b>——</p>
+  <ul class="plain">
+    <li>兩份計畫都有的房：還沒開始做的單改掛新計畫、換成新的負責人。</li>
+    <li>舊有新無的房（例如客人決定續住、今天不用掃了）：還沒開始做的單取消，原因記「計畫重產」。</li>
+    <li>已經做到一半的單：系統不自動動它——人都已經在房間裡了，直接取消或改派只會製造混亂。這些單列成一張清單交給主管，由他決定讓原來的人做完還是改派。</li>
+  </ul>
+  <p>對帳之外，資料庫還有一道保險：<b>一間房一天只能有一筆還沒完成的打掃單</b>，這條唯一約束寫在資料庫上。所以就算對帳邏輯哪天寫錯、或者兩個人同時按發佈，重複開單也會在最底層被擋下來，不會有兩個房務各自跑去掃同一間房。</p>
+
+  <h3>5) 主管查房</h3>
+  <p>打掃任務到 <span class="st">done</span> 之後，主管要查房。這是飯店品質的最後一道關卡，所以規則很硬：</p>
+  <ol class="flow">
+    <li>主管在房間逐項判定 <code>POST /admin/inspections/{taskId}</code>。項目是這家飯店自己設定的——床、浴室、備品、QR 貼紙在位……</li>
+    <li><b>全過</b>：<span class="st">done → inspected</span>，房況可賣，排一筆「回寫 PMS Inspected」進待送匣。</li>
+    <li><b>任一項不過</b>：整間退回 <span class="st">done → accepted</span>，退回次數 +1，清空計時和 SOP 勾記，房況回 dirty。原本清這間的人重做。</li>
+    <li>守衛：清這間房的人不能查這間房。</li>
+  </ol>
+
+  <h4 class="sub">退回給一個已經下班的人，這間房會過夜</h4>
+  <p>第 3 步的「退回給原本清這間的人」有個前提沒說出口：那個人還在。實際上常常不在——房務 17:00 下班，主管 17:20 巡到這間房，按了退回。單子回到 <span class="st">accepted</span> 掛在她名下，可是 <span class="st">accepted</span> 的單不在待接池裡，晚班的人打開 App 什麼也看不到，主管也以為自己已經處理掉了。這間房就帶著 dirty 過夜，隔天早上才被發現。</p>
+  <p>所以退回要連人在不在一起看。引擎在同一筆交易裡多做一次檢查：照這家飯店設定的班次時間，算原清房者現在是否還在班、是否請假了。還在班就照原樣退給她；<b>已經下班或已請假，就連動再退一次回待接池</b>（<span class="st">accepted → pool</span>），並沿用請假退回那套「優先推播同樓層」。這一趟會寫兩筆事件——<code>inspection_failed</code> 記查房的判定，<code>returned_to_pool</code> 記為什麼變成無主的單，日後回頭看才知道這間房不是沒人管，是接手的人換了。</p>
+  <p>注意第 3 步的「清空」：任務上的計時和勾記被覆寫了，但「第一次誰在幾點勾了什麼」要能回溯——這就是非功能需求第 3 條，深入探討第四題會講怎麼做到。</p>
+
+  <h3>6) 請假與中斷</h3>
+  <p>主管登記請假 <code>POST /admin/leaves</code>，系統自動做兩件事，然後交給主管收尾：</p>
+  <ol class="flow">
+    <li>這個人<b>已認領還沒開始</b>的任務（<span class="st">accepted</span>）→ 自動退回待接池 <span class="st">pool</span>，等別人認領。</li>
+    <li>這個人<b>正在做</b>的任務（<span class="st">doing</span>）→ 標記 <span class="st">interrupted</span>。系統不知道做到哪，所以不自動退回。</li>
+    <li>回傳被影響的任務清單給主管。</li>
+    <li>主管對每筆中斷任務附上「做到哪」的交代（「浴室洗好了，床還沒鋪」）→ <code>POST /admin/tasks/{id}/requeue</code>，退回待接池。交代跟著單走，接手的人看得到。</li>
+    <li>退回時優先推播同樓層的人——他們離最近。</li>
+  </ol>
+  <p>為什麼不讓主管直接改派給某個人？因為主管在辦公室，不知道誰現在有空、誰離得近。退回池、推播同樓層，讓有空的人自己接，比主管猜要準。</p>
+  <p>「人不在了，單要回池」這條規則還有第二個觸發點：<b>班末掃描</b>。有人不是請假，只是早上認領了幾單、一直沒去做，到下班時間就回家了。所以班次結束時（照這家飯店設定的班次時間），系統掃一次還停在 <span class="st">accepted</span>、連「開始」都沒按過的單，一律退回待接池 <span class="st">accepted → pool</span>，事件記 <code>returned_to_pool</code>、原因寫班末退池。這樣交接的時候，下一班看到的待接池就是真的還沒人做的事，不會有一堆掛在已下班的人名下的隱形單。</p>
+
+  <h3>7) 老闆儀表板與推播</h3>
+  <p>老闆的需求只有兩句：打開就看到數字，出事才響。</p>
+  <ol class="flow">
+    <li><code>GET /owner/dashboard</code> 回四張卡片（可賣房數、平均回應分鐘、住客評分、查房退回次數）加一行當日摘要。</li>
+    <li>數字不是開畫面時現算的——背景 worker 每隔幾分鐘從事件流算好存進 <code>stats_daily</code>，API 只讀。這樣老闆開畫面永遠秒開，也不會因為算統計拖慢員工端。</li>
+    <li>推播的來源在 v1 只有兩個：住客評低分、主管手動上報。SLA 升級鏈啟用後會多一個「逾時兩倍 SLA 還沒處理」。推播和其他副作用一樣走待送匣、上 Kafka，推播消費者再送到 APNS／FCM。</li>
+  </ol>
+
+  <div class="callout">
+    <p>到這裡七條功能需求都走通了。但有幾件事我們一直用「後面講」帶過：怎麼保證推播和 PMS 回寫一定送達？弱網的「完成」怎麼不丟？怎麼做到 2 秒內？歷史怎麼不滅？接下來一題一題看。</p>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="n">4</span>深入探討</h2>
+  <p class="lede">高階設計已經能動了。現在回頭對著非功能需求一條一條看，哪些還沒滿足、哪些可以做得更好。每一題都先看最直覺的做法會在哪裡出事，再推到我們選的方案。</p>
+
+  <h3>1) 怎麼保證推播與 PMS 回寫一定送達、而且不重複？</h3>
+  <p>這是整個系統最核心的一題。「漏一響不漏單」的前提，是單本身不能漏。</p>
+  <p>場景：主管查房全過，系統要做兩件事——把任務改成 <span class="st">inspected</span>，然後叫 PMS 把房況改成 Inspected。</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">不好的做法</span>改完資料庫，直接呼叫 PMS 的 API</h4>
+    <p><b class="lbl">做法</b>在同一個 request handler 裡，先 <code>UPDATE tasks SET state='inspected'</code> 並 commit，然後 <code>POST pms/rooms/305/status</code>。</p>
+    <p><b class="lbl">問題</b>commit 之後、呼叫 PMS 之前，應用當掉或 PMS 剛好沒回應——任務已經是 inspected，但 PMS 還是 dirty，這間房賣不出去。反過來先叫 PMS 再寫資料庫也一樣：PMS 改了但資料庫沒寫，任務卡在 done。兩個系統各自成功或失敗，沒有辦法保證「要嘛都做、要嘛都不做」。加重試也不行——重試會讓已經送出的推播再響一次。</p>
+  </div>
+
+  <div class="opt ok">
+    <h4><span class="tag">還可以的做法</span>寫完資料庫，讓應用直接把事件發進 Kafka</h4>
+    <p><b class="lbl">做法</b>我們的下游都訂閱 Kafka，那最直覺的寫法是：commit 完資料庫，接著在程式裡把事件發進 Kafka，讓消費者去呼叫 PMS 和推播。</p>
+    <p><b class="lbl">問題</b>寫資料庫和發 Kafka 還是兩個動作、兩個系統。commit 之後、發出去之前應用當掉——資料庫說任務已經 inspected，輸送帶上卻沒有這件事，下游永遠等不到。反過來先發再寫也一樣。這就是經典的「雙寫問題」：兩邊各自成功或失敗，沒辦法保證要嘛都做、要嘛都不做——問題的形狀跟上面直接呼叫 PMS 一模一樣，只是把 PMS 換成了 Kafka。</p>
+  </div>
+
+  <div class="opt great">
+    <h4><span class="tag">好的做法</span>outbox 當交易護欄，relay 轉送 Kafka</h4>
+    <p><b class="lbl">做法</b>把要送出去的副作用當成一筆資料，和任務狀態<b>寫在同一筆 Postgres 交易裡</b>——這張表叫 outbox（待送匣）：</p>
+<pre class="api">BEGIN;
+  UPDATE tasks SET state = 'inspected', event_seq = event_seq + 1
+   WHERE id = 't_1234' AND state = 'done' RETURNING event_seq;  <span class="c">-- 守衛＋取號同一句（§2 共同約定）：0 列＝409，回傳值就是下一行的 seq 9</span>
+  INSERT INTO task_events (task_id, seq, type, actor, payload) VALUES ('t_1234', 9, 'inspection_passed', 's_07', '{…}');
+  <span class="c">-- 任務事件掛任務鍵、房況回寫掛房鍵——為什麼不同，見下</span>
+  INSERT INTO outbox (aggregate_key, kind, payload, idempotency_key)
+       VALUES ('task:t_1234', 'task_event', '{"type":"inspection_passed","seq":9}', 'evt-t_1234-9'),
+              ('room:1:r_305', 'pms_status', '{"room":"305","status":"inspected"}', 'insp-t_1234-9');
+COMMIT;</pre>
+    <p>交易要嘛全部成功、要嘛全部失敗，狀態和副作用不會分家——outbox 就是<b>交易護欄</b>。然後一個 <b>relay</b>（轉送器，住在背景 worker 裡）輪詢 outbox 的待送列，一筆一筆搬上 Kafka，送成功才標記；失敗就記次數、排下一次重試。推播、SSE 即時推送、PMS 回寫這些下游，全部從 Kafka 訂閱，誰都不用再來輪資料庫。這裡有一條要講死的邊界：<b>Kafka 的下游一律不回寫 tasks</b>——tasks 由任務引擎在同一筆交易裡同步更新完才 commit，看板畫面讀它永遠是最新的。從 Kafka 吃事件的只有兩種東西：即時推送（SSE 的鈴聲——鈴響了，畫面去重撈一次 tasks），和 room_memory、stats_daily 這類衍生投影（同樣從事件流算出來的小抄，慢一拍沒關係）。要是讓 Kafka 上晚到的舊事件回頭改 tasks，就是拿非同步的舊狀態去蓋同步寫好的新狀態。</p>
+    <p>輸送帶本身還給了兩個保證。<b>進度各自記</b>：每個下游自己記「讀到哪」（offset，讀取進度的書籤），當掉重啟就從書籤處接著讀，一個下游卡住不影響別人。<b>保序</b>：分區是輸送帶裡的一條軌道，同一個分區鍵的事件永遠進同一條軌道、照寫入順序排。</p>
+    <p>第二個保證有個陷阱值得講清楚：分區只保證「<b>進去的順序</b>」，而進去的順序是 relay 的責任，不是 Kafka 的。所以 relay 身上有一條保序義務——<b>同一個鍵最早那一筆還沒送成功（包括正在排隊等重試）之前，不送這個鍵的後續列</b>；只擋同一個鍵，別的鍵照常往前跑。少了這條會怎樣？查房退回的「房況回 dirty」送失敗、排三十秒後重試，這三十秒裡複查通過的「房況改 inspected」先送成功了——分區裡的順序就反了，PMS 的房況永久停在 dirty，房間從此賣不出去。最難查的是兩筆都「送達」了，沒有任何一個環節會報錯。</p>
+    <p>那分區鍵該怎麼挑？跟著<b>被寫入對象的一致性邊界</b>走，不是跟著觸發它的那個任務走。任務領域事件寫的是任務，用任務鍵 <code>task:t_1234</code>；房況回寫寫的是房間，一律用房鍵 <code>room:1:r_305</code>（租戶編號＋房間 id——房號會改、跨店又會重複，所以不拿房號當鍵）。這個分別不是潔癖：同一間 305 房的打掃任務和冷氣修繕任務是兩個不同的任務鍵，會落在兩條分區上，誰先誰後純看運氣；可是房況只有一個——打掃通過要把它改成可賣、冷氣報廢要把它改成停用，這兩筆的先後必須有定論。以房為單位排隊，「這間房現在是什麼狀況」才有唯一答案。</p>
+  </div>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 960 560" role="img" aria-label="Outbox 轉送流程：TMS 應用在同一筆交易裡寫 task_events、tasks 與 outbox；relay 輪詢 outbox，把事件轉送進 Kafka 事件輸送帶，送成功才標記；推播消費者、SSE 即時推送、PMS 回寫 adapter 各自訂閱 Kafka、自己記讀取進度">
+      <defs>
+        <marker id="sko" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="skow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/>
+        </marker>
+      </defs>
+
+      <rect class="sk-shape" x="30" y="90" width="180" height="110" rx="16"/>
+      <text class="sk-t sk-t-b" x="48" y="122">TMS 應用</text>
+      <text class="sk-t-lb" x="48" y="150">查房全過：</text>
+      <text class="sk-t-lb" x="48" y="174">done → inspected</text>
+
+      <path class="sk-edge" d="M 214 145 L 268 145" marker-end="url(#sko)"/>
+      <text class="sk-t-lb" x="241" y="128" text-anchor="middle">一筆交易</text>
+
+      <rect class="sk-shape" x="272" y="36" width="340" height="230" rx="16" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="292" y="66" style="fill:var(--accent-ink)">Postgres・同一筆交易落庫</text>
+
+      <rect class="sk-shape" x="292" y="88" width="136" height="60" rx="10"/>
+      <text class="sk-t" x="360" y="112" text-anchor="middle">task_events</text>
+      <text class="sk-t-s" x="360" y="134" text-anchor="middle">INSERT inspected</text>
+
+      <rect class="sk-shape" x="292" y="168" width="136" height="60" rx="10"/>
+      <text class="sk-t" x="360" y="192" text-anchor="middle">tasks</text>
+      <text class="sk-t-s" x="360" y="214" text-anchor="middle">UPDATE state</text>
+
+      <rect class="sk-shape" x="452" y="120" width="140" height="68" rx="10" style="stroke:var(--warn)"/>
+      <text class="sk-t" x="522" y="146" text-anchor="middle">outbox</text>
+      <text class="sk-t-s" x="522" y="168" text-anchor="middle">交易護欄・待送匣</text>
+
+      <path class="sk-edge-warn" d="M 522 188 L 522 304" marker-end="url(#skow)"/>
+      <text class="sk-t-warn" x="540" y="292">relay 轉送：送成功才標記・失敗排重試</text>
+
+      <rect class="sk-shape" x="110" y="308" width="740" height="64" rx="14" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="130" y="334">Kafka・事件輸送帶</text>
+      <text class="sk-t-s" x="130" y="356">同一個分區鍵 → 同一條分區・照順序排・可重播</text>
+      <rect class="sk-shape" x="640" y="328" width="24" height="24" rx="5"/>
+      <rect class="sk-shape" x="676" y="328" width="24" height="24" rx="5"/>
+      <rect class="sk-shape" x="712" y="328" width="24" height="24" rx="5"/>
+      <path class="sk-edge" d="M 750 340 L 796 340" marker-end="url(#sko)"/>
+
+      <path class="sk-edge" d="M 210 372 L 210 428" marker-end="url(#sko)"/>
+      <path class="sk-edge" d="M 480 372 L 480 428" marker-end="url(#sko)"/>
+      <path class="sk-edge" d="M 740 372 L 740 428" marker-end="url(#sko)"/>
+
+      <rect class="sk-shape" x="110" y="428" width="200" height="78" rx="12"/>
+      <text class="sk-t sk-t-b" x="128" y="458">推播消費者</text>
+      <text class="sk-t-s" x="128" y="482">送 APNS／FCM 到手機</text>
+
+      <rect class="sk-shape" x="370" y="428" width="220" height="78" rx="12"/>
+      <text class="sk-t sk-t-b" x="388" y="458">SSE 即時推送・衍生投影</text>
+      <text class="sk-t-s" x="388" y="482">SSE 給看板與住客頁</text>
+
+      <rect class="sk-shape" x="640" y="428" width="200" height="78" rx="12"/>
+      <text class="sk-t sk-t-b" x="658" y="458">PMS 回寫 adapter</text>
+      <text class="sk-t-s" x="658" y="482">回寫房況・重試到成功</text>
+
+      <text class="sk-t-s" x="110" y="540">下游各自訂閱、各自記讀取進度（offset）・每筆事件帶 idempotency_key・某條分區卡住只擋那一條</text>
+    </svg>
+    </div>
+    <figcaption>待送匣與輸送帶。應用只負責把事件和狀態放進同一筆交易；relay（住在背景 worker 裡）負責把 outbox 搬上 Kafka；下游各自從 Kafka 讀。應用當掉，事件還在匣子裡；relay 當掉，重啟後接著搬；下游當掉，回來從自己的書籤接著讀。Postgres 交易保證「事件一定上得了帶」，Kafka 保證「上了帶就照順序、人人讀得到」。</figcaption>
+  </figure>
+
+  <p>這一路給我們的是 <b>at-least-once</b>：每一筆至少送一次。但「至少一次」代表可能送兩次——relay 轉送後還沒標記就當掉，會再轉送一次；下游處理完還沒記書籤就重啟，會再讀到一次。所以還要配三件事：</p>
+  <ol class="flow">
+    <li><b>冪等鍵</b>：每筆事件帶一個防重複編號 <code>idempotency_key</code>。消費端（PMS 回寫 adapter、推播消費者）記得處理過哪些編號，同一個編號再來就直接跳過、不重做。「冪等」的意思是：同一件事做兩次的效果要跟做一次一樣。</li>
+    <li><b>同鍵串行</b>：<code>aggregate_key</code> 就是 Kafka 的分區鍵——任務事件掛任務鍵、房況回寫掛房鍵，同一個鍵的事件進同一條分區、照順序消費，relay 也要等同鍵的前一筆送成功才送下一筆。否則「退回 dirty」和「通過 inspected」兩筆順序顛倒，PMS 的房況就錯了。某條分區卡住只擋那一條，不擋全部。</li>
+    <li><b>推播是 best-effort</b>：推播到手機漏一響可以接受——待接池和看板才是真相，人打開 App 一定看得到單。但 PMS 回寫不能漏，所以重試要一直到成功為止。</li>
+  </ol>
+  <p>將來 SLA 升級鏈啟用，也只是 worker 多一種排程掃描。有一個實作上的提醒：掃描用「區間判斷（≥）＋停機補觸發」，不要用「精確等於某分鐘」——批次推進時會跳過那一分鐘，就漏觸發了。</p>
+
+  <h3>2) 弱網的「完成」怎麼不丟、不重複？</h3>
+  <p>房務在電梯間按「完成」，網路剛好斷了。</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">不好的做法</span>按鈕轉圈圈，失敗就跳錯誤</h4>
+    <p><b class="lbl">問題</b>房務不會等。她會關掉 App 去做下一間，這一單就永遠停在 <span class="st">doing</span>。或者她多按幾次，網路回來時三個 request 都到了——第一個成功，後兩個因為狀態已經是 done 回 409，畫面跳錯誤，她以為沒成功。</p>
+  </div>
+
+  <div class="opt great">
+    <h4><span class="tag">好的做法</span>客戶端本地佇列，加操作編號去重</h4>
+    <p><b class="lbl">做法</b></p>
+    <ol>
+      <li>按下去的那一刻，App 先把操作寫進本地佇列、畫面直接顯示「已完成」，不等網路。</li>
+      <li>App 為這次操作產生一個唯一編號（UUID），放在 <code>Idempotency-Key</code> header 裡。</li>
+      <li>網路回來後背景重送。同一個編號可以送很多次。</li>
+      <li>伺服器收到 request 先查 <code>processed_ops</code> 表：這個編號處理過了嗎？處理過就直接回上次的結果，不重做、不報錯；沒處理過才真的執行，然後把編號和結果記下來。</li>
+    </ol>
+    <p>這樣不管重送幾次，效果都跟送一次一樣——又是冪等。</p>
+  </div>
+
+  <p><b>衝突怎麼辦？</b>兩個人對同一單同時操作（主管改派、房務同時認領）：v1 先到先贏，後到的人收到通知「這單已經被某某認領了」。欄位級合併留給 v2——實務上同一單同時被動的機率很低，不值得現在做。</p>
+
+  <h3>3) 怎麼做到「2 秒內出現在看板」？</h3>
+
+  <div class="opt ok">
+    <h4><span class="tag">還可以的做法</span>輪詢</h4>
+    <p><b class="lbl">做法</b>看板每 2 秒 <code>GET /staff/pool</code> 一次。</p>
+    <p><b class="lbl">問題</b>幾十個員工乘以每 2 秒一次，每秒幾十個 request 打資料庫，絕大多數回「沒變」。單店撐得住，但這是白白浪費。我們把它留作降級方案，不當主方案。</p>
+  </div>
+
+  <div class="opt ok">
+    <h4><span class="tag">過頭的做法</span>WebSocket</h4>
+    <p><b class="lbl">做法</b>雙向長連線，伺服器主動推。</p>
+    <p><b class="lbl">問題</b>雙向用不到。客戶端的寫入都走 REST——要帶 Idempotency-Key、要走狀態機守衛——只有伺服器到客戶端這個方向需要推。WebSocket 的連線管理、心跳、重連比較複雜，Flutter 和瀏覽器各要寫一套。</p>
+  </div>
+
+  <div class="opt great">
+    <h4><span class="tag">好的做法</span>SSE（Server-Sent Events）</h4>
+    <p><b class="lbl">做法</b>客戶端開一條單向長連線 <code>GET /staff/stream</code>（住客是 <code>/guest/stream</code>），伺服器有事件就推。SSE 是標準 HTTP，瀏覽器原生支援、Flutter 用 http client 就能收，斷線自動重連。</p>
+    <ol>
+      <li>任務狀態一變，事件在同一筆交易裡落庫、由 relay 搬上 Kafka；即時推送模組訂閱 Kafka，一收到就往下發——第一題的輸送帶在這裡又用了一次。</li>
+      <li>推送模組按租戶、部門、房號分發給相關連線——住客只收自己房的，房務只收自己部門的。</li>
+      <li>每則推出去的訊息帶一個<b>連線層級</b>的流水號 <code>stream_pos</code>——「這條連線上的第幾則」。客戶端記住上一個 stream_pos，收到跳號（上次 41、這次 43）就知道中間掉了一則，重拉一次快照。</li>
+      <li>連線斷了、重連也失敗，客戶端退回每 5 秒輪詢。看板永遠能用，只是慢一點。</li>
+    </ol>
+    <p>跳號偵測為什麼不直接用任務歷程裡的 <code>seq</code>？因為那是「<b>這個任務</b>的第幾步」，而待接池這條串流是好幾個任務混在一起流過來的——A 單的第 1 步、B 單的第 1 步、A 單的第 2 步、C 單的第 1 步，客戶端看到的序列是 1,1,2,1，每一則都像掉件。兩個號碼各有各的用處：<code>seq</code> 排的是一個任務的歷史，<code>stream_pos</code> 排的是一條連線的送達順序，不能互相代用。</p>
+    <p>還有一種更陰的故障要防。連線斷掉至少客戶端知道，但 Kafka 或 relay 停擺時，SSE 連線是健康的、只是永遠沒訊息送來——看板就這樣靜默地過時，而誰都不會發現。所以降級不能只看連線：</p>
+    <ul class="plain">
+      <li>推送模組每 15 秒自己發一則<b>心跳</b>（不經 Kafka，就是推送模組自己發的）。心跳停了，客戶端立刻知道這條連線死了。</li>
+      <li>推送模組同時盯著自己的 Kafka 消費延遲，超過門檻就往連線上推一則 <code>degraded</code> 事件。客戶端收到就切成每 5 秒輪詢，並在畫面標「資料可能延遲」——與其讓人盯著一塊看似正常的舊畫面做決定，不如明講。</li>
+    </ul>
+    <p>因為 SSE 容許掉事件（跳號重拉就好），推送模組不用保證送達——這比待送匣輕得多。真相在資料庫，SSE 只是「有東西變了，去看一眼」的提醒。</p>
+  </div>
+
+  <h3>4) 歷史怎麼不滅？</h3>
+  <p>場景：305 房第一次清完被退回，第二次才過。老闆問「這間退回是因為什麼？」房務問「我第一次有勾浴室，為什麼說我沒勾？」</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">不好的做法</span>只有一張 tasks 表</h4>
+    <p><b class="lbl">做法</b>tasks 一列就是一個任務，state、assignee、started_at 都在上面，改狀態就 UPDATE。</p>
+    <p><b class="lbl">問題</b>退回時清空 started_at 和勾記，第一次的記錄就沒了。要查「誰在幾點勾了什麼」查不到。</p>
+  </div>
+
+  <div class="opt ok">
+    <h4><span class="tag">還可以的做法</span>tasks 表旁邊加一張 audit_log</h4>
+    <p><b class="lbl">做法</b>每次 UPDATE tasks 順便 INSERT 一筆 log。</p>
+    <p><b class="lbl">問題</b>兩張表會漂移——有人忘了寫 log，或 log 寫了 tasks 沒寫。log 是附屬品，不是真相；時間一久沒人信它。</p>
+  </div>
+
+  <div class="opt great">
+    <h4><span class="tag">好的做法</span>事件流是唯一真相，tasks 只是投影</h4>
+    <p><b class="lbl">做法</b>所有變更先寫 <code>task_events</code>——一件事一列，只能 INSERT，資料庫權限直接禁止 UPDATE 和 DELETE。<code>tasks</code> 表是從事件流算出來的「目前狀態的小抄」，我們把這種算出來的表叫<b>投影</b>：</p>
+<pre class="api"><span class="c">task_events  (task_id = t_1234)</span>
+seq 1  created      by guest    {kind: cleaning, room: 305}
+seq 2  assigned     by system   {assignee: s_12}          <span class="c">← 排房</span>
+seq 3  started      by s_12
+seq 4  sop_checked  by s_12     {item: bathroom}
+seq 5  completed    by s_12
+seq 6  inspection_failed  by s_07  {failed: [bed]}        <span class="c">← 查房退回</span>
+seq 7  started      by s_12                               <span class="c">← 重做</span>
+seq 8  completed    by s_12
+seq 9  inspection_passed  by s_07
+
+<span class="c">tasks  (t_1234)  ← 投影</span>
+state = inspected   assignee = s_12   redo = 1   started_at = (seq 7 的時間)</pre>
+    <p>退回會覆寫投影（清計時、清勾記），但 seq 4 永遠在那裡。房務可以證明她勾過浴室，老闆可以看到退回原因是床。</p>
+  </div>
+
+  <p>這個設計還有三個順手的好處：</p>
+  <ul class="plain">
+    <li><b>投影可以重算</b>：tasks、room_memory、stats_daily 這些表隨便壞，清空後從 task_events 重放就回來。「刪掉投影表還能重建」是這條設計的驗收標準——它有一個前提和一個驗法。前提：事件得把投影需要的欄位帶齊，會改動 tasks 欄位的事件 payload 必填（created 要帶完整的建立快照：種類、來源、房號、訂單、標題、預估分鐘），純標記類事件才可空——否則到了真要重建那天，才發現流水帳裡沒料。驗法：自動化——CI 定期在影子庫把 tasks 清空、重放、與線上比對，不靠口號。</li>
+    <li><b>事件流上了 Kafka 就是全系統的事件匯流排</b>：知識庫、儀表板、即時推送只要各自訂閱，不用每個寫入點都去通知它們；新的下游隨時加入，還能倒帶重播補上歷史。這裡有一條邊界要守住：<b>下游要增量訂閱一律走 Kafka</b>，不准自己輪詢 <code>task_events</code>、拿看到的最大 id 當書籤。原因是 id 在取號的那一刻就配發出去，但要等那筆交易 commit 之後別人才看得見——編號 500 的交易可能比 499 早 commit，輪詢的人讀到 500、把書籤推到 500，499 一 commit 就永遠落在書籤後面，再也不會被讀到。直接讀表只用在一種場合：離線的全表重放。</li>
+    <li><b>交班單是凍結快照</b>：交班那一刻把相關任務的狀態拍下來存成一份，之後任務再怎麼變，交班單停在那一刻。</li>
+  </ul>
+
+  <p>但「只進不改」碰上另一條需求會打架：個人工時與 SOP 統計有<b>保留期限</b>，到期要處理掉，而事件列又不准刪。兩者怎麼和解？把「刪資料」換成「<b>去識別化</b>」。事件列永遠不刪，但系統留唯一一條受控的路徑：抹除 payload 裡的個資欄位（姓名、聯絡方式、自由文字裡的住客敘述），並連動把離職員工的帳號列換成不可回推的代號。這條路徑只能做這件事、不能改別的欄位，而且執行本身也在流水帳裡記一筆——連「誰在什麼時候去識別化了哪些列」都留痕。</p>
+  <p>這樣一來，「個人資料保留期限」的落實是去識別化、不是刪列：統計的形狀（幾點開始、做了幾分鐘、哪一項跳過）完整保留，投影重算得出來的結果天生就是匿名版——過了保留期之後，誰也沒辦法從流水帳重建出那個人是誰。</p>
+
+  <h3>5) 住客憑證怎麼設計才安全？貼紙被撕走怎麼辦？</h3>
+  <p>房間 QR 是一張貼紙，貼在床頭。問題是：它會被撕走。撿到貼紙的人能不能對這間房亂建需求、偷看任務進度？</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">不好的做法</span>QR 綁住客</h4>
+    <p><b class="lbl">做法</b>每次 check-in 印一張新 QR，綁這位住客。</p>
+    <p><b class="lbl">問題</b>每天退房都要換貼紙，房務多一道工。而且住客拿到的是紙本不是 App，沒有「登出」這回事。</p>
+  </div>
+
+  <div class="opt ok">
+    <h4><span class="tag">還可以的做法</span>QR 綁房號，長期有效</h4>
+    <p><b class="lbl">做法</b>一房一枚，貼上去就不用換。退房換人沒差。</p>
+    <p><b class="lbl">問題</b>貼紙被撕走，撿到的人隨時可以掃。空房掃碼會擋下，但下一個住客 check-in 後，這張貼紙就又能用了。</p>
+  </div>
+
+  <div class="opt great">
+    <h4><span class="tag">好的做法</span>兩層憑證，加輪替</h4>
+    <p><b class="lbl">做法</b>把「長期憑證」和「短期憑證」分開：</p>
+    <ol>
+      <li><b>房間 QR token</b>：綁房號、不綁住客、長期有效，退房換人不用換貼紙。但它有版本號、可以作廢。token 本身是至少 128 bit 的隨機字串（base62 約 22 個字元，像 <code>8fQ2hL9xKpD3vRw1sTzUjm</code>），而且裡面<b>不含房號資訊</b>——看得出房號的短碼，等於邀請別人從 301 猜到 302。</li>
+      <li><b>住客 session</b>：掃碼後由系統簽發，綁房號和這次住宿期間，退房自動失效。之後所有請求只帶 session。</li>
+      <li><b>空房擋下</b>：掃碼時用房號查「現在住這間的訂單」，查不到就不簽 session、不建單。</li>
+      <li><b>輪替</b>：貼紙被撕走（查房 SOP 有「QR 貼紙在位」這一項，或住客反映掃不到），主管在內部 Web 按「重產此房 QR」。系統發新的一版 token、舊的立即作廢，列印新貼紙貼回去。被撿走的那張從此掃到就是「請洽櫃檯」。</li>
+      <li><b>輪替連坐 session</b>：輪替不能只作廢 token。同一筆交易裡，這間房<b>所有還沒撤銷的住客 session 一併撤銷</b>（寫上 <code>guest_sessions.revoked_at</code>），而且每個住客請求都要驗「未過期<b>且</b>未撤銷」兩件事。</li>
+      <li><b>同房限流</b>：一房 10 分鐘最多 3 筆，惡作劇也刷不出幾筆。</li>
+      <li><b>掃碼限流</b>：<code>/guest/scan</code> 另外有一層按 IP 計的限流，連續失敗到一定次數就告警。</li>
+    </ol>
+  </div>
+
+  <p>第 5 條值得多講一句，因為它補的是一個很容易漏掉的洞。只作廢 token 的話，撕貼紙的人只要在輪替<b>之前</b>掃過一次，手上那枚 session 就一路活到退房——他照樣能對這間房建假需求、偷看任務進度，輪替對他毫無作用。「被撕走的貼紙一經輪替就作廢」這句話，只對還沒掃過的人成立。所以輪替的語意必須是「這間房現在握有的住客身分全部失效」，而不是「這張紙失效」。同樣的整批撤銷也用在提前退房和訂單取消：住客走了、訂單沒了，房裡那枚 session 就不該還活著。</p>
+  <p>第 7 條補的是另一個角度。既有的「同房 10 分鐘 3 筆」是<b>建單</b>限流，擋的是住客亂按，對「拿字典猜 token」這件事完全沒有作用——猜的人根本還沒拿到 session，一筆單都還沒建。所以掃碼入口自己要有限流與失敗計數：短時間內大量掃碼失敗，不是手滑，是有人在試。</p>
+  <p>第 3 條的「空房擋下」還牽出一件和降級有關的事。這道關卡的判準是「<b>快取裡查不查得到當前訂單</b>」——查得到才簽 session，查不到一律請洽櫃檯。這也意味著：PMS 斷線時，快取就是整個住客入口的生死線。如果降級只補退房清單，排房照樣跑得動，但當天新入住、當日分房、walk-in 的房在快取裡通通沒有當前訂單，這些房的住客一掃碼就吃到「請洽櫃檯」——住客入口整個失效，而且失效的正好是最需要服務的新客。所以 <code>POST /admin/occupancy/import</code> 匯入的是<b>今日房態（入住＋退房）</b>，不是只有退房：降級要蓋到核心入口，不能只蓋到排房。</p>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 980 440" role="img" aria-label="住客 QR 兩層憑證與輪替：房間 QR 貼紙的 token 綁房號不綁住客、長期有效；住客掃描後由身分權限模組驗證 token，以房號加當前訂單解析住客身分，簽發綁住宿期間、退房即失效的住客 session，空房掃描不建單。貼紙被撕走或遺失時，主管重產此房 QR：舊 token 與該房當下所有住客 session 在同一筆交易裡立即撤銷，簽發新 version 並列印新貼紙貼回房間">
+      <defs>
+        <marker id="skq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="skqw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/>
+        </marker>
+      </defs>
+
+      <rect class="sk-shape" x="40" y="80" width="250" height="128" rx="14"/>
+      <text class="sk-t sk-t-b" x="58" y="112">房間 QR 貼紙</text>
+      <text class="sk-t-lb" x="58" y="140">token 綁房號・不綁住客</text>
+      <text class="sk-t-lb" x="58" y="164">t.tms.tw/r/（22 字元亂碼）↔ 房 305</text>
+      <text class="sk-t-lb" x="58" y="188">長期有效・可輪替（version）</text>
+
+      <path class="sk-edge" d="M 290 148 Q 329 138 368 144" marker-end="url(#skq)"/>
+      <text class="sk-t-lb" x="329" y="122" text-anchor="middle">住客掃描</text>
+
+      <rect class="sk-shape" x="370" y="80" width="270" height="128" rx="14"/>
+      <text class="sk-t sk-t-b" x="388" y="112">身分權限 Identity</text>
+      <text class="sk-t-lb" x="388" y="140">驗 token・已作廢就擋下</text>
+      <text class="sk-t-lb" x="388" y="164">房號＋當前訂單 → 住客身分</text>
+      <text class="sk-t-lb" x="388" y="188">空房：請洽櫃檯・不建單</text>
+
+      <path class="sk-edge" d="M 640 148 Q 679 138 718 144" marker-end="url(#skq)"/>
+      <text class="sk-t-lb" x="679" y="122" text-anchor="middle">簽發 session</text>
+
+      <rect class="sk-shape" x="720" y="80" width="230" height="128" rx="14"/>
+      <text class="sk-t sk-t-b" x="738" y="112">住客 session</text>
+      <text class="sk-t-lb" x="738" y="140">綁房號＋住宿期間</text>
+      <text class="sk-t-lb" x="738" y="164">退房或輪替即失效</text>
+      <text class="sk-t-lb" x="738" y="188">同房限流 3 筆／10 分</text>
+
+      <path class="sk-edge-warn" d="M 100 208 L 100 300" marker-end="url(#skqw)"/>
+      <text class="sk-t-warn" x="114" y="258">被撕走／遺失</text>
+
+      <rect class="sk-shape" x="40" y="300" width="250" height="104" rx="14" style="stroke:var(--warn)"/>
+      <text class="sk-t sk-t-b" x="58" y="332">發現貼紙不見</text>
+      <text class="sk-t-lb" x="58" y="358">查房 SOP：QR 在位檢查</text>
+      <text class="sk-t-lb" x="58" y="382">或住客反映掃不到</text>
+
+      <path class="sk-edge-warn" d="M 290 352 L 368 352" marker-end="url(#skqw)"/>
+      <text class="sk-t-warn" x="329" y="336" text-anchor="middle">主管重產</text>
+
+      <rect class="sk-shape" x="370" y="300" width="270" height="104" rx="14" style="stroke:var(--warn)"/>
+      <text class="sk-t sk-t-b" x="388" y="332">重產此房 QR</text>
+      <text class="sk-t-lb" x="388" y="358">舊 token 與該房 session 立即作廢</text>
+      <text class="sk-t-lb" x="388" y="382">舊貼紙掃到 → 請洽櫃檯</text>
+
+      <path class="sk-edge-warn" d="M 640 352 L 718 352" marker-end="url(#skqw)"/>
+      <text class="sk-t-warn" x="679" y="336" text-anchor="middle">新 version</text>
+
+      <rect class="sk-shape" x="720" y="300" width="230" height="104" rx="14"/>
+      <text class="sk-t sk-t-b" x="738" y="332">新貼紙貼回</text>
+      <text class="sk-t-lb" x="738" y="358">內部 Web 列印</text>
+      <text class="sk-t-lb" x="738" y="382">房務貼回房間</text>
+
+      <path class="sk-edge" d="M 835 300 C 815 244 430 252 240 213"/>
+      <text class="sk-t-lb" x="520" y="236" text-anchor="middle">新 version 生效・回到正常流程</text>
+    </svg>
+    </div>
+    <figcaption>上排是正常流程，下排（橘色）是輪替。QR 是長期憑證，退房換人不用換貼紙；「退房失效」的是掃描後簽發的住客 session。輪替是一筆交易做兩件事：舊 token 作廢，加上這間房當下所有住客 session 一併撤銷——撿到舊貼紙的人，不管有沒有在輪替前掃過，從此都無法再對該房建假需求或偷看任務進度。</figcaption>
+  </figure>
+
+  <p>這些能力歸在身分權限模組下的一個子元件「住客憑證 Guest Access」，對外四個操作：簽發、輪替、撤銷、解析。不叫它「QR 服務」是因為 QR 只是載體——哪天改 NFC 或房卡短碼，這四個操作一個都不用改。</p>
+
+  <h3>6) 多家飯店共用一個資料庫，怎麼零跨店洩漏？</h3>
+  <p>非功能需求第 5 條說「一個 Postgres」，第 4 條說「零跨店洩漏」。這兩條要一起滿足。</p>
+
+  <div class="opt ok">
+    <h4><span class="tag">選項 A</span>一店一個資料庫</h4>
+    <p>隔離最乾淨。<b class="lbl">問題</b>十家店就十個資料庫要備份、升級、監控——「一個人能運維」立刻破功。</p>
+  </div>
+  <div class="opt ok">
+    <h4><span class="tag">選項 B</span>一店一個 schema</h4>
+    <p>中間方案。<b class="lbl">問題</b>schema 數量跟著店數長，migration 要跑 N 次，連線池要按 schema 切。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">選項 C</span>同庫同表，每列帶 tenant_id</h4>
+    <p><b class="lbl">做法</b></p>
+    <ol>
+      <li>每張業務表第一欄都是 <code>tenant_id</code>，唯一鍵和索引都以它開頭。</li>
+      <li>應用層強制 tenant scope：從憑證解析出 tenant，每個查詢自動帶 <code>WHERE tenant_id = ?</code>。這寫在資料存取層，不靠每個開發者記得。</li>
+      <li>Postgres Row-Level Security 當第二道保險：就算應用層的 scope 漏了，資料庫也只回這家店的列。</li>
+      <li>寫入側同一道牆：跨表引用一律用複合外鍵 <code>(tenant_id, 對方_id)</code>。外鍵檢查不經過 RLS——單欄外鍵擋不住程式 bug 把任務掛到別家店的房間；外鍵帶上 tenant，資料庫就直接拒絕跨店的關聯。</li>
+      <li>API 路徑不帶店別，跨店資源一律 404。</li>
+    </ol>
+    <p>單店規模下 C 的成本最低。而且哪天某家店真的要實體隔離，把它的資料搬出去成一個獨立庫，程式不用改。</p>
+  </div>
+
+  <p>Kafka 層用同一個邏輯：topic 全租戶共用、不為每家店開一條，每筆事件都帶 <code>tenant_id</code>；消費端先過租戶授權，只處理、只分發自己該看的事件。和資料庫的 tenant scope 是同一道牆，換個地方再砌一次。</p>
+
+  <h3>7) 要不要拆微服務？</h3>
+  <p>先給答案：不拆。就算所有飯店的事件加總，一台單體也綽綽有餘。拆微服務得到的是獨立部署和獨立擴展，付出的是跨服務交易、網路呼叫、好幾倍的運維——得到的我們用不到，付出的我們付不起。</p>
+  <p>但單體不等於一團泥。單體內部按領域切模組，邊界清楚：</p>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 980 720" role="img" aria-label="TMS 單體內部模組圖：派工、查房兩個寫入模組把狀態變更送進任務引擎（唯一寫入口）；任務引擎在同一筆交易把事件寫進 task_events 與 outbox；協作模組管理自有實體並同樣寫事件；背景 worker 的 relay 輪詢 outbox、把事件轉送 Kafka 事件輸送帶；知識庫、儀表板、即時推送從 Kafka 訂閱；身分權限與租戶設定為橫切模組">
+      <defs>
+        <marker id="skb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="skbw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/>
+        </marker>
+      </defs>
+
+      <rect class="sk-shape" x="24" y="24" width="690" height="664" rx="18"/>
+      <text class="sk-t sk-t-b" x="44" y="54">TMS 單體（一個部署單位）</text>
+
+      <rect class="sk-shape" x="48" y="84" width="170" height="60" rx="10"/>
+      <text class="sk-t" x="133" y="110" text-anchor="middle">派工（含建單・判讀）</text>
+      <text class="sk-t-s" x="133" y="130" text-anchor="middle">Dispatch</text>
+      <rect class="sk-shape" x="282" y="84" width="170" height="60" rx="10"/>
+      <text class="sk-t" x="367" y="110" text-anchor="middle">查房</text>
+      <text class="sk-t-s" x="367" y="130" text-anchor="middle">Inspection</text>
+      <rect class="sk-shape" x="516" y="84" width="170" height="60" rx="10"/>
+      <text class="sk-t" x="601" y="110" text-anchor="middle">協作</text>
+      <text class="sk-t-s" x="601" y="130" text-anchor="middle">通知／交班／遺失物</text>
+
+      <line class="sk-edge" x1="133" y1="144" x2="310" y2="214" marker-end="url(#skb)"/>
+      <line class="sk-edge" x1="367" y1="144" x2="390" y2="214" marker-end="url(#skb)"/>
+
+      <rect class="sk-shape" x="250" y="214" width="280" height="72" rx="12" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="390" y="246" text-anchor="middle" style="fill:var(--accent-ink)">任務引擎 Task Engine</text>
+      <text class="sk-t-s" x="390" y="268" text-anchor="middle">狀態變更唯一入口</text>
+
+      <path class="sk-edge" d="M 601 144 Q 652 240 606 328" marker-end="url(#skb)"/>
+      <text class="sk-t-s" x="706" y="236" text-anchor="end">自有實體・照樣寫事件</text>
+
+      <line class="sk-edge" x1="390" y1="286" x2="390" y2="330" marker-end="url(#skb)"/>
+      <text class="sk-t-lb" x="404" y="314">寫入（同一交易）</text>
+
+      <rect class="sk-shape" x="180" y="330" width="520" height="130" rx="14" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="200" y="356" style="fill:var(--accent-ink)">同一筆 Postgres 交易</text>
+
+      <ellipse class="sk-shape" cx="320" cy="408" rx="118" ry="40"/>
+      <text class="sk-t sk-t-b" x="320" y="402" text-anchor="middle">task_events</text>
+      <text class="sk-t-s" x="320" y="424" text-anchor="middle">只進不改・唯一真相</text>
+
+      <rect class="sk-shape" x="486" y="376" width="172" height="66" rx="10" style="stroke:var(--warn)"/>
+      <text class="sk-t" x="572" y="400" text-anchor="middle">outbox</text>
+      <text class="sk-t-s" x="572" y="424" text-anchor="middle">待送匣・任務事件與副作用</text>
+
+      <path class="sk-edge-warn" d="M 572 442 L 572 492" marker-end="url(#skbw)"/>
+      <text class="sk-t-warn" x="586" y="474">relay 轉送</text>
+
+      <rect class="sk-shape" x="140" y="492" width="520" height="56" rx="14" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="160" y="516">Kafka・事件輸送帶</text>
+      <text class="sk-t-s" x="160" y="538">照順序・可重播・誰訂閱誰來讀</text>
+      <rect class="sk-shape" x="360" y="502" width="20" height="20" rx="4"/>
+      <rect class="sk-shape" x="388" y="502" width="20" height="20" rx="4"/>
+      <rect class="sk-shape" x="416" y="502" width="20" height="20" rx="4"/>
+      <path class="sk-edge" d="M 444 512 L 478 512" marker-end="url(#skb)"/>
+
+      <line class="sk-edge" x1="180" y1="548" x2="158" y2="576" marker-end="url(#skb)"/>
+      <line class="sk-edge" x1="360" y1="548" x2="360" y2="576" marker-end="url(#skb)"/>
+      <line class="sk-edge" x1="540" y1="548" x2="562" y2="576" marker-end="url(#skb)"/>
+
+      <rect class="sk-shape" x="80" y="576" width="150" height="60" rx="10"/>
+      <text class="sk-t" x="155" y="600" text-anchor="middle">知識庫</text>
+      <text class="sk-t-s" x="155" y="620" text-anchor="middle">房間記憶・問答</text>
+      <rect class="sk-shape" x="285" y="576" width="150" height="60" rx="10"/>
+      <text class="sk-t" x="360" y="600" text-anchor="middle">儀表板</text>
+      <text class="sk-t-s" x="360" y="620" text-anchor="middle">統計先算好放著</text>
+      <rect class="sk-shape" x="490" y="576" width="150" height="60" rx="10"/>
+      <text class="sk-t" x="565" y="600" text-anchor="middle">即時推送</text>
+      <text class="sk-t-s" x="565" y="620" text-anchor="middle">SSE 看板更新</text>
+
+      <text class="sk-t-s" x="80" y="664">橫切模組（所有人共用）：身分權限・租戶設定</text>
+
+      <rect class="sk-shape" x="770" y="350" width="180" height="120" rx="14"/>
+      <text class="sk-t sk-t-b" x="788" y="380">背景 Worker</text>
+      <text class="sk-t-lb" x="788" y="406">- relay：outbox → Kafka</text>
+      <text class="sk-t-lb" x="788" y="428">- PMS 同步・排房</text>
+      <text class="sk-t-lb" x="788" y="450">- 投影・統計刷新</text>
+      <path class="sk-edge" d="M 770 408 Q 720 452 660 430" marker-end="url(#skb)"/>
+      <text class="sk-t-lb" x="745" y="498" text-anchor="middle">relay 輪詢 outbox</text>
+    </svg>
+    </div>
+    <figcaption>模組化單體。上排模組把任務狀態變更全部送進任務引擎——唯一寫入口，事件與待送匣在同一筆 Postgres 交易落庫；協作模組管自己的實體（通知、交班、遺失物），事件照樣進流。背景 worker 的 relay 輪詢 outbox、把事件搬上 Kafka 輸送帶；下排讀者只從 Kafka 訂閱、不寫任務。</figcaption>
+  </figure>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>模組</th><th>職責</th></tr></thead>
+    <tbody>
+      <tr><td><b>派工 Dispatch</b></td><td>建單、分類（規則引擎與 LLM 建議）、櫃檯判讀、待接池、班前排房（演算法做成可替換元件）、認領、改派、請假連鎖、人力缺口試算。</td></tr>
+      <tr><td><b>任務引擎 Task Engine</b></td><td>狀態機轉移與守衛、事件 append、投影更新。<b>任務狀態變更的唯一入口</b>——其他模組不准直接改 tasks。</td></tr>
+      <tr><td><b>查房 Inspection</b></td><td>逐項判定、退回重做、通過後排 PMS 回寫進待送匣。</td></tr>
+      <tr><td><b>協作 Collaboration</b></td><td>通知板、交班單快照與簽收、遺失物。</td></tr>
+      <tr><td><b>知識庫 Knowledge</b></td><td>SOP 結構化、房間記憶聚合、LLM 問答。只讀事件流，不寫任務。</td></tr>
+      <tr><td><b>儀表板 Reporting</b></td><td>數字卡片與當日摘要。worker 預先算好存 stats_daily，開畫面只讀。</td></tr>
+      <tr><td><b>即時推送 Realtime</b></td><td>SSE 連線管理、按租戶／部門／房號分發。</td></tr>
+      <tr><td><b>身分權限 Identity</b>（橫切）</td><td>角色×動作矩陣、員工帳號與推播裝置登記、住客憑證 Guest Access（簽發／輪替／撤銷／解析）。</td></tr>
+      <tr><td><b>租戶設定 Config</b>（橫切）</td><td>每家店的標準工時、SOP 與查房項目、班次容量、資訊頁、選單、工時換算率。</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>兩條規則讓邊界守得住：寫入任務狀態只能經過任務引擎；讀者模組只訂閱 task_events、不寫任務。</p>
+  <p>哪天真的要拆——某個模組的擴縮節奏明顯和別人不同（推播量暴增要 worker 獨立擴），或有租戶要求實體隔離——沿這些邊界搬出去就好。那是搬家，不是重寫。</p>
+
+  <h4 class="sub">不拆服務，那為什麼要上 Kafka？</h4>
+  <p>乍看矛盾：一邊說規模撐不起微服務，一邊又添購 Kafka。其實兩個決定看的量不一樣。拆不拆服務，看「一個部署單位扛不扛得住寫入」——扛得住，所以不拆。上不上 Kafka，看「一份事件有幾個讀者、要不要重播」——這一項在雲端多租戶下變了。只服務一家店、下游只有推播和 PMS 回寫的時候，讓 worker 直接輪詢 outbox 就夠；現在不夠了：</p>
+  <ul class="plain">
+    <li><b>讀者變多</b>：推播、SSE 即時推送、PMS 回寫、儀表板、知識庫，每個都要吃事件，而且數量跟著飯店數長。全部各自去輪資料庫，資料庫就成了每個人的瓶頸。</li>
+    <li><b>要能重播</b>：投影壞了要重建、新下游上線要補讀歷史，輸送帶上的事件留著，倒回去重讀就好。</li>
+    <li><b>故障要隔離</b>：某一家 PMS 回寫卡住，不該拖慢任何一家的推播——每個下游自己記讀取進度，互不干擾。</li>
+  </ul>
+  <p><b>權衡</b>：多一個元件要維運，和「一個人能運維」有張力——所以用代管 Kafka（雲端服務商代為維運，我們只管用），自架還是代管、挑哪一家，是<a href="#a2">附錄 B</a> 的開放問題。而單體不拆的結論不變：Kafka 搬的是事件，業務邏輯一行都沒搬出單體。</p>
+
+  <h3>8) 超時沒人接怎麼辦？——為什麼 v1 先不做 SLA 升級鏈</h3>
+  <p>住客的毛巾單進了待接池，但樓層正忙，二十分鐘沒人認領。現在的設計裡誰會發現？櫃檯看板看得到這一單，但系統不會主動叫任何人——v1 的「超時」靠人盯。</p>
+  <p>完整的解法是 <b>SLA 升級鏈</b>（SLA 是服務時限：這類單多久內該有人處理）。設計已經想好，整包延後：</p>
+  <ol class="flow">
+    <li>SLA 從<b>櫃檯判讀完成</b>才起算——等待判讀的時間不算在部門頭上。</li>
+    <li>待接超過 1×SLA：通知櫃檯介入，打電話確認、代為協調。</li>
+    <li>超過 2×SLA 還沒處理：值班主管接手、自動建一筆客訴、推播老闆手機——這會成為「出事才響」的第三個來源。</li>
+    <li>同一家族的提醒還有三個：主管的「逾時未判讀」提醒、重要通知逾時未讀升級、清潔班次期限（例如 11:00 前要清完）提醒。</li>
+  </ol>
+
+  <figure>
+    <div class="figwrap">
+    <svg class="sm" viewBox="0 0 880 180" role="img" aria-label="SLA 升級時間軸（後續優化）：任務建立進待接池後，超過一倍 SLA 仍未接單升級第一級，由櫃檯介入；超過兩倍 SLA 仍未處理升級第二級，值班主管接手、自動建客訴、老闆手機推播">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <line class="sv-edge" x1="60" y1="110" x2="840" y2="110" marker-end="url(#ar3)"/>
+      <circle cx="110" cy="110" r="7" class="sv-box"/>
+      <text class="sv-t sv-t-b" x="110" y="80" text-anchor="middle">建單，入待接池</text>
+      <text class="sv-mono" x="110" y="140" text-anchor="middle">t = 0</text>
+
+      <circle cx="420" cy="110" r="7" fill="var(--warn)" stroke="none"/>
+      <text class="sv-t-warn" x="420" y="60" text-anchor="middle">第一級：櫃檯介入</text>
+      <text class="sv-t-s" x="420" y="80" text-anchor="middle">打電話確認、代為協調</text>
+      <text class="sv-mono" x="420" y="140" text-anchor="middle">t ≥ 1×SLA 仍未接單</text>
+
+      <circle cx="720" cy="110" r="7" fill="var(--warn)" stroke="none"/>
+      <text class="sv-t-warn" x="720" y="42" text-anchor="middle">第二級：值班主管接手</text>
+      <text class="sv-t-s" x="720" y="62" text-anchor="middle">自動建一筆客訴</text>
+      <text class="sv-t-s" x="720" y="80" text-anchor="middle">老闆手機推播（出事才響）</text>
+      <text class="sv-mono" x="720" y="140" text-anchor="middle">t ≥ 2×SLA 仍未處理</text>
+    </svg>
+    </div>
+    <figcaption>啟用後的兩級升級鏈。在那之前，老闆的「出事才響」推播只有兩個來源：住客評低分、主管手動上報。</figcaption>
+  </figure>
+
+  <p><b>為什麼 v1 先不做？</b>因為它增加的是營運複雜度，不是架構複雜度。每種任務的 SLA 數值、值班表、客訴誰結案（<a href="#a2">附錄 B</a> 的 Q5）都還沒拍板——規則沒定，計時器上了也是空轉。而單店幾十個員工的規模，櫃檯看得到所有單，人工盯得住。</p>
+  <p><b>之後怎麼加上去？</b>延後不等於沒準備。資料模型現在就保留 <code>sla</code> 和 <code>esc</code>（升級級數）欄位；啟用時只是背景 worker 多一種排程掃描——架構和 schema 都不用動。掃描怎麼寫才不漏，第一題末尾講過：用區間判斷（≥）加停機補觸發，不要用「精確等於某分鐘」。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="n">5</span>最終設計</h2>
+  <p class="lede">把前面的東西拼起來。起手式的三個元件，加上深入探討加進來的背景 worker、待送匣與 Kafka，再接上三個外部依賴。整套由我們統一在雲端託管，所有飯店共用。</p>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 1000 700" role="img" aria-label="TMS 最終架構：Clients 與 TMS 單體應用以 REST 與 SSE 溝通；應用把任務、事件與 outbox 寫進同一筆 Postgres 交易；背景 worker 裡的 relay 輪詢 outbox、把事件轉送進代管的 Kafka 事件輸送帶；worker 訂閱 Kafka 做推播與 PMS 回寫，應用訂閱 Kafka 做 SSE 推送與衍生投影；PMS 經 adapter 對接（事件訂閱優先、輪詢兜底）；LLM API 作為應用的同步輔助">
+      <defs>
+        <marker id="ska" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+        <marker id="skw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/>
+        </marker>
+      </defs>
+
+      <text class="sk-t sk-t-b" x="605" y="42" text-anchor="middle">推播服務</text>
+      <text class="sk-t-s" x="605" y="64" text-anchor="middle">（APNS ／ FCM・員工與老闆推播）</text>
+
+      <path class="sk-edge-warn" d="M 545 70 Q 320 120 140 272" marker-end="url(#skw)"/>
+      <text class="sk-t-warn" x="298" y="142" text-anchor="middle">推播送達手機</text>
+
+      <rect class="sk-shape" x="40" y="280" width="192" height="152" rx="16"/>
+      <text class="sk-t sk-t-b" x="58" y="312">Clients</text>
+      <text class="sk-t-lb" x="58" y="340">- 住客 Web（QR 免裝）</text>
+      <text class="sk-t-lb" x="58" y="364">- 內部 App（Flutter）</text>
+      <text class="sk-t-lb" x="58" y="388">- 內部 Web（櫃檯・主管）</text>
+      <text class="sk-t-lb" x="58" y="412">- 老闆手機（App）</text>
+
+      <path class="sk-edge" d="M 236 330 Q 282 312 326 318" marker-start="url(#ska)" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="282" y="296" text-anchor="middle">送需求／接單／回報</text>
+      <path class="sk-edge" d="M 326 372 Q 282 384 236 374" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="282" y="410" text-anchor="middle">SSE 即時更新</text>
+
+      <rect class="sk-shape" x="330" y="250" width="210" height="232" rx="18"/>
+      <text class="sk-t sk-t-b" x="352" y="286">TMS 單體應用</text>
+      <text class="sk-t-lb" x="352" y="316">- 派工・建單分類・待接池</text>
+      <text class="sk-t-lb" x="352" y="344">- 任務狀態機</text>
+      <text class="sk-t-lb" x="352" y="372">- 查房・交班・知識庫</text>
+      <text class="sk-t-lb" x="352" y="400">- 權限（伺服器端強制）</text>
+      <text class="sk-t-lb" x="352" y="428">- 住客憑證 Guest Access</text>
+      <text class="sk-t-lb" x="352" y="456">- SSE 推送</text>
+
+      <path class="sk-edge" d="M 544 336 Q 590 318 630 308" marker-start="url(#ska)" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="588" y="268" text-anchor="middle">寫入（任務＋事件＋outbox）</text>
+      <text class="sk-t-s" x="588" y="288" text-anchor="middle">同一筆交易</text>
+
+      <circle class="sk-shape" cx="720" cy="300" r="88"/>
+      <text class="sk-t sk-t-b" x="720" y="290" text-anchor="middle">Postgres</text>
+      <text class="sk-t-s" x="720" y="316" text-anchor="middle">task_events（只進不改）</text>
+      <text class="sk-t-s" x="720" y="336" text-anchor="middle">tasks 投影・outbox</text>
+
+      <text class="sk-t" x="836" y="230">Task</text>
+      <text class="sk-t-lb" x="836" y="254">- room・dept</text>
+      <text class="sk-t-lb" x="836" y="276">- state・assignee</text>
+      <text class="sk-t-lb" x="836" y="298">- est（sla 保留）</text>
+      <text class="sk-t-lb" x="836" y="320">- rating</text>
+
+      <circle class="sk-shape" cx="880" cy="120" r="60"/>
+      <text class="sk-t sk-t-b" x="880" y="116" text-anchor="middle">LLM API</text>
+      <text class="sk-t-s" x="880" y="140" text-anchor="middle">僅輔助・留稽核</text>
+      <path class="sk-edge" d="M 542 268 Q 700 150 816 132" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="668" y="146" text-anchor="middle">翻譯・分類建議・問答</text>
+
+      <path class="sk-edge" d="M 712 388 Q 704 442 700 500" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="722" y="448">relay 輪詢 outbox</text>
+
+      <rect class="sk-shape" x="120" y="520" width="440" height="58" rx="14" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="140" y="545">Kafka（代管）事件輸送帶</text>
+      <text class="sk-t-s" x="140" y="566">照順序・可重播・同一個鍵同一條分區</text>
+      <rect class="sk-shape" x="420" y="530" width="20" height="20" rx="4"/>
+      <rect class="sk-shape" x="448" y="530" width="20" height="20" rx="4"/>
+      <rect class="sk-shape" x="476" y="530" width="20" height="20" rx="4"/>
+      <path class="sk-edge" d="M 504 540 L 536 540" marker-end="url(#ska)"/>
+
+      <path class="sk-edge" d="M 420 520 L 420 488" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="434" y="508">SSE 推送・衍生投影</text>
+
+      <rect class="sk-shape" x="610" y="500" width="190" height="150" rx="16"/>
+      <text class="sk-t sk-t-b" x="628" y="530">背景 Worker</text>
+      <text class="sk-t-lb" x="628" y="558">- relay：outbox → Kafka</text>
+      <text class="sk-t-lb" x="628" y="582">- 訂閱：推播・PMS 回寫</text>
+      <text class="sk-t-lb" x="628" y="606">- PMS 同步（adapter）</text>
+      <text class="sk-t-lb" x="628" y="630">- 排房・投影統計刷新</text>
+
+      <path class="sk-edge" d="M 606 549 L 566 549" marker-start="url(#ska)" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="575" y="600" text-anchor="middle">轉送・訂閱</text>
+
+      <path class="sk-edge-warn" d="M 632 500 Q 584 300 600 80" marker-end="url(#skw)"/>
+      <text class="sk-t-warn" x="616" y="120">推播（出事才響）</text>
+
+      <circle class="sk-shape" cx="895" cy="590" r="70"/>
+      <text class="sk-t sk-t-b" x="895" y="584" text-anchor="middle">PMS</text>
+      <text class="sk-t-s" x="895" y="608" text-anchor="middle">訂房・房況</text>
+      <path class="sk-edge" d="M 802 585 Q 814 583 823 586" marker-start="url(#ska)" marker-end="url(#ska)"/>
+      <text class="sk-t-lb" x="806" y="462">adapter 同步：訂房・房況</text>
+      <text class="sk-t-lb" x="806" y="484">事件訂閱優先・輪詢兜底</text>
+      <text class="sk-t-lb" x="806" y="506">回寫：Inspected／OOO</text>
+    </svg>
+    </div>
+    <figcaption>最終架構。自營的有四件：TMS 單體應用、背景 worker、Postgres、一條代管的 Kafka——整套由我們統一在雲端託管，所有飯店共用。外部依賴三個：各家 PMS（經 adapter 對接，事件訂閱優先、輪詢兜底）、推播服務、LLM API。兩個關鍵機制貫穿整張圖：① 應用把任務、事件、outbox 放進同一筆 Postgres 交易，狀態和副作用不會分家；② relay 把 outbox 的事件轉送 Kafka，推播、SSE 即時推送、PMS 回寫全部從 Kafka 訂閱——重試、保序、重播都在輸送帶上解決。橘色是通報「打到手機」的那一響。</figcaption>
+  </figure>
+
+  <h3>背景 worker 做的事</h3>
+  <p>單體之外唯一的第二個程序。它沒有對外 API，做的全是排程、轉送與消費：</p>
+  <ul class="plain">
+    <li><b>relay 轉送</b>：輪詢待送匣，把事件依序搬上 Kafka，送成功才標記；失敗記次數、排重試。</li>
+    <li><b>消費下游</b>：訂閱 Kafka 做推播（APNS／FCM）與 PMS 房況回寫。冪等、同鍵同一分區串行、各自記讀取進度。</li>
+    <li><b>PMS 同步</b>：經 adapter 拉訂房檔與房況進快取——PMS 能推事件就訂閱事件，不能就輪詢兜底；讀到 VIP／親子／寵物／紀念日就自動開準備工單。</li>
+    <li><b>班前排房</b>：樓層 × 工時，一層一人；產生排房計畫等主管發佈。</li>
+    <li><b>刷新投影與統計</b>：stats_daily、room_memory、phrase_counter、cleaning_time_stats。</li>
+    <li><b>將來</b>：SLA 掃描。</li>
+  </ul>
+
+  <h3>資料模型</h3>
+  <p>一個 Postgres。設計由三件事直接決定：<code>task_events</code> 是唯一真相、任務相關的表都是可重建的投影；副作用一律先落待送匣、由 relay 轉送 Kafka；多租戶同庫，每張業務表第一欄都是 <code>tenant_id</code>。</p>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 920 530" role="img" aria-label="TMS 資料庫設計：task_events（只進不改的流水帳＝真相）、tasks（目前狀態的投影）與 outbox（待送匣）在同一筆交易寫入；流水帳重放可重建 tasks 與下方投影表；relay 把待送匣的事件轉送 Kafka、下游從 Kafka 消費，重送不重做；右欄住客憑證鏈——room_qr_tokens 掃碼簽發 guest_sessions、綁 reservations_cache 的當前訂單，rooms 由 TMS 與 PMS 分管清潔狀態與住否；所有表皆帶 tenant_id">
+      <defs>
+        <marker id="sker" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <rect class="sk-shape" x="40" y="64" width="560" height="200" rx="16" style="stroke:var(--accent); stroke-width:2"/>
+      <text class="sk-t sk-t-b" x="60" y="94" style="fill:var(--accent-ink)">同一筆交易寫入</text>
+
+      <rect class="sk-shape" x="64" y="130" width="140" height="96" rx="10"/>
+      <text class="sk-t sk-t-b" x="134" y="162" text-anchor="middle">tasks</text>
+      <text class="sk-t-s" x="134" y="184" text-anchor="middle">目前狀態的投影</text>
+      <text class="sk-t-s" x="134" y="202" text-anchor="middle">狀態・負責人・退回次數</text>
+
+      <ellipse class="sk-shape" cx="320" cy="178" rx="86" ry="48"/>
+      <text class="sk-t sk-t-b" x="320" y="168" text-anchor="middle">task_events</text>
+      <text class="sk-t-s" x="320" y="190" text-anchor="middle">只進不改的流水帳</text>
+      <text class="sk-t-s" x="320" y="206" text-anchor="middle">一件事一列・照順序排</text>
+
+      <line class="sk-edge" x1="234" y1="178" x2="208" y2="178" marker-end="url(#sker)"/>
+      <text class="sk-t-s" x="221" y="158" text-anchor="middle">算出</text>
+
+      <rect class="sk-shape" x="436" y="130" width="148" height="96" rx="10"/>
+      <text class="sk-t sk-t-b" x="510" y="162" text-anchor="middle">outbox</text>
+      <text class="sk-t-s" x="510" y="184" text-anchor="middle">待送匣・交易護欄</text>
+      <text class="sk-t-s" x="510" y="202" text-anchor="middle">重送不會做兩次</text>
+
+      <line class="sk-edge" x1="510" y1="226" x2="510" y2="330" marker-end="url(#sker)"/>
+      <text class="sk-t-lb" x="524" y="290">relay 轉送 Kafka：同鍵同分區・依序</text>
+      <text class="sk-t-s" x="510" y="352" text-anchor="middle">Kafka → 推播・SSE 推送・PMS 回寫</text>
+
+      <line class="sk-edge" x1="320" y1="226" x2="320" y2="376" marker-end="url(#sker)"/>
+      <text class="sk-t-lb" x="334" y="320">從流水帳算出統計與記憶</text>
+
+      <rect class="sk-shape" x="40" y="380" width="600" height="116" rx="12"/>
+      <text class="sk-t sk-t-b" x="60" y="408">周邊表（每張都帶 tenant_id）</text>
+      <text class="sk-t-lb" x="60" y="434">投影（可由流水帳重算）：room_memory・stats_daily・phrase_counter・cleaning_time_stats</text>
+      <text class="sk-t-lb" x="60" y="458">營運：cleaning_plans・sop_checks・inspections・handovers・notices・lost_items・leaves</text>
+      <text class="sk-t-lb" x="60" y="482">身分與設定：staff_accounts・staff_devices・tenant_config</text>
+
+      <rect class="sk-shape" x="660" y="64" width="200" height="88" rx="10"/>
+      <text class="sk-t sk-t-b" x="760" y="92" text-anchor="middle">room_qr_tokens</text>
+      <text class="sk-t-s" x="760" y="114" text-anchor="middle">version・revoked_at</text>
+      <text class="sk-t-s" x="760" y="132" text-anchor="middle">Guest Access 擁有</text>
+
+      <line class="sk-edge" x1="760" y1="152" x2="760" y2="186" marker-end="url(#sker)"/>
+      <text class="sk-t-s" x="772" y="174">掃碼簽發</text>
+
+      <rect class="sk-shape" x="660" y="186" width="200" height="76" rx="10"/>
+      <text class="sk-t sk-t-b" x="760" y="214" text-anchor="middle">guest_sessions</text>
+      <text class="sk-t-s" x="760" y="238" text-anchor="middle">綁房號＋住期・退房失效</text>
+
+      <line class="sk-edge" x1="760" y1="262" x2="760" y2="302" marker-end="url(#sker)"/>
+      <text class="sk-t-s" x="772" y="286">綁當前訂單</text>
+
+      <rect class="sk-shape" x="660" y="302" width="200" height="76" rx="10"/>
+      <text class="sk-t sk-t-b" x="760" y="330" text-anchor="middle">reservations_cache</text>
+      <text class="sk-t-s" x="760" y="354" text-anchor="middle">PMS 唯讀快取・VIP 屬性</text>
+
+      <line class="sk-edge" x1="760" y1="378" x2="760" y2="418" marker-end="url(#sker)"/>
+      <text class="sk-t-s" x="772" y="402">推得住否</text>
+
+      <rect class="sk-shape" x="660" y="418" width="200" height="86" rx="10"/>
+      <text class="sk-t sk-t-b" x="760" y="446" text-anchor="middle">rooms</text>
+      <text class="sk-t-s" x="760" y="468" text-anchor="middle">hk_state：TMS 擁有</text>
+      <text class="sk-t-s" x="760" y="486" text-anchor="middle">occupancy：PMS 擁有</text>
+    </svg>
+    </div>
+    <figcaption>資料庫骨架。左上綠框是核心機制：task_events、tasks、outbox 三者同一筆交易落庫；下方投影表全部可由流水帳重放重建。右欄是住客憑證鏈，以及 rooms 的兩欄分治——一間房，TMS 管清潔狀態、PMS 管住否，不共用欄位。</figcaption>
+  </figure>
+
+  <h4 class="sub">核心四張表</h4>
+  <div class="tablewrap"><table>
+    <thead><tr><th>表</th><th>關鍵欄位</th><th>職責</th></tr></thead>
+    <tbody>
+      <tr><td class="id">task_events</td><td>id（全館依序編號）、task_id ＋ seq（這個任務的第幾步）、type（發生什麼事）、actor（誰做的）、payload（細節）</td><td>唯一真相。只進不改，資料庫權限直接禁止 UPDATE 與 DELETE。其他表都靠讀它更新自己。</td></tr>
+      <tr><td class="id">tasks</td><td>種類（備品／修繕／打掃／其他）、來源（住客掃碼／櫃檯／系統）、房號、所屬訂單、部門、狀態、負責人、預估分鐘、退回次數、評分、事件取號器 event_seq、sla／esc（保留欄位）</td><td>目前狀態的投影。查房退回會直接覆寫（清計時），隨時可由流水帳重算。</td></tr>
+      <tr><td class="id">outbox</td><td>aggregate_key（Kafka 分區鍵：任務事件用任務鍵 <code>task:…</code>、房況回寫用房鍵 <code>room:…</code>）、kind（<code>task_event</code>／<code>push</code>／<code>pms_status</code>）、payload、idempotency_key、attempts ＋ next_retry_at</td><td>交易護欄。與狀態變更同一筆交易落庫；relay 掃它轉送 Kafka，下游從 Kafka 消費。同一個鍵依序進同一條分區（前一筆沒送成功就不送下一筆）、某條卡住只擋那一條；每筆帶防重複編號，重送不會做兩次。</td></tr>
+      <tr><td class="id">processed_ops</td><td>op_id（客戶端操作編號）、result_ref（上次處理結果）</td><td>弱網重送的去重簿。同一個操作編號再來，直接回上次結果、不重做。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4 class="sub">住客與憑證</h4>
+  <div class="tablewrap"><table>
+    <thead><tr><th>表</th><th>關鍵欄位</th><th>職責</th></tr></thead>
+    <tbody>
+      <tr><td class="id">room_qr_tokens</td><td>房號、token、版本、狀態、作廢時間</td><td>Guest Access 擁有。重產＝發新的一版，舊的立即標作廢。</td></tr>
+      <tr><td class="id">guest_sessions</td><td>房號、對應的訂單、到期時間、撤銷時間（revoked_at）</td><td>掃碼簽發、退房自動失效。每個請求驗「未過期且未撤銷」兩件事；QR 輪替、提前退房、訂單取消時整批寫上撤銷時間。住客端所有請求都靠它認人。</td></tr>
+      <tr><td class="id">reservations_cache</td><td>房號、姓名、語言、VIP／親子／寵物／紀念日、入住與退房時間</td><td>真相在 PMS，這裡是 worker 定期抄來的唯讀副本。VIP 等屬性用來自動開準備工單。</td></tr>
+      <tr><td class="id">rooms</td><td>樓層、hk_state（清潔狀態，TMS 擁有）、occupancy（住了沒，PMS 擁有）</td><td>一間房兩個系統各管一半，不共用欄位。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4 class="sub">營運、投影、設定</h4>
+  <div class="tablewrap"><table>
+    <thead><tr><th>表</th><th>關鍵欄位</th><th>職責</th></tr></thead>
+    <tbody>
+      <tr><td class="id">cleaning_plans ＋ plan_rooms</td><td>哪一天、哪個班次、何時產生、版本號、狀態（草稿／已發佈／superseded）；哪位清潔人員負責哪間房、預估幾分鐘</td><td>worker 班前自動產生；發佈時逐間開清潔任務並指派到人，建立即 accepted。手動調整帶版本號比對，每改一次版本 +1。重產出的是新草稿，和現行計畫並存對照，按發佈才切換、舊的標 superseded；唯一約束只鎖同一天同一班次的已發佈計畫。人力缺口試算讀它。</td></tr>
+      <tr><td class="id">sop_items ＋ task_sop_checks</td><td>清潔 SOP 有哪些項目（每家飯店自己設定）；每間房實際打勾／跳過的記錄</td><td>查房退回時打勾記錄歸零重來；但誰在幾點勾過什麼，流水帳裡都還在。</td></tr>
+      <tr><td class="id">inspections</td><td>查的是哪個任務、誰查的、每一項過不過、整間結果</td><td>程式會擋：自己清的房不能自己查。</td></tr>
+      <tr><td class="id">handovers ＋ handover_signs</td><td>交班單內容（存檔當下定格）、班次、誰簽收</td><td>定格之後就不再變——任務後續再怎麼動，交班單停在交班那一刻。</td></tr>
+      <tr><td class="id">notices ／ lost_items ／ leaves</td><td>通知內容、收件對象、誰已讀；遺失物登記與歸還狀態；請假起訖</td><td>一登記請假，系統自動把他手上已接未開始的單退回待接池、進行中的標記中斷。</td></tr>
+      <tr><td class="id">room_memory ／ stats_daily ／ phrase_counter ／ cleaning_time_stats</td><td>每間房的往事（修過什麼、住客偏好）；儀表板每日數字；住客常打的字句排行；每種房型的平均實際打掃分鐘</td><td>四張都是從流水帳算出來的投影，worker 隨時更新、清空可重算。字句排行餵「建議轉按鈕」，平均打掃分鐘餵排房與人力預估。</td></tr>
+      <tr><td class="id">staff_accounts ＋ staff_devices</td><td>員工帳號（角色、部門）；收推播的裝置與推播地址</td><td>登入驗帳密與角色；裝置只是推播的收件地址，不是門檻。</td></tr>
+      <tr><td class="id">tenants ＋ tenant_config</td><td>每家飯店一包自己的設定：標準工時、班次容量、SOP 與查房項目、資訊頁、選單、工時換算率</td><td>「什麼都可調」的落地。key ＋ jsonb，對應 <code>GET／PUT /admin/settings</code>。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4 class="sub">設計守則</h4>
+  <ul class="plain">
+    <li>每張業務表第一欄 <code>tenant_id</code>，唯一鍵與索引皆以它開頭。應用層強制 tenant scope，Postgres RLS 當第二道保險；跨表外鍵帶 tenant（複合外鍵），寫錯租戶的關聯在資料庫就被拒絕。</li>
+    <li>索引三件事：<code>tasks(tenant, dept, state)</code> 餵待接池；<code>task_events(tenant, task_id, seq)</code> 讀單一任務歷史、<code>(tenant, id)</code> 全序訂閱；outbox 對「待送 ＋ next_retry_at」建 partial index。</li>
+    <li>投影表永遠可清空後由 <code>task_events</code> 重放重建。這是「歷史不滅」的驗收標準。</li>
+    <li>兩條唯一約束寫在資料庫上，不靠程式記得：同一天同一個班次只能有一份<b>已發佈</b>的排房計畫（草稿不限）；同一間房同一天只能有一筆<b>還沒完成</b>的打掃單——重產對帳寫錯或兩人同時按發佈，重複開單在最底層就被擋下。</li>
+    <li>個人層級工時與 SOP 統計依租戶設定的保留期限定期<b>去識別化</b>——清掉的是可識別性（payload 裡的個資欄位、離職員工帳號列），不是事件列本身；執行本身也記一筆事件。</li>
+  </ul>
+</section>
+
+<section id="a1">
+  <h2><span class="n">A</span>需求 × API × 資料表對照</h2>
+  <p class="lede">每條需求走哪些端點、動哪幾張表、一句運作重點。方便驗收時對照。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>#</th><th>需求</th><th>走的 API</th><th>動的表</th><th>運作重點</th></tr></thead>
+    <tbody>
+      <tr><td class="id">1</td><td>系統根據房間產生 QR</td><td>GET /admin/rooms/{no}/qr（列印）、POST /admin/rooms/{no}/qr/rotate（重產）</td><td>room_qr_tokens、guest_sessions、rooms</td><td>一房一枚、長期有效、至少 128 bit 隨機且不含房號資訊；被撕走就重產新的一版，同一筆交易作廢舊 token 並撤銷該房所有住客 session</td></tr>
+      <tr><td class="id">2</td><td>住客掃 QR 提需求、看進度、評分</td><td>POST /guest/scan → POST /guest/requests；GET /guest/requests、/guest/stream；POST /guest/requests/{id}/cancel、…/rating</td><td>room_qr_tokens、guest_sessions、reservations_cache（session 綁的當前訂單）、tasks、task_events、outbox、processed_ops</td><td>掃碼換 session 認出住客；進度清單以 session 綁的訂單過濾、不按房號撈；選單自動分部門、自由文字猜不準進櫃檯判讀；還沒人認領前住客可自己收回（事件 cancelled・原因 guest_withdrew），已被認領就擋下；空房擋下、同房限流＋掃碼 IP 限流</td></tr>
+      <tr><td class="id">3</td><td>住客看飯店規定與設施</td><td>POST /guest/scan 回的 home；GET /guest/home</td><td>tenant_config</td><td>前台直接提供、不進任務流；內容每家飯店自己在設定裡改</td></tr>
+      <tr><td class="id">4</td><td>櫃檯判讀、把需求送到對的部門</td><td>GET /desk/triage、POST /desk/triage/{id}；所有單在櫃檯看板可見（SSE）</td><td>tasks、task_events</td><td>選單由規則引擎自動分；自由文字猜不準由櫃檯三選一；櫃檯看得到所有單是防重複建單的機制</td></tr>
+      <tr><td class="id">5</td><td>櫃檯發訊息給自選對象、追蹤已讀</td><td>POST /desk/notices、GET /desk/notices/{id}/reads</td><td>notices、notice_reads、outbox</td><td>收件人打開即記已讀；「逾時未讀升級」是 SLA 升級鏈的一部分，不在 v1</td></tr>
+      <tr><td class="id">6</td><td>房務認領、前往處理、回報完成</td><td>GET /staff/pool、POST /staff/tasks/{id}/claim／start／complete；主管端 POST /admin/tasks/{id}/undefer、/cancel</td><td>tasks、task_events、processed_ops、outbox</td><td>開始／完成兩段回報；弱網本地佇列重送，靠操作編號不重複；班次結束時還沒按開始的單自動退回待接池（事件 returned_to_pool）；主管可把延後的單拉回池，或附原因取消（事件 cancelled・原因 manager_void），取消的單不進完成數、平均工時與評分</td></tr>
+      <tr><td class="id">7</td><td>房務看今日打掃房；完工自動統計打掃時間</td><td>GET /staff/schedule；時間由 start／complete 的時間戳相減</td><td>cleaning_plans ＋ plan_rooms、task_events、cleaning_time_stats</td><td>實際分鐘＝完成−開始；查房退回清計時重算（歷史在流水帳）；平均值回頭餵排房與人力預估</td></tr>
+      <tr><td class="id">8</td><td>今日房態（入住＋退房）來源：PMS 或 Excel 匯入</td><td>worker PMS 同步（無對外 API）；POST /admin/occupancy/import</td><td>reservations_cache、rooms、cleaning_plans、task_events（匯入留痕）</td><td>兩條來源殊途同歸，都變成「今日待掃清單」餵排房，也補上 reservations_cache 的當前訂單讓住客掃得了碼；匯入逐列檢查房號存在才收；PMS 恢復同步後比對真訂單，同一間房住期重疊的匯入列自動標作廢——同一段住宿永遠只有一筆有效訂單</td></tr>
+      <tr><td class="id">9</td><td>平均打掃時間 × 待掃數量 → 預估工時與人力</td><td>GET /admin/capacity</td><td>cleaning_time_stats、cleaning_plans、tenant_config</td><td>只偵測與試算、怎麼降由主管決定；平均值沒累積夠之前先用標準工時</td></tr>
+      <tr><td class="id">10</td><td>自動排房 ＋ 手動調整 ＋ 重產</td><td>worker 班前自動產生；GET／PUT /admin/plans/{date}（PUT 帶 If-Match）；發佈後改用 POST /admin/tasks/{id}/reassign、/cancel</td><td>cleaning_plans ＋ plan_rooms、tasks（發佈後）、task_events、outbox</td><td>v1 演算法＝樓層 × 工時、一層一人；計畫每被調整一次版本 +1，版本不符回 409 並附最新內容；重產出的新草稿與現行計畫並存對照，唯一約束只鎖已發佈的那份；按發佈時同一筆交易切換——新計畫生效、舊計畫標 superseded、任務對帳（兩份都有的房換負責人、舊有新無的房取消且原因記 plan_superseded、做到一半的列給主管處理）；資料庫另有「一房一天只有一筆未完成打掃單」的唯一約束擋重複開單；手動調整寫事件留痕</td></tr>
+      <tr><td class="id">11</td><td>員工交班</td><td>GET /staff/handovers、POST /staff/handovers/{id}/sign</td><td>handovers ＋ handover_signs、task_events</td><td>凍結快照；簽收寫事件</td></tr>
+      <tr><td class="id">12</td><td>員工「問一下」</td><td>POST /staff/kb/ask</td><td>room_memory、sop_items</td><td>知識庫只讀事件流；LLM 回答留稽核</td></tr>
+      <tr><td class="id">13</td><td>遺失物登記與歸還</td><td>POST /desk/lost-items、POST /desk/lost-items/{id}/return</td><td>lost_items</td><td>櫃檯登記，歸還時結案</td></tr>
+      <tr><td class="id">14</td><td>每家飯店自己的設定</td><td>GET /admin/settings、PUT /admin/settings/{key}</td><td>tenant_config</td><td>標準工時、SOP 與查房項目、班次容量、資訊頁、選單集中一處讀寫</td></tr>
+      <tr><td class="id">15</td><td>權限劃分</td><td>POST /auth/login 核發員工憑證，之後每個 API 都先過「角色 × 動作」檢查</td><td>staff_accounts、staff_devices、guest_sessions</td><td>伺服器端強制、前端提示不算數；住客不是帳號，是綁房號＋住期的 session</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="a2">
+  <h2><span class="n">B</span>開放問題</h2>
+  <p class="lede">設計評審前要拍板的事。每一條都說明為什麼現在就要決定。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>#</th><th>問題</th><th>為什麼現在要決定</th></tr></thead>
+    <tbody>
+      <tr><td class="id">Q1</td><td>工時計量用「分鐘」還是「credit（點數）」？</td><td>影響預估分鐘欄位與人力試算的型別和換算層，schema 定案前要決定。</td></tr>
+      <tr><td class="id">Q2</td><td>個人層級工時與 SOP 跳過資料：保留多久、誰能看、能否用於考核？</td><td>分級可見的開關要在 v1 就內建，事後補救成本高。</td></tr>
+      <tr><td class="id">Q3</td><td>離線衝突的細部規則（v1 先到先贏；v2 要不要細到欄位級）？</td><td>決定員工端本地佇列要不要帶版本戳。</td></tr>
+      <tr><td class="id">Q4</td><td>排房演算法 v2 的輸入：責任區、趕房、VIP 順序怎麼建模？</td><td>v1 先以「樓層 × 工時」上線，但資料模型要預留欄位。</td></tr>
+      <tr><td class="id">Q5</td><td>客訴的生命週期：低分評分（和未來 SLA 升級）產生的客訴，誰結案、怎麼追蹤？</td><td>決定評分通報落地成什麼實體。</td></tr>
+      <tr><td class="id">Q6</td><td>App 維運策略：員工用自己的手機還是公司機？雙平台上架與版更節奏？推播權限被關掉時的備援？</td><td>直接影響導入速度與定價。</td></tr>
+      <tr><td class="id">Q7</td><td>Kafka 自架還是用代管服務？挑哪一家？</td><td>決定維運負擔與成本——「一個人能運維」的底線靠它守住；也決定事件保留多久、重播能力的上限。</td></tr>
+      <tr><td class="id">Q8</td><td>各家 PMS adapter 的能力盤點：哪些能主動推事件、哪些只能輪詢？</td><td>決定每個 adapter 走事件訂閱還是輪詢兜底，以及對客戶承諾的同步延遲能給到多緊。</td></tr>
+      <tr><td class="id">Q9</td><td>SaaS 的資料落地與區域：資料放在哪個國家／區域？客戶有沒有在地存放的要求？</td><td>影響雲端區域選擇、存取延遲與合約條款，上線前要定。</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout warn">
+    <p><b>一個敘事上的提醒。</b>「預估 vs 實際工時落差」的統計保留（儀表板和房間記憶都用得到），但它不是這個產品的護城河——市面上已有產品用 ML 做同類預測與路徑優化。對外的差異化不要押在工時預測上。</p>
+  </div>
+</section>
+
+<footer class="doc">
+  <p>本文件是 TMS 的需求與系統設計總覽：功能與非功能需求、核心實體、API、高階設計、深入探討、最終架構與資料模型。逐欄位的資料規格另有文件。</p>
+</footer>
+
+</div>
+</body>
+</html>

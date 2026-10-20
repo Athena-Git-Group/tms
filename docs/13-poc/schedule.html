@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 主管排房</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  .schedule-layout { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+  .schedule-layout .panel h2 { font-size: 16px; margin-bottom: 4px; }
+  .panel-sub { font-size: 13px; color: var(--color-ink-muted); margin: 0 0 14px; }
+
+  .source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .source-card { border: 1px dashed var(--color-line-strong); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .source-card h3 { font-size: 14px; margin: 0; }
+  .source-card .source-desc { font-size: 12.5px; color: var(--color-ink-muted); margin: 0; flex: 1; }
+  .source-card textarea { font-family: var(--font-mono); font-size: 13px; min-height: 96px; resize: vertical; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
+  .source-card input[type="file"] { font-size: 12.5px; color: var(--color-ink-muted); }
+  .source-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* 排房板：左欄「未分配」、每位房務員一欄，房卡拖到人身上（照 05 沙盤的指派制畫面） */
+  .plan-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; align-items: start; }
+  .plan-col { border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface-sunken); display: flex; flex-direction: column; }
+  .plan-col.is-dropover { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft); }
+  .plan-col-head { padding: 10px 12px 9px; border-bottom: 1px solid var(--color-line); }
+  .plan-col-head .who { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .plan-col-head h3 { font-size: 14px; margin: 0; }
+  .plan-col-head .load-text { font-family: var(--font-mono); font-size: 12px; color: var(--color-ink-muted); white-space: nowrap; }
+  .load-meter { height: 4px; border-radius: 2px; background: var(--color-line); margin-top: 7px; overflow: hidden; }
+  .load-meter i { display: block; height: 100%; background: var(--color-accent); }
+  .load-meter i.is-over { background: var(--color-error); }
+  .load-text.is-over { color: var(--color-error); font-weight: 700; }
+  .plan-col-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 90px; flex: 1; }
+  .floor-cap { font-size: 11.5px; font-weight: 700; color: var(--color-ink-faint); letter-spacing: 0.05em; margin: 4px 0 -2px; }
+
+  .room-card {
+    background: var(--color-surface-raised); border: 1px solid var(--color-line);
+    border-left: 4px solid var(--color-line-strong); border-radius: var(--radius-sm);
+    padding: 8px 10px; display: flex; align-items: center; gap: 10px;
+    cursor: grab; box-shadow: var(--shadow-card);
+  }
+  .room-card:active { cursor: grabbing; }
+  .room-card.is-dragging { opacity: 0.4; }
+  .room-card.is-conflict { opacity: 0.55; cursor: not-allowed; }
+  .room-card .rm { font-family: var(--font-display); font-size: 18px; font-weight: 600; min-width: 42px; }
+  .room-card .kd { font-size: 12px; color: var(--color-ink-muted); flex: 1; min-width: 0; }
+  .room-card .kd b { display: block; color: var(--color-ink); font-size: 13px; font-weight: 700; }
+  .room-card .quick { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .room-card .quick button { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: var(--color-surface); color: var(--color-ink-muted); cursor: pointer; white-space: nowrap; }
+  .room-card .quick button:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+  .room-card.kind-depart { border-left-color: var(--color-state-accepted); }
+  .room-card.kind-stay { border-left-color: var(--color-state-doing); }
+  .room-card.kind-turndown { border-left-color: var(--color-state-pool); }
+  .room-card.kind-patrol { border-left-color: var(--color-state-deferred); }
+
+  .plan-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 12.5px; color: var(--color-ink-muted); }
+  .plan-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .plan-legend .kind-depart { background: var(--color-state-accepted); }
+  .plan-legend .kind-stay { background: var(--color-state-doing); }
+  .plan-legend .kind-turndown { background: var(--color-state-pool); }
+  .plan-legend .kind-patrol { background: var(--color-state-deferred); }
+
+  .draft-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .load-summary { font-family: var(--font-mono); font-size: 12.5px; color: var(--color-ink-muted); }
+
+  .publish-note { margin-top: 10px; font-size: 13px; color: var(--color-warning); font-weight: 600; }
+
+  .staff-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+  .staff-col { display: flex; flex-direction: column; gap: 10px; border: 1px solid transparent; border-radius: var(--radius-md); padding: 6px; }
+  .staff-col.is-dropover { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft); }
+  .staff-col-head { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 2px 8px; border-bottom: 2px solid var(--color-line); }
+  .staff-col-head h3 { font-size: 14px; margin: 0; }
+  .staff-col-head .load { font-family: var(--font-mono); font-size: 12.5px; color: var(--color-ink-faint); }
+  .task-card.is-draggable { cursor: grab; }
+  .task-card.is-draggable:active { cursor: grabbing; }
+  .task-card.is-dragging { opacity: 0.4; }
+  .task-quick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--color-ink-faint); }
+  .task-quick button { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: var(--color-surface); color: var(--color-ink-muted); cursor: pointer; }
+  .task-quick button:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+  @media (max-width: 760px) {
+    .source-grid { grid-template-columns: 1fr; }
+    .scroll-x table.draft { min-width: 560px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="tms-topbar">
+  <span class="tms-brand">
+    <span class="tms-brand-mark">TMS</span>
+    <span class="tms-brand-role">主管排房</span>
+  </span>
+  <div class="tms-topbar-actions">
+    <a class="btn btn-secondary" href="manager.html">查房頁</a>
+    <a class="btn btn-secondary" href="events.html" target="_blank" rel="noopener">事件流水帳</a>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+</div>
+
+<div class="schedule-layout">
+
+  <section class="panel">
+    <h2>今日要掃哪些房？先把房態拉進來</h2>
+    <p class="panel-sub">正式環境走 PMS adapter 訂閱；PMS 接不上時用 Excel 匯入當降級。兩邊都會蓋掉現有草稿。</p>
+    <div class="source-grid">
+      <div class="source-card">
+        <h3>串接 PMS</h3>
+        <p class="source-desc">模擬 adapter 拉回今日房態（退房清／續住清／夜床／空房巡）。</p>
+        <div class="source-actions">
+          <button class="btn btn-primary" id="pms-import" type="button">從 PMS 拉今日房態</button>
+        </div>
+      </div>
+      <div class="source-card">
+        <h3>Excel 匯入（CSV 示意）</h3>
+        <p class="source-desc">每行一間房，格式「房號,清掃類型」；可直接貼上或選 .csv 檔。類型限：退房清／續住清／夜床／空房巡。</p>
+        <textarea id="csv-input" placeholder="306,退房清&#10;307,續住清&#10;505,夜床" aria-label="CSV 內容"></textarea>
+        <input type="file" id="csv-file" accept=".csv,.txt" aria-label="選擇 CSV 檔案">
+        <div class="source-actions">
+          <button class="btn btn-secondary" id="csv-sample" type="button">填入範例</button>
+          <button class="btn btn-primary" id="csv-import" type="button">匯入</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>草稿：分給誰掃？</h2>
+    <p class="panel-sub">把房卡<b>拖到人身上</b>（或點卡片右側的小按鈕）。「自動分配」的策略在租戶設定可切換：樓層聚合（一層一人）或純工時平衡；標準工時與班次容量也在那裡調。怎麼分都只是草稿，發佈才算數。</p>
+    <div class="plan-board" id="plan-board"></div>
+    <div class="plan-legend" id="plan-legend"></div>
+    <div class="draft-actions">
+      <button class="btn btn-secondary" id="auto-assign" type="button">自動分配（樓層聚合）</button>
+      <button class="btn btn-primary" id="publish" type="button">發佈排房</button>
+      <span class="load-summary" id="load-summary"></span>
+    </div>
+    <p class="publish-note" id="publish-note" hidden></p>
+  </section>
+
+  <section class="panel">
+    <h2>今日已發佈的打掃單</h2>
+    <p class="panel-sub">發佈即指派（不進待接池）；還沒按「開始」的單，直接把卡片<b>拖到另一個人身上</b>就改派（或點卡上的小按鈕）。開始處理中的單不能改派——那條路走中斷退池。</p>
+    <div class="staff-board" id="staff-board"></div>
+  </section>
+
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+  var ACTOR = '王主管';
+
+  function housekeepingStaff(state) {
+    return state.staff.filter(function (s) { return s.dept === 'housekeeping'; });
+  }
+
+  function doReassign(taskId, staffId, roomNo) {
+    var r = E.reassignTask(taskId, staffId, ACTOR);
+    if (r.ok) {
+      C.toast(roomNo + ' 號房已改派給 ' + E.resolveStaffName(E.getState(), staffId), 'success');
+    } else {
+      C.toastFromResult(r);
+      renderAll();
+    }
+  }
+
+  var KIND_SLUG = { '退房清': 'depart', '續住清': 'stay', '夜床': 'turndown', '空房巡': 'patrol' };
+
+  function moveRoom(roomNo, staffId) {
+    E.setDraftAssignee(roomNo, staffId || null);
+  }
+
+  function roomCard(state, r, currentColId) {
+    var card = C.el('div', 'room-card kind-' + (KIND_SLUG[r.kind] || 'depart') + (r.conflict ? ' is-conflict' : ''));
+    card.appendChild(C.el('span', 'rm', r.roomNo));
+    var kd = C.el('span', 'kd');
+    kd.appendChild(C.el('b', null, r.kind + ' · ' + r.estMin + ' 分'));
+    kd.appendChild(C.el('span', null, r.conflict ? '已有今日打掃單，發佈時跳過' : r.floor + ' 樓'));
+    card.appendChild(kd);
+
+    if (r.conflict) return card;
+
+    card.draggable = true;
+    card.addEventListener('dragstart', function (e) {
+      // 前綴區分兩個看板的拖曳來源：草稿卡拖進已發佈欄（或反過來）要被忽略，不是改派。
+      e.dataTransfer.setData('text/plain', 'room:' + r.roomNo);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('is-dragging');
+    });
+    card.addEventListener('dragend', function () { card.classList.remove('is-dragging'); });
+
+    // 拖曳在觸控裝置上不可靠，卡片右側永遠放一組小按鈕當備援。
+    var quick = C.el('div', 'quick');
+    housekeepingStaff(state).forEach(function (s) {
+      if (s.id === currentColId) return;
+      var b = C.el('button', null, s.name);
+      b.type = 'button';
+      b.addEventListener('click', function () { moveRoom(r.roomNo, s.id); });
+      quick.appendChild(b);
+    });
+    if (currentColId) {
+      var back = C.el('button', null, '退回');
+      back.type = 'button';
+      back.addEventListener('click', function () { moveRoom(r.roomNo, null); });
+      quick.appendChild(back);
+    }
+    card.appendChild(quick);
+    return card;
+  }
+
+  function appendByFloor(body, state, rooms, colId, withFloorCaps) {
+    var sorted = rooms.slice().sort(function (a, b) { return a.roomNo.localeCompare(b.roomNo); });
+    var lastFloor = null;
+    sorted.forEach(function (r) {
+      if (withFloorCaps && r.floor !== lastFloor) {
+        body.appendChild(C.el('p', 'floor-cap', r.floor + ' 樓'));
+        lastFloor = r.floor;
+      }
+      body.appendChild(roomCard(state, r, colId));
+    });
+  }
+
+  function renderDraft(state) {
+    var board = document.getElementById('plan-board');
+    var legend = document.getElementById('plan-legend');
+    board.innerHTML = '';
+    legend.innerHTML = '';
+    var draft = (state.schedule || {}).draft || [];
+    if (!draft.length) {
+      board.appendChild(C.emptyState('草稿是空的——先從上面任一來源把今日房態拉進來'));
+      document.getElementById('load-summary').textContent = '';
+      return;
+    }
+
+    var load = {};
+    draft.forEach(function (r) {
+      if (r.conflict || !r.assigneeId) return;
+      load[r.assigneeId] = (load[r.assigneeId] || 0) + r.estMin;
+    });
+    var staff = housekeepingStaff(state);
+    var capacity = state.settings.shiftCapacityMin || 240;
+
+    var columns = [{ id: null, name: '未分配' }].concat(staff.map(function (s) { return { id: s.id, name: s.name }; }));
+    columns.forEach(function (col) {
+      var rooms = draft.filter(function (r) {
+        return col.id ? (r.assigneeId === col.id && !r.conflict) : (!r.assigneeId || r.conflict);
+      });
+      var colEl = C.el('div', 'plan-col');
+      var head = C.el('div', 'plan-col-head');
+      var who = C.el('div', 'who');
+      who.appendChild(C.el('h3', null, col.name));
+      var mins = rooms.reduce(function (a, r) { return a + (r.conflict ? 0 : r.estMin); }, 0);
+      var over = col.id && mins > capacity;
+      who.appendChild(C.el('span', 'load-text' + (over ? ' is-over' : ''), col.id
+        ? rooms.length + ' 間 · ' + mins + ' / ' + capacity + ' 分' + (over ? '（超載）' : '')
+        : rooms.length + ' 間'));
+      head.appendChild(who);
+      if (col.id) {
+        var meter = C.el('div', 'load-meter');
+        var fill = C.el('i', over ? 'is-over' : null);
+        fill.style.width = Math.min(100, Math.round((load[col.id] || 0) / capacity * 100)) + '%';
+        meter.appendChild(fill);
+        head.appendChild(meter);
+      }
+      colEl.appendChild(head);
+
+      var body = C.el('div', 'plan-col-body');
+      if (!rooms.length) {
+        body.appendChild(C.el('p', 'floor-cap', col.id ? '把房卡拖到這裡' : '全部分配完了'));
+      } else {
+        appendByFloor(body, state, rooms, col.id, !col.id);
+      }
+      colEl.appendChild(body);
+
+      colEl.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        colEl.classList.add('is-dropover');
+      });
+      colEl.addEventListener('dragleave', function () { colEl.classList.remove('is-dropover'); });
+      colEl.addEventListener('drop', function (e) {
+        e.preventDefault();
+        colEl.classList.remove('is-dropover');
+        var payload = e.dataTransfer.getData('text/plain');
+        if (payload.indexOf('room:') === 0) moveRoom(payload.slice(5), col.id);
+      });
+
+      board.appendChild(colEl);
+    });
+
+    var std = state.settings.cleaningStandard || E.CLEANING_STANDARD;
+    Object.keys(KIND_SLUG).forEach(function (kind) {
+      var item = C.el('span');
+      item.appendChild(C.el('i', 'kind-' + KIND_SLUG[kind]));
+      item.appendChild(document.createTextNode(kind + ' ' + std[kind] + ' 分'));
+      legend.appendChild(item);
+    });
+
+    var parts = staff
+      .filter(function (s) { return load[s.id]; })
+      .map(function (s) { return s.name + ' ' + load[s.id] + ' 分'; });
+    document.getElementById('load-summary').textContent = parts.length ? '工時合計：' + parts.join('　') : '';
+  }
+
+  function renderStaffBoard(state) {
+    var board = document.getElementById('staff-board');
+    board.innerHTML = '';
+    var staff = housekeepingStaff(state);
+    staff.forEach(function (s) {
+      var tasks = state.tasks.filter(function (t) {
+        return t.type === 'cleaning' && t.assigneeId === s.id &&
+          t.state !== 'cancelled' && t.state !== 'inspected';
+      }).sort(function (a, b) { return a.createdAt - b.createdAt; });
+
+      var col = C.el('div', 'staff-col');
+      var head = C.el('div', 'staff-col-head');
+      head.appendChild(C.el('h3', null, s.name));
+      var totalMin = tasks.reduce(function (a, t) {
+        var std = state.settings.cleaningStandard || E.CLEANING_STANDARD;
+        return a + (t.estMin || std[t.title] || 0);
+      }, 0);
+      head.appendChild(C.el('span', 'load', tasks.length + ' 間 · 約 ' + totalMin + ' 分'));
+      col.appendChild(head);
+
+      if (!tasks.length) {
+        col.appendChild(C.emptyState('目前沒有未完成的打掃單（可以把別欄的卡拖過來）'));
+      }
+      tasks.forEach(function (t) {
+        var card = C.taskCard(t, { meta: t.estMin ? '預估 ' + t.estMin + ' 分' : null });
+        if (t.state === 'accepted') {
+          card.classList.add('is-draggable');
+          card.draggable = true;
+          card.addEventListener('dragstart', function (e) {
+            e.dataTransfer.setData('text/plain', 'task:' + t.id);
+            e.dataTransfer.effectAllowed = 'move';
+            card.classList.add('is-dragging');
+          });
+          card.addEventListener('dragend', function () { card.classList.remove('is-dragging'); });
+
+          var quick = C.el('div', 'task-quick');
+          quick.appendChild(C.el('span', null, '拖到別欄改派，或點：'));
+          staff.forEach(function (other) {
+            if (other.id === s.id) return;
+            var b = C.el('button', null, other.name);
+            b.type = 'button';
+            b.addEventListener('click', function () { doReassign(t.id, other.id, t.roomNo); });
+            quick.appendChild(b);
+          });
+          card.appendChild(quick);
+        }
+        col.appendChild(card);
+      });
+
+      col.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        col.classList.add('is-dropover');
+      });
+      col.addEventListener('dragleave', function () { col.classList.remove('is-dropover'); });
+      col.addEventListener('drop', function (e) {
+        e.preventDefault();
+        col.classList.remove('is-dropover');
+        var payload = e.dataTransfer.getData('text/plain');
+        if (payload.indexOf('task:') !== 0) return;
+        var taskId = payload.slice(5);
+        var task = E.findTask(E.getState(), taskId);
+        if (!task || task.assigneeId === s.id) return;
+        doReassign(taskId, s.id, task.roomNo);
+      });
+
+      board.appendChild(col);
+    });
+  }
+
+  function renderAll() {
+    var state = E.getState();
+    document.getElementById('auto-assign').textContent =
+      '自動分配（' + (state.settings.autoAssignStrategy === 'balance' ? '工時平衡' : '樓層聚合') + '）';
+    renderDraft(state);
+    renderStaffBoard(state);
+  }
+
+  // CSV textarea 打到一半時跳過整頁重繪，不然別的分頁一有動靜貼好的內容就沒了
+  //（與設定頁同一類坑）。
+  function safeRender() {
+    var ae = document.activeElement;
+    if (ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type !== 'checkbox'))) return;
+    renderAll();
+  }
+
+  function parseCsv(text) {
+    return text.split(/\r?\n/)
+      .map(function (line) { return line.trim(); })
+      .filter(function (line) { return line.length; })
+      .map(function (line) {
+        var parts = line.split(/[,，\t]/);
+        return { roomNo: (parts[0] || '').trim(), kind: (parts[1] || '').trim() };
+      });
+  }
+
+  function reportImport(r, sourceLabel) {
+    if (!r.ok) { C.toastFromResult(r); return; }
+    var msg = '已從' + sourceLabel + '匯入 ' + r.count + ' 間房';
+    if (r.rejected && r.rejected.length) msg += '；' + r.rejected.length + ' 列格式不符已略過';
+    C.toast(msg, 'success');
+  }
+
+  document.getElementById('pms-import').addEventListener('click', function () {
+    reportImport(E.importOccupancy(TMS_SEED.PMS_TODAY, 'pms', ACTOR), ' PMS ');
+  });
+
+  document.getElementById('csv-sample').addEventListener('click', function () {
+    document.getElementById('csv-input').value = '306,退房清\n307,續住清\n308,退房清\n505,夜床\n506,退房清';
+  });
+
+  document.getElementById('csv-file').addEventListener('change', function (ev) {
+    var file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      document.getElementById('csv-input').value = String(reader.result || '').trim();
+      C.toast('已讀入「' + file.name + '」，按「匯入」生效', 'info');
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('csv-import').addEventListener('click', function () {
+    var text = document.getElementById('csv-input').value;
+    if (!text.trim()) { C.toast('先貼上內容或選擇 CSV 檔', 'warning'); return; }
+    reportImport(E.importOccupancy(parseCsv(text), 'excel', ACTOR), ' Excel（CSV）');
+  });
+
+  document.getElementById('auto-assign').addEventListener('click', function () {
+    var r = E.autoAssignDraft();
+    if (r.ok) C.toast('已自動分配（樓層聚合），可逐列覆寫', 'success');
+    else C.toastFromResult(r);
+  });
+
+  document.getElementById('publish').addEventListener('click', function () {
+    var r = E.publishSchedule(ACTOR);
+    var note = document.getElementById('publish-note');
+    if (!r.ok) { C.toastFromResult(r); return; }
+    C.toast('已發佈 ' + r.created + ' 張打掃單（發佈即指派）', 'success');
+    if (r.skipped.length) {
+      note.hidden = false;
+      note.textContent = '跳過 ' + r.skipped.length + ' 間（已有今日未完成打掃單）：' + r.skipped.join('、');
+    } else {
+      note.hidden = true;
+    }
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  renderAll();
+  E.subscribe(safeRender);
+  setInterval(safeRender, 20000);
+})();
+</script>
+</body>
+</html>

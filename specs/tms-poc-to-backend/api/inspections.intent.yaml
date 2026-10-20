@@ -1,0 +1,12 @@
+api: inspections
+schema_version: "3.3"
+entity: inspections
+title: 查房 API
+description: 主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；自清自查 403；原清房者已下班→連動退池。
+
+exposes:
+  standard: [list, create]
+
+source_evidence:
+  - "specify/spec.md#故事 4（FR-030~032）、E-07"
+  - "db_table/erm.dbml#Table:inspections"

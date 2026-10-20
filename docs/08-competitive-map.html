@@ -1,0 +1,434 @@
+<title>三層之間</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F2F4F3; --surface:#FFFFFF; --surface-2:#E9EEED;
+  --ink:#16292B; --ink-2:#4B5D5E; --ink-3:#7C8C8D;
+  --rule:#D6DEDD; --rule-strong:#B9C4C3;
+  --brass:#8F6519; --brass-tint:#F2E7CF;
+  --crit:#96382B; --crit-tint:#F7E6E2;
+  --warn:#9C7220; --warn-tint:#F7EDD5;
+  --ok:#2C6A59; --ok-tint:#DCEBE6;
+  --shadow:0 1px 2px rgba(22,41,43,.06), 0 8px 24px -16px rgba(22,41,43,.2);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1415; --surface:#171F20; --surface-2:#1F2A2A;
+    --ink:#E7ECEA; --ink-2:#A6B5B4; --ink-3:#7C8C8C;
+    --rule:#293434; --rule-strong:#3C4949;
+    --brass:#DCAC50; --brass-tint:#33280F;
+    --crit:#D9836F; --crit-tint:#3A211B;
+    --warn:#DCAC50; --warn-tint:#33280F;
+    --ok:#63AE97; --ok-tint:#19302A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1415; --surface:#171F20; --surface-2:#1F2A2A;
+  --ink:#E7ECEA; --ink-2:#A6B5B4; --ink-3:#7C8C8C;
+  --rule:#293434; --rule-strong:#3C4949;
+  --brass:#DCAC50; --brass-tint:#33280F;
+  --crit:#D9836F; --crit-tint:#3A211B;
+  --warn:#DCAC50; --warn-tint:#33280F;
+  --ok:#63AE97; --ok-tint:#19302A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:"Source Serif 4","Songti TC","Noto Serif TC",Georgia,serif;
+  font-size:16.5px;line-height:1.68;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px;margin:0 auto;padding:0 22px 96px}
+h1,h2,h3,.eyebrow{font-family:"Archivo","PingFang TC","Noto Sans TC",system-ui,sans-serif}
+.mono,code,th{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+h1{font-size:clamp(2.1rem,5vw,3.2rem);line-height:1.04;font-weight:700;letter-spacing:-.02em;margin:.12em 0 0}
+h2{font-size:1.3rem;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+h3{font-size:1.02rem;font-weight:600;margin:0}
+p{margin:0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.69rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+code{font-size:.85em;background:var(--surface-2);padding:1px 5px}
+
+header{padding:70px 0 36px;border-bottom:1px solid var(--rule)}
+.thesis{margin-top:22px;max-width:62ch;font-size:1.13rem;line-height:1.6;color:var(--ink-2)}
+.thesis b{color:var(--ink);font-weight:600}
+
+section{padding-top:60px}
+.s-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.s-head::after{content:"";flex:1 1 40px;height:1px;background:var(--rule);align-self:center}
+.lede{max-width:66ch;color:var(--ink-2);margin-bottom:20px}
+.body-col{max-width:66ch;display:flex;flex-direction:column;gap:13px}
+.body-col b{font-weight:600}
+
+figure{margin:26px 0 0}
+.board{background:#14171A;color:#ECEEF0;padding:22px 16px;border:1px solid #262B2F;overflow-x:auto}
+.board svg{display:block;max-width:100%;height:auto;margin:0 auto}
+.board svg text{font-family:"PingFang TC","Noto Sans TC","Helvetica Neue",sans-serif;fill:currentColor}
+.b-box{fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.b-core{stroke-width:3.5}
+.b-dash{stroke-dasharray:7 5}
+.b-band{fill:#1B1F23;stroke:none}
+.b-t{font-size:13px;font-weight:500}
+.b-s{font-size:10.5px;fill:#98A0A6}
+.b-fh{font-size:12.5px;font-weight:600;fill:#ECEEF0}
+.b-a{stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round}
+.b-l{font-size:10.5px;fill:#98A0A6}
+.b-hi{fill:#E8B457}.b-hs{stroke:#E8B457}
+.b-cr{fill:#E08A72}.b-cs{stroke:#E08A72}
+figcaption{
+  padding:16px 18px;background:var(--surface);border:1px solid var(--rule);border-top:0;
+  font-size:.89rem;line-height:1.62;color:var(--ink-2);
+}
+figcaption b{color:var(--ink);font-weight:600}
+
+.tbl-scroll{overflow-x:auto;border:1px solid var(--rule);background:var(--surface);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;min-width:780px;font-size:.88rem}
+th{font-size:.62rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:11px 12px;border-bottom:1px solid var(--rule-strong);background:var(--surface-2);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.5}
+tbody tr:last-child td{border-bottom:0}
+td.nm{font-family:"Archivo",sans-serif;font-weight:600;white-space:nowrap}
+td.pr{font-family:"IBM Plex Mono",monospace;font-size:.78rem;white-space:nowrap;color:var(--ink-2)}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:.64rem;font-weight:600;padding:1px 6px;border:1px solid currentColor;white-space:nowrap;display:inline-block}
+.t-crit{color:var(--crit)}.t-warn{color:var(--warn)}.t-ok{color:var(--ok)}.t-dim{color:var(--ink-3)}
+
+.callout{margin-top:24px;padding:20px 22px;border-left:3px solid var(--crit);background:var(--crit-tint);max-width:72ch;display:flex;flex-direction:column;gap:10px}
+.callout.ok{border-left-color:var(--ok);background:var(--ok-tint)}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-tint)}
+.callout .eyebrow{color:var(--crit)}
+.callout.ok .eyebrow{color:var(--ok)}
+.callout.warn .eyebrow{color:var(--warn)}
+.callout p{font-size:.96rem;line-height:1.62}
+
+.moats{display:flex;flex-direction:column;gap:14px;margin-top:20px}
+.moat{
+  background:var(--surface);border:1px solid var(--rule);box-shadow:var(--shadow);
+  border-left:4px solid var(--mc,var(--rule-strong));padding:18px 20px;
+  display:flex;flex-direction:column;gap:9px;
+}
+.moat-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.moat-hd .r{font-family:"IBM Plex Mono",monospace;font-size:.68rem;font-weight:600;color:var(--ink-3);letter-spacing:.1em}
+.moat-hd .t{font-family:"Archivo",sans-serif;font-weight:600;font-size:1.04rem}
+.moat-hd .str{margin-left:auto}
+.moat .w{font-size:.95rem;line-height:1.62;color:var(--ink-2)}
+.moat .w b{color:var(--ink);font-weight:600}
+.moat .risk{font-size:.88rem;line-height:1.55;color:var(--crit);padding-top:8px;border-top:1px dashed var(--rule)}
+
+.nots{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin-top:18px}
+.not{padding:14px 16px;background:var(--surface-2);border:1px solid var(--rule);display:flex;flex-direction:column;gap:6px}
+.not .t{font-family:"Archivo",sans-serif;font-weight:600;font-size:.94rem}
+.not .w{font-size:.85rem;color:var(--ink-2);line-height:1.5}
+
+footer{margin-top:72px;padding-top:22px;border-top:1px solid var(--rule);font-size:.83rem;color:var(--ink-3);max-width:74ch;line-height:1.65}
+footer a{color:var(--brass)}
+a:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+@media (max-width:640px){body{font-size:15.5px}header{padding-top:48px}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">TMS · 競品分析 · 2026-09-11 · v2</p>
+  <h1>三層之間</h1>
+  <p class="thesis">
+    這個市場分成三層：<b>住客層、營運任務層、PMS 層</b>。
+    Flexkeeping、Optii、Quore、Sweeply、HotSOS 全在中間那層，而中間那層沒有資料主權——
+    這就是 Mews 能把 Flexkeeping 買走的原因。<b>你們的差異化不在功能，在你們同時站在三層上。</b>
+  </p>
+</header>
+
+<section>
+  <div class="s-head"><p class="eyebrow">00 — 更正</p></div>
+  <h2>「預估 vs 實際工時」不是護城河</h2>
+  <div class="callout">
+    <p class="eyebrow">先前的判斷錯了</p>
+    <p>我之前說「Flexkeeping 只有預估工時、沒有量測實際起訖，所以預估與實際的落差是你的差異化」——<b>這個結論在整個類別的層次上是錯的。</b></p>
+    <p><b>Optii 已經做得更深：</b>用機器學習依房客類型、住宿長度、房型與歷史資料<b>預測每間房的清潔時間</b>，再據此最佳化房務人員的走動路線。官方宣稱房務人員產能提升最多 20%、主管 40%、人力成本降最多 15%；一份 2026 年的第三方實測確認「AI 確實有效、人力節省是真的，只是沒有宣稱的 18% 那麼高」。</p>
+    <p>Quore 也有依入住預測動態調整人力配置的功能。<b>工時量測與派工最佳化在這個類別已經是標配，不是賣點。</b></p>
+  </div>
+  <p class="lede" style="margin-top:22px">這個更正很重要，因為它把你的差異化敘事從「我們能算出工時」逼回到真正站得住腳的地方。往下看第 03 節。</p>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">01 — 地圖</p></div>
+  <h2>三層，以及你們站的位置</h2>
+
+  <figure>
+    <div class="board">
+    <svg viewBox="0 0 1120 470" role="img" aria-label="旅宿軟體的三層市場地圖。最上層是住客層，有 Duve、Canary、Akia 與 HiJiffy；中間是營運任務層，有 Optii、Quore、HotSOS、Sweeply 與 Flexkeeping；最下層是 PMS 層，有 Cloudbeds、Oracle、Shiji 與 Mews。Flexkeeping 在 2025 年 10 月被下層的 Mews 併購。右側是使用者的公司，以一個縱向長條同時跨越三層，代表自家 PMS 加上 TMS，三層在同一家公司內，零整合成本。" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#E08A72"/></marker>
+      </defs>
+
+      <rect class="b-band" x="164" y="50" width="620" height="90"/>
+      <rect class="b-band" x="164" y="160" width="620" height="130"/>
+      <rect class="b-band" x="164" y="310" width="620" height="110"/>
+
+      <text class="b-fh" x="150" y="90" text-anchor="end">住客層</text>
+      <text class="b-s" x="150" y="108" text-anchor="end">房客自己操作</text>
+      <text class="b-fh" x="150" y="215" text-anchor="end">營運任務層</text>
+      <text class="b-s" x="150" y="233" text-anchor="end">員工派工與回報</text>
+      <text class="b-s" x="150" y="249" text-anchor="end">← 你的類別</text>
+      <text class="b-fh" x="150" y="358" text-anchor="end">PMS 層</text>
+      <text class="b-s" x="150" y="376" text-anchor="end">訂單 · 房況 · 帳務</text>
+      <text class="b-s" x="150" y="392" text-anchor="end">資料主權在這裡</text>
+
+      <!-- guest layer -->
+      <rect class="b-box" x="176" y="72" width="165" height="46" rx="8"/>
+      <text class="b-t" x="258" y="100" text-anchor="middle">Duve</text>
+      <rect class="b-box" x="353" y="72" width="165" height="46" rx="8"/>
+      <text class="b-t" x="435" y="100" text-anchor="middle">Canary</text>
+      <rect class="b-box" x="530" y="72" width="240" height="46" rx="8"/>
+      <text class="b-t" x="650" y="100" text-anchor="middle">Akia · HiJiffy</text>
+
+      <!-- ops layer -->
+      <rect class="b-box b-core" x="176" y="178" width="180" height="48" rx="8"/>
+      <text class="b-t" x="266" y="199" text-anchor="middle">Optii</text>
+      <text class="b-s" x="266" y="216" text-anchor="middle">ML 預測清潔時間 · 路線</text>
+
+      <rect class="b-box" x="368" y="178" width="180" height="48" rx="8"/>
+      <text class="b-t" x="458" y="199" text-anchor="middle">Quore</text>
+      <text class="b-s" x="458" y="216" text-anchor="middle">美國 select-service</text>
+
+      <rect class="b-box" x="560" y="178" width="210" height="48" rx="8"/>
+      <text class="b-t" x="665" y="199" text-anchor="middle">HotSOS（Amadeus）</text>
+      <text class="b-s" x="665" y="216" text-anchor="middle">大型 · 175 國</text>
+
+      <rect class="b-box" x="176" y="238" width="180" height="46" rx="8"/>
+      <text class="b-t" x="266" y="259" text-anchor="middle">Sweeply</text>
+      <text class="b-s" x="266" y="275" text-anchor="middle">小型旅館</text>
+
+      <rect class="b-box b-cs" x="368" y="238" width="250" height="46" rx="8"/>
+      <text class="b-t b-cr" x="493" y="259" text-anchor="middle">Flexkeeping</text>
+      <text class="b-s b-cr" x="493" y="275" text-anchor="middle">2012 起 · 跨部門最完整</text>
+
+      <!-- pms layer -->
+      <rect class="b-box" x="176" y="332" width="145" height="46" rx="8"/>
+      <text class="b-t" x="248" y="360" text-anchor="middle">Cloudbeds</text>
+      <rect class="b-box" x="333" y="332" width="145" height="46" rx="8"/>
+      <text class="b-t" x="405" y="360" text-anchor="middle">Oracle</text>
+      <rect class="b-box" x="490" y="332" width="145" height="46" rx="8"/>
+      <text class="b-t" x="562" y="360" text-anchor="middle">Shiji</text>
+      <rect class="b-box b-cs b-core" x="647" y="332" width="123" height="46" rx="8"/>
+      <text class="b-t b-cr" x="708" y="360" text-anchor="middle">Mews</text>
+
+      <!-- acquisition arrow -->
+      <polyline class="b-a b-cs" points="560,284 592,284 592,306 708,306 708,328" marker-end="url(#ma)"/>
+      <text class="b-l b-cr" x="640" y="301" text-anchor="middle">2025-10 被併購</text>
+
+      <!-- your column -->
+      <rect class="b-box b-core b-hs" x="812" y="50" width="290" height="370" rx="14"/>
+      <text class="b-fh b-hi" x="957" y="126" text-anchor="middle" style="font-size:17px">你 們</text>
+      <text class="b-t b-hi" x="957" y="164" text-anchor="middle">自家 PMS ＋ TMS</text>
+      <text class="b-s" x="957" y="196" text-anchor="middle">住客 QR · 員工任務 · 房況帳務</text>
+      <text class="b-s" x="957" y="216" text-anchor="middle">三層在同一家公司</text>
+      <line class="b-a b-hs" x1="852" y1="240" x2="1062" y2="240"/>
+      <text class="b-t b-hi" x="957" y="272" text-anchor="middle">零整合成本</text>
+      <text class="b-s" x="957" y="292" text-anchor="middle">不需談合作、不看別人 API 臉色</text>
+      <text class="b-s" x="957" y="312" text-anchor="middle">可以雙向寫房況與計費</text>
+      <line class="b-a b-cs b-dash" x1="852" y1="340" x2="1062" y2="340"/>
+      <text class="b-s b-cr" x="957" y="366" text-anchor="middle">但這個優勢只在</text>
+      <text class="b-s b-cr" x="957" y="384" text-anchor="middle">「客戶已經用你的 PMS」時成立</text>
+      <text class="b-s b-cr" x="957" y="402" text-anchor="middle">離開這個前提就歸零</text>
+    </svg>
+    </div>
+    <figcaption>
+      中間那層的五家全都<b>必須整合下面那層才能運作</b>——Flexkeeping 接 Mews、Cloudbeds、Oracle、Apaleo、Shiji、RMS，訂單資料一變就同步房況。
+      沒有資料主權的一層，最後會被擁有資料的那一層買走或碾壓，<b>紅色那條線就是這件事在 2025 年 10 月真的發生了</b>。
+      右邊的黃框是你們唯一真正的結構性優勢，而它底下那行紅字是這份分析最重要的一句話。
+    </figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">02 — 對位</p></div>
+  <h2>營運任務層：五家的實際差別</h2>
+  <p class="lede">這一層才是你的直接競品。PMS 那一層（Cloudbeds / Mews / Little Hotelier / RoomRaccoon）房務只是淺模組，下面分開談。</p>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>產品</th><th>主戰客群</th><th>定價</th><th>最強的地方</th><th>結構弱點</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="nm">Flexkeeping</td>
+          <td>小型到大型<br>歐洲起家</td>
+          <td class="pr">$2 / 使用者 / 月<br>起</td>
+          <td>跨部門最完整（房務＋工務＋櫃檯＋F&amp;B＋活動）。語音建單、200+ 語言自動翻譯。credit／分鐘派工與人力預測</td>
+          <td><span class="tag t-crit">已被 Mews 併購</span> 往後會跟著 Mews 的客戶群走，不會服務非 Mews 陣營</td>
+        </tr>
+        <tr>
+          <td class="nm">Optii</td>
+          <td>高端 / 度假村<br>upscale 以上</td>
+          <td class="pr">per-room / 月<br>不公開報價</td>
+          <td><b>ML 預測清潔時間</b>（依房客類型、住宿長度、房型、歷史）＋走動路線最佳化。宣稱 RA 產能 +20%、人力成本 −15%</td>
+          <td>價格保密（提案含保密條款）＝高單價分層議價。要達到效果需要夠多歷史資料</td>
+        </tr>
+        <tr>
+          <td class="nm">Quore</td>
+          <td>美國 select-service<br>連鎖品牌</td>
+          <td class="pr">依物件報價</td>
+          <td>依入住預測動態調整人力配置。深耕美國連鎖品牌標準流程</td>
+          <td>幾乎是美國市場專屬，品牌體系綁定深</td>
+        </tr>
+        <tr>
+          <td class="nm">Sweeply</td>
+          <td><b>小型旅館</b><br>歐洲（冰島／德國）</td>
+          <td class="pr">依可售房 / 月<br>使用者不限</td>
+          <td>20+ PMS 整合、<b>可不接 PMS 獨立跑</b>、新整合 2–3 週、24h 上線。定價模式對 SMB 最友善</td>
+          <td>規模極小（約 30 家物件）。功能淺，跨部門與工時分析弱</td>
+        </tr>
+        <tr>
+          <td class="nm">HotSOS<br><span style="font-weight:400;font-size:.8rem;color:var(--ink-3)">Amadeus</span></td>
+          <td>大型 / 集團<br>另有 Select 版</td>
+          <td class="pr">$20–45 / 使用者 / 月</td>
+          <td>企業級、175 國、部門最多。住客需求＋工單＋預防保養＋即時儀表板</td>
+          <td><span class="tag t-warn">最貴</span> 300 房配 100 位使用者＝每月 $2,000–4,500。導入重</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-top:34px">Sweeply 的整合清單（2026-09-11 查證）</h3>
+  <p class="lede" style="margin-top:10px">單獨拉出來看，因為它的整合策略直接影響下面那個結論。</p>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>項目</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td class="nm">官網具名的 PMS</td><td>Apaleo · Visbook · Mews · Oracle OPERA Cloud · Infor · Guestline · Cloudbeds · Guesty · Sihot · Clock PMS<br><span style="color:var(--ink-3)">官網稱「20+ 支援的 PMS」</span></td></tr>
+        <tr><td class="nm">第三方名錄補充</td><td>freetobook · HOTELTIME · VISIT · Noovy · Beds24 · Booking Factory · AeroGuest，以及住客層的 Duve</td></tr>
+        <tr><td class="nm">台灣／華語 PMS</td><td><span class="tag t-crit">一個都沒有</span> 連 Shiji 都不在清單上（Flexkeeping 有）</td></tr>
+        <tr><td class="nm">沒有支援的 PMS 呢</td><td><b>可以完全不接 PMS 獨立運作。</b>官網 FAQ 明說有旅館先從 Maintenance 模組單獨開始用，之後再補整合</td></tr>
+        <tr><td class="nm">新做一個 PMS 整合要多久</td><td><b>客戶確定要買之後，2–3 週</b></td></tr>
+        <tr><td class="nm">上線速度</td><td>已支援的 PMS，房間／訂單／房況 24 小時內同步上線</td></tr>
+        <tr><td class="nm">定價模式</td><td><b>依可售房數 × 月</b>。使用者數不限，走道／大廳／後場／員工區不計費。量大有折扣。AI agent 另計（per agent per property）</td></tr>
+        <tr><td class="nm">規模</td><td>歐洲約 28 家（冰島 12、德國 9）、北美 1、亞太 1。<b>非常早期</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout" style="margin-top:26px">
+    <p class="eyebrow">這裡要更正我自己前一版的說法</p>
+    <p>我前一版寫「台灣本地 PMS 不在整合清單上，<b>整合不了產品就進不來</b>」。查完 Sweeply 之後，<b>這個說法太強了。</b></p>
+    <p>兩個反證：一、Sweeply <b>可以完全不接 PMS 獨立運作</b>；二、要新做一個 PMS 整合，<b>客戶確定買之後只要 2–3 週</b>。所以整合不是牆，是摩擦。</p>
+    <p>剩下的真實障礙比較小但仍然存在：2–3 週是「<b>客戶先承諾之後</b>」才開始算，所以需要有台灣客戶先想要他們想要到願意簽——這是雞生蛋問題。而獨立運作模式會失去自動化價值（房況要手動維護），那正是我們第一天討論時否定掉的路線 C。</p>
+  </div>
+
+  <div class="callout warn" style="margin-top:20px">
+    <p class="eyebrow">台灣市場：查無公開資料，不要當成護城河</p>
+    <p>這五家在台灣的在地化、繁中介面、本地經銷，我查不到任何公開資訊。<b>這是「查無資料」，不是「確定沒有」。</b></p>
+    <p>可以合理推論的是：沒有任何一家的整合清單出現台灣或華語 PMS，亞太客戶數也極少（Sweeply 亞太 1 家）。<b>所以「他們現在不在這裡」大致成立，但「他們進不來」不成立。</b>進入台灣對他們是投報率問題，不是能力問題。</p>
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">03 — PMS 那一層</p></div>
+  <h2>他們的房務模組有多深</h2>
+  <p class="lede">Cloudbeds / Mews / Little Hotelier / RoomRaccoon 四家都有房務功能，但深度差很多——而且<b>這一層你們是既有玩家，不是挑戰者</b>。</p>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>PMS</th><th>房務模組現況</th><th>對你的意義</th></tr></thead>
+      <tbody>
+        <tr><td class="nm">Mews</td><td>整合房務、即時房況。<b>但房務行動版屬於加購訂閱</b>，不含在基本方案</td><td>買了 Flexkeeping 之後這塊會補強。<b>最該盯的一家</b></td></tr>
+        <tr><td class="nm">Cloudbeds</td><td>有房務模組，但比較評測指出<b>僅有基本房況、沒有專屬房務 App</b></td><td>深度不足 → 這正是 Flexkeeping 這類產品存在的空間</td></tr>
+        <tr><td class="nm">RoomRaccoon</td><td>房務行事曆與通知</td><td>中小型全包型，深度有限</td></tr>
+        <tr><td class="nm">Little Hotelier</td><td>小型旅館用的基本房況與清潔提醒</td><td>最淺。這一層確認了中小型市場的房務工具是空的</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="body-col" style="margin-top:22px">
+    <p><b>這張表的重點不是誰強誰弱，是一個模式：</b>PMS 廠商的房務模組普遍停在「房況顯示」，<b>沒有走到派工最佳化與工時量測</b>，而且行動端常常要加購。這是整個營運任務層存在的理由。</p>
+    <p>但 Mews 買下 Flexkeeping 代表<b>這個空間正在被收斂</b>。三年內，「PMS 自帶像樣的房務模組」大概會變成標配——你們如果要做，時間窗不是無限的。</p>
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">04 — 差異化</p></div>
+  <h2>你真正不一樣的地方，按強度排序</h2>
+
+  <div class="moats">
+    <div class="moat" style="--mc:var(--ok)">
+      <div class="moat-hd"><span class="r">01</span><span class="t">你們同時擁有 PMS 與任務層</span><span class="str"><span class="tag t-ok">結構性 · 最強</span></span></div>
+      <p class="w">上面那五家<b>每一家都是一個必須整合的夾層</b>。他們要談合作、要看別人的 API 臉色、要承擔整合壞掉的風險、而且永遠拿不到訂單與帳務資料。<b>Flexkeeping 被 Mews 買走就是這個結構的必然結果。</b></p>
+      <p class="w">你們從他們的終點出發：零整合成本、單一供應商責任、可以直接雙向寫房況與 minibar 計費而不需要任何合作協議、bundle 定價可以低到他們追不上。</p>
+      <p class="risk">風險：這條優勢<b>百分之百建立在「客戶已經在用你們的 PMS」</b>。離開這個前提，你就只是一個沒人聽過的台灣 task 工具在跟 Optii 比功能表。</p>
+    </div>
+
+    <div class="moat" style="--mc:var(--ok)">
+      <div class="moat-hd"><span class="r">02</span><span class="t">員工端在 LINE 上，不是 App</span><span class="str"><span class="tag t-ok">在地 · 難複製</span></span></div>
+      <p class="w">這不是「翻譯成中文」，是<b>通道不同</b>。歐美產品的員工端預設是自家 App 或 WhatsApp／Slack；台灣、日本、泰國的旅宿員工整天都在 LINE 上。</p>
+      <p class="w">要 Optii 或 Quore 為台灣市場重做一個 LINE LIFF 員工端，<b>投資報酬率對他們不成立</b>——市場太小。這是典型的在地護城河：不是技術難，是對方不值得做。</p>
+      <p class="risk">風險：LINE 推播有訊息量費用，且員工要加官方帳號為好友。成本模型與 web 備援要先算清楚（已列在待決事項）。</p>
+    </div>
+
+    <div class="moat" style="--mc:var(--brass)">
+      <div class="moat-hd"><span class="r">03</span><span class="t">業務履約報告</span><span class="str"><span class="tag t-warn">真實但未驗證</span></span></div>
+      <p class="w">公司戶合約承諾 → 入住前自動展開跨部門任務 → 退房後產出履約報告。<b>這需要同時握有任務軌跡（營運層）與合約／corporate account（PMS 層）。</b></p>
+      <p class="w">Flexkeeping、HotSOS 有任務軌跡但沒有合約資料；PMS 有合約但沒有任務軌跡。<b>只有跨兩層的人做得出來。</b>這條在我更正掉工時那條之後，變成你功能面最站得住的差異化。</p>
+      <p class="risk">風險：完全沒有客戶驗證過。四五星業務是否真的會用這份報告去談續約，是假設不是事實。</p>
+    </div>
+
+    <div class="moat" style="--mc:var(--brass)">
+      <div class="moat-hd"><span class="r">04</span><span class="t">定價帶與導入成本</span><span class="str"><span class="tag t-warn">可被跟進</span></span></div>
+      <p class="w">HotSOS $20–45／使用者／月，300 房配 100 位使用者就是每月 $2,000–4,500。Optii per-room 且價格保密。<b>台灣四五星付這個價會很痛，而你可以用 PMS 客戶的 bundle 價進場。</b></p>
+      <p class="w"><b>但 Sweeply 的模式要小心：</b>依可售房計費、使用者不限、後場與走道不計費。對 300 房配 100 員工的飯店，這比 per-user 便宜一個量級，而且可預測。<b>你的定價設計應該對標 Sweeply 的模式，不是對標 HotSOS 的。</b></p>
+      <p class="risk">風險：價格優勢是最容易被跟進的，而且已經有人（Sweeply）用更友善的模式在做。競品降價或推 lite 版就沒了。<b>絕對不要把它當成核心敘事。</b></p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:38px">以下這些不要當成賣點</h3>
+  <p class="lede" style="margin-top:10px">拿去跟客戶講，對方只要有做過功課就會反問「Optii 也有啊」。</p>
+  <div class="nots">
+    <div class="not"><span class="t">工時量測</span><span class="w">Optii 用 ML 預測 + 實測校正，做得比你深。這是標配。</span></div>
+    <div class="not"><span class="t">派工最佳化 / 樓層聚合</span><span class="w">Optii 的走動路線最佳化就是這個，而且更成熟。</span></div>
+    <div class="not"><span class="t">人力預測</span><span class="w">Quore 依入住預測調整人力，Flexkeeping 也有 staffing forecast。</span></div>
+    <div class="not"><span class="t">數位 checklist / SOP</span><span class="w">五家全都有，十年前就有。</span></div>
+    <div class="not"><span class="t">跨部門任務與轉單</span><span class="w">Flexkeeping 與 HotSOS 的核心功能。</span></div>
+    <div class="not"><span class="t">住客 QR 提需求</span><span class="w">Duve / Canary / Akia / HiJiffy 整層都在做，HotSOS 也含 guest request。</span></div>
+  </div>
+
+  <div class="callout" style="margin-top:28px">
+    <p class="eyebrow">功能比較表你一定會輸</p>
+    <p>Optii 做這件事超過十年，Flexkeeping 從 2012 年開始，HotSOS 更久。<b>你是 v0。</b>任何逐項打勾的功能比較表，你都會被比下去。</p>
+    <p>所以銷售敘事不能建立在功能上，要建立在<b>「我們是同一家公司、你已經在用我們、零整合、繁中與 LINE、在地支援」</b>——這些是他們無法在比較表上反駁的。</p>
+  </div>
+</section>
+
+<section>
+  <div class="s-head"><p class="eyebrow">05 — 結論</p></div>
+  <h2>這份分析回答了那個未決問題</h2>
+  <div class="callout ok">
+    <p class="eyebrow">第一市場不是偏好問題，是唯一可行的問題</p>
+    <p>你昨天留著沒決定的是：<b>先打現有四五星 PMS 客戶，還是先打中小型旅宿。</b></p>
+    <p>競品地圖給出的答案很清楚：<b>你唯一的結構性優勢（差異化 01）只在客戶已經使用你們 PMS 時存在。</b>離開這個前提，你在跟 Optii、Flexkeeping、HotSOS 比功能，而你是 v0。</p>
+    <p>所以第一市場<b>必須</b>是現有四五星 PMS 客戶。這不是因為它比較好賣，是因為<b>另一條路上你沒有任何結構性優勢。</b></p>
+  </div>
+
+  <div class="body-col" style="margin-top:26px">
+    <h3>那中小型旅宿呢</h3>
+    <p>那個市場<b>確實是空的</b>——Flexkeeping 進不來（沒有可整合的 PMS）、HotSOS 太貴、Optii 定位太高端，只有 Sweeply 瞄準小型旅館。</p>
+    <p>但你在那裡<b>同樣沒有 PMS 優勢</b>（那些客戶不用你們的 PMS），而且要自帶輕量 PMS 才能拿到房況。所以它是<b>第二市場</b>，而且進入條件是「先在四五星把產品做熟，再往下做一個簡化版」——不是反過來。</p>
+    <p><b>時間壓力：</b>Mews 買下 Flexkeeping 代表 PMS 自帶像樣房務模組正在變成標配。你們作為 PMS 廠商做這件事是順勢而為，但窗口不是無限的。</p>
+  </div>
+</section>
+
+<footer>
+  資料來源與查證日期 2026-09-11：
+  <a href="https://hoteltechreport.com/operations/housekeeping-software">Hotel Tech Report — Housekeeping Software</a> ·
+  <a href="https://www.optiisolutions.com/housekeeping">Optii Housekeeping</a> ·
+  <a href="https://6hoteliers.com/housekeeping/optii-review/">Optii 第三方實測（6hoteliers, 2026）</a> ·
+  <a href="https://hoteltechreport.com/operations/housekeeping-software/flexkeeping-housekeeping">Flexkeeping on HTR</a> ·
+  <a href="https://www.vestbee.com/insights/articles/mews-acquires-fkexkeeping">Mews 併購 Flexkeeping（Vestbee）</a> ·
+  <a href="https://www.amadeus-hospitality.com/service-optimization-software/hotsos/">Amadeus HotSOS</a> ·
+  <a href="https://softwarefinder.com/hotel-management/amadeus-hotsos">HotSOS 定價估算</a> ·
+  <a href="https://hoteltechreport.com/operations/housekeeping-software/sweeply-housekeeping">Sweeply on HTR</a> ·
+  <a href="https://getsweeply.com/platform">Sweeply Platform（整合清單與定價）</a> ·
+  <a href="https://www.cloudbeds.com/integrations/sweeply/">Sweeply on Cloudbeds Marketplace</a>
+  <br><br>
+  <b>可信度說明：</b>定價多為第三方估算或「起價」，Optii 與 Quore 不公開報價，實際數字需向供應商索取。
+  台灣在地化與經銷狀況<b>查無公開資料</b>，本文未對此下結論——請以直接詢問供應商或同業查證為準。
+  競品功能與定位隨時會變，本文為 2026-09-11 的快照。
+</footer>
+
+</div>

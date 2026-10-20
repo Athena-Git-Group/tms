@@ -1,0 +1,14 @@
+api: tenant-configs
+schema_version: "3.3"
+entity: tenant_config
+title: 租戶設定 API
+description: 封閉鍵集合的讀寫（含住客資訊頁 guest-home 的前台讀取面）；sop_items/inspection_items 兩鍵為 sop_items 表的門面。
+
+exposes:
+  standard: [list, update]
+  operations:
+    - { name: guest_home, method: GET, path: "/guest-home" }
+
+source_evidence:
+  - "specify/spec.md#故事 16（租戶設定）與故事 1 的資訊頁讀取"
+  - "db_table/erm.dbml#Table:tenant_config"

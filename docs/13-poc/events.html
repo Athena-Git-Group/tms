@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMS 事件流水帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/styles.css">
+<style>
+  body { font-family: var(--font-mono); }
+  .events-wrap { max-width: 1040px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .events-intro { font-family: var(--font-body); font-size: 13.5px; color: var(--color-ink-muted); margin: 0; }
+  .filter-bar { display: flex; gap: 8px; align-items: center; }
+  .filter-bar input { flex: 1; font-family: var(--font-mono); font-size: 13px; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
+  .filter-bar .count { font-size: 12px; color: var(--color-ink-faint); white-space: nowrap; }
+
+  table.log { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.log th { text-align: left; padding: 8px 10px; color: var(--color-ink-faint); font-weight: 600; border-bottom: 1px solid var(--color-line); position: sticky; top: 0; background: var(--color-surface); }
+  table.log td { padding: 8px 10px; border-bottom: 1px solid var(--color-line); vertical-align: top; white-space: nowrap; }
+  table.log td.payload { white-space: normal; color: var(--color-ink-muted); max-width: 360px; }
+  table.log tr:hover td { background: var(--color-surface-sunken); }
+  .ev-type { font-weight: 700; color: var(--color-accent-strong); }
+</style>
+</head>
+<body>
+
+<div class="tms-topbar">
+  <span class="tms-brand">
+    <span class="tms-brand-mark">TMS</span>
+    <span class="tms-brand-role">事件流水帳</span>
+  </span>
+  <div class="tms-topbar-actions">
+    <a class="btn btn-secondary" href="index.html">回導覽頁</a>
+    <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
+  </div>
+</div>
+
+<div class="events-wrap">
+  <p class="events-intro">
+    append-only 事件流：<code>task_events</code> 才是真相，<code>tasks</code> 只是從事件推出來的投影。
+    下面依時間倒序列出所有寫入，可用右側篩選框快速找房號、人名或事件類型。
+  </p>
+  <div class="filter-bar">
+    <input type="text" id="filter-input" placeholder="篩選：房號 / 人名 / 事件類型，例如 301、inspect_fail、小美">
+    <span class="count" id="result-count"></span>
+  </div>
+  <div class="scroll-x">
+    <table class="log">
+      <thead>
+        <tr><th>時間</th><th>角色</th><th>事件</th><th>任務 / 房號</th><th>內容摘要</th></tr>
+      </thead>
+      <tbody id="log-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="shared/seed.js"></script>
+<script src="shared/engine.js"></script>
+<script src="shared/components.js"></script>
+<script>
+(function () {
+  var C = TMS_COMPONENTS, E = TMS_ENGINE;
+
+  function roomFor(state, taskId) {
+    if (taskId === 'settings') return '租戶設定';
+    if (taskId === 'schedule') return '排房';
+    var t = E.findTask(state, taskId);
+    return t ? t.roomNo + ' 號房' : taskId;
+  }
+
+  function summarize(payload) {
+    try {
+      var s = JSON.stringify(payload);
+      return s.length > 80 ? s.slice(0, 80) + '…' : s;
+    } catch (e) { return ''; }
+  }
+
+  function matchesFilter(row, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return row.some(function (cell) { return String(cell).toLowerCase().indexOf(q) !== -1; });
+  }
+
+  function renderAll() {
+    var state = E.getState();
+    var q = document.getElementById('filter-input').value.trim();
+    var rows = state.events.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (ev) {
+      var time = new Date(ev.ts).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      var target = roomFor(state, ev.taskId);
+      return [time, ev.actor, ev.type, target, summarize(ev.payload)];
+    });
+
+    var filtered = rows.filter(function (r) { return matchesFilter(r, q); });
+    document.getElementById('result-count').textContent = filtered.length + ' / ' + rows.length + ' 筆';
+
+    var tbody = document.getElementById('log-body');
+    tbody.innerHTML = '';
+    if (!filtered.length) {
+      var tr = document.createElement('tr');
+      var td = document.createElement('td');
+      td.colSpan = 5;
+      td.appendChild(C.emptyState('沒有符合條件的事件'));
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+    filtered.forEach(function (r) {
+      var tr = document.createElement('tr');
+      [r[0], r[1], null, r[3], null].forEach(function (val, idx) {
+        var td = document.createElement('td');
+        if (idx === 2) { td.className = 'ev-type'; td.textContent = r[2]; }
+        else if (idx === 4) { td.className = 'payload'; td.textContent = r[4]; }
+        else { td.textContent = val; }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('filter-input').addEventListener('input', renderAll);
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    E.resetAll();
+    C.toast('已重置示範資料', 'success');
+  });
+
+  renderAll();
+  E.subscribe(renderAll);
+})();
+</script>
+</body>
+</html>
