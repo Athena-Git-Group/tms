@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1172 720" width="1172" height="720" data-generator="fireworks-tech-graph" data-schema-version="1" data-text-metrics="heuristic-v1" data-style-id="11" data-visual-theme="Event Transit" data-diagram-type="event_stream" data-motion-scene="" data-semantic-profile="event-transit" data-semantic-valid="true" data-quality-profile="showcase" data-max-bends-per-edge="2" data-max-total-bends="8" data-max-route-stretch="1.35" data-max-bridged-crossings="0" data-min-node-gap="40.0" data-min-container-gutter="20.0" data-min-label-clearance="4.0" data-min-segment-length="16.0">
+  <defs>
+    <marker id="arrowA" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#e4475b"/>
+    </marker>
+    <marker id="arrowB" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#00897b"/>
+    </marker>
+    <marker id="arrowC" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowE" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#f59e0b"/>
+    </marker>
+    <marker id="arrowF" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrowG" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#c62828"/>
+    </marker>
+    <marker id="arrowH" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
+      <polygon points="0 0, 12 4.5, 0 9" fill="#7a746a"/>
+    </marker>
+    <pattern id="transitDots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="0.9" fill="#8d867b" fill-opacity="0.12"/>
+    </pattern>
+    <style>
+    text { font-family: 'Avenir Next', Avenir, 'Segoe UI', 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif; }
+    .title { font-size: 27px; font-weight: 700; fill: #17213c; }
+    .subtitle { font-size: 13px; font-weight: 500; fill: #6e6a61; }
+    .section { font-size: 13px; font-weight: 700; fill: #514c43; letter-spacing: 1.4px; }
+    .section-sub { font-size: 12px; font-weight: 500; fill: #6d665c; }
+    .node-title { font-weight: 700; fill: #17213c; }
+    .node-sub { font-weight: 500; fill: #5e5a52; }
+    .node-type { font-size: 10px; font-weight: 700; fill: #7a746a; letter-spacing: 0.08em; }
+    .arrow-label { font-size: 12px; font-weight: 600; fill: #4b5563; }
+    .legend { font-size: 12px; font-weight: 500; fill: #5e5a52; }
+    .footnote { font-size: 12px; font-weight: 500; fill: #6d665c; }
+    .metric-label { font-size: 8.5px; font-weight: 700; fill: #6d665c; text-transform: uppercase; }
+    .metric-value { font-size: 9.5px; font-weight: 700; fill: #17213c; }
+    </style>
+  </defs>
+  <rect data-graph-role="background" width="1172.0" height="720.0" fill="#fbf7ee"/>
+  <rect data-graph-role="decoration" width="1172.0" height="720.0" fill="url(#transitDots)"/>
+  <text x="48.0" y="48" text-anchor="start" class="title">一個 Request 從進站到 SSE 推播</text>
+  <text x="48.0" y="72" text-anchor="start" class="subtitle">狀態變更與事件同交易落庫，Outbox Relay 發 Kafka，SSE consumer 廣播到瀏覽器</text>
+  <g id="style-signature" data-graph-role="decoration" data-style-signature="event-metro-map">
+    <rect x="898.0" y="22.0" width="226.0" height="34.0" rx="7" fill="#17213c" stroke="#514c43" stroke-width="1"/>
+    <line x1="910.0" y1="39.0" x2="934.0" y2="39.0" stroke="#e4475b" stroke-width="3"/>
+    <circle cx="916.0" cy="39.0" r="4" fill="#fbf7ee" stroke="#e4475b" stroke-width="2"/>
+    <circle cx="929.0" cy="39.0" r="4" fill="#fbf7ee" stroke="#e4475b" stroke-width="2"/>
+    <text data-full-text="TMS · EVENT METRO" x="944.0" y="36.0" font-size="8.5" font-weight="800" fill="#ffffff">TMS · EVENT METRO</text>
+    <text data-full-text="2 TOPIC LINES · DECLARED STOPS" x="944.0" y="49.0" font-size="8" font-weight="700" fill="#f3d5d9">2 TOPIC LINES · DECLARED STOPS</text>
+  </g>
+  <g id="task-events-line" data-graph-role="container" data-container-id="task-events-line" data-semantic-role="boundary" data-graph-bounds="35,140,1137,550">
+  <rect data-graph-role="container" x="35.0" y="140.0" width="1102.0" height="410.0" rx="16.0" fill="rgba(255,255,255,0.38)" stroke="#d4cbbb" stroke-width="1.4" stroke-dasharray="4 5"/>
+  <line data-graph-role="decoration" x1="53.0" y1="174.0" x2="1119.0" y2="174.0" stroke="#d4cbbb" stroke-width="1" stroke-dasharray="2 7" opacity="0.35"/>
+  <text x="53.0" y="164.0" class="section">LINE 1 · TMS.TASK-EVENTS</text>
+  <text x="53.0" y="184.0" class="section-sub">key = task:&lt;uuid&gt; · 同 key 串行 · 每實例獨立 group（廣播）</text>
+    <rect id="task-events-line-header" data-graph-role="reserved" data-reserved-kind="container-header" x="43" y="146" width="380.64" height="54" fill="none" stroke="none"/>
+  </g>
+  <path id="rail-01-rail-casing" data-graph-role="decoration" data-owner="rail-01" d="M 210,297 L 278,297" fill="none" stroke="#514c43" stroke-width="6.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.28"/>
+  <path id="rail-01" data-graph-role="edge" data-edge-id="rail-01" data-source="rest-api" data-target="task-engine" data-edge-kind="rail" data-topic-id="tms.task-events" data-flow="control" data-motion-role="topic-rail" data-motion-stage="1" data-motion-order="0" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 210,297 L 278,297" fill="none" stroke="#e4475b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowA)"/>
+  <path id="rail-01-direction" data-graph-role="decoration" data-owner="rail-01" d="M 240.5 293.5 L 245.5 297.0 L 240.5 300.5" fill="none" stroke="#fbf7ee" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="rail-12-rail-casing" data-graph-role="decoration" data-owner="rail-12" d="M 428,297 L 496,297" fill="none" stroke="#514c43" stroke-width="6.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.28"/>
+  <path id="rail-12" data-graph-role="edge" data-edge-id="rail-12" data-source="task-engine" data-target="outbox-relay" data-edge-kind="rail" data-topic-id="tms.task-events" data-flow="control" data-motion-role="topic-rail" data-motion-stage="2" data-motion-order="0" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 428,297 L 496,297" fill="none" stroke="#e4475b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowA)"/>
+  <path id="rail-12-direction" data-graph-role="decoration" data-owner="rail-12" d="M 458.5 293.5 L 463.5 297.0 L 458.5 300.5" fill="none" stroke="#fbf7ee" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="rail-23-rail-casing" data-graph-role="decoration" data-owner="rail-23" d="M 646,297 L 714,297" fill="none" stroke="#514c43" stroke-width="6.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.28"/>
+  <path id="rail-23" data-graph-role="edge" data-edge-id="rail-23" data-source="outbox-relay" data-target="sse-consumer" data-edge-kind="rail" data-topic-id="tms.task-events" data-flow="control" data-motion-role="topic-rail" data-motion-stage="3" data-motion-order="0" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 646,297 L 714,297" fill="none" stroke="#e4475b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowA)"/>
+  <path id="rail-23-direction" data-graph-role="decoration" data-owner="rail-23" d="M 676.5 293.5 L 681.5 297.0 L 676.5 300.5" fill="none" stroke="#fbf7ee" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="rail-34-rail-casing" data-graph-role="decoration" data-owner="rail-34" d="M 864,297 L 932,297" fill="none" stroke="#514c43" stroke-width="6.0" stroke-linecap="round" stroke-linejoin="round" opacity="0.28"/>
+  <path id="rail-34" data-graph-role="edge" data-edge-id="rail-34" data-source="sse-consumer" data-target="sse-push" data-edge-kind="rail" data-topic-id="tms.task-events" data-flow="control" data-motion-role="topic-rail" data-motion-stage="4" data-motion-order="0" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 864,297 L 932,297" fill="none" stroke="#e4475b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowA)"/>
+  <path id="rail-34-direction" data-graph-role="decoration" data-owner="rail-34" d="M 894.5 293.5 L 899.5 297.0 L 894.5 300.5" fill="none" stroke="#fbf7ee" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="to-failed" data-graph-role="edge" data-edge-id="to-failed" data-source="outbox-relay" data-target="outbox-failed" data-edge-kind="dead_letter" data-topic-id="outbox.failed" data-flow="feedback" data-motion-role="dead-letter" data-motion-stage="5" data-motion-order="0" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 571,336 L 571,430" fill="none" stroke="#c62828" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowG)" stroke-dasharray="6,4"/>
+  <path id="to-registry" data-graph-role="edge" data-edge-id="to-registry" data-source="sse-consumer" data-target="conn-registry" data-edge-kind="state" data-topic-id="tms.task-events" data-flow="write" data-motion-role="state-project" data-motion-stage="5" data-motion-order="1" data-protocol="" data-via="" data-critical-path-id="" data-critical-hop="" data-critical-hops="" data-critical="false" data-bends="0" data-route-stretch="1.0" data-bridges="" d="M 789,336 L 789,430" fill="none" stroke="#00897b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrowB)"/>
+  <g id="node-rest-api" data-graph-role="node" data-node-id="rest-api" data-semantic-role="producer" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="tms.task-events" data-span-id="" data-station-order="0" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="60,258,210,336">
+  <rect x="60.0" y="258.0" width="150.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#e4475b" stroke-width="1.6"/>
+  <circle cx="78.0" cy="297.0" r="8" fill="#fbf7ee" stroke="#e4475b" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="REST 請求" x="96.0" y="296.0" text-anchor="start" class="node-title" font-size="13.5">REST 請求</text>
+  <text data-text-role="subtitle" data-full-text="desk·staff·guest" x="96.0" y="316.0" text-anchor="start" class="node-sub" font-size="9.97">desk·staff·guest</text>
+  <text data-graph-role="decoration" x="78.0" y="299.5" text-anchor="middle" font-size="7" font-weight="800" fill="#e4475b">01</text>
+  <rect x="148.57999999999998" y="264.0" width="51.42" height="15" rx="7.5" fill="#e4475b" opacity="0.13"/>
+  <text x="174.29" y="274.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#e4475b">idem-key</text>
+  </g>
+  <g id="node-task-engine" data-graph-role="node" data-node-id="task-engine" data-semantic-role="station" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="tms.task-events" data-span-id="" data-station-order="1" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="278,258,428,336">
+  <rect x="278.0" y="258.0" width="150.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#e4475b" stroke-width="1.6"/>
+  <circle cx="296.0" cy="297.0" r="8" fill="#fbf7ee" stroke="#e4475b" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="TaskEngine" x="314.0" y="296.0" text-anchor="start" class="node-title" font-size="13.5">TaskEngine</text>
+  <text data-text-role="subtitle" data-full-text="@Transactional" x="314.0" y="316.0" text-anchor="start" class="node-sub" font-size="11.5">@Transactional</text>
+  <text data-graph-role="decoration" x="296.0" y="299.5" text-anchor="middle" font-size="7" font-weight="800" fill="#e4475b">02</text>
+  <rect x="384.0" y="264.0" width="34.0" height="15" rx="7.5" fill="#e4475b" opacity="0.13"/>
+  <text x="401.0" y="274.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#e4475b">seq</text>
+  </g>
+  <g id="node-outbox-relay" data-graph-role="node" data-node-id="outbox-relay" data-semantic-role="station" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="tms.task-events" data-span-id="" data-station-order="2" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="496,258,646,336">
+  <rect x="496.0" y="258.0" width="150.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#e4475b" stroke-width="1.6"/>
+  <circle cx="514.0" cy="297.0" r="8" fill="#fbf7ee" stroke="#e4475b" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="Outbox Relay" x="532.0" y="296.0" text-anchor="start" class="node-title" font-size="13.5">Outbox Relay</text>
+  <text data-text-role="subtitle" data-full-text="每 2s 輪詢" x="532.0" y="316.0" text-anchor="start" class="node-sub" font-size="11.5">每 2s 輪詢</text>
+  <text data-graph-role="decoration" x="514.0" y="299.5" text-anchor="middle" font-size="7" font-weight="800" fill="#e4475b">03</text>
+  <rect x="581.34" y="264.0" width="54.660000000000004" height="15" rx="7.5" fill="#e4475b" opacity="0.13"/>
+  <text x="608.67" y="274.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#e4475b">lease 60s</text>
+  </g>
+  <g id="node-sse-consumer" data-graph-role="node" data-node-id="sse-consumer" data-semantic-role="station" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="tms.task-events" data-span-id="" data-station-order="3" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="714,258,864,336">
+  <rect x="714.0" y="258.0" width="150.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#e4475b" stroke-width="1.6"/>
+  <circle cx="732.0" cy="297.0" r="8" fill="#fbf7ee" stroke="#e4475b" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="SSE Consumer" x="750.0" y="296.0" text-anchor="start" class="node-title" font-size="13.5">SSE Consumer</text>
+  <text data-text-role="subtitle" data-full-text="@KafkaListener" x="750.0" y="316.0" text-anchor="start" class="node-sub" font-size="11.43">@KafkaListener</text>
+  <text data-graph-role="decoration" x="732.0" y="299.5" text-anchor="middle" font-size="7" font-weight="800" fill="#e4475b">04</text>
+  <rect x="807.44" y="264.0" width="46.56" height="15" rx="7.5" fill="#e4475b" opacity="0.13"/>
+  <text x="830.72" y="274.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#e4475b">lag 監測</text>
+  </g>
+  <g id="node-sse-push" data-graph-role="node" data-node-id="sse-push" data-semantic-role="consumer" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="tms.task-events" data-span-id="" data-station-order="4" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="932,258,1112,336">
+  <rect x="932.0" y="258.0" width="180.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#e4475b" stroke-width="1.6"/>
+  <circle cx="950.0" cy="297.0" r="8" fill="#fbf7ee" stroke="#e4475b" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="SSE 推播" x="968.0" y="296.0" text-anchor="start" class="node-title" font-size="13.5">SSE 推播</text>
+  <text data-text-role="subtitle" data-full-text="Guest / Staff 瀏覽器" x="968.0" y="316.0" text-anchor="start" class="node-sub" font-size="11.5">Guest / Staff 瀏覽器</text>
+  <text data-graph-role="decoration" x="950.0" y="299.5" text-anchor="middle" font-size="7" font-weight="800" fill="#e4475b">05</text>
+  <rect x="1068.0" y="264.0" width="34.0" height="15" rx="7.5" fill="#e4475b" opacity="0.13"/>
+  <text x="1085.0" y="274.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#e4475b">廣播</text>
+  </g>
+  <g id="node-outbox-failed" data-graph-role="node" data-node-id="outbox-failed" data-semantic-role="dlq" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="outbox.failed" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="496,430,646,508">
+  <rect x="496.0" y="430.0" width="150.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#c62828" stroke-width="1.6" stroke-dasharray="5 3"/>
+  <circle cx="514.0" cy="469.0" r="8" fill="#fbf7ee" stroke="#c62828" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="Outbox failed" x="532.0" y="468.0" text-anchor="start" class="node-title" font-size="13.5">Outbox failed</text>
+  <text data-text-role="subtitle" data-full-text="DB 標記 · 人工處理" x="532.0" y="488.0" text-anchor="start" class="node-sub" font-size="10.49">DB 標記 · 人工處理</text>
+  <path data-graph-role="decoration" d="M 511.0 466.0 L 517.0 472.0 M 517.0 466.0 L 511.0 472.0" stroke="#c62828" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="597.54" y="436.0" width="38.46" height="15" rx="7.5" fill="#c62828" opacity="0.13"/>
+  <text x="616.77" y="446.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#c62828">8 次後</text>
+  </g>
+  <g id="node-conn-registry" data-graph-role="node" data-node-id="conn-registry" data-semantic-role="state_store" data-motion-role="" data-motion-stage="" data-motion-order="" data-parent="" data-deployment-id="" data-topic-id="tms.task-events" data-span-id="" data-station-order="" data-status="" data-start-ms="" data-duration-ms="" data-parent-span="" data-graph-bounds="714,430,864,508">
+  <rect x="714.0" y="430.0" width="150.0" height="78.0" rx="39.0" fill="#fffdf8" stroke="#00897b" stroke-width="1.6"/>
+  <circle cx="732.0" cy="469.0" r="8" fill="#fbf7ee" stroke="#00897b" stroke-width="2.4"/>
+  <text data-text-role="title" data-full-text="連線 Registry" x="750.0" y="468.0" text-anchor="start" class="node-title" font-size="13.5">連線 Registry</text>
+  <text data-text-role="subtitle" data-full-text="stream_pos·去重" x="750.0" y="488.0" text-anchor="start" class="node-sub" font-size="11.04">stream_pos·去重</text>
+  <rect data-graph-role="decoration" x="728.5" y="465.5" width="7" height="7" rx="1.2" fill="none" stroke="#00897b" stroke-width="1.5"/>
+  <rect x="805.1" y="436.0" width="48.9" height="15" rx="7.5" fill="#00897b" opacity="0.13"/>
+  <text x="829.55" y="446.5" text-anchor="middle" font-size="8.2" font-weight="800" fill="#00897b">心跳 15s</text>
+  </g>
+  <g id="legend" data-graph-role="legend">
+    <rect id="legend-zone" data-graph-role="reserved" data-reserved-kind="legend" x="38" y="596" width="396.08" height="46" rx="10" fill="none" stroke="none"/>
+    <line data-graph-role="decoration" x1="48.0" y1="610.0" x2="78.0" y2="610.0" stroke="#e4475b" stroke-width="2.8" marker-end="url(#arrowA)"/>
+    <text data-graph-role="decoration" x="88.0" y="614.0" class="legend">事件主線</text>
+    <line data-graph-role="decoration" x1="164.0" y1="610.0" x2="194.0" y2="610.0" stroke="#00897b" stroke-width="2.8" marker-end="url(#arrowB)"/>
+    <text data-graph-role="decoration" x="204.0" y="614.0" class="legend">連線狀態</text>
+    <line data-graph-role="decoration" x1="280.0" y1="610.0" x2="310.0" y2="610.0" stroke="#c62828" stroke-width="2.8" marker-end="url(#arrowG)"/>
+    <text data-graph-role="decoration" x="320.0" y="614.0" class="legend">outbox 重試耗盡</text>
+  </g>
+  <g id="footer" data-graph-role="reserved" data-graph-bounds="48,683,363,699">
+  <text x="48.0" y="695.0" class="footnote">TMS · 業務程式不直接發 Kafka，一律經 Transactional Outbox</text>
+  </g>
+</svg>

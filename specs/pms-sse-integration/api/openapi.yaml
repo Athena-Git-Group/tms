@@ -1,0 +1,228 @@
+openapi: 3.0.3
+info:
+  title: TMS PMS 整合 API
+  version: 1.0.0
+servers:
+- url: /api/v1
+tags:
+- name: PMS 整合 API
+  description: |
+    PMS（M2M，X-API-Key 認證）出站訂閱房況：cursor 增量拉取 + SSE 即時流。 傳遞語意 at-least-once，去重鍵 (task_id, seq)。認證、查詢參數（after/limit/cursor） 與 text/event-stream 內容型別超出本版 transpiler 能力，契約以 spec.md FR-103/201/202/203/301/302 為準；openapi.yaml 只承載路徑、動詞與狀態碼骨架。
+paths:
+  /integration/pms/events:
+    get:
+      operationId: integrationPmsEvents
+      summary: pms events
+      tags:
+      - PMS 整合 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /integration/pms/stream:
+    get:
+      operationId: integrationPmsStream
+      summary: pms stream
+      tags:
+      - PMS 整合 API
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+        '409':
+          $ref: '#/components/responses/Conflict'
+components:
+  schemas:
+    Error:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          example: VALIDATION_FAILED
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              issue:
+                type: string
+    integration_api_keys:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UuidV7（團隊代理鍵慣例）
+        tenantId:
+          type: integer
+          format: int64
+          description: FK → tenants；RLS 隔離鍵
+        name:
+          type: string
+          description: 營運命名；同租戶可重名（假設 A6：輪替重疊期必然同名），不設 (tenant_id, name) 唯一
+        keyPrefix:
+          type: string
+          description: 明文前 16 字，僅供營運肉眼對帳，不參與驗證（FR-102）
+        keyHash:
+          type: string
+          description: SHA-256(明文全字串) 的 64 字 hex；唯一熱查詢鍵（FR-102）。明文 tmsik_<tenantId>_<43 字 base64url> 不落庫
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+          description: NULL = active；非空 = revoked（單向、不可逆、不復活，FR-107）。active 為 derived，不落欄
+        cREATE:
+          type: string
+      required:
+      - id
+      - tenantId
+      - name
+      - keyPrefix
+      - keyHash
+      - createdAt
+    integration_api_keysRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          description: FK → tenants；RLS 隔離鍵
+        name:
+          type: string
+          description: 營運命名；同租戶可重名（假設 A6：輪替重疊期必然同名），不設 (tenant_id, name) 唯一
+        keyPrefix:
+          type: string
+          description: 明文前 16 字，僅供營運肉眼對帳，不參與驗證（FR-102）
+        keyHash:
+          type: string
+          description: SHA-256(明文全字串) 的 64 字 hex；唯一熱查詢鍵（FR-102）。明文 tmsik_<tenantId>_<43 字 base64url> 不落庫
+        revokedAt:
+          type: string
+          format: date-time
+          description: NULL = active；非空 = revoked（單向、不可逆、不復活，FR-107）。active 為 derived，不落欄
+        cREATE:
+          type: string
+      required:
+      - tenantId
+      - name
+      - keyPrefix
+      - keyHash
+    tenants:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 既有；IDENTITY 從 1 起跳
+      required:
+      - id
+    tenantsRequest:
+      type: object
+      properties: {}
+    task_events:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 既有 IDENTITY。本版起兼任整合 cursor（FR-202）；對 PMS 為不透明十進位字串
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int32
+          description: (tenant_id, task_id, seq) 唯一（uq_task_events_task_seq）＝整合去重鍵素材
+        type:
+          type: string
+          description: 白名單對映（程式常數，v1 僅 inspection_passed）決定是否外流——值域封閉性由 TaskEventType 承載，DB 不加 CHECK（既有決策）
+        createdAt:
+          type: string
+          format: date-time
+          description: 整合回放查詢套 3 秒安全遲滯：created_at <= now() - 3s（FR-203）
+      required:
+      - id
+      - tenantId
+      - taskId
+      - seq
+      - type
+      - createdAt
+    task_eventsRequest:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        taskId:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int32
+          description: (tenant_id, task_id, seq) 唯一（uq_task_events_task_seq）＝整合去重鍵素材
+        type:
+          type: string
+          description: 白名單對映（程式常數，v1 僅 inspection_passed）決定是否外流——值域封閉性由 TaskEventType 承載，DB 不加 CHECK（既有決策）
+      required:
+      - tenantId
+      - taskId
+      - seq
+      - type
+    outbox:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          description: 既有 chk_outbox_kind CHECK 不收緊（FR-403）；V3 刪除 kind=pms_status 殘留列（FR-402）；OutboxKind.ALL 於程式面縮為 task_event,
+            push
+      required:
+      - id
+    outboxRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: 既有 chk_outbox_kind CHECK 不收緊（FR-403）；V3 刪除 kind=pms_status 殘留列（FR-402）；OutboxKind.ALL 於程式面縮為 task_event,
+            push
+  responses:
+    BadRequest:
+      description: 請求參數錯誤
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 資源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 衝突（樂觀鎖 / 唯一鍵 / 狀態機）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

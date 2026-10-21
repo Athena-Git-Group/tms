@@ -1,0 +1,23 @@
+api: integration                # 不照慣例複數化：/integration 已是 SecurityConfig 授權矩陣的前綴契約，改成 /integrations 會讓矩陣與對外文件分裂
+schema_version: "3.3"
+# entity 刻意省略：兩端點的回應是 wire 契約（包裝陣列 + next_cursor、SSE 流），
+# 綁上任何 DBML Table 都會讓 transpiler 產出錯誤的 response schema——
+# 寧可讓 openapi 少 schema，也不給下游一個會誤導實作的假契約。
+# wire 欄位的真源在 specify/spec.md §5.1（RoomStatusEvent 表）。
+title: PMS 整合 API
+description: >
+  PMS（M2M，X-API-Key 認證）出站訂閱房況：cursor 增量拉取 + SSE 即時流。
+  傳遞語意 at-least-once，去重鍵 (task_id, seq)。認證、查詢參數（after/limit/cursor）
+  與 text/event-stream 內容型別超出本版 transpiler 能力，契約以 spec.md
+  FR-103/201/202/203/301/302 為準；openapi.yaml 只承載路徑、動詞與狀態碼骨架。
+
+exposes:
+  operations:
+    # path 顯式寫死而不走 /{id}/<name> 推導：整合端點操作的是租戶事件流，
+    # 沒有單一資源 id 可言
+    - { name: pms_events, method: GET, path: "/pms/events" }
+    - { name: pms_stream, method: GET, path: "/pms/stream" }
+
+source_evidence:
+  - "specify/spec.md"
+  - "db_table/erm.dbml"

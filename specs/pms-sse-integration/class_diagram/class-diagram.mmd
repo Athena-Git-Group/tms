@@ -1,0 +1,119 @@
+classDiagram
+    %% pms-sse-integration · 物件設計（對齊 data_model；既有類別標 <<existing>>）
+    %% 複雜度：中——新增 1 條認證鏈 + 2 端點 + 既有 SSE 消費端的整合分支；
+    %% 依 SRP 把「回放讀取」抽成 IntegrationEventReader 供 events 端點與 stream 回放共用（FR-201/302 同一讀取邏輯）。
+
+    class IntegrationEventsController {
+        +getEvents(after: String, limit: Integer) IntegrationEventsResponse
+    }
+    class IntegrationStreamController {
+        +stream(cursor: String, lastEventId: String) SseEmitter
+    }
+
+    class IntegrationEventReader {
+        <<Service>>
+        +readAfter(tenantId: long, afterId: long, limit: int) List~RoomStatusEvent~
+        %% 查詢語意：id > after AND created_at <= now()-3s AND type IN 白名單 ORDER BY id（FR-202/203/204）
+    }
+    class RoomStatusMapper {
+        <<helper>>
+        +toRoomStatus(eventRow) RoomStatusEvent
+        +whitelist() Map~String,String~
+        %% 封閉白名單常數：inspection_passed -> inspected（FR-204/303，D5 結構性收斂點）
+    }
+
+    class IntegrationApiKeyAuthFilter {
+        <<OncePerRequestFilter>>
+        -doFilterInternal(req, res, chain)
+        %% 只攔 /integration/**；X-API-Key；順序①格式→②tenantId→③TenantContext.set→④hash查表→⑤驗列→⑥ROLE_INTEGRATION；finally 清 ThreadLocal（FR-103）
+    }
+    class IntegrationApiKeys {
+        <<util>>
+        +parseTenantId(key: String) Long
+        +sha256Hex(key: String) String
+        %% 比照 GuestSessionTokens 的靜態工具慣例（FR-102）
+    }
+    class IntegrationApiKeyRepository {
+        <<DAO>>
+        +findByKeyHash(keyHash: String) Optional~IntegrationApiKey~
+    }
+    class IntegrationApiKey {
+        <<Entity>>
+        +UUID id
+        +long tenantId
+        +String name
+        +String keyPrefix
+        +String keyHash
+        +OffsetDateTime createdAt
+        +OffsetDateTime revokedAt
+    }
+
+    class RoomStatusEvent {
+        <<DTO / wire room_status.v1>>
+        +String schema
+        +String eventId
+        +String roomNo
+        +String hkState
+        +String taskId
+        +int seq
+        +String occurredAt
+    }
+    class IntegrationEventsResponse {
+        <<DTO>>
+        +List~RoomStatusEvent~ events
+        +String nextCursor
+    }
+
+    class StreamConnectionRegistry {
+        <<existing Component>>
+        +connectIntegration(tenantId: long) SseEmitter
+        %% 新方法；既有 connectGuest/connectStaff/broadcast* 不變（FR-301/305）
+    }
+    class StreamConnection {
+        <<existing>>
+        +integration(tenantId, emitter)$ StreamConnection
+        +wants(change) boolean
+        +sendRoomStatus(event, mapper) boolean
+        %% 整合型別 wants = 白名單命中；guest/staff wants 不變
+    }
+    class TaskEventsSseConsumer {
+        <<existing Component>>
+        -dispatch(envelopeJson)
+        -loadIntegrationEvent(tenantId, taskId, seq) RoomStatusEvent
+        %% 新分支：type 命中白名單才 join rooms 取 room_no、按 uq_task_events_task_seq 取 id（FR-303）
+    }
+    class SecurityConfig {
+        <<existing Configuration>>
+        %% 新增一行 /integration/** -> hasRole(INTEGRATION)；filter 掛 AuthorizationFilter 前（FR-105）
+    }
+    class TenantContext {
+        <<existing util>>
+    }
+
+    class OutboxWriter {
+        <<existing>>
+        %% 退場：刪 enqueuePmsStatus（FR-401.1）；enqueueTaskEvent/enqueuePush 保留
+    }
+    class InspectionService {
+        <<existing>>
+        %% 退場：刪 enqueuePmsStatus 呼叫與 pmsStatusPayload（FR-401.3）；其餘交易行為不變（FR-404）
+    }
+    class KafkaTopicsProperties {
+        <<existing>>
+        %% 退場：刪 pmsStatus 欄位與 PMS_STATUS case（FR-401.2）
+    }
+
+    IntegrationEventsController --> IntegrationEventReader
+    IntegrationStreamController --> IntegrationEventReader : 建線回放（FR-302）
+    IntegrationStreamController --> StreamConnectionRegistry : connectIntegration
+    IntegrationEventReader --> RoomStatusMapper
+    IntegrationEventReader ..> RoomStatusEvent
+    IntegrationApiKeyAuthFilter --> IntegrationApiKeys
+    IntegrationApiKeyAuthFilter --> IntegrationApiKeyRepository
+    IntegrationApiKeyAuthFilter --> TenantContext : set/clear
+    IntegrationApiKeyRepository ..> IntegrationApiKey
+    SecurityConfig ..> IntegrationApiKeyAuthFilter : 註冊
+    TaskEventsSseConsumer --> RoomStatusMapper : 白名單判定
+    TaskEventsSseConsumer --> StreamConnectionRegistry : broadcast
+    StreamConnectionRegistry --> StreamConnection
+    InspectionService --> OutboxWriter : 僅餘 push/task_event

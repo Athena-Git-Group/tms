@@ -1,0 +1,80 @@
+// pms-sse-integration · 持久化增量（V3 migration 範圍）
+// 真源：data_model/data-model.md。既有表（tenants / tasks / task_events / rooms / outbox）
+// schema 零改動，僅以 Ref 端點示意；RoomStatusEvent 為 wire-only，不落表。
+
+Project tms_pms_sse_integration {
+  database_type: 'PostgreSQL'
+  Note: '''
+    V3__integration_api_keys.sql 內容對應：
+    1) CREATE TABLE integration_api_keys（本檔）
+    2) ENABLE ROW LEVEL SECURITY + policy（沿用 V1 的 tenant_isolation_* 模式）
+    3) GRANT SELECT, UPDATE (revoked_at) ON integration_api_keys TO tms_app
+       —— 應用只驗證與撤銷；INSERT 由營運以 admin 角色執行（spec 假設 A1）
+    4) DELETE FROM outbox WHERE kind = 'pms_status'（FR-402：清殘留列，
+       防改碼後 OutboxRelay.topicFor 對未知 kind 拋錯）
+    5) chk_outbox_kind CHECK 不收緊（FR-403：留值無害、改 CHECK 鎖表）
+    6) COMMENT ON COLUMN task_events.id 更新——自本版起兼任整合 cursor
+       （推翻 V1「非訂閱書籤」註解）
+  '''
+}
+
+Table integration_api_keys {
+  id          uuid        [pk, note: 'UuidV7（團隊代理鍵慣例）']
+  tenant_id   bigint      [not null, note: 'FK → tenants；RLS 隔離鍵']
+  name        text        [not null, note: '營運命名；同租戶可重名（假設 A6：輪替重疊期必然同名），不設 (tenant_id, name) 唯一']
+  key_prefix  text        [not null, note: '明文前 16 字，僅供營運肉眼對帳，不參與驗證（FR-102）']
+  key_hash    text        [not null, unique, note: 'SHA-256(明文全字串) 的 64 字 hex；唯一熱查詢鍵（FR-102）。明文 tmsik_<tenantId>_<43 字 base64url> 不落庫']
+  created_at  timestamptz [not null]
+  revoked_at  timestamptz [note: 'NULL = active；非空 = revoked（單向、不可逆、不復活，FR-107）。active 為 derived，不落欄']
+
+  Indexes {
+    key_hash [unique, name: 'uq_integration_api_keys_hash', note: '即熱查詢索引：WHERE key_hash = ?（每請求一次）']
+    tenant_id [name: 'idx_integration_api_keys_tenant', note: '營運盤點用；量級 < 100，聊備']
+  }
+
+  Note: '''
+    PMS 的 per-租戶 M2M 長效憑證，只存 hash（資料庫外洩不可反推明文）。
+    不變條件：
+    - 驗證順序（FR-103）：filter 先由 key 自述段取 tenant 立 TenantContext，
+      RLS 下才查得到本表——本表 RLS 不豁免。
+    - 列 tenant_id 必須與 key 明文自述的 tenantId 一致，不一致視同無效（邊界 5）。
+    - 不硬刪：撤銷列永久保留當稽核軌跡（FK RESTRICT 慣例）。
+    - 無 PII；無 updated_at / version——兩態單向生命週期無競態更新面
+      （撤銷是冪等的單欄落印），依比例原則不補樂觀鎖。
+    RLS policy：
+      CREATE POLICY tenant_isolation_integration_api_keys ON integration_api_keys
+        USING (tenant_id = current_setting('app.tenant_id', true)::bigint);
+  '''
+}
+
+// ---- 既有表（零改動，僅示意關聯與新讀取樣式）----
+
+Table tenants {
+  id bigint [pk, note: '既有；IDENTITY 從 1 起跳']
+}
+
+Table task_events {
+  id         bigint      [pk, note: '既有 IDENTITY。本版起兼任整合 cursor（FR-202）；對 PMS 為不透明十進位字串']
+  tenant_id  bigint      [not null]
+  task_id    uuid        [not null]
+  seq        int         [not null, note: '(tenant_id, task_id, seq) 唯一（uq_task_events_task_seq）＝整合去重鍵素材']
+  type       text        [not null, note: '白名單對映（程式常數，v1 僅 inspection_passed）決定是否外流——值域封閉性由 TaskEventType 承載，DB 不加 CHECK（既有決策）']
+  created_at timestamptz [not null, note: '整合回放查詢套 3 秒安全遲滯：created_at <= now() - 3s（FR-203）']
+
+  Note: '''
+    既有表零改動。新增讀取樣式（FR-202/203/204）：
+      WHERE id > :after AND created_at <= now() - interval '3 seconds'
+        AND type IN (白名單) ORDER BY id ASC LIMIT :n （RLS 過濾租戶）
+    索引評估：PK(id) 即最左掃描鍵，RLS 的 tenant 過濾走 PK 範圍掃描後濾列；
+    task_events 量級與白名單命中率下不需新索引（新增 (tenant_id, id) 複合索引
+    屬過早最佳化）——build 階段以 EXPLAIN 驗證，慢再補，不在 V3 預建。
+  '''
+}
+
+Table outbox {
+  id   bigint [pk]
+  kind text   [note: '既有 chk_outbox_kind CHECK 不收緊（FR-403）；V3 刪除 kind=pms_status 殘留列（FR-402）；OutboxKind.ALL 於程式面縮為 task_event, push']
+}
+
+Ref: integration_api_keys.tenant_id > tenants.id [delete: restrict, update: restrict]
+// task_events / outbox 的既有 FK 不在本檔重複宣告

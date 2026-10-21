@@ -1,0 +1,65 @@
+# TMS 本機開發環境：Postgres + Kafka
+#
+# 啟動：  docker compose up -d
+# 停止：  docker compose down          （保留資料）
+# 重置：  docker compose down -v      （連資料一起清掉，下次啟動 Flyway 重建）
+#
+# 注意：本機 5432 已被 Langfuse 的 Postgres 佔用，所以這裡的 Postgres
+# 對外開在 5433。啟動 app 時要覆寫 DB URL（Flyway 共用同一個變數）：
+#
+#   TMS_DB_URL=jdbc:postgresql://localhost:5433/tms ./mvnw -f tms/pom.xml spring-boot:run
+#
+# 帳號密碼都用 application.properties 的預設值：
+#   Flyway 管理帳號 tms / tms（下面 POSTGRES_USER 建的就是它）
+#   應用帳號 tms_app / tms_app（V1 migration 會自己建立並授權，不用手動處理）
+# Kafka 在預設的 localhost:9092，topic 開 auto-create，app 直接用預設值即可。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tms-postgres
+    environment:
+      POSTGRES_DB: tms
+      POSTGRES_USER: tms
+      POSTGRES_PASSWORD: tms
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - tms-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tms -d tms"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: tms-kafka
+    ports:
+      - "127.0.0.1:9092:9092"
+    environment:
+      # 單節點 KRaft（新版 Kafka 不需要 ZooKeeper）
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      # client 在宿主機上連，所以 advertise localhost
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      # 單 broker，所有內部 topic 的複本數只能是 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - tms-kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  tms-pgdata:
+  tms-kafka-data:
