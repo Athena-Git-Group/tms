@@ -1,0 +1,14 @@
+api: staff-accounts
+schema_version: "3.3"
+entity: staff_accounts
+title: 員工帳號與登入 API
+description: 帳密登入換 JWT（TTL 12h），同時登記推播裝置（同裝置去重）；帳號停用即不能登入但歷史保留。
+
+exposes:
+  standard: [list]
+  operations:
+    - { name: login, method: POST, path: "/login" }
+
+source_evidence:
+  - "specify/spec.md#故事 5（登入、裝置登記與授權矩陣）"
+  - "db_table/erm.dbml#Table:staff_accounts"

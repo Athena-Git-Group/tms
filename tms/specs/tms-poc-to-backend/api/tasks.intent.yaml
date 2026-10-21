@@ -1,0 +1,24 @@
+api: tasks
+schema_version: "3.3"
+entity: tasks
+title: 任務 API
+description: 任務建立、認領/開始/完成兩段回報、櫃檯判讀、住客收回與評分、主管改派/退池/延後/取消。所有狀態轉移經任務引擎守衛（非法轉移 409 state_conflict）。
+
+exposes:
+  standard: [list, read, create]
+  operations:
+    - claim
+    - start
+    - complete
+    - cancel
+    - rate
+    - { name: triage, method: POST, path: "/{id}/triage" }
+    - { name: sop_check, method: POST, path: "/{id}/sop-check" }
+    - { name: requeue, method: POST, path: "/{id}/requeue" }
+    - { name: reassign, method: POST, path: "/{id}/reassign" }
+    - { name: defer, method: POST, path: "/{id}/defer" }
+    - { name: undefer, method: POST, path: "/{id}/undefer" }
+
+source_evidence:
+  - "specify/spec.md#故事 1（住客建單/收回/評分）、故事 2（認領兩段回報與 SOP）、故事 3（櫃檯判讀）、故事 8（requeue/reassign/defer/undefer/cancel）"
+  - "db_table/erm.dbml#Table:tasks"

@@ -1,0 +1,14 @@
+api: reservations
+schema_version: "3.3"
+entity: reservations_cache
+title: 訂房檔副本與房態匯入 API
+description: PMS 唯讀快取查詢＋Excel/CSV 今日房態匯入（入住＋退房；逐列驗房號；reservation_ref 合成 excel:日期:房號）。
+
+exposes:
+  standard: [list]
+  operations:
+    - { name: import_occupancy, method: POST, path: "/import" }
+
+source_evidence:
+  - "specify/spec.md#故事 9（FR-080 FR-081）、E-10、假設 A9"
+  - "db_table/erm.dbml#Table:reservations_cache"

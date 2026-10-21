@@ -1,0 +1,14 @@
+api: daily-stats
+schema_version: "3.3"
+entity: stats_daily
+title: 老闆儀表板 API
+description: 讀 worker 預算好的每日數字卡片與摘要，API 只讀不現算；取消單一律排除。
+
+exposes:
+  standard: [list]
+  operations:
+    - { name: dashboard, method: GET, path: "/dashboard" }
+
+source_evidence:
+  - "specify/spec.md#故事 10（儀表板與出事才響）"
+  - "db_table/erm.dbml#Table:stats_daily"

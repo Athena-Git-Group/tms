@@ -1,0 +1,12 @@
+api: rooms
+schema_version: "3.3"
+entity: rooms
+title: 房間 API
+description: 房間主檔查詢（房況板）。hk_state 由任務引擎改、occupancy 由 PMS 同步改，本 API 只讀。
+
+exposes:
+  standard: [list, read]
+
+source_evidence:
+  - "specify/spec.md#故事 4（hk_state 變化）、資料維度 rooms"
+  - "db_table/erm.dbml#Table:rooms"
