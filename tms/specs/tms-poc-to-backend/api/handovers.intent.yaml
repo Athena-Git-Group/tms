@@ -1,0 +1,14 @@
+api: handovers
+schema_version: "3.3"
+entity: handovers
+title: 交班單 API
+description: 查看凍結快照（班末排程產生、之後任務再變快照不變）與簽收。
+
+exposes:
+  standard: [list, read]
+  operations:
+    - sign
+
+source_evidence:
+  - "specify/spec.md#故事 14（交班快照與簽收）"
+  - "db_table/erm.dbml#Table:handovers"

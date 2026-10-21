@@ -1,0 +1,14 @@
+api: room-memories
+schema_version: "3.3"
+entity: room_memory
+title: 房間記憶與問一下 API
+description: 查這間房的往事（修過什麼、偏好）；ask 為 MVP 降級版（room_memory＋SOP 關鍵字比對，LLM 留椿）。
+
+exposes:
+  standard: [list]
+  operations:
+    - { name: ask, method: POST, path: "/ask" }
+
+source_evidence:
+  - "specify/spec.md#故事 15（問一下降級版）"
+  - "db_table/erm.dbml#Table:room_memory"

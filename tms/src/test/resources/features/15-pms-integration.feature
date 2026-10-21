@@ -1,0 +1,198 @@
+# language: zh-TW
+@pms_integration
+功能: PMS 以整合金鑰出站訂閱房況
+  身為 PMS 整合客戶端
+  我想要 用租戶專屬的整合金鑰拉取或即時訂閱房況變化
+  以便 不接 Kafka 也能即時知道哪些房已查房通過可以賣
+
+  背景:
+    假設 系統中存在以下房間:
+      | id    | tenant_id | room_no | floor | room_type       | hk_state | occupancy |
+      | r-305 | 1         | 305     | 3     | standard_double | dirty    | occupied  |
+      | r-301 | 1         | 301     | 3     | standard_double | dirty    | occupied  |
+      | r-512 | 1         | 512     | 5     | standard_double | dirty    | occupied  |
+
+  Rule: 整合金鑰驗證失敗一律回 401，且不洩漏失敗原因差異
+
+    @error @boundary
+    場景大綱: 無效憑證被拒
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      當 PMS 以 X-API-Key "<提供的金鑰>" 查詢整合事件
+      那麼請求應該失敗，回應為 401
+      例子:
+        | 提供的金鑰              |
+        |                         |
+        | tmsik_abc_x             |
+        | Bearer xxx              |
+        | tmsik_1_noSuchRandomKey |
+
+    @error
+    場景: 已撤銷的金鑰被拒
+      假設 租戶 1 存在整合金鑰，別名 "key-revoked"，revoked_at 為 "2026-10-20T00:00:00Z"
+      當 PMS 以別名 "key-revoked" 的金鑰查詢整合事件
+      那麼請求應該失敗，回應為 401
+
+    @error
+    場景: 金鑰自述租戶與簽發租戶不符被拒
+      # 金鑰字串宣稱自己屬於租戶 2，但資料庫裡這把金鑰是租戶 1 簽發的
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"，但其明文的租戶段被改寫為 2
+      當 PMS 以該改寫後的金鑰查詢整合事件
+      那麼請求應該失敗，回應為 401
+
+  Rule: 角色與路徑的授權矩陣：整合金鑰只能進整合端點，員工憑證進不了整合端點
+
+    @error
+    場景: 整合金鑰打員工端點被拒
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      當 PMS 以別名 "key-t1" 的金鑰查詢員工任務列表
+      那麼請求應該失敗，回應為 403
+
+    @error
+    場景: 員工憑證打整合端點被拒
+      假設 租戶 1 存在已登入的 manager 員工，別名 "mgr-1"
+      當 員工 "mgr-1" 以自己的憑證查詢整合事件
+      那麼請求應該失敗，回應為 403
+
+  Rule: 租戶隔離：金鑰只看得到自己租戶的事件
+
+    @boundary
+    場景: 他租戶的事件零列
+      假設 租戶 2 存在有效整合金鑰，別名 "key-t2"
+      並且 租戶 1 的房 "305" 已發生查房通過事件
+      當 PMS 以別名 "key-t2" 的金鑰查詢整合事件
+      那麼 回應的事件列表為空
+
+  Rule: 事件查詢參數越界回 400，不存在的 cursor 是合法空結果
+
+    @error @boundary
+    場景大綱: 參數越界被拒
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件，參數 <參數名> 為 "<值>"
+      那麼請求應該失敗，回應為 400
+      例子:
+        | 參數名 | 值  |
+        | after  | abc |
+        | after  | -1  |
+        | limit  | 0   |
+        | limit  | 501 |
+
+    @boundary
+    場景: cursor 指向不存在的事件回空列表
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件，參數 after 為 "999999999"
+      那麼 回應為 200
+      並且 回應的事件列表為空
+
+  Rule: 只有白名單事件外流：查房通過轉成 room_status，其他事件種類一律不出現
+
+    @boundary
+    場景: 查房退回事件不外流
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305" 已發生查房退回事件
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件
+      那麼 回應的事件列表為空
+
+    @happy
+    場景: 查房通過事件轉成 room_status
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305" 已發生查房通過事件
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件
+      那麼 回應包含 1 筆事件，其內容為:
+        | schema         | room_no | hk_state  |
+        | room_status.v1 | 305     | inspected |
+      並且 該事件包含非空的 event_id、task_id、seq 與 occurred_at
+      並且 回應的 next_cursor 等於該事件的 event_id
+
+  Rule: 3 秒安全遲滯：太新的事件暫不回傳，防止亂序提交造成漏推
+
+    @boundary
+    場景大綱: 事件依發生時間決定是否回傳
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305" 已發生查房通過事件，發生於 <距今秒數> 秒前
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件
+      那麼 回應的事件列表 <預期>
+      例子:
+        | 距今秒數 | 預期      |
+        | 2        | 為空      |
+        | 5        | 恰有 1 筆 |
+
+  Rule: cursor 增量語意：after 之後的事件依序回傳，limit 截斷並給 next_cursor
+
+    @boundary
+    場景: limit 截斷
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305"、"301"、"512" 依序各發生一筆查房通過事件
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件，參數 limit 為 "2"
+      那麼 回應依序包含 room_no 為 "305"、"301" 的 2 筆事件
+      並且 回應的 next_cursor 等於第 2 筆事件的 event_id
+
+    @happy
+    場景: 依序回傳全部事件
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305"、"301"、"512" 依序各發生一筆查房通過事件
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件
+      那麼 回應依序包含 room_no 為 "305"、"301"、"512" 的 3 筆事件
+      並且 回應的 next_cursor 等於最後一筆的 event_id
+
+    @happy
+    場景: 以 next_cursor 續拉只得其後事件
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305"、"301"、"512" 依序各發生一筆查房通過事件
+      當 PMS 以別名 "key-t1" 的金鑰查詢整合事件，參數 after 為第 1 筆事件的 event_id
+      那麼 回應依序包含 room_no 為 "301"、"512" 的 2 筆事件
+
+  Rule: SSE 整合流：即時收到白名單事件，重連帶 cursor 回放不漏推
+
+    @happy
+    場景: 連線中即時收到查房通過事件
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 PMS 以別名 "key-t1" 的金鑰建立整合 SSE 連線
+      當 租戶 1 的房 "305" 發生查房通過
+      那麼 整合連線收到事件名為 "room_status" 的 SSE 事件，其資料為:
+        | schema         | room_no | hk_state  |
+        | room_status.v1 | 305     | inspected |
+      並且 該 SSE 事件的 id 欄位等於其資料中的 event_id
+
+    @boundary
+    場景: 重連帶 cursor 補齊斷線期間事件
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 租戶 1 的房 "305" 已發生查房通過事件，且 PMS 已取得其 event_id
+      並且 斷線期間租戶 1 的房 "301" 又發生一筆查房通過事件
+      當 PMS 以別名 "key-t1" 的金鑰帶 cursor 為房 "305" 事件的 event_id 重新建立整合 SSE 連線
+      那麼 整合連線收到 room_no 為 "301" 的 "room_status" 事件
+
+    @boundary @sse
+    場景: 白名單外事件不推給整合連線但照推給員工連線
+      假設 租戶 1 存在有效整合金鑰，別名 "key-t1"
+      並且 PMS 以別名 "key-t1" 的金鑰建立整合 SSE 連線
+      並且 房務「小美」開啟員工事件串流
+      當 租戶 1 的房 "305" 發生查房退回
+      那麼 員工連線收到該任務的變化事件
+      但是 整合連線未收到任何 "room_status" 事件
+
+  Rule: 查房通過交易不再落 pms_status outbox，其餘交易行為不變
+
+    @happy
+    場景: 查房全項通過後 outbox 僅有任務事件
+      假設 系統中存在以下員工:
+        | id    | tenant_id | name   | login_id | password_hash | role         | dept         |
+        | s-mgr | 1         | 王主管 | mgr1     | hash-mgr1     | manager      |              |
+        | s-hk1 | 1         | 小美   | hk1      | hash-hk1      | housekeeping | housekeeping |
+      並且 系統中存在以下SOP項目:
+        | id     | tenant_id | applies_to | item_key  | label | sort_order |
+        | insp-1 | 1         | inspection | bed       | 床鋪  | 1          |
+        | insp-2 | 1         | inspection | bathroom  | 浴室  | 2          |
+        | insp-3 | 1         | inspection | amenities | 備品  | 3          |
+      並且 租戶 1 的班次設定涵蓋現在，清房者視為在班
+      並且 系統中存在以下任務:
+        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
+        | t-305-1 | 1         | cleaning | system | r-305   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
+      當 王主管對任務 "t-305-1" 送出全過的查房
+      那麼 任務 "t-305-1" 的資料應為:
+        | state     |
+        | inspected |
+      並且 房間 "r-305" 的資料應為:
+        | hk_state  |
+        | inspected |
+      並且 outbox 排入的訊息 kind 僅有 "task_event"
+      並且 outbox 中不存在 kind 為 "pms_status" 的訊息

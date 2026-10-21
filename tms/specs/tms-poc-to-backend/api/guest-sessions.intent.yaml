@@ -1,0 +1,14 @@
+api: guest-sessions
+schema_version: "3.3"
+entity: guest_sessions
+title: 住客掃碼 API
+description: 掃房間 QR 換住客 session。空房或 token 已作廢回 409 room_vacant；驗證=未過期且未撤銷。
+
+exposes:
+  standard: []
+  operations:
+    - { name: scan, method: POST, path: "/scan" }
+
+source_evidence:
+  - "specify/spec.md#FR-001（掃碼簽發）、E-03、E-17"
+  - "db_table/erm.dbml#Table:guest_sessions"

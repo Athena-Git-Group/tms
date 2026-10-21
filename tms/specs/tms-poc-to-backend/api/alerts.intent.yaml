@@ -1,0 +1,10 @@
+api: alerts
+schema_version: "3.3"
+title: 主管手動上報 API
+description: 「出事才響」的第二個來源：主管手動上報，排 owner 推播進 outbox。無持久化實體（事件與推播留痕）。
+
+exposes:
+  standard: [create]
+
+source_evidence:
+  - "specify/spec.md#故事 10 的推播來源與假設 A11"

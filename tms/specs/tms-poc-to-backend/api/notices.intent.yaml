@@ -1,0 +1,15 @@
+api: notices
+schema_version: "3.3"
+entity: notices
+title: 通知板 API
+description: 櫃檯發通知（部門/個人混選，推播經 outbox 展開一人一封）、收件人開啟即記已讀、發送者查已讀名單。
+
+exposes:
+  standard: [list, create]
+  operations:
+    - { name: mark_read, method: POST, path: "/{id}/mark-read" }
+    - { name: reads, method: GET, path: "/{id}/reads" }
+
+source_evidence:
+  - "specify/spec.md#故事 12（通知板與已讀）"
+  - "db_table/erm.dbml#Table:notices"

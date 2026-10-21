@@ -1,0 +1,491 @@
+// TMS 持久化模型（落地 data-model.md；逐欄位語意以 docs/12 為權威）
+// 全檔慣例：每張業務表首欄 tenant_id（bigint → tenants.id）；實體表 PK=uuid（UUIDv7，app 層產號）；
+// 跨表引用一律複合外鍵 (tenant_id, xxx_id) REFERENCES 對方 (tenant_id, id)，被引用表補 UNIQUE (tenant_id, id)；
+// enum 一律 text + CHECK（註記於 note）；應用層 tenant scope + Postgres RLS 第二道；
+// FK 行為一律 ON DELETE RESTRICT / ON UPDATE RESTRICT（業務不硬刪：停用/作廢/去識別化代替刪除）。
+
+Project tms {
+  database_type: 'PostgreSQL'
+  Note: '''
+  多租戶 SaaS。task_events 為唯一真相（DB 權限收走 UPDATE/DELETE；唯一例外=受控去識別化函式）。
+  tasks/room_memory/stats_daily/phrase_counter/cleaning_time_stats/task_sop_checks 為投影，可清空由事件流重建。
+  '''
+}
+
+Table tenants {
+  id         bigint      [pk, increment, note: '即各表 tenant_id（docs/12 例外二：集中開設、量少，8 bytes 省索引）']
+  name       text        [not null, note: '飯店名']
+  created_at timestamptz [not null]
+  Note: '租戶（飯店）主檔。v1 由營運人工開設。'
+}
+
+Table tenant_config {
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days']
+  value      jsonb       [not null, note: '結構依 key 而異']
+  updated_at timestamptz [not null]
+  updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
+  Indexes {
+    (tenant_id, key) [unique]
+  }
+  Note: '「什麼都可調」的落地。inspection_items/sop_items 兩鍵為 sop_items 表的門面（讀寫轉進表）。'
+}
+
+Table staff_accounts {
+  id            uuid        [pk]
+  tenant_id     bigint      [not null, ref: > tenants.id]
+  name          text        [not null, note: 'PII：離職去識別化換不可回推代號']
+  login_id      text        [not null, note: 'PII；UNIQUE (tenant_id, login_id)']
+  password_hash text        [not null, note: 'bcrypt/argon2，絕不存明文']
+  role          text        [not null, note: 'CHECK: frontdesk|housekeeping|engineering|manager|owner']
+  dept          text        [note: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空']
+  active        boolean     [not null, default: true, note: '停用=不能登入，歷史保留']
+  created_at    timestamptz [not null]
+  updated_at    timestamptz [not null]
+  Indexes {
+    (tenant_id, login_id) [unique]
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+    (tenant_id, dept)
+  }
+  Note: '員工帳號。角色×動作矩陣在程式/設定，不在表裡（docs/11 需求 15）。'
+}
+
+Table staff_devices {
+  id                 uuid        [pk]
+  tenant_id          bigint      [not null, ref: > tenants.id]
+  staff_id           uuid        [not null]
+  device_fingerprint text        [not null, note: '只做去重，不做綁定（docs/11 不在範圍內）']
+  push_token         text        [note: 'APNS/FCM 地址；權限被關即空']
+  registered_at      timestamptz [not null]
+  revoked_at         timestamptz [note: '登出或推播服務回報失效時標記']
+  Indexes {
+    (tenant_id, staff_id, device_fingerprint) [unique]
+  }
+  Note: '推播地址簿：一列=一台裝置。登入不驗裝置、多機合法。'
+}
+
+Table rooms {
+  id         uuid        [pk]
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  room_no    text        [not null, note: '房號「305」']
+  floor      int         [not null, note: 'v1 排房演算法排序鍵']
+  room_type  text        [not null, note: '平均打掃分鐘按它統計']
+  hk_state   text        [not null, note: 'TMS 擁有。CHECK: dirty|cleaned|inspected|out_of_order']
+  occupancy  text        [not null, note: 'PMS 擁有（同步唯讀）。CHECK: occupied|vacant']
+  updated_at timestamptz [not null]
+  Indexes {
+    (tenant_id, room_no) [unique]
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+  }
+  Note: '''
+  房間主檔，兩系統各管一半、不共用欄位。
+  不變條件：hk_state 僅由任務引擎改（查房通過→inspected、退回→dirty）；occupancy 僅由 PMS 同步改。
+  '''
+}
+
+Table room_qr_tokens {
+  id         uuid        [pk]
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  room_id    uuid        [not null]
+  token      text        [not null, unique, note: '≥128 bit 隨機 base62 約 22 字元，不含房號資訊；全域 UNIQUE']
+  version    int         [not null, note: '重產 +1']
+  status     text        [not null, note: 'CHECK: active|revoked']
+  created_at timestamptz [not null]
+  revoked_at timestamptz
+  Indexes {
+    (tenant_id, room_id) [unique, note: 'partial UNIQUE WHERE status=\'active\'——一房同時僅一枚現行']
+  }
+  Note: '''
+  房間 QR 憑證（Guest Access 擁有）。
+  不變條件：輪替=同一交易「舊 token→revoked＋新列 version+1＋該房全部未撤銷 guest_sessions 標 revoked_at」（E-18 連坐撤銷）。
+  '''
+}
+
+Table guest_sessions {
+  id             uuid        [pk]
+  tenant_id      bigint      [not null, ref: > tenants.id]
+  session_token  text        [not null, unique, note: '住客瀏覽器憑證；全域 UNIQUE']
+  room_id        uuid        [not null]
+  reservation_id uuid        [not null, note: '綁簽發當下訂單——換住客舊 session 自然失效']
+  expires_at     timestamptz [not null, note: '=退房時間']
+  revoked_at     timestamptz [note: 'QR 輪替/提前退房/訂單取消時整批標上']
+  created_at     timestamptz [not null]
+  last_seen_at   timestamptz
+  Indexes {
+    (tenant_id, room_id)
+  }
+  Note: '不變條件：驗證=expires_at > now() AND revoked_at IS NULL，缺一即 401（E-17）。'
+}
+
+Table reservations_cache {
+  id              uuid        [pk]
+  tenant_id       bigint      [not null, ref: > tenants.id]
+  reservation_ref text        [not null, note: 'PMS 訂單編號；Excel 匯入列合成 excel:日期:房號']
+  room_id         uuid        [not null]
+  guest_name      text        [note: 'PII：去識別化範圍']
+  lang            text        [note: '住客端語言']
+  attrs           jsonb       [note: 'VIP/親子/寵物/紀念日——自動開準備工單依據']
+  checkin_at      timestamptz [not null]
+  checkout_at     timestamptz [not null]
+  source          text        [not null, note: 'CHECK: pms|excel']
+  synced_at       timestamptz [not null]
+  superseded_at   timestamptz [note: 'PMS 恢復比對到住期重疊真訂單時標上；當前訂單查詢一律 IS NULL']
+  Indexes {
+    (tenant_id, reservation_ref) [unique]
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+    (tenant_id, room_id, checkout_at) [note: '今日退房與當前訂單']
+  }
+  Note: '''
+  訂房檔唯讀副本（真相在 PMS）。
+  不變條件：EXCLUDE 約束——同房、住期區間重疊、皆未作廢 → 拒絕寫入（E-10；DBML 無法表達，migration 以
+  EXCLUDE USING gist (tenant_id WITH =, room_id WITH =, tstzrange(checkin_at, checkout_at) WITH &&) WHERE (superseded_at IS NULL) 落地）。
+  '''
+}
+
+Table tasks {
+  id             uuid        [pk]
+  tenant_id      bigint      [not null, ref: > tenants.id]
+  type           text        [not null, note: 'CHECK: amenity|repair|cleaning|other']
+  source         text        [not null, note: 'CHECK: guest|desk|system']
+  room_id        uuid        [not null]
+  reservation_id uuid        [note: 'guest 來源必填；住客查詢一律以它過濾（不按房號）']
+  dept           text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）']
+  state          text        [not null, note: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled']
+  event_seq      int         [not null, default: 0, note: '事件取號器：守衛 UPDATE 同句 +1 RETURNING']
+  assignee_id    uuid        [note: '池中為空']
+  title          text        [not null]
+  note           text        [note: '住客原文/翻譯/交代/當場回答——PII 去識別化範圍']
+  est_min        int         [note: '排房帶入；credit 換算屬 Q1 未決']
+  started_at     timestamptz [note: '查房退回清空重計']
+  done_at        timestamptz [note: '實際分鐘=done_at−started_at（derived，不落欄）']
+  redo_count     int         [not null, default: 0]
+  rating         int         [note: 'CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）']
+  plan_id        uuid        [note: '打掃任務回鏈排房計畫']
+  work_date      date        [note: '打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描']
+  sla_min        int         [note: '保留欄位，SLA 升級鏈啟用前不寫']
+  esc_level      int         [note: '保留欄位']
+  created_at     timestamptz [not null]
+  updated_at     timestamptz [not null]
+  Indexes {
+    (tenant_id, dept, state) [note: '待接池與看板']
+    (tenant_id, assignee_id, state) [note: '個人在手']
+    (tenant_id, room_id, created_at) [note: '單房歷程']
+    (tenant_id, reservation_id, created_at) [note: '住客本次住宿需求']
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+    (tenant_id, room_id, work_date) [unique, note: 'partial UNIQUE WHERE type=\'cleaning\' AND state NOT IN (\'done\',\'inspected\',\'cancelled\')——一房一天僅一筆未完成打掃（E-09）']
+  }
+  Note: '''
+  任務投影（可由 task_events 重放重建）。
+  不變條件：state 轉移全集見 spec §5.1；守衛=一句條件式 UPDATE（0 列→409）；
+  只有任務引擎可寫；cancelled 不進任何統計（E-15）；僅 cleaning 走 inspected。
+  '''
+}
+
+Table task_events {
+  id         bigint      [pk, increment, note: '全館依序，但非訂閱書籤（增量一律走 Kafka）；僅離線重放/排查排序用']
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  task_id    uuid        [not null]
+  seq        int         [not null, note: '這個任務的第幾步；取自 tasks.event_seq 的 RETURNING']
+  type       text        [not null, note: '18 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled（可擴充，加值不改表）']
+  actor_role text        [not null, note: 'guest|frontdesk|housekeeping|engineering|manager|system']
+  actor_id   uuid        [note: '住客與系統為空']
+  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded']
+  created_at timestamptz [not null]
+  Indexes {
+    (tenant_id, task_id, seq) [unique]
+    (tenant_id, id) [note: '離線全表重放']
+  }
+  Note: '''
+  唯一真相，只進不改：DB 權限收走 UPDATE/DELETE（E-13）。
+  唯一例外=受控去識別化函式（抹 payload 個資、帳號代號化、執行記一筆事件）。
+  驗收：CI 影子庫清空 tasks 重放比對（SC-006）。
+  '''
+}
+
+Table outbox {
+  id              bigint      [pk, increment]
+  tenant_id       bigint      [not null, ref: > tenants.id]
+  aggregate_key   text        [not null, note: 'Kafka 分區鍵：task_event/push 用 task:<uuid>；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）']
+  kind            text        [not null, note: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）']
+  payload         jsonb       [not null]
+  idempotency_key text        [not null, note: '下游去重：重送不重做']
+  status          text        [not null, default: 'pending', note: 'CHECK: pending|sent|failed（重試用盡等人工）']
+  attempts        int         [not null, default: 0]
+  next_retry_at   timestamptz [note: '指數退避']
+  created_at      timestamptz [not null]
+  sent_at         timestamptz
+  Indexes {
+    (tenant_id, kind, idempotency_key) [unique]
+    (aggregate_key, id) [note: 'partial index WHERE status=\'pending\'——relay 依鍵輪詢']
+  }
+  Note: '''
+  待送匣=交易護欄：與狀態變更同交易落庫。
+  不變條件：relay 同鍵串行（同 aggregate_key 最早一筆未 sent 不送後續，E-14）；
+  sent 保留 3 天後排程清除；Kafka 下游一律不回寫 tasks。
+  '''
+}
+
+Table processed_ops {
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  op_id      text        [not null, note: '客戶端 Idempotency-Key（UUID）']
+  result_ref jsonb       [not null, note: '狀態碼＋精簡回應，重送原樣回放']
+  created_at timestamptz [not null, note: '7 天後排程清']
+  Indexes {
+    (tenant_id, op_id) [pk]
+  }
+  Note: '弱網重送去重簿（GR-002/E-11）。'
+}
+
+Table cleaning_plans {
+  id           uuid        [pk]
+  tenant_id    bigint      [not null, ref: > tenants.id]
+  work_date    date        [not null]
+  shift        text        [not null, note: '值域從租戶設定 shift_times 來']
+  status       text        [not null, note: 'CHECK: draft|published|superseded']
+  version      int         [not null, default: 0, note: '每次調整 +1；PUT 帶 If-Match，不符 409＋最新內容（E-08）']
+  generated_by text        [not null, note: 'CHECK: system|manager']
+  algo_version text        [not null, note: 'v1=樓層×工時一層一人；Q4 v2 對照用']
+  generated_at timestamptz [not null]
+  published_at timestamptz
+  Indexes {
+    (tenant_id, work_date, shift) [unique, note: 'partial UNIQUE WHERE status=\'published\'——一班同時僅一份已發佈；草稿不限']
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+  }
+  Note: '''
+  排房計畫。不變條件：發佈切換同一交易＝新 published＋舊標 superseded＋任務對帳三分支
+  （共有房未開始改掛新計畫 reassigned；舊有新無未開始 cancelled 原因 plan_superseded；doing 不動、列清單給主管）。
+  '''
+}
+
+Table plan_rooms {
+  id        uuid [pk]
+  tenant_id bigint [not null, ref: > tenants.id]
+  plan_id   uuid [not null]
+  room_id   uuid [not null]
+  staff_id  uuid [not null, note: '誰在哪天負責哪些房查這張']
+  est_min   int  [not null, note: '抄自 cleaning_time_stats，樣本<20 用標準工時']
+  route_seq int  [not null, note: '建議打掃順序（v1=照樓層）']
+  task_id   uuid [note: '發佈後回填對應打掃任務']
+  Indexes {
+    (tenant_id, plan_id, room_id) [unique]
+    (tenant_id, plan_id, staff_id) [note: '個人當日清單']
+  }
+  Note: '計畫明細（Plan×Room×Staff junction）。'
+}
+
+Table cleaning_time_stats {
+  tenant_id      bigint      [not null, ref: > tenants.id]
+  room_type      text        [not null]
+  avg_actual_min numeric(6,1) [not null, note: 'derived：流水帳 completed−started 平均（退回以最後一輪為準）']
+  sample_count   int         [not null, note: '<20 時排房用標準工時']
+  updated_at     timestamptz [not null]
+  Indexes {
+    (tenant_id, room_type) [pk]
+  }
+  Note: '投影（可重算）。只到房型層級、不含個人（個人工時受分級可見與保留期限管）。'
+}
+
+Table sop_items {
+  id         uuid        [pk]
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  applies_to text        [not null, note: 'CHECK: cleaning|inspection——SOP 項目與查房項目同構共表']
+  item_key   text        [not null]
+  label      text        [not null]
+  sort_order int         [not null]
+  active     boolean     [not null, default: true]
+  created_at timestamptz [not null]
+  Indexes {
+    (tenant_id, applies_to, item_key) [unique]
+  }
+  Note: '每家飯店自設的 SOP/查房項目（reference）。/admin/settings 的 sop_items/inspection_items 鍵為本表門面。'
+}
+
+Table task_sop_checks {
+  id         uuid        [pk]
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  task_id    uuid        [not null]
+  item_key   text        [not null]
+  label      text        [not null, note: '建單當下快照（項目日後改名不影響歷史單）']
+  checked    boolean     [not null, default: false]
+  skipped    boolean     [not null, default: false, note: 'CHECK NOT (checked AND skipped)；跳過不擋流程但留痕']
+  checked_by uuid
+  checked_at timestamptz
+  Indexes {
+    (tenant_id, task_id, item_key) [unique]
+  }
+  Note: '投影：查房退回時歸零重來；「誰在幾點勾過什麼」的歷史在 task_events（sop_checked）。'
+}
+
+Table inspections {
+  id           uuid        [pk]
+  tenant_id    bigint      [not null, ref: > tenants.id]
+  task_id      uuid        [not null]
+  inspector_id uuid        [not null, note: '守衛：inspector ≠ 原清房者（403）']
+  result       text        [not null, note: 'CHECK: passed|failed']
+  items        jsonb       [not null, note: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）']
+  created_at   timestamptz [not null]
+  Indexes {
+    (tenant_id, task_id)
+  }
+  Note: '查房記錄（history，一次查房一列；退回重查會有多列）。'
+}
+
+Table handovers {
+  id           uuid        [pk]
+  tenant_id    bigint      [not null, ref: > tenants.id]
+  dept         text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk']
+  shift        text        [not null]
+  work_date    date        [not null]
+  snapshot     jsonb       [not null, note: '交班當下任務清單定格——之後任務再變，快照不變']
+  generated_by text        [not null, note: 'CHECK: system|manager（班末掃描產生，主管可手動；假設 A8）']
+  created_at   timestamptz [not null]
+  Indexes {
+    (tenant_id, work_date)
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+  }
+  Note: '交班單凍結快照（history，永不 UPDATE）。'
+}
+
+Table handover_signs {
+  tenant_id   bigint      [not null, ref: > tenants.id]
+  handover_id uuid        [not null]
+  staff_id    uuid        [not null]
+  signed_at   timestamptz [not null]
+  Indexes {
+    (handover_id, staff_id) [pk]
+  }
+  Note: '簽收（junction）；簽收另寫事件。'
+}
+
+Table notices {
+  id         uuid        [pk]
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  sender_id  uuid        [not null]
+  title      text        [not null]
+  body       text        [not null]
+  recipients jsonb       [not null, note: '部門/個人混選 {"depts":[…],"staff_ids":[…]}；推播經 outbox 展開一人一封']
+  created_at timestamptz [not null]
+  Indexes {
+    (tenant_id, created_at)
+    (tenant_id, id) [unique, note: '複合外鍵落點']
+  }
+  Note: '通知板。逾時未讀升級屬 SLA 家族，v1 不做。'
+}
+
+Table notice_reads {
+  tenant_id bigint      [not null, ref: > tenants.id]
+  notice_id uuid        [not null]
+  staff_id  uuid        [not null]
+  read_at   timestamptz [not null]
+  Indexes {
+    (notice_id, staff_id) [pk, note: '打開即記、重開不重記']
+  }
+  Note: '已讀（junction）。'
+}
+
+Table lost_items {
+  id          uuid        [pk]
+  tenant_id   bigint      [not null, ref: > tenants.id]
+  room_id     uuid        [note: '公共區拾獲可空']
+  location    text        [note: '房外位置描述']
+  item_desc   text        [not null]
+  photo_ref   text        [note: '照片外存引用；事件 payload 只記 hasPhoto']
+  status      text        [not null, note: 'CHECK: held|returned']
+  found_by    uuid        [not null, note: '拾獲人（追責與對帳）']
+  found_at    timestamptz [not null]
+  returned_at timestamptz
+  returned_to text        [note: 'PII：領回人稱謂——去識別化範圍']
+  created_at  timestamptz [not null]
+  Indexes {
+    (tenant_id, status)
+  }
+  Note: '遺失物：櫃檯登記、歸還結案。'
+}
+
+Table leaves {
+  id         uuid        [pk]
+  tenant_id  bigint      [not null, ref: > tenants.id]
+  staff_id   uuid        [not null]
+  from_at    timestamptz [not null]
+  to_at      timestamptz [not null]
+  created_by uuid        [not null, note: '登記的主管']
+  created_at timestamptz [not null]
+  Indexes {
+    (tenant_id, staff_id, from_at)
+  }
+  Note: '請假。登記當下觸發連鎖：accepted→pool、doing→interrupted（效果記事件，不回寫本表）。'
+}
+
+Table room_memory {
+  id             uuid        [pk]
+  tenant_id      bigint      [not null, ref: > tenants.id]
+  room_id        uuid        [not null]
+  kind           text        [not null, note: 'CHECK: repair|preference|incident']
+  summary        text        [not null, note: '可能含住客線索——去識別化範圍']
+  source_task_id uuid        [note: '追溯來源任務']
+  occurred_at    timestamptz [not null]
+  Indexes {
+    (tenant_id, room_id, occurred_at)
+  }
+  Note: '投影（可重算）：這間房的往事，餵「問一下」。'
+}
+
+Table stats_daily {
+  tenant_id          bigint      [not null, ref: > tenants.id]
+  stat_date          date        [not null]
+  sellable           int         [not null, note: '可賣房數']
+  avg_response_min   numeric(6,1) [not null, note: '平均回應分鐘']
+  rating_avg         numeric(3,2) [not null, note: '住客評分均值']
+  inspection_returns int         [not null, note: '查房退回次數']
+  completed_count    int         [not null]
+  summary            text        [not null, note: '一行當日摘要']
+  updated_at         timestamptz [not null]
+  Indexes {
+    (tenant_id, stat_date) [pk]
+  }
+  Note: '投影（worker 預算好，API 只讀不現算）。不變條件：取消單一律排除（E-15/SC-007）。'
+}
+
+Table phrase_counter {
+  tenant_id    bigint      [not null, ref: > tenants.id]
+  phrase       text        [not null, note: '住客常打字句——PII 風險，去識別化範圍']
+  count        int         [not null]
+  last_seen_at timestamptz [not null]
+  suggested    boolean     [not null, default: false, note: '已建議轉按鈕']
+  Indexes {
+    (tenant_id, phrase) [pk]
+  }
+  Note: '投影（可重算）：高頻自由文字排行，餵「建議轉成按鈕」。'
+}
+
+// ===== 複合外鍵（(tenant_id, xxx_id) → 對方 (tenant_id, id)；外鍵檢查不經 RLS，擋跨租戶關聯）=====
+Ref: staff_devices.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
+Ref: room_qr_tokens.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: guest_sessions.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: guest_sessions.(tenant_id, reservation_id) > reservations_cache.(tenant_id, id)
+Ref: reservations_cache.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: tasks.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: tasks.(tenant_id, reservation_id) > reservations_cache.(tenant_id, id)
+Ref: tasks.(tenant_id, assignee_id) > staff_accounts.(tenant_id, id)
+Ref: tasks.(tenant_id, plan_id) > cleaning_plans.(tenant_id, id)
+Ref: task_events.(tenant_id, task_id) > tasks.(tenant_id, id)
+Ref: cleaning_plans.(tenant_id, id) < plan_rooms.(tenant_id, plan_id)
+Ref: plan_rooms.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: plan_rooms.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
+Ref: plan_rooms.(tenant_id, task_id) > tasks.(tenant_id, id)
+Ref: task_sop_checks.(tenant_id, task_id) > tasks.(tenant_id, id)
+Ref: task_sop_checks.(tenant_id, checked_by) > staff_accounts.(tenant_id, id)
+Ref: inspections.(tenant_id, task_id) > tasks.(tenant_id, id)
+Ref: inspections.(tenant_id, inspector_id) > staff_accounts.(tenant_id, id)
+Ref: handover_signs.(tenant_id, handover_id) > handovers.(tenant_id, id)
+Ref: handover_signs.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
+Ref: notices.(tenant_id, sender_id) > staff_accounts.(tenant_id, id)
+Ref: notice_reads.(tenant_id, notice_id) > notices.(tenant_id, id)
+Ref: notice_reads.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
+Ref: lost_items.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: lost_items.(tenant_id, found_by) > staff_accounts.(tenant_id, id)
+Ref: leaves.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
+Ref: leaves.(tenant_id, created_by) > staff_accounts.(tenant_id, id)
+Ref: room_memory.(tenant_id, room_id) > rooms.(tenant_id, id)
+Ref: room_memory.(tenant_id, source_task_id) > tasks.(tenant_id, id)
+Ref: tenant_config.(tenant_id, updated_by) > staff_accounts.(tenant_id, id)

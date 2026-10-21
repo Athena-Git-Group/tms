@@ -1,0 +1,12 @@
+api: sop-items
+schema_version: "3.3"
+entity: sop_items
+title: SOP 與查房項目 API
+description: 唯讀清單（applies_to 區分 cleaning/inspection）；寫入走租戶設定門面，不另開寫入端點以免雙寫。
+
+exposes:
+  standard: [list]
+
+source_evidence:
+  - "specify/spec.md#故事 2 的 SOP 打勾與故事 4 的查房項目全集校驗"
+  - "db_table/erm.dbml#Table:sop_items"

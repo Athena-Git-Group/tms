@@ -1,0 +1,14 @@
+api: lost-items
+schema_version: "3.3"
+entity: lost_items
+title: 遺失物 API
+description: 櫃檯登記拾獲（拾獲人留痕；照片外存、事件只記 hasPhoto）與歸還結案。
+
+exposes:
+  standard: [list, create]
+  operations:
+    - return
+
+source_evidence:
+  - "specify/spec.md#故事 13（遺失物登記與歸還）"
+  - "db_table/erm.dbml#Table:lost_items"
