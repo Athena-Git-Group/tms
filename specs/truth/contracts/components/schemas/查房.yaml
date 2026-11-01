@@ -1,0 +1,98 @@
+inspections:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    inspectorId:
+      type: string
+      format: uuid
+      description: 守衛：inspector ≠ 原清房者（403）
+    result:
+      type: string
+      description: 'CHECK: passed|failed'
+    items:
+      type: string
+      description: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）'
+    createdAt:
+      type: string
+      format: date-time
+  description: 查房記錄（history，一次查房一列；退回重查會有多列）。
+  required:
+  - id
+  - tenantId
+  - taskId
+  - inspectorId
+  - result
+  - items
+  - createdAt
+inspectionsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    inspectorId:
+      type: string
+      format: uuid
+      description: 守衛：inspector ≠ 原清房者（403）
+    result:
+      type: string
+      description: 'CHECK: passed|failed'
+    items:
+      type: string
+      description: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）'
+  required:
+  - tenantId
+  - taskId
+  - inspectorId
+  - result
+  - items
+SpotCheckRequest:
+  type: object
+  required:
+  - taskId
+  - items
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    items:
+      type: array
+      minItems: 1
+      description: 抽查判定的項目；不需要涵蓋查房項目全集。
+      items:
+        type: object
+        required:
+        - key
+        - pass
+        properties:
+          key:
+            type: string
+          pass:
+            type: boolean
+PassRate:
+  type: object
+  required:
+  - passed
+  - failed
+  properties:
+    passed:
+      type: integer
+      format: int32
+    failed:
+      type: integer
+      format: int32
+    rate:
+      type: number
+      nullable: true
+      description: passed /（passed + failed）；分母為 0 時為 null。

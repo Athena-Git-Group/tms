@@ -1,0 +1,15 @@
+createAlerts:
+  post:
+    operationId: createAlerts
+    summary: create alerts
+    tags:
+    - 主管手動上報 API
+    responses:
+      '201':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: object
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'

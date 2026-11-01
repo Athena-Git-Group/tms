@@ -1,0 +1,58 @@
+TaskId:
+  name: id
+  in: path
+  required: true
+  description: 任務 id。工務單也是任務，可以用同一個 id。
+  schema:
+    type: string
+    format: uuid
+IdempotencyKey:
+  name: Idempotency-Key
+  in: header
+  required: true
+  description: 冪等鍵。同一個鍵重送時回放第一次的回應（processed_ops），不重複寫入。
+  schema:
+    type: string
+PhotoId:
+  name: photoId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+RepairTicketId:
+  name: ticketId
+  in: path
+  required: true
+  description: 工務單的任務 id（不是 W- 單號）。
+  schema:
+    type: string
+    format: uuid
+AnswerId:
+  name: answerId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+EscalationId:
+  name: escalationId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+GuestSession:
+  name: X-Guest-Session
+  in: header
+  required: true
+  description: guestSessionsScan 回傳的 sessionToken。驗證條件為 expires_at > now() 而且 revoked_at 為空，缺一就回 401（基線 E-17）。
+  schema:
+    type: string
+GuestRequestId:
+  name: id
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid

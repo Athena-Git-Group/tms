@@ -1,0 +1,15 @@
+listTaskEvents:
+  get:
+    operationId: listTaskEvents
+    summary: list task_events
+    tags:
+    - 任務事件流水帳 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/任務事件流水帳.yaml#/task_events'

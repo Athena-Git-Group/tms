@@ -1,0 +1,90 @@
+listInspectionsAndcreateInspections:
+  get:
+    operationId: listInspections
+    summary: list inspections
+    tags:
+    - 查房 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/查房.yaml#/inspections'
+  post:
+    operationId: createInspections
+    summary: create inspections
+    tags:
+    - 查房 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/查房.yaml#/inspectionsRequest'
+    responses:
+      '201':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/查房.yaml#/inspections'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+createSpotCheck:
+  post:
+    operationId: createSpotCheck
+    summary: 抽查免查的打掃任務
+    description: >-
+      主管對 inspected 且 inspection=waived 的任務抽查。
+      任一項不過時，任務依查房退回規則回到 accepted：負責人不變、redo 加 1、清空計時與勾記、
+      inspection 改為 failed，並推播負責人「<房號> 查房退回 · <項目>不合格」。
+      全部通過時任務不變，inspection 仍為 waived。
+      對 inspection 不是 waived 的任務回 409 state_conflict。
+    tags:
+    - 查房 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/查房.yaml#/SpotCheckRequest'
+    responses:
+      '201':
+        description: 已記錄
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/查房.yaml#/inspections'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+getInspectionPassRate:
+  get:
+    operationId: getInspectionPassRate
+    summary: 查看查房合格率
+    description: 合格率只用 inspection=passed 與 failed 計算：passed 是分子，passed 加 failed 是分母；waived 不計入分子也不計入分母。
+    tags:
+    - 查房 API
+    parameters:
+    - name: date
+      in: query
+      required: false
+      description: 預設今天（租戶時區）。
+      schema:
+        type: string
+        format: date
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/查房.yaml#/PassRate'

@@ -1,0 +1,41 @@
+tenant_config:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    key:
+      type: string
+      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）
+    value:
+      type: string
+      description: 結構依 key 而異
+    updatedAt:
+      type: string
+      format: date-time
+    updatedBy:
+      type: string
+      format: uuid
+      description: → staff_accounts；設定變更要能追
+  description: 「什麼都可調」的落地。inspection_items/sop_items 兩鍵為 sop_items 表的門面（讀寫轉進表）。
+  required:
+  - tenantId
+  - key
+  - value
+  - updatedAt
+tenant_configRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    key:
+      type: string
+      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）
+    value:
+      type: string
+      description: 結構依 key 而異
+  required:
+  - tenantId
+  - key
+  - value

@@ -1,0 +1,46 @@
+getMyToday:
+  get:
+    operationId: getMyToday
+    summary: 查看我的今日進度與下一間
+    description: >-
+      回傳呼叫者的今日進度：
+      打掃總數＝本人今日打掃任務數，不含 cancelled；
+      打掃完成數＝其中 done 或 inspected 的數量；
+      今日完成單數＝本人 done 或 inspected 的任務數；
+      臨時需求完成數＝本人非打掃類 done 的任務數；
+      預估剩餘工時＝Σ（accepted、doing、deferred、interrupted 的本人任務）max(0, 預估分鐘 − 已做分鐘)。
+      下一間推薦只列 accepted，排序為：redo 次數多的先、非打掃類先於打掃類、最後依房號遞增。
+      連續零退回天數的計算定義待 clarify（FR-030）。
+    tags:
+    - 員工工作台 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工工作台.yaml#/MyToday'
+listDeptPool:
+  get:
+    operationId: listDeptPool
+    summary: 查看本部門待接池
+    description: >-
+      依登入員工的部門回傳待接池；工務員工看到的是工務池。
+      排序為：急件 → 優先通知 → 與查詢者同樓層 → 房號遞增。
+      同樓層以查詢者本班排房負責的樓層判斷（推定，FR-032 NEEDS CLARIFICATION）。
+      回應包含分類筆數；帶 category 時只回傳該類別，但 counts 仍回傳全部類別。
+    tags:
+    - 員工工作台 API
+    parameters:
+    - name: category
+      in: query
+      required: false
+      schema:
+        $ref: '../../components/schemas/員工工作台.yaml#/PoolCategory'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工工作台.yaml#/DeptPool'

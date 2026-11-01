@@ -1,0 +1,42 @@
+BadRequest:
+  description: 請求參數錯誤
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+NotFound:
+  description: 資源不存在
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+Conflict:
+  description: 衝突（樂觀鎖 / 唯一鍵 / 狀態機）
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+Forbidden:
+  description: 呼叫者沒有權限做這個操作，例如不是負責人、不是報修人，或角色不符。
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+UnprocessableEntity:
+  description: 輸入驗證失敗，例如原因超過 60 字、照片張數不符或照片還沒上傳成功。
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+Unauthorized:
+  description: 憑證無效或已過期，例如住客 session 已過退房時間或已被撤銷。
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+TooManyRequests:
+  description: 超過限流，例如同一房 10 分鐘內第 4 筆需求。
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'

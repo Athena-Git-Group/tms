@@ -1,0 +1,817 @@
+Error:
+  type: object
+  description: >-
+    錯誤回應。message 用業務原文句型，App 直接顯示。
+    本 plan 新增的 code：
+    doing_task_exists（409，context 帶 taskId、roomNo，例：「305 還在進行中」）；
+    reason_invalid（422，原因空白或超過 60 字）；
+    photo_required（422，「至少需要 1 張照片」）；
+    photo_limit（422，「最多 3 張」）；
+    photo_not_uploaded（422，有照片還沒上傳成功）；
+    completion_photo_required（422，「需要完修照片」）；
+    already_claimed（409，「已被工務認領」）；
+    ticket_closed（409，工務單已結案）。
+    違反狀態機守衛時沿用 state_conflict（409）。
+  required:
+  - code
+  - message
+  properties:
+    code:
+      type: string
+      example: VALIDATION_FAILED
+    message:
+      type: string
+    details:
+      type: array
+      items:
+        type: object
+        properties:
+          field:
+            type: string
+          issue:
+            type: string
+    context:
+      type: object
+      additionalProperties: true
+      description: 錯誤的業務脈絡，例如 doing_task_exists 的 {taskId, roomNo}。
+tenants:
+  type: object
+  properties:
+    id:
+      type: integer
+      format: int64
+      description: 即各表 tenant_id（docs/12 例外二：集中開設、量少，8 bytes 省索引）
+    name:
+      type: string
+      description: 飯店名
+    createdAt:
+      type: string
+      format: date-time
+  description: 租戶（飯店）主檔。v1 由營運人工開設。
+  required:
+  - id
+  - name
+  - createdAt
+tenantsRequest:
+  type: object
+  properties:
+    name:
+      type: string
+      description: 飯店名
+  required:
+  - name
+staff_devices:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    staffId:
+      type: string
+      format: uuid
+    deviceFingerprint:
+      type: string
+      description: 只做去重，不做綁定（docs/11 不在範圍內）
+    pushToken:
+      type: string
+      description: APNS/FCM 地址；權限被關即空
+    registeredAt:
+      type: string
+      format: date-time
+    revokedAt:
+      type: string
+      format: date-time
+      description: 登出或推播服務回報失效時標記
+  description: 推播地址簿：一列=一台裝置。登入不驗裝置、多機合法。
+  required:
+  - id
+  - tenantId
+  - staffId
+  - deviceFingerprint
+  - registeredAt
+staff_devicesRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    staffId:
+      type: string
+      format: uuid
+    deviceFingerprint:
+      type: string
+      description: 只做去重，不做綁定（docs/11 不在範圍內）
+    pushToken:
+      type: string
+      description: APNS/FCM 地址；權限被關即空
+    registeredAt:
+      type: string
+      format: date-time
+    revokedAt:
+      type: string
+      format: date-time
+      description: 登出或推播服務回報失效時標記
+  required:
+  - tenantId
+  - staffId
+  - deviceFingerprint
+  - registeredAt
+roomsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    roomNo:
+      type: string
+      description: 房號「305」
+    floor:
+      type: integer
+      format: int32
+      description: v1 排房演算法排序鍵
+    roomType:
+      type: string
+      description: 平均打掃分鐘按它統計
+    hkState:
+      type: string
+      description: 'TMS 擁有。CHECK: dirty|cleaned|inspected|out_of_order'
+    occupancy:
+      type: string
+      description: 'PMS 擁有（同步唯讀）。CHECK: occupied|vacant'
+  required:
+  - tenantId
+  - roomNo
+  - floor
+  - roomType
+  - hkState
+  - occupancy
+task_eventsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    seq:
+      type: integer
+      format: int32
+      description: 這個任務的第幾步；取自 tasks.event_seq 的 RETURNING
+    type:
+      type: string
+      description: '18 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled（可擴充，加值不改表）'
+    actorRole:
+      type: string
+      description: guest|frontdesk|housekeeping|engineering|manager|system
+    actorId:
+      type: string
+      format: uuid
+      description: 住客與系統為空
+    payload:
+      type: string
+      description: 會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded
+  required:
+  - tenantId
+  - taskId
+  - seq
+  - type
+  - actorRole
+outbox:
+  type: object
+  properties:
+    id:
+      type: integer
+      format: int64
+    tenantId:
+      type: integer
+      format: int64
+    aggregateKey:
+      type: string
+      description: Kafka 分區鍵：task_event/push 用 task:<uuid>；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）
+    kind:
+      type: string
+      description: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）'
+    payload:
+      type: string
+    idempotencyKey:
+      type: string
+      description: 下游去重：重送不重做
+    status:
+      type: string
+      description: 'CHECK: pending|sent|failed（重試用盡等人工）'
+    attempts:
+      type: integer
+      format: int32
+    nextRetryAt:
+      type: string
+      format: date-time
+      description: 指數退避
+    createdAt:
+      type: string
+      format: date-time
+    sentAt:
+      type: string
+      format: date-time
+  required:
+  - id
+  - tenantId
+  - aggregateKey
+  - kind
+  - payload
+  - idempotencyKey
+  - status
+  - attempts
+  - createdAt
+outboxRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    aggregateKey:
+      type: string
+      description: Kafka 分區鍵：task_event/push 用 task:<uuid>；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）
+    kind:
+      type: string
+      description: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）'
+    payload:
+      type: string
+    idempotencyKey:
+      type: string
+      description: 下游去重：重送不重做
+    status:
+      type: string
+      description: 'CHECK: pending|sent|failed（重試用盡等人工）'
+    attempts:
+      type: integer
+      format: int32
+    nextRetryAt:
+      type: string
+      format: date-time
+      description: 指數退避
+    sentAt:
+      type: string
+      format: date-time
+  required:
+  - tenantId
+  - aggregateKey
+  - kind
+  - payload
+  - idempotencyKey
+  - status
+  - attempts
+processed_ops:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    opId:
+      type: string
+      description: 客戶端 Idempotency-Key（UUID）
+    resultRef:
+      type: string
+      description: 狀態碼＋精簡回應，重送原樣回放
+    createdAt:
+      type: string
+      format: date-time
+      description: 7 天後排程清
+  description: 弱網重送去重簿（GR-002/E-11）。
+  required:
+  - tenantId
+  - opId
+  - resultRef
+  - createdAt
+processed_opsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    opId:
+      type: string
+      description: 客戶端 Idempotency-Key（UUID）
+    resultRef:
+      type: string
+      description: 狀態碼＋精簡回應，重送原樣回放
+  required:
+  - tenantId
+  - opId
+  - resultRef
+plan_rooms:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    planId:
+      type: string
+      format: uuid
+    roomId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+      description: 誰在哪天負責哪些房查這張
+    estMin:
+      type: integer
+      format: int32
+      description: 抄自 cleaning_time_stats，樣本<20 用標準工時
+    routeSeq:
+      type: integer
+      format: int32
+      description: 建議打掃順序（v1=照樓層）
+    taskId:
+      type: string
+      format: uuid
+      description: 發佈後回填對應打掃任務
+  description: 計畫明細（Plan×Room×Staff junction）。
+  required:
+  - id
+  - tenantId
+  - planId
+  - roomId
+  - staffId
+  - estMin
+  - routeSeq
+plan_roomsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    planId:
+      type: string
+      format: uuid
+    roomId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+      description: 誰在哪天負責哪些房查這張
+    estMin:
+      type: integer
+      format: int32
+      description: 抄自 cleaning_time_stats，樣本<20 用標準工時
+    routeSeq:
+      type: integer
+      format: int32
+      description: 建議打掃順序（v1=照樓層）
+    taskId:
+      type: string
+      format: uuid
+      description: 發佈後回填對應打掃任務
+  required:
+  - tenantId
+  - planId
+  - roomId
+  - staffId
+  - estMin
+  - routeSeq
+cleaning_time_stats:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    roomType:
+      type: string
+    avgActualMin:
+      type: number
+      format: decimal
+      description: derived：流水帳 completed−started 平均（退回以最後一輪為準）
+    sampleCount:
+      type: integer
+      format: int32
+      description: <20 時排房用標準工時
+    updatedAt:
+      type: string
+      format: date-time
+  description: 投影（可重算）。只到房型層級、不含個人（個人工時受分級可見與保留期限管）。
+  required:
+  - tenantId
+  - roomType
+  - avgActualMin
+  - sampleCount
+  - updatedAt
+cleaning_time_statsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    roomType:
+      type: string
+    avgActualMin:
+      type: number
+      format: decimal
+      description: derived：流水帳 completed−started 平均（退回以最後一輪為準）
+    sampleCount:
+      type: integer
+      format: int32
+      description: <20 時排房用標準工時
+  required:
+  - tenantId
+  - roomType
+  - avgActualMin
+  - sampleCount
+sop_itemsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    appliesTo:
+      type: string
+      description: 'CHECK: cleaning|inspection——SOP 項目與查房項目同構共表'
+    itemKey:
+      type: string
+    label:
+      type: string
+    sortOrder:
+      type: integer
+      format: int32
+    active:
+      type: boolean
+  required:
+  - tenantId
+  - appliesTo
+  - itemKey
+  - label
+  - sortOrder
+  - active
+task_sop_checks:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    itemKey:
+      type: string
+    label:
+      type: string
+      description: 建單當下快照（項目日後改名不影響歷史單）
+    checked:
+      type: boolean
+    skipped:
+      type: boolean
+      description: CHECK NOT (checked AND skipped)；跳過不擋流程但留痕
+    checkedBy:
+      type: string
+      format: uuid
+    checkedAt:
+      type: string
+      format: date-time
+  description: 投影：查房退回時歸零重來；「誰在幾點勾過什麼」的歷史在 task_events（sop_checked）。
+  required:
+  - id
+  - tenantId
+  - taskId
+  - itemKey
+  - label
+  - checked
+  - skipped
+task_sop_checksRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    itemKey:
+      type: string
+    label:
+      type: string
+      description: 建單當下快照（項目日後改名不影響歷史單）
+    checked:
+      type: boolean
+    skipped:
+      type: boolean
+      description: CHECK NOT (checked AND skipped)；跳過不擋流程但留痕
+    checkedBy:
+      type: string
+      format: uuid
+    checkedAt:
+      type: string
+      format: date-time
+  required:
+  - tenantId
+  - taskId
+  - itemKey
+  - label
+  - checked
+  - skipped
+handover_signs:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    handoverId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+    signedAt:
+      type: string
+      format: date-time
+  description: 簽收（junction）；簽收另寫事件。
+  required:
+  - tenantId
+  - handoverId
+  - staffId
+  - signedAt
+handover_signsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    handoverId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+    signedAt:
+      type: string
+      format: date-time
+  required:
+  - tenantId
+  - handoverId
+  - staffId
+  - signedAt
+notice_reads:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    noticeId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+    readAt:
+      type: string
+      format: date-time
+  description: 已讀（junction）。
+  required:
+  - tenantId
+  - noticeId
+  - staffId
+  - readAt
+notice_readsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    noticeId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+    readAt:
+      type: string
+      format: date-time
+  required:
+  - tenantId
+  - noticeId
+  - staffId
+  - readAt
+stats_dailyRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    statDate:
+      type: string
+      format: date
+    sellable:
+      type: integer
+      format: int32
+      description: 可賣房數
+    avgResponseMin:
+      type: number
+      format: decimal
+      description: 平均回應分鐘
+    ratingAvg:
+      type: number
+      format: decimal
+      description: 住客評分均值
+    inspectionReturns:
+      type: integer
+      format: int32
+      description: 查房退回次數
+    completedCount:
+      type: integer
+      format: int32
+    summary:
+      type: string
+      description: 一行當日摘要
+  required:
+  - tenantId
+  - statDate
+  - sellable
+  - avgResponseMin
+  - ratingAvg
+  - inspectionReturns
+  - completedCount
+  - summary
+phrase_counter:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    phrase:
+      type: string
+      description: 住客常打字句——PII 風險，去識別化範圍
+    count:
+      type: integer
+      format: int32
+    lastSeenAt:
+      type: string
+      format: date-time
+    suggested:
+      type: boolean
+      description: 已建議轉按鈕
+  description: 投影（可重算）：高頻自由文字排行，餵「建議轉成按鈕」。
+  required:
+  - tenantId
+  - phrase
+  - count
+  - lastSeenAt
+  - suggested
+phrase_counterRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    phrase:
+      type: string
+      description: 住客常打字句——PII 風險，去識別化範圍
+    count:
+      type: integer
+      format: int32
+    lastSeenAt:
+      type: string
+      format: date-time
+    suggested:
+      type: boolean
+      description: 已建議轉按鈕
+  required:
+  - tenantId
+  - phrase
+  - count
+  - lastSeenAt
+  - suggested
+RepairTicketSummary:
+  type: object
+  description: 工務單摘要。任務詳情、開單前檢查與工務單 API 共用。
+  required:
+  - taskId
+  - ticketNo
+  - roomNo
+  - category
+  - urgent
+  - state
+  - reporterName
+  - createdAt
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    ticketNo:
+      type: string
+      pattern: ^W-\d{4}$
+      example: W-0410
+    roomNo:
+      type: string
+    category:
+      $ref: './工務單.yaml#/RepairCategory'
+    urgent:
+      type: boolean
+    state:
+      type: string
+      enum:
+      - pool
+      - accepted
+      - doing
+      - done
+      - cancelled
+      description: 待接、已認領、處理中、已完修、已撤回（cancelled 且原因為 staff_withdrew）。
+    reporterName:
+      type: string
+    createdAt:
+      type: string
+      format: date-time
+PushPayload:
+  type: object
+  description: >-
+    非同步契約：outbox kind=push 的內容，由推播消費者送到裝置（MVP 只寫日誌與資料列，不接 APNS/FCM）。
+    沒有對應的 HTTP 端點，這裡列出它的形狀，作為 App 解析推播與後端 E2E 斷言的依據。
+  required:
+  - recipientStaffId
+  - event
+  - title
+  - target
+  properties:
+    recipientStaffId:
+      type: string
+      format: uuid
+    event:
+      type: string
+      enum:
+      - pool_new_request
+      - inspection_passed
+      - inspection_failed
+      - spot_check_failed
+      - task_cancelled
+      - reassigned_away
+      - reassigned_to_me
+      - shift_end_returned
+      - guest_withdrew
+      - leave_takeover
+      - repair_completed
+      - repair_urgent
+      - kb_reply
+      - kb_unhelpful
+      - shift_end_still_interrupted
+    title:
+      type: string
+      description: 推播標題全文，例如「305 水電已修好」。
+    body:
+      type: string
+      nullable: true
+    target:
+      $ref: '#/PushTarget'
+PushTarget:
+  type: object
+  description: 點開推播後的去處。屬於本人的任務帶 taskId；不屬於本人的帶待接池入口。
+  required:
+  - kind
+  properties:
+    kind:
+      type: string
+      enum:
+      - task
+      - pool
+      - home
+    taskId:
+      type: string
+      format: uuid
+      nullable: true
+      description: kind=task 時必填。
+    dept:
+      type: string
+      enum:
+      - housekeeping
+      - engineering
+      - frontdesk
+      nullable: true
+      description: kind=pool 時必填。
+    highlightTaskId:
+      type: string
+      format: uuid
+      nullable: true
+      description: kind=pool 時選填，要標亮的單。
+PmsRoomStatusWriteback:
+  type: object
+  description: >-
+    非同步契約：outbox kind=pms_status 的內容，由 PMS 回寫消費者送到 PMS adapter。
+    查房通過時回寫 vacant_clean（可售）；免查結案時回寫 occupied_clean（OC，住客房・已整理），不得回寫為可售。
+  required:
+  - roomNo
+  - status
+  properties:
+    roomNo:
+      type: string
+    status:
+      type: string
+      enum:
+      - vacant_clean
+      - occupied_clean

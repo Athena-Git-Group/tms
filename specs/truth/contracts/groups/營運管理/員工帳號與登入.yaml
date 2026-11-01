@@ -1,0 +1,38 @@
+listStaffAccounts:
+  get:
+    operationId: listStaffAccounts
+    summary: list staff_accounts
+    tags:
+    - 員工帳號與登入 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accounts'
+staffAccountsLogin:
+  post:
+    operationId: staffAccountsLogin
+    summary: login
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accountsRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accounts'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

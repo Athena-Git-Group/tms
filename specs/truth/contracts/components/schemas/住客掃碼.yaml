@@ -1,0 +1,125 @@
+guest_sessions:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    sessionToken:
+      type: string
+      description: 住客瀏覽器憑證；全域 UNIQUE
+    roomId:
+      type: string
+      format: uuid
+    reservationId:
+      type: string
+      format: uuid
+      description: 綁簽發當下訂單——換住客舊 session 自然失效
+    expiresAt:
+      type: string
+      format: date-time
+      description: =退房時間
+    revokedAt:
+      type: string
+      format: date-time
+      description: QR 輪替/提前退房/訂單取消時整批標上
+    createdAt:
+      type: string
+      format: date-time
+    lastSeenAt:
+      type: string
+      format: date-time
+  description: 不變條件：驗證=expires_at > now() AND revoked_at IS NULL，缺一即 401（E-17）。
+  required:
+  - id
+  - tenantId
+  - sessionToken
+  - roomId
+  - reservationId
+  - expiresAt
+  - createdAt
+guest_sessionsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    sessionToken:
+      type: string
+      description: 住客瀏覽器憑證；全域 UNIQUE
+    roomId:
+      type: string
+      format: uuid
+    reservationId:
+      type: string
+      format: uuid
+      description: 綁簽發當下訂單——換住客舊 session 自然失效
+    expiresAt:
+      type: string
+      format: date-time
+      description: =退房時間
+    revokedAt:
+      type: string
+      format: date-time
+      description: QR 輪替/提前退房/訂單取消時整批標上
+    lastSeenAt:
+      type: string
+      format: date-time
+  required:
+  - tenantId
+  - sessionToken
+  - roomId
+  - reservationId
+  - expiresAt
+CreateGuestRequestRequest:
+  type: object
+  description: itemId 與 text 必須剛好擇一，兩者都有或都沒有時回 422。
+  properties:
+    itemId:
+      type: string
+      description: 勾選單品項，對應 tenant_config.request_menu。
+    quantity:
+      type: integer
+      format: int32
+      minimum: 1
+      description: 勾選單數量，預設 1。
+    text:
+      type: string
+      minLength: 1
+      description: 自由文字需求。PII 去識別化範圍。
+    lang:
+      type: string
+      description: 自由文字的語言，例如 en、ja。
+GuestRequest:
+  type: object
+  description: 住客視角的需求。不含員工姓名等內部資訊。
+  required:
+  - id
+  - title
+  - state
+  - createdAt
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: 等於 tasks.id。
+    title:
+      type: string
+      description: 例如「衣架 ×4」。
+    state:
+      type: string
+      enum:
+      - triage
+      - pool
+      - accepted
+      - doing
+      - done
+      - inspected
+      - deferred
+      - interrupted
+      - cancelled
+    createdAt:
+      type: string
+      format: date-time

@@ -1,0 +1,75 @@
+staff_accounts:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    name:
+      type: string
+      description: PII：離職去識別化換不可回推代號
+    loginId:
+      type: string
+      description: PII；UNIQUE (tenant_id, login_id)
+    passwordHash:
+      type: string
+      description: bcrypt/argon2，絕不存明文
+    role:
+      type: string
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+    active:
+      type: boolean
+      description: 停用=不能登入，歷史保留
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time
+  description: 員工帳號。角色×動作矩陣在程式/設定，不在表裡（docs/11 需求 15）。
+  required:
+  - id
+  - tenantId
+  - name
+  - loginId
+  - passwordHash
+  - role
+  - active
+  - createdAt
+  - updatedAt
+staff_accountsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    name:
+      type: string
+      description: PII：離職去識別化換不可回推代號
+    loginId:
+      type: string
+      description: PII；UNIQUE (tenant_id, login_id)
+    passwordHash:
+      type: string
+      description: bcrypt/argon2，絕不存明文
+    role:
+      type: string
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+    active:
+      type: boolean
+      description: 停用=不能登入，歷史保留
+  required:
+  - tenantId
+  - name
+  - loginId
+  - passwordHash
+  - role
+  - active

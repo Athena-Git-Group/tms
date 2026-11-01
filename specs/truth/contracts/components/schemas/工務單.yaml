@@ -1,0 +1,151 @@
+RepairCategory:
+  type: string
+  description: 冷氣、水電、家具／設備、門鎖、其他。
+  enum:
+  - air_conditioning
+  - plumbing_electrical
+  - furniture_equipment
+  - door_lock
+  - other
+CreateRepairPhotoRequest:
+  type: object
+  required:
+  - purpose
+  - takenAt
+  properties:
+    purpose:
+      type: string
+      enum:
+      - report
+      - completion
+      description: report 是報修照片；completion 是完修照片。
+    roomId:
+      type: string
+      format: uuid
+    takenAt:
+      type: string
+      format: date-time
+      description: 拍攝時間。從相簿選取的照片用檔案時間；這個值和 App 加上的浮水印一致。
+RepairPhoto:
+  type: object
+  required:
+  - id
+  - status
+  properties:
+    id:
+      type: string
+      format: uuid
+    status:
+      type: string
+      enum:
+      - pending
+      - uploaded
+    takenAt:
+      type: string
+      format: date-time
+RepairTicketPrecheckRequest:
+  type: object
+  required:
+  - sourceTaskId
+  - category
+  properties:
+    sourceTaskId:
+      type: string
+      format: uuid
+    category:
+      $ref: '#/RepairCategory'
+RepairTicketPrecheckResponse:
+  type: object
+  required:
+  - urgentSuggestion
+  properties:
+    duplicate:
+      type: object
+      allOf:
+      - $ref: './shared.yaml#/RepairTicketSummary'
+      nullable: true
+      description: 同房、同類別、未結案的工務單；沒有時為 null。
+    urgentSuggestion:
+      type: object
+      required:
+      - suggested
+      properties:
+        suggested:
+          type: boolean
+        message:
+          type: string
+          description: 例如「這間『VIP · 15:00 入住』，影響入住的話建議設為急件」。
+CreateRepairTicketRequest:
+  type: object
+  required:
+  - sourceTaskId
+  - category
+  - photoIds
+  - urgent
+  - interruptSourceTask
+  properties:
+    sourceTaskId:
+      type: string
+      format: uuid
+      description: 原任務。房號由原任務帶入。
+    category:
+      $ref: '#/RepairCategory'
+    description:
+      type: string
+    photoIds:
+      type: array
+      minItems: 1
+      maxItems: 3
+      items:
+        type: string
+        format: uuid
+      description: 0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；有任一張還沒上傳回 422 photo_not_uploaded。
+    urgent:
+      type: boolean
+    interruptSourceTask:
+      type: boolean
+      description: true 表示「中斷 → 需要工務協助」模式。
+AppendRepairPhotosRequest:
+  type: object
+  required:
+  - photoIds
+  properties:
+    photoIds:
+      type: array
+      minItems: 1
+      maxItems: 3
+      items:
+        type: string
+        format: uuid
+RepairTicket:
+  description: 工務單詳情。工務單本身就是一筆修繕任務，taskId 可以直接用在 tasksClaim、tasksStart、tasksComplete。
+  allOf:
+  - $ref: './shared.yaml#/RepairTicketSummary'
+  - type: object
+    required:
+    - photoCount
+    properties:
+      description:
+        type: string
+      photos:
+        type: array
+        items:
+          $ref: '#/RepairPhoto'
+      photoCount:
+        type: integer
+        format: int32
+      sourceTaskId:
+        type: string
+        format: uuid
+        nullable: true
+      assigneeName:
+        type: string
+        nullable: true
+        description: 處理人。
+      completionPhotos:
+        type: array
+        items:
+          $ref: '#/RepairPhoto'
+      resolutionNote:
+        type: string
+        nullable: true

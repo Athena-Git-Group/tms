@@ -1,0 +1,89 @@
+listNoticesAndcreateNotices:
+  get:
+    operationId: listNotices
+    summary: list notices
+    tags:
+    - 通知板 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/通知板.yaml#/notices'
+  post:
+    operationId: createNotices
+    summary: create notices
+    tags:
+    - 通知板 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/通知板.yaml#/noticesRequest'
+    responses:
+      '201':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/通知板.yaml#/notices'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+noticesMarkRead:
+  post:
+    operationId: noticesMarkRead
+    summary: mark read
+    tags:
+    - 通知板 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/通知板.yaml#/noticesRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/通知板.yaml#/notices'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+noticesReads:
+  get:
+    operationId: noticesReads
+    summary: reads
+    tags:
+    - 通知板 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/通知板.yaml#/notices'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

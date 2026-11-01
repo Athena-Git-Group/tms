@@ -1,0 +1,458 @@
+listTasksAndcreateTasks:
+  get:
+    operationId: listTasks
+    summary: list tasks
+    tags:
+    - 任務 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/任務.yaml#/tasks'
+  post:
+    operationId: createTasks
+    summary: create tasks
+    tags:
+    - 任務 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/tasksRequest'
+    responses:
+      '201':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+readTasks:
+  get:
+    operationId: readTasks
+    summary: 查看任務詳情
+    description: >-
+      回傳任務本體，加上本 plan 新增的員工視角欄位：
+      inspection、免查鎖定值、已做分鐘、停住原因、SOP 勾記與跳過項；
+      同房交辦（主管交代或接手進度、交班單中該房的項目、櫃檯備註；樓層層級的項目不併入）；
+      呼叫者的交辦已讀狀態；
+      查房退回資訊（不合格項、重做次數、換人原因合併成一則，不另列為主管交代）；
+      同房未撤回的工務單。
+      這個查詢不寫交辦已讀紀錄。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+tasksClaim:
+  post:
+    operationId: tasksClaim
+    summary: claim
+    tags:
+    - 任務 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/tasksRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksStart:
+  post:
+    operationId: tasksStart
+    summary: 開始任務
+    description: >-
+      負責人開工，接受 accepted→doing，也接受本人延後的 deferred→doing。
+      開工當下依租戶設定 inspection_waived_cleaning_types 鎖定是否免查房，並把交辦標為已讀。
+      同一位員工已有另一筆 doing 時，回 409 doing_task_exists，context 帶那一筆的 taskId 與 roomNo，
+      message 例如「305 還在進行中」。
+      主管延後（沒有負責人）的 deferred 不能直接開工。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksComplete:
+  post:
+    operationId: tasksComplete
+    summary: 完成任務
+    description: >-
+      負責人完成 doing 的任務。實際工時等於各段 doing 期間的總和，不含中斷期間。
+      打掃任務：未勾也未跳過的 SOP 項記為跳過。開工時鎖定為免查的，直接轉 inspected、inspection=waived，
+      PMS 回寫 occupied_clean（OC）；其他的轉 done 等查房。
+      修繕任務（工務單）：photoIds 至少 1 張，否則回 422 completion_photo_required；resolutionNote 選填。
+      判斷不需維修也用完成結案，並在 resolutionNote 註明。
+      工務單完成時推播報修人，連結的原任務停住原因改為「工務已修好：<類別>」，但原任務不自動恢復。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/CompleteTaskRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+tasksCancel:
+  post:
+    operationId: tasksCancel
+    summary: 主管作廢任務
+    description: >-
+      主管把任何未完成態的任務轉為 cancelled，必須附原因 manager_void 或 plan_superseded。
+      note 是給負責人的說明，例如「住客延後退房」。
+      任務有負責人時，推播「<房號> 已被主管作廢」，去處是該任務頁。
+      作廢因工務單而中斷的原任務時，工務單維持原狀（推定，見 spec 邊界情況的 NEEDS CLARIFICATION）。
+      員工撤回工務單請用 withdrawRepairTicket；住客撤回需求請用 cancelGuestRequest。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/CancelTaskRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksRate:
+  post:
+    operationId: tasksRate
+    summary: rate
+    tags:
+    - 任務 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/tasksRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksTriage:
+  post:
+    operationId: tasksTriage
+    summary: triage
+    tags:
+    - 任務 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/tasksRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksSopCheck:
+  post:
+    operationId: tasksSopCheck
+    summary: 勾記或跳過 SOP 項
+    description: 負責人對自己 doing 的打掃任務勾選或跳過一個 SOP 項。中斷期間保留勾記；查房退回與抽查退回時清空。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/SopCheckRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksRequeue:
+  post:
+    operationId: tasksRequeue
+    summary: requeue
+    tags:
+    - 任務 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/tasksRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksReassign:
+  post:
+    operationId: tasksReassign
+    summary: reassign
+    tags:
+    - 任務 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/tasksRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksDefer:
+  post:
+    operationId: tasksDefer
+    summary: 延後任務
+    description: >-
+      有兩種呼叫者：
+      (1) 主管把 pool 的任務延後，pool→deferred，沒有負責人；隔日自動回池，也可以 undefer。
+      (2) 負責人把自己名下 accepted 的任務延後，accepted→deferred，保留負責人；由班末掃描退池，不適用隔日回池與 undefer。
+      reason 是預設原因或自填文字，去掉頭尾空白後必須是 1–60 字，否則回 422 reason_invalid。
+      延後也視為已讀交辦。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/HoldReasonRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+tasksUndefer:
+  post:
+    operationId: tasksUndefer
+    summary: 主管取消延後
+    description: 主管把主管延後（沒有負責人）的 deferred 任務送回 pool。本人延後（有負責人）的任務回 409 state_conflict。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/tasks'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tasksInterrupt:
+  post:
+    operationId: tasksInterrupt
+    summary: 中斷自己進行中的任務
+    description: >-
+      負責人把自己 doing 的任務轉為 interrupted：暫停計時，已做分鐘停在當下；保留 SOP 勾記與負責人。
+      reason 的規則同 tasksDefer。
+      要開工務單並同時中斷原任務，請用 createRepairTicket 並設 interruptSourceTask=true，
+      停住原因由系統記為「等工務：<類別>」。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/任務.yaml#/HoldReasonRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+tasksResume:
+  post:
+    operationId: tasksResume
+    summary: 恢復自己中斷的任務
+    description: >-
+      負責人把自己 interrupted 的任務轉回 doing。已做分鐘從中斷前的累計接續，不含中斷期間。
+      同一位員工已有另一筆 doing 時，回 409 doing_task_exists，規則同 tasksStart。
+    tags:
+    - 任務 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

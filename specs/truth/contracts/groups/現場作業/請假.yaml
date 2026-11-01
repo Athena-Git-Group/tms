@@ -1,0 +1,35 @@
+listLeavesAndcreateLeaves:
+  get:
+    operationId: listLeaves
+    summary: list leaves
+    tags:
+    - 請假 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/請假.yaml#/leaves'
+  post:
+    operationId: createLeaves
+    summary: create leaves
+    tags:
+    - 請假 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/請假.yaml#/leavesRequest'
+    responses:
+      '201':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/請假.yaml#/leaves'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'

@@ -1,0 +1,413 @@
+openapi: 3.0.3
+info:
+  title: TMS 任務交辦系統 API
+  description: 系統目前唯一的 API truth。由基線 specs/tms-poc-to-backend/api/openapi.yaml 遷入，並套用 plan 001-staff-app-increment 的增量。推播與 PMS 回寫的非同步內容見 components.schemas 的 PushPayload 與 PmsRoomStatusWriteback。
+  version: 1.0.0
+servers:
+- url: /api/v1
+tags:
+- name: 主管手動上報 API
+  description: 「出事才響」的第二個來源：主管手動上報，排 owner 推播進 outbox。無持久化實體（事件與推播留痕）。
+- name: 排房計畫 API
+  description: 查當日計畫、手動調整（If-Match 版本，衝突 409 附最新）、發佈（同交易切換＋任務對帳）、重產（新草稿與現行並存）、人力缺口試算。
+- name: 老闆儀表板 API
+  description: 讀 worker 預算好的每日數字卡片與摘要，API 只讀不現算；取消單一律排除。
+- name: 住客掃碼 API
+  description: 掃房間 QR 換住客 session，並以 session 建立、查看、撤回本次住宿的需求。空房或 token 已作廢回 409 room_vacant；驗證=未過期且未撤銷。
+- name: 交班單 API
+  description: 查看凍結快照（班末排程產生、之後任務再變快照不變）與簽收。
+- name: 查房 API
+  description: 主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；自清自查 403；原清房者已下班→連動退池。
+- name: 請假 API
+  description: 登記請假即觸發連鎖：該員 accepted 單自動退池、doing 單標中斷並回傳受影響清單給主管收尾。
+- name: 遺失物 API
+  description: 櫃檯登記拾獲（拾獲人留痕；照片外存、事件只記 hasPhoto）與歸還結案。
+- name: 通知板 API
+  description: 櫃檯發通知（部門/個人混選，推播經 outbox 展開一人一封）、收件人開啟即記已讀、發送者查已讀名單。
+- name: 訂房檔副本與房態匯入 API
+  description: PMS 唯讀快取查詢＋Excel/CSV 今日房態匯入（入住＋退房；逐列驗房號；reservation_ref 合成 excel:日期:房號）。
+- name: 房間記憶與問一下 API
+  description: 查這間房的往事（修過什麼、偏好）；ask 為 MVP 降級版（room_memory＋SOP 關鍵字比對，LLM 留椿）。
+- name: 房間 QR 憑證 API
+  description: 列印現行 QR 與重產輪替。輪替同一交易作廢舊 token 並連坐撤銷該房全部住客 session（E-18）。
+- name: 房間 API
+  description: 房間主檔查詢（房況板）。hk_state 由任務引擎改、occupancy 由 PMS 同步改，本 API 只讀。
+- name: SOP 與查房項目 API
+  description: 唯讀清單（applies_to 區分 cleaning/inspection）；寫入走租戶設定門面，不另開寫入端點以免雙寫。
+- name: 員工帳號與登入 API
+  description: 帳密登入換 JWT（TTL 12h），同時登記推播裝置（同裝置去重）；帳號停用即不能登入但歷史保留。
+- name: 任務事件流水帳 API
+  description: 只進不改的事件歷程查詢（單任務歷程、全序排查）。增量訂閱一律走 Kafka，本 API 僅供查閱。
+- name: 任務 API
+  description: 任務建立、認領/開始/完成兩段回報、櫃檯判讀、住客收回與評分、主管改派/退池/延後/取消。所有狀態轉移經任務引擎守衛（非法轉移 409 state_conflict）。
+- name: 租戶設定 API
+  description: 封閉鍵集合的讀寫（含住客資訊頁 guest-home 的前台讀取面）；sop_items/inspection_items 兩鍵為 sop_items 表的門面。
+- name: 工務單 API
+  description: 本 plan 新增。房務從任務開工務單交給工務（工務部門的修繕任務），照片兩段式上傳、開單前檢查（重複與急件建議）、補照片、撤回。認領、開始、完成沿用任務 API。
+- name: 員工工作台 API
+  description: 本 plan 新增。員工首頁的今日進度與下一間，以及依部門的待接池（排序、同樓層、分類篩選與筆數）。
+- name: 房間交辦 API
+  description: 本 plan 新增。櫃檯房間備註與交辦已讀；合併後的交辦呈現在任務詳情。
+paths:
+  /alerts:
+    $ref: './groups/營運管理/主管手動上報.yaml#/createAlerts'
+  /cleaning-plans:
+    $ref: './groups/營運管理/排房計畫.yaml#/listCleaningPlans'
+  /cleaning-plans/{id}:
+    $ref: './groups/營運管理/排房計畫.yaml#/readCleaningPlansAndupdateCleaningPlans'
+  /cleaning-plans/{id}/publish:
+    $ref: './groups/營運管理/排房計畫.yaml#/cleaningPlansPublish'
+  /cleaning-plans/{id}/regenerate:
+    $ref: './groups/營運管理/排房計畫.yaml#/cleaningPlansRegenerate'
+  /cleaning-plans/capacity:
+    $ref: './groups/營運管理/排房計畫.yaml#/cleaningPlansCapacity'
+  /daily-stats:
+    $ref: './groups/營運管理/老闆儀表板.yaml#/listStatsDaily'
+  /daily-stats/dashboard:
+    $ref: './groups/營運管理/老闆儀表板.yaml#/statsDailyDashboard'
+  /guest-sessions/scan:
+    $ref: './groups/住客與房間/住客掃碼.yaml#/guestSessionsScan'
+  /guest-requests:
+    $ref: './groups/住客與房間/住客掃碼.yaml#/listGuestRequestsAndcreateGuestRequest'
+  /guest-requests/{id}/cancel:
+    $ref: './groups/住客與房間/住客掃碼.yaml#/cancelGuestRequest'
+  /handovers:
+    $ref: './groups/現場作業/交班單.yaml#/listHandovers'
+  /handovers/{id}:
+    $ref: './groups/現場作業/交班單.yaml#/readHandovers'
+  /handovers/{id}/sign:
+    $ref: './groups/現場作業/交班單.yaml#/handoversSign'
+  /inspections:
+    $ref: './groups/現場作業/查房.yaml#/listInspectionsAndcreateInspections'
+  /leaves:
+    $ref: './groups/現場作業/請假.yaml#/listLeavesAndcreateLeaves'
+  /lost-items:
+    $ref: './groups/住客與房間/遺失物.yaml#/listLostItemsAndcreateLostItems'
+  /lost-items/{id}/return:
+    $ref: './groups/住客與房間/遺失物.yaml#/lostItemsReturn'
+  /notices:
+    $ref: './groups/知識與通知/通知板.yaml#/listNoticesAndcreateNotices'
+  /notices/{id}/mark-read:
+    $ref: './groups/知識與通知/通知板.yaml#/noticesMarkRead'
+  /notices/{id}/reads:
+    $ref: './groups/知識與通知/通知板.yaml#/noticesReads'
+  /reservations:
+    $ref: './groups/住客與房間/訂房檔副本與房態匯入.yaml#/listReservationsCache'
+  /reservations/import:
+    $ref: './groups/住客與房間/訂房檔副本與房態匯入.yaml#/reservationsCacheImportOccupancy'
+  /room-memories:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/listRoomMemory'
+  /room-memories/ask:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/roomMemoryAsk'
+  /room-qr-tokens:
+    $ref: './groups/住客與房間/房間QR憑證.yaml#/listRoomQrTokens'
+  /room-qr-tokens/{id}:
+    $ref: './groups/住客與房間/房間QR憑證.yaml#/readRoomQrTokens'
+  /room-qr-tokens/{id}/rotate:
+    $ref: './groups/住客與房間/房間QR憑證.yaml#/roomQrTokensRotate'
+  /rooms:
+    $ref: './groups/住客與房間/房間.yaml#/listRooms'
+  /rooms/{id}:
+    $ref: './groups/住客與房間/房間.yaml#/readRooms'
+  /sop-items:
+    $ref: './groups/知識與通知/SOP與查房項目.yaml#/listSopItems'
+  /staff-accounts:
+    $ref: './groups/營運管理/員工帳號與登入.yaml#/listStaffAccounts'
+  /staff-accounts/login:
+    $ref: './groups/營運管理/員工帳號與登入.yaml#/staffAccountsLogin'
+  /task-events:
+    $ref: './groups/知識與通知/任務事件流水帳.yaml#/listTaskEvents'
+  /tasks:
+    $ref: './groups/現場作業/任務.yaml#/listTasksAndcreateTasks'
+  /tasks/{id}:
+    $ref: './groups/現場作業/任務.yaml#/readTasks'
+  /tasks/{id}/claim:
+    $ref: './groups/現場作業/任務.yaml#/tasksClaim'
+  /tasks/{id}/start:
+    $ref: './groups/現場作業/任務.yaml#/tasksStart'
+  /tasks/{id}/complete:
+    $ref: './groups/現場作業/任務.yaml#/tasksComplete'
+  /tasks/{id}/cancel:
+    $ref: './groups/現場作業/任務.yaml#/tasksCancel'
+  /tasks/{id}/rate:
+    $ref: './groups/現場作業/任務.yaml#/tasksRate'
+  /tasks/{id}/triage:
+    $ref: './groups/現場作業/任務.yaml#/tasksTriage'
+  /tasks/{id}/sop-check:
+    $ref: './groups/現場作業/任務.yaml#/tasksSopCheck'
+  /tasks/{id}/requeue:
+    $ref: './groups/現場作業/任務.yaml#/tasksRequeue'
+  /tasks/{id}/reassign:
+    $ref: './groups/現場作業/任務.yaml#/tasksReassign'
+  /tasks/{id}/defer:
+    $ref: './groups/現場作業/任務.yaml#/tasksDefer'
+  /tasks/{id}/undefer:
+    $ref: './groups/現場作業/任務.yaml#/tasksUndefer'
+  /tenant-configs:
+    $ref: './groups/營運管理/租戶設定.yaml#/listTenantConfig'
+  /tenant-configs/{id}:
+    $ref: './groups/營運管理/租戶設定.yaml#/updateTenantConfig'
+  /tenant-configs/guest-home:
+    $ref: './groups/營運管理/租戶設定.yaml#/tenantConfigGuestHome'
+  /tasks/{id}/interrupt:
+    $ref: './groups/現場作業/任務.yaml#/tasksInterrupt'
+  /tasks/{id}/resume:
+    $ref: './groups/現場作業/任務.yaml#/tasksResume'
+  /tasks/{id}/handover-read:
+    $ref: './groups/現場作業/房間交辦.yaml#/markHandoverRead'
+  /repair-photos:
+    $ref: './groups/現場作業/工務單.yaml#/createRepairPhoto'
+  /repair-photos/{photoId}/content:
+    $ref: './groups/現場作業/工務單.yaml#/uploadRepairPhotoContent'
+  /repair-tickets:
+    $ref: './groups/現場作業/工務單.yaml#/listRepairTicketsAndcreateRepairTicket'
+  /repair-tickets/precheck:
+    $ref: './groups/現場作業/工務單.yaml#/precheckRepairTicket'
+  /repair-tickets/{ticketId}:
+    $ref: './groups/現場作業/工務單.yaml#/readRepairTicket'
+  /repair-tickets/{ticketId}/photos:
+    $ref: './groups/現場作業/工務單.yaml#/appendRepairTicketPhotos'
+  /repair-tickets/{ticketId}/withdraw:
+    $ref: './groups/現場作業/工務單.yaml#/withdrawRepairTicket'
+  /me/today:
+    $ref: './groups/現場作業/員工工作台.yaml#/getMyToday'
+  /pool:
+    $ref: './groups/現場作業/員工工作台.yaml#/listDeptPool'
+  /desk-notes:
+    $ref: './groups/現場作業/房間交辦.yaml#/createDeskNote'
+  /inspections/spot-checks:
+    $ref: './groups/現場作業/查房.yaml#/createSpotCheck'
+  /inspections/pass-rate:
+    $ref: './groups/現場作業/查房.yaml#/getInspectionPassRate'
+  /room-memories/suggestions:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/listKbSuggestions'
+  /room-memories/answers/{answerId}/feedback:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/submitKbFeedback'
+  /room-memories/answers/{answerId}/escalate:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/escalateKbQuestion'
+  /room-memories/escalations:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/listKbEscalations'
+  /room-memories/escalations/{escalationId}/reply:
+    $ref: './groups/知識與通知/房間記憶與問一下.yaml#/replyKbEscalation'
+components:
+  parameters:
+    GuestSession:
+      $ref: './components/parameters.yaml#/GuestSession'
+    GuestRequestId:
+      $ref: './components/parameters.yaml#/GuestRequestId'
+    TaskId:
+      $ref: './components/parameters.yaml#/TaskId'
+    IdempotencyKey:
+      $ref: './components/parameters.yaml#/IdempotencyKey'
+    PhotoId:
+      $ref: './components/parameters.yaml#/PhotoId'
+    RepairTicketId:
+      $ref: './components/parameters.yaml#/RepairTicketId'
+    AnswerId:
+      $ref: './components/parameters.yaml#/AnswerId'
+    EscalationId:
+      $ref: './components/parameters.yaml#/EscalationId'
+  schemas:
+    Error:
+      $ref: './components/schemas/shared.yaml#/Error'
+    tenants:
+      $ref: './components/schemas/shared.yaml#/tenants'
+    tenantsRequest:
+      $ref: './components/schemas/shared.yaml#/tenantsRequest'
+    tenant_config:
+      $ref: './components/schemas/租戶設定.yaml#/tenant_config'
+    tenant_configRequest:
+      $ref: './components/schemas/租戶設定.yaml#/tenant_configRequest'
+    staff_accounts:
+      $ref: './components/schemas/員工帳號與登入.yaml#/staff_accounts'
+    staff_accountsRequest:
+      $ref: './components/schemas/員工帳號與登入.yaml#/staff_accountsRequest'
+    staff_devices:
+      $ref: './components/schemas/shared.yaml#/staff_devices'
+    staff_devicesRequest:
+      $ref: './components/schemas/shared.yaml#/staff_devicesRequest'
+    rooms:
+      $ref: './components/schemas/房間.yaml#/rooms'
+    roomsRequest:
+      $ref: './components/schemas/shared.yaml#/roomsRequest'
+    room_qr_tokens:
+      $ref: './components/schemas/房間QR憑證.yaml#/room_qr_tokens'
+    room_qr_tokensRequest:
+      $ref: './components/schemas/房間QR憑證.yaml#/room_qr_tokensRequest'
+    guest_sessions:
+      $ref: './components/schemas/住客掃碼.yaml#/guest_sessions'
+    guest_sessionsRequest:
+      $ref: './components/schemas/住客掃碼.yaml#/guest_sessionsRequest'
+    CreateGuestRequestRequest:
+      $ref: './components/schemas/住客掃碼.yaml#/CreateGuestRequestRequest'
+    GuestRequest:
+      $ref: './components/schemas/住客掃碼.yaml#/GuestRequest'
+    reservations_cache:
+      $ref: './components/schemas/訂房檔副本與房態匯入.yaml#/reservations_cache'
+    reservations_cacheRequest:
+      $ref: './components/schemas/訂房檔副本與房態匯入.yaml#/reservations_cacheRequest'
+    tasks:
+      $ref: './components/schemas/任務.yaml#/tasks'
+    tasksRequest:
+      $ref: './components/schemas/任務.yaml#/tasksRequest'
+    task_events:
+      $ref: './components/schemas/任務事件流水帳.yaml#/task_events'
+    task_eventsRequest:
+      $ref: './components/schemas/shared.yaml#/task_eventsRequest'
+    outbox:
+      $ref: './components/schemas/shared.yaml#/outbox'
+    outboxRequest:
+      $ref: './components/schemas/shared.yaml#/outboxRequest'
+    processed_ops:
+      $ref: './components/schemas/shared.yaml#/processed_ops'
+    processed_opsRequest:
+      $ref: './components/schemas/shared.yaml#/processed_opsRequest'
+    cleaning_plans:
+      $ref: './components/schemas/排房計畫.yaml#/cleaning_plans'
+    cleaning_plansRequest:
+      $ref: './components/schemas/排房計畫.yaml#/cleaning_plansRequest'
+    plan_rooms:
+      $ref: './components/schemas/shared.yaml#/plan_rooms'
+    plan_roomsRequest:
+      $ref: './components/schemas/shared.yaml#/plan_roomsRequest'
+    cleaning_time_stats:
+      $ref: './components/schemas/shared.yaml#/cleaning_time_stats'
+    cleaning_time_statsRequest:
+      $ref: './components/schemas/shared.yaml#/cleaning_time_statsRequest'
+    sop_items:
+      $ref: './components/schemas/SOP與查房項目.yaml#/sop_items'
+    sop_itemsRequest:
+      $ref: './components/schemas/shared.yaml#/sop_itemsRequest'
+    task_sop_checks:
+      $ref: './components/schemas/shared.yaml#/task_sop_checks'
+    task_sop_checksRequest:
+      $ref: './components/schemas/shared.yaml#/task_sop_checksRequest'
+    inspections:
+      $ref: './components/schemas/查房.yaml#/inspections'
+    inspectionsRequest:
+      $ref: './components/schemas/查房.yaml#/inspectionsRequest'
+    handovers:
+      $ref: './components/schemas/交班單.yaml#/handovers'
+    handoversRequest:
+      $ref: './components/schemas/交班單.yaml#/handoversRequest'
+    handover_signs:
+      $ref: './components/schemas/shared.yaml#/handover_signs'
+    handover_signsRequest:
+      $ref: './components/schemas/shared.yaml#/handover_signsRequest'
+    notices:
+      $ref: './components/schemas/通知板.yaml#/notices'
+    noticesRequest:
+      $ref: './components/schemas/通知板.yaml#/noticesRequest'
+    notice_reads:
+      $ref: './components/schemas/shared.yaml#/notice_reads'
+    notice_readsRequest:
+      $ref: './components/schemas/shared.yaml#/notice_readsRequest'
+    lost_items:
+      $ref: './components/schemas/遺失物.yaml#/lost_items'
+    lost_itemsRequest:
+      $ref: './components/schemas/遺失物.yaml#/lost_itemsRequest'
+    leaves:
+      $ref: './components/schemas/請假.yaml#/leaves'
+    leavesRequest:
+      $ref: './components/schemas/請假.yaml#/leavesRequest'
+    room_memory:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/room_memory'
+    room_memoryRequest:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/room_memoryRequest'
+    stats_daily:
+      $ref: './components/schemas/老闆儀表板.yaml#/stats_daily'
+    stats_dailyRequest:
+      $ref: './components/schemas/shared.yaml#/stats_dailyRequest'
+    phrase_counter:
+      $ref: './components/schemas/shared.yaml#/phrase_counter'
+    phrase_counterRequest:
+      $ref: './components/schemas/shared.yaml#/phrase_counterRequest'
+    RepairTicketSummary:
+      $ref: './components/schemas/shared.yaml#/RepairTicketSummary'
+    PushPayload:
+      $ref: './components/schemas/shared.yaml#/PushPayload'
+    PushTarget:
+      $ref: './components/schemas/shared.yaml#/PushTarget'
+    PmsRoomStatusWriteback:
+      $ref: './components/schemas/shared.yaml#/PmsRoomStatusWriteback'
+    HoldReasonRequest:
+      $ref: './components/schemas/任務.yaml#/HoldReasonRequest'
+    CompleteTaskRequest:
+      $ref: './components/schemas/任務.yaml#/CompleteTaskRequest'
+    CancelTaskRequest:
+      $ref: './components/schemas/任務.yaml#/CancelTaskRequest'
+    SopCheckRequest:
+      $ref: './components/schemas/任務.yaml#/SopCheckRequest'
+    HandoverEntry:
+      $ref: './components/schemas/任務.yaml#/HandoverEntry'
+    ReturnInfo:
+      $ref: './components/schemas/任務.yaml#/ReturnInfo'
+    TaskDetail:
+      $ref: './components/schemas/任務.yaml#/TaskDetail'
+    RepairCategory:
+      $ref: './components/schemas/工務單.yaml#/RepairCategory'
+    CreateRepairPhotoRequest:
+      $ref: './components/schemas/工務單.yaml#/CreateRepairPhotoRequest'
+    RepairPhoto:
+      $ref: './components/schemas/工務單.yaml#/RepairPhoto'
+    RepairTicketPrecheckRequest:
+      $ref: './components/schemas/工務單.yaml#/RepairTicketPrecheckRequest'
+    RepairTicketPrecheckResponse:
+      $ref: './components/schemas/工務單.yaml#/RepairTicketPrecheckResponse'
+    CreateRepairTicketRequest:
+      $ref: './components/schemas/工務單.yaml#/CreateRepairTicketRequest'
+    AppendRepairPhotosRequest:
+      $ref: './components/schemas/工務單.yaml#/AppendRepairPhotosRequest'
+    RepairTicket:
+      $ref: './components/schemas/工務單.yaml#/RepairTicket'
+    MyToday:
+      $ref: './components/schemas/員工工作台.yaml#/MyToday'
+    NextTask:
+      $ref: './components/schemas/員工工作台.yaml#/NextTask'
+    PoolCategory:
+      $ref: './components/schemas/員工工作台.yaml#/PoolCategory'
+    PoolSource:
+      $ref: './components/schemas/員工工作台.yaml#/PoolSource'
+    PoolItem:
+      $ref: './components/schemas/員工工作台.yaml#/PoolItem'
+    DeptPool:
+      $ref: './components/schemas/員工工作台.yaml#/DeptPool'
+    CreateDeskNoteRequest:
+      $ref: './components/schemas/房間交辦.yaml#/CreateDeskNoteRequest'
+    DeskNote:
+      $ref: './components/schemas/房間交辦.yaml#/DeskNote'
+    HandoverRead:
+      $ref: './components/schemas/房間交辦.yaml#/HandoverRead'
+    SpotCheckRequest:
+      $ref: './components/schemas/查房.yaml#/SpotCheckRequest'
+    PassRate:
+      $ref: './components/schemas/查房.yaml#/PassRate'
+    KbAskRequest:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbAskRequest'
+    KbSource:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbSource'
+    KbAnswer:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbAnswer'
+    KbSuggestion:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbSuggestion'
+    KbFeedbackRequest:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbFeedbackRequest'
+    KbEscalation:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbEscalation'
+    KbReplyRequest:
+      $ref: './components/schemas/房間記憶與問一下.yaml#/KbReplyRequest'
+  responses:
+    BadRequest:
+      $ref: './components/responses.yaml#/BadRequest'
+    NotFound:
+      $ref: './components/responses.yaml#/NotFound'
+    Conflict:
+      $ref: './components/responses.yaml#/Conflict'
+    Forbidden:
+      $ref: './components/responses.yaml#/Forbidden'
+    UnprocessableEntity:
+      $ref: './components/responses.yaml#/UnprocessableEntity'
+    Unauthorized:
+      $ref: './components/responses.yaml#/Unauthorized'
+    TooManyRequests:
+      $ref: './components/responses.yaml#/TooManyRequests'

@@ -1,0 +1,66 @@
+listLostItemsAndcreateLostItems:
+  get:
+    operationId: listLostItems
+    summary: list lost_items
+    tags:
+    - 遺失物 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/遺失物.yaml#/lost_items'
+  post:
+    operationId: createLostItems
+    summary: create lost_items
+    tags:
+    - 遺失物 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/遺失物.yaml#/lost_itemsRequest'
+    responses:
+      '201':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/遺失物.yaml#/lost_items'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+lostItemsReturn:
+  post:
+    operationId: lostItemsReturn
+    summary: return
+    tags:
+    - 遺失物 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/遺失物.yaml#/lost_itemsRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/遺失物.yaml#/lost_items'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

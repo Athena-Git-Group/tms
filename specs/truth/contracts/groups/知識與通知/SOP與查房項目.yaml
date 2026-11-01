@@ -1,0 +1,15 @@
+listSopItems:
+  get:
+    operationId: listSopItems
+    summary: list sop_items
+    tags:
+    - SOP 與查房項目 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/SOP與查房項目.yaml#/sop_items'

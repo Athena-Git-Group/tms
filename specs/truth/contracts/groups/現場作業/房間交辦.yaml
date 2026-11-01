@@ -1,0 +1,46 @@
+createDeskNote:
+  post:
+    operationId: createDeskNote
+    summary: 櫃檯為房間留備註
+    description: >-
+      櫃檯新增房間層級的備註，會顯示在該房任務的交辦區。
+      有效期間（當日、本次入住，或手動移除）待 clarify（FR-037）。
+    tags:
+    - 房間交辦 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/房間交辦.yaml#/CreateDeskNoteRequest'
+    responses:
+      '201':
+        description: 已建立
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間交辦.yaml#/DeskNote'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+markHandoverRead:
+  post:
+    operationId: markHandoverRead
+    summary: 展開交辦（記錄已讀）
+    description: 員工展開任務的交辦時呼叫。同一位員工對同一張任務只記一筆已讀；已讀過時直接回傳原紀錄，不新增。tasksStart 與 tasksDefer 也會自動記已讀。
+    tags:
+    - 房間交辦 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間交辦.yaml#/HandoverRead'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'

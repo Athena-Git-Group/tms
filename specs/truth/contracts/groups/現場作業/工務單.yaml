@@ -1,0 +1,212 @@
+createRepairPhoto:
+  post:
+    operationId: createRepairPhoto
+    summary: 建立一張工務單照片的上傳位置
+    description: >-
+      照片採兩段式：先建立照片 id，再用 uploadRepairPhotoContent 上傳內容，最後在開單、補照片或完修時引用 id。
+      壓縮（長邊 1600px、JPEG）與「房號 · 拍攝時間」浮水印在 App 端完成，後端不做影像處理。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/工務單.yaml#/CreateRepairPhotoRequest'
+    responses:
+      '201':
+        description: 已建立，status=pending。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairPhoto'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+uploadRepairPhotoContent:
+  put:
+    operationId: uploadRepairPhotoContent
+    summary: 上傳或重試一張照片的內容
+    description: 上傳成功後 status=uploaded。上傳失敗時用同一個照片 id 重送，只需重試失敗的那張。這個操作是冪等的。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/PhotoId'
+    requestBody:
+      required: true
+      content:
+        image/jpeg:
+          schema:
+            type: string
+            format: binary
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairPhoto'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+precheckRepairTicket:
+  post:
+    operationId: precheckRepairTicket
+    summary: 開單前檢查（選類別時呼叫）
+    description: >-
+      報修人選定類別時呼叫。這個操作不建立工務單。
+      重複提示：同房、同類別、還沒結案（不是 done 也不是 cancelled）的工務單存在時，回傳它的單號與狀態，
+      並記錄呼叫者可以對那張單補照片。
+      急件建議：房間今日有入住或是 VIP 時，回傳 suggested=true 與提示文字，
+      例如「這間『VIP · 15:00 入住』，影響入住的話建議設為急件」。
+    tags:
+    - 工務單 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/工務單.yaml#/RepairTicketPrecheckRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairTicketPrecheckResponse'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+listRepairTicketsAndcreateRepairTicket:
+  get:
+    operationId: listRepairTickets
+    summary: 列出同房的工務單
+    description: 依房間列出未撤回的工務單，給原任務頁的工務單區使用（FR-021）。
+    tags:
+    - 工務單 API
+    parameters:
+    - name: roomId
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/shared.yaml#/RepairTicketSummary'
+  post:
+    operationId: createRepairTicket
+    summary: 開立工務單
+    description: >-
+      負責人從自己未取消的任務開立工務單，房號由原任務帶入。
+      工務單是工務部門的修繕任務（dept=engineering、type=repair、source=staff），
+      送出後直接進工務待接池，不經主管審核。
+      照片 1–3 張，而且每張都必須已上傳（status=uploaded）；否則回 422，不建立工務單，原任務也不變。
+      interruptSourceTask=true 時同時把 doing 的原任務轉為 interrupted，停住原因記為「等工務：<類別>」並連結單號。
+      urgent=true 時排在工務待接池的所有非急件之前，並推播該租戶所有工務與主管。
+      必須帶 Idempotency-Key；離線重送時回放第一次的回應，不會產生第二張單。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/工務單.yaml#/CreateRepairTicketRequest'
+    responses:
+      '201':
+        description: 已建立
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+readRepairTicket:
+  get:
+    operationId: readRepairTicket
+    summary: 查看工務單詳情
+    description: 回傳照片、類別、說明、處理進度、完修照片與處理說明。報修人、原任務負責人與工務都可以查看。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/RepairTicketId'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+appendRepairTicketPhotos:
+  post:
+    operationId: appendRepairTicketPhotos
+    summary: 補照片到工務單
+    description: >-
+      報修人，以及在該房開單前檢查時觸發這張單重複提示的員工，可以在工務單結案前補照片，每次 1–3 張，而且都必須已上傳。
+      工務單已 done 或 cancelled 時回 409 ticket_closed；其他員工回 403。
+      事件只記補了幾張，不含照片本體。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/RepairTicketId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/工務單.yaml#/AppendRepairPhotosRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+withdrawRepairTicket:
+  post:
+    operationId: withdrawRepairTicket
+    summary: 撤回工務單
+    description: >-
+      報修人在工務認領前撤回：pool→cancelled，原因 staff_withdrew，之後不再出現在工務待接池。
+      已經被認領時回 409 already_claimed，message 為「已被工務認領」。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/RepairTicketId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

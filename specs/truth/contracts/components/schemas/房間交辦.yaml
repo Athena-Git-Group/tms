@@ -1,0 +1,52 @@
+CreateDeskNoteRequest:
+  type: object
+  required:
+  - roomId
+  - content
+  properties:
+    roomId:
+      type: string
+      format: uuid
+    content:
+      type: string
+      minLength: 1
+DeskNote:
+  type: object
+  required:
+  - id
+  - roomId
+  - content
+  - authorId
+  - createdAt
+  properties:
+    id:
+      type: string
+      format: uuid
+    roomId:
+      type: string
+      format: uuid
+    content:
+      type: string
+    authorId:
+      type: string
+      format: uuid
+    createdAt:
+      type: string
+      format: date-time
+HandoverRead:
+  type: object
+  required:
+  - taskId
+  - staffId
+  - readAt
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    staffId:
+      type: string
+      format: uuid
+    readAt:
+      type: string
+      format: date-time
+      description: 第一次已讀的時間；重複展開不會改變。

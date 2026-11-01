@@ -1,0 +1,63 @@
+handovers:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk'
+    shift:
+      type: string
+    workDate:
+      type: string
+      format: date
+    snapshot:
+      type: string
+      description: 交班當下任務清單定格——之後任務再變，快照不變
+    generatedBy:
+      type: string
+      description: 'CHECK: system|manager（班末掃描產生，主管可手動；假設 A8）'
+    createdAt:
+      type: string
+      format: date-time
+  description: 交班單凍結快照（history，永不 UPDATE）。
+  required:
+  - id
+  - tenantId
+  - dept
+  - shift
+  - workDate
+  - snapshot
+  - generatedBy
+  - createdAt
+handoversRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk'
+    shift:
+      type: string
+    workDate:
+      type: string
+      format: date
+    snapshot:
+      type: string
+      description: 交班當下任務清單定格——之後任務再變，快照不變
+    generatedBy:
+      type: string
+      description: 'CHECK: system|manager（班末掃描產生，主管可手動；假設 A8）'
+  required:
+  - tenantId
+  - dept
+  - shift
+  - workDate
+  - snapshot
+  - generatedBy

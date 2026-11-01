@@ -1,0 +1,143 @@
+listCleaningPlans:
+  get:
+    operationId: listCleaningPlans
+    summary: list cleaning_plans
+    tags:
+    - 排房計畫 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plans'
+readCleaningPlansAndupdateCleaningPlans:
+  get:
+    operationId: readCleaningPlans
+    summary: read cleaning_plans
+    tags:
+    - 排房計畫 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plans'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+  put:
+    operationId: updateCleaningPlans
+    summary: update cleaning_plans
+    tags:
+    - 排房計畫 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plansRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plans'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+cleaningPlansPublish:
+  post:
+    operationId: cleaningPlansPublish
+    summary: publish
+    tags:
+    - 排房計畫 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plansRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plans'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+cleaningPlansRegenerate:
+  post:
+    operationId: cleaningPlansRegenerate
+    summary: regenerate
+    tags:
+    - 排房計畫 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plansRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plans'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+cleaningPlansCapacity:
+  get:
+    operationId: cleaningPlansCapacity
+    summary: capacity
+    tags:
+    - 排房計畫 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/排房計畫.yaml#/cleaning_plans'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

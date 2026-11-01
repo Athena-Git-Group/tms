@@ -1,0 +1,160 @@
+MyToday:
+  type: object
+  required:
+  - cleaningDone
+  - cleaningTotal
+  - completedCount
+  - adHocCompleted
+  - remainingMinutes
+  - nextTasks
+  - zeroReturnStreakDays
+  properties:
+    cleaningDone:
+      type: integer
+      format: int32
+    cleaningTotal:
+      type: integer
+      format: int32
+    completedCount:
+      type: integer
+      format: int32
+    adHocCompleted:
+      type: integer
+      format: int32
+    remainingMinutes:
+      type: integer
+      format: int32
+    nextTasks:
+      type: array
+      description: 待開始的單，已依推薦順序排好。
+      items:
+        $ref: '#/NextTask'
+    zeroReturnStreakDays:
+      type: integer
+      format: int32
+      minimum: 0
+NextTask:
+  type: object
+  required:
+  - taskId
+  - roomNo
+  - title
+  - type
+  - redoCount
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    roomNo:
+      type: string
+    title:
+      type: string
+    type:
+      type: string
+      enum:
+      - cleaning
+      - amenity
+      - repair
+      - other
+    redoCount:
+      type: integer
+      format: int32
+PoolCategory:
+  type: string
+  description: 打掃 cleaning、備品 amenity、修繕 repair（工務池）、其他 other。
+  enum:
+  - cleaning
+  - amenity
+  - repair
+  - other
+PoolSource:
+  type: string
+  description: 來源標籤，依序對應：住客掃碼、櫃檯轉單、主管退回、請假退回、班末退池、查房退回、房務報修、系統準備。
+  enum:
+  - guest_scan
+  - desk_forward
+  - manager_requeue
+  - leave_return
+  - shift_end_return
+  - inspection_return
+  - staff_report
+  - system
+PoolItem:
+  type: object
+  required:
+  - taskId
+  - roomNo
+  - floor
+  - title
+  - category
+  - source
+  - urgent
+  - priorityNotify
+  - sameFloor
+  - createdAt
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    ticketNo:
+      type: string
+      nullable: true
+      description: 只有工務單有值，例如 W-0412。
+    roomNo:
+      type: string
+    floor:
+      type: integer
+      format: int32
+    title:
+      type: string
+    category:
+      $ref: '#/PoolCategory'
+    source:
+      $ref: '#/PoolSource'
+    urgent:
+      type: boolean
+    priorityNotify:
+      type: boolean
+    sameFloor:
+      type: boolean
+    returnReason:
+      type: string
+      nullable: true
+      description: 退池原因，例如「小陳請假」、「班末退池 · 交給下一班」。
+    handoverNote:
+      type: string
+      nullable: true
+      description: 接手進度交代，例如「浴室已刷完，還沒換床單」。
+    createdAt:
+      type: string
+      format: date-time
+DeptPool:
+  type: object
+  required:
+  - items
+  - counts
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/PoolItem'
+    counts:
+      type: object
+      required:
+      - all
+      properties:
+        all:
+          type: integer
+          format: int32
+        cleaning:
+          type: integer
+          format: int32
+        amenity:
+          type: integer
+          format: int32
+        repair:
+          type: integer
+          format: int32
+        other:
+          type: integer
+          format: int32

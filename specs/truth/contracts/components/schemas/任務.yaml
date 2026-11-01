@@ -1,0 +1,354 @@
+tasks:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    type:
+      type: string
+      description: 'CHECK: amenity|repair|cleaning|other'
+    source:
+      type: string
+      description: 'CHECK: guest|desk|system|staff（staff 為本 plan 新增：房務開立的工務單）'
+    roomId:
+      type: string
+      format: uuid
+    reservationId:
+      type: string
+      format: uuid
+      description: guest 來源必填；住客查詢一律以它過濾（不按房號）
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
+    state:
+      type: string
+      description: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled'
+    eventSeq:
+      type: integer
+      format: int32
+      description: 事件取號器：守衛 UPDATE 同句 +1 RETURNING
+    assigneeId:
+      type: string
+      format: uuid
+      description: 池中為空
+    title:
+      type: string
+    note:
+      type: string
+      description: 住客原文/翻譯/交代/當場回答——PII 去識別化範圍
+    estMin:
+      type: integer
+      format: int32
+      description: 排房帶入；credit 換算屬 Q1 未決
+    startedAt:
+      type: string
+      format: date-time
+      description: 查房退回清空重計
+    doneAt:
+      type: string
+      format: date-time
+      description: 完成時間。實際分鐘改以 accumulatedMinutes 為準（不含中斷期間）。
+    redoCount:
+      type: integer
+      format: int32
+    rating:
+      type: integer
+      format: int32
+      description: CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）
+    planId:
+      type: string
+      format: uuid
+      description: 打掃任務回鏈排房計畫
+    workDate:
+      type: string
+      format: date
+      description: 打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描
+    slaMin:
+      type: integer
+      format: int32
+      description: 保留欄位，SLA 升級鏈啟用前不寫
+    escLevel:
+      type: integer
+      format: int32
+      description: 保留欄位
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time
+    inspection:
+      type: string
+      nullable: true
+      enum:
+      - passed
+      - waived
+      - failed
+      description: 打掃任務的查房結果。全部通過為 passed，免查結案為 waived，查房或抽查退回為 failed。查房合格率只計 passed 與 failed。
+    inspectionWaived:
+      type: boolean
+      description: 開工當下依租戶設定鎖定是否免查房；之後設定變更不影響。
+    accumulatedMinutes:
+      type: integer
+      format: int32
+      description: 各段 doing 期間的累計分鐘，不含中斷期間。實際工時以它為準（取代 done_at − started_at）。
+    holdReason:
+      type: string
+      nullable: true
+      description: 停住原因。本人延後或中斷的原因、「等工務：<類別>」或「工務已修好：<類別>」。
+    deferredBySelf:
+      type: boolean
+      description: deferred 時是否為本人延後（有負責人）。主管延後為 false。
+    linkedRepairTicketId:
+      type: string
+      format: uuid
+      nullable: true
+      description: 以中斷模式開立工務單時連結的工務單。
+    cancelReason:
+      type: string
+      nullable: true
+      enum:
+      - guest_withdrew
+      - manager_void
+      - plan_superseded
+      - staff_withdrew
+      description: staff_withdrew 是本 plan 新增的值：報修人在工務認領前撤回工務單。
+  required:
+  - id
+  - tenantId
+  - type
+  - source
+  - roomId
+  - dept
+  - state
+  - eventSeq
+  - title
+  - redoCount
+  - createdAt
+  - updatedAt
+tasksRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    type:
+      type: string
+      description: 'CHECK: amenity|repair|cleaning|other'
+    source:
+      type: string
+      description: 'CHECK: guest|desk|system|staff（staff 為本 plan 新增：房務開立的工務單）'
+    roomId:
+      type: string
+      format: uuid
+    reservationId:
+      type: string
+      format: uuid
+      description: guest 來源必填；住客查詢一律以它過濾（不按房號）
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
+    state:
+      type: string
+      description: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled'
+    eventSeq:
+      type: integer
+      format: int32
+      description: 事件取號器：守衛 UPDATE 同句 +1 RETURNING
+    assigneeId:
+      type: string
+      format: uuid
+      description: 池中為空
+    title:
+      type: string
+    note:
+      type: string
+      description: 住客原文/翻譯/交代/當場回答——PII 去識別化範圍
+    estMin:
+      type: integer
+      format: int32
+      description: 排房帶入；credit 換算屬 Q1 未決
+    startedAt:
+      type: string
+      format: date-time
+      description: 查房退回清空重計
+    doneAt:
+      type: string
+      format: date-time
+      description: 完成時間。實際分鐘改以 accumulatedMinutes 為準（不含中斷期間）。
+    redoCount:
+      type: integer
+      format: int32
+    rating:
+      type: integer
+      format: int32
+      description: CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）
+    planId:
+      type: string
+      format: uuid
+      description: 打掃任務回鏈排房計畫
+    workDate:
+      type: string
+      format: date
+      description: 打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描
+    slaMin:
+      type: integer
+      format: int32
+      description: 保留欄位，SLA 升級鏈啟用前不寫
+    escLevel:
+      type: integer
+      format: int32
+      description: 保留欄位
+  required:
+  - tenantId
+  - type
+  - source
+  - roomId
+  - dept
+  - state
+  - eventSeq
+  - title
+  - redoCount
+HoldReasonRequest:
+  type: object
+  description: 延後或中斷的原因。可以是預設原因（例如「請勿打擾」、「缺備品，去拿」、「住客回房」）或自填文字。
+  required:
+  - reason
+  properties:
+    reason:
+      type: string
+      minLength: 1
+      maxLength: 60
+      description: 去掉頭尾空白後 1–60 字；全是空白視為空。
+CompleteTaskRequest:
+  type: object
+  description: 打掃與一般任務不需要 body。修繕任務（工務單）必須附完修照片。
+  properties:
+    photoIds:
+      type: array
+      minItems: 1
+      maxItems: 3
+      items:
+        type: string
+        format: uuid
+      description: 修繕任務必填，至少 1 張已上傳（status=uploaded）、purpose=completion 的照片。
+    resolutionNote:
+      type: string
+      description: 處理說明，選填。判斷不需維修時在這裡註明，例如「不需維修：已重新設定門鎖，測試正常」。
+CancelTaskRequest:
+  type: object
+  required:
+  - reason
+  properties:
+    reason:
+      type: string
+      enum:
+      - manager_void
+      - plan_superseded
+    note:
+      type: string
+      description: 給負責人的說明，會帶進推播。
+SopCheckRequest:
+  type: object
+  required:
+  - sopItemId
+  - result
+  properties:
+    sopItemId:
+      type: string
+      format: uuid
+    result:
+      type: string
+      enum:
+      - checked
+      - skipped
+HandoverEntry:
+  type: object
+  description: 任務詳情中合併後的一則交辦。
+  required:
+  - kind
+  - author
+  - at
+  - content
+  properties:
+    kind:
+      type: string
+      enum:
+      - manager_note
+      - requeue_progress
+      - shift_handover
+      - desk_note
+      description: manager_note 主管交代；requeue_progress 接手進度（原負責人或主管附交代退池）；shift_handover 交班單中該房的項目；desk_note 櫃檯備註。
+    author:
+      type: string
+      description: 作者顯示名稱。
+    at:
+      type: string
+      format: date-time
+    content:
+      type: string
+ReturnInfo:
+  type: object
+  description: 查房退回或抽查退回的合併資訊；換人原因併在這裡，不另列為主管交代。
+  required:
+  - failedItems
+  - redoCount
+  - summary
+  properties:
+    failedItems:
+      type: array
+      items:
+        type: string
+    redoCount:
+      type: integer
+      format: int32
+    reassignReason:
+      type: string
+      enum:
+      - original_cleaner_off_shift
+      nullable: true
+    summary:
+      type: string
+      description: 例如「查房退回：換床單鋪床不合格 · 第 1 次重做 · 原清房者小林已下班，改由您接手」。
+TaskDetail:
+  description: 員工視角的任務詳情。
+  allOf:
+  - $ref: '#/tasks'
+  - type: object
+    properties:
+      roomNo:
+        type: string
+      elapsedMinutes:
+        type: integer
+        format: int32
+        description: 已做分鐘。accepted 與 deferred 為 0，doing 為目前累計，interrupted 為中斷前累計。
+      checkedSopItems:
+        type: array
+        items:
+          type: string
+          format: uuid
+      skippedSopItems:
+        type: array
+        items:
+          type: string
+          format: uuid
+      handovers:
+        type: array
+        items:
+          $ref: '#/HandoverEntry'
+      handoverRead:
+        type: boolean
+        description: 呼叫者是否已讀這張任務的交辦。
+      returnInfo:
+        type: object
+        allOf:
+        - $ref: '#/ReturnInfo'
+        nullable: true
+      repairTickets:
+        type: array
+        description: 同房未撤回的工務單摘要，對應 FR-021。
+        items:
+          $ref: './shared.yaml#/RepairTicketSummary'

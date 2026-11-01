@@ -1,0 +1,94 @@
+reservations_cache:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    reservationRef:
+      type: string
+      description: PMS 訂單編號；Excel 匯入列合成 excel:日期:房號
+    roomId:
+      type: string
+      format: uuid
+    guestName:
+      type: string
+      description: PII：去識別化範圍
+    lang:
+      type: string
+      description: 住客端語言
+    attrs:
+      type: string
+      description: VIP/親子/寵物/紀念日——自動開準備工單依據
+    checkinAt:
+      type: string
+      format: date-time
+    checkoutAt:
+      type: string
+      format: date-time
+    source:
+      type: string
+      description: 'CHECK: pms|excel'
+    syncedAt:
+      type: string
+      format: date-time
+    supersededAt:
+      type: string
+      format: date-time
+      description: PMS 恢復比對到住期重疊真訂單時標上；當前訂單查詢一律 IS NULL
+  required:
+  - id
+  - tenantId
+  - reservationRef
+  - roomId
+  - checkinAt
+  - checkoutAt
+  - source
+  - syncedAt
+reservations_cacheRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    reservationRef:
+      type: string
+      description: PMS 訂單編號；Excel 匯入列合成 excel:日期:房號
+    roomId:
+      type: string
+      format: uuid
+    guestName:
+      type: string
+      description: PII：去識別化範圍
+    lang:
+      type: string
+      description: 住客端語言
+    attrs:
+      type: string
+      description: VIP/親子/寵物/紀念日——自動開準備工單依據
+    checkinAt:
+      type: string
+      format: date-time
+    checkoutAt:
+      type: string
+      format: date-time
+    source:
+      type: string
+      description: 'CHECK: pms|excel'
+    syncedAt:
+      type: string
+      format: date-time
+    supersededAt:
+      type: string
+      format: date-time
+      description: PMS 恢復比對到住期重疊真訂單時標上；當前訂單查詢一律 IS NULL
+  required:
+  - tenantId
+  - reservationRef
+  - roomId
+  - checkinAt
+  - checkoutAt
+  - source
+  - syncedAt
