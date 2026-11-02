@@ -57,9 +57,24 @@
   - 以資料庫 `now()` 為準，測試改寫資料列時間：Java 端的計算就無法控制，step 也會耦合 schema。
   - 真實時間 ＋ 等待：太慢且不穩定，不採用。
 
+## 決策 5：員工 App 的平台與 BDD runner（2026-11-02 補拍板）
+
+- **Decision**:
+  - **員工 App**：以 Swift 開發，支援 iOS 與 Android 雙平台；跨平台工具鏈（例如 Skip、Swift SDK for Android）尚未拍板。
+  - **App 端 BDD runner**：`Appium` ＋ `Cucumber-JVM`。iOS 用 XCUITest driver、Android 用 UiAutomator2 driver；step definitions 用 Java，與後端共用 Cucumber-JVM 生態（中文 Gherkin、報表、CI 整合）。
+- **Rationale**: 本輪 clarify（2026-11-02）使用者拍板「Swift 寫、雙平台」並選定 Appium 方案。
+  - 雙平台前提下，Appium 是唯一「一套 Gherkin ＋ 一套 step definitions 同時驅動兩平台」的主流組合。
+  - Appium 黑箱驅動已編譯的 App，runner 決策與 App 實作技術解耦——跨平台工具鏈之後定案也不必重選 runner。
+  - 後端已用 Cucumber-JVM（決策 2），App 測試層可直接重用同一套 Gherkin 工具與 Java 經驗。
+- **Alternatives considered**:
+  - `XCUITest` ＋ `Cucumberish`（或 CucumberSwift）：全原生工具鏈，但只能跑 iOS；Android 要另建一套，step definitions 寫兩份會各自漂移。
+  - `Maestro`：雙平台且最穩定易寫，但不原生執行 Gherkin，feature 檔與 flow 檔變成兩套真相。
+  - 各平台原生 runner（iOS XCUITest ＋ Android Espresso/UiAutomator）：最貼近平台，但維護成本最高。
+
 ## 殘餘風險與後續驗證
 
 - **後端程式碼目前不在本機**：`tms/tms` 是 gitlink（160000，指向 `1b65c99`），沒有 `.gitmodules`，所以目錄是空的。這輪的技術堆疊依據是基線 spec 與 `docker-compose.yml`。進入 `/system-analysis` 或 `/implement` 前要先取回子模組，確認 Spring Boot、Java、Kafka 實際版本，以及 Cucumber 與 Testcontainers 跟 Spring Boot 4.1.1 的相容性。
 - **照片儲存媒介未決**：工務單照片每張 1–3 張、完修照片必填、可補照片，這是本 plan 新增的大量二進位資料。存資料庫、本機檔案系統，或物件儲存介面，交由 `/data-plan` 決定。浮水印與壓縮依 spec 假設在 App 端處理，後端不引入影像處理函式庫。
-- **App 端測項無執行器**：App 的 Gherkin 目前不會被自動驗證，可能隨實作慢慢失真。App 技術選型確定後，要回到本 skill 補 runner。
+- **App 端 runner 已選、尚未落地**：Appium ＋ Cucumber-JVM 已拍板（決策 5），但 App 尚未實作，測試專案與兩平台 capabilities 都還沒建；feature 檔在 App 開發啟動前仍只是規格。Appium UI 測試本身較脆弱，實作時要規劃選取器策略（accessibility id）與重試。
+- **跨平台工具鏈未拍板**：Swift 雙平台的具體做法（Skip、Swift SDK for Android 等）未定。它不影響 runner 決策，但定案後要回本 skill 補進 techstack truth。
 - **Testcontainers 需要 Docker**：開發機與 CI 都要能跑 Docker。這台 Windows 機器已用 docker-compose 跑 Postgres 與 Kafka，推定可行，但尚未實測。

@@ -6,8 +6,8 @@
 
 | 類別 | 採用技術 | 用途 |
 | --- | --- | --- |
-| 員工端 | iOS 員工 App（房務／工務） | 員工的接單、執行、工務單、查一下；App 本身的技術選型尚未拍板，不在本 repo 實作 |
-| App 端驗收規格 | Gherkin feature files（`# language: zh-TW`） | App 端行為測項，例如照片、離線重送、推播去處；目前只當規格，不執行 |
+| 員工端 | 員工 App（房務／工務）：Swift，iOS ＋ Android 雙平台 | 員工的接單、執行、工務單、查一下；跨平台工具鏈（例如 Skip）尚未拍板，App 不在本 repo 實作 |
+| App 端驗收規格 | Gherkin feature files（`# language: zh-TW`） | App 端行為測項，例如照片、離線重送、推播去處；runner 已拍板（見「測試與驗證」），App 實作啟動前仍只當規格 |
 
 ### 後端
 
@@ -37,7 +37,7 @@
 | --- | --- | --- |
 | 後端 BDD techstack | `Cucumber-JVM` ＋ `Spring Boot Test` | 後端 E2E：跑後端 Gherkin，以真實 HTTP 打 API，並斷言資料庫權威狀態與 outbox |
 | 後端 E2E 依賴 | `Testcontainers`（PostgreSQL、Kafka） | 測試時啟動真的資料庫與訊息佇列 |
-| iOS App BDD techstack | 尚無 runner（只有 feature file 測項） | App 端 Gherkin 目前只當驗收規格，App 技術選型確定後再補 |
+| 員工 App BDD techstack | `Appium` ＋ `Cucumber-JVM`（iOS：XCUITest driver；Android：UiAutomator2 driver） | 一套 Gherkin ＋ 一套 Java step definitions 驅動兩平台；與後端共用 Cucumber-JVM 生態。App 實作啟動後落地 |
 
 ## 本次開發不引入的技術
 
@@ -46,4 +46,4 @@
 - 真實 APNS/FCM 推播投遞（MVP 只寫日誌與資料列）
 - LLM 問答（查一下只做關鍵字比對與出處，介面留椿）
 - 後端影像處理函式庫（照片壓縮與浮水印由 App 端處理）
-- iOS App 自動化 BDD runner（本輪只產出 feature file 測項）
+- iOS 專屬 BDD runner（XCUITest ＋ Cucumberish）與 Maestro：雙平台改採 Appium ＋ Cucumber-JVM，不另建平台專屬測試線

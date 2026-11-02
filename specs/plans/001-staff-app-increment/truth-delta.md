@@ -13,6 +13,9 @@
 | ADD | `specs/truth/techstack.md` -> `測試與驗證` 後端 BDD techstack | 後端 E2E 用 Cucumber-JVM 加 Spring Boot Test，搭配 Testcontainers 的 Postgres 與 Kafka；斷言 API 與權威狀態。 | clarify 第 2 題選 1、第 3 題選 1。 |
 | ADD | `specs/truth/techstack.md` -> `測試與驗證` iOS App BDD techstack | App 端暫無 runner，只有 feature file 測項。 | 使用者指示先只產生 feature-file 測項。 |
 | ADD | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 排除 H2 或記憶體 Kafka 驗收、真實 APNS/FCM、LLM、後端影像處理、App 自動化 runner。 | clarify 第 3 題排除替代品；基線假設 A1、A6；spec 假設照片在 App 端處理；App runner 延後。 |
+| MODIFY | `specs/truth/techstack.md` -> `前端` 員工端 | 員工 App 拍板為 Swift、iOS ＋ Android 雙平台；跨平台工具鏈未拍板。 | 2026-11-02 clarify：使用者拍板「Swift 寫、支援雙平台」。 |
+| MODIFY | `specs/truth/techstack.md` -> `測試與驗證` 員工 App BDD techstack | 由「尚無 runner」改為 Appium ＋ Cucumber-JVM（iOS：XCUITest driver；Android：UiAutomator2 driver），Java step definitions 與後端共用生態。 | 2026-11-02 clarify 使用者選 B；回補 research.md 殘餘風險「App 端測項無執行器」。 |
+| MODIFY | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 「App 自動化 runner 延後」改為排除 iOS 專屬 runner（XCUITest ＋ Cucumberish）與 Maestro。 | runner 已拍板，排除項改為被淘汰的替代方案。 |
 
 ## /api-plan
 
@@ -89,3 +92,12 @@
 | MODIFY | `.../backend/房間交辦/dsl.md`、`查一下/dsl.md`、`推播/dsl.md` -> StepDef 實作語意 | 對應 `createDeskNote`、`markHandoverRead`、`readTasks`（`TaskDetail.handovers`、`returnInfo`）、`roomMemoryAsk`、`listKbSuggestions`、`submitKbFeedback`、`escalateKbQuestion`、`replyKbEscalation`、`tasksCancel`、`tasksReassign`、`createLeaves`、`guestSessionsScan`；權威狀態對到 `handover_reads`、`desk_notes`、`kb_audit_logs`、`kb_escalations`。住客建單與撤回標示 API truth 缺口。句型與驗證責任不變。 | 同上。 |
 | MODIFY | `specs/truth/features/backend/推播/dsl.md` -> `住客在 "{房號}" 掃碼要 "{品項}"`、`住客撤回 "{房號}" 的需求` 的 StepDef 實作語意 | 把「API truth 尚未收錄」換成 `createGuestRequest`（`POST /guest-requests`）與 `cancelGuestRequest`（`POST /guest-requests/{id}/cancel`）；權威狀態補上 `pool_source`=guest_scan、`cancel_reason`=guest_withdrew 與 `PushPayload.event`。句型與驗證責任不變。 | `/api-plan` 已補上住客需求 API，回補先前標示的缺口。 |
 | NOOP | `specs/truth/features/backend/**/*.feature`、`specs/truth/features/ios-app/**` | 已檢查。所有 feature 句型不變，稽核仍通過；App 端 DSL 透過後端測試資料準備狀態，不直接綁定 operation，而且 runner 尚未決定，所以本輪不改。 | 本輪只回補實作語意。 |
+| MODIFY | `specs/truth/features/ios-app/**/dsl.md`（含介面根，共 8 份） | 實作語意欄由「runner 未定」改掛 Appium；介面根 BDD techstack 段落改為 Appium ＋ Cucumber-JVM（iOS XCUITest driver / Android UiAutomator2 driver），並新增「元素定位用 accessibility id、兩平台共用」共通約定。句型與驗證責任不變。 | `/technical-research` 2026-11-02 拍板 runner，回補先前標示的缺口。 |
+| MODIFY | `"{員工}" 在 App 打開首頁` 權威位置：`ios-app/今日進度/dsl.md` -> `ios-app/dsl.md`（介面根 When） | 僅搬移權威位置，語意不變。 | 任務執行與今日進度兩模組共用，依唯一歸屬判準上收；任務執行的 3 個 step 原本找不到 row（稽核 error）。 |
+| MODIFY | `"{員工}" 已停用` 權威位置：`ios-app/dsl.md` -> `ios-app/待接池/dsl.md`（Given） | 僅搬移權威位置，語意不變。 | 只有待接池模組使用，依唯一歸屬判準下放（稽核 warning）。 |
+| MODIFY | `"{房號}" 今天沒有打掃負責人` 權威位置：`backend/待接池/dsl.md` -> `backend/dsl.md`（介面根 Given） | 僅搬移權威位置，語意不變。 | 待接池與推播兩模組共用；推播的 step 原本找不到 row（稽核 error）。 |
+| MODIFY | `"{員工}" 只收到一次推播 "{標題}"` 權威位置：`backend/dsl.md` -> `backend/推播/dsl.md`（Then） | 僅搬移權威位置，語意不變。 | 只有推播模組使用，依唯一歸屬判準下放（稽核 warning）。 |
+| MODIFY | `從 PMS 拉今日房態，"{房號}" 的訂房帶 "{屬性}" 屬性` 權威位置：`backend/待接池/dsl.md` ＋ `backend/推播/dsl.md` 雙列 -> 合併為 `backend/dsl.md` 一列（介面根 When） | 把推播列的「進池時寫入部門成員 push outbox」語意併入待接池列的完整定義；合併後語意為兩列聯集，句型不變。待接池的 `匯入今日房態 CSV` 列改引用介面根句型。 | 同一句型有兩個權威位置（稽核 error）；兩模組共用，依唯一歸屬判準上收。 |
+| MODIFY | `"{員工}" 判定 "{任務}" 查房全部項目通過` 權威位置：`backend/dsl.md`（`"{主管}"` 版）＋ `backend/查房/dsl.md`（`"{員工}"` 版）雙列 -> 合併為 `backend/dsl.md` 一列 `"{員工}"` 版 | 合併語意：有 `inspect_submit` 權限時同原主管版落地，無權限時被拒；句型形狀不變（參數改名不影響 step 匹配）。 | 同形句型在根與模組各一列造成稽核 ambiguous match（5 個 error）。 |
+| MODIFY | `backend/待接池/系統準備工單派給負責人.feature` -> 「刪除或停用規則」場景大綱拆成刪除、停用兩個場景 | 驗收語意不變；`刪除規則`、`停用規則` 兩列 DSL 本就存在。 | 稽核器不展開場景大綱的 `<操作>` 佔位，無法對應 DSL row（稽核 error）。 |
+| NOOP | `specs/truth/features/**` 其餘 feature 與 dsl.md | 已檢查。句型與驗證責任不變；ios-app 與 backend 拓樸稽核均 PASSED。 | 本輪只回補 runner 實作語意與修復稽核缺陷。 |
