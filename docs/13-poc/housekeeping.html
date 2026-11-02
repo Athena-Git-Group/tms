@@ -70,6 +70,10 @@
       <label for="operator-select">目前操作者</label>
       <select id="operator-select"></select>
     </div>
+    <div class="operator-row">
+      <span>目前班次</span>
+      <span id="shift-label" style="font-weight:700;"></span>
+    </div>
   </div>
 
   <div class="app-content" id="app-content"></div>
@@ -93,14 +97,28 @@
   var TAB_KEY = 'tms_poc_hk_tab';
 
   function currentDept() { return sessionStorage.getItem(DEPT_KEY) || 'housekeeping'; }
-  function setDept(d) { sessionStorage.setItem(DEPT_KEY, d); if (!operatorsForDept(d).some(function (s) { return s.id === currentOperatorId(); })) { setOperator(operatorsForDept(d)[0].id); } }
-
-  function operatorsForDept(dept) {
-    return E.getState().staff.filter(function (s) { return s.dept === dept; });
+  function setDept(d) {
+    sessionStorage.setItem(DEPT_KEY, d);
+    var first = operatorsForDept(d)[0];
+    if (first && !operatorsForDept(d).some(function (s) { return s.id === currentOperatorId(); })) { setOperator(first.id); }
   }
-  function currentOperatorId() { return sessionStorage.getItem(OPERATOR_KEY) || operatorsForDept(currentDept())[0].id; }
+
+  // 用 role 篩（不是 dept）：道理跟排房看板一樣——這個分頁切的是「房務／工務」
+  // 兩種工作類型，不是自訂的部門標籤；停用的人不再進這份清單。
+  function operatorsForDept(dept) {
+    return E.getState().staff.filter(function (s) { return s.role === dept && s.active !== false; });
+  }
+  function currentOperatorId() {
+    var saved = sessionStorage.getItem(OPERATOR_KEY);
+    var pool = operatorsForDept(currentDept());
+    if (saved && pool.some(function (s) { return s.id === saved; })) return saved;
+    return pool.length ? pool[0].id : null;
+  }
   function setOperator(id) { sessionStorage.setItem(OPERATOR_KEY, id); }
-  function currentOperatorName() { return E.resolveStaffName(E.getState(), currentOperatorId()); }
+  function currentOperatorName() {
+    var id = currentOperatorId();
+    return id ? E.resolveStaffName(E.getState(), id) : '（這個部門目前沒有在職員工）';
+  }
 
   function currentTab() { return sessionStorage.getItem(TAB_KEY) || 'pool'; }
   function setTab(t) { sessionStorage.setItem(TAB_KEY, t); }
@@ -120,6 +138,9 @@
       sel.appendChild(o);
     });
     sel.value = currentOperatorId();
+
+    var shift = E.getCurrentShift();
+    document.getElementById('shift-label').textContent = shift ? shift.name + '（' + shift.start + '–' + shift.end + '）' : '—';
   }
 
   function renderPoolTab(state, content) {
@@ -127,6 +148,7 @@
     var tasks = state.tasks.filter(function (t) { return t.state === 'pool' && t.dept === dept; })
       .sort(function (a, b) { return a.createdAt - b.createdAt; });
     content.appendChild(C.el('p', 'section-label', (dept === 'housekeeping' ? '房務' : '工務') + '待接池'));
+    if (!currentOperatorId()) { content.appendChild(C.emptyState('這個部門目前沒有在職員工可以搶單——到租戶設定頁啟用至少一位')); return; }
     if (!tasks.length) { content.appendChild(C.emptyState('目前沒有待接的任務')); return; }
     tasks.forEach(function (t) {
       var card = C.taskCard(t, {
@@ -366,11 +388,37 @@
     });
   }
 
+  // 逾時升級第一層的提醒面：升級鏈在真實系統是推播到接單人／部門池成員的手機，
+  // POC 用常駐橫幅等價呈現——逾時的單要「叫到人」，塞在通知分頁裡等人點開
+  // 就跟沒叫一樣。只列目前部門、而且是「我該動」的單：還在待接池的，
+  // 或已指派給目前操作者的；別人的單升級了不干這個操作者的事。
+  function renderEscalationBanner(state, content) {
+    var opId = currentOperatorId();
+    var dept = currentDept();
+    var hits = E.escalationsForPage(state, 'housekeeping').filter(function (h) {
+      if (h.task.dept !== dept) return false;
+      return h.task.state === 'pool' || h.task.assigneeId === opId;
+    });
+    if (!hits.length) return;
+    var banner = C.el('div', 'esc-banner');
+    banner.appendChild(C.el('span', 'esc-banner-title', '逾時升級提醒（' + hits.length + '）——這些單過時限了，有人接嗎？'));
+    hits.forEach(function (h) {
+      var item = C.el('div', 'esc-banner-item');
+      item.appendChild(C.el('span', 'esc-lv', 'L' + h.level));
+      item.appendChild(C.el('span', null, C.roomLabel(h.task.roomNo) + ' · ' + h.task.title + ' · ' +
+        (h.task.state === 'pool' ? '還在待接池' : '已指派給你，尚未完成')));
+      banner.appendChild(item);
+    });
+    banner.appendChild(C.el('p', 'esc-banner-sub', '升級時點與通知對象可在租戶設定「通知」的逾時升級鏈調整；處理完成後提醒自動消失。'));
+    content.appendChild(banner);
+  }
+
   function renderAll() {
     renderChrome();
     var state = E.getState();
     var content = document.getElementById('app-content');
     content.innerHTML = '';
+    renderEscalationBanner(state, content);
     var tab = currentTab();
     if (tab === 'pool') renderPoolTab(state, content);
     else if (tab === 'mine') renderMineTab(state, content);

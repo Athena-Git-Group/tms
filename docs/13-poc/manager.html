@@ -18,6 +18,8 @@
 
   .self-warning { font-size: 12.5px; color: var(--color-warning); font-weight: 700; margin: -4px 0 0; }
 
+  .escalate-panel textarea { min-height: 52px; }
+
   .clipboard { padding: 20px; }
   .clipboard-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .clipboard-head .room { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
@@ -34,6 +36,21 @@
   .check-toggle button { padding: 6px 12px; font-size: 12.5px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink-muted); font-weight: 700; cursor: pointer; }
   .check-toggle button.is-active-pass.is-active { background: var(--color-state-done); border-color: var(--color-state-done); color: #fff; }
   .check-toggle button.is-active-fail.is-active { background: var(--color-state-interrupted); border-color: var(--color-state-interrupted); color: #fff; }
+
+  /* 免查房橫幅：跟 owner.html 的 .daily-line 同一套「左側色條＋說明文字」語彙，
+     不是警告（沒有東西壞掉），用 accent 而不是 warning 色。 */
+  .noinspect-banner {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 12px 14px; border: 1px solid var(--color-line);
+    border-left: 3px solid var(--color-accent);
+    background: var(--color-accent-soft); border-radius: var(--radius-md);
+    font-size: 13px; color: var(--color-ink);
+  }
+  /* class 選擇器跟 [hidden] 的 UA 樣式權重打平時 author 規則會贏（settings.html
+     的 .settings-shell[hidden] 同一個坑）——不額外補這條，JS 設 hidden 屬性
+     在這個元素上會完全沒作用，橫幅永遠擠在畫面上。 */
+  .noinspect-banner[hidden] { display: none; }
+  .noinspect-banner b { font-size: 13.5px; }
 </style>
 </head>
 <body>
@@ -56,6 +73,27 @@
     <label for="inspector-select">目前查房者</label>
     <select id="inspector-select"></select>
   </section>
+
+  <section class="panel escalate-panel">
+    <h2>上報老闆</h2>
+    <p class="panel-sub" id="escalate-desc"></p>
+    <div class="field">
+      <label for="escalate-input">一句話說明狀況</label>
+      <textarea id="escalate-input" placeholder="例如：302 房客訴要求退房，已經在協調"></textarea>
+    </div>
+    <button class="btn btn-primary" id="escalate-send" type="button" style="margin-top:8px;">送出上報</button>
+  </section>
+
+  <div class="esc-banner" id="escalation-banner" hidden>
+    <span class="esc-banner-title" id="escalation-banner-title"></span>
+    <div id="escalation-banner-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <p class="esc-banner-sub">任務逾時後依升級鏈通知到主管這層（該介入協調了）；層距與通知對象在租戶設定「通知」的逾時升級鏈調整，任務完成或取消就不再升級。</p>
+  </div>
+
+  <div class="noinspect-banner" id="noinspect-banner" hidden>
+    <b>免查房已開啟</b>
+    <span>新完成的打掃自動通過查驗；下方是開關前已完成、仍待人工處理的房。</span>
+  </div>
 
   <section id="task-list" class="stack" style="gap:16px;"></section>
 
@@ -84,7 +122,7 @@
     sel.innerHTML = '';
     INSPECTOR_POOL_IDS.forEach(function (id) {
       var s = state.staff.filter(function (x) { return x.id === id; })[0];
-      if (!s) return;
+      if (!s || s.active === false) return;
       var o = document.createElement('option');
       o.value = id; o.textContent = s.name + (s.role === 'manager' ? '（主管）' : '（房務）');
       sel.appendChild(o);
@@ -101,13 +139,20 @@
     if (!tasks.length) {
       var flow = state.settings.flow || {};
       wrap.appendChild(C.emptyState(flow.requireInspection === false
-        ? '流程設定目前是「打掃免查房」：完成即自動合格，不會出現待查任務（可到租戶設定頁改回）'
+        ? '沒有開關前遺留的待處理房了，新完成的打掃都自動合格（見上方說明）'
         : '目前沒有待查房的任務（打掃完成後會出現在這裡）'));
       return;
     }
 
     var inspectorId = currentInspectorId();
     var inspectorName = E.resolveStaffName(state, inspectorId);
+    // 權限咬合示範點之一：拿掉角色的「查房判定」權限，查房按鈕要整個消失，
+    // 不是停用——不然使用者會以為是任務本身不能查，而不是自己沒這個權限。
+    var canSubmit = E.hasPermission(inspectorId, 'inspect_submit');
+    if (!canSubmit) {
+      wrap.appendChild(C.emptyState(inspectorName + ' 目前的角色沒有「查房判定」權限，看不到查房按鈕——到租戶設定頁的「員工與權限」調整角色權限'));
+      return;
+    }
 
     tasks.forEach(function (task) {
       var card = C.el('article', 'panel clipboard');
@@ -168,7 +213,11 @@
         if (!r.ok) { C.toastFromResult(r); return; }
         delete draftResults[task.id];
         if (r.task.state === 'inspected') {
-          C.toast(task.roomNo + ' 號房查驗合格，已排 PMS 回寫', 'success');
+          // 回寫開關（租戶設定「PMS 整合」）關閉時查驗照樣合格，但不回寫——
+          // toast 照實講，不能永遠喊「已排 PMS 回寫」。
+          C.toast(task.roomNo + ' 號房查驗合格' + (r.task.pmsSync
+            ? '，已排 PMS 回寫（房間狀態 Inspected）'
+            : '（PMS 房間狀態回寫已關閉／未接 PMS，這次不回寫）'), 'success');
         } else {
           C.toast(task.roomNo + ' 號房查驗不過，已退回 ' + assigneeName + ' 重掃（第 ' + r.task.redoCount + ' 次）', 'warning');
         }
@@ -179,15 +228,70 @@
     });
   }
 
+  // 來源開關關閉時「上報老闆」入口留著但停用＋提示，不直接藏起來——跟 UI 一致性
+  // 選擇有關：這個入口本身就是個動作按鈕，停用比消失更清楚「為什麼現在按不了」。
+  function renderEscalatePanel(state) {
+    var enabled = (state.settings.notifications || {}).ownerManagerReportEnabled !== false;
+    document.getElementById('escalate-send').disabled = !enabled;
+    document.getElementById('escalate-input').disabled = !enabled;
+    document.getElementById('escalate-desc').textContent = enabled
+      ? '送出後老闆頁會立即出現提醒，並留一筆事件紀錄。'
+      : '老闆通知已關閉（到租戶設定「通知」開啟「主管上報」來源）。';
+  }
+
+  // 免查房開關開著時，查房區頂部要留一句說明——不然開關前就已經完成、還卡在
+  // 這頁等人工處理的房卡看起來像壞掉（沒人查、也沒有任何提示）。開關切回
+  // true 橫幅就消失，不動 inspect_submit 權限閘的行為（那是另一條、各自獨立）。
+  function renderNoInspectBanner(state) {
+    var flow = state.settings.flow || {};
+    document.getElementById('noinspect-banner').hidden = flow.requireInspection !== false;
+  }
+
+  // 升級通知到主管這層的呈現：真實系統是推播主管手機，POC 用頁首橫幅等價呈現。
+  // 只列還沒處理完的單——任務一離開可升級狀態（完成／查驗／取消），
+  // 引擎的 escalationsForPage 就不再回報它，橫幅自動消失，不用人工清。
+  function renderEscalationBanner(state) {
+    var banner = document.getElementById('escalation-banner');
+    var hits = E.escalationsForPage(state, 'manager');
+    banner.hidden = !hits.length;
+    if (!hits.length) return;
+    document.getElementById('escalation-banner-title').textContent =
+      '逾時升級通知（' + hits.length + '）——逾時太久沒動靜，升級到主管';
+    var list = document.getElementById('escalation-banner-list');
+    list.innerHTML = '';
+    hits.forEach(function (h) {
+      var item = C.el('div', 'esc-banner-item');
+      item.appendChild(C.el('span', 'esc-lv', 'L' + h.level));
+      item.appendChild(C.el('span', null, C.roomLabel(h.task.roomNo) + ' · ' + h.task.title + ' · ' +
+        E.STATE_LABELS[h.task.state] +
+        (h.task.assigneeId ? ' · 負責人 ' + E.resolveStaffName(state, h.task.assigneeId) : ' · 尚無人認領')));
+      list.appendChild(item);
+    });
+  }
+
   function renderAll() {
     var state = E.getState();
     buildInspectorSelect(state);
+    renderEscalationBanner(state);
+    renderNoInspectBanner(state);
+    renderEscalatePanel(state);
     renderTaskList(state);
   }
 
   document.getElementById('inspector-select').addEventListener('change', function (e) {
     setInspector(e.target.value);
     renderAll();
+  });
+
+  document.getElementById('escalate-send').addEventListener('click', function () {
+    var input = document.getElementById('escalate-input');
+    var text = input.value.trim();
+    if (!text) { C.toast('請輸入要上報的內容', 'warning'); return; }
+    var inspectorName = E.resolveStaffName(E.getState(), currentInspectorId());
+    var r = E.reportToOwner(text, inspectorName);
+    if (!r.ok) { C.toastFromResult(r); return; }
+    input.value = '';
+    C.toast('已上報老闆', 'success');
   });
   document.getElementById('reset-btn').addEventListener('click', function () {
     E.resetAll();

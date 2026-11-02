@@ -64,6 +64,15 @@
   .plan-legend .kind-turndown { background: var(--color-state-pool); }
   .plan-legend .kind-patrol { background: var(--color-state-deferred); }
 
+  /* 因設定排除的房：收在 details 裡——這份清單是「交代去向」不是「待辦」，
+     常駐展開會跟真正要動手的未分配池搶視線，但主管想查時一鍵可見、不用翻設定頁。 */
+  .excluded-box { margin-top: 12px; border: 1px dashed var(--color-line-strong); border-radius: var(--radius-md); padding: 10px 14px; }
+  .excluded-box summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--color-warning); }
+  .excluded-list { margin: 10px 0 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 4px; }
+  .excluded-list li { font-size: 13px; color: var(--color-ink-muted); }
+  .excluded-list li b { color: var(--color-ink); font-family: var(--font-display); font-size: 14.5px; }
+  .excluded-note { margin: 10px 0 2px; font-size: 12.5px; color: var(--color-ink-faint); }
+
   .draft-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
   .load-summary { font-family: var(--font-mono); font-size: 12.5px; color: var(--color-ink-muted); }
 
@@ -82,9 +91,15 @@
   .task-quick button { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--color-line-strong); background: var(--color-surface); color: var(--color-ink-muted); cursor: pointer; }
   .task-quick button:hover { border-color: var(--color-accent); color: var(--color-accent); }
 
+  /* 頂欄塞了「目前操作者」下拉後，窄螢幕下 flex 子項會被壓到比文字內容還窄，
+     中文標籤逐字斷行（每個字各佔一行）——這裡讓頂欄換行，標籤本身不換行。 */
+  .tms-topbar-actions label { white-space: nowrap; flex-shrink: 0; }
   @media (max-width: 760px) {
     .source-grid { grid-template-columns: 1fr; }
     .scroll-x table.draft { min-width: 560px; }
+    .tms-topbar { flex-wrap: wrap; row-gap: 10px; }
+    .tms-topbar-actions { flex-wrap: wrap; width: 100%; }
+    #operator-select { max-width: none; flex: 1 1 200px; }
   }
 </style>
 </head>
@@ -96,6 +111,8 @@
     <span class="tms-brand-role">主管排房</span>
   </span>
   <div class="tms-topbar-actions">
+    <label for="operator-select" style="font-size:12.5px;color:var(--color-ink-muted);align-self:center;">目前操作者</label>
+    <select id="operator-select" style="padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--color-line-strong);background:var(--color-surface-raised);color:var(--color-ink);font-weight:700;"></select>
     <a class="btn btn-secondary" href="manager.html">查房頁</a>
     <a class="btn btn-secondary" href="events.html" target="_blank" rel="noopener">事件流水帳</a>
     <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
@@ -107,18 +124,20 @@
   <section class="panel">
     <h2>今日要掃哪些房？先把房態拉進來</h2>
     <p class="panel-sub">正式環境走 PMS adapter 訂閱；PMS 接不上時用 Excel 匯入當降級。兩邊都會蓋掉現有草稿。</p>
+    <p class="panel-sub" id="checkout-checkin-hint" style="margin-top:-6px;"></p>
     <div class="source-grid">
       <div class="source-card">
         <h3>串接 PMS</h3>
         <p class="source-desc">模擬 adapter 拉回今日房態（退房清／續住清／夜床／空房巡）。</p>
+        <p class="source-desc" id="pms-mode-hint"></p>
         <div class="source-actions">
           <button class="btn btn-primary" id="pms-import" type="button">從 PMS 拉今日房態</button>
         </div>
       </div>
       <div class="source-card">
         <h3>Excel 匯入（CSV 示意）</h3>
-        <p class="source-desc">每行一間房，格式「房號,清掃類型」；可直接貼上或選 .csv 檔。類型限：退房清／續住清／夜床／空房巡。</p>
-        <textarea id="csv-input" placeholder="306,退房清&#10;307,續住清&#10;505,夜床" aria-label="CSV 內容"></textarea>
+        <p class="source-desc">每行一間房，格式「房號,清掃類型[,訂房屬性][,房態][,旗標]」；可直接貼上或選 .csv 檔。類型限：退房清／續住清／夜床／空房巡。第三欄訂房屬性選填（例如 VIP、親子），多個屬性用「/」分隔；第四欄房態選填（退房／續住／空房／停用維修），沒填就依清掃類型推定；第五欄旗標選填（環保／請勿打擾，可用「/」並列）——旗標只決定這間房進不進草稿（照租戶設定的納入開關），不影響預估工時。沒有這些欄的舊格式照常可以匯入。</p>
+        <textarea id="csv-input" placeholder="306,退房清,VIP&#10;307,續住清,親子&#10;505,夜床" aria-label="CSV 內容"></textarea>
         <input type="file" id="csv-file" accept=".csv,.txt" aria-label="選擇 CSV 檔案">
         <div class="source-actions">
           <button class="btn btn-secondary" id="csv-sample" type="button">填入範例</button>
@@ -133,6 +152,11 @@
     <p class="panel-sub">把房卡<b>拖到人身上</b>（或點卡片右側的小按鈕）。「自動分配」的策略在租戶設定可切換：樓層聚合（一層一人）或純工時平衡；標準工時與班次容量也在那裡調。怎麼分都只是草稿，發佈才算數。</p>
     <div class="plan-board" id="plan-board"></div>
     <div class="plan-legend" id="plan-legend"></div>
+    <details class="excluded-box" id="excluded-box" hidden>
+      <summary id="excluded-summary"></summary>
+      <ul class="excluded-list" id="excluded-list"></ul>
+      <p class="excluded-note">納入開關在租戶設定「流程設定」。改開關不會動這份草稿、也不回溯已發佈的任務——重新拉 PMS 或重新匯入才生效。環保房／請勿打擾是房間當日旗標，v1 只決定進不進草稿，不影響預估工時。</p>
+    </details>
     <div class="draft-actions">
       <button class="btn btn-secondary" id="auto-assign" type="button">自動分配（樓層聚合）</button>
       <button class="btn btn-primary" id="publish" type="button">發佈排房</button>
@@ -144,6 +168,7 @@
   <section class="panel">
     <h2>今日已發佈的打掃單</h2>
     <p class="panel-sub">發佈即指派（不進待接池）；還沒按「開始」的單，直接把卡片<b>拖到另一個人身上</b>就改派（或點卡上的小按鈕）。開始處理中的單不能改派——那條路走中斷退池。</p>
+    <p class="publish-note" id="reassign-permission-note" hidden></p>
     <div class="staff-board" id="staff-board"></div>
   </section>
 
@@ -155,14 +180,52 @@
 <script>
 (function () {
   var C = TMS_COMPONENTS, E = TMS_ENGINE;
-  var ACTOR = '王主管';
+  var OPERATOR_KEY = 'tms_poc_schedule_operator';
 
+  // 排房頁本來是單一「王主管」身分寫死；現在要能示範「拿掉改派權限→改派操作消失」，
+  // 就得先有身分可以切換，照 POC 既有的「操作者下拉＋sessionStorage」慣例
+  // （跟房務工作台、查房頁同一套），不是另外發明一套切換機制。
+  function currentOperatorId() {
+    var saved = sessionStorage.getItem(OPERATOR_KEY);
+    var pool = E.getState().staff.filter(function (s) { return s.active !== false; });
+    if (saved && pool.some(function (s) { return s.id === saved; })) return saved;
+    var fallback = pool.filter(function (s) { return s.role === 'manager'; })[0] || pool[0];
+    return fallback ? fallback.id : null;
+  }
+  function setOperator(id) { sessionStorage.setItem(OPERATOR_KEY, id); }
+  function ACTOR_NAME() {
+    var id = currentOperatorId();
+    return id ? E.resolveStaffName(E.getState(), id) : '租戶管理者';
+  }
+
+  function renderOperatorSelect() {
+    var sel = document.getElementById('operator-select');
+    var cur = currentOperatorId();
+    sel.innerHTML = '';
+    E.getState().staff.filter(function (s) { return s.active !== false; }).forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s.id; o.textContent = s.name;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+  }
+
+  // 用 role 不是 dept 篩：dept 現在是可自訂的組織標籤（可能被租戶改成「客房 3 樓」
+  // 這類細分），排房看板要抓的是「做房務工作的人」，跟他掛哪個部門標籤無關；
+  // 停用的房務員不再出現在這裡，也就不會被排房、改派選到。
   function housekeepingStaff(state) {
-    return state.staff.filter(function (s) { return s.dept === 'housekeeping'; });
+    return state.staff.filter(function (s) { return s.role === 'housekeeping' && s.active !== false; });
+  }
+
+  // UI 已經把改派按鈕／拖曳都藏起來了（見 renderStaffBoard），這裡是最後一道防線——
+  // 直接呼叫這個函式（例如還殘留的拖曳事件）一樣要擋，不能只靠「看不到按鈕」。
+  function canReassign() {
+    return E.hasPermission(currentOperatorId(), 'schedule_reassign');
   }
 
   function doReassign(taskId, staffId, roomNo) {
-    var r = E.reassignTask(taskId, staffId, ACTOR);
+    if (!canReassign()) { C.toast('目前身分沒有「改派」權限', 'warning'); return; }
+    var r = E.reassignTask(taskId, staffId, ACTOR_NAME());
     if (r.ok) {
       C.toast(roomNo + ' 號房已改派給 ' + E.resolveStaffName(E.getState(), staffId), 'success');
     } else {
@@ -173,6 +236,12 @@
 
   var KIND_SLUG = { '退房清': 'depart', '續住清': 'stay', '夜床': 'turndown', '空房巡': 'patrol' };
 
+  // 工作量單位字樣一律現查設定：租戶切成「點數」顯示時，這頁的負載條、容量、
+  // 卡片估時要同步改口，不能有的地方講分、有的地方講點。
+  function unitOf(state) {
+    return E.workloadUnitLabel(state.settings);
+  }
+
   function moveRoom(roomNo, staffId) {
     E.setDraftAssignee(roomNo, staffId || null);
   }
@@ -181,8 +250,14 @@
     var card = C.el('div', 'room-card kind-' + (KIND_SLUG[r.kind] || 'depart') + (r.conflict ? ' is-conflict' : ''));
     card.appendChild(C.el('span', 'rm', r.roomNo));
     var kd = C.el('span', 'kd');
-    kd.appendChild(C.el('b', null, r.kind + ' · ' + r.estMin + ' 分'));
-    kd.appendChild(C.el('span', null, r.conflict ? '已有今日打掃單，發佈時跳過' : r.floor + ' 樓'));
+    kd.appendChild(C.el('b', null, r.kind + ' · ' + r.estMin + ' ' + unitOf(state)));
+    var subtitle = r.conflict ? '已有今日打掃單，發佈時跳過' : r.floor + ' 樓';
+    if (r.roomState && E.ROOM_STATE_LABELS[r.roomState]) subtitle += '　·　' + E.ROOM_STATE_LABELS[r.roomState];
+    (r.flags || []).forEach(function (f) {
+      if (E.ROOM_FLAG_LABELS[f]) subtitle += '　·　' + E.ROOM_FLAG_LABELS[f];
+    });
+    if (r.attributes && r.attributes.length) subtitle += '　·　訂房屬性：' + r.attributes.join('、');
+    kd.appendChild(C.el('span', null, subtitle));
     card.appendChild(kd);
 
     if (r.conflict) return card;
@@ -259,7 +334,7 @@
       var mins = rooms.reduce(function (a, r) { return a + (r.conflict ? 0 : r.estMin); }, 0);
       var over = col.id && mins > capacity;
       who.appendChild(C.el('span', 'load-text' + (over ? ' is-over' : ''), col.id
-        ? rooms.length + ' 間 · ' + mins + ' / ' + capacity + ' 分' + (over ? '（超載）' : '')
+        ? rooms.length + ' 間 · ' + mins + ' / ' + capacity + ' ' + unitOf(state) + (over ? '（超載）' : '')
         : rooms.length + ' 間'));
       head.appendChild(who);
       if (col.id) {
@@ -295,24 +370,54 @@
       board.appendChild(colEl);
     });
 
-    var std = state.settings.cleaningStandard || E.CLEANING_STANDARD;
+    // 圖例標的是各類型在推定房態下的基準值（覆寫是房間自己的事，不進圖例）；
+    // 房態不同或房間有覆寫時，卡片上的數字會跟圖例不同，那正是要展示的差異。
     Object.keys(KIND_SLUG).forEach(function (kind) {
       var item = C.el('span');
       item.appendChild(C.el('i', 'kind-' + KIND_SLUG[kind]));
-      item.appendChild(document.createTextNode(kind + ' ' + std[kind] + ' 分'));
+      item.appendChild(document.createTextNode(kind + ' ' + E.estimateCleaningMinutes(state, null, kind) + ' ' + unitOf(state)));
       legend.appendChild(item);
     });
 
     var parts = staff
       .filter(function (s) { return load[s.id]; })
-      .map(function (s) { return s.name + ' ' + load[s.id] + ' 分'; });
+      .map(function (s) { return s.name + ' ' + load[s.id] + ' ' + unitOf(state); });
     document.getElementById('load-summary').textContent = parts.length ? '工時合計：' + parts.join('　') : '';
+  }
+
+  // 被開關排除的房單獨渲染、不跟草稿綁在一起：整批都被排除時草稿是空的，
+  // 這份清單反而是唯一能交代「房去了哪裡」的地方，不能跟著草稿一起消失。
+  function renderExcluded(state) {
+    var box = document.getElementById('excluded-box');
+    var list = document.getElementById('excluded-list');
+    var excluded = (state.schedule || {}).excluded || [];
+    if (!excluded.length) { box.hidden = true; return; }
+    box.hidden = false;
+    document.getElementById('excluded-summary').textContent =
+      excluded.length + ' 間房因租戶設定的納入開關沒有進草稿（點開看是哪幾間、為什麼）';
+    list.innerHTML = '';
+    excluded.forEach(function (r) {
+      var li = document.createElement('li');
+      li.appendChild(C.el('b', null, r.roomNo));
+      var desc = '　' + r.kind;
+      if (r.roomState && E.ROOM_STATE_LABELS[r.roomState]) desc += ' · ' + E.ROOM_STATE_LABELS[r.roomState];
+      (r.flags || []).forEach(function (f) {
+        if (E.ROOM_FLAG_LABELS[f]) desc += ' · ' + E.ROOM_FLAG_LABELS[f];
+      });
+      desc += '　——　' + (r.reasons || []).join('；');
+      li.appendChild(document.createTextNode(desc));
+      list.appendChild(li);
+    });
   }
 
   function renderStaffBoard(state) {
     var board = document.getElementById('staff-board');
     board.innerHTML = '';
     var staff = housekeepingStaff(state);
+    var reassignAllowed = canReassign();
+    var note = document.getElementById('reassign-permission-note');
+    note.hidden = reassignAllowed;
+    note.textContent = ACTOR_NAME() + ' 目前的角色沒有「改派」權限，下面的已發佈打掃單唯讀——到租戶設定頁的「員工與權限」調整角色權限';
     staff.forEach(function (s) {
       var tasks = state.tasks.filter(function (t) {
         return t.type === 'cleaning' && t.assigneeId === s.id &&
@@ -323,18 +428,19 @@
       var head = C.el('div', 'staff-col-head');
       head.appendChild(C.el('h3', null, s.name));
       var totalMin = tasks.reduce(function (a, t) {
-        var std = state.settings.cleaningStandard || E.CLEANING_STANDARD;
-        return a + (t.estMin || std[t.title] || 0);
+        // 排房發佈的任務帶著自己的 estMin；臨時建立的打掃單沒有，現算一份
+        // （吃得到房間覆寫與基準格），負載加總才不會漏算這些單。
+        return a + (t.estMin || E.estimateCleaningMinutes(state, t.roomNo, t.title, t.roomState) || 0);
       }, 0);
-      head.appendChild(C.el('span', 'load', tasks.length + ' 間 · 約 ' + totalMin + ' 分'));
+      head.appendChild(C.el('span', 'load', tasks.length + ' 間 · 約 ' + totalMin + ' ' + unitOf(state)));
       col.appendChild(head);
 
       if (!tasks.length) {
         col.appendChild(C.emptyState('目前沒有未完成的打掃單（可以把別欄的卡拖過來）'));
       }
       tasks.forEach(function (t) {
-        var card = C.taskCard(t, { meta: t.estMin ? '預估 ' + t.estMin + ' 分' : null });
-        if (t.state === 'accepted') {
+        var card = C.taskCard(t, { meta: t.estMin ? '預估 ' + t.estMin + ' ' + unitOf(state) : null });
+        if (t.state === 'accepted' && reassignAllowed) {
           card.classList.add('is-draggable');
           card.draggable = true;
           card.addEventListener('dragstart', function (e) {
@@ -358,22 +464,24 @@
         col.appendChild(card);
       });
 
-      col.addEventListener('dragover', function (e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        col.classList.add('is-dropover');
-      });
-      col.addEventListener('dragleave', function () { col.classList.remove('is-dropover'); });
-      col.addEventListener('drop', function (e) {
-        e.preventDefault();
-        col.classList.remove('is-dropover');
-        var payload = e.dataTransfer.getData('text/plain');
-        if (payload.indexOf('task:') !== 0) return;
-        var taskId = payload.slice(5);
-        var task = E.findTask(E.getState(), taskId);
-        if (!task || task.assigneeId === s.id) return;
-        doReassign(taskId, s.id, task.roomNo);
-      });
+      if (reassignAllowed) {
+        col.addEventListener('dragover', function (e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          col.classList.add('is-dropover');
+        });
+        col.addEventListener('dragleave', function () { col.classList.remove('is-dropover'); });
+        col.addEventListener('drop', function (e) {
+          e.preventDefault();
+          col.classList.remove('is-dropover');
+          var payload = e.dataTransfer.getData('text/plain');
+          if (payload.indexOf('task:') !== 0) return;
+          var taskId = payload.slice(5);
+          var task = E.findTask(E.getState(), taskId);
+          if (!task || task.assigneeId === s.id) return;
+          doReassign(taskId, s.id, task.roomNo);
+        });
+      }
 
       board.appendChild(col);
     });
@@ -381,10 +489,51 @@
 
   function renderAll() {
     var state = E.getState();
+    renderOperatorSelect();
     document.getElementById('auto-assign').textContent =
       '自動分配（' + (state.settings.autoAssignStrategy === 'balance' ? '工時平衡' : '樓層聚合') + '）';
+    renderCheckoutCheckinHint(state.settings);
+    renderPmsSourceCard(state.settings);
     renderDraft(state);
+    renderExcluded(state);
     renderStaffBoard(state);
+  }
+
+  // 純提示文字，不改演算法——退房清本來就該優先排，這裡只是把「為什麼優先」的
+  // 營業參數（租戶設定可調）攤開給主管看，v1 不會真的按這兩個時間重新排序。
+  function renderCheckoutCheckinHint(settings) {
+    var biz = settings.business || {};
+    var checkout = biz.checkoutTime || '11:00';
+    var checkin = biz.checkinTime || '15:00';
+    document.getElementById('checkout-checkin-hint').textContent =
+      '退房時間 ' + checkout + '／入住時間 ' + checkin + '（租戶設定「營業參數」可調）——退房清通常最早要清出來給下一位住客，排分配時可以優先考慮。';
+  }
+
+  // 拉回鈕跟租戶設定「PMS 整合」連動：卡片上講清楚現在接的是哪一家、同步走
+  // 哪條路（推事件／輪詢），手動匯入模式或「今日房態」同步關閉時直接停用按鈕
+  // 並指去 CSV 匯入——引擎那端同樣會擋，這裡停用只是不讓主管按了才吃錯誤。
+  function renderPmsSourceCard(settings) {
+    var pms = E.pmsSettingsOf(settings);
+    var provider = E.pmsProviderOf(pms.provider);
+    var btn = document.getElementById('pms-import');
+    var hint = document.getElementById('pms-mode-hint');
+    if (pms.provider === 'manual') {
+      btn.disabled = true;
+      hint.textContent = '目前是「手動匯入模式」（租戶設定「PMS 整合」可改）——沒有接 PMS，請用右邊的 Excel／CSV 匯入。';
+      return;
+    }
+    if (!pms.syncScope.occupancy) {
+      btn.disabled = true;
+      hint.textContent = '目前接的是「' + (provider ? provider.name : pms.provider) + '」，但同步範圍「今日房態」已關閉——到租戶設定「PMS 整合」開回來，或改用 Excel／CSV 匯入。';
+      return;
+    }
+    btn.disabled = false;
+    var cap = pms.capability && pms.capability.provider === pms.provider ? pms.capability : null;
+    hint.textContent = '目前接的是「' + (provider ? provider.name : pms.provider) + '」，同步模式：'
+      + (cap
+        ? (cap.mode === 'push' ? '推事件（事件訂閱）' : '輪詢（每 ' + cap.pollIntervalMin + ' 分鐘）')
+        : '還沒做能力盤點（租戶設定「PMS 整合」按「測試連線＋能力盤點」）')
+      + '。';
   }
 
   // CSV textarea 打到一半時跳過整頁重繪，不然別的分頁一有動靜貼好的內容就沒了
@@ -401,23 +550,35 @@
       .filter(function (line) { return line.length; })
       .map(function (line) {
         var parts = line.split(/[,，\t]/);
-        return { roomNo: (parts[0] || '').trim(), kind: (parts[1] || '').trim() };
+        // 第三欄訂房屬性選填，多個屬性用 / 、 ; 都當分隔（示範彈性，不強制單一符號）；
+        // 沒有第三欄的舊格式 parts[2] 是 undefined，attributes 就是空陣列，照常匯入。
+        var attrRaw = (parts[2] || '').trim();
+        var attributes = attrRaw ? attrRaw.split(/[\/、;；]/).map(function (a) { return a.trim(); }).filter(Boolean) : [];
+        // 第四欄房態同樣選填，引擎會把中文顯示名換回值、沒填就依清掃類型推定。
+        // 第五欄旗標（環保／請勿打擾）選填，分隔符與屬性欄同一套；認不得的字樣
+        // 引擎會丟棄而不是退整列。
+        var flagRaw = (parts[4] || '').trim();
+        var flags = flagRaw ? flagRaw.split(/[\/、;；]/).map(function (a) { return a.trim(); }).filter(Boolean) : [];
+        return { roomNo: (parts[0] || '').trim(), kind: (parts[1] || '').trim(), attributes: attributes, roomState: (parts[3] || '').trim(), flags: flags };
       });
   }
 
   function reportImport(r, sourceLabel) {
     if (!r.ok) { C.toastFromResult(r); return; }
     var msg = '已從' + sourceLabel + '匯入 ' + r.count + ' 間房';
+    if (r.excluded && r.excluded.length) msg += '；' + r.excluded.length + ' 間因納入開關排除（草稿下方有明細）';
     if (r.rejected && r.rejected.length) msg += '；' + r.rejected.length + ' 列格式不符已略過';
+    if (r.prepTasksCreated) msg += '；本次依自動化規則自動建立 ' + r.prepTasksCreated + ' 筆工單';
+    if (r.attributesDropped) msg += '；' + r.attributesDropped + ' 間房的訂房屬性已依同步範圍設定丟棄（訂房觸發的自動化規則不會命中）';
     C.toast(msg, 'success');
   }
 
   document.getElementById('pms-import').addEventListener('click', function () {
-    reportImport(E.importOccupancy(TMS_SEED.PMS_TODAY, 'pms', ACTOR), ' PMS ');
+    reportImport(E.importOccupancy(TMS_SEED.PMS_TODAY, 'pms', ACTOR_NAME()), ' PMS ');
   });
 
   document.getElementById('csv-sample').addEventListener('click', function () {
-    document.getElementById('csv-input').value = '306,退房清\n307,續住清\n308,退房清\n505,夜床\n506,退房清';
+    document.getElementById('csv-input').value = '306,退房清,VIP\n307,續住清,親子\n308,退房清\n505,夜床,,,請勿打擾\n506,退房清,寵物\n601,續住清,,,環保\n602,空房巡,,停用維修\n603,空房巡,,空房';
   });
 
   document.getElementById('csv-file').addEventListener('change', function (ev) {
@@ -434,7 +595,7 @@
   document.getElementById('csv-import').addEventListener('click', function () {
     var text = document.getElementById('csv-input').value;
     if (!text.trim()) { C.toast('先貼上內容或選擇 CSV 檔', 'warning'); return; }
-    reportImport(E.importOccupancy(parseCsv(text), 'excel', ACTOR), ' Excel（CSV）');
+    reportImport(E.importOccupancy(parseCsv(text), 'excel', ACTOR_NAME()), ' Excel（CSV）');
   });
 
   document.getElementById('auto-assign').addEventListener('click', function () {
@@ -444,7 +605,7 @@
   });
 
   document.getElementById('publish').addEventListener('click', function () {
-    var r = E.publishSchedule(ACTOR);
+    var r = E.publishSchedule(ACTOR_NAME());
     var note = document.getElementById('publish-note');
     if (!r.ok) { C.toastFromResult(r); return; }
     C.toast('已發佈 ' + r.created + ' 張打掃單（發佈即指派）', 'success');
@@ -459,6 +620,11 @@
   document.getElementById('reset-btn').addEventListener('click', function () {
     E.resetAll();
     C.toast('已重置示範資料', 'success');
+  });
+
+  document.getElementById('operator-select').addEventListener('change', function (e) {
+    setOperator(e.target.value);
+    renderAll();
   });
 
   renderAll();

@@ -71,6 +71,18 @@
   </section>
 
   <aside class="rail">
+    <div class="esc-banner" id="esc-banner" hidden>
+      <span class="esc-banner-title" id="esc-banner-title"></span>
+      <div id="esc-banner-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <p class="esc-banner-sub">升級鏈通知到值班經理這層（店級的事）；POC 沒有獨立的值班經理頁，映射成櫃檯看板與老闆頁並列顯示。層距與對象在租戶設定「通知」調整。</p>
+    </div>
+
+    <section class="panel" id="sla-alert-panel" hidden>
+      <h2>逾時提醒（<span id="sla-alert-count">0</span>）</h2>
+      <p style="font-size:12.5px;color:var(--color-ink-muted);margin:0 0 10px;">任務超過「班次與服務標準」設定的 SLA 時限的看板彙整；關掉「通知」分區的櫃檯提醒開關就不會出現這塊。逾時後「指名道姓叫到人」的分層通知是另一條——見「通知」分區的逾時升級鏈。</p>
+      <div id="sla-alert-list"></div>
+    </section>
+
     <section class="panel">
       <h2>通知板</h2>
       <div class="field">
@@ -156,9 +168,9 @@
     function matchesQuery(t) {
       if (!q) return true;
       var hay = [
-        t.roomNo, t.title, t.detail || '',
+        t.roomNo, t.title, t.detail || '', t.ruleHit || '',
         t.assigneeId ? staffName(t.assigneeId) : '',
-        E.TYPE_LABELS[t.type] || '', E.STATE_LABELS[t.state] || ''
+        E.TYPE_LABELS[t.type] || '', E.STATE_LABELS[t.state] || '', E.deptLabel(t.dept) || ''
       ].join(' ').toLowerCase();
       return hay.indexOf(q) !== -1;
     }
@@ -188,10 +200,43 @@
     document.getElementById('search-count').textContent = q ? '符合 ' + totalMatched + ' 筆' : '';
   }
 
+  // 逾時判定跟任務卡上的小標記（components.js taskCard）同一套條件與 SLA 值，
+  // 只是這裡要彙整成清單——兩處各自算一次比共用一個函式沒有壞處，條件只有四行。
+  function computeOverdueTasks(state) {
+    var slaByType = state.settings.slaByType || {};
+    var nowTs = Date.now();
+    return state.tasks.filter(function (t) {
+      var sla = slaByType[t.type];
+      if (!sla) return false;
+      if (['triage', 'pool', 'accepted', 'doing'].indexOf(t.state) === -1) return false;
+      return Math.floor((nowTs - t.createdAt) / 60000) > sla;
+    }).sort(function (a, b) { return a.createdAt - b.createdAt; });
+  }
+
+  function renderSlaAlerts(state) {
+    var panel = document.getElementById('sla-alert-panel');
+    var enabled = (state.settings.notifications || {}).deskSlaAlertEnabled === true;
+    if (!enabled) { panel.hidden = true; return; }
+    var overdue = computeOverdueTasks(state);
+    panel.hidden = false;
+    document.getElementById('sla-alert-count').textContent = String(overdue.length);
+    var wrap = document.getElementById('sla-alert-list');
+    wrap.innerHTML = '';
+    if (!overdue.length) { wrap.appendChild(C.emptyState('目前沒有逾時任務')); return; }
+    overdue.forEach(function (t) {
+      var sla = state.settings.slaByType[t.type];
+      var elapsedMin = Math.floor((Date.now() - t.createdAt) / 60000);
+      var item = C.el('div', 'notice-item');
+      item.appendChild(C.el('p', 'notice-msg', t.roomNo + ' 號房 · ' + t.title));
+      item.appendChild(C.el('p', 'notice-meta', E.TYPE_LABELS[t.type] + '限 ' + sla + ' 分，已過 ' + elapsedMin + ' 分 · ' + E.STATE_LABELS[t.state]));
+      wrap.appendChild(item);
+    });
+  }
+
   function renderNotices(state) {
     var wrap = document.getElementById('notice-list');
     wrap.innerHTML = '';
-    var staffNames = state.staff.filter(function (s) { return s.role !== 'manager' && s.role !== 'desk'; }).map(function (s) { return s.name; });
+    var staffNames = state.staff.filter(function (s) { return s.role !== 'manager' && s.role !== 'desk' && s.active !== false; }).map(function (s) { return s.name; });
     (state.notices || []).forEach(function (n) {
       var item = C.el('div', 'notice-item');
       item.appendChild(C.el('p', 'notice-msg', n.message));
@@ -205,6 +250,19 @@
       wrap.appendChild(item);
     });
     if (!(state.notices || []).length) wrap.appendChild(C.emptyState('尚未發送任何通知'));
+  }
+
+  // 逾保管期＝還保管中（還沒歸還）且登記時間早於「資料保留」設定的保管期限；
+  // 到期處理只影響標籤文字（通知櫃檯／標記待處理），這個 POC 沒有背景排程真的去通知。
+  function isLostFoundExpired(rec, settings) {
+    if (rec.status === 'returned') return false;
+    var days = (settings.dataRetention || {}).lostFoundRetentionDays || 90;
+    return (Date.now() - rec.ts) > days * 24 * 60 * 60 * 1000;
+  }
+
+  function expiryTagLabel(settings) {
+    var action = (settings.dataRetention || {}).lostFoundOnExpiry;
+    return action === 'notifyDesk' ? '已逾保管期・已通知櫃檯（示意）' : '已逾保管期・待處理';
   }
 
   function renderLostFound(state) {
@@ -221,6 +279,9 @@
       if (rec.status === 'returned') {
         item.appendChild(C.el('span', 'tag tag-muted', '已歸還'));
       } else {
+        if (isLostFoundExpired(rec, state.settings)) {
+          item.appendChild(C.el('span', 'tag tag-warning', expiryTagLabel(state.settings)));
+        }
         var btn = C.el('button', 'btn btn-ghost', '標記歸還');
         btn.type = 'button';
         btn.addEventListener('click', function () { E.returnLostFound(rec.id, ACTOR); });
@@ -231,9 +292,33 @@
     if (!(state.lostFound || []).length) wrap.appendChild(C.emptyState('尚無遺失物登記'));
   }
 
+  // 升級鏈通知到櫃檯／值班經理這層的呈現：跟下方「逾時提醒」看板彙整分開——
+  // 那塊列的是「所有逾時任務」給人掃視，這塊只列「升級鏈點名到這層」的單，
+  // 混在一起就分不出哪些已經是店級的事。任務離開可升級狀態就自動消失。
+  function renderEscalationBanner(state) {
+    var banner = document.getElementById('esc-banner');
+    var hits = E.escalationsForPage(state, 'desk');
+    banner.hidden = !hits.length;
+    if (!hits.length) return;
+    document.getElementById('esc-banner-title').textContent =
+      '逾時升級通知（' + hits.length + '）——升級到值班經理層';
+    var list = document.getElementById('esc-banner-list');
+    list.innerHTML = '';
+    hits.forEach(function (h) {
+      var item = C.el('div', 'esc-banner-item');
+      item.appendChild(C.el('span', 'esc-lv', 'L' + h.level));
+      item.appendChild(C.el('span', null, C.roomLabel(h.task.roomNo) + ' · ' + h.task.title + ' · ' +
+        E.STATE_LABELS[h.task.state] +
+        (h.task.assigneeId ? ' · 負責人 ' + staffName(h.task.assigneeId) : ' · 尚無人認領')));
+      list.appendChild(item);
+    });
+  }
+
   function renderAll() {
     var state = E.getState();
     renderBoard(state);
+    renderEscalationBanner(state);
+    renderSlaAlerts(state);
     renderNotices(state);
     renderLostFound(state);
   }

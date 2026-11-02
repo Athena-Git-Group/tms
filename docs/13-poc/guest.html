@@ -51,14 +51,20 @@
     <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
   </div>
 
-  <div class="scan-strip">
-    <span>目前房號（模擬掃碼入住）</span>
+  <div class="scan-strip" id="scan-strip">
+    <span id="scan-label">目前房號（模擬掃碼入住）</span>
     <select id="room-select"></select>
   </div>
 
-  <div class="phone-content">
+  <section class="panel" id="qr-invalid-panel" hidden style="margin:18px;">
+    <h2>這組 QR 已經失效</h2>
+    <p class="panel-sub">可能是飯店已經重新產生這間房的 QR，或者這間房目前停用中。請改用最新的 QR，或直接洽櫃檯協助。</p>
+  </section>
+
+  <div class="phone-content" id="phone-content">
 
     <section class="hotel-card">
+      <img id="brand-logo-img" alt="飯店 Logo" style="display:none;max-height:40px;max-width:150px;margin-bottom:10px;border-radius:6px;object-fit:contain;">
       <p class="hotel-name" id="hotel-name">—</p>
       <p class="room-no" id="room-label">房號 —</p>
       <div id="hotel-info-list"></div>
@@ -91,7 +97,27 @@
 (function () {
   var C = TMS_COMPONENTS, E = TMS_ENGINE;
   var ROOM_KEY = 'tms_poc_guest_room';
-  var KNOWN_ROOMS = ['301', '302', '303', '305', '502', '503'];
+  // 真正的 QR 掃碼會帶 token 連結進來；沒有 token 時退回「模擬掃碼」下拉選單，
+  // 方便示範時任意切換房號。有 token 就鎖定該房、不給切換，呼應「掃碼才能進」。
+  var urlToken = new URLSearchParams(location.search).get('token');
+
+  function activeRooms(state) {
+    return (state.rooms || []).filter(function (r) { return r.active !== false; });
+  }
+
+  // token 模式下找不到對得上的房（舊碼被重產、房間被停用，或根本是亂填的
+  // token）一律視為「QR 已失效」，不退回任何預設房號——這是驗收要的「舊碼進不去」。
+  function currentRoom() {
+    var state = E.getState();
+    if (urlToken) {
+      var hit = activeRooms(state).filter(function (r) { return r.qrToken === urlToken; })[0];
+      return hit ? hit.roomNo : null;
+    }
+    var saved = localStorage.getItem(ROOM_KEY);
+    var rooms = activeRooms(state);
+    if (saved && rooms.some(function (r) { return r.roomNo === saved; })) return saved;
+    return rooms.length ? rooms[0].roomNo : null;
+  }
 
   var CHECKLIST_OPTIONS = [
     { key: 'towel', label: '加毛巾' },
@@ -101,23 +127,52 @@
     { key: 'plumbing', label: '水電問題' }
   ];
 
-  function currentRoom() {
-    return localStorage.getItem(ROOM_KEY) || '301';
-  }
-
-  function buildRoomSelect() {
+  // token 模式鎖房號、不給切換（呼應「真的掃碼」不能亂改房間）；一般模式才是
+  // 模擬掃碼用的自由下拉，選了就記住，下次開著還是同一間房。
+  function buildRoomSelect(state) {
     var sel = document.getElementById('room-select');
+    var label = document.getElementById('scan-label');
+    if (urlToken) {
+      var room = currentRoom();
+      sel.style.display = 'none';
+      label.textContent = room ? '已透過 QR 確認房號 ' + room : '';
+      return;
+    }
+    sel.style.display = '';
+    label.textContent = '目前房號（模擬掃碼入住）';
     sel.innerHTML = '';
-    KNOWN_ROOMS.forEach(function (r) {
+    activeRooms(state).forEach(function (r) {
       var o = document.createElement('option');
-      o.value = r; o.textContent = r + ' 號房';
+      o.value = r.roomNo; o.textContent = r.roomNo + ' 號房';
       sel.appendChild(o);
     });
     sel.value = currentRoom();
-    sel.addEventListener('change', function () {
-      localStorage.setItem(ROOM_KEY, sel.value);
-      renderAll();
-    });
+  }
+
+  // 品牌主色套到整頁的 CSS 變數（--color-accent 一家族），styles.css 裡所有元件
+  // 本來就吃這幾個變數（按鈕、強調色），改這裡就連動改到，不用逐個元件重寫樣式。
+  // primaryColor 是 null 時移除覆蓋，整頁退回 styles.css 的預設主題色。
+  function applyBrand(settings) {
+    var brand = settings.brand || {};
+    var root = document.documentElement;
+    if (brand.primaryColor) {
+      root.style.setProperty('--color-accent', brand.primaryColor);
+      root.style.setProperty('--color-accent-strong', C.mixColor(brand.primaryColor, false, 0.22));
+      root.style.setProperty('--color-accent-soft', C.mixColor(brand.primaryColor, true, 0.82));
+      root.style.setProperty('--color-accent-ink', C.contrastInk(brand.primaryColor));
+    } else {
+      ['--color-accent', '--color-accent-strong', '--color-accent-soft', '--color-accent-ink'].forEach(function (p) {
+        root.style.removeProperty(p);
+      });
+    }
+    var img = document.getElementById('brand-logo-img');
+    if (brand.logo) {
+      img.src = brand.logo;
+      img.style.display = '';
+    } else {
+      img.removeAttribute('src');
+      img.style.display = 'none';
+    }
   }
 
   function renderHotel(state) {
@@ -210,36 +265,74 @@
 
   function renderAll() {
     var state = E.getState();
-    document.getElementById('room-select').value = currentRoom();
+    var room = currentRoom();
+    var invalidPanel = document.getElementById('qr-invalid-panel');
+    var phoneContent = document.getElementById('phone-content');
+    var scanStrip = document.getElementById('scan-strip');
+
+    // 只有「帶了 token 但比對不到」才算 QR 失效；一般模式（沒有 token）理論上
+    // 一定找得到房，除非全館房間都被停用，這種邊界一樣用同一塊畫面擋下。
+    if (!room) {
+      invalidPanel.hidden = false;
+      phoneContent.style.display = 'none';
+      scanStrip.style.display = 'none';
+      return;
+    }
+    invalidPanel.hidden = true;
+    phoneContent.style.display = '';
+    scanStrip.style.display = '';
+
+    applyBrand(state.settings);
+    buildRoomSelect(state);
     renderHotel(state);
     renderChecklist(state);
     renderProgress(state);
   }
 
+  document.getElementById('room-select').addEventListener('change', function (e) {
+    localStorage.setItem(ROOM_KEY, e.target.value);
+    renderAll();
+  });
+
   document.getElementById('submit-btn').addEventListener('click', function () {
     var room = currentRoom();
+    if (!room) { C.toast('目前沒有有效的房號，無法送出', 'error'); return; }
     var checked = Array.prototype.slice.call(document.querySelectorAll('.checklist-input:checked'));
     var text = document.getElementById('freetext').value;
     var hits = [];
     var any = false;
+    // 防濫用節流擋下時只彈一次提示——同一次送出勾了好幾項，每項都會各自被引擎擋下，
+    // 不需要每項都跳一次一樣的 toast。
+    var blocked = false;
 
     checked.forEach(function (cb) {
       var r = E.guestSubmitChecklist(room, cb.value);
       if (r.ok) { any = true; hits.push(r.task.ruleHit); }
+      else if (r.code === 'rate_limited' && !blocked) { blocked = true; C.toastFromResult(r); }
       cb.checked = false;
     });
 
+    // 提示文案要跟著「住客自由文字需要櫃檯判讀」這個流程開關走——關掉判讀後
+    // 留言其實直接進房務待接池（guestSubmitFreetext 內部已經這樣分流），
+    // 文案卻寫死「已送交櫃檯判讀」會跟實際行為對不上。
+    var needsTriage = !E.getState().settings.flow || E.getState().settings.flow.freetextNeedsTriage !== false;
     if (text && text.trim()) {
       var r2 = E.guestSubmitFreetext(room, text);
-      if (r2.ok) any = true;
-      document.getElementById('freetext').value = '';
+      if (r2.ok) {
+        any = true;
+        hits.push(needsTriage ? '留言已送交櫃檯判讀（triage）' : '留言已送交房務');
+        document.getElementById('freetext').value = '';
+      } else if (r2.code === 'rate_limited' && !blocked) {
+        blocked = true;
+        C.toastFromResult(r2);
+      }
     }
 
     if (!any) {
-      C.toast('請至少勾選一項需求或輸入留言', 'warning');
+      if (!blocked) C.toast('請至少勾選一項需求或輸入留言', 'warning');
       return;
     }
-    document.getElementById('rule-hint').textContent = hits.length ? hits.join('；') : '留言已送交櫃檯判讀（triage）';
+    document.getElementById('rule-hint').textContent = hits.length ? hits.join('；') : (needsTriage ? '留言已送交櫃檯判讀（triage）' : '留言已送交房務');
     C.toast('已送出，可在下方「我的進度」追蹤', 'success');
   });
 
@@ -248,7 +341,6 @@
     C.toast('已重置示範資料', 'success');
   });
 
-  buildRoomSelect();
   renderAll();
   E.subscribe(renderAll);
   setInterval(renderAll, 20000);

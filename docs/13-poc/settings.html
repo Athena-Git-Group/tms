@@ -10,9 +10,68 @@
 <link rel="stylesheet" href="shared/styles.css">
 <style>
   body { background: var(--color-surface-sunken); }
-  .settings-layout { max-width: 820px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+
+  /* 頂欄塞了「目前操作者」下拉後，窄螢幕下 flex 子項會被壓到比文字內容還窄，
+     中文標籤逐字斷行（每個字各佔一行）——這裡讓頂欄換行，標籤本身不換行。 */
+  .tms-topbar-actions label { white-space: nowrap; flex-shrink: 0; }
+  @media (max-width: 760px) {
+    .tms-topbar { flex-wrap: wrap; row-gap: 10px; }
+    .tms-topbar-actions { flex-wrap: wrap; width: 100%; }
+    #operator-select { max-width: none; flex: 1 1 200px; }
+  }
+
+  .settings-shell { max-width: 1180px; margin: 0 auto; display: flex; align-items: flex-start; gap: 0; }
+  /* .settings-shell 自己宣告了 display:flex，權重跟 [hidden] 的 UA 樣式打平時
+     author 規則會贏——不額外補這條，JS 設 hidden 屬性在這個元素上會完全沒作用。 */
+  .settings-shell[hidden] { display: none; }
+  .settings-sidebar {
+    width: 240px; flex-shrink: 0; align-self: stretch;
+    background: var(--color-surface-raised); border-right: 1px solid var(--color-line);
+    padding: 18px 14px; display: flex; flex-direction: column; gap: 16px;
+  }
+  .settings-search-wrap { position: relative; }
+  .settings-search-input {
+    width: 100%; font-family: inherit; font-size: 13.5px; padding: 9px 12px;
+    border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong);
+    background: var(--color-surface); color: var(--color-ink);
+  }
+  .settings-search-results {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40;
+    background: var(--color-surface-raised); border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-raised);
+    max-height: 300px; overflow-y: auto;
+  }
+  .settings-search-result { padding: 9px 12px; cursor: pointer; font-size: 13px; display: flex; flex-direction: column; gap: 1px; }
+  .settings-search-result:hover, .settings-search-result.is-active { background: var(--color-accent-soft); }
+  .settings-search-result .hit-label { font-weight: 700; color: var(--color-ink); }
+  .settings-search-result:hover .hit-label, .settings-search-result.is-active .hit-label { color: var(--color-accent-strong); }
+  .settings-search-result .hit-section { font-size: 11px; color: var(--color-ink-faint); }
+  .settings-search-empty { padding: 10px 12px; font-size: 12.5px; color: var(--color-ink-faint); }
+
+  .settings-nav { display: flex; flex-direction: column; gap: 3px; }
+  .settings-nav button {
+    text-align: left; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid transparent;
+    background: transparent; color: var(--color-ink-muted); font-weight: 700; font-size: 13.5px; cursor: pointer;
+  }
+  .settings-nav button:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+  .settings-nav button.is-active { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+
+  .settings-main { flex: 1; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+  .settings-main > section { display: none; flex-direction: column; gap: 18px; }
+  .settings-main > section.is-active { display: flex; }
+
+  .settings-blocked { max-width: 560px; margin: 60px auto; text-align: center; }
+  .settings-blocked .glyph { font-size: 34px; margin-bottom: 6px; }
+
   .settings-layout .panel h2 { font-size: 16px; margin-bottom: 4px; }
   .panel-sub { font-size: 13px; color: var(--color-ink-muted); margin: 0 0 14px; }
+
+  .settings-highlight-flash { animation: settingsFlash 1.6s ease; border-radius: var(--radius-md); }
+  @keyframes settingsFlash {
+    0% { box-shadow: 0 0 0 3px var(--color-accent); }
+    80% { box-shadow: 0 0 0 3px var(--color-accent); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
 
   .info-item-row {
     display: grid;
@@ -45,13 +104,22 @@
     background: var(--color-surface-sunken); border: 1px solid var(--color-line);
     border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 12px;
     overflow-x: auto; white-space: nowrap;
+    /* width:0 + min-width:100%：這一行文字不換行，瀏覽器算「內容最小寬度」時會把
+       整條不斷行文字的寬度一路灌給上層巢狀 flex 容器（.panel／section／
+       .settings-main 都是 column 方向的 flex item），窄螢幕下把整頁橫向撐開。
+       width:0 讓這個元素對外回報的最小寬度是 0（百分比不計入內容尺寸估算），
+       layout 階段再靠 min-width:100% 補回填滿容器的寬度，兩者合力切斷這條
+       「撐開鏈」，逾寬內容改成只在自己身上橫向捲動。 */
+    width: 0; min-width: 100%; box-sizing: border-box;
   }
   .settings-note { font-size: 12.5px; color: var(--color-ink-faint); margin: 0; }
 
   .custom-add { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .custom-add input[type="text"] { flex: 1; min-width: 160px; font-family: inherit; font-size: 13.5px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
   .custom-add select { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); font-weight: 600; }
-  .custom-item { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px dashed var(--color-line); font-size: 13.5px; }
+  .custom-add input[type="time"], .custom-add input[type="number"],
+  .custom-item input[type="time"], .custom-item input[type="number"] { font-family: var(--font-mono); font-size: 13px; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
+  .custom-item { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px dashed var(--color-line); font-size: 13.5px; flex-wrap: wrap; }
   .custom-item:first-of-type { border-top: none; }
   .custom-item .title { font-weight: 700; }
   .custom-item .spacer { flex: 1; }
@@ -59,8 +127,16 @@
   .custom-item input[type="text"] { flex: 1; min-width: 140px; font-family: inherit; font-size: 13.5px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
   .custom-item .tag-mini { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--color-surface-sunken); color: var(--color-ink-muted); font-weight: 600; white-space: nowrap; }
 
-  .std-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; max-width: 680px; }
+  /* minmax(150px, 1fr) 在容器比 150px 窄時仍會把軌道撐到 150px（auto-fit 的已知
+     坑）——用 min(150px, 100%) 把下限夾在容器寬度內，桌機維持原本的卡片寬度。 */
+  .std-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 10px; max-width: 680px; }
   .std-grid .field input { width: 100%; }
+  .std-matrix { border-collapse: collapse; font-size: 13px; }
+  .std-matrix th, .std-matrix td { border: 1px solid var(--color-line); padding: 6px 8px; text-align: center; white-space: nowrap; }
+  .std-matrix th { background: var(--color-surface-sunken); font-weight: 700; }
+  .std-matrix th[scope="row"] { text-align: left; }
+  .std-matrix td input { width: 72px; text-align: right; }
+  .std-matrix td.type-default { background: var(--color-surface-sunken); }
 
   .segmented-sm { display: flex; gap: 6px; flex-wrap: wrap; }
   .segmented-sm button { padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink-muted); font-weight: 700; font-size: 13px; cursor: pointer; }
@@ -71,6 +147,67 @@
   .flow-extra select { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); font-weight: 600; }
 
   .redline { margin: 0; padding-left: 18px; font-size: 13px; color: var(--color-ink-muted); display: flex; flex-direction: column; gap: 6px; }
+
+  /* 通知／營業參數／資料保留三個新區共用：跨區指路連結，樣式像文字裡的超連結，
+     但其實是 button（才能用 jumpTo 做「切換分區＋捲動＋高亮」，純 <a href="#"> 做不到）。 */
+  .settings-link-btn {
+    background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+    color: var(--color-accent); font-weight: 700; text-decoration: underline;
+  }
+  .brand-swatch {
+    width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm);
+    border: 1px solid var(--color-line-strong); cursor: pointer;
+  }
+
+  .org-row.is-disabled { opacity: 0.55; }
+  .org-row .qr-code { font-family: var(--font-mono); font-size: 12px; padding: 3px 8px; background: var(--color-surface-sunken); border-radius: var(--radius-sm); color: var(--color-ink-muted); }
+  .org-row input[type="text"] { font-family: inherit; font-size: 13.5px; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
+  .org-row input[type="time"] { font-family: var(--font-mono); font-size: 13px; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
+  .org-row select { padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); font-weight: 600; }
+
+  /* 角色清單：手風琴——點名字列展開/收合權限勾選，避免一次攤開十幾組勾選框 */
+  .role-row { border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 10px; }
+  .role-row-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; background: var(--color-surface-raised); }
+  .role-row-head:hover { background: var(--color-surface-sunken); }
+  .role-row-head .chev { font-size: 11px; color: var(--color-ink-faint); width: 12px; flex-shrink: 0; }
+  .role-row-head .name { font-weight: 700; flex: 1; min-width: 0; }
+  .role-row-head .base-fn { font-size: 11.5px; color: var(--color-ink-faint); font-weight: 500; }
+  .role-row-body { display: none; padding: 14px 16px 16px; border-top: 1px solid var(--color-line); background: var(--color-surface-sunken); }
+  .role-row.is-open .role-row-body { display: block; }
+  .role-rename-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .role-rename-row input[type="text"] { font-family: inherit; font-size: 13.5px; padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); flex: 1; min-width: 140px; }
+  .perm-group { margin-bottom: 14px; }
+  .perm-group:last-child { margin-bottom: 0; }
+  .perm-group h4 { font-size: 12.5px; margin: 0 0 8px; color: var(--color-ink-muted); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .perm-live-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--color-accent-soft); color: var(--color-accent-strong); }
+  .perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 10px; }
+  .perm-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 2px; }
+  .perm-item input { width: 16px; height: 16px; accent-color: var(--color-accent); flex-shrink: 0; }
+  .perm-item.is-live b { font-weight: 600; }
+  .perm-locked-note { font-size: 12px; color: var(--color-ink-faint); margin: 0 0 10px; }
+  .role-new-form { border: 1px dashed var(--color-line-strong); border-radius: var(--radius-md); padding: 14px 16px; margin-top: 4px; }
+  .role-new-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .role-new-row input[type="text"], .role-new-row select { font-family: inherit; font-size: 13.5px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); color: var(--color-ink); }
+  .role-new-row input[type="text"] { flex: 1; min-width: 160px; }
+
+  /* 員工：姓名/email/角色/狀態 */
+  .staff-row-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; }
+  .staff-row-email { font-size: 12px; color: var(--color-ink-faint); font-family: var(--font-mono); }
+  .status-pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .status-pill-active { background: var(--color-state-done-soft); color: var(--color-state-done); }
+  .status-pill-pending { background: var(--color-state-pool-soft); color: var(--color-state-pool); }
+  .status-pill-disabled { background: var(--color-surface-sunken); color: var(--color-ink-faint); }
+  .invite-panel { flex-basis: 100%; margin-top: 8px; padding: 10px 12px; background: var(--color-surface-sunken); border: 1px solid var(--color-line); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 8px; }
+  .invite-link-box { font-family: var(--font-mono); font-size: 11.5px; word-break: break-all; background: var(--color-surface-raised); border: 1px solid var(--color-line); border-radius: var(--radius-sm); padding: 7px 9px; color: var(--color-ink-muted); }
+  .invite-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  @media (max-width: 860px) {
+    .settings-shell { flex-direction: column; }
+    .settings-sidebar { width: 100%; flex-direction: column; border-right: none; border-bottom: 1px solid var(--color-line); gap: 10px; padding: 12px 14px; }
+    .settings-nav { flex-direction: row; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; }
+    .settings-nav button { white-space: nowrap; flex-shrink: 0; }
+    .settings-main { padding: 14px; }
+  }
   @media (max-width: 640px) {
     .info-item-row { grid-template-columns: 24px 48px 1fr; }
     .info-item-row input[data-field="content"] { grid-column: 1 / -1; }
@@ -86,113 +223,456 @@
     <span class="tms-brand-role">租戶設定</span>
   </span>
   <div class="tms-topbar-actions">
+    <label for="operator-select" style="font-size:12.5px;color:var(--color-ink-muted);">目前操作者</label>
+    <select id="operator-select" style="padding:7px 10px;border-radius:var(--radius-sm);border:1px solid var(--color-line-strong);background:var(--color-surface-raised);color:var(--color-ink);font-weight:700;max-width:220px;"></select>
     <a class="btn btn-secondary" href="index.html">回導覽頁</a>
     <a class="btn btn-secondary" href="events.html" target="_blank" rel="noopener">事件流水帳</a>
     <button class="btn btn-ghost" id="reset-btn" type="button">重置</button>
   </div>
 </div>
 
-<div class="settings-layout">
+<div class="settings-shell" id="settings-shell">
 
-  <section class="panel">
-    <h2>住客掃碼頁顯示什麼</h2>
-    <p class="panel-sub">改這裡，所有已開啟的住客分頁會立刻跟著變，不用重新整理。</p>
-
-    <div class="field" style="max-width:360px;">
-      <label for="hotel-name-input">飯店名稱</label>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="hotel-name-input">
-        <button class="btn btn-secondary" id="hotel-name-save" type="button">儲存</button>
-      </div>
+  <aside class="settings-sidebar">
+    <div class="settings-search-wrap">
+      <input type="search" class="settings-search-input" id="settings-search" placeholder="搜尋設定項，例如「工時」「QR」…" aria-label="搜尋設定項">
+      <div class="settings-search-results" id="settings-search-results" hidden></div>
     </div>
+    <nav class="settings-nav" id="settings-nav" aria-label="設定分區">
+      <button type="button" data-section="guest">住客掃碼頁</button>
+      <button type="button" data-section="staff">員工與權限</button>
+      <button type="button" data-section="rooms">房間</button>
+      <button type="button" data-section="service">班次與服務標準</button>
+      <button type="button" data-section="prepRules">自動化規則</button>
+      <button type="button" data-section="notifications">通知</button>
+      <button type="button" data-section="business">營業參數</button>
+      <button type="button" data-section="dataRetention">資料保留</button>
+      <button type="button" data-section="flow">流程設定</button>
+      <button type="button" data-section="pmsIntegration">PMS 整合</button>
+      <button type="button" data-section="redline">刻意不開放的部分</button>
+    </nav>
+  </aside>
 
-    <p class="panel-sub" style="margin-top:16px;">資訊卡項目（圖示／標題／內容，取消勾選就不顯示）：</p>
-    <div id="info-items"></div>
-    <button class="btn btn-secondary" id="info-add" type="button" style="margin-top:10px;">＋ 新增一項</button>
+  <main class="settings-main">
 
-    <p class="panel-sub" style="margin-top:18px;">需求選單（取消勾選的項目住客就看不到，仍可打字留言）：</p>
-    <div class="menu-toggle-row" id="menu-items"></div>
+    <section data-section="guest">
+      <div class="panel" id="panel-hotel-name">
+        <h2>住客掃碼頁顯示什麼</h2>
+        <p class="panel-sub">改這裡，所有已開啟的住客分頁會立刻跟著變，不用重新整理。</p>
 
-    <p class="panel-sub" style="margin-top:18px;">自建選單項目（住客勾選送出後，直接進指定部門的待接池）：</p>
-    <div id="custom-menu-list"></div>
-    <div class="custom-add">
-      <input type="text" id="custom-title" placeholder="例如：送冰塊" aria-label="自建項目名稱">
-      <select id="custom-dept" aria-label="部門">
-        <option value="housekeeping">房務</option>
-        <option value="maintenance">工務</option>
-      </select>
-      <select id="custom-type" aria-label="類型">
-        <option value="amenity">備品</option>
-        <option value="repair">修繕</option>
-        <option value="other">其他</option>
-      </select>
-      <button class="btn btn-secondary" id="custom-add-btn" type="button">新增</button>
-    </div>
-  </section>
+        <div class="field" style="max-width:360px;">
+          <label for="hotel-name-input">飯店名稱</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="hotel-name-input">
+            <button class="btn btn-secondary" id="hotel-name-save" type="button">儲存</button>
+          </div>
+        </div>
 
-  <section class="panel">
-    <h2>服務標準</h2>
-    <p class="panel-sub">排房估時、自動分配、負載條、任務卡的時限標記都吃這裡的值，改了立即生效。</p>
+        <p class="panel-sub" style="margin-top:16px;">資訊卡項目（圖示／標題／內容，取消勾選就不顯示）：</p>
+        <div id="info-items"></div>
+        <button class="btn btn-secondary" id="info-add" type="button" style="margin-top:10px;">＋ 新增一項</button>
 
-    <p class="panel-sub" style="margin:0 0 8px;">清掃標準工時（分鐘／間）：</p>
-    <div class="std-grid" id="std-grid"></div>
-    <button class="btn btn-secondary" id="std-save" type="button" style="margin-top:10px;">儲存標準工時</button>
+        <p class="panel-sub" style="margin-top:18px;">需求選單（取消勾選的項目住客就看不到，仍可打字留言）：</p>
+        <div class="menu-toggle-row" id="menu-items"></div>
 
-    <p class="panel-sub" style="margin:18px 0 8px;">SLA 時限（分鐘；留空＝不限。逾時只在卡片標記，不自動升級——v1 無升級鏈）：</p>
-    <div class="std-grid" id="sla-grid"></div>
-    <button class="btn btn-secondary" id="sla-save" type="button" style="margin-top:10px;">儲存 SLA 時限</button>
-
-    <div class="field" style="max-width:300px;margin-top:18px;">
-      <label for="capacity-input">班次容量（分鐘／人／班，排房欄的負載條以此為滿格）</label>
-      <div style="display:flex;gap:8px;">
-        <input type="number" id="capacity-input" min="30" step="10">
-        <button class="btn btn-secondary" id="capacity-save" type="button">儲存</button>
-      </div>
-    </div>
-
-    <p class="panel-sub" style="margin:18px 0 8px;">SOP／查房檢核項目（房務打勾與主管查房共用同一套；只影響之後建立的任務，已建立的照原快照驗）：</p>
-    <div id="inspection-items"></div>
-    <button class="btn btn-secondary" id="inspection-add" type="button" style="margin-top:8px;">＋ 新增檢核項</button>
-  </section>
-
-  <section class="panel">
-    <h2>流程設定</h2>
-    <p class="panel-sub">開關會直接改變狀態機的走法，事件流水帳查得到是誰改的。</p>
-    <div id="flow-toggles"></div>
-    <div class="flow-extra">
-      <div class="field">
-        <span class="field-label" id="strategy-label">自動分配策略</span>
-        <div class="segmented-sm" id="strategy-seg" role="group" aria-labelledby="strategy-label">
-          <button data-v="floor" type="button">樓層聚合（一層一人）</button>
-          <button data-v="balance" type="button">純工時平衡（逐間給最閒的人）</button>
+        <p class="panel-sub" style="margin-top:18px;">自建選單項目（住客勾選送出後，直接進指定部門的待接池）：</p>
+        <div id="custom-menu-list"></div>
+        <div class="custom-add">
+          <input type="text" id="custom-title" placeholder="例如：送冰塊" aria-label="自建項目名稱">
+          <select id="custom-dept" aria-label="部門">
+            <option value="housekeeping">房務</option>
+            <option value="maintenance">工務</option>
+          </select>
+          <select id="custom-type" aria-label="類型">
+            <option value="amenity">備品</option>
+            <option value="repair">修繕</option>
+            <option value="other">其他</option>
+          </select>
+          <button class="btn btn-secondary" id="custom-add-btn" type="button">新增</button>
         </div>
       </div>
-      <div class="field">
-        <label class="field-label" for="owner-stars">老闆出事門檻</label>
-        <select id="owner-stars">
-          <option value="1">1 星才通知</option>
-          <option value="2">2 星以下通知</option>
-          <option value="3">3 星以下通知</option>
-          <option value="4">4 星以下通知</option>
-        </select>
+
+      <div class="panel" id="panel-brand">
+        <h2>品牌</h2>
+        <p class="panel-sub">Logo 與主色改了立即套用到住客掃碼頁，不用重新整理。</p>
+
+        <div class="field" style="max-width:320px;">
+          <label for="brand-logo-input">Logo（選填；會壓縮後存入，跟遺失物拍照同一套流程）</label>
+          <input type="file" id="brand-logo-input" accept="image/*">
+        </div>
+        <div id="brand-logo-preview" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;"></div>
+
+        <p class="panel-sub" style="margin:18px 0 8px;">主色：</p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <input type="color" id="brand-color-input" aria-label="主色">
+          <div class="segmented-sm" id="brand-color-presets"></div>
+          <button class="btn btn-ghost" id="brand-color-reset" type="button">恢復預設色</button>
+        </div>
+        <p class="settings-note" id="brand-color-note" style="margin-top:8px;"></p>
+
+        <p class="settings-note" style="margin-top:18px;">多語內容（資訊卡／選單）——正式版提供。</p>
       </div>
-    </div>
-    <div class="flow-line" id="flow-line"></div>
-  </section>
+    </section>
 
-  <section class="panel">
-    <h2>刻意不開放自訂的部分</h2>
-    <p class="panel-sub">這些是語意骨架——動了之後報表與 PMS 整合就不再可信，對應正式版的產品立場（競品 HotSOS／Optii／ALICE 同樣不開放這層）。</p>
-    <ul class="redline">
-      <li>九態狀態機的語意類別與轉移規則（上面的開關只是跳過某一步，不是改狀態圖）</li>
-      <li>事件流水帳的字彙（task_events 是 append-only 真相，重放保證依賴穩定字彙）</li>
-      <li>統計定義：取消單不進統計、可賣房、回應時間的算法</li>
-      <li>PMS 回寫觸發點（查驗合格才回寫房況）</li>
-    </ul>
-  </section>
+    <section data-section="staff">
+      <div class="panel" id="panel-roles">
+        <h2>角色</h2>
+        <p class="panel-sub">角色＝一組命名過的權限。Administrator 全開且不可停用；其餘角色可以改名、調權限、停用（使用中的角色無法停用）。標「⚡ 即時生效」的權限會真的影響其他頁面能不能按，其餘權限先只記錄勾選狀態。</p>
+        <div id="role-list"></div>
+        <button class="btn btn-secondary" id="role-new-toggle" type="button" style="margin-top:10px;">＋ 新增角色</button>
+        <div id="role-new-form"></div>
+      </div>
 
-  <p class="settings-note">「重置示範資料」會把以上設定一併還原成預設值。</p>
+      <div class="panel" id="panel-staff">
+        <h2>員工</h2>
+        <p class="panel-sub">邀請新員工只需要姓名、email、角色；送出後是「待開通」狀態，不會出現在搶單／排房／查房等名單裡，直到點開通連結（demo 用按鈕模擬，不寄真信）。停用不會刪除這個人，也不會動到他已經接下的任務——只是不再出現在排房欄位、改派對象這些「挑人」的地方。</p>
+        <div id="staff-list"></div>
+        <div class="custom-add">
+          <input type="text" id="staff-name-input" placeholder="姓名" aria-label="姓名" style="max-width:120px;">
+          <input type="text" id="staff-email-input" placeholder="email" aria-label="email" style="max-width:180px;">
+          <select id="staff-role-select" aria-label="角色"></select>
+          <select id="staff-dept-select" aria-label="所屬部門"></select>
+          <button class="btn btn-secondary" id="staff-add-btn" type="button">邀請員工</button>
+        </div>
+      </div>
 
+      <div class="panel" id="panel-departments">
+        <h2>部門</h2>
+        <p class="panel-sub">部門清單（自建選單項目、員工的所屬部門都從這裡挑；預設房務／工務）：</p>
+        <div id="department-list"></div>
+        <div class="custom-add">
+          <input type="text" id="dept-name-input" placeholder="例如：布草" aria-label="部門名稱">
+          <button class="btn btn-secondary" id="dept-add-btn" type="button">新增部門</button>
+        </div>
+        <p class="settings-note" style="margin-top:8px;">新部門的需求送出後會進共用待接池、帶部門標籤可在櫃檯看板辨識與搜尋；房務／工務工作台目前只開放「房務」「工務」兩個分頁認領，新部門暫時還沒有專屬的認領畫面（示範降級）。</p>
+      </div>
+    </section>
+
+    <section data-section="rooms">
+      <div class="panel" id="panel-rooms">
+        <h2>房間主檔</h2>
+        <p class="panel-sub">停用的房間不會出現在排房匯入結果裡，也不會再產生空房巡；QR 代碼重產後舊碼立刻失效。</p>
+
+        <div id="room-list"></div>
+        <div class="custom-add">
+          <input type="text" id="room-no-input" placeholder="房號，例如 309" aria-label="房號">
+          <button class="btn btn-secondary" id="room-add-btn" type="button">新增房間</button>
+        </div>
+        <button class="btn btn-secondary" id="room-qr-batch-btn" type="button" style="margin-top:10px;">全館批次重產 QR</button>
+        <p class="settings-note" id="qr-permission-note" style="margin-top:8px;" hidden></p>
+      </div>
+    </section>
+
+    <section data-section="service">
+      <div class="panel" id="panel-service">
+        <h2>班次與服務標準</h2>
+        <p class="panel-sub">排房估時、自動分配、負載條、任務卡的時限標記都吃這裡的值，改了立即生效；班次定義房務工作台用來判斷「現在是哪一班」。</p>
+
+        <div class="field" style="margin:0 0 14px;">
+          <span class="field-label" id="unit-label">工作量顯示單位</span>
+          <div class="segmented-sm" id="unit-seg" role="group" aria-labelledby="unit-label">
+            <button data-v="minutes" type="button">分鐘</button>
+            <button data-v="points" type="button">點數（不換算，數字當相對權重顯示）</button>
+          </div>
+          <p class="settings-note" style="margin-top:6px;">底層一律用分鐘運算；切到點數只是把全系統的「分」字樣換成「點」、數字原樣——讓員工看到的是相對權重，不是時間承諾。</p>
+        </div>
+
+        <p class="panel-sub" style="margin:0 0 8px;" id="std-matrix-title">清掃基準工時（清掃類型 × 房態；留空＝該組合不適用，排房時退回最右欄的類型預設）：</p>
+        <div class="scroll-x"><table class="std-matrix" id="std-matrix"></table></div>
+        <button class="btn btn-secondary" id="std-save" type="button" style="margin-top:10px;">儲存基準工時</button>
+
+        <p class="panel-sub" style="margin:18px 0 8px;" id="room-override-title">房間覆寫（格局特殊的房直接指定工時，優先於上表的基準格）：</p>
+        <div id="room-override-list"></div>
+        <div class="custom-add">
+          <select id="override-room-select" aria-label="房號"></select>
+          <select id="override-kind-select" aria-label="清掃類型"></select>
+          <input type="number" id="override-min-input" min="1" placeholder="工時" aria-label="覆寫工時" style="max-width:90px;">
+          <button class="btn btn-secondary" id="override-add-btn" type="button">新增覆寫</button>
+        </div>
+
+        <p class="panel-sub" id="sla-note" style="margin:18px 0 8px;"></p>
+        <div class="std-grid" id="sla-grid"></div>
+        <button class="btn btn-secondary" id="sla-save" type="button" style="margin-top:10px;">儲存 SLA 時限</button>
+
+        <p class="panel-sub" style="margin:18px 0 8px;">SOP／查房檢核項目（房務打勾與主管查房共用同一套；只影響之後建立的任務，已建立的照原快照驗）：</p>
+        <div id="inspection-items"></div>
+        <button class="btn btn-secondary" id="inspection-add" type="button" style="margin-top:8px;">＋ 新增檢核項</button>
+
+        <p class="panel-sub" style="margin:20px 0 8px;">班次定義（至少要留一個班次）：</p>
+        <div id="shift-list"></div>
+        <div class="custom-add">
+          <input type="text" id="shift-name-input" placeholder="班次名稱" aria-label="班次名稱" style="max-width:100px;">
+          <input type="time" id="shift-start-input" aria-label="開始時間">
+          <input type="time" id="shift-end-input" aria-label="結束時間">
+          <button class="btn btn-secondary" id="shift-add-btn" type="button">新增班次</button>
+        </div>
+
+        <div class="field" style="max-width:320px;margin-top:18px;">
+          <label for="capacity-input">班次容量（分鐘／人／班，排房欄的負載條以此為滿格）</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="capacity-input" min="30" step="10">
+            <button class="btn btn-secondary" id="capacity-save" type="button">儲存</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section data-section="prepRules">
+      <div class="panel" id="panel-prep-rules">
+        <h2>自動化規則</h2>
+        <p class="panel-sub">一條規則＝觸發源＋條件＋動作。觸發源目前開放兩種：「訂房資料進來」（從 PMS 拉房態或 CSV 匯入時，房間帶著指定訂房屬性就命中）與「排程時間到」（每日或每週的固定時點一到就建單）。動作一律是自動開一張任務、直接進對應部門待接池，可以另外設「建立後幾分鐘到期」——有到期時間的任務，逾時升級就改以到期時間起算。同一個觸發不會重複建單：同一天重複拉房態、或排程時間到之後重新整理頁面，都只會有一筆。</p>
+        <div id="prep-rule-list"></div>
+        <div class="custom-add" id="auto-rule-add-form">
+          <select id="auto-rule-trigger-select" aria-label="觸發源">
+            <option value="reservation">訂房資料進來</option>
+            <option value="schedule">排程時間到</option>
+          </select>
+          <input type="text" id="prep-rule-attribute-input" placeholder="訂房屬性，例如 VIP" aria-label="訂房屬性" list="prep-rule-attribute-suggestions" style="max-width:140px;">
+          <datalist id="prep-rule-attribute-suggestions">
+            <option value="VIP">
+            <option value="親子">
+            <option value="寵物">
+            <option value="紀念日">
+          </datalist>
+          <select id="auto-rule-repeat-select" aria-label="重複" hidden>
+            <option value="daily">每日</option>
+            <option value="weekly">每週</option>
+          </select>
+          <select id="auto-rule-weekday-select" aria-label="星期幾" hidden>
+            <option value="1">週一</option>
+            <option value="2">週二</option>
+            <option value="3">週三</option>
+            <option value="4">週四</option>
+            <option value="5">週五</option>
+            <option value="6">週六</option>
+            <option value="7">週日</option>
+          </select>
+          <input type="time" id="auto-rule-time-input" aria-label="時間（HH:MM）" hidden style="max-width:110px;">
+          <input type="text" id="auto-rule-room-input" placeholder="房號（選填）" aria-label="房號（選填）" hidden style="max-width:110px;">
+          <input type="text" id="prep-rule-title-input" placeholder="工單名稱，例如 VIP 迎賓準備" aria-label="工單名稱">
+          <select id="prep-rule-dept-select" aria-label="部門">
+            <option value="housekeeping">房務</option>
+            <option value="maintenance">工務</option>
+          </select>
+          <select id="prep-rule-type-select" aria-label="類型">
+            <option value="amenity">備品</option>
+            <option value="repair">修繕</option>
+            <option value="cleaning">打掃</option>
+            <option value="other">其他</option>
+          </select>
+          <input type="number" id="auto-rule-due-input" placeholder="到期（分，選填）" aria-label="建立後幾分鐘到期（選填）" min="0.5" step="0.5" style="max-width:130px;">
+          <button class="btn btn-secondary" id="prep-rule-add-btn" type="button">新增規則</button>
+        </div>
+        <p class="settings-note" style="margin-top:8px;">出廠的 VIP／親子／寵物／紀念日四條，就是內建的第一組自動化規則（準備工單）：房間帶著同名訂房屬性，匯入當下自動開準備工單。四條都可以改內容、停用或刪除；訂房屬性是自由文字，可以自己新增（例如「長住」）。排程規則要現場驗證的話，把「每日」的時間設在一兩分鐘後即可——時間一到（引擎每 5 秒掃一次）就會自動建單。</p>
+      </div>
+    </section>
+
+    <section data-section="flow">
+      <div class="panel" id="panel-flow">
+        <h2>流程設定</h2>
+        <p class="panel-sub">開關會直接改變狀態機的走法，事件流水帳查得到是誰改的。</p>
+        <div id="flow-toggles"></div>
+        <div class="flow-extra">
+          <div class="field">
+            <span class="field-label" id="strategy-label">自動分配策略</span>
+            <div class="segmented-sm" id="strategy-seg" role="group" aria-labelledby="strategy-label">
+              <button data-v="floor" type="button">樓層聚合（一層一人）</button>
+              <button data-v="balance" type="button">純工時平衡（逐間給最閒的人）</button>
+            </div>
+          </div>
+          <div class="field" style="margin-top:16px;">
+            <span class="field-label" id="inclusion-label">排房草稿要納入哪些房（勾＝納入）</span>
+            <div id="schedule-inclusion" role="group" aria-labelledby="inclusion-label"></div>
+            <p class="settings-note" style="margin-top:6px;">退房、續住的房一律進草稿，沒有開關。被排除的房不會出現在未分配池，但排房頁會列出「因設定排除的房」與原因。改開關<b>不回溯</b>這份草稿與已發佈的任務——重新拉 PMS 或重新匯入後才生效。環保房／請勿打擾是 PMS 帶入的房間當日旗標（跟房態是兩回事），v1 只決定進不進草稿，不影響預估工時。</p>
+          </div>
+        </div>
+        <div class="flow-line" id="flow-line"></div>
+      </div>
+    </section>
+
+    <section data-section="notifications">
+      <div class="panel" id="panel-notifications">
+        <h2>通知設定</h2>
+        <p class="panel-sub">決定老闆與櫃檯會不會收到特定事件的提醒；開關本身也會留事件紀錄，不是悄悄改行為。</p>
+
+        <p class="panel-sub" style="margin:0 0 8px;font-weight:700;color:var(--color-ink);">老闆推播來源（出事才會響）</p>
+        <div class="flow-toggle" id="notif-owner-rating-toggle" style="flex-wrap:wrap;">
+          <input type="checkbox" id="notif-owner-rating-cb">
+          <label for="notif-owner-rating-cb" style="cursor:pointer;">
+            <b>住客低分評價</b>
+            <span class="flow-desc">住客評分低於門檻時，老闆頁自動出現提醒（既有功能）。</span>
+          </label>
+          <span style="flex-basis:100%;margin-left:30px;display:flex;align-items:center;gap:8px;">
+            <label for="owner-stars" style="font-size:12.5px;color:var(--color-ink-muted);">門檻</label>
+            <select id="owner-stars">
+              <option value="1">1 星才通知</option>
+              <option value="2">2 星以下通知</option>
+              <option value="3">3 星以下通知</option>
+              <option value="4">4 星以下通知</option>
+            </select>
+          </span>
+        </div>
+        <div class="flow-toggle" id="notif-owner-report-toggle">
+          <input type="checkbox" id="notif-owner-report-cb">
+          <label for="notif-owner-report-cb" style="cursor:pointer;">
+            <b>主管上報</b>
+            <span class="flow-desc">主管在查房頁按「上報老闆」填一句話送出時，老闆頁出現提醒（新）。關閉後，查房頁的上報入口會停用並提示「老闆通知已關閉」。</span>
+          </label>
+        </div>
+
+        <p class="panel-sub" style="margin:20px 0 8px;font-weight:700;color:var(--color-ink);">SLA 逾時提醒櫃檯</p>
+        <div class="flow-toggle" id="notif-sla-toggle">
+          <input type="checkbox" id="notif-sla-cb">
+          <label for="notif-sla-cb" style="cursor:pointer;">
+            <b>任務逾時提醒櫃檯</b>
+            <span class="flow-desc" id="notif-sla-desc"></span>
+          </label>
+        </div>
+        <p class="settings-note" id="notif-sla-link-wrap" style="margin:-6px 0 0 30px;"></p>
+
+        <p class="panel-sub" style="margin:20px 0 8px;font-weight:700;color:var(--color-ink);">逾時升級鏈（叫的人一層比一層大）</p>
+        <div class="flow-toggle" id="esc-master-toggle">
+          <input type="checkbox" id="esc-enabled-cb">
+          <label for="esc-enabled-cb" style="cursor:pointer;">
+            <b>任務逾時後分層升級通知</b>
+            <span class="flow-desc" id="esc-master-desc"></span>
+          </label>
+        </div>
+        <div id="esc-level-list" style="margin-left:30px;display:flex;flex-direction:column;gap:8px;"></div>
+        <button class="btn btn-secondary" id="esc-save" type="button" style="margin:10px 0 0 30px;">儲存升級時點</button>
+        <p class="settings-note" id="esc-note" style="margin:8px 0 0 30px;"></p>
+      </div>
+    </section>
+
+    <section data-section="business">
+      <div class="panel" id="panel-business">
+        <h2>營業參數</h2>
+        <p class="panel-sub">時區與日切時間決定「今天」從幾點起算；退房／入住時間與防濫用參數則是排房與住客端送出流程會用到的前提值。</p>
+
+        <div class="field" style="max-width:280px;">
+          <label for="biz-timezone">時區</label>
+          <select id="biz-timezone">
+            <option value="Asia/Taipei">Asia/Taipei（台北，UTC+8）</option>
+            <option value="Asia/Tokyo">Asia/Tokyo（東京，UTC+9）</option>
+            <option value="Asia/Hong_Kong">Asia/Hong_Kong（香港，UTC+8）</option>
+            <option value="Asia/Bangkok">Asia/Bangkok（曼谷，UTC+7）</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </div>
+
+        <div class="field" style="max-width:220px;margin-top:14px;">
+          <label for="biz-day-cutover">日切時間</label>
+          <input type="time" id="biz-day-cutover">
+        </div>
+        <p class="settings-note" style="margin-top:6px;">決定「今天」從幾點起算——正式版排房的 work_date、房務工作台「目前班次」跨夜判斷都會接這個值；這個 POC 本身沒有逐日累積的資料（重置才會換一批示範資料，示範期間不會真的跨日），接不上真正的日切判斷，先存值示意。</p>
+
+        <p class="panel-sub" style="margin:20px 0 8px;">退房／入住時間（排房「趕房」優先序的前提；v1 先存值，排房頁顯示提示，不改演算法）：</p>
+        <div class="std-grid" style="max-width:360px;">
+          <div class="field"><label for="biz-checkout">退房時間</label><input type="time" id="biz-checkout"></div>
+          <div class="field"><label for="biz-checkin">入住時間</label><input type="time" id="biz-checkin"></div>
+        </div>
+        <button class="btn btn-secondary" id="biz-time-save" type="button" style="margin-top:10px;">儲存時區／時間設定</button>
+
+        <p class="panel-sub" style="margin:22px 0 8px;">防濫用：住客同一房間短時間內最多送出幾筆需求（勾選式需求與打字留言合併計算）：</p>
+        <div class="std-grid" style="max-width:360px;">
+          <div class="field"><label for="biz-throttle-window">幾分鐘內</label><input type="number" id="biz-throttle-window" min="1"></div>
+          <div class="field"><label for="biz-throttle-max">最多幾筆</label><input type="number" id="biz-throttle-max" min="1"></div>
+        </div>
+        <button class="btn btn-secondary" id="biz-throttle-save" type="button" style="margin-top:10px;">儲存防濫用參數</button>
+        <p class="settings-note" style="margin-top:8px;">超過上限時，住客頁送出會被擋下並提示；調大這裡的數字後可以馬上再送，不用等時窗過期。</p>
+      </div>
+    </section>
+
+    <section data-section="dataRetention">
+      <div class="panel" id="panel-retention">
+        <h2>資料保留</h2>
+        <p class="panel-sub">對應「受控去識別化」政策：個資不是無限期保留，遺失物與照片也有明確的保管與清理時限。</p>
+
+        <div class="field" style="max-width:240px;">
+          <label for="retention-deid">個資去識別化期限（天）</label>
+          <input type="number" id="retention-deid" min="1">
+        </div>
+        <button class="btn btn-secondary" id="retention-deid-save" type="button" style="margin-top:8px;">儲存</button>
+        <p class="settings-note" style="margin-top:6px;">示意——正式版由背景排程執行，這裡先存值。</p>
+
+        <p class="panel-sub" style="margin:22px 0 8px;">遺失物保管期限與到期處理：</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;max-width:460px;">
+          <div class="field" style="max-width:160px;"><label for="retention-lf-days">保管期限（天）</label><input type="number" id="retention-lf-days" min="1"></div>
+          <div class="field" style="max-width:220px;">
+            <label for="retention-lf-action">到期處理</label>
+            <select id="retention-lf-action">
+              <option value="flag">標記待處理</option>
+              <option value="notifyDesk">通知櫃檯</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="retention-lf-save" type="button" style="margin-top:8px;">儲存</button>
+        <p class="settings-note" style="margin-top:6px;">超過保管期限的遺失物，櫃檯遺失物清單會標示「已逾保管期」。</p>
+
+        <div class="field" style="max-width:240px;margin-top:20px;">
+          <label for="retention-lf-photo">遺失物照片保留（天）</label>
+          <input type="number" id="retention-lf-photo" min="1">
+        </div>
+        <button class="btn btn-secondary" id="retention-lf-photo-save" type="button" style="margin-top:8px;">儲存</button>
+        <p class="settings-note" style="margin-top:6px;">示意——先存值，預設與保管期限相同；正式版由背景排程清除逾期照片。</p>
+      </div>
+    </section>
+
+    <section data-section="pmsIntegration">
+      <div class="panel" id="panel-pms">
+        <h2>PMS 整合</h2>
+        <p class="panel-sub">每家接上來的 PMS 一組租戶級整合設定：連線憑證、能力盤點結果、同步範圍、回寫開關。這個 POC 的 PMS 本來就是模擬的——這裡示範的是設定面怎麼操作，排房頁「從 PMS 拉今日房態」會跟著這裡的選擇連動。</p>
+
+        <div class="field" style="max-width:340px;">
+          <label for="pms-provider-select">接哪一家 PMS</label>
+          <select id="pms-provider-select"></select>
+        </div>
+        <p class="settings-note" id="pms-provider-note" style="margin-top:6px;"></p>
+
+        <div class="field" style="max-width:440px;margin-top:14px;">
+          <label for="pms-credential-input">連線憑證（API key 之類；示意——mock 存值、顯示遮罩，不用填真的）</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="pms-credential-input" placeholder="例如 demo-key-123" autocomplete="off">
+            <button class="btn btn-secondary" id="pms-credential-save" type="button">儲存</button>
+          </div>
+        </div>
+        <p class="settings-note" id="pms-credential-masked" style="margin-top:6px;"></p>
+
+        <button class="btn btn-primary" id="pms-test-btn" type="button" style="margin-top:14px;">測試連線＋能力盤點</button>
+        <p class="settings-note" id="pms-capability-box" style="margin-top:8px;"></p>
+
+        <p class="panel-sub" style="margin:22px 0 8px;font-weight:700;color:var(--color-ink);">同步範圍（PMS → TMS 拉哪些東西）</p>
+        <div id="pms-sync-toggles"></div>
+
+        <p class="panel-sub" style="margin:20px 0 8px;font-weight:700;color:var(--color-ink);">回寫開關（TMS → PMS 永遠只有這兩條路徑，各自可關，不開放第三條）</p>
+        <div id="pms-writeback-toggles"></div>
+        <p class="settings-note" style="margin-top:8px;">回寫路徑是既定的兩條，不開放自訂——哪些事件可以寫回 PMS 是語意骨架的一部分（見「刻意不開放的部分」）。</p>
+      </div>
+    </section>
+
+    <section data-section="redline">
+      <div class="panel" id="panel-redline">
+        <h2>刻意不開放自訂的部分</h2>
+        <p class="panel-sub">這些是語意骨架——動了之後報表與 PMS 整合就不再可信，對應正式版的產品立場（競品 HotSOS／Optii／ALICE 同樣不開放這層）。</p>
+        <ul class="redline" id="redline-list">
+          <li>九態狀態機的語意類別與轉移規則（上面的開關只是跳過某一步，不是改狀態圖）</li>
+          <li>事件流水帳的字彙（task_events 是 append-only 真相，重放保證依賴穩定字彙）</li>
+          <li>統計定義：取消單不進統計、可賣房、回應時間的算法</li>
+          <li>PMS 回寫觸發點（查驗合格才回寫房況），以及回寫路徑本身——永遠只有房間狀態、minibar 計費兩條（「PMS 整合」分區的開關只能各自關掉，不能加第三條）</li>
+        </ul>
+      </div>
+    </section>
+
+    <p class="settings-note">「重置示範資料」會把以上設定一併還原成預設值。</p>
+
+  </main>
+</div>
+
+<div class="panel settings-blocked" id="settings-blocked" hidden>
+  <div class="glyph">🔒</div>
+  <h2 id="blocked-title">沒有「租戶設定」權限</h2>
+  <p class="panel-sub" id="blocked-desc"></p>
+  <p class="settings-note">切換上方「目前操作者」到有權限的身分即可進入。</p>
 </div>
 
 <script src="shared/seed.js"></script>
@@ -201,28 +681,156 @@
 <script>
 (function () {
   var C = TMS_COMPONENTS, E = TMS_ENGINE;
-  var ACTOR = '租戶管理者';
 
-  var FLOW_TOGGLES = [
-    {
-      key: 'requireInspection',
-      label: '打掃完成後需要主管查房',
-      onDesc: '完成的打掃單停在 done，等主管逐項查房後才算合格（inspected）。',
-      offDesc: '完成即視為查驗合格：done 後自動變 inspected、照樣排 PMS 回寫，主管頁不會出現待查任務。'
-    },
-    {
-      key: 'freetextNeedsTriage',
-      label: '住客自由文字需要櫃檯判讀',
-      onDesc: '留言先進待判讀（triage），由櫃檯三選一分流。',
-      offDesc: '留言直接進房務待接池，櫃檯看板不再出現待判讀。'
-    },
-    {
-      key: 'allowSelfInspect',
-      label: '允許清房者查自己清的房',
-      onDesc: '解除 403 防自查——示範「規則本身也可調」，正式環境不建議開。',
-      offDesc: '清房者送出自己房的查房結果會被擋下（403）。'
-    }
+  // ---- 身分（目前操作者）：__owner__ 是不綁定任何員工的虛擬身分，永遠視為
+  // 全權限，用來保住「預設就能用整頁設定」的既有行為；選真實員工才會真的吃
+  // 他掛的角色權限——這樣「拿掉租戶設定權限→擋下」的示範不會把預設體驗也鎖死。
+  var OPERATOR_KEY = 'tms_poc_settings_operator';
+  function currentOperatorId() { return sessionStorage.getItem(OPERATOR_KEY) || '__owner__'; }
+  function setOperatorId(id) { sessionStorage.setItem(OPERATOR_KEY, id); }
+  function ACTOR_NAME() {
+    var id = currentOperatorId();
+    if (id === '__owner__') return '租戶管理者';
+    return E.resolveStaffName(E.getState(), id);
+  }
+  function canAccessSettings() {
+    var id = currentOperatorId();
+    return id === '__owner__' || E.hasPermission(id, 'tenant_settings');
+  }
+  function canRegenQr() {
+    var id = currentOperatorId();
+    return id === '__owner__' || E.hasPermission(id, 'qr_regenerate');
+  }
+
+  function renderOperatorSelect() {
+    var sel = document.getElementById('operator-select');
+    var cur = currentOperatorId();
+    sel.innerHTML = '';
+    var ownerOpt = document.createElement('option');
+    ownerOpt.value = '__owner__'; ownerOpt.textContent = '租戶管理者（預設，不受角色限制）';
+    sel.appendChild(ownerOpt);
+    E.getState().staff.filter(function (s) { return s.active !== false; }).forEach(function (s) {
+      var role = (E.getState().roles || []).filter(function (r) { return r.key === s.roleKey; })[0];
+      var o = document.createElement('option');
+      o.value = s.id; o.textContent = s.name + (role ? '（' + role.name + '）' : '');
+      sel.appendChild(o);
+    });
+    sel.value = cur;
+  }
+
+  // ---- 分區導航：桌機側欄、窄螢幕退化成同一組按鈕的水平捲動列（同一份 DOM，
+  // CSS 媒體查詢切排版），不用另外維護一份下拉選單跟按鈕兩邊同步的狀態。
+  var SECTION_KEY = 'tms_poc_settings_section';
+  function currentSection() { return sessionStorage.getItem(SECTION_KEY) || 'guest'; }
+  function switchSection(key) {
+    sessionStorage.setItem(SECTION_KEY, key);
+    document.querySelectorAll('.settings-nav button').forEach(function (btn) {
+      btn.classList.toggle('is-active', btn.dataset.section === key);
+    });
+    document.querySelectorAll('.settings-main > section').forEach(function (sec) {
+      sec.classList.toggle('is-active', sec.dataset.section === key);
+    });
+  }
+
+  // ---- 搜尋：純關鍵字對照表，不做全文索引——這個頁面設定項數量有限，
+  // 對照表比起動態掃 DOM 文字更穩定（改版型不會連帶改到搜尋結果）。
+  var SEARCH_INDEX = [
+    { label: '飯店名稱', section: 'guest', anchor: 'panel-hotel-name', keywords: '飯店名稱 hotel' },
+    { label: '資訊卡項目', section: 'guest', anchor: 'info-items', keywords: '資訊卡 資訊項目 早餐 wifi' },
+    { label: '需求選單', section: 'guest', anchor: 'menu-items', keywords: '需求選單 毛巾 加床 備品' },
+    { label: '自建選單項目', section: 'guest', anchor: 'custom-menu-list', keywords: '自建選單 自訂選單' },
+    { label: '品牌（Logo／主色）', section: 'guest', anchor: 'panel-brand', keywords: '品牌 logo 主色 brand color 顏色' },
+    { label: '角色', section: 'staff', anchor: 'panel-roles', keywords: '角色 權限 role permission administrator' },
+    { label: '員工清單', section: 'staff', anchor: 'panel-staff', keywords: '員工 邀請 email 開通 activation invite' },
+    { label: '部門清單', section: 'staff', anchor: 'panel-departments', keywords: '部門 department' },
+    { label: '房間主檔', section: 'rooms', anchor: 'room-list', keywords: '房間 房號 room' },
+    { label: 'QR 重產', section: 'rooms', anchor: 'room-qr-batch-btn', keywords: 'qr 重產 二維碼 貼紙' },
+    { label: '清掃基準工時（類型×房態）', section: 'service', anchor: 'std-matrix', keywords: '清掃標準 基準 工時 矩陣 房態 退房清 續住清 夜床 空房巡 退房 續住 空房 停用維修' },
+    { label: '工作量顯示單位', section: 'service', anchor: 'unit-seg', keywords: '顯示單位 分鐘 點數 點 權重 workload points' },
+    { label: '房間工時覆寫', section: 'service', anchor: 'room-override-list', keywords: '覆寫 房間 工時 特殊 override' },
+    { label: 'SLA 時限', section: 'service', anchor: 'sla-grid', keywords: 'sla 時限 逾時' },
+    { label: 'SOP／查房檢核項目', section: 'service', anchor: 'inspection-items', keywords: 'sop 查房 檢核 床鋪 浴室' },
+    { label: '班次定義', section: 'service', anchor: 'shift-list', keywords: '班次 早班 中班 晚班 shift' },
+    { label: '班次容量', section: 'service', anchor: 'capacity-input', keywords: '班次容量 負載 工時 capacity' },
+    { label: '自動化規則', section: 'prepRules', anchor: 'panel-prep-rules', keywords: '自動化 automation 準備工單 prep VIP 親子 寵物 紀念日 訂房屬性 排程 每日 每週 到期 觸發 自動開單' },
+    { label: '流程開關', section: 'flow', anchor: 'panel-flow', keywords: '流程 查房 判讀 自查 flow' },
+    { label: '自動分配策略', section: 'flow', anchor: 'strategy-seg', keywords: '自動分配 樓層聚合 工時平衡' },
+    { label: '排房草稿要納入哪些房', section: 'flow', anchor: 'schedule-inclusion', keywords: '排房 納入 排除 開關 空房 環保 環保房 環保牌 停用維修 請勿打擾 草稿 房態 旗標 inclusion' },
+    { label: '通知設定', section: 'notifications', anchor: 'panel-notifications', keywords: '通知 推播 notification' },
+    { label: '老闆出事門檻', section: 'notifications', anchor: 'notif-owner-rating-toggle', keywords: '老闆 出事 門檻 評分 星 低分評價' },
+    { label: '主管上報', section: 'notifications', anchor: 'notif-owner-report-toggle', keywords: '主管 上報 escalation 老闆通知' },
+    { label: 'SLA 逾時提醒櫃檯', section: 'notifications', anchor: 'notif-sla-toggle', keywords: 'sla 逾時 提醒 櫃檯 desk alert' },
+    { label: '逾時升級鏈', section: 'notifications', anchor: 'esc-master-toggle', keywords: '升級 逾時 escalation 分層 值班經理 主管 層' },
+    { label: '營業參數', section: 'business', anchor: 'panel-business', keywords: '營業參數 timezone' },
+    { label: '時區與日切時間', section: 'business', anchor: 'biz-day-cutover', keywords: '時區 日切 今天 跨夜 timezone cutover' },
+    { label: '退房／入住時間', section: 'business', anchor: 'biz-checkout', keywords: '退房 入住 時間 趕房 checkout checkin' },
+    { label: '防濫用參數', section: 'business', anchor: 'biz-throttle-window', keywords: '防濫用 節流 throttle 住客 送出上限' },
+    { label: '資料保留', section: 'dataRetention', anchor: 'panel-retention', keywords: '資料保留 去識別化 retention 受控去識別化' },
+    { label: '遺失物保管期限', section: 'dataRetention', anchor: 'retention-lf-days', keywords: '遺失物 保管 期限 到期 逾期' },
+    { label: 'PMS 整合', section: 'pmsIntegration', anchor: 'panel-pms', keywords: 'pms 整合 adapter 轉接頭 mews cloudbeds 手動匯入' },
+    { label: 'PMS 連線憑證', section: 'pmsIntegration', anchor: 'pms-credential-input', keywords: 'pms 憑證 api key 連線 credential' },
+    { label: 'PMS 能力盤點', section: 'pmsIntegration', anchor: 'pms-test-btn', keywords: 'pms 能力盤點 測試連線 推事件 輪詢 事件訂閱 capability' },
+    { label: 'PMS 同步範圍', section: 'pmsIntegration', anchor: 'pms-sync-toggles', keywords: 'pms 同步範圍 今日房態 訂房屬性 sync scope' },
+    { label: 'PMS 回寫開關', section: 'pmsIntegration', anchor: 'pms-writeback-toggles', keywords: 'pms 回寫 房間狀態 inspected ooo 停用維修 minibar 計費 writeback' },
+    { label: '刻意不開放的部分', section: 'redline', anchor: 'panel-redline', keywords: '紅線 不開放 狀態機 事件字彙' }
   ];
+
+  var searchActiveIndex = -1;
+  function searchMatches(q) {
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    return SEARCH_INDEX.filter(function (it) {
+      return (it.label + ' ' + it.keywords).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 8);
+  }
+
+  function renderSearchResults() {
+    var input = document.getElementById('settings-search');
+    var wrap = document.getElementById('settings-search-results');
+    var matches = searchMatches(input.value);
+    wrap.innerHTML = '';
+    if (!input.value.trim()) { wrap.hidden = true; return; }
+    if (!matches.length) {
+      wrap.appendChild(C.el('div', 'settings-search-empty', '沒有符合的設定項'));
+      wrap.hidden = false;
+      return;
+    }
+    matches.forEach(function (it, i) {
+      var row = C.el('div', 'settings-search-result' + (i === searchActiveIndex ? ' is-active' : ''));
+      var sectionLabel = document.querySelector('.settings-nav button[data-section="' + it.section + '"]').textContent;
+      row.appendChild(C.el('span', 'hit-label', it.label));
+      row.appendChild(C.el('span', 'hit-section', sectionLabel));
+      row.addEventListener('mousedown', function (e) { e.preventDefault(); goToSearchHit(it); });
+      wrap.appendChild(row);
+    });
+    wrap.hidden = false;
+  }
+
+  // 切分區＋捲動＋高亮：搜尋結果點擊與「通知」⇄「班次與服務標準」互相指路的連結
+  // 共用這一個函式，不要兩邊各寫一份容易讓其中一邊漏掉高亮或捲動。
+  function jumpTo(section, anchor) {
+    switchSection(section);
+    document.getElementById('settings-search-results').hidden = true;
+    searchActiveIndex = -1;
+    setTimeout(function () {
+      var el = document.getElementById(anchor);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('settings-highlight-flash');
+      setTimeout(function () { el.classList.remove('settings-highlight-flash'); }, 1700);
+    }, 30);
+  }
+
+  function goToSearchHit(it) { jumpTo(it.section, it.anchor); }
+
+  function crossLink(label, section, anchor) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'settings-link-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', function () { jumpTo(section, anchor); });
+    return btn;
+  }
 
   function renderHotelName(settings) {
     document.getElementById('hotel-name-input').value = settings.hotelName || '';
@@ -245,7 +853,7 @@
         E.updateSettings(function (s) {
           var it = s.infoItems.filter(function (x) { return x.id === item.id; })[0];
           if (it) it.enabled = cb.checked;
-        }, ACTOR, (cb.checked ? '顯示' : '隱藏') + '資訊項「' + item.title + '」');
+        }, ACTOR_NAME(), (cb.checked ? '顯示' : '隱藏') + '資訊項「' + item.title + '」');
       });
       row.appendChild(cb);
 
@@ -273,7 +881,7 @@
           it.icon = iconInput.value.trim() || 'ℹ️';
           it.title = titleInput.value.trim() || '未命名';
           it.content = contentInput.value.trim();
-        }, ACTOR, '更新資訊項「' + (titleInput.value.trim() || item.title) + '」');
+        }, ACTOR_NAME(), '更新資訊項「' + (titleInput.value.trim() || item.title) + '」');
         C.toast('已儲存，住客頁同步更新', 'success');
       });
       var delBtn = C.el('button', 'btn btn-ghost', '刪除');
@@ -281,7 +889,7 @@
       delBtn.addEventListener('click', function () {
         E.updateSettings(function (s) {
           s.infoItems = s.infoItems.filter(function (x) { return x.id !== item.id; });
-        }, ACTOR, '刪除資訊項「' + item.title + '」');
+        }, ACTOR_NAME(), '刪除資訊項「' + item.title + '」');
         C.toast('已刪除', 'info');
       });
       actions.appendChild(saveBtn);
@@ -304,7 +912,7 @@
         E.updateSettings(function (s) {
           var it = s.menuItems.filter(function (x) { return x.key === m.key; })[0];
           if (it) it.enabled = cb.checked;
-        }, ACTOR, (cb.checked ? '啟用' : '停用') + '需求選單「' + (rule ? rule.title : m.key) + '」');
+        }, ACTOR_NAME(), (cb.checked ? '啟用' : '停用') + '需求選單「' + (rule ? rule.title : m.key) + '」');
       });
       label.appendChild(cb);
       label.appendChild(C.el('span', null, rule ? rule.title : m.key));
@@ -329,12 +937,125 @@
     return field;
   }
 
-  function renderStdGrid(settings) {
-    var wrap = document.getElementById('std-grid');
-    wrap.innerHTML = '';
-    KINDS.forEach(function (kind) {
-      wrap.appendChild(numberField(kind, (settings.cleaningStandard || {})[kind], 'data-kind', kind));
+  // 顯示單位的字樣（分／點）各顯示處現查；點數模式數字不換算，只換標籤。
+  function UNIT(settings) {
+    return E.workloadUnitLabel(settings);
+  }
+
+  function renderWorkloadUnit(settings) {
+    document.querySelectorAll('#unit-seg button').forEach(function (btn) {
+      btn.classList.toggle('is-active', (settings.workloadDisplayUnit || 'minutes') === btn.dataset.v);
     });
+  }
+
+  // 基準表的矩陣：列＝清掃類型、欄＝房態，最右欄是哪一格都取不到時退回的
+  // 類型預設。格子留空代表該組合不適用（例如「夜床 × 退房」），存檔時空格
+  // 會從基準表移除，而不是存 0——0 會被排房當成「這間房免工時」。
+  function renderStdMatrix(settings) {
+    var table = document.getElementById('std-matrix');
+    table.innerHTML = '';
+    var unit = UNIT(settings);
+    document.getElementById('std-matrix-title').textContent =
+      '清掃基準工時（清掃類型 × 房態，單位：' + unit + '；留空＝該組合不適用，排房時退回最右欄的類型預設）：';
+    var head = C.el('tr');
+    head.appendChild(C.el('th', null, '清掃類型'));
+    E.ROOM_STATES.forEach(function (st) {
+      head.appendChild(C.el('th', null, E.ROOM_STATE_LABELS[st]));
+    });
+    head.appendChild(C.el('th', null, '類型預設'));
+    table.appendChild(head);
+
+    KINDS.forEach(function (kind) {
+      var row = C.el('tr');
+      var th = C.el('th', null, kind);
+      th.setAttribute('scope', 'row');
+      row.appendChild(th);
+      E.ROOM_STATES.forEach(function (st) {
+        var td = C.el('td');
+        var input = document.createElement('input');
+        input.type = 'number';
+        input.min = '1';
+        var v = ((settings.cleaningStandardMatrix || {})[kind] || {})[st];
+        input.value = (v == null ? '' : v);
+        input.setAttribute('data-kind', kind);
+        input.setAttribute('data-state', st);
+        input.setAttribute('aria-label', kind + '×' + E.ROOM_STATE_LABELS[st] + '的基準' + unit + '數');
+        td.appendChild(input);
+        row.appendChild(td);
+      });
+      var tdDefault = C.el('td', 'type-default');
+      var defInput = document.createElement('input');
+      defInput.type = 'number';
+      defInput.min = '1';
+      defInput.value = (settings.cleaningStandard || {})[kind] || '';
+      defInput.setAttribute('data-kind-default', kind);
+      defInput.setAttribute('aria-label', kind + '的類型預設' + unit + '數');
+      tdDefault.appendChild(defInput);
+      row.appendChild(tdDefault);
+      table.appendChild(row);
+    });
+  }
+
+  function renderRoomOverrides(state) {
+    var settings = state.settings;
+    var unit = UNIT(settings);
+    document.getElementById('room-override-title').textContent =
+      '房間覆寫（格局特殊的房直接指定' + unit + '數，優先於上表的基準格）：';
+    var wrap = document.getElementById('room-override-list');
+    wrap.innerHTML = '';
+    var overrides = settings.cleaningRoomOverrides || {};
+    var rows = [];
+    Object.keys(overrides).sort().forEach(function (roomNo) {
+      Object.keys(overrides[roomNo]).forEach(function (kind) {
+        rows.push({ roomNo: roomNo, kind: kind, min: overrides[roomNo][kind] });
+      });
+    });
+    if (!rows.length) {
+      wrap.appendChild(C.emptyState('目前沒有房間覆寫——排房一律取基準格或類型預設'));
+    }
+    rows.forEach(function (r) {
+      var row = C.el('div', 'custom-item org-row');
+      row.appendChild(C.el('span', 'title', r.roomNo + ' 號房'));
+      row.appendChild(C.el('span', 'tag-mini', r.kind));
+      row.appendChild(C.el('span', null, r.min + ' ' + unit));
+      row.appendChild(C.el('span', 'spacer', ''));
+      var delBtn = C.el('button', 'btn btn-ghost', '刪除');
+      delBtn.type = 'button';
+      delBtn.addEventListener('click', function () {
+        E.updateSettings(function (s) {
+          var o = s.cleaningRoomOverrides || {};
+          if (o[r.roomNo]) {
+            delete o[r.roomNo][r.kind];
+            if (!Object.keys(o[r.roomNo]).length) delete o[r.roomNo];
+          }
+        }, ACTOR_NAME(), '刪除 ' + r.roomNo + ' 號房「' + r.kind + '」的工時覆寫');
+        C.toast('已刪除覆寫，之後匯入改取基準格', 'success');
+      });
+      row.appendChild(delBtn);
+      wrap.appendChild(row);
+    });
+
+    var roomSel = document.getElementById('override-room-select');
+    var kept = roomSel.value;
+    roomSel.innerHTML = '';
+    (state.rooms || []).filter(function (r) { return r.active !== false; })
+      .slice().sort(function (a, b) { return a.roomNo.localeCompare(b.roomNo); })
+      .forEach(function (r) {
+        var o = document.createElement('option');
+        o.value = r.roomNo; o.textContent = r.roomNo + ' 號房';
+        roomSel.appendChild(o);
+      });
+    if (kept) roomSel.value = kept;
+
+    var kindSel = document.getElementById('override-kind-select');
+    var keptKind = kindSel.value;
+    kindSel.innerHTML = '';
+    KINDS.forEach(function (kind) {
+      var o = document.createElement('option');
+      o.value = kind; o.textContent = kind;
+      kindSel.appendChild(o);
+    });
+    if (keptKind) kindSel.value = keptKind;
   }
 
   function renderSlaGrid(settings) {
@@ -345,8 +1066,189 @@
     });
   }
 
+  // 文案連動：這句話是否自相矛盾（講「不自動升級」卻又講「會提醒」）要跟著
+  // 「通知」分區的 SLA 逾時提醒開關走，兩處用同一個布林值，不會各自講各自的故事。
+  function renderSlaNote(settings) {
+    var p = document.getElementById('sla-note');
+    p.innerHTML = '';
+    var deskAlert = (settings.notifications || {}).deskSlaAlertEnabled === true;
+    var escOn = (settings.escalation || {}).enabled !== false;
+    p.appendChild(document.createTextNode('SLA 時限（分鐘；留空＝不限。' +
+      (deskAlert ? '逾時會在櫃檯看板彙整' : '逾時只在任務卡標記') +
+      (escOn ? '，並依逾時升級鏈分層通知' : '；逾時升級鏈目前關閉') + '）：　'));
+    p.appendChild(crossLink('→ 到「通知」調整提醒與升級鏈', 'notifications', 'notif-sla-toggle'));
+  }
+
   function renderCapacity(settings) {
     document.getElementById('capacity-input').value = settings.shiftCapacityMin || 240;
+    document.querySelector('label[for="capacity-input"]').textContent =
+      '班次容量（' + (UNIT(settings) === '點' ? '點' : '分鐘') + '／人／班，排房欄的負載條以此為滿格）';
+  }
+
+  function renderNotifications(settings) {
+    var notif = settings.notifications || {};
+    document.getElementById('notif-owner-rating-cb').checked = notif.ownerLowRatingEnabled !== false;
+    document.getElementById('notif-owner-report-cb').checked = notif.ownerManagerReportEnabled !== false;
+    document.getElementById('notif-sla-cb').checked = notif.deskSlaAlertEnabled === true;
+    document.getElementById('notif-sla-desc').textContent = '任務超過「班次與服務標準」設定的 SLA 時限時，' +
+      (notif.deskSlaAlertEnabled === true ? '櫃檯看板會多一塊逾時彙整清單。' : '目前只在任務卡標記，不會另出彙整清單。') +
+      '這塊是給櫃檯掃視的看板；逾時後「指名道姓叫到人」的推播走下方的逾時升級鏈，兩者各自開關、不衝突。';
+    var linkWrap = document.getElementById('notif-sla-link-wrap');
+    linkWrap.innerHTML = '';
+    linkWrap.appendChild(document.createTextNode('時限值沿用「班次與服務標準」的設定，同一套值不重開第二份。　'));
+    linkWrap.appendChild(crossLink('→ 前往調整時限', 'service', 'sla-grid'));
+  }
+
+  // 逾時升級鏈的三層收件對象：第一層固定是接單人／部門待接池（第一個該知道的
+  // 人沒有懸念，不開放改），第二、三層開放租戶自選——這是跟競品的差異化立場，
+  // 每家店的人力結構不同，收件人鎖死就只能全世界一套節奏。
+  var ESC_RECIPIENT_OPTIONS = ['manager', 'desk', 'owner', 'duty_manager'];
+
+  function renderEscalation(settings) {
+    var esc = settings.escalation || { enabled: false, levels: [] };
+    document.getElementById('esc-enabled-cb').checked = esc.enabled !== false;
+    document.getElementById('esc-master-desc').textContent = esc.enabled !== false
+      ? '任務超過 SLA 後，到達各層時點就通知該層的人；每層只通知一次，任務完成或取消就不再升級。升級不是新狀態——任務停在原狀態，留痕走 escalated 事件（事件流水帳查得到）。'
+      : '目前關閉：逾時只在任務卡標記與櫃檯看板彙整，不會分層叫人。';
+
+    var wrap = document.getElementById('esc-level-list');
+    wrap.innerHTML = '';
+    var disabled = esc.enabled === false;
+    (esc.levels || []).forEach(function (lv) {
+      var row = C.el('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;' + (disabled ? 'opacity:.45;' : '');
+
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = lv.enabled !== false;
+      cb.disabled = disabled;
+      cb.setAttribute('aria-label', '啟用第 ' + lv.level + ' 層');
+      cb.addEventListener('change', function () {
+        E.updateSettings(function (s) {
+          var it = (s.escalation.levels || []).filter(function (x) { return x.level === lv.level; })[0];
+          if (it) it.enabled = cb.checked;
+        }, ACTOR_NAME(), '逾時升級第 ' + lv.level + ' 層改為' + (cb.checked ? '啟用' : '停用'));
+        C.toast('已更新', 'success');
+      });
+      row.appendChild(cb);
+
+      row.appendChild(C.el('span', null, 'L' + lv.level + '：逾時後第'));
+      var min = document.createElement('input');
+      min.type = 'number';
+      min.min = '0';
+      min.step = '0.5';
+      min.style.maxWidth = '80px';
+      min.value = lv.afterOverdueMin == null ? 0 : lv.afterOverdueMin;
+      min.disabled = disabled;
+      min.setAttribute('data-esc-level', String(lv.level));
+      min.setAttribute('aria-label', '第 ' + lv.level + ' 層逾時後第幾分鐘');
+      row.appendChild(min);
+      row.appendChild(C.el('span', null, '分鐘通知'));
+
+      if (lv.level === 1) {
+        row.appendChild(C.el('span', 'tag tag-muted', E.ESCALATION_RECIPIENT_LABELS.assignee_or_pool + '（固定）'));
+      } else {
+        var sel = document.createElement('select');
+        sel.disabled = disabled;
+        sel.setAttribute('aria-label', '第 ' + lv.level + ' 層通知對象');
+        ESC_RECIPIENT_OPTIONS.forEach(function (key) {
+          var o = document.createElement('option');
+          o.value = key;
+          o.textContent = E.ESCALATION_RECIPIENT_LABELS[key] || key;
+          sel.appendChild(o);
+        });
+        sel.value = lv.recipient || 'manager';
+        sel.addEventListener('change', function () {
+          E.updateSettings(function (s) {
+            var it = (s.escalation.levels || []).filter(function (x) { return x.level === lv.level; })[0];
+            if (it) it.recipient = sel.value;
+          }, ACTOR_NAME(), '逾時升級第 ' + lv.level + ' 層通知對象改為「' + (E.ESCALATION_RECIPIENT_LABELS[sel.value] || sel.value) + '」');
+          C.toast('已更新', 'success');
+        });
+        row.appendChild(sel);
+      }
+      wrap.appendChild(row);
+    });
+
+    document.getElementById('esc-save').disabled = disabled;
+    var note = document.getElementById('esc-note');
+    note.innerHTML = '';
+    note.appendChild(document.createTextNode(
+      '時點可填小數（0.5＝30 秒），驗收或 demo 不用枯等整分鐘；已經升過的層不會因為改設定重發。' +
+      '出廠預設走保守節奏（逾時即刻 L1、+2 分 L2、+5 分 L3）——層層太密只會通知疲勞。　'));
+    note.appendChild(crossLink('→ SLA 時限在「班次與服務標準」', 'service', 'sla-grid'));
+  }
+
+  function renderBusiness(settings) {
+    var biz = settings.business || {};
+    document.getElementById('biz-timezone').value = biz.timezone || 'Asia/Taipei';
+    document.getElementById('biz-day-cutover').value = biz.dayCutoverTime || '00:00';
+    document.getElementById('biz-checkout').value = biz.checkoutTime || '11:00';
+    document.getElementById('biz-checkin').value = biz.checkinTime || '15:00';
+    document.getElementById('biz-throttle-window').value = biz.guestThrottleWindowMin || 10;
+    document.getElementById('biz-throttle-max').value = biz.guestThrottleMaxCount || 3;
+  }
+
+  function renderRetention(settings) {
+    var dr = settings.dataRetention || {};
+    document.getElementById('retention-deid').value = dr.deidentifyDays || 365;
+    document.getElementById('retention-lf-days').value = dr.lostFoundRetentionDays || 90;
+    document.getElementById('retention-lf-action').value = dr.lostFoundOnExpiry || 'flag';
+    document.getElementById('retention-lf-photo').value = dr.lostFoundPhotoRetentionDays || 90;
+  }
+
+  var BRAND_PRESETS = ['#15705A', '#0B5FA5', '#B3542B', '#8A6210', '#6D4AA6', '#A52B2B'];
+
+  function saveBrandColor(hex) {
+    E.updateSettings(function (s) {
+      s.brand = s.brand || {};
+      s.brand.primaryColor = hex;
+    }, ACTOR_NAME(), '品牌主色改為 ' + hex);
+    C.toast('已更新主色，住客頁同步套用', 'success');
+  }
+
+  function renderBrand(settings) {
+    var brand = settings.brand || {};
+    var preview = document.getElementById('brand-logo-preview');
+    preview.innerHTML = '';
+    if (brand.logo) {
+      var img = document.createElement('img');
+      img.src = brand.logo;
+      img.alt = '目前 Logo';
+      img.style.cssText = 'max-height:48px;max-width:160px;border-radius:6px;background:var(--color-surface-sunken);object-fit:contain;';
+      preview.appendChild(img);
+      var removeBtn = C.el('button', 'btn btn-ghost', '移除 Logo');
+      removeBtn.type = 'button';
+      removeBtn.addEventListener('click', function () {
+        E.updateSettings(function (s) { s.brand.logo = null; }, ACTOR_NAME(), '移除品牌 Logo');
+        document.getElementById('brand-logo-input').value = '';
+        C.toast('已移除 Logo，住客頁回到預設', 'success');
+      });
+      preview.appendChild(removeBtn);
+    } else {
+      preview.appendChild(C.emptyState('尚未上傳 Logo，住客頁不顯示'));
+    }
+
+    document.getElementById('brand-color-input').value = brand.primaryColor || '#15705A';
+    var presetWrap = document.getElementById('brand-color-presets');
+    presetWrap.innerHTML = '';
+    BRAND_PRESETS.forEach(function (hex) {
+      var sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'brand-swatch';
+      sw.style.background = hex;
+      sw.title = hex;
+      sw.setAttribute('aria-label', '主色 ' + hex);
+      sw.addEventListener('click', function () { saveBrandColor(hex); });
+      presetWrap.appendChild(sw);
+    });
+    var note = document.getElementById('brand-color-note');
+    if (brand.primaryColor) {
+      note.textContent = '目前主色 ' + brand.primaryColor + '，按鈕文字自動配' +
+        (C.contrastInk(brand.primaryColor) === '#FFFFFF' ? '白色' : '深色') + '以維持對比。';
+    } else {
+      note.textContent = '尚未自訂，住客頁使用預設主色。';
+    }
   }
 
   function renderInspectionItems(settings) {
@@ -367,7 +1269,7 @@
         E.updateSettings(function (s) {
           var it = s.inspectionItems.filter(function (x) { return x.key === item.key; })[0];
           if (it) it.label = v;
-        }, ACTOR, '檢核項改名為「' + v + '」');
+        }, ACTOR_NAME(), '檢核項改名為「' + v + '」');
         C.toast('已儲存，之後建立的任務適用', 'success');
       });
       var delBtn = C.el('button', 'btn btn-ghost', '刪除');
@@ -379,7 +1281,7 @@
         }
         E.updateSettings(function (s) {
           s.inspectionItems = s.inspectionItems.filter(function (x) { return x.key !== item.key; });
-        }, ACTOR, '刪除檢核項「' + item.label + '」');
+        }, ACTOR_NAME(), '刪除檢核項「' + item.label + '」');
       });
       row.appendChild(saveBtn);
       row.appendChild(delBtn);
@@ -405,11 +1307,11 @@
         E.updateSettings(function (s) {
           var it = s.customMenuItems.filter(function (x) { return x.key === item.key; })[0];
           if (it) it.enabled = cb.checked;
-        }, ACTOR, (cb.checked ? '啟用' : '停用') + '自建項目「' + item.title + '」');
+        }, ACTOR_NAME(), (cb.checked ? '啟用' : '停用') + '自建項目「' + item.title + '」');
       });
       row.appendChild(cb);
       row.appendChild(C.el('span', 'title', item.title));
-      row.appendChild(C.el('span', 'tag-mini', E.DEPT_LABELS[item.dept] || item.dept));
+      row.appendChild(C.el('span', 'tag-mini', E.deptLabel(item.dept)));
       row.appendChild(C.el('span', 'tag-mini', E.TYPE_LABELS[item.type] || item.type));
       row.appendChild(C.el('span', 'spacer', ''));
       var delBtn = C.el('button', 'btn btn-ghost', '刪除');
@@ -417,7 +1319,500 @@
       delBtn.addEventListener('click', function () {
         E.updateSettings(function (s) {
           s.customMenuItems = s.customMenuItems.filter(function (x) { return x.key !== item.key; });
-        }, ACTOR, '刪除自建項目「' + item.title + '」');
+        }, ACTOR_NAME(), '刪除自建項目「' + item.title + '」');
+      });
+      row.appendChild(delBtn);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderAutomationDeptSelect(settings) {
+    populateSelect(document.getElementById('prep-rule-dept-select'),
+      activeDepartments(settings).map(function (d) { return { value: d.key, label: d.name }; }));
+  }
+
+  var AUTOMATION_TYPE_OPTIONS = ['amenity', 'repair', 'cleaning', 'other'];
+  var AUTOMATION_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
+
+  // 規則清單：每列直接可編輯（跟班次/部門清單同一套慣例——文字框＋下拉＋「儲存」，
+  // 不用手風琴），停用/刪除各自一顆按鈕。每列開頭固定一顆觸發源標籤——觸發源
+  // 不開放改（換觸發源＝換一條冪等語意不同的規則，引擎端也擋），用標籤而不是
+  // 下拉，使用者才不會以為能切。部門下拉若遇到規則目前掛著、但已經停用的部門，
+  // 額外補一個「（已停用）」選項墊著，不然下拉會顯示空白或悄悄把值換掉
+  // （跟員工編輯面板 rolesForStaffEdit 同一個理由）。
+  function renderAutomationRuleList(settings) {
+    var wrap = document.getElementById('prep-rule-list');
+    wrap.innerHTML = '';
+    var rules = settings.automationRules || [];
+    if (!rules.length) {
+      wrap.appendChild(C.emptyState('目前沒有自動化規則——在下面選觸發源、填條件與動作後按「新增規則」'));
+      return;
+    }
+    rules.forEach(function (rule) {
+      var active = rule.enabled !== false;
+      var isReservation = rule.trigger !== 'schedule';
+      var row = C.el('div', 'custom-item org-row' + (active ? '' : ' is-disabled'));
+
+      row.appendChild(C.el('span', 'tag tag-rule',
+        (E.AUTOMATION_TRIGGER_LABELS[rule.trigger] || rule.trigger) + (rule.builtin ? '・內建' : '')));
+
+      var attrInput = null, repeatSelect = null, weekdaySelect = null, timeInput = null, roomInput = null;
+      if (isReservation) {
+        attrInput = document.createElement('input');
+        attrInput.type = 'text'; attrInput.value = rule.attribute || '';
+        attrInput.style.maxWidth = '110px';
+        attrInput.setAttribute('aria-label', '訂房屬性');
+        row.appendChild(attrInput);
+      } else {
+        var sch = rule.schedule || {};
+        repeatSelect = document.createElement('select');
+        repeatSelect.setAttribute('aria-label', '重複');
+        [{ v: 'daily', l: '每日' }, { v: 'weekly', l: '每週' }].forEach(function (opt) {
+          var o = document.createElement('option');
+          o.value = opt.v; o.textContent = opt.l;
+          repeatSelect.appendChild(o);
+        });
+        repeatSelect.value = sch.repeat === 'weekly' ? 'weekly' : 'daily';
+        row.appendChild(repeatSelect);
+
+        weekdaySelect = document.createElement('select');
+        weekdaySelect.setAttribute('aria-label', '星期幾');
+        AUTOMATION_WEEKDAYS.forEach(function (wd) {
+          var o = document.createElement('option');
+          o.value = String(wd); o.textContent = E.WEEKDAY_LABELS[wd];
+          weekdaySelect.appendChild(o);
+        });
+        weekdaySelect.value = String(sch.weekday || 1);
+        weekdaySelect.hidden = repeatSelect.value !== 'weekly';
+        repeatSelect.addEventListener('change', function () {
+          weekdaySelect.hidden = repeatSelect.value !== 'weekly';
+        });
+        row.appendChild(weekdaySelect);
+
+        timeInput = document.createElement('input');
+        timeInput.type = 'time'; timeInput.value = sch.time || '';
+        timeInput.style.maxWidth = '110px';
+        timeInput.setAttribute('aria-label', '時間（HH:MM）');
+        row.appendChild(timeInput);
+
+        roomInput = document.createElement('input');
+        roomInput.type = 'text'; roomInput.value = sch.roomNo || '';
+        roomInput.placeholder = '房號（選填）';
+        roomInput.style.maxWidth = '100px';
+        roomInput.setAttribute('aria-label', '房號（選填）');
+        row.appendChild(roomInput);
+      }
+
+      var titleInput = document.createElement('input');
+      titleInput.type = 'text'; titleInput.value = rule.title;
+      titleInput.setAttribute('aria-label', '工單名稱');
+      row.appendChild(titleInput);
+
+      var deptSelect = document.createElement('select');
+      deptSelect.setAttribute('aria-label', '部門');
+      var deptOptions = activeDepartments(settings);
+      deptOptions.forEach(function (d) {
+        var o = document.createElement('option');
+        o.value = d.key; o.textContent = d.name;
+        deptSelect.appendChild(o);
+      });
+      if (!deptOptions.some(function (d) { return d.key === rule.dept; })) {
+        var cur = (settings.departments || []).filter(function (d) { return d.key === rule.dept; })[0];
+        var danglingOpt = document.createElement('option');
+        danglingOpt.value = rule.dept;
+        danglingOpt.textContent = (cur ? cur.name : rule.dept) + '（已停用）';
+        deptSelect.appendChild(danglingOpt);
+      }
+      deptSelect.value = rule.dept;
+      row.appendChild(deptSelect);
+
+      var typeSelect = document.createElement('select');
+      typeSelect.setAttribute('aria-label', '類型');
+      AUTOMATION_TYPE_OPTIONS.forEach(function (t) {
+        var o = document.createElement('option');
+        o.value = t; o.textContent = E.TYPE_LABELS[t] || t;
+        typeSelect.appendChild(o);
+      });
+      typeSelect.value = rule.type;
+      row.appendChild(typeSelect);
+
+      var dueInput = document.createElement('input');
+      dueInput.type = 'number'; dueInput.min = '0.5'; dueInput.step = '0.5';
+      dueInput.value = rule.dueAfterMin > 0 ? String(rule.dueAfterMin) : '';
+      dueInput.placeholder = '到期（分）';
+      dueInput.style.maxWidth = '100px';
+      dueInput.setAttribute('aria-label', '建立後幾分鐘到期（選填）');
+      row.appendChild(dueInput);
+
+      var saveBtn = C.el('button', 'btn btn-secondary', '儲存');
+      saveBtn.type = 'button';
+      saveBtn.addEventListener('click', function () {
+        var data = {
+          title: titleInput.value, dept: deptSelect.value, type: typeSelect.value,
+          dueAfterMin: dueInput.value
+        };
+        if (isReservation) {
+          data.attribute = attrInput.value;
+        } else {
+          data.schedule = {
+            repeat: repeatSelect.value, weekday: weekdaySelect.value,
+            time: timeInput.value, roomNo: roomInput.value
+          };
+        }
+        var r = E.updateAutomationRule(rule.key, data, ACTOR_NAME());
+        if (r.ok) C.toast('已儲存', 'success'); else C.toastFromResult(r);
+      });
+      row.appendChild(saveBtn);
+
+      row.appendChild(C.el('span', 'spacer', ''));
+
+      var toggleBtn = C.el('button', 'btn btn-ghost', active ? '停用' : '啟用');
+      toggleBtn.type = 'button';
+      toggleBtn.addEventListener('click', function () {
+        var r = E.setAutomationRuleActive(rule.key, !active, ACTOR_NAME());
+        if (r.ok) C.toast((active ? '已停用規則「' : '已啟用規則「') + rule.title + '」', 'success');
+        else C.toastFromResult(r);
+      });
+      row.appendChild(toggleBtn);
+
+      var delBtn = C.el('button', 'btn btn-ghost', '刪除');
+      delBtn.type = 'button';
+      delBtn.addEventListener('click', function () {
+        var r = E.deleteAutomationRule(rule.key, ACTOR_NAME());
+        if (r.ok) C.toast('已刪除規則「' + rule.title + '」', 'info'); else C.toastFromResult(r);
+      });
+      row.appendChild(delBtn);
+
+      wrap.appendChild(row);
+    });
+  }
+
+  function populateSelect(sel, options, keepValue) {
+    var prev = keepValue != null ? keepValue : sel.value;
+    sel.innerHTML = '';
+    options.forEach(function (opt) {
+      var o = document.createElement('option');
+      o.value = opt.value; o.textContent = opt.label;
+      sel.appendChild(o);
+    });
+    if (options.some(function (o) { return o.value === prev; })) sel.value = prev;
+  }
+
+  function activeDepartments(settings) {
+    return (settings.departments || []).filter(function (d) { return d.active !== false; });
+  }
+
+  function activeRoles() {
+    return (E.getState().roles || []).filter(function (r) { return r.active !== false; });
+  }
+
+  function renderStaffRoleSelect() {
+    // Administrator 排到選單最後——邀請新人時瀏覽器預設選到第一項，不該讓
+    // 「不小心沒選就送出」的新人直接變成全權限帳號。
+    var roles = activeRoles().slice().sort(function (a, b) {
+      return (a.key === 'administrator' ? 1 : 0) - (b.key === 'administrator' ? 1 : 0);
+    });
+    populateSelect(document.getElementById('staff-role-select'), roles.map(function (r) {
+      return { value: r.key, label: r.name };
+    }));
+  }
+
+  function renderStaffDeptSelect(settings) {
+    var sel = document.getElementById('staff-dept-select');
+    var roleKey = document.getElementById('staff-role-select').value;
+    var role = activeRoles().filter(function (r) { return r.key === roleKey; })[0];
+    var needsDept = role && (role.baseFunction === 'housekeeping' || role.baseFunction === 'maintenance');
+    sel.style.display = needsDept ? '' : 'none';
+    if (!needsDept) return;
+    populateSelect(sel, activeDepartments(settings).map(function (d) { return { value: d.key, label: d.name }; }));
+  }
+
+  function renderCustomDeptSelect(settings) {
+    populateSelect(document.getElementById('custom-dept'),
+      activeDepartments(settings).map(function (d) { return { value: d.key, label: d.name }; }));
+  }
+
+  function roleNameOf(roleKey) {
+    var r = (E.getState().roles || []).filter(function (x) { return x.key === roleKey; })[0];
+    return r ? r.name : roleKey;
+  }
+
+  // 編輯哪些員工列目前展開——跟角色手風琴（openRoleKeys）同一套慣例，
+  // 頁面變數存「哪幾列開著」，重繪不洗掉展開狀態。
+  var openStaffEditKeys = {};
+
+  // 編輯下拉可選角色＝在職角色，但這個人「目前」掛著的角色就算已停用也要
+  // 留在選項裡（不然選單一開，畫面顯示的值會跟實際存檔的值對不上）；
+  // Administrator 排最後，跟邀請表單同一個理由：不想讓誤觸看起來像誤升權。
+  function rolesForStaffEdit(currentRoleKey) {
+    var roles = activeRoles().slice();
+    if (currentRoleKey && !roles.some(function (r) { return r.key === currentRoleKey; })) {
+      var cur = (E.getState().roles || []).filter(function (r) { return r.key === currentRoleKey; })[0];
+      if (cur) roles.push(cur);
+    }
+    return roles.sort(function (a, b) {
+      return (a.key === 'administrator' ? 1 : 0) - (b.key === 'administrator' ? 1 : 0);
+    });
+  }
+
+  // 編輯面板：姓名／email／角色／部門皆可改，即存即生效（跟頁面其他欄位同一套
+  // 慣例）。角色一換，部門下拉馬上照新角色的比照工作類型重新帶出預設選項與
+  // 預設值（baseFunction 帶入），使用者存檔前都還能在下拉自己改——這就是「可再
+  // 手動覆寫」。已經接下的任務不會被這個編輯動到，單純文字說明，不用額外邏輯。
+  function buildStaffEditPanel(s, settings) {
+    var panel = C.el('div', 'invite-panel');
+    panel.appendChild(C.el('p', 'settings-note',
+      '改角色時，部門／職能預設跟著新角色的比照工作類型帶入，可以再自己改選；已經接下的任務不會被搬動或改派。'));
+
+    var row1 = C.el('div', 'role-new-row');
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text'; nameInput.value = s.name; nameInput.placeholder = '姓名'; nameInput.setAttribute('aria-label', '姓名');
+    var emailInput = document.createElement('input');
+    emailInput.type = 'text'; emailInput.value = s.email || ''; emailInput.placeholder = 'email'; emailInput.setAttribute('aria-label', 'email');
+    row1.appendChild(nameInput);
+    row1.appendChild(emailInput);
+    panel.appendChild(row1);
+
+    var row2 = C.el('div', 'role-new-row');
+    var roleSelect = document.createElement('select');
+    roleSelect.setAttribute('aria-label', '角色');
+    rolesForStaffEdit(s.roleKey).forEach(function (r) {
+      var o = document.createElement('option');
+      o.value = r.key; o.textContent = r.name + (r.active === false ? '（已停用）' : '');
+      roleSelect.appendChild(o);
+    });
+    roleSelect.value = s.roleKey;
+    row2.appendChild(roleSelect);
+
+    var deptSelect = document.createElement('select');
+    deptSelect.setAttribute('aria-label', '部門／職能');
+    row2.appendChild(deptSelect);
+    panel.appendChild(row2);
+
+    function syncDeptOptions(preferDeptKey) {
+      var role = (E.getState().roles || []).filter(function (r) { return r.key === roleSelect.value; })[0];
+      var needsDept = role && (role.baseFunction === 'housekeeping' || role.baseFunction === 'maintenance');
+      deptSelect.style.display = needsDept ? '' : 'none';
+      if (!needsDept) return;
+      var opts = activeDepartments(settings).map(function (d) { return { value: d.key, label: d.name }; });
+      deptSelect.innerHTML = '';
+      opts.forEach(function (o) {
+        var op = document.createElement('option');
+        op.value = o.value; op.textContent = o.label;
+        deptSelect.appendChild(op);
+      });
+      var want = preferDeptKey || role.baseFunction;
+      if (opts.some(function (o) { return o.value === want; })) deptSelect.value = want;
+    }
+    syncDeptOptions(s.dept);
+    roleSelect.addEventListener('change', function () { syncDeptOptions(null); });
+
+    var actions = C.el('div', 'invite-actions');
+    var saveBtn = C.el('button', 'btn btn-primary', '儲存');
+    saveBtn.type = 'button';
+    saveBtn.addEventListener('click', function () {
+      var dept = (deptSelect.style.display !== 'none') ? deptSelect.value : null;
+      var r = E.updateStaff(s.id, {
+        name: nameInput.value, email: emailInput.value, roleKey: roleSelect.value, dept: dept
+      }, ACTOR_NAME());
+      if (!r.ok) { C.toastFromResult(r); return; }
+      delete openStaffEditKeys[s.id];
+      C.toast(r.noop ? '沒有變更' : '已更新「' + nameInput.value.trim() + '」', 'success');
+      renderStaffList(E.getState());
+    });
+    var cancelBtn = C.el('button', 'btn btn-ghost', '取消');
+    cancelBtn.type = 'button';
+    cancelBtn.addEventListener('click', function () {
+      delete openStaffEditKeys[s.id];
+      renderStaffList(E.getState());
+    });
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    panel.appendChild(actions);
+
+    return panel;
+  }
+
+  function renderStaffList(state) {
+    var wrap = document.getElementById('staff-list');
+    wrap.innerHTML = '';
+    var staff = state.staff || [];
+    if (!staff.length) { wrap.appendChild(C.emptyState('目前沒有員工')); return; }
+    staff.forEach(function (s) {
+      var pending = s.invite && s.invite.status === 'pending';
+      var active = s.active !== false;
+      var editing = !!openStaffEditKeys[s.id];
+      var row = C.el('div', 'custom-item org-row' + (active ? '' : ' is-disabled'));
+      var main = C.el('div', 'staff-row-main');
+      main.appendChild(C.el('span', 'title', s.name));
+      if (s.email) main.appendChild(C.el('span', 'staff-row-email', s.email));
+      var roleName = roleNameOf(s.roleKey);
+      main.appendChild(C.el('span', 'tag-mini', roleName));
+      // 職能（角色比照的工作類型）跟部門常常同名（出廠預設房務角色＋房務部門
+      // 都叫「房務」）——同名就只顯示一個標籤，不同名（自訂部門、自訂角色名）
+      // 才兩個都顯示，不然畫面會出現「房務」「房務」看起來像重複印錯。
+      if (s.dept && E.deptLabel(s.dept) !== roleName) {
+        main.appendChild(C.el('span', 'tag-mini', E.deptLabel(s.dept)));
+      }
+      main.appendChild(C.el('span',
+        'status-pill ' + (pending ? 'status-pill-pending' : (active ? 'status-pill-active' : 'status-pill-disabled')),
+        pending ? '待開通' : (active ? '啟用中' : '已停用')));
+      main.appendChild(C.el('span', 'spacer', ''));
+
+      var editBtn = C.el('button', 'btn btn-ghost', editing ? '收合' : '編輯');
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', function () {
+        if (editing) delete openStaffEditKeys[s.id]; else openStaffEditKeys[s.id] = true;
+        renderStaffList(E.getState());
+      });
+      main.appendChild(editBtn);
+
+      if (!pending) {
+        var toggleBtn = C.el('button', 'btn btn-ghost', active ? '停用' : '啟用');
+        toggleBtn.type = 'button';
+        toggleBtn.addEventListener('click', function () {
+          var r = E.setStaffActive(s.id, !active, ACTOR_NAME());
+          if (r.ok) C.toast((active ? '已停用「' : '已啟用「') + s.name + '」', 'success');
+          else C.toastFromResult(r);
+        });
+        main.appendChild(toggleBtn);
+      }
+      row.appendChild(main);
+
+      if (editing) row.appendChild(buildStaffEditPanel(s, state.settings));
+
+      if (pending) {
+        var invitePanel = C.el('div', 'invite-panel');
+        invitePanel.appendChild(C.el('span', 'settings-note', '開通連結（示意，不寄真信）：'));
+        var link = 'guest.html#activate=' + encodeURIComponent((s.invite && s.invite.token) || '');
+        invitePanel.appendChild(C.el('code', 'invite-link-box', link));
+        var actions = C.el('div', 'invite-actions');
+        var activateBtn = C.el('button', 'btn btn-primary', '模擬點擊開通');
+        activateBtn.type = 'button';
+        activateBtn.addEventListener('click', function () {
+          var r = E.activateStaff(s.id, ACTOR_NAME());
+          if (r.ok) C.toast('「' + s.name + '」已開通，啟用狀態生效', 'success'); else C.toastFromResult(r);
+        });
+        var resendBtn = C.el('button', 'btn btn-secondary', '重新寄送');
+        resendBtn.type = 'button';
+        resendBtn.addEventListener('click', function () {
+          var r = E.resendInvite(s.id, ACTOR_NAME());
+          if (r.ok) C.toast('已重新寄送開通連結給「' + s.name + '」（示意）', 'success'); else C.toastFromResult(r);
+        });
+        actions.appendChild(activateBtn);
+        actions.appendChild(resendBtn);
+        invitePanel.appendChild(actions);
+        row.appendChild(invitePanel);
+      }
+
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderDepartmentList(settings) {
+    var wrap = document.getElementById('department-list');
+    wrap.innerHTML = '';
+    var depts = settings.departments || [];
+    if (!depts.length) { wrap.appendChild(C.emptyState('目前沒有部門')); return; }
+    depts.forEach(function (d) {
+      var active = d.active !== false;
+      var row = C.el('div', 'custom-item org-row' + (active ? '' : ' is-disabled'));
+      var input = document.createElement('input');
+      input.type = 'text'; input.value = d.name; input.setAttribute('aria-label', '部門名稱');
+      row.appendChild(input);
+      var saveBtn = C.el('button', 'btn btn-secondary', '改名');
+      saveBtn.type = 'button';
+      saveBtn.addEventListener('click', function () {
+        var v = input.value.trim();
+        if (!v) { C.toast('部門名稱不能空白', 'warning'); return; }
+        var r = E.renameDepartment(d.key, v, ACTOR_NAME());
+        if (r.ok) C.toast('已改名，相關任務卡與選單同步更新', 'success'); else C.toastFromResult(r);
+      });
+      row.appendChild(saveBtn);
+      row.appendChild(C.el('span', 'spacer', ''));
+      var toggleBtn = C.el('button', 'btn btn-ghost', active ? '停用' : '啟用');
+      toggleBtn.type = 'button';
+      toggleBtn.addEventListener('click', function () {
+        var r = E.setDepartmentActive(d.key, !active, ACTOR_NAME());
+        if (r.ok) C.toast((active ? '已停用部門「' : '已啟用部門「') + d.name + '」', 'success'); else C.toastFromResult(r);
+      });
+      row.appendChild(toggleBtn);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderRoomList(state) {
+    var wrap = document.getElementById('room-list');
+    wrap.innerHTML = '';
+    var canQr = canRegenQr();
+    var note = document.getElementById('qr-permission-note');
+    note.hidden = canQr;
+    note.textContent = ACTOR_NAME() + ' 目前的角色沒有「QR 重產」權限，下面的重產按鈕已隱藏';
+    document.getElementById('room-qr-batch-btn').style.display = canQr ? '' : 'none';
+    var rooms = (state.rooms || []).slice().sort(function (a, b) { return a.roomNo.localeCompare(b.roomNo); });
+    if (!rooms.length) { wrap.appendChild(C.emptyState('目前沒有房間')); return; }
+    rooms.forEach(function (r) {
+      var active = r.active !== false;
+      var row = C.el('div', 'custom-item org-row' + (active ? '' : ' is-disabled'));
+      row.appendChild(C.el('span', 'title', r.roomNo + ' 號房'));
+      row.appendChild(C.el('span', 'tag-mini', E.floorOf(r.roomNo) + ' 樓'));
+      row.appendChild(C.el('code', 'qr-code', r.qrToken));
+      var scanLink = C.el('a', 'btn btn-ghost', '模擬掃碼進入');
+      scanLink.href = 'guest.html?token=' + encodeURIComponent(r.qrToken);
+      scanLink.target = '_blank';
+      scanLink.rel = 'noopener';
+      row.appendChild(scanLink);
+      if (canQr) {
+        var regenBtn = C.el('button', 'btn btn-ghost', '重產 QR');
+        regenBtn.type = 'button';
+        regenBtn.addEventListener('click', function () {
+          var rr = E.rotateRoomQr(r.roomNo, ACTOR_NAME());
+          if (rr.ok) C.toast(r.roomNo + ' 號房 QR 已重產，舊連結失效', 'success'); else C.toastFromResult(rr);
+        });
+        row.appendChild(regenBtn);
+      }
+      row.appendChild(C.el('span', 'spacer', ''));
+      var toggleBtn = C.el('button', 'btn btn-ghost', active ? '停用' : '啟用');
+      toggleBtn.type = 'button';
+      toggleBtn.addEventListener('click', function () {
+        var rr = E.setRoomActive(r.roomNo, !active, ACTOR_NAME());
+        if (rr.ok) C.toast((active ? '已停用' : '已啟用') + r.roomNo + ' 號房', 'success'); else C.toastFromResult(rr);
+      });
+      row.appendChild(toggleBtn);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderShiftList(settings) {
+    var wrap = document.getElementById('shift-list');
+    wrap.innerHTML = '';
+    var shifts = settings.shifts || [];
+    shifts.forEach(function (sh) {
+      var row = C.el('div', 'custom-item org-row');
+      var nameInput = document.createElement('input');
+      nameInput.type = 'text'; nameInput.value = sh.name; nameInput.setAttribute('aria-label', '班次名稱');
+      nameInput.style.maxWidth = '100px';
+      var startInput = document.createElement('input');
+      startInput.type = 'time'; startInput.value = sh.start; startInput.setAttribute('aria-label', '開始時間');
+      var endInput = document.createElement('input');
+      endInput.type = 'time'; endInput.value = sh.end; endInput.setAttribute('aria-label', '結束時間');
+      row.appendChild(nameInput);
+      row.appendChild(startInput);
+      row.appendChild(C.el('span', null, '–'));
+      row.appendChild(endInput);
+      var saveBtn = C.el('button', 'btn btn-secondary', '儲存');
+      saveBtn.type = 'button';
+      saveBtn.addEventListener('click', function () {
+        var r = E.updateShift(sh.key, { name: nameInput.value, start: startInput.value, end: endInput.value }, ACTOR_NAME());
+        if (r.ok) C.toast('已儲存，房務工作台的「目前班次」同步更新', 'success'); else C.toastFromResult(r);
+      });
+      row.appendChild(saveBtn);
+      row.appendChild(C.el('span', 'spacer', ''));
+      var delBtn = C.el('button', 'btn btn-ghost', '刪除');
+      delBtn.type = 'button';
+      delBtn.addEventListener('click', function () {
+        var r = E.deleteShift(sh.key, ACTOR_NAME());
+        if (!r.ok) C.toastFromResult(r);
       });
       row.appendChild(delBtn);
       wrap.appendChild(row);
@@ -429,6 +1824,44 @@
       btn.classList.toggle('is-active', (settings.autoAssignStrategy || 'floor') === btn.dataset.v);
     });
     document.getElementById('owner-stars').value = String(settings.ownerAlertMaxStars || 2);
+    renderScheduleInclusion(settings);
+  }
+
+  // 四個納入開關的字彙跟引擎的房態值（vacant／out_of_service）與旗標值（eco／
+  // do_not_disturb）同一套——設定存的鍵就是匯入時比對的鍵，不另設一層對照表。
+  var SCHEDULE_INCLUSION_TOGGLES = [
+    { key: 'vacant', label: '空房', onDesc: '空房巡照常進草稿。', offDesc: '空房不進草稿（排房頁會列在「因設定排除」清單）。' },
+    { key: 'eco', label: '環保房（住客掛環保牌、這次住宿少打掃）', onDesc: '掛環保牌的房照常進草稿，由主管在草稿裡決定留不留。', offDesc: '掛環保牌的房不進草稿（排房頁會列在「因設定排除」清單）。' },
+    { key: 'out_of_service', label: '停用維修房', onDesc: '停用維修房也進草稿（例如要派清潔配合完工驗收）。', offDesc: '停用維修房不進草稿（排房頁會列在「因設定排除」清單）。' },
+    { key: 'do_not_disturb', label: '請勿打擾的房', onDesc: '掛請勿打擾的房也進草稿——發給誰、何時進房由現場判斷。', offDesc: '掛請勿打擾的房不進草稿（排房頁會列在「因設定排除」清單）。' }
+  ];
+
+  function renderScheduleInclusion(settings) {
+    var wrap = document.getElementById('schedule-inclusion');
+    wrap.innerHTML = '';
+    var inclusion = E.scheduleInclusionOf(settings);
+    SCHEDULE_INCLUSION_TOGGLES.forEach(function (def) {
+      var row = C.el('div', 'flow-toggle');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = inclusion[def.key];
+      cb.id = 'inclusion-' + def.key;
+      cb.addEventListener('change', function () {
+        E.updateSettings(function (s) {
+          s.scheduleInclusion = s.scheduleInclusion || {};
+          s.scheduleInclusion[def.key] = cb.checked;
+        }, ACTOR_NAME(), '排房納入開關「' + def.label + '」改為' + (cb.checked ? '納入' : '排除'));
+        C.toast('已更新——重新拉 PMS／重新匯入後生效，不回溯已發佈任務', 'success');
+      });
+      row.appendChild(cb);
+      var box = C.el('label');
+      box.setAttribute('for', cb.id);
+      box.style.cursor = 'pointer';
+      box.appendChild(C.el('b', null, def.label));
+      box.appendChild(C.el('span', 'flow-desc', inclusion[def.key] ? def.onDesc : def.offDesc));
+      row.appendChild(box);
+      wrap.appendChild(row);
+    });
   }
 
   function renderFlow(settings) {
@@ -443,7 +1876,7 @@
       cb.addEventListener('change', function () {
         E.updateSettings(function (s) {
           s.flow[def.key] = cb.checked;
-        }, ACTOR, '流程設定「' + def.label + '」改為' + (cb.checked ? '開' : '關'));
+        }, ACTOR_NAME(), '流程設定「' + def.label + '」改為' + (cb.checked ? '開' : '關'));
         C.toast('流程已更新', 'success');
       });
       row.appendChild(cb);
@@ -462,18 +1895,360 @@
     document.getElementById('flow-line').textContent = line;
   }
 
+  var FLOW_TOGGLES = [
+    {
+      key: 'requireInspection',
+      label: '打掃完成後需要主管查房',
+      onDesc: '完成的打掃單停在 done，等主管逐項查房後才算合格（inspected）。',
+      offDesc: '完成即視為查驗合格：done 後自動變 inspected、照樣排 PMS 回寫，主管頁不會出現待查任務。'
+    },
+    {
+      key: 'freetextNeedsTriage',
+      label: '住客自由文字需要櫃檯判讀',
+      onDesc: '留言先進待判讀（triage），由櫃檯三選一分流。',
+      offDesc: '留言直接進房務待接池，櫃檯看板不再出現待判讀。'
+    },
+    {
+      key: 'allowSelfInspect',
+      label: '允許清房者查自己清的房',
+      onDesc: '解除 403 防自查——示範「規則本身也可調」，正式環境不建議開。',
+      offDesc: '清房者送出自己房的查房結果會被擋下（403）。'
+    }
+  ];
+
+  // PMS 同步範圍與回寫開關的鍵跟引擎 pmsSettingsOf 的鍵同一套，不另設對照表
+  // ——跟排房納入開關同一個理由。
+  var PMS_SYNC_TOGGLES = [
+    {
+      group: 'syncScope', key: 'occupancy', label: '今日房態（入住＋退房）',
+      onDesc: '排房頁「從 PMS 拉今日房態」照常可用。',
+      offDesc: '這條同步路徑整個關閉——排房頁從 PMS 拉回會被擋下，要用 Excel／CSV 匯入當降級。'
+    },
+    {
+      group: 'syncScope', key: 'reservationAttributes', label: '訂房屬性（VIP／親子／寵物／紀念日…）',
+      onDesc: '拉回／匯入帶訂房屬性，訂房觸發的自動化規則照常比對建單。',
+      offDesc: '拉回／匯入當下就丟棄屬性欄（PMS 與 Excel 一視同仁）——屬性沒進系統，訂房觸發的自動化規則自然不命中、不建準備工單，草稿卡也不帶屬性。'
+    }
+  ];
+  var PMS_WRITEBACK_TOGGLES = [
+    {
+      group: 'writeback', key: 'roomStatus', label: '房間狀態（查房通過 Inspected、停用維修 OOO）',
+      onDesc: '查房通過（含免查房自動合格）會記一筆模擬回寫事件 pms_writeback（事件流水帳查得到）。POC 的既有流程只走得到 Inspected，OOO 那一腳先存值示意。',
+      offDesc: '查房照常通過，但不產生回寫——房況要在 PMS 那邊自己改（例如回寫權限還沒開通的過渡期）。'
+    },
+    {
+      group: 'writeback', key: 'minibarBilling', label: 'minibar 計費',
+      onDesc: '查房勾到 minibar 消耗時把費用寫進 PMS 帳摺——POC 沒有做 minibar 計費流程，這個開關先存值示意，正式版接上。',
+      offDesc: '不回寫 minibar 費用，消耗由櫃檯人工入帳。（POC 沒有做 minibar 計費流程，開關先存值示意。）'
+    }
+  ];
+
+  function maskCredential(credential) {
+    if (!credential) return '尚未設定憑證。';
+    var tail = credential.length > 4 ? credential.slice(-4) : '';
+    return '已存一組憑證（遮罩顯示）：' + '•'.repeat(Math.max(credential.length - tail.length, 4)) + tail;
+  }
+
+  function renderPmsToggleList(containerId, defs, pms) {
+    var wrap = document.getElementById(containerId);
+    wrap.innerHTML = '';
+    defs.forEach(function (def) {
+      var row = C.el('div', 'flow-toggle');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = pms[def.group][def.key] !== false;
+      cb.id = 'pms-' + def.group + '-' + def.key;
+      cb.addEventListener('change', function () {
+        E.updateSettings(function (s) {
+          s.pms = s.pms || {};
+          s.pms[def.group] = s.pms[def.group] || {};
+          s.pms[def.group][def.key] = cb.checked;
+        }, ACTOR_NAME(), 'PMS ' + (def.group === 'syncScope' ? '同步範圍' : '回寫') + '「' + def.label + '」改為' + (cb.checked ? '開' : '關'));
+        C.toast('已更新 PMS 整合設定', 'success');
+      });
+      row.appendChild(cb);
+      var box = C.el('label');
+      box.setAttribute('for', cb.id);
+      box.style.cursor = 'pointer';
+      box.appendChild(C.el('b', null, def.label));
+      box.appendChild(C.el('span', 'flow-desc', cb.checked ? def.onDesc : def.offDesc));
+      row.appendChild(box);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderPms(settings) {
+    var pms = E.pmsSettingsOf(settings);
+    var sel = document.getElementById('pms-provider-select');
+    sel.innerHTML = '';
+    TMS_SEED.PMS_PROVIDERS.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p.key; o.textContent = p.name;
+      sel.appendChild(o);
+    });
+    sel.value = pms.provider;
+    var provider = E.pmsProviderOf(pms.provider);
+    document.getElementById('pms-provider-note').textContent = provider ? provider.note : '';
+    document.getElementById('pms-credential-masked').textContent =
+      pms.provider === 'manual' ? '手動匯入模式不用憑證。' : maskCredential(pms.credential);
+    document.getElementById('pms-test-btn').disabled = pms.provider === 'manual';
+
+    var box = document.getElementById('pms-capability-box');
+    var cap = pms.capability;
+    if (pms.provider === 'manual') {
+      box.textContent = '手動匯入模式沒有要連 PMS——排房頁的拉回鈕會停用，今日房態改用 Excel／CSV 匯入。';
+    } else if (!cap) {
+      box.textContent = '還沒盤點過——填好憑證後按「測試連線＋能力盤點」，結果會存在這裡。';
+    } else if (cap.provider !== pms.provider) {
+      box.textContent = '換了 PMS 之後還沒重新盤點——上一次盤點是對另一家做的，按「測試連線＋能力盤點」更新。';
+    } else {
+      box.textContent = '盤點結果：' + (provider ? provider.name : cap.provider) + ' — '
+        + (cap.mode === 'push'
+          ? '能主動推事件，同步走事件訂閱（房態一變就推過來）。'
+          : '只能輪詢，同步走每 ' + (cap.pollIntervalMin || 'N') + ' 分鐘輪詢一次兜底。')
+        + '（盤點時間 ' + new Date(cap.checkedAt).toLocaleString() + '）';
+    }
+
+    renderPmsToggleList('pms-sync-toggles', PMS_SYNC_TOGGLES, pms);
+    renderPmsToggleList('pms-writeback-toggles', PMS_WRITEBACK_TOGGLES, pms);
+  }
+
+  // ---- 角色：手風琴清單＋新增表單。既有角色的權限勾選是「即存即生效」
+  // （跟頁面上其他 checkbox 同一套慣例），只有「新增角色」表單本身要擋重繪洗稿，
+  // 用一個頁面變數存草稿，不開表單時是 null。
+  var openRoleKeys = {};
+  var roleDraft = null; // { name, baseFunction, permissions }
+
+  var TEMPLATE_CHOICES = [
+    { key: 'administrator', label: 'Administrator（全開）' },
+    { key: 'desk', label: '櫃檯' },
+    { key: 'housekeeping', label: '房務員' },
+    { key: 'maintenance', label: '工務' },
+    { key: 'manager', label: '主管' },
+    { key: 'owner', label: '老闆' },
+    { key: 'blank', label: '空白（全不勾）' }
+  ];
+
+  function blankPermissionObject() {
+    var p = {};
+    E.PERMISSION_GROUPS.forEach(function (g) { g.items.forEach(function (it) { p[it.key] = false; }); });
+    return p;
+  }
+
+  function permissionGroupsVisible(settings) {
+    var flow = settings.flow || {};
+    return E.PERMISSION_GROUPS.filter(function (g) {
+      if (!g.requiresFlow) return true;
+      return flow[g.requiresFlow] !== false;
+    });
+  }
+
+  function buildPermGrid(permissions, groups, onToggle, disabled) {
+    var wrap = document.createElement('div');
+    groups.forEach(function (g) {
+      var gwrap = C.el('div', 'perm-group');
+      var h = C.el('h4', null, g.label + ' ');
+      if (g.items.some(function (it) { return it.live; })) {
+        h.appendChild(C.el('span', 'perm-live-badge', '含⚡即時生效'));
+      }
+      gwrap.appendChild(h);
+      var grid = C.el('div', 'perm-grid');
+      g.items.forEach(function (it) {
+        var label = C.el('label', 'perm-item' + (it.live ? ' is-live' : ''));
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!(permissions && permissions[it.key]);
+        cb.disabled = !!disabled;
+        cb.addEventListener('change', function () { onToggle(it.key, cb.checked); });
+        label.appendChild(cb);
+        var textSpan = document.createElement('span');
+        textSpan.textContent = (it.live ? '⚡ ' : '') + it.label;
+        label.appendChild(textSpan);
+        grid.appendChild(label);
+      });
+      gwrap.appendChild(grid);
+      wrap.appendChild(gwrap);
+    });
+    return wrap;
+  }
+
+  function renderRoleList(state) {
+    var wrap = document.getElementById('role-list');
+    wrap.innerHTML = '';
+    var groups = permissionGroupsVisible(state.settings);
+    (state.roles || []).forEach(function (role) {
+      var inUse = E.roleInUse(role.key);
+      var isOpen = !!openRoleKeys[role.key];
+      var row = C.el('div', 'role-row' + (isOpen ? ' is-open' : ''));
+      var head = C.el('div', 'role-row-head');
+      head.appendChild(C.el('span', 'chev', isOpen ? '▾' : '▸'));
+      head.appendChild(C.el('span', 'name', role.name));
+      head.appendChild(C.el('span', 'base-fn', '比照：' + (E.ROLE_LABELS[role.baseFunction] || role.baseFunction)));
+      if (role.active === false) head.appendChild(C.el('span', 'tag-mini', '已停用'));
+      head.addEventListener('click', function () {
+        openRoleKeys[role.key] = !isOpen;
+        renderRoleList(E.getState());
+      });
+      row.appendChild(head);
+
+      var body = C.el('div', 'role-row-body');
+      if (role.key === 'administrator') {
+        body.appendChild(C.el('p', 'perm-locked-note', 'Administrator 是系統內建角色：全部權限固定開啟，不可調整、不可改名、不可停用。'));
+      } else {
+        var renameRow = C.el('div', 'role-rename-row');
+        var nameInput = document.createElement('input');
+        nameInput.type = 'text'; nameInput.value = role.name; nameInput.setAttribute('aria-label', '角色名稱');
+        var renameBtn = C.el('button', 'btn btn-secondary', '改名');
+        renameBtn.type = 'button';
+        renameBtn.addEventListener('click', function () {
+          var v = nameInput.value.trim();
+          if (!v) { C.toast('角色名稱不能空白', 'warning'); return; }
+          var r = E.renameRole(role.key, v, ACTOR_NAME());
+          if (r.ok) C.toast('已改名', 'success'); else C.toastFromResult(r);
+        });
+        renameRow.appendChild(nameInput);
+        renameRow.appendChild(renameBtn);
+        var active = role.active !== false;
+        var toggleBtn = C.el('button', 'btn btn-ghost', active ? '停用角色' : '啟用角色');
+        toggleBtn.type = 'button';
+        toggleBtn.title = (active && inUse) ? '目前有在職員工使用這個角色，無法停用' : '';
+        toggleBtn.addEventListener('click', function () {
+          var r = E.setRoleActive(role.key, !active, ACTOR_NAME());
+          if (r.ok) C.toast((active ? '已停用角色「' : '已啟用角色「') + role.name + '」', 'success');
+          else C.toastFromResult(r);
+        });
+        renameRow.appendChild(toggleBtn);
+        body.appendChild(renameRow);
+      }
+
+      var disabled = role.key === 'administrator';
+      body.appendChild(buildPermGrid(role.permissions, groups, function (permKey, value) {
+        var r = E.setRolePermission(role.key, permKey, value, ACTOR_NAME());
+        if (!r.ok) { C.toastFromResult(r); renderRoleList(E.getState()); }
+      }, disabled));
+
+      row.appendChild(body);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderRoleNewForm(state) {
+    var host = document.getElementById('role-new-form');
+    host.innerHTML = '';
+    if (!roleDraft) return;
+    var form = C.el('div', 'role-new-form');
+
+    var row1 = C.el('div', 'role-new-row');
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text'; nameInput.placeholder = '角色名稱，例如：資深房務';
+    nameInput.value = roleDraft.name;
+    nameInput.setAttribute('aria-label', '角色名稱');
+    nameInput.addEventListener('input', function () { roleDraft.name = nameInput.value; });
+    row1.appendChild(nameInput);
+
+    var baseSelect = document.createElement('select');
+    baseSelect.setAttribute('aria-label', '比照工作類型');
+    ['desk', 'housekeeping', 'maintenance', 'manager', 'owner'].forEach(function (k) {
+      var o = document.createElement('option');
+      o.value = k; o.textContent = '比照：' + E.ROLE_LABELS[k];
+      baseSelect.appendChild(o);
+    });
+    baseSelect.value = roleDraft.baseFunction;
+    baseSelect.addEventListener('change', function () { roleDraft.baseFunction = baseSelect.value; });
+    row1.appendChild(baseSelect);
+    form.appendChild(row1);
+    form.appendChild(C.el('p', 'settings-note', '「比照工作類型」決定這個角色的員工會不會出現在搶單／排房／查房的名單裡（跟權限勾選是兩件事）。'));
+
+    var tplRow = C.el('div', 'segmented-sm', '');
+    tplRow.style.marginBottom = '10px';
+    TEMPLATE_CHOICES.forEach(function (t) {
+      var btn = C.el('button', null, t.label);
+      btn.type = 'button';
+      btn.addEventListener('click', function () {
+        roleDraft.permissions = t.key === 'blank' ? blankPermissionObject() : JSON.parse(JSON.stringify(E.ROLE_TEMPLATES[t.key]));
+        if (t.key !== 'blank' && t.key !== 'administrator') roleDraft.baseFunction = t.key;
+        renderRoleNewForm(E.getState());
+      });
+      tplRow.appendChild(btn);
+    });
+    form.appendChild(C.el('p', 'settings-note', '套用範本（可再手動調整）：'));
+    form.appendChild(tplRow);
+
+    var groups = permissionGroupsVisible(state.settings);
+    form.appendChild(buildPermGrid(roleDraft.permissions, groups, function (permKey, value) {
+      roleDraft.permissions[permKey] = value;
+    }, false));
+
+    var actions = C.el('div', 'invite-actions');
+    actions.style.marginTop = '12px';
+    var saveBtn = C.el('button', 'btn btn-primary', '建立角色');
+    saveBtn.type = 'button';
+    saveBtn.addEventListener('click', function () {
+      var r = E.addRole({ name: roleDraft.name, baseFunction: roleDraft.baseFunction, permissions: roleDraft.permissions }, ACTOR_NAME());
+      if (!r.ok) { C.toastFromResult(r); return; }
+      // addRole 內部存檔會同步觸發 E.subscribe 掛的重繪，發生在 roleDraft 清空「之前」，
+      // 所以那次重繪還是會把表單畫回來——這裡存完要自己再關一次表單，不能只設旗標。
+      roleDraft = null;
+      renderRoleNewForm(E.getState());
+      C.toast('已新增角色', 'success');
+    });
+    var cancelBtn = C.el('button', 'btn btn-ghost', '取消');
+    cancelBtn.type = 'button';
+    cancelBtn.addEventListener('click', function () { roleDraft = null; renderRoleNewForm(E.getState()); });
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    host.appendChild(form);
+  }
+
   function renderAll() {
-    var settings = E.getSettings();
+    var state = E.getState();
+    var settings = state.settings;
+    renderOperatorSelect();
+
+    var allowed = canAccessSettings();
+    document.getElementById('settings-shell').hidden = !allowed;
+    var blocked = document.getElementById('settings-blocked');
+    blocked.hidden = allowed;
+    if (!allowed) {
+      document.getElementById('blocked-desc').textContent =
+        ACTOR_NAME() + ' 目前的角色沒有「租戶設定」權限，無法進入租戶設定頁。';
+      return;
+    }
+
     renderHotelName(settings);
     renderInfoItems(settings);
     renderMenuItems(settings);
+    renderCustomDeptSelect(settings);
     renderCustomMenu(settings);
-    renderStdGrid(settings);
+    renderWorkloadUnit(settings);
+    renderStdMatrix(settings);
+    renderRoomOverrides(state);
     renderSlaGrid(settings);
+    renderSlaNote(settings);
     renderCapacity(settings);
     renderInspectionItems(settings);
+    renderAutomationDeptSelect(settings);
+    renderAutomationRuleList(settings);
     renderFlowExtras(settings);
     renderFlow(settings);
+    renderNotifications(settings);
+    renderEscalation(settings);
+    renderBusiness(settings);
+    renderRetention(settings);
+    renderPms(settings);
+    renderBrand(settings);
+    renderStaffRoleSelect();
+    renderStaffDeptSelect(settings);
+    renderStaffList(state);
+    renderDepartmentList(settings);
+    renderRoleList(state);
+    renderRoleNewForm(state);
+    renderRoomList(state);
+    renderShiftList(settings);
+
+    if (!document.querySelector('.settings-nav button.is-active')) switchSection(currentSection());
   }
 
   // 別的分頁隨時會觸發重繪，但這頁有「打到一半的輸入框」——焦點在文字輸入上時
@@ -487,19 +2262,57 @@
   document.getElementById('hotel-name-save').addEventListener('click', function () {
     var v = document.getElementById('hotel-name-input').value.trim();
     if (!v) { C.toast('飯店名稱不能空白', 'warning'); return; }
-    E.updateSettings(function (s) { s.hotelName = v; }, ACTOR, '飯店名稱改為「' + v + '」');
+    E.updateSettings(function (s) { s.hotelName = v; }, ACTOR_NAME(), '飯店名稱改為「' + v + '」');
     C.toast('已儲存，住客頁同步更新', 'success');
   });
 
   document.getElementById('std-save').addEventListener('click', function () {
-    var inputs = document.querySelectorAll('#std-grid input[data-kind]');
+    var cellInputs = document.querySelectorAll('#std-matrix input[data-state]');
+    var defaultInputs = document.querySelectorAll('#std-matrix input[data-kind-default]');
     E.updateSettings(function (s) {
-      inputs.forEach(function (input) {
+      s.cleaningStandardMatrix = s.cleaningStandardMatrix || {};
+      cellInputs.forEach(function (input) {
+        var kind = input.getAttribute('data-kind');
+        var st = input.getAttribute('data-state');
         var v = parseInt(input.value, 10);
-        if (v > 0) s.cleaningStandard[input.getAttribute('data-kind')] = v;
+        s.cleaningStandardMatrix[kind] = s.cleaningStandardMatrix[kind] || {};
+        // 留空＝不適用：這格要從表上移除而不是存 0，0 會讓排房把這種房算成
+        // 免工時，負載條直接失真。
+        if (v > 0) s.cleaningStandardMatrix[kind][st] = v;
+        else delete s.cleaningStandardMatrix[kind][st];
       });
-    }, ACTOR, '更新清掃標準工時');
-    C.toast('已儲存標準工時（之後匯入的草稿適用）', 'success');
+      defaultInputs.forEach(function (input) {
+        var v = parseInt(input.value, 10);
+        // 類型預設是最後一層 fallback，也是匯入時判斷清掃類型合法性的依據，
+        // 不能清空；留空就維持原值。
+        if (v > 0) s.cleaningStandard[input.getAttribute('data-kind-default')] = v;
+      });
+    }, ACTOR_NAME(), '更新清掃基準工時（類型×房態）');
+    C.toast('已儲存基準工時（之後匯入的草稿適用）', 'success');
+  });
+
+  document.querySelectorAll('#unit-seg button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.dataset.v;
+      E.updateSettings(function (s) { s.workloadDisplayUnit = v; }, ACTOR_NAME(),
+        '工作量顯示單位改為' + (v === 'points' ? '點數' : '分鐘'));
+      C.toast(v === 'points' ? '已切換成點數顯示：數字不換算，只是當相對權重看' : '已切換回分鐘顯示', 'success');
+    });
+  });
+
+  document.getElementById('override-add-btn').addEventListener('click', function () {
+    var roomNo = document.getElementById('override-room-select').value;
+    var kind = document.getElementById('override-kind-select').value;
+    var v = parseInt(document.getElementById('override-min-input').value, 10);
+    if (!roomNo) { C.toast('先選房號', 'warning'); return; }
+    if (!(v > 0)) { C.toast('覆寫工時要是正整數', 'warning'); return; }
+    E.updateSettings(function (s) {
+      s.cleaningRoomOverrides = s.cleaningRoomOverrides || {};
+      s.cleaningRoomOverrides[roomNo] = s.cleaningRoomOverrides[roomNo] || {};
+      s.cleaningRoomOverrides[roomNo][kind] = v;
+    }, ACTOR_NAME(), roomNo + ' 號房「' + kind + '」工時覆寫為 ' + v);
+    document.getElementById('override-min-input').value = '';
+    C.toast('已設定覆寫，之後匯入排房以這個值優先', 'success');
   });
 
   document.getElementById('sla-save').addEventListener('click', function () {
@@ -510,21 +2323,21 @@
         var v = parseInt(raw, 10);
         s.slaByType[input.getAttribute('data-type')] = (raw === '' || !(v > 0)) ? null : v;
       });
-    }, ACTOR, '更新 SLA 時限');
+    }, ACTOR_NAME(), '更新 SLA 時限');
     C.toast('已儲存 SLA 時限，任務卡標記即時更新', 'success');
   });
 
   document.getElementById('capacity-save').addEventListener('click', function () {
     var v = parseInt(document.getElementById('capacity-input').value, 10);
     if (!(v >= 30)) { C.toast('班次容量至少 30 分鐘', 'warning'); return; }
-    E.updateSettings(function (s) { s.shiftCapacityMin = v; }, ACTOR, '班次容量改為 ' + v + ' 分');
+    E.updateSettings(function (s) { s.shiftCapacityMin = v; }, ACTOR_NAME(), '班次容量改為 ' + v + ' 分');
     C.toast('已儲存，排房欄的負載條同步更新', 'success');
   });
 
   document.getElementById('inspection-add').addEventListener('click', function () {
     E.updateSettings(function (s) {
       s.inspectionItems.push({ key: 'chk_' + Date.now().toString(36), label: '新檢核項' });
-    }, ACTOR, '新增檢核項');
+    }, ACTOR_NAME(), '新增檢核項');
   });
 
   document.getElementById('custom-add-btn').addEventListener('click', function () {
@@ -534,14 +2347,122 @@
     var type = document.getElementById('custom-type').value;
     E.updateSettings(function (s) {
       s.customMenuItems.push({ key: 'custom_' + Date.now().toString(36), title: title, dept: dept, type: type, enabled: true });
-    }, ACTOR, '新增自建選單項目「' + title + '」');
+    }, ACTOR_NAME(), '新增自建選單項目「' + title + '」');
     document.getElementById('custom-title').value = '';
     C.toast('已新增，住客頁選單立即出現', 'success');
   });
 
+  // 新增列的觸發源下拉切換時，只露出該觸發源用得到的條件欄位——兩組欄位同時
+  // 亮著，使用者會以為一條規則可以同時吃屬性跟排程，存出去卻只有一半生效。
+  function syncAutomationAddForm() {
+    var trigger = document.getElementById('auto-rule-trigger-select').value;
+    var isSchedule = trigger === 'schedule';
+    document.getElementById('prep-rule-attribute-input').hidden = isSchedule;
+    document.getElementById('auto-rule-repeat-select').hidden = !isSchedule;
+    document.getElementById('auto-rule-time-input').hidden = !isSchedule;
+    document.getElementById('auto-rule-room-input').hidden = !isSchedule;
+    document.getElementById('auto-rule-weekday-select').hidden =
+      !isSchedule || document.getElementById('auto-rule-repeat-select').value !== 'weekly';
+  }
+  document.getElementById('auto-rule-trigger-select').addEventListener('change', syncAutomationAddForm);
+  document.getElementById('auto-rule-repeat-select').addEventListener('change', syncAutomationAddForm);
+  syncAutomationAddForm();
+
+  document.getElementById('prep-rule-add-btn').addEventListener('click', function () {
+    var trigger = document.getElementById('auto-rule-trigger-select').value;
+    var title = document.getElementById('prep-rule-title-input').value.trim();
+    if (!title) { C.toast('請填工單名稱', 'warning'); return; }
+    var data = {
+      trigger: trigger,
+      title: title,
+      dept: document.getElementById('prep-rule-dept-select').value,
+      type: document.getElementById('prep-rule-type-select').value,
+      dueAfterMin: document.getElementById('auto-rule-due-input').value
+    };
+    var what;
+    if (trigger === 'reservation') {
+      data.attribute = document.getElementById('prep-rule-attribute-input').value.trim();
+      if (!data.attribute) { C.toast('請填訂房屬性（例如 VIP）', 'warning'); return; }
+      what = data.attribute;
+    } else {
+      data.schedule = {
+        repeat: document.getElementById('auto-rule-repeat-select').value,
+        weekday: document.getElementById('auto-rule-weekday-select').value,
+        time: document.getElementById('auto-rule-time-input').value,
+        roomNo: document.getElementById('auto-rule-room-input').value
+      };
+      what = E.scheduleLabelOf({
+        repeat: data.schedule.repeat,
+        weekday: parseInt(data.schedule.weekday, 10),
+        time: data.schedule.time
+      });
+    }
+    var r = E.addAutomationRule(data, ACTOR_NAME());
+    if (!r.ok) { C.toastFromResult(r); return; }
+    document.getElementById('prep-rule-attribute-input').value = '';
+    document.getElementById('prep-rule-title-input').value = '';
+    document.getElementById('auto-rule-due-input').value = '';
+    C.toast('已新增規則「' + what + ' → ' + title + '」', 'success');
+  });
+
+  document.getElementById('staff-role-select').addEventListener('change', function () {
+    renderStaffDeptSelect(E.getSettings());
+  });
+
+  document.getElementById('staff-add-btn').addEventListener('click', function () {
+    var name = document.getElementById('staff-name-input').value.trim();
+    if (!name) { C.toast('請填姓名', 'warning'); return; }
+    var email = document.getElementById('staff-email-input').value.trim();
+    var roleKey = document.getElementById('staff-role-select').value;
+    var deptSel = document.getElementById('staff-dept-select');
+    var dept = (deptSel.style.display !== 'none') ? deptSel.value : null;
+    var r = E.addStaff({ name: name, email: email, roleKey: roleKey, dept: dept }, ACTOR_NAME());
+    if (!r.ok) { C.toastFromResult(r); return; }
+    document.getElementById('staff-name-input').value = '';
+    document.getElementById('staff-email-input').value = '';
+    C.toast('已邀請「' + name + '」，請在下方清單點「模擬點擊開通」完成示範', 'success');
+  });
+
+  document.getElementById('dept-add-btn').addEventListener('click', function () {
+    var v = document.getElementById('dept-name-input').value.trim();
+    if (!v) { C.toast('請填部門名稱', 'warning'); return; }
+    var r = E.addDepartment(v, ACTOR_NAME());
+    if (!r.ok) { C.toastFromResult(r); return; }
+    document.getElementById('dept-name-input').value = '';
+    C.toast('已新增部門「' + v + '」，自建選單與員工部門下拉可選', 'success');
+  });
+
+  document.getElementById('room-add-btn').addEventListener('click', function () {
+    var v = document.getElementById('room-no-input').value.trim();
+    var r = E.addRoom(v, ACTOR_NAME());
+    if (!r.ok) { C.toastFromResult(r); return; }
+    document.getElementById('room-no-input').value = '';
+    C.toast('已新增房間「' + v + '」', 'success');
+  });
+
+  document.getElementById('room-qr-batch-btn').addEventListener('click', function () {
+    if (!canRegenQr()) { C.toast('目前身分沒有「QR 重產」權限', 'warning'); return; }
+    var r = E.rotateAllRoomQr(ACTOR_NAME());
+    if (r.ok) C.toast('已重產全館 ' + r.count + ' 間房的 QR，舊連結全數失效', 'success');
+    else C.toastFromResult(r);
+  });
+
+  document.getElementById('shift-add-btn').addEventListener('click', function () {
+    var name = document.getElementById('shift-name-input').value.trim();
+    var start = document.getElementById('shift-start-input').value;
+    var end = document.getElementById('shift-end-input').value;
+    if (!name) { C.toast('請填班次名稱', 'warning'); return; }
+    var r = E.addShift({ name: name, start: start, end: end }, ACTOR_NAME());
+    if (!r.ok) { C.toastFromResult(r); return; }
+    document.getElementById('shift-name-input').value = '';
+    document.getElementById('shift-start-input').value = '';
+    document.getElementById('shift-end-input').value = '';
+    C.toast('已新增班次「' + name + '」', 'success');
+  });
+
   document.querySelectorAll('#strategy-seg button').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      E.updateSettings(function (s) { s.autoAssignStrategy = btn.dataset.v; }, ACTOR,
+      E.updateSettings(function (s) { s.autoAssignStrategy = btn.dataset.v; }, ACTOR_NAME(),
         '自動分配策略改為' + (btn.dataset.v === 'balance' ? '純工時平衡' : '樓層聚合'));
       C.toast('已切換自動分配策略', 'success');
     });
@@ -549,15 +2470,195 @@
 
   document.getElementById('owner-stars').addEventListener('change', function (e) {
     var v = parseInt(e.target.value, 10);
-    E.updateSettings(function (s) { s.ownerAlertMaxStars = v; }, ACTOR, '老闆出事門檻改為 ' + v + ' 星以下');
+    E.updateSettings(function (s) { s.ownerAlertMaxStars = v; }, ACTOR_NAME(), '老闆出事門檻改為 ' + v + ' 星以下');
     C.toast('已更新老闆通知門檻', 'success');
+  });
+
+  document.getElementById('notif-owner-rating-cb').addEventListener('change', function (e) {
+    E.updateSettings(function (s) {
+      s.notifications = s.notifications || {};
+      s.notifications.ownerLowRatingEnabled = e.target.checked;
+    }, ACTOR_NAME(), '老闆通知來源「住客低分評價」改為' + (e.target.checked ? '開' : '關'));
+    C.toast('已更新', 'success');
+  });
+
+  document.getElementById('notif-owner-report-cb').addEventListener('change', function (e) {
+    E.updateSettings(function (s) {
+      s.notifications = s.notifications || {};
+      s.notifications.ownerManagerReportEnabled = e.target.checked;
+    }, ACTOR_NAME(), '老闆通知來源「主管上報」改為' + (e.target.checked ? '開' : '關'));
+    C.toast('已更新', 'success');
+  });
+
+  document.getElementById('notif-sla-cb').addEventListener('change', function (e) {
+    E.updateSettings(function (s) {
+      s.notifications = s.notifications || {};
+      s.notifications.deskSlaAlertEnabled = e.target.checked;
+    }, ACTOR_NAME(), 'SLA 逾時提醒櫃檯改為' + (e.target.checked ? '開' : '關'));
+    C.toast('已更新', 'success');
+  });
+
+  document.getElementById('esc-enabled-cb').addEventListener('change', function (e) {
+    E.updateSettings(function (s) {
+      s.escalation = s.escalation || { levels: [] };
+      s.escalation.enabled = e.target.checked;
+    }, ACTOR_NAME(), '逾時升級鏈總開關改為' + (e.target.checked ? '開' : '關'));
+    C.toast(e.target.checked ? '已開啟逾時升級鏈' : '已關閉逾時升級鏈', 'success');
+  });
+
+  // 層距輸入框改用「儲存」按鈕一次寫入，不逐鍵即存：打「1.5」打到一半是「1」，
+  // 逐鍵即存會把半成品數字當設定寫出去，升級掃描立刻照錯的時點跑一輪。
+  document.getElementById('esc-save').addEventListener('click', function () {
+    var inputs = document.querySelectorAll('#esc-level-list input[data-esc-level]');
+    var values = {};
+    var bad = false;
+    inputs.forEach(function (inp) {
+      var v = parseFloat(inp.value);
+      if (!(v >= 0)) { bad = true; return; }
+      values[inp.getAttribute('data-esc-level')] = v;
+    });
+    if (bad) { C.toast('層距請填 0 以上的分鐘數（可填小數）', 'warning'); return; }
+    E.updateSettings(function (s) {
+      ((s.escalation || {}).levels || []).forEach(function (lv) {
+        if (values[String(lv.level)] != null) lv.afterOverdueMin = values[String(lv.level)];
+      });
+    }, ACTOR_NAME(), '逾時升級時點改為 L1+' + (values['1'] != null ? values['1'] : '?') +
+      '／L2+' + (values['2'] != null ? values['2'] : '?') +
+      '／L3+' + (values['3'] != null ? values['3'] : '?') + ' 分');
+    C.toast('已儲存升級時點，掃描立即套用新值', 'success');
+  });
+
+  document.getElementById('biz-time-save').addEventListener('click', function () {
+    var tz = document.getElementById('biz-timezone').value;
+    var cutover = document.getElementById('biz-day-cutover').value || '00:00';
+    var checkout = document.getElementById('biz-checkout').value || '11:00';
+    var checkin = document.getElementById('biz-checkin').value || '15:00';
+    E.updateSettings(function (s) {
+      s.business = s.business || {};
+      s.business.timezone = tz;
+      s.business.dayCutoverTime = cutover;
+      s.business.checkoutTime = checkout;
+      s.business.checkinTime = checkin;
+    }, ACTOR_NAME(), '更新營業參數（時區／日切／退房入住時間）');
+    C.toast('已儲存，排房頁的提示文字同步更新', 'success');
+  });
+
+  document.getElementById('biz-throttle-save').addEventListener('click', function () {
+    var win = parseInt(document.getElementById('biz-throttle-window').value, 10);
+    var max = parseInt(document.getElementById('biz-throttle-max').value, 10);
+    if (!(win > 0) || !(max > 0)) { C.toast('請輸入大於 0 的數字', 'warning'); return; }
+    E.updateSettings(function (s) {
+      s.business = s.business || {};
+      s.business.guestThrottleWindowMin = win;
+      s.business.guestThrottleMaxCount = max;
+    }, ACTOR_NAME(), '防濫用參數改為 ' + win + ' 分鐘最多 ' + max + ' 筆');
+    C.toast('已儲存，住客端送出流程立即套用新上限', 'success');
+  });
+
+  document.getElementById('retention-deid-save').addEventListener('click', function () {
+    var v = parseInt(document.getElementById('retention-deid').value, 10);
+    if (!(v > 0)) { C.toast('請輸入大於 0 的天數', 'warning'); return; }
+    E.updateSettings(function (s) {
+      s.dataRetention = s.dataRetention || {};
+      s.dataRetention.deidentifyDays = v;
+    }, ACTOR_NAME(), '個資去識別化期限改為 ' + v + ' 天');
+    C.toast('已儲存（示意，正式版由背景排程執行）', 'success');
+  });
+
+  document.getElementById('retention-lf-save').addEventListener('click', function () {
+    var days = parseInt(document.getElementById('retention-lf-days').value, 10);
+    var action = document.getElementById('retention-lf-action').value;
+    if (!(days > 0)) { C.toast('請輸入大於 0 的天數', 'warning'); return; }
+    E.updateSettings(function (s) {
+      s.dataRetention = s.dataRetention || {};
+      s.dataRetention.lostFoundRetentionDays = days;
+      s.dataRetention.lostFoundOnExpiry = action;
+    }, ACTOR_NAME(), '遺失物保管期限改為 ' + days + ' 天（到期：' + (action === 'notifyDesk' ? '通知櫃檯' : '標記待處理') + '）');
+    C.toast('已儲存，櫃檯遺失物清單立即套用', 'success');
+  });
+
+  document.getElementById('retention-lf-photo-save').addEventListener('click', function () {
+    var v = parseInt(document.getElementById('retention-lf-photo').value, 10);
+    if (!(v > 0)) { C.toast('請輸入大於 0 的天數', 'warning'); return; }
+    E.updateSettings(function (s) {
+      s.dataRetention = s.dataRetention || {};
+      s.dataRetention.lostFoundPhotoRetentionDays = v;
+    }, ACTOR_NAME(), '遺失物照片保留改為 ' + v + ' 天');
+    C.toast('已儲存（示意）', 'success');
+  });
+
+  document.getElementById('pms-provider-select').addEventListener('change', function (e) {
+    var key = e.target.value;
+    var provider = E.pmsProviderOf(key);
+    E.updateSettings(function (s) {
+      s.pms = s.pms || {};
+      s.pms.provider = key;
+      // 換 PMS 不替它保留上一家的盤點結果：能力是「這一家」的事實，留著只會
+      // 讓畫面拿舊結果講新 PMS 的同步模式。
+      s.pms.capability = null;
+    }, ACTOR_NAME(), 'PMS 改為「' + (provider ? provider.name : key) + '」');
+    C.toast(key === 'manual'
+      ? '已切到手動匯入模式——排房頁的拉回鈕停用，今日房態改用 Excel／CSV 匯入'
+      : '已切換 PMS，記得重新「測試連線＋能力盤點」', 'success');
+  });
+
+  document.getElementById('pms-credential-save').addEventListener('click', function () {
+    var input = document.getElementById('pms-credential-input');
+    var v = input.value.trim();
+    if (!v) { C.toast('憑證不能空白（示意值即可，例如 demo-key-123）', 'warning'); return; }
+    E.updateSettings(function (s) {
+      s.pms = s.pms || {};
+      s.pms.credential = v;
+    }, ACTOR_NAME(), '更新 PMS 連線憑證（值不進流水帳）');
+    input.value = '';
+    C.toast('已存憑證（遮罩顯示在下方）', 'success');
+  });
+
+  document.getElementById('pms-test-btn').addEventListener('click', function () {
+    var r = E.testPmsConnection(ACTOR_NAME());
+    if (!r.ok) { C.toastFromResult(r); return; }
+    C.toast(r.provider.name + ' 連線成功：' + (r.capability.mode === 'push'
+      ? '能主動推事件，同步走事件訂閱'
+      : '只能輪詢，每 ' + r.capability.pollIntervalMin + ' 分鐘拉一次'), 'success');
+  });
+
+  document.getElementById('brand-logo-input').addEventListener('change', function (ev) {
+    var f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    C.compressImage(f, 200, function (dataUrl) {
+      if (!dataUrl) { C.toast('Logo 讀取失敗，換一張試試', 'error'); return; }
+      E.updateSettings(function (s) {
+        s.brand = s.brand || {};
+        s.brand.logo = dataUrl;
+      }, ACTOR_NAME(), '上傳品牌 Logo');
+      C.toast('已上傳 Logo，住客頁同步顯示', 'success');
+    });
+  });
+
+  document.getElementById('brand-color-input').addEventListener('change', function (e) {
+    saveBrandColor(e.target.value);
+  });
+
+  document.getElementById('brand-color-reset').addEventListener('click', function () {
+    E.updateSettings(function (s) {
+      s.brand = s.brand || {};
+      s.brand.primaryColor = null;
+    }, ACTOR_NAME(), '品牌主色恢復預設');
+    C.toast('已恢復預設主色', 'success');
   });
 
   document.getElementById('info-add').addEventListener('click', function () {
     var id = 'info_' + Date.now().toString(36);
     E.updateSettings(function (s) {
       s.infoItems.push({ id: id, icon: 'ℹ️', title: '新項目', content: '在這裡填內容，按「儲存」生效', enabled: true });
-    }, ACTOR, '新增資訊項');
+    }, ACTOR_NAME(), '新增資訊項');
+  });
+
+  document.getElementById('role-new-toggle').addEventListener('click', function () {
+    if (roleDraft) { roleDraft = null; } else {
+      roleDraft = { name: '', baseFunction: 'housekeeping', permissions: JSON.parse(JSON.stringify(E.ROLE_TEMPLATES.housekeeping)) };
+    }
+    renderRoleNewForm(E.getState());
   });
 
   document.getElementById('reset-btn').addEventListener('click', function () {
@@ -565,6 +2666,33 @@
     C.toast('已重置示範資料（含設定還原預設）', 'success');
   });
 
+  document.getElementById('operator-select').addEventListener('change', function (e) {
+    setOperatorId(e.target.value);
+    renderAll();
+  });
+
+  document.querySelectorAll('.settings-nav button').forEach(function (btn) {
+    btn.addEventListener('click', function () { switchSection(btn.dataset.section); });
+  });
+
+  document.getElementById('settings-search').addEventListener('input', function () {
+    searchActiveIndex = -1;
+    renderSearchResults();
+  });
+  document.getElementById('settings-search').addEventListener('keydown', function (e) {
+    var matches = searchMatches(this.value);
+    if (!matches.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); searchActiveIndex = Math.min(searchActiveIndex + 1, matches.length - 1); renderSearchResults(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); searchActiveIndex = Math.max(searchActiveIndex - 1, 0); renderSearchResults(); }
+    else if (e.key === 'Enter') { e.preventDefault(); goToSearchHit(matches[searchActiveIndex >= 0 ? searchActiveIndex : 0]); }
+    else if (e.key === 'Escape') { document.getElementById('settings-search-results').hidden = true; }
+  });
+  document.addEventListener('click', function (e) {
+    var wrap = document.getElementById('settings-search-results');
+    if (!wrap.hidden && !e.target.closest('.settings-search-wrap')) wrap.hidden = true;
+  });
+
+  switchSection(currentSection());
   renderAll();
   E.subscribe(safeRender);
 })();

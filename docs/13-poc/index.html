@@ -175,7 +175,7 @@
         <span class="role-card-glyph" style="background:var(--color-state-inspected-soft); color:var(--color-state-inspected);">主</span>
         <h2>主管</h2>
         <p class="role-sub">schedule.html＋manager.html</p>
-        <p>排房：從 PMS 或 Excel（CSV）拉今日房態、自動分配（樓層聚合）後發佈即指派、未開始可改派；查房：逐項判定，任一不過整間退回重掃。</p>
+        <p>排房：從 PMS 或 Excel（CSV）拉今日房態（拉回鈕跟租戶設定「PMS 整合」連動——顯示接哪一家與同步模式，手動匯入模式時停用、改走 CSV）、自動分配（樓層聚合）後發佈即指派、未開始可改派；哪些房進草稿由四個納入開關決定（空房／環保房／停用維修／請勿打擾各一個，被排除的房列成清單交代去向）；估時走三層工作量規則（房間覆寫 &gt; 清掃類型×房態基準格 &gt; 類型預設），顯示單位可切分鐘或點數；查房：逐項判定，任一不過整間退回重掃。</p>
         <span class="story-count">4 則可操作故事</span>
         <a class="btn btn-primary" href="schedule.html" target="_blank" rel="noopener">開啟排房頁（新分頁）</a>
         <a class="btn btn-secondary" href="manager.html" target="_blank" rel="noopener">開啟查房頁（新分頁）</a>
@@ -185,7 +185,7 @@
         <span class="role-card-glyph" style="background:var(--color-state-pool-soft); color:var(--color-state-pool);">闆</span>
         <h2>老闆</h2>
         <p class="role-sub">owner.html · 手機總覽（唯讀）</p>
-        <p>四張數字卡：可賣房、回應速度、住客評分、查房退回，加一行當日摘要；只在出事（住客評低分）時出現通知。</p>
+        <p>四張數字卡：可賣房、回應速度、住客評分、查房退回，加一行當日摘要；只在出事（住客評低分、或主管手動上報）時出現通知。</p>
         <span class="story-count">2 則唯讀故事</span>
         <a class="btn btn-primary" href="owner.html" target="_blank" rel="noopener">開啟老闆頁（新分頁）</a>
       </article>
@@ -211,11 +211,7 @@
       </li>
       <li class="scope-item">
         <span class="scope-what">租戶設定的其餘可調項</span>
-        <span class="scope-why">已做：資訊頁、需求選單（含自建項目）、流程開關、標準工時、SLA 時限、班次容量、SOP／查房項目、自動分配策略、老闆通知門檻。留給正式版：多語內容、責任區與 VIP 排序、顯示層自訂（狀態改名、語意類別下加子狀態）。</span>
-      </li>
-      <li class="scope-item">
-        <span class="scope-what">老闆通知的「主管手動上報」來源</span>
-        <span class="scope-why">老闆頁的出事通知 v1 有兩個來源：住客評低分、主管手動上報。這裡示範前者（評 2 星以下自動出現），後者需要在主管端加上報流程，不在這條黃金路徑上。</span>
+        <span class="scope-why">已做：資訊頁、需求選單（含自建項目）、品牌 Logo／主色、流程開關、清掃基準工時（類型×房態）與房間覆寫、工作量顯示單位（分鐘／點數）、SLA 時限、班次容量、SOP／查房項目、自動分配策略、排房納入開關（空房／環保房／停用維修／請勿打擾各一個，排除的房在排房頁列清單交代去向）、通知來源開關與老闆通知門檻、逾時升級鏈（SLA 逾時後 L1 接單人／部門池 → L2 主管 → L3 值班經理分層通知，層距分鐘與通知對象可調、層可停用；升級是通知不是新狀態）、營業參數（時區／日切／退房入住時間／防濫用節流）、資料保留（去識別化期限／遺失物保管與到期處理）、自動化規則（觸發源＝訂房資料進來或排程時間到〔每日／每週〕＋條件＋動作＝自動建任務、可設建立後 N 分鐘到期，同一個觸發不重複建單；出廠的訂房屬性準備工單四條就是內建的第一組規則）、PMS 整合設定（選接哪一家 PMS〔自家／Mews／Cloudbeds／手動匯入模式〕＋連線憑證遮罩存值、「測試連線＋能力盤點」回報這家能推事件還是只能輪詢、同步範圍兩開關〔今日房態／訂房屬性——關訂房屬性會真的在匯入時丟棄屬性〕、回寫開關兩條〔房間狀態 Inspected／OOO、minibar 計費〕各自可關——關房間狀態那條，查房通過就不產生模擬回寫事件）。留給正式版：多語內容、責任區與 VIP 排序、顯示層自訂（狀態改名、語意類別下加子狀態）、minibar 計費回寫的實際流程（POC 只有開關存值）。</span>
       </li>
     </ul>
   </section>

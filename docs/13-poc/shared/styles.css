@@ -253,6 +253,27 @@ button { font-family: inherit; }
 .tag-rule { background: var(--color-accent-soft); color: var(--color-accent-strong); }
 .tag-warning { background: var(--color-state-interrupted-soft); color: var(--color-state-interrupted); }
 .tag-assignee { background: var(--color-surface-sunken); color: var(--color-ink); }
+/* 升級層徽章用實心紅：逾時標記（淡底）已經在同一列，升級是更高一級的事，
+   兩者必須一眼分得出層次，共用淡底就糊成一種警告 */
+.tag-escalation { background: var(--color-state-interrupted); color: #FFFFFF; }
+
+/* 逾時升級提醒：四個角色頁共用同一套橫幅樣式，模擬「推播抵達」的視覺語彙，
+   和各頁原生的面板（看板彙整、通知板）長得不一樣才讀得出「這是被叫到」 */
+.esc-banner {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; border: 1px solid var(--color-state-interrupted);
+  border-left: 4px solid var(--color-state-interrupted);
+  background: var(--color-state-interrupted-soft);
+  border-radius: var(--radius-md); font-size: 13px;
+}
+.esc-banner[hidden] { display: none; }
+.esc-banner-title { font-weight: 800; color: var(--color-state-interrupted); font-size: 13.5px; }
+.esc-banner-item { display: flex; align-items: baseline; gap: 8px; color: var(--color-ink); }
+.esc-banner-item .esc-lv {
+  flex-shrink: 0; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700;
+  padding: 1px 7px; border-radius: 999px; background: var(--color-state-interrupted); color: #FFFFFF;
+}
+.esc-banner-sub { font-size: 12px; color: var(--color-ink-muted); margin: 0; }
 .tag-time { color: var(--color-ink-faint); background: transparent; font-weight: 500; }
 
 /* 任務卡：四頁共用的最小單位，左側用狀態色做一道細窄的語意提示，不做滿版色條 */
@@ -342,6 +363,8 @@ button { font-family: inherit; }
 .field label { font-size: 13px; font-weight: 600; color: var(--color-ink-muted); }
 .field textarea,
 .field input[type="text"],
+.field input[type="number"],
+.field input[type="time"],
 .field select {
   font-family: inherit;
   font-size: 14px;
@@ -350,6 +373,11 @@ button { font-family: inherit; }
   border: 1px solid var(--color-line-strong);
   background: var(--color-surface-raised);
   color: var(--color-ink);
+}
+.field input[type="color"] {
+  width: 44px; height: 38px; padding: 3px;
+  border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong);
+  background: var(--color-surface-raised); cursor: pointer;
 }
 .field textarea:focus,
 .field input:focus,

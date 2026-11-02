@@ -143,21 +143,76 @@
   function renderAlerts(state) {
     var wrap = document.getElementById('alert-list');
     wrap.innerHTML = '';
+    var notif = state.settings.notifications || {};
     var maxStars = state.settings.ownerAlertMaxStars || 2;
-    document.getElementById('alert-note').textContent =
-      'v1 通知來源是「住客評低分」與「主管手動上報」；這裡示範前者（' + maxStars +
-      ' 星以下自動出現，門檻可在租戶設定調），手動上報不在這份 POC。';
-    var lowRatings = state.events
-      .filter(function (ev) { return ev.type === 'guest_rate' && ev.payload && ev.payload.stars != null && ev.payload.stars <= maxStars; })
-      .sort(function (a, b) { return b.ts - a.ts; });
-    if (!lowRatings.length) {
+    var ratingOn = notif.ownerLowRatingEnabled !== false;
+    var reportOn = notif.ownerManagerReportEnabled !== false;
+
+    var escOn = (state.settings.escalation || {}).enabled !== false;
+
+    var sourceParts = [];
+    if (ratingOn) sourceParts.push('住客評低分（' + maxStars + ' 星以下）');
+    if (reportOn) sourceParts.push('主管手動上報');
+    if (escOn) sourceParts.push('逾時升級到值班經理層（處理完就消失）');
+    document.getElementById('alert-note').textContent = sourceParts.length
+      ? 'v1 通知來源：' + sourceParts.join('、') + '（門檻與開關可在租戶設定「通知」調整）。'
+      : '通知來源目前都已關閉（到租戶設定「通知」開啟）。';
+
+    // 兩個來源各自獨立的開關：關掉的那一個，事件還是記得進流水帳，
+    // 只是不會混進這份「出事才會響」的清單——跟事件流水帳查得到是兩回事。
+    // 低分評價那筆算不算進這份清單，用事件自己當時存的 ownerNotifyEligible
+    // 旗標判斷（產生時過濾），不是看現在的開關狀態——不然關掉期間發生的低分
+    // 評價，重新打開後會回溯冒出；舊事件沒有這個欄位一律視為 true（既有通知
+    // 不用清）。
+    var items = [];
+    if (ratingOn) {
+      state.events
+        .filter(function (ev) {
+          return ev.type === 'guest_rate' && ev.payload && ev.payload.stars != null &&
+            ev.payload.stars <= maxStars && ev.payload.ownerNotifyEligible !== false;
+        })
+        .forEach(function (ev) { items.push({ ts: ev.ts, kind: 'rating', ev: ev }); });
+    }
+    if (reportOn) {
+      state.events
+        .filter(function (ev) { return ev.type === 'manager_escalation'; })
+        .forEach(function (ev) { items.push({ ts: ev.ts, kind: 'report', ev: ev }); });
+    }
+    // 逾時升級跟上面兩個來源性質不同：低分評價與上報是「發生過的事」要留著看，
+    // 升級是「現在還沒人處理」的催辦——任務一完成或取消就該從這份清單消失，
+    // 不然老闆看到的永遠是一排已經解決的舊火警。所以這裡吃引擎的現況查詢
+    // （只回仍未處理完的單），不吃 escalated 事件的歷史。
+    if (escOn) {
+      E.escalationsForPage(state, 'owner').forEach(function (h) {
+        items.push({ ts: h.ts, kind: 'escalation', hit: h });
+      });
+    }
+    items.sort(function (a, b) { return b.ts - a.ts; });
+
+    if (!items.length) {
       wrap.appendChild(C.emptyState('目前沒有需要你操心的事'));
       return;
     }
-    lowRatings.forEach(function (ev) {
-      var t = E.findTask(state, ev.taskId);
+    items.forEach(function (it) {
+      if (it.kind === 'escalation') {
+        var h = it.hit;
+        var escItem = C.el('div', 'alert-item');
+        escItem.appendChild(C.el('span', null, '逾時升級 L' + h.level + '：' + C.roomLabel(h.task.roomNo) + ' · ' +
+          h.task.title + ' 超過時限仍未處理完'));
+        var escTime = document.createElement('time');
+        escTime.textContent = new Date(it.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+        escItem.appendChild(escTime);
+        wrap.appendChild(escItem);
+        return;
+      }
+      var ev = it.ev;
       var item = C.el('div', 'alert-item');
-      item.appendChild(C.el('span', null, (t ? t.roomNo + ' 號房' : ev.taskId) + ' 住客評了 ' + ev.payload.stars + ' 星' + (t && t.title ? '（' + t.title + '）' : '')));
+      if (it.kind === 'rating') {
+        var t = E.findTask(state, ev.taskId);
+        item.appendChild(C.el('span', null, (t ? t.roomNo + ' 號房' : ev.taskId) + ' 住客評了 ' + ev.payload.stars + ' 星' + (t && t.title ? '（' + t.title + '）' : '')));
+      } else {
+        item.appendChild(C.el('span', null, '主管上報：' + ev.payload.message + '（' + ev.actor + '）'));
+      }
       var time = document.createElement('time');
       time.textContent = new Date(ev.ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
       item.appendChild(time);
