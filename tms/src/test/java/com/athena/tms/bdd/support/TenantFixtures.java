@@ -48,13 +48,17 @@ public class TenantFixtures {
         return id;
     }
 
-    /** 查房項目（applies_to=inspection）的 item_key → label，與 V2__seed_dev.sql 示範租戶的清單同構。 */
+    /**
+     * 查房項目（applies_to=inspection）的 item_key → label。label 用推播標題會原樣
+     * 引用的短名稱（例如「{房號} 查房退回 · 床鋪不合格」引用「床鋪」），feature 的
+     * 期望標題才組得出來；鍵集與 V2__seed_dev.sql 示範租戶的清單同構。
+     */
     private static final List<String[]> INSPECTION_SOP_ITEMS = List.of(
-            new String[] {"bed", "床鋪平整"},
-            new String[] {"bathroom", "浴室無水痕"},
-            new String[] {"amenities", "備品齊全"},
-            new String[] {"floor", "地面乾淨"},
-            new String[] {"odor", "無異味"});
+            new String[] {"bed", "床鋪"},
+            new String[] {"bathroom", "浴室"},
+            new String[] {"amenities", "備品"},
+            new String[] {"floor", "地面"},
+            new String[] {"odor", "異味"});
 
     /**
      * 確保「測試飯店」有一套查房項目（sop_items，applies_to=inspection）。V2__seed_dev.sql

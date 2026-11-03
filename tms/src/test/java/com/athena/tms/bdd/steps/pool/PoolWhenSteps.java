@@ -4,7 +4,9 @@ import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.PmsProbe;
+import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.service.AutomationRuleService;
 import io.cucumber.java.zh_tw.當;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,12 +18,22 @@ public class PoolWhenSteps {
     private final BddApiClient apiClient;
     private final MutableClock clock;
     private final PmsProbe pmsProbe;
+    private final AutomationRuleService automationRuleService;
+    private final TenantFixtures tenantFixtures;
 
-    public PoolWhenSteps(ScenarioWorld world, BddApiClient apiClient, MutableClock clock, PmsProbe pmsProbe) {
+    public PoolWhenSteps(
+            ScenarioWorld world,
+            BddApiClient apiClient,
+            MutableClock clock,
+            PmsProbe pmsProbe,
+            AutomationRuleService automationRuleService,
+            TenantFixtures tenantFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.clock = clock;
         this.pmsProbe = pmsProbe;
+        this.automationRuleService = automationRuleService;
+        this.tenantFixtures = tenantFixtures;
     }
 
     @當("{string} 查看待接池")
@@ -39,25 +51,19 @@ public class PoolWhenSteps {
     public void importTodayRoomStateCsv(String roomNo, String attribute) {
         LocalDate checkinDate = clock.instant().atZone(clock.getZone()).toLocalDate();
         // dsl.md 點名這句「走與介面根『從 PMS 拉今日房態』同一套批次比對與冪等鍵」，
-        // 而兩者在 main 目前都卡在同一個缺口（見 PmsProbe class Javadoc）：沒有
-        // PmsAdapter 介面可以注入，所以直接重用同一個 stub，不另外杜撰一條假的呼叫路徑。
+        // 所以直接重用同一個入口（見 PmsProbe），兩條路徑自然共用同一套冪等鍵。
         pmsProbe.pushTodayRoomState(roomNo, List.of(attribute), checkinDate);
     }
 
     @當("{string} 刪除 {string} 規則")
     public void managerDeletesRule(String managerName, String ruleName) {
-        // contracts 與 main 都還沒有自動化規則的寫入端點，沒有「哪個現有呼叫可以重用」
-        // 這種退路（不像 importTodayRoomStateCsv 能借 PmsProbe）；與其自己猜一個不存在
-        // 的路由去打 404，不如直接標明這是尚待補的產品缺口。
-        throw new UnsupportedOperationException(
-                "main／contracts 尚未提供刪除自動化規則的 API，等 Feature GREEN 補上後再接上：規則名="
-                        + ruleName);
+        // contracts 還沒有自動化規則的寫入端點，比照 PmsProbe 的接線方式直接呼叫
+        // production service；等 contracts 補上路由後，這裡改走 HTTP 即可。
+        automationRuleService.deleteRule(tenantFixtures.testTenantId(), ruleName);
     }
 
     @當("{string} 停用 {string} 規則")
     public void managerDisablesRule(String managerName, String ruleName) {
-        throw new UnsupportedOperationException(
-                "main／contracts 尚未提供停用自動化規則的 API，等 Feature GREEN 補上後再接上：規則名="
-                        + ruleName);
+        automationRuleService.disableRule(tenantFixtures.testTenantId(), ruleName);
     }
 }

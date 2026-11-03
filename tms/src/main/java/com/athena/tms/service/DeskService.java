@@ -53,21 +53,21 @@ public class DeskService {
         if (ASSIGN.equals(request.action())) {
             String dept = request.dept();
             if (!"housekeeping".equals(dept) && !"engineering".equals(dept)) {
-                throw new UnprocessableEntityException("assign \u7684 dept \u503c\u57df\u50c5 housekeeping|engineering\uff08FR-021\uff09\uff0c\u6536\u5230: " + dept);
+                throw new UnprocessableEntityException("assign 的 dept 值域僅 housekeeping|engineering（FR-021），收到: " + dept);
             }
             this.taskEngine.assignFromTriage(tenantId, taskId, dept, deskActor);
         } else if (ANSWER.equals(request.action())) {
             if (request.note() == null || request.note().isBlank()) {
-                throw new UnprocessableEntityException("answer \u5fc5\u9644 note\uff08\u56de\u8986\u5167\u5bb9\uff0c\u4f4f\u5ba2\u7aef\u53ef\u898b\uff09");
+                throw new UnprocessableEntityException("answer 必附 note（回覆內容，住客端可見）");
             }
             this.taskEngine.answer(tenantId, taskId, request.note(), deskActor);
         } else {
-            throw new UnprocessableEntityException("action \u50c5 assign|answer\uff08\u4e09\u9078\u4e00\u7684\u7b2c\u4e09\u9078\uff1danswer \u7576\u5834\u56de\u7b54\uff09\uff0c\u6536\u5230: " + request.action());
+            throw new UnprocessableEntityException("action 僅 assign|answer（三選一的第三選＝answer 當場回答），收到: " + request.action());
         }
         return this.requireTask(tenantId, taskId);
     }
 
     private Task requireTask(long tenantId, UUID taskId) {
-        return this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("\u67e5\u7121\u4efb\u52d9: " + String.valueOf(taskId)));
+        return this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("查無任務: " + String.valueOf(taskId)));
     }
 }

@@ -21,10 +21,13 @@ import tools.jackson.databind.node.ObjectNode;
  * 超過時限先升 L1 通知負責人，之後每多過一個層距（escalation_step_minutes）
  * 再升一層：L2 通知主管、L3 通知值班經理，最多到 L3。
  *
- * <p>只掃 doing 的任務：已延後與已中斷的單是人主動停住的，照樣升級只會對
- * 已知狀況重複吵人；恢復進行後自然重新納入掃描。每層只升一次——升級用
- * 條件式更新（WHERE 帶前一層的 esc_level），兩次掃描重疊時第二次一列也改
- * 不到；推播以「任務＋層級＋收件人」當冪等鍵，重跑不會重複插入。
+ * <p>掃待接池（pool）、待開始（accepted）與進行中（doing）的任務；已延後與
+ * 已中斷的單是人主動停住的，照樣升級只會對已知狀況重複吵人，恢復進行後自然
+ * 重新納入掃描。進行中的單最多升到 L1：有人正在房裡做，升到主管與值班經理
+ * 只會對處理中的工作疊加催促；沒人接手的單（pool 與 accepted）才逐層往上催。
+ * 每層只升一次——升級用條件式更新（WHERE 帶前一層的 esc_level），兩次掃描
+ * 重疊時第二次一列也改不到；推播以「任務＋層級＋收件人」當冪等鍵，重跑不會
+ * 重複插入。
  *
  * <p>時間一律用注入的 {@link Clock}，測試能以可調時鐘直接把「現在」推到
  * 時限之後，不必真等。
@@ -69,10 +72,10 @@ public class EscalationScanJob {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT t.id, t.type, t.dept, t.assignee_id, t.esc_level, t.due_at, t.created_at,
-                       t.title, r.room_no
+                       t.state, t.title, r.room_no
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
-                 WHERE t.tenant_id = ? AND t.state = 'doing'
+                 WHERE t.tenant_id = ? AND t.state IN ('pool', 'accepted', 'doing')
                 """,
                 tenantId);
         for (Map<String, Object> row : rows) {
@@ -84,7 +87,8 @@ public class EscalationScanJob {
             if (overdueMinutes <= 0) {
                 continue;
             }
-            int targetLevel = (int) Math.min(MAX_LEVEL, 1 + (overdueMinutes - 1) / stepMinutes);
+            int maxLevel = "doing".equals(row.get("state")) ? 1 : MAX_LEVEL;
+            int targetLevel = (int) Math.min(maxLevel, 1 + (overdueMinutes - 1) / stepMinutes);
             int currentLevel = row.get("esc_level") instanceof Number n ? n.intValue() : 0;
             UUID taskId = (UUID) row.get("id");
             UUID assigneeId = (UUID) row.get("assignee_id");
@@ -131,7 +135,7 @@ public class EscalationScanJob {
                 """
                 UPDATE tasks
                    SET esc_level = ?, event_seq = event_seq + 1, updated_at = now()
-                 WHERE tenant_id = ? AND id = ? AND state = 'doing' AND COALESCE(esc_level, 0) = ?
+                 WHERE tenant_id = ? AND id = ? AND state IN ('pool', 'accepted', 'doing') AND COALESCE(esc_level, 0) = ?
                 RETURNING event_seq
                 """,
                 (rs, i) -> rs.getInt(1),
@@ -168,17 +172,11 @@ public class EscalationScanJob {
         };
         String title = level == 1 ? label + " 已逾時 · 升級 L1" : label + " 已升級 L" + level;
         for (UUID recipient : recipients) {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("recipientStaffId", recipient.toString());
-            payload.put("event", "escalated");
-            payload.put("title", title);
-            ObjectNode target = payload.putObject("target");
+            ObjectNode payload = PushOutboxWriter.payload(objectMapper, recipient, "escalated", title);
             if (assigneeId != null) {
-                target.put("kind", "task");
-                target.put("taskId", taskId.toString());
+                PushOutboxWriter.targetTask(payload, taskId);
             } else {
-                target.put("kind", "pool");
-                target.put("dept", dept);
+                PushOutboxWriter.targetPool(payload, dept);
             }
             pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                     "escalate:" + taskId + ":L" + level + ":" + recipient);

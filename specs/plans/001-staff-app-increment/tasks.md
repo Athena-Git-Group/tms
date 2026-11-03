@@ -880,7 +880,7 @@
 - `specs/truth/features/backend/待接池/待接池排序與篩選.feature`
 
 - [X] T186 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T187 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T187 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4L: ADD Feature File - backend/待接池/系統準備工單派給負責人.feature
 
@@ -903,8 +903,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/待接池/系統準備工單派給負責人.feature`
 
-- [ ] T188 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T189 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T188 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T189 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4M: ADD Feature File - backend/今日進度/今日進度與下一間.feature
 
@@ -927,8 +927,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/今日進度/今日進度與下一間.feature`
 
-- [ ] T190 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T191 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T190 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T191 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4N: ADD Feature File - backend/房間交辦/交辦合併與已讀.feature
 
@@ -952,8 +952,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/房間交辦/交辦合併與已讀.feature`
 
-- [ ] T192 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T193 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T192 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T193 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4O: ADD Feature File - backend/房間交辦/查房退回資訊.feature
 
@@ -977,8 +977,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/房間交辦/查房退回資訊.feature`
 
-- [ ] T194 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T195 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T194 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T195 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4P: ADD Feature File - backend/查一下/推薦問題.feature
 
@@ -1001,8 +1001,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/查一下/推薦問題.feature`
 
-- [ ] T196 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T197 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T196 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T197 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4Q: ADD Feature File - backend/查一下/有出處的回答與問主管.feature
 
@@ -1025,8 +1025,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/查一下/有出處的回答與問主管.feature`
 
-- [ ] T198 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T199 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T198 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T199 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4R: ADD Feature File - backend/查一下/沒幫助回饋.feature
 
@@ -1049,8 +1049,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/查一下/沒幫助回饋.feature`
 
-- [ ] T200 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T201 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T200 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T201 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
 
 ## Phase 4S: ADD Feature File - backend/推播/員工推播事件.feature
 
@@ -1074,5 +1074,5 @@
 **Test Scope**:
 - `specs/truth/features/backend/推播/員工推播事件.feature`
 
-- [ ] T202 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T203 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化
+- [X] T202 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T203 [BDD-REFACTOR] 在綠燈下整理本 feature 新增的產品碼與 stepdef 重複，並重跑已完成 phase 的 Test Scope 確認不退化

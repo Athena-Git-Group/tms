@@ -48,7 +48,7 @@ extends OncePerRequestFilter {
     public static final String ROLE = "INTEGRATION";
     public static final String API_KEY_HEADER = "X-API-Key";
     private static final Pattern KEY_PATTERN = Pattern.compile("^tmsik_(\\d+)_([A-Za-z0-9_-]+)$");
-    private static final String INVALID_KEY_MESSAGE = "\u6574\u5408\u91d1\u9470\u7121\u6548";
+    private static final String INVALID_KEY_MESSAGE = "整合金鑰無效";
     private final IntegrationApiKeyRepository integrationApiKeyRepository;
     private final ApiErrorResponses apiErrorResponses;
 
@@ -111,7 +111,7 @@ extends OncePerRequestFilter {
             return HexFormat.of().formatHex(digest.digest(plaintext.getBytes(StandardCharsets.UTF_8)));
         }
         catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 \u4e0d\u53ef\u7528", e);
+            throw new IllegalStateException("SHA-256 不可用", e);
         }
     }
 

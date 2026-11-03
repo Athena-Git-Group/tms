@@ -11,7 +11,7 @@ public final class TenantContext {
 
     public static void set(Long tenantId) {
         if (tenantId == null) {
-            throw new IllegalArgumentException("tenantId \u4e0d\u5f97\u70ba null\uff1b\u8981\u6e05\u9664\u8acb\u7528 clear()");
+            throw new IllegalArgumentException("tenantId 不得為 null；要清除請用 clear()");
         }
         CURRENT_TENANT.set(tenantId);
     }
@@ -23,7 +23,7 @@ public final class TenantContext {
     public static Long require() {
         Long tenantId = CURRENT_TENANT.get();
         if (tenantId == null) {
-            throw new IllegalStateException("TenantContext \u672a\u5efa\u7acb\u2014\u2014\u6b64\u8def\u5f91\u4e0d\u8a72\u5728\u8a8d\u8b49\u4e4b\u524d\u78b0\u8cc7\u6599\u5eab");
+            throw new IllegalStateException("TenantContext 未建立——此路徑不該在認證之前碰資料庫");
         }
         return tenantId;
     }

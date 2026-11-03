@@ -61,11 +61,11 @@ public class OutboxRelay {
         this.sendTimeout = DurationStyle.detectAndParse((String)sendTimeout);
         this.claimLease = DurationStyle.detectAndParse((String)claimLease);
         if (this.sendTimeout.toMillis() < producerDeliveryTimeoutMs) {
-            throw new IllegalStateException("tms.outbox.relay.send-timeout\uff08" + String.valueOf(this.sendTimeout) + "\uff09\u5fc5\u9808\u5927\u65bc\u7b49\u65bc producer \u7684 delivery.timeout.ms\uff08" + producerDeliveryTimeoutMs + "ms\uff09\u3002send-timeout \u6bd4\u5b83\u77ed\uff0c\u6211\u5011\u6703\u5728 producer \u771f\u6b63\u653e\u68c4\u4e4b\u524d\u5c31\u5148\u8a8d\u8f38\u3001\u628a\u8a0a\u606f\u6392\u53bb\u91cd\u8a66\uff0c\u4f46 producer \u53ef\u80fd\u4e4b\u5f8c\u9084\u662f\u628a\u5b83\u9001\u5230\u4e86 Kafka\uff0c\u7559\u4e0b\u4e00\u7b46\u6211\u5011\u81ea\u5df1\u4e0d\u77e5\u9053\u7684\u91cd\u8907\u9001\u51fa\u3002");
+            throw new IllegalStateException("tms.outbox.relay.send-timeout（" + String.valueOf(this.sendTimeout) + "）必須大於等於 producer 的 delivery.timeout.ms（" + producerDeliveryTimeoutMs + "ms）。send-timeout 比它短，我們會在 producer 真正放棄之前就先認輸、把訊息排去重試，但 producer 可能之後還是把它送到了 Kafka，留下一筆我們自己不知道的重複送出。");
         }
         Duration worstCaseSend = Duration.ofMillis(producerMaxBlockMs).plus(this.sendTimeout);
         if (this.claimLease.compareTo(worstCaseSend) <= 0) {
-            throw new IllegalStateException("tms.outbox.relay.claim-lease\uff08" + String.valueOf(this.claimLease) + "\uff09\u5fc5\u9808\u5927\u65bc producer max.block.ms + relay send-timeout \u7684\u7e3d\u548c\uff08\u76ee\u524d\u662f " + String.valueOf(worstCaseSend) + "\uff09\u3002\u79df\u7d04\u6490\u4e0d\u904e\u55ae\u7b46\u8a0a\u606f\u6700\u9577\u53ef\u80fd\u5361\u4f4f\u7684\u6642\u9593\uff0c\u6d3b\u8457\u7684 instance \u6703\u88ab\u8aa4\u5224\u6210\u7576\u6389\u3001\u540c\u4e00\u7b46\u88ab\u5225\u7684 instance \u6436\u8d70\u91cd\u9001\uff0c\u7834\u58de\u540c aggregate_key \u7684\u9001\u51fa\u9806\u5e8f\u3002");
+            throw new IllegalStateException("tms.outbox.relay.claim-lease（" + String.valueOf(this.claimLease) + "）必須大於 producer max.block.ms + relay send-timeout 的總和（目前是 " + String.valueOf(worstCaseSend) + "）。租約撐不過單筆訊息最長可能卡住的時間，活著的 instance 會被誤判成當掉、同一筆被別的 instance 搶走重送，破壞同 aggregate_key 的送出順序。");
         }
     }
 
@@ -76,7 +76,7 @@ public class OutboxRelay {
                 this.relayTenant(tenantId);
             }
             catch (Exception e) {
-                log.error("\u79df\u6236 {} \u9019\u8f2a relay \u51fa\u932f\uff0c\u8df3\u904e\u3001\u4e0b\u4e00\u8f2a\u518d\u8a66: {}", new Object[]{tenantId, e.getMessage(), e});
+                log.error("租戶 {} 這輪 relay 出錯，跳過、下一輪再試: {}", new Object[]{tenantId, e.getMessage(), e});
             }
         }
     }
@@ -92,7 +92,7 @@ public class OutboxRelay {
                 if (message.nextRetryAt() != null && message.nextRetryAt().isAfter(now)) continue block0;
                 ClaimResult claim = this.claim(tenantId, message);
                 if (claim.exhausted()) {
-                    log.error("outbox {} \u91cd\u8a66\u6b21\u6578\u7528\u76e1\uff0c\u6a19 failed \u7b49\u4eba\u5de5\u8655\u7406\uff08aggregate_key={}\uff09", (Object)message.id(), (Object)message.aggregateKey());
+                    log.error("outbox {} 重試次數用盡，標 failed 等人工處理（aggregate_key={}）", (Object)message.id(), (Object)message.aggregateKey());
                     continue block0;
                 }
                 if (claim.claimed() && this.sendOne(tenantId, message, claim.attempts())) continue;
@@ -122,14 +122,14 @@ public class OutboxRelay {
             Duration retryDelay = this.backoff(attempts);
             double delaySeconds = (double)retryDelay.toMillis() / 1000.0;
             this.tenantScopedExecutor.runAsTenant(tenantId, () -> this.jdbcTemplate.update("UPDATE outbox SET next_retry_at = now() + make_interval(secs => ?) WHERE id = ?", new Object[]{delaySeconds, message.id()}));
-            log.warn("outbox {} \u9001\u51fa\u5931\u6557\uff08\u7b2c {} \u6b21\uff09\uff0c{} \u5f8c\u91cd\u8a66: {}", new Object[]{message.id(), attempts, retryDelay, e.getMessage()});
+            log.warn("outbox {} 送出失敗（第 {} 次），{} 後重試: {}", new Object[]{message.id(), attempts, retryDelay, e.getMessage()});
             return false;
         }
         try {
             this.tenantScopedExecutor.runAsTenant(tenantId, () -> this.jdbcTemplate.update("UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = ?", new Object[]{message.id()}));
         }
         catch (Exception e) {
-            log.error("outbox {} \u5df2\u7d93\u9001\u9054 Kafka\uff0c\u4f46\u6a19\u8a18 sent \u5931\u6557\uff1b\u7dad\u6301 pending\uff0c\u79df\u7d04\u5230\u671f\u5f8c\u6703\u81ea\u52d5\u91cd\u9001\u3001\u7531\u4e0b\u6e38\u53bb\u91cd\u6536\u5c3e: {}", new Object[]{message.id(), e.getMessage(), e});
+            log.error("outbox {} 已經送達 Kafka，但標記 sent 失敗；維持 pending，租約到期後會自動重送、由下游去重收尾: {}", new Object[]{message.id(), e.getMessage(), e});
         }
         return true;
     }

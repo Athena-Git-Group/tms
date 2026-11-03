@@ -78,7 +78,7 @@ public class TaskEventsSseConsumer {
     void logResolvedGroupId() {
         MessageListenerContainer container = this.kafkaListenerRegistry.getListenerContainer("sse-task-events");
         if (container != null) {
-            log.info("SSE consumer \u9019\u500b instance \u5be6\u969b\u4f7f\u7528\u7684 Kafka consumer group id\uff1a{}", (Object)container.getGroupId());
+            log.info("SSE consumer 這個 instance 實際使用的 Kafka consumer group id：{}", (Object)container.getGroupId());
         }
     }
 
@@ -89,7 +89,7 @@ public class TaskEventsSseConsumer {
             this.dispatch((String)record.value());
         }
         catch (Exception e) {
-            log.warn("SSE \u5206\u767c\u5931\u6557\uff0c\u7565\u904e\u6b64\u4e8b\u4ef6\uff08offset={}\uff0c\u6389\u9234\u53ef\u63a5\u53d7\u3001\u771f\u76f8\u5728 DB\uff09: {}", (Object)record.offset(), (Object)e.getMessage());
+            log.warn("SSE 分發失敗，略過此事件（offset={}，掉鈴可接受、真相在 DB）: {}", (Object)record.offset(), (Object)e.getMessage());
         }
     }
 
@@ -115,7 +115,7 @@ public class TaskEventsSseConsumer {
         JsonNode seq = envelope.get("seq");
         JsonNode type = envelope.get("type");
         if (tenantId == null || taskId == null || seq == null || type == null) {
-            log.debug("envelope \u7f3a\u5fc5\u8981\u6b04\u4f4d\uff0c\u7565\u904e: {}", (Object)envelopeJson);
+            log.debug("envelope 缺必要欄位，略過: {}", (Object)envelopeJson);
             return;
         }
         UUID task = UUID.fromString(taskId.asText());
@@ -125,7 +125,7 @@ public class TaskEventsSseConsumer {
         JsonNode occurredAt = envelope.get("occurred_at");
         TaskChange change = this.loadRouting(tenantId.asLong(), task, eventSeq, type.asText(), occurredAt == null ? null : occurredAt.asText());
         if (change == null) {
-            log.debug("\u4efb\u52d9 {} \u67e5\u7121\u6295\u5f71\u5217\uff0c\u7565\u904e\u6b64\u9234", (Object)task);
+            log.debug("任務 {} 查無投影列，略過此鈴", (Object)task);
             return;
         }
         this.registry.broadcastTask(change);
@@ -140,13 +140,13 @@ public class TaskEventsSseConsumer {
         try {
             IntegrationRoomStatusEvent event = this.loadRoomStatus(tenantId, taskId, seq, hkState);
             if (event == null) {
-                log.debug("\u4efb\u52d9 {} seq {} \u67e5\u7121\u4e8b\u4ef6\u5217\u6216\u623f\u865f\uff0c\u6574\u5408\u63a8\u9001\u7565\u904e\uff08\u56de\u653e\u515c\u5e95\uff09", (Object)taskId, (Object)seq);
+                log.debug("任務 {} seq {} 查無事件列或房號，整合推送略過（回放兜底）", (Object)taskId, (Object)seq);
                 return;
             }
             this.registry.broadcastRoomStatus(tenantId, event);
         }
         catch (Exception e) {
-            log.warn("\u6574\u5408\u63a8\u9001\u67e5\u8a62\u5931\u6557\uff0c\u7565\u904e\u6b64\u4e8b\u4ef6\uff08task={} seq={}\uff0c\u56de\u653e\u515c\u5e95\uff09: {}", new Object[]{taskId, seq, e.getMessage()});
+            log.warn("整合推送查詢失敗，略過此事件（task={} seq={}，回放兜底）: {}", new Object[]{taskId, seq, e.getMessage()});
         }
     }
 

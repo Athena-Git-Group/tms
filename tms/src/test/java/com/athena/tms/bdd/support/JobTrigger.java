@@ -45,8 +45,8 @@ public class JobTrigger {
                     applicationContext.getBean(IdempotencyRetentionJob.class).purgeExpiredOps();
             case "stream-heartbeat" -> applicationContext.getBean(StreamHeartbeat.class).beat();
             case "shift-end-scan" -> applicationContext.getBean(ShiftEndScanJob.class).scan();
-            case "schedule-rule-scan" -> throw new UnsupportedOperationException(
-                    "main 尚未建立自動化規則排程掃描 job，等 Feature GREEN 建立後接上");
+            case "schedule-rule-scan" ->
+                    applicationContext.getBean(com.athena.tms.service.ScheduleRuleScanJob.class).scan();
             case "escalation-scan" -> applicationContext.getBean(EscalationScanJob.class).scan();
             default -> throw new IllegalArgumentException(
                     "未知的排程工作名稱：" + jobName + "；已知名稱：" + KNOWN_JOBS);

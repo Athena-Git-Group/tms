@@ -76,7 +76,7 @@ extends OncePerRequestFilter {
                     this.idempotencyService.store(tenantId, opId, wrapper.getStatus(), wrapper.getContentType(), body);
                 }
                 catch (RuntimeException e) {
-                    this.logger.warn((Object)"processed_ops \u843d\u7c3f\u5931\u6557\u2014\u2014\u9019\u628a\u9375\u7684\u91cd\u9001\u6703\u91cd\u7b97\u800c\u4e0d\u662f\u56de\u653e", (Throwable)e);
+                    this.logger.warn((Object)"processed_ops 落簿失敗——這把鍵的重送會重算而不是回放", (Throwable)e);
                 }
             }
         }

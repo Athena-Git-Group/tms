@@ -69,7 +69,7 @@ public class RoomQrService {
     }
 
     private Room findRoom(long tenantId, String roomNo) {
-        return this.roomRepository.findByTenantIdAndRoomNo(tenantId, roomNo).orElseThrow(() -> new NotFoundException("\u67e5\u7121\u623f\u865f " + roomNo));
+        return this.roomRepository.findByTenantIdAndRoomNo(tenantId, roomNo).orElseThrow(() -> new NotFoundException("查無房號 " + roomNo));
     }
 
     private RoomQrToken issue(long tenantId, UUID roomId) {

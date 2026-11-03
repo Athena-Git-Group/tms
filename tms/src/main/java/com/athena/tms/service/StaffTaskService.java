@@ -47,7 +47,7 @@ public class StaffTaskService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         if (actor.dept() == null) {
-            throw new UnprocessableEntityException("\u6b64\u5e33\u865f\u672a\u8a2d\u90e8\u9580\uff0c\u6c92\u6709\u5c0d\u61c9\u7684\u90e8\u9580\u5f85\u63a5\u6c60\uff08FR-010\uff09");
+            throw new UnprocessableEntityException("此帳號未設部門，沒有對應的部門待接池（FR-010）");
         }
         return this.taskRepository.findByTenantIdAndDeptAndStateOrderByCreatedAtAsc(tenantId, actor.dept(), "pool");
     }
@@ -87,10 +87,10 @@ public class StaffTaskService {
         CurrentActor actor = CurrentActor.require();
         boolean checked = Boolean.TRUE.equals(request.checked());
         if (checked == (skipped = Boolean.TRUE.equals(request.skipped()))) {
-            throw new UnprocessableEntityException("checked \u8207 skipped \u5fc5\u9808\u6070\u53d6\u5176\u4e00\uff08FR-013\uff1a{\"checked\":true} \u6216 {\"skipped\":true}\uff09");
+            throw new UnprocessableEntityException("checked 與 skipped 必須恰取其一（FR-013：{\"checked\":true} 或 {\"skipped\":true}）");
         }
         this.requireTask(tenantId, taskId);
-        SopItem item = this.sopItemRepository.findByTenantIdAndAppliesToAndItemKey(tenantId, "cleaning", itemKey).orElseThrow(() -> new NotFoundException("\u67e5\u7121 SOP \u9805\u76ee: " + itemKey));
+        SopItem item = this.sopItemRepository.findByTenantIdAndAppliesToAndItemKey(tenantId, "cleaning", itemKey).orElseThrow(() -> new NotFoundException("查無 SOP 項目: " + itemKey));
         this.taskEngine.sopCheck(tenantId, taskId, item.getItemKey(), item.getLabel(), checked, skipped, StaffTaskService.staffActor(actor));
         TaskSopCheck check = this.taskSopCheckRepository.findByTenantIdAndTaskIdAndItemKey(tenantId, taskId, itemKey).orElseGet(() -> {
             TaskSopCheck fresh = new TaskSopCheck();
@@ -109,7 +109,7 @@ public class StaffTaskService {
     }
 
     private Task requireTask(long tenantId, UUID taskId) {
-        return this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("\u67e5\u7121\u4efb\u52d9: " + String.valueOf(taskId)));
+        return this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("查無任務: " + String.valueOf(taskId)));
     }
 
     private static Actor staffActor(CurrentActor actor) {
@@ -120,7 +120,7 @@ public class StaffTaskService {
         String claimerName;
         Task current = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElse(null);
         if (current != null && current.getAssigneeId() != null && !"pool".equals(current.getState()) && (claimerName = (String)this.staffAccountRepository.findByTenantIdAndId(tenantId, current.getAssigneeId()).map(account -> account.getName()).orElse(null)) != null) {
-            return new StateConflictException("\u9019\u55ae\u5df2\u88ab" + claimerName + "\u8a8d\u9818");
+            return new StateConflictException("這單已被" + claimerName + "認領");
         }
         return original;
     }

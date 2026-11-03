@@ -1,6 +1,7 @@
 package com.athena.tms.service;
 
 import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.NotFoundException;
 import com.athena.tms.common.error.StateConflictException;
@@ -10,11 +11,14 @@ import com.athena.tms.dto.CompleteTaskRequest;
 import com.athena.tms.dto.HoldReasonRequest;
 import com.athena.tms.dto.RequeueRequest;
 import com.athena.tms.dto.SopCheckItemRequest;
+import com.athena.tms.handover.HandoverService;
 import com.athena.tms.repair.RepairService;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +43,7 @@ public class TaskExecutionService {
     private final PushOutboxWriter pushOutboxWriter;
     private final TaskRowLookup taskRowLookup;
     private final RepairService repairService;
+    private final HandoverService handoverService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -48,6 +53,7 @@ public class TaskExecutionService {
             PushOutboxWriter pushOutboxWriter,
             TaskRowLookup taskRowLookup,
             RepairService repairService,
+            HandoverService handoverService,
             ObjectMapper objectMapper,
             Clock clock) {
         this.taskEngine = taskEngine;
@@ -55,6 +61,7 @@ public class TaskExecutionService {
         this.pushOutboxWriter = pushOutboxWriter;
         this.taskRowLookup = taskRowLookup;
         this.repairService = repairService;
+        this.handoverService = handoverService;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -95,13 +102,23 @@ public class TaskExecutionService {
         return reason;
     }
 
-    /** 負責人開工，接受待開始與本人延後的任務。同一位員工同時只能有一間進行中。 */
+    /**
+     * 負責人開工，接受待開始與本人延後的任務。同一位員工同時只能有一間進行中。
+     * 開工時順帶記交辦已讀（contracts tasksStart、FR-038）——開工前 App 會把
+     * 交辦攤在確認頁上，走到開工就代表看過了；重複開工或先展開過都不重記
+     * （handover_reads 主鍵衝突不動作）。兩個寫入包在同一個交易，不會出現
+     * 「已開工但已讀沒記到」的中間態。
+     */
+    @Transactional
     public Map<String, Object> start(UUID taskId) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         rejectIfAnotherTaskDoing(tenantId, taskId, actor);
-        return transition(tenantId, taskId, actor,
+        Map<String, Object> detail = transition(tenantId, taskId, actor,
                 (actorRef) -> taskEngine.start(tenantId, taskId, actorRef));
+        handoverService.recordRead(tenantId, taskId, actor.staffId());
+        detail.put("handoverRead", true);
+        return detail;
     }
 
     /**
@@ -191,7 +208,7 @@ public class TaskExecutionService {
 
     /**
      * 主管附交代把已中斷的任務退回待接池（contracts tasksRequeue）。退池與事件由
-     * {@link TaskEngine#requeueInterrupted} 以條件式更新把關；之後推播同樓層的房務員，請他們到
+     * {@link TaskEngine#requeueToPool} 以條件式更新把關；之後推播同樓層的房務員，請他們到
      * 待接池接手——推播和退池包在同一個交易裡，退池成立但沒人收到通知的狀態不會出現。
      */
     @Transactional
@@ -203,7 +220,7 @@ public class TaskExecutionService {
             throw new UnprocessableEntityException("note_required", "附交代退池必須附上接手進度的交代");
         }
         Map<String, Object> before = taskRowLookup.require(tenantId, taskId);
-        int seq = taskEngine.requeueInterrupted(tenantId, taskId, note, staffActor(actor));
+        int seq = taskEngine.requeueToPool(tenantId, taskId, note, staffActor(actor));
         notifySameFloorHousekeepers(tenantId, taskId, seq, before);
         return toDetail(taskRowLookup.require(tenantId, taskId));
     }
@@ -227,17 +244,73 @@ public class TaskExecutionService {
                 UUID.class, tenantId, taskRow.get("room_id"), tenantId);
         String roomNo = String.valueOf(taskRow.get("room_no"));
         for (UUID recipient : recipients) {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("recipientStaffId", recipient.toString());
-            payload.put("event", "returned_to_pool");
-            payload.put("title", roomNo + " 已附交代退回待接池");
-            ObjectNode target = payload.putObject("target");
-            target.put("kind", "pool");
-            target.put("dept", "housekeeping");
-            target.put("highlightTaskId", taskId.toString());
+            ObjectNode payload = PushOutboxWriter.payload(
+                    objectMapper, recipient, "returned_to_pool", roomNo + " 已附交代退回待接池");
+            PushOutboxWriter.targetPool(payload, "housekeeping", taskId);
             pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                     "requeue:" + taskId + ":seq:" + seq + ":" + recipient);
         }
+    }
+
+    /**
+     * 主管作廢任務（contracts tasksCancel）。原因只收 manager_void 與 plan_superseded：
+     * guest_withdrew 是住客撤回入口專用的原因，混進這裡會讓「誰收掉這張單」的追溯失真。
+     * 任務有負責人時推播他，點開直達該任務頁，他才知道手上的單被收掉、不用白跑一趟。
+     */
+    @Transactional
+    public Map<String, Object> cancel(UUID taskId, String reason, String note) {
+        long tenantId = TenantContext.require();
+        CurrentActor actor = CurrentActor.require();
+        if (!"manager_void".equals(reason) && !"plan_superseded".equals(reason)) {
+            throw new UnprocessableEntityException("作廢必附原因 manager_void 或 plan_superseded，收到: " + reason);
+        }
+        Map<String, Object> before = taskRowLookup.require(tenantId, taskId);
+        int seq = taskEngine.cancel(tenantId, taskId, reason, staffActor(actor));
+        Object assignee = before.get("assignee_id");
+        if (assignee != null) {
+            UUID recipient = UUID.fromString(String.valueOf(assignee));
+            ObjectNode payload = PushOutboxWriter.payload(
+                    objectMapper, recipient, "task_cancelled", before.get("room_no") + " 已被主管作廢");
+            PushOutboxWriter.targetTask(payload, taskId);
+            pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
+                    "task_cancelled:" + taskId + ":seq:" + seq + ":" + recipient);
+        }
+        return toDetail(taskRowLookup.require(tenantId, taskId));
+    }
+
+    /**
+     * 主管改派（contracts tasksReassign）：還沒開工的單換負責人。兩邊的推播去處
+     * 刻意不同——新負責人點開要直達這張單（接下來是他要做的事），原負責人點開
+     * 只回首頁（這張單已經不屬於他，直達任務頁反而會讓他誤操作別人的單）。
+     */
+    @Transactional
+    public Map<String, Object> reassign(UUID taskId, UUID newAssigneeId) {
+        long tenantId = TenantContext.require();
+        CurrentActor actor = CurrentActor.require();
+        if (newAssigneeId == null) {
+            throw new UnprocessableEntityException("改派必須指定新負責人（assigneeId）");
+        }
+        Map<String, Object> before = taskRowLookup.require(tenantId, taskId);
+        int seq = taskEngine.reassign(tenantId, taskId, newAssigneeId, staffActor(actor));
+
+        String newAssigneeName = jdbcTemplate.queryForObject(
+                "SELECT name FROM staff_accounts WHERE tenant_id = ? AND id = ?",
+                String.class, tenantId, newAssigneeId);
+        Object previousAssignee = before.get("assignee_id");
+        if (previousAssignee != null && !newAssigneeId.toString().equalsIgnoreCase(String.valueOf(previousAssignee))) {
+            UUID recipient = UUID.fromString(String.valueOf(previousAssignee));
+            ObjectNode payload = PushOutboxWriter.payload(
+                    objectMapper, recipient, "reassigned_away", before.get("room_no") + " 已改派給" + newAssigneeName);
+            PushOutboxWriter.targetHome(payload);
+            pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
+                    "reassigned_away:" + taskId + ":seq:" + seq + ":" + recipient);
+        }
+        ObjectNode payload = PushOutboxWriter.payload(objectMapper, newAssigneeId, "reassigned_to_me", "主管改派一單給您");
+        PushOutboxWriter.targetTask(payload, taskId);
+        pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
+                "reassigned_to_me:" + taskId + ":seq:" + seq + ":" + newAssigneeId);
+
+        return toDetail(taskRowLookup.require(tenantId, taskId));
     }
 
     /** 負責人恢復已中斷的任務。 */
@@ -326,6 +399,113 @@ public class TaskExecutionService {
     }
 
     /**
+     * 查看呼叫者的今日進度與下一間，形狀對應 contracts 的 MyToday。統計的口徑：
+     * 打掃總數＝本人今日（work_date＝今天）未取消的打掃任務數，打掃完成數＝其中
+     * done 或 inspected 的數量；今日完成單數＝本人今天完成（done_at 落在今天）且
+     * 狀態 done 或 inspected 的任務數；臨時需求完成數＝其中非打掃類 done 的數量；
+     * 預估剩餘工時＝Σ（accepted、doing、deferred、interrupted）max(0, 預估分鐘 −
+     * 已做分鐘），進行中的段落以現在時刻折算。下一間只列 accepted，排序為 redo
+     * 次數多的先、非打掃類先於打掃類、最後依房號遞增，讓員工先清掉臨時需求再回
+     * 打掃動線。連續零退回天數的計算定義尚未拍板，先固定回 0。
+     */
+    public Map<String, Object> myToday() {
+        long tenantId = TenantContext.require();
+        CurrentActor actor = CurrentActor.require();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        LocalDate today = LocalDate.ofInstant(clock.instant(), clock.getZone());
+        OffsetDateTime dayStart = today.atStartOfDay(clock.getZone()).toOffsetDateTime();
+        OffsetDateTime dayEnd = today.plusDays(1).atStartOfDay(clock.getZone()).toOffsetDateTime();
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                """
+                SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
+                       t.work_date, t.done_at, t.redo_count, r.room_no
+                  FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? AND t.assignee_id = ?
+                """,
+                tenantId, actor.staffId());
+
+        int cleaningTotal = 0;
+        int cleaningDone = 0;
+        int completedCount = 0;
+        int adHocCompleted = 0;
+        long remainingMinutes = 0;
+        List<Map<String, Object>> nextTasks = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String type = String.valueOf(row.get("type"));
+            String state = String.valueOf(row.get("state"));
+            boolean doneLike = "done".equals(state) || "inspected".equals(state);
+            if ("cleaning".equals(type) && today.equals(toLocalDate(row.get("work_date")))
+                    && !"cancelled".equals(state)) {
+                cleaningTotal++;
+                if (doneLike) {
+                    cleaningDone++;
+                }
+            }
+            OffsetDateTime doneAt = SqlTimestamps.toOffsetDateTime(row.get("done_at"));
+            boolean doneToday = doneAt != null && !doneAt.isBefore(dayStart) && doneAt.isBefore(dayEnd);
+            if (doneLike && doneToday) {
+                completedCount++;
+                if (!"cleaning".equals(type) && "done".equals(state)) {
+                    adHocCompleted++;
+                }
+            }
+            if ("accepted".equals(state) || "doing".equals(state)
+                    || "deferred".equals(state) || "interrupted".equals(state)) {
+                remainingMinutes += remainingMinutesOf(row, now);
+            }
+            if ("accepted".equals(state)) {
+                Map<String, Object> next = new LinkedHashMap<>();
+                next.put("taskId", String.valueOf(row.get("id")));
+                next.put("roomNo", row.get("room_no"));
+                next.put("title", row.get("title"));
+                next.put("type", type);
+                next.put("redoCount", row.get("redo_count"));
+                nextTasks.add(next);
+            }
+        }
+        nextTasks.sort(Comparator
+                .comparingInt((Map<String, Object> n) -> ((Number) n.get("redoCount")).intValue()).reversed()
+                .thenComparing(n -> "cleaning".equals(n.get("type")) ? 1 : 0)
+                .thenComparing(n -> String.valueOf(n.get("roomNo"))));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("cleaningDone", cleaningDone);
+        result.put("cleaningTotal", cleaningTotal);
+        result.put("completedCount", completedCount);
+        result.put("adHocCompleted", adHocCompleted);
+        result.put("remainingMinutes", (int) Math.max(0, remainingMinutes));
+        result.put("nextTasks", nextTasks);
+        result.put("zeroReturnStreakDays", 0);
+        return result;
+    }
+
+    /** 單一任務的剩餘分鐘：預估分鐘減已做分鐘，進行中的段落折算到現在，最低 0。 */
+    private long remainingMinutesOf(Map<String, Object> row, OffsetDateTime now) {
+        Number estMin = (Number) row.get("est_min");
+        if (estMin == null) {
+            return 0;
+        }
+        long workedSec = row.get("worked_sec") == null ? 0 : ((Number) row.get("worked_sec")).longValue();
+        OffsetDateTime segmentStartedAt = SqlTimestamps.toOffsetDateTime(row.get("segment_started_at"));
+        if (segmentStartedAt != null && segmentStartedAt.isBefore(now)) {
+            workedSec += Duration.between(segmentStartedAt, now).getSeconds();
+        }
+        return Math.max(0, estMin.longValue() - workedSec / 60);
+    }
+
+    private static LocalDate toLocalDate(Object v) {
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof java.sql.Date d) {
+            return d.toLocalDate();
+        }
+        return (LocalDate) v;
+    }
+
+    /**
      * 狀態轉移的共用流程：先確認任務存在（查無任務要回 404，不能被後續狀態不符的
      * 409 蓋掉），再委派 {@link TaskEngine} 執行轉移，最後重讀資料列組出最新的
      * TaskDetail 回給呼叫端。
@@ -358,6 +538,12 @@ public class TaskExecutionService {
         detail.put("elapsedMinutes", minutes);
         detail.put("accumulatedMinutes", minutes);
         detail.put("checkedSopItems", checkedSopItemIds(row));
+        detail.put("handovers", handoverService.handoversOf(row));
+        detail.put("returnInfo", handoverService.returnInfoOf(row));
+        detail.put("handoverRead", handoverService.isRead(
+                ((Number) row.get("tenant_id")).longValue(),
+                UUID.fromString(String.valueOf(row.get("id"))),
+                CurrentActor.require().staffId()));
         return detail;
     }
 

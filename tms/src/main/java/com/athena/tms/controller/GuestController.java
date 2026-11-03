@@ -51,7 +51,7 @@ public class GuestController {
     @PostMapping(value={"/guest/scan"})
     public ScanResponse scan(@RequestBody ScanRequest request, HttpServletRequest http) {
         if (request.token() == null || request.token().isBlank()) {
-            throw new UnprocessableEntityException("token \u5fc5\u586b");
+            throw new UnprocessableEntityException("token 必填");
         }
         return this.scanService.scan(request.token().trim(), GuestController.clientIp(http));
     }

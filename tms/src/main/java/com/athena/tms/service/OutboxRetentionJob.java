@@ -42,7 +42,7 @@ public class OutboxRetentionJob {
         this.tenantScopedExecutor.forEachTenant(tenantId -> {
             int purged = this.jdbcTemplate.update("DELETE FROM outbox WHERE status = 'sent' AND sent_at < ?", new Object[]{cutoff});
             if (purged > 0) {
-                log.info("\u79df\u6236 {} \u6e05\u6389 {} \u7b46\u904e\u4fdd\u7559\u671f\u7684 sent outbox", (Object)tenantId, (Object)purged);
+                log.info("租戶 {} 清掉 {} 筆過保留期的 sent outbox", (Object)tenantId, (Object)purged);
             }
         });
     }

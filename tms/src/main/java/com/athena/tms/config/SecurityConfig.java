@@ -1,24 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  jakarta.servlet.DispatcherType
- *  jakarta.servlet.Filter
- *  org.springframework.boot.context.properties.EnableConfigurationProperties
- *  org.springframework.context.annotation.Bean
- *  org.springframework.context.annotation.Configuration
- *  org.springframework.http.HttpMethod
- *  org.springframework.security.config.annotation.web.builders.HttpSecurity
- *  org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer
- *  org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer$AuthorizedUrl
- *  org.springframework.security.config.http.SessionCreationPolicy
- *  org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
- *  org.springframework.security.crypto.password.PasswordEncoder
- *  org.springframework.security.web.AuthenticationEntryPoint
- *  org.springframework.security.web.SecurityFilterChain
- *  org.springframework.security.web.access.AccessDeniedHandler
- *  org.springframework.security.web.access.intercept.AuthorizationFilter
- */
 package com.athena.tms.config;
 
 import com.athena.tms.common.error.ApiErrorResponses;
@@ -74,6 +53,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/owner/**").hasRole("owner")
                         .requestMatchers("/integration/**").hasRole("INTEGRATION")
                         .requestMatchers("/api/v1/tenant-configs/**").hasRole("manager")
+                        // 住客掃碼註冊 session 時還沒有任何憑證（contracts guestSessionsScan）
+                        .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").permitAll()
+                        // 住客需求操作走 X-Guest-Session 憑證（contracts createGuestRequest 等）
+                        .requestMatchers("/api/v1/guest-requests/**").hasRole("guest")
+                        // 櫃檯備註由櫃檯建立（contracts createDeskNote），不套下面
+                        // 「/api/v1 寫入限現場執行部門」的通則，否則櫃檯一律 403。
+                        .requestMatchers(HttpMethod.POST, "/api/v1/desk-notes").hasAnyRole("frontdesk", "manager")
                         .requestMatchers(HttpMethod.GET, "/api/v1/**")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
                         .requestMatchers("/api/v1/**").hasAnyRole("housekeeping", "engineering", "manager")

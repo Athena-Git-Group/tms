@@ -1,47 +1,84 @@
 package com.athena.tms.kb;
 
+import com.athena.tms.common.error.UnprocessableEntityException;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 查一下：推薦、回饋、問主管（本 plan 新增，FR-039–044）。
- *
- * <p>骨架階段：僅預留路由落點，一律回 501，不含業務邏輯。
- * 對照 {@code specs/truth/contracts/groups/知識與通知/房間記憶與問一下.yaml}：
- * listKbSuggestions、submitKbFeedback、escalateKbQuestion（員工）、
- * listKbEscalations、replyKbEscalation（主管）。
+ * 查一下 API：推薦問題、提問、回饋、問主管與主管回覆。路由對照
+ * {@code specs/truth/contracts/groups/知識與通知/房間記憶與問一下.yaml}，
+ * 掛在 {@code /api/v1} 前綴下。
  */
 @RestController
+@RequestMapping("/api/v1")
 public class KbController {
 
-    @GetMapping("/staff/room-memories/suggestions")
-    public ResponseEntity<Void> listKbSuggestions() {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    private final KbSuggestionService kbSuggestionService;
+    private final KbAskService kbAskService;
+
+    public KbController(KbSuggestionService kbSuggestionService, KbAskService kbAskService) {
+        this.kbSuggestionService = kbSuggestionService;
+        this.kbAskService = kbAskService;
     }
 
-    @PostMapping("/staff/room-memories/answers/{answerId}/feedback")
-    public ResponseEntity<Void> submitKbFeedback(@PathVariable UUID answerId) {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    public record AskRequest(UUID taskId, String question) {
     }
 
-    @PostMapping("/staff/room-memories/answers/{answerId}/escalate")
-    public ResponseEntity<Void> escalateKbQuestion(@PathVariable UUID answerId) {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    public record FeedbackRequest(Boolean helpful) {
     }
 
-    @GetMapping("/admin/room-memories/escalations")
-    public ResponseEntity<Void> listKbEscalations() {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    public record ReplyRequest(String reply) {
     }
 
-    @PostMapping("/admin/room-memories/escalations/{escalationId}/reply")
-    public ResponseEntity<Void> replyKbEscalation(@PathVariable UUID escalationId) {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    @GetMapping("/room-memories/suggestions")
+    public List<KbSuggestion> listKbSuggestions(@RequestParam UUID taskId) {
+        return kbSuggestionService.listSuggestions(taskId);
+    }
+
+    @PostMapping("/room-memories/ask")
+    public KbAnswer roomMemoryAsk(@RequestBody AskRequest request) {
+        if (request == null || request.taskId() == null
+                || request.question() == null || request.question().isBlank()) {
+            throw new UnprocessableEntityException("taskId、question 必填");
+        }
+        return kbAskService.ask(request.taskId(), request.question());
+    }
+
+    @PostMapping("/room-memories/answers/{answerId}/feedback")
+    public ResponseEntity<Void> submitKbFeedback(
+            @PathVariable UUID answerId, @RequestBody FeedbackRequest request) {
+        if (request == null || request.helpful() == null) {
+            throw new UnprocessableEntityException("helpful 必填");
+        }
+        kbAskService.submitFeedback(answerId, request.helpful());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/room-memories/answers/{answerId}/escalate")
+    public ResponseEntity<KbEscalationView> escalateKbQuestion(@PathVariable UUID answerId) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(kbAskService.escalate(answerId));
+    }
+
+    @GetMapping("/room-memories/escalations")
+    public List<KbEscalationView> listKbEscalations(@RequestParam(required = false) String status) {
+        return kbAskService.listEscalations(status);
+    }
+
+    @PostMapping("/room-memories/escalations/{escalationId}/reply")
+    public KbEscalationView replyKbEscalation(
+            @PathVariable UUID escalationId, @RequestBody ReplyRequest request) {
+        if (request == null || request.reply() == null || request.reply().isBlank()) {
+            throw new UnprocessableEntityException("reply 必填");
+        }
+        return kbAskService.reply(escalationId, request.reply());
     }
 }

@@ -64,8 +64,8 @@ public class GuestScanService {
         int threshold = hit != null ? hit.threshold() : this.ipRateLimiter.lastKnownThreshold(clientIp, 10);
         int recentFailures = this.ipRateLimiter.recentFailures(clientIp);
         if (recentFailures >= threshold) {
-            log.warn("[alert][scan-rate-limit] \u6383\u78bc\u9650\u6d41\u89f8\u767c\uff1aip={} \u5341\u5206\u9418\u5167\u5df2\u5931\u6557 {} \u6b21\uff08\u9580\u6abb {}\uff09\uff0c\u672c\u6b21\u8acb\u6c42\u88ab\u64cb", new Object[]{clientIp, recentFailures, threshold});
-            throw new TooManyRequestsException("\u6383\u78bc\u5931\u6557\u6b21\u6578\u904e\u591a\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u6216\u6d3d\u6ac3\u6aaf");
+            log.warn("[alert][scan-rate-limit] 掃碼限流觸發：ip={} 十分鐘內已失敗 {} 次（門檻 {}），本次請求被擋", new Object[]{clientIp, recentFailures, threshold});
+            throw new TooManyRequestsException("掃碼失敗次數過多，請稍後再試或洽櫃檯");
         }
         if (hit == null || !"active".equals(hit.token().getStatus())) {
             if (hit != null) {
@@ -73,7 +73,7 @@ public class GuestScanService {
             } else {
                 this.ipRateLimiter.recordFailure(clientIp);
             }
-            throw new StateConflictException(ROOM_VACANT, "QR \u7121\u6548\u6216\u623f\u9593\u76ee\u524d\u7121\u4f4f\u5ba2\uff0c\u8acb\u6d3d\u6ac3\u6aaf");
+            throw new StateConflictException(ROOM_VACANT, "QR 無效或房間目前無住客，請洽櫃檯");
         }
         long tenantId = hit.token().getTenantId();
         return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.issueSession(tenantId, hit.token(), threshold, clientIp));
@@ -84,9 +84,9 @@ public class GuestScanService {
         ReservationCache current = this.reservationCacheRepository.findCurrentByRoom(tenantId, qr.getRoomId(), now).orElse(null);
         if (current == null) {
             this.ipRateLimiter.recordFailure(clientIp, threshold);
-            throw new StateConflictException(ROOM_VACANT, "\u623f\u9593\u76ee\u524d\u7121\u4f4f\u5ba2\uff0c\u8acb\u6d3d\u6ac3\u6aaf");
+            throw new StateConflictException(ROOM_VACANT, "房間目前無住客，請洽櫃檯");
         }
-        Room room = this.roomRepository.findByTenantIdAndId(tenantId, qr.getRoomId()).orElseThrow(() -> new IllegalStateException("QR token \u6307\u5411\u7684\u623f\u9593\u4e0d\u5b58\u5728\uff08\u8cc7\u6599\u4e0d\u4e00\u81f4\uff09: " + String.valueOf(qr.getRoomId())));
+        Room room = this.roomRepository.findByTenantIdAndId(tenantId, qr.getRoomId()).orElseThrow(() -> new IllegalStateException("QR token 指向的房間不存在（資料不一致）: " + String.valueOf(qr.getRoomId())));
         GuestSession session = new GuestSession();
         session.setId(UuidV7.generate());
         session.setTenantId(tenantId);

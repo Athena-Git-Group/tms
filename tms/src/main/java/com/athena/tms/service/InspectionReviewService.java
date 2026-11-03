@@ -135,13 +135,10 @@ public class InspectionReviewService {
         if (task.getAssigneeId() == null) {
             return;
         }
-        ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("recipientStaffId", task.getAssigneeId().toString());
-        payload.put("event", "inspection_failed");
-        payload.put("title", roomNo + " 查房退回 · " + failedKeysText + "不合格");
-        ObjectNode target = payload.putObject("target");
-        target.put("kind", "task");
-        target.put("taskId", task.getId().toString());
+        ObjectNode payload = PushOutboxWriter.payload(
+                objectMapper, task.getAssigneeId(), "inspection_failed",
+                roomNo + " 查房退回 · " + failedKeysText + "不合格");
+        PushOutboxWriter.targetTask(payload, task.getId());
         pushOutboxWriter.enqueue(
                 tenantId,
                 "task:" + task.getId(),

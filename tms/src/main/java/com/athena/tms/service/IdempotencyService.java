@@ -11,14 +11,14 @@
  */
 package com.athena.tms.service;
 
-import com.athena.tms.service.TenantScopedExecutor;
-import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
+
+import java.util.Optional;
 
 @Service
 public class IdempotencyService {
@@ -58,7 +58,7 @@ public class IdempotencyService {
             return new StoredResult(node.get("status").asInt(), contentType, node.path("body").asText(""));
         }
         catch (JacksonException e) {
-            throw new IllegalStateException("processed_ops.result_ref \u4e0d\u662f\u9810\u671f\u7684 JSON \u5f62\u72c0", e);
+            throw new IllegalStateException("processed_ops.result_ref 不是預期的 JSON 形狀", e);
         }
     }
 

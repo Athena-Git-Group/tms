@@ -41,7 +41,7 @@ public class AuthService {
         TenantContext.set(request.tenantId());
         StaffAccount account = this.staffAccountRepository.findByTenantIdAndLoginId(request.tenantId(), request.loginId()).orElse(null);
         if (account == null || !account.isActive() || !this.passwordEncoder.matches((CharSequence)request.password(), account.getPasswordHash())) {
-            throw new UnauthorizedException("\u5e33\u865f\u6216\u5bc6\u78bc\u932f\u8aa4\uff0c\u6216\u5e33\u865f\u5df2\u505c\u7528");
+            throw new UnauthorizedException("帳號或密碼錯誤，或帳號已停用");
         }
         this.registerDevice(request, account);
         JwtService.IssuedToken issued = this.jwtService.issue(account.getTenantId(), account.getId(), account.getRole(), account.getDept());
@@ -71,13 +71,13 @@ public class AuthService {
 
     private void validate(LoginRequest request) {
         if (request.tenantId() == null) {
-            throw new UnprocessableEntityException("tenantId \u5fc5\u586b");
+            throw new UnprocessableEntityException("tenantId 必填");
         }
         if (request.loginId() == null || request.loginId().isBlank()) {
-            throw new UnprocessableEntityException("loginId \u5fc5\u586b");
+            throw new UnprocessableEntityException("loginId 必填");
         }
         if (request.password() == null || request.password().isBlank()) {
-            throw new UnprocessableEntityException("password \u5fc5\u586b");
+            throw new UnprocessableEntityException("password 必填");
         }
     }
 }

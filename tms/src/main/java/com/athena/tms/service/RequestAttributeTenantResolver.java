@@ -17,13 +17,11 @@ public class RequestAttributeTenantResolver
 implements IdempotencyTenantResolver {
     @Override
     public Optional<Long> resolveTenantId(HttpServletRequest request) {
-        String text;
         Object attribute = request.getAttribute("tms.tenant_id");
-        if (attribute instanceof Number) {
-            Number number = (Number)attribute;
+        if (attribute instanceof Number number) {
             return Optional.of(number.longValue());
         }
-        if (attribute instanceof String && !(text = (String)attribute).isBlank()) {
+        if (attribute instanceof String text && !text.isBlank()) {
             return RequestAttributeTenantResolver.parse(text);
         }
         return Optional.empty();
@@ -33,7 +31,7 @@ implements IdempotencyTenantResolver {
         try {
             return Optional.of(Long.parseLong(value.trim()));
         }
-        catch (NumberFormatException e) {
+        catch (NumberFormatException _) {
             return Optional.empty();
         }
     }

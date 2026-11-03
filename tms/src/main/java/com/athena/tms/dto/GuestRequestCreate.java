@@ -1,7 +1,4 @@
-/*
- * Decompiled with CFR 0.152.
- */
 package com.athena.tms.dto;
 
-public record GuestRequestCreate(String itemId, String text, String lang) {
+public record GuestRequestCreate(String itemId, Integer quantity, String text, String lang) {
 }

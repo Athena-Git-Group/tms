@@ -87,7 +87,8 @@ public class StaffFixtures {
     }
 
     private CreatedStaff insertStaff(String name, String roleCode, String deptCode, String stateCode) {
-        boolean active = mapActive(stateCode);
+        boolean active = "active".equals(stateCode);
+        requireKnownState(stateCode);
 
         long tenantId = tenantFixtures.testTenantId();
         UUID id = UuidV7.generate();
@@ -99,10 +100,10 @@ public class StaffFixtures {
                 .sql(
                         """
                         INSERT INTO staff_accounts
-                            (id, tenant_id, name, login_id, password_hash, role, dept, active, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            (id, tenant_id, name, login_id, password_hash, role, dept, active, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """)
-                .params(id, tenantId, name, loginId, passwordHash, roleCode, deptCode, active, now, now)
+                .params(id, tenantId, name, loginId, passwordHash, roleCode, deptCode, active, stateCode, now, now)
                 .update();
 
         // 直接簽發 JWT 而不經過 /auth/login：登入本身是待測行為之一，
@@ -148,17 +149,15 @@ public class StaffFixtures {
                 .update();
     }
 
-    private boolean mapActive(String stateCode) {
-        return switch (stateCode) {
-            case "active" -> true;
-            case "inactive" -> false;
-            // staff_accounts 只有 active 這一個 boolean，沒有第三態可以承載「待開通」，
-            // 之後若要支援得先決定資料模型，不是加一行映射就能蒙混過去。
-            case "invited" ->
-                throw new UnsupportedOperationException(
-                        "staff_accounts 目前只有 active boolean，沒有欄位可以承載「待開通」狀態。");
-            default -> throw new IllegalArgumentException("未知的員工狀態代碼: " + stateCode);
-        };
+    /**
+     * 員工狀態三態寫進 staff_accounts.status（V10 新增欄位）。active 這個 boolean
+     * 是「可登入、可被挑人、收推播」的衍生旗標，只有在職（active）為 true；
+     * 待開通（invited）與停用（inactive）都還不能動作，所以同為 false。
+     */
+    private static void requireKnownState(String stateCode) {
+        if (!Set.of("active", "invited", "inactive").contains(stateCode)) {
+            throw new IllegalArgumentException("未知的員工狀態代碼: " + stateCode);
+        }
     }
 
     public record CreatedStaff(long tenantId, UUID id, String loginId, String password, String jwt) {}

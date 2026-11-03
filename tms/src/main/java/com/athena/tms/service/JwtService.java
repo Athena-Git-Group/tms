@@ -49,7 +49,7 @@ public class JwtService {
             this.verifier = new MACVerifier(secret);
         }
         catch (JOSEException e) {
-            throw new IllegalStateException("tms.auth.jwt.secret \u9577\u5ea6\u4e0d\u8db3\uff08HS256 \u9700\u81f3\u5c11 32 bytes\uff09", e);
+            throw new IllegalStateException("tms.auth.jwt.secret 長度不足（HS256 需至少 32 bytes）", e);
         }
         this.ttl = properties.ttl();
     }
@@ -66,7 +66,7 @@ public class JwtService {
             jwt.sign((JWSSigner)this.signer);
         }
         catch (JOSEException e) {
-            throw new IllegalStateException("JWT \u7c3d\u7ae0\u5931\u6557", e);
+            throw new IllegalStateException("JWT 簽章失敗", e);
         }
         return new IssuedToken(jwt.serialize(), expiresAt.atOffset(ZoneOffset.UTC));
     }

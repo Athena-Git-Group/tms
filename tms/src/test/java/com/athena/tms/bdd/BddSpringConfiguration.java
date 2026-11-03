@@ -165,13 +165,24 @@ public class BddSpringConfiguration {
             return new HandoverFixtures(jdbcClient, tenantFixtures, objectMapper);
         }
 
+        /**
+         * 需要 {@link ScenarioWorld} 登記建出的任務 id，而 world 是 scenario 一份的
+         * 代理 bean，所以 PmsProbe 也跟著掛 {@code @ScenarioScope}，避免 singleton
+         * 抓住第一個 scenario 的 world 不放。
+         */
         @Bean
+        @ScenarioScope
         PmsProbe pmsProbe(
                 OutboxAwait outboxAwait,
                 DbProbe dbProbe,
                 TenantFixtures tenantFixtures,
-                RoomFixtures roomFixtures) {
-            return new PmsProbe(outboxAwait, dbProbe, tenantFixtures, roomFixtures);
+                RoomFixtures roomFixtures,
+                com.athena.tms.service.AutomationRuleService automationRuleService,
+                ScenarioWorld scenarioWorld,
+                MutableClock mutableClock) {
+            return new PmsProbe(
+                    outboxAwait, dbProbe, tenantFixtures, roomFixtures,
+                    automationRuleService, scenarioWorld, mutableClock);
         }
     }
 

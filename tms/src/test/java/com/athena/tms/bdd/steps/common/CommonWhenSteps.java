@@ -96,10 +96,11 @@ public class CommonWhenSteps {
     @當("時間來到 {string}")
     public void timeAdvancesTo(String hhmm) {
         clock.setTodayAt(hhmm);
-        // main 還沒有逾時升級／排程建單的週期掃描 job（見 JobTrigger），這裡仍然呼叫它：
-        // 讓這句在 GREEN 階段接上真正的 job 之後不必再動 stepdef，現在跑出來的
-        // UnsupportedOperationException 就是這句目前合法的失敗結果。
+        // 時間推進後，所有依賴時間的週期工作都該有機會跑一輪：逾時升級與排程建單
+        // 在正式環境各自定時掃描，測試裡同步觸發，情境才不用等真實排程間隔。
         jobTrigger.run("escalation-scan");
+        jobTrigger.run("schedule-rule-scan");
+        registerRuleCreatedTasks();
     }
 
     @當("從 PMS 拉今日房態，{string} 的訂房帶 {string} 屬性")
@@ -107,6 +108,31 @@ public class CommonWhenSteps {
         LocalDate checkinDate = clock.instant().atZone(clock.getZone()).toLocalDate();
         // PmsProbe 固定丟 UnsupportedOperationException（main 還沒有 PmsAdapter），見其類別註解。
         pmsProbe.pushTodayRoomState(roomNo, List.of(attribute), checkinDate);
+    }
+
+    /**
+     * 把排程規則剛建出的工單登記進 {@link ScenarioWorld}：後續 Then 句以房號（公共
+     * 區域的單以內容）取任務 id，規則引擎建的單沒有任何 Given 登記過，不補登記
+     * 就找不到。鍵相同時重複登記的是同一張單，覆寫無害。
+     */
+    private void registerRuleCreatedTasks() {
+        long tenantId = tenantFixtures.testTenantId();
+        List<Map<String, Object>> rows = jdbcClient
+                .sql(
+                        """
+                        SELECT t.id, t.title, r.room_no
+                          FROM tasks t
+                          JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                         WHERE t.tenant_id = ? AND t.rule_hit IS NOT NULL AND t.pool_source = 'system'
+                        """)
+                .params(tenantId)
+                .query()
+                .listOfRows();
+        for (Map<String, Object> row : rows) {
+            String roomNo = String.valueOf(row.get("room_no"));
+            String key = "公共區域".equals(roomNo) ? String.valueOf(row.get("title")) : roomNo;
+            world.rememberTask(key, String.valueOf(row.get("id")));
+        }
     }
 
     private UUID resolveTaskId(String key) {

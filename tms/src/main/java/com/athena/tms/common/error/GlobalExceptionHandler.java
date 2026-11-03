@@ -27,6 +27,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(value={MethodArgumentNotValidException.class})
     public ResponseEntity<ApiError> handleBeanValidation(MethodArgumentNotValidException ex) {
         List<ApiError.Detail> details = ex.getBindingResult().getFieldErrors().stream().map(fieldError -> new ApiError.Detail(fieldError.getField(), fieldError.getDefaultMessage())).toList();
-        return ResponseEntity.unprocessableEntity().body(new ApiError("validation_failed", "\u8acb\u6c42\u5167\u5bb9\u9a57\u8b49\u5931\u6557", details, null));
+        return ResponseEntity.unprocessableEntity().body(new ApiError("validation_failed", "請求內容驗證失敗", details, null));
     }
 }

@@ -1,12 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.slf4j.Logger
- *  org.slf4j.LoggerFactory
- *  org.springframework.stereotype.Service
- *  tools.jackson.databind.ObjectMapper
- */
 package com.athena.tms.service;
 
 import com.athena.tms.common.CurrentActor;
@@ -21,11 +12,6 @@ import com.athena.tms.dto.GuestRequestCreate;
 import com.athena.tms.dto.GuestTaskView;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
-import com.athena.tms.service.ClassificationRuleEngine;
-import com.athena.tms.service.GuestTenantConfigReader;
-import com.athena.tms.service.GuestTextAdvisor;
-import com.athena.tms.service.RoomRequestRateLimiter;
-import com.athena.tms.service.TaskEngine;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
@@ -47,8 +34,10 @@ public class GuestRequestService {
     private final GuestTextAdvisor textAdvisor;
     private final RoomRequestRateLimiter roomRequestRateLimiter;
     private final ObjectMapper objectMapper;
+    private final PushNotifier pushNotifier;
+    private final JdbcTemplate jdbcTemplate;
 
-    public GuestRequestService(TaskEngine taskEngine, TaskRepository taskRepository, GuestTenantConfigReader configReader, ClassificationRuleEngine ruleEngine, GuestTextAdvisor textAdvisor, RoomRequestRateLimiter roomRequestRateLimiter, ObjectMapper objectMapper) {
+    public GuestRequestService(TaskEngine taskEngine, TaskRepository taskRepository, GuestTenantConfigReader configReader, ClassificationRuleEngine ruleEngine, GuestTextAdvisor textAdvisor, RoomRequestRateLimiter roomRequestRateLimiter, ObjectMapper objectMapper, PushNotifier pushNotifier, JdbcTemplate jdbcTemplate) {
         this.taskEngine = taskEngine;
         this.taskRepository = taskRepository;
         this.configReader = configReader;
@@ -56,29 +45,43 @@ public class GuestRequestService {
         this.textAdvisor = textAdvisor;
         this.roomRequestRateLimiter = roomRequestRateLimiter;
         this.objectMapper = objectMapper;
+        this.pushNotifier = pushNotifier;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public GuestTaskView create(GuestRequestCreate request) {
-        TaskCreateCommand command;
-        boolean hasText;
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         boolean hasItem = request.itemId() != null && !request.itemId().isBlank();
-        boolean bl = hasText = request.text() != null && !request.text().isBlank();
+        boolean hasText = request.text() != null && !request.text().isBlank();
         if (hasItem == hasText) {
-            throw new UnprocessableEntityException("itemId\uff08\u52fe\u9078\u55ae\uff09\u8207 text\uff08\u81ea\u7531\u6587\u5b57\uff09\u5fc5\u9808\u6070\u597d\u64c7\u4e00");
+            throw new UnprocessableEntityException("itemId（勾選單）與 text（自由文字）必須恰好擇一");
         }
-        TaskCreateCommand taskCreateCommand = command = hasItem ? this.menuCommand(tenantId, actor, request.itemId().trim()) : this.freeTextCommand(tenantId, actor, request.text().trim(), request.lang());
+        TaskCreateCommand command = hasItem
+                ? this.menuCommand(tenantId, actor, request.itemId().trim(), request.quantity())
+                : this.freeTextCommand(tenantId, actor, request.text().trim(), request.lang());
         if (!this.roomRequestRateLimiter.tryAcquire(tenantId, actor.roomId())) {
-            throw new TooManyRequestsException("\u540c\u4e00\u623f 10 \u5206\u9418\u5167\u6700\u591a 3 \u7b46\u9700\u6c42\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66");
+            throw new TooManyRequestsException("同一房 10 分鐘內最多 3 筆需求，請洽櫃檯協助");
         }
         try {
-            return GuestTaskView.from(this.taskEngine.create(command));
+            Task task = this.taskEngine.create(command);
+            if ("pool".equals(task.getState())) {
+                this.markGuestScanPoolSource(tenantId, task.getId());
+                this.pushNotifier.notifyPoolNewRequest(tenantId, task.getId());
+            }
+            return GuestTaskView.from(task);
         }
         catch (RuntimeException e) {
             this.roomRequestRateLimiter.release(tenantId, actor.roomId());
             throw e;
         }
+    }
+
+    /** 進池的住客需求補記進池來源（tasks.pool_source=guest_scan），已有值時不覆寫。 */
+    private void markGuestScanPoolSource(long tenantId, UUID taskId) {
+        this.jdbcTemplate.update(
+                "UPDATE tasks SET pool_source = COALESCE(pool_source, 'guest_scan') WHERE tenant_id = ? AND id = ?",
+                tenantId, taskId);
     }
 
     public List<GuestTaskView> list() {
@@ -91,22 +94,30 @@ public class GuestRequestService {
         long tenantId = TenantContext.require();
         this.ownedTask(tenantId, taskId);
         this.taskEngine.cancelByGuest(tenantId, taskId);
+        this.pushNotifier.notifyGuestWithdrew(tenantId, taskId);
         return GuestTaskView.from(this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow());
     }
 
     public GuestTaskView rate(UUID taskId, GuestRatingRequest request) {
         long tenantId = TenantContext.require();
         if (request.rating() == null) {
-            throw new UnprocessableEntityException("rating \u5fc5\u586b\uff081\u20135 \u6574\u6578\uff09");
+            throw new UnprocessableEntityException("rating 必填（1–5 整數）");
         }
         this.ownedTask(tenantId, taskId);
         this.taskEngine.rate(tenantId, taskId, request.rating());
         return GuestTaskView.from(this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow());
     }
 
-    private TaskCreateCommand menuCommand(long tenantId, CurrentActor actor, String itemId) {
-        GuestTenantConfigReader.MenuItem item = this.configReader.requestMenu(tenantId).stream().filter(candidate -> candidate.key().equals(itemId)).findFirst().orElseThrow(() -> new UnprocessableEntityException("\u9078\u55ae\u88e1\u6c92\u6709\u9019\u500b\u9805\u76ee: " + itemId));
-        return new TaskCreateCommand(tenantId, item.type(), "guest", actor.roomId(), actor.reservationId(), item.dept(), "pool", null, item.label(), this.noteJson(Map.of("menu_key", item.key())), null, null, GuestRequestService.workDateFor(item.type()), Actor.guest());
+    private TaskCreateCommand menuCommand(long tenantId, CurrentActor actor, String itemId, Integer quantity) {
+        GuestTenantConfigReader.MenuItem item = this.configReader.requestMenu(tenantId).stream().filter(candidate -> candidate.key().equals(itemId)).findFirst().orElse(null);
+        if (item == null) {
+            // 不在勾選單上的品項當自由文字處理：走規則引擎，沒命中就進 triage 由櫃檯分流，
+            // 不因為 App 與勾選單版本不同步就直接拒絕住客。
+            return this.freeTextCommand(tenantId, actor, itemId, null);
+        }
+        int effectiveQuantity = quantity != null && quantity > 0 ? quantity : 1;
+        String title = effectiveQuantity > 1 ? item.label() + " ×" + effectiveQuantity : item.label();
+        return new TaskCreateCommand(tenantId, item.type(), "guest", actor.roomId(), actor.reservationId(), item.dept(), "pool", null, title, this.noteJson(Map.of("menu_key", item.key(), "quantity", effectiveQuantity)), null, null, GuestRequestService.workDateFor(item.type()), Actor.guest());
     }
 
     private TaskCreateCommand freeTextCommand(long tenantId, CurrentActor actor, String text, String lang) {
@@ -120,7 +131,7 @@ public class GuestRequestService {
             noteFields.put("rule_id", routing.ruleId());
         }
         this.textAdvisor.advise(tenantId, text, lang).ifPresent(advice -> {
-            log.info("[llm-advice] tenant={} \u5efa\u8b70\u90e8\u9580={} \u7ffb\u8b6f={}\uff08\u50c5\u8a18\u9304\uff0c\u4e0d\u6539\u6b78\u5c6c\uff09", new Object[]{tenantId, advice.suggestedDept(), advice.translatedText()});
+            log.info("[llm-advice] tenant={} 建議部門={} 翻譯={}（僅記錄，不改歸屬）", new Object[]{tenantId, advice.suggestedDept(), advice.translatedText()});
             if (advice.translatedText() != null) {
                 noteFields.put("llm_translated", advice.translatedText());
             }
@@ -128,7 +139,7 @@ public class GuestRequestService {
                 noteFields.put("llm_suggested_dept", advice.suggestedDept());
             }
         });
-        String title = text.length() <= 120 ? text : text.substring(0, 120) + "\u2026";
+        String title = text.length() <= TITLE_MAX_LENGTH ? text : text.substring(0, TITLE_MAX_LENGTH) + "…";
         return new TaskCreateCommand(tenantId, routing.type(), "guest", actor.roomId(), actor.reservationId(), routing.dept(), routing.initialState(), null, title, this.noteJson(noteFields), null, null, GuestRequestService.workDateFor(routing.type()), Actor.guest());
     }
 
@@ -137,11 +148,17 @@ public class GuestRequestService {
     }
 
     private void ownedTask(long tenantId, UUID taskId) {
-        Task task = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("\u9700\u6c42\u4e0d\u5b58\u5728"));
-        UUID sessionReservation = CurrentActor.require().reservationId();
-        if (!sessionReservation.equals(task.getReservationId())) {
-            throw new NotFoundException("\u9700\u6c42\u4e0d\u5b58\u5728");
+        Task task = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("需求不存在"));
+        CurrentActor actor = CurrentActor.require();
+        if (actor.reservationId().equals(task.getReservationId())) {
+            return;
         }
+        // 櫃檯代住客轉的單沒有綁訂單（reservation_id 為空）：這種單以「同一間房」認定
+        // 歸屬——session 綁定的房間跟任務的房間一致就視為這位住客的需求。
+        if (task.getReservationId() == null && actor.roomId() != null && actor.roomId().equals(task.getRoomId())) {
+            return;
+        }
+        throw new NotFoundException("需求不存在");
     }
 
     private String noteJson(Map<String, Object> fields) {

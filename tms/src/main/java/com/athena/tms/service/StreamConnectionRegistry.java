@@ -107,7 +107,7 @@ public class StreamConnectionRegistry {
     }
 
     public void broadcastDegraded() {
-        log.warn("Kafka \u6d88\u8cbb\u5ef6\u9072\u8d85\u9580\u6abb\uff0c\u5411 {} \u689d SSE \u9023\u7dda\u63a8\u9001 degraded\uff08\u5ba2\u6236\u7aef\u8f49 5 \u79d2\u8f2a\u8a62\uff09", (Object)this.connections.size());
+        log.warn("Kafka 消費延遲超門檻，向 {} 條 SSE 連線推送 degraded（客戶端轉 5 秒輪詢）", (Object)this.connections.size());
         for (StreamConnection connection : this.connections) {
             if (connection.sendDegraded(this.objectMapper)) continue;
             this.drop(connection);

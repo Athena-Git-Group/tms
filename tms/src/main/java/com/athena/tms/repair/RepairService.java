@@ -309,13 +309,9 @@ public class RepairService {
         String roomNo = queryFirstString(
                 "SELECT room_no FROM rooms WHERE tenant_id = ? AND id = ?", tenantId, ticket.get("room_id"));
         UUID reporterId = UUID.fromString(String.valueOf(ticket.get("reporter_id")));
-        ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("recipientStaffId", reporterId.toString());
-        payload.put("event", "repair_resolved");
-        payload.put("title", roomNo + " " + categoryLabel + "已修好");
-        ObjectNode target = payload.putObject("target");
-        target.put("kind", "task");
-        target.put("taskId", ticketTaskId.toString());
+        ObjectNode payload = PushOutboxWriter.payload(
+                objectMapper, reporterId, "repair_resolved", roomNo + " " + categoryLabel + "已修好");
+        PushOutboxWriter.targetTask(payload, ticketTaskId);
         pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
                 "repair_resolved:" + ticketTaskId + ":" + reporterId);
     }
@@ -521,14 +517,10 @@ public class RepairService {
                 """,
                 UUID.class, tenantId);
         for (UUID recipient : recipients) {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("recipientStaffId", recipient.toString());
-            payload.put("event", "repair_urgent");
-            payload.put("title", roomNo + " 急件報修（" + categoryLabel + " " + ticketNo + "）");
-            ObjectNode target = payload.putObject("target");
-            target.put("kind", "pool");
-            target.put("dept", "engineering");
-            target.put("highlightTaskId", ticketTaskId.toString());
+            ObjectNode payload = PushOutboxWriter.payload(
+                    objectMapper, recipient, "repair_urgent",
+                    roomNo + " 急件報修（" + categoryLabel + " " + ticketNo + "）");
+            PushOutboxWriter.targetPool(payload, "engineering", ticketTaskId);
             pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
                     "repair_urgent:" + ticketTaskId + ":" + recipient);
         }

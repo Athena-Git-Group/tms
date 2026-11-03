@@ -1,14 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.springframework.stereotype.Service
- *  org.springframework.transaction.annotation.Transactional
- *  tools.jackson.core.JacksonException
- *  tools.jackson.databind.ObjectMapper
- *  tools.jackson.databind.node.ArrayNode
- *  tools.jackson.databind.node.ObjectNode
- */
 package com.athena.tms.service;
 
 import com.athena.tms.common.CurrentActor;
@@ -32,8 +21,6 @@ import com.athena.tms.entity.Inspection;
 import com.athena.tms.entity.Room;
 import com.athena.tms.entity.SopItem;
 import com.athena.tms.entity.Task;
-import com.athena.tms.service.OutboxWriter;
-import com.athena.tms.service.TaskEngine;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -58,9 +45,10 @@ public class InspectionService {
     private final TenantConfigRepository tenantConfigRepository;
     private final TaskEngine taskEngine;
     private final OutboxWriter outboxWriter;
+    private final PushOutboxWriter pushOutboxWriter;
     private final ObjectMapper objectMapper;
 
-    public InspectionService(TaskRepository taskRepository, SopItemRepository sopItemRepository, InspectionRepository inspectionRepository, TaskSopCheckRepository taskSopCheckRepository, RoomRepository roomRepository, LeaveRepository leaveRepository, TenantConfigRepository tenantConfigRepository, TaskEngine taskEngine, OutboxWriter outboxWriter, ObjectMapper objectMapper) {
+    public InspectionService(TaskRepository taskRepository, SopItemRepository sopItemRepository, InspectionRepository inspectionRepository, TaskSopCheckRepository taskSopCheckRepository, RoomRepository roomRepository, LeaveRepository leaveRepository, TenantConfigRepository tenantConfigRepository, TaskEngine taskEngine, OutboxWriter outboxWriter, PushOutboxWriter pushOutboxWriter, ObjectMapper objectMapper) {
         this.taskRepository = taskRepository;
         this.sopItemRepository = sopItemRepository;
         this.inspectionRepository = inspectionRepository;
@@ -70,6 +58,7 @@ public class InspectionService {
         this.tenantConfigRepository = tenantConfigRepository;
         this.taskEngine = taskEngine;
         this.outboxWriter = outboxWriter;
+        this.pushOutboxWriter = pushOutboxWriter;
         this.objectMapper = objectMapper;
     }
 
@@ -77,39 +66,42 @@ public class InspectionService {
     public InspectionResponse inspect(UUID taskId, InspectionRequest request) {
         long tenantId = TenantContext.require();
         CurrentActor inspector = CurrentActor.require();
-        Task task = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("\u67e5\u7121\u6b64\u4efb\u52d9"));
+        Task task = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("查無此任務"));
         if (inspector.staffId() != null && inspector.staffId().equals(task.getAssigneeId())) {
-            throw new ForbiddenException("\u67e5\u623f\u8005\u4e0d\u5f97\u70ba\u539f\u6e05\u623f\u8005\uff08E-07\uff09");
+            throw new ForbiddenException("查房者不得為原清房者（E-07）");
         }
         if (!"cleaning".equals(task.getType())) {
-            throw new UnprocessableEntityException("\u67e5\u623f\u53ea\u9069\u7528\u6253\u6383\u4efb\u52d9\uff0c\u6b64\u55ae\u7a2e\u985e\u70ba " + task.getType());
+            throw new UnprocessableEntityException("查房只適用打掃任務，此單種類為 " + task.getType());
         }
         if (task.getRoomId() == null) {
-            throw new UnprocessableEntityException("\u6b64\u4efb\u52d9\u672a\u7d81\u623f\u9593\uff0c\u7121\u6cd5\u67e5\u623f");
+            throw new UnprocessableEntityException("此任務未綁房間，無法查房");
         }
         List<SopItem> requiredItems = this.sopItemRepository.findByTenantIdAndAppliesToAndActiveTrueOrderBySortOrderAsc(tenantId, "inspection");
         Map<String, Boolean> judgements = this.validateCoverage(request, requiredItems);
-        Room room = this.roomRepository.findByTenantIdAndId(tenantId, task.getRoomId()).orElseThrow(() -> new NotFoundException("\u67e5\u7121\u4efb\u52d9\u7d81\u5b9a\u7684\u623f\u9593"));
+        Room room = this.roomRepository.findByTenantIdAndId(tenantId, task.getRoomId()).orElseThrow(() -> new NotFoundException("查無任務綁定的房間"));
         Actor actor = Actor.staff(inspector.role(), inspector.staffId());
         boolean allPass = judgements.values().stream().allMatch(Boolean::booleanValue);
         if (allPass) {
-            this.taskEngine.passInspection(tenantId, taskId, actor);
+            int passSeq = this.taskEngine.passInspection(tenantId, taskId, actor);
             this.updateHkState(room, "inspected");
             this.recordInspection(tenantId, taskId, inspector.staffId(), "passed", judgements);
+            this.notifyAssignee(tenantId, task, passSeq, "inspection_passed", room.getRoomNo() + " 查房通過");
             // 查房通過＝合格結案：回寫 PMS 房況（回寫開關關閉或手動匯入模式時由該方法自行略過），
             // 任務事件因此在 inspection_passed 之後多一筆 pms_writeback。
             this.taskEngine.writebackRoomStatusIfEnabled(tenantId, taskId, actor);
             return new InspectionResponse(taskId, "passed", "inspected", task.getRedoCount(), false);
         }
-        String failedLabels = String.join((CharSequence)"\u3001", requiredItems.stream().filter(item -> (Boolean)judgements.get(item.getItemKey()) == false).map(SopItem::getLabel).toList());
-        this.taskEngine.failInspection(tenantId, taskId, failedLabels, actor);
+        String failedLabels = String.join((CharSequence)"、", requiredItems.stream().filter(item -> (Boolean)judgements.get(item.getItemKey()) == false).map(SopItem::getLabel).toList());
+        int failSeq = this.taskEngine.failInspection(tenantId, taskId, failedLabels, actor);
+        this.notifyAssignee(tenantId, task, failSeq, "inspection_failed",
+                room.getRoomNo() + " 查房退回 · " + failedLabels + "不合格");
         this.taskSopCheckRepository.deleteByTenantIdAndTaskId(tenantId, taskId);
         this.updateHkState(room, "dirty");
         this.recordInspection(tenantId, taskId, inspector.staffId(), "failed", judgements);
         boolean returnedToPool = false;
         UUID cleanerId = task.getAssigneeId();
         if (cleanerId != null && this.cleanerUnavailable(tenantId, cleanerId)) {
-            int returnSeq = this.taskEngine.returnToPool(tenantId, taskId, "\u67e5\u623f\u9000\u56de\u6642\u539f\u6e05\u623f\u8005\u5df2\u4e0b\u73ed\u6216\u8acb\u5047\uff0c\u81ea\u52d5\u9000\u56de\u5f85\u63a5\u6c60", actor);
+            int returnSeq = this.taskEngine.returnToPool(tenantId, taskId, "查房退回時原清房者已下班或請假，自動退回待接池", actor);
             this.outboxWriter.enqueuePush(tenantId, taskId, "task:" + String.valueOf(taskId) + ":returned_to_pool:seq:" + returnSeq, this.returnedToPoolPushPayload(room, task, failedLabels));
             returnedToPool = true;
         }
@@ -118,12 +110,12 @@ public class InspectionService {
 
     private Map<String, Boolean> validateCoverage(InspectionRequest request, List<SopItem> requiredItems) {
         if (requiredItems.isEmpty()) {
-            // \u79df\u6236\u6c92\u6709\u8a2d\u5b9a\u67e5\u623f\u9805\u76ee\uff1a\u6c92\u6709\u53ef\u9010\u9805\u5224\u5b9a\u7684\u6e05\u55ae\uff0c\u300c\u6db5\u84cb\u5168\u96c6\u300d\u7a7a\u96c6\u5408\u6210\u7acb\uff0c
-            // \u6574\u9ad4\u5224\u5b9a\u8996\u70ba\u5168\u90e8\u901a\u904e\uff08\u4e0d\u5f37\u8feb\u6bcf\u500b\u79df\u6236\u90fd\u5f97\u5148\u5efa\u67e5\u623f\u9805\u76ee\u624d\u80fd\u7d50\u6848\uff09\u3002
+            // 租戶沒有設定查房項目：沒有可逐項判定的清單，「涵蓋全集」空集合成立，
+            // 整體判定視為全部通過（不強迫每個租戶都得先建查房項目才能結案）。
             return new LinkedHashMap<String, Boolean>();
         }
         if (request == null || request.items() == null || request.items().isEmpty()) {
-            throw new UnprocessableEntityException("items \u5fc5\u586b\uff1a\u9808\u6db5\u84cb\u79df\u6236\u67e5\u623f\u9805\u76ee\u5168\u96c6");
+            throw new UnprocessableEntityException("items 必填：須涵蓋租戶查房項目全集");
         }
         LinkedHashMap<String, Boolean> judgements = new LinkedHashMap<String, Boolean>();
         for (SopItem sopItem : requiredItems) {
@@ -131,19 +123,19 @@ public class InspectionService {
         }
         for (InspectionRequest.Item item : request.items()) {
             if (item.key() == null || !judgements.containsKey(item.key())) {
-                throw new UnprocessableEntityException("\u672a\u77e5\u7684\u67e5\u623f\u9805\u76ee: " + item.key());
+                throw new UnprocessableEntityException("未知的查房項目: " + item.key());
             }
             if (judgements.get(item.key()) != null) {
-                throw new UnprocessableEntityException("\u67e5\u623f\u9805\u76ee\u91cd\u8907\u5224\u5b9a: " + item.key());
+                throw new UnprocessableEntityException("查房項目重複判定: " + item.key());
             }
             if (item.pass() == null) {
-                throw new UnprocessableEntityException("\u67e5\u623f\u9805\u76ee " + item.key() + " \u7f3a pass \u5224\u5b9a");
+                throw new UnprocessableEntityException("查房項目 " + item.key() + " 缺 pass 判定");
             }
             judgements.put(item.key(), item.pass());
         }
         List<String> missing = judgements.entrySet().stream().filter(entry -> entry.getValue() == null).map(Map.Entry::getKey).toList();
         if (!missing.isEmpty()) {
-            throw new UnprocessableEntityException("items \u9808\u6db5\u84cb\u79df\u6236\u67e5\u623f\u9805\u76ee\u5168\u96c6\uff0c\u7f3a: " + String.join((CharSequence)", ", missing));
+            throw new UnprocessableEntityException("items 須涵蓋租戶查房項目全集，缺: " + String.join((CharSequence)", ", missing));
         }
         return judgements;
     }
@@ -184,6 +176,21 @@ public class InspectionService {
         inspection.setItems(items.toString());
         inspection.setCreatedAt(OffsetDateTime.now());
         this.inspectionRepository.save(inspection);
+    }
+
+    /**
+     * 查房結果要讓負責人即時知道，他才知道該去接下一間還是回頭重做。
+     * 推播寫進 outbox，冪等鍵帶這次查房的事件序號，請求重試時同一次查房
+     * 不會對負責人插入第二筆。沒有負責人的單沒有收件對象，直接略過。
+     */
+    private void notifyAssignee(long tenantId, Task task, int seq, String event, String title) {
+        if (task.getAssigneeId() == null) {
+            return;
+        }
+        ObjectNode payload = PushOutboxWriter.payload(this.objectMapper, task.getAssigneeId(), event, title);
+        PushOutboxWriter.targetTask(payload, task.getId());
+        this.pushOutboxWriter.enqueue(tenantId, "task:" + task.getId(), payload,
+                event + ":" + task.getId() + ":seq:" + seq + ":" + task.getAssigneeId());
     }
 
     private void updateHkState(Room room, String hkState) {

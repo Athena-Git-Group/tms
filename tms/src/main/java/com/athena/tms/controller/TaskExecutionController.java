@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 員工 App 的任務執行 API，路由對應 contracts 的 readTasks、tasksDefer、
  * tasksStart、tasksSopCheck、tasksInterrupt、tasksComplete、tasksRequeue、
- * tasksResume 與 listDeptPool。
+ * tasksResume、listDeptPool 與 getMyToday。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -68,6 +68,25 @@ public class TaskExecutionController {
         return taskExecutionService.requeue(id, request);
     }
 
+    /** 請求形狀對應 contracts 任務.yaml 的 CancelTaskRequest。 */
+    public record CancelTaskRequest(String reason, String note) {}
+
+    @PostMapping("/tasks/{id}/cancel")
+    public Map<String, Object> cancel(
+            @PathVariable UUID id, @RequestBody(required = false) CancelTaskRequest request) {
+        return taskExecutionService.cancel(
+                id, request == null ? null : request.reason(), request == null ? null : request.note());
+    }
+
+    /** 改派只需要新負責人；整列任務資料其餘欄位不在這個動作的輸入裡。 */
+    public record ReassignTaskRequest(UUID assigneeId) {}
+
+    @PostMapping("/tasks/{id}/reassign")
+    public Map<String, Object> reassign(
+            @PathVariable UUID id, @RequestBody(required = false) ReassignTaskRequest request) {
+        return taskExecutionService.reassign(id, request == null ? null : request.assigneeId());
+    }
+
     @PostMapping("/tasks/{id}/resume")
     public Map<String, Object> resume(@PathVariable UUID id) {
         return taskExecutionService.resume(id);
@@ -76,5 +95,11 @@ public class TaskExecutionController {
     @GetMapping("/pool")
     public Map<String, Object> pool(@RequestParam(required = false) String category) {
         return taskExecutionService.deptPool(category);
+    }
+
+    /** 查看呼叫者的今日進度與下一間；統計口徑與排序規則在 {@link TaskExecutionService#myToday()}。 */
+    @GetMapping("/me/today")
+    public Map<String, Object> myToday() {
+        return taskExecutionService.myToday();
     }
 }

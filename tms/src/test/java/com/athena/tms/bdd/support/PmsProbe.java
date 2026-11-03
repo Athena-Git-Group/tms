@@ -1,22 +1,20 @@
 package com.athena.tms.bdd.support;
 
+import com.athena.tms.bdd.ScenarioWorld;
+import com.athena.tms.service.AutomationRuleService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 模擬 PMS adapter 的測試入口（對應 dsl.md 的 When 句型
  * 「從 PMS 拉今日房態，"{房號}" 的訂房帶 "{屬性}" 屬性」）。
  *
  * <p>這個方向的事件（PMS 推訂房進 TMS）設計上不走 HTTP：production 端是直接呼叫
- * 一個 {@code PmsAdapter} 介面，不是 controller。main 既有的
+ * {@link AutomationRuleService#applyTodayRoomState}，不是 controller。main 既有的
  * {@code IntegrationEventsController}／{@code IntegrationStreamController} 是反方向——
  * TMS 把房況往外推給 PMS 拉取或訂閱，兩者接不上本句的事件。
- *
- * <p>拉訂房方向（PMS 推訂房進 TMS）main 仍然沒有任何入口：{@code reservations_cache}
- * 只被既有 fixture 以直接 SQL 寫入，不經任何 adapter。{@link #pushTodayRoomState}
- * 因此保留簽章但拒絕執行——若改成假裝成功，依賴這句的情境會在沒有任何
- * production 行為的情況下通過，失敗訊號就消失了。
  */
 public class PmsProbe {
 
@@ -24,25 +22,50 @@ public class PmsProbe {
     private final DbProbe dbProbe;
     private final TenantFixtures tenantFixtures;
     private final RoomFixtures roomFixtures;
+    private final AutomationRuleService automationRuleService;
+    private final ScenarioWorld world;
+    private final MutableClock clock;
 
     public PmsProbe(
             OutboxAwait outboxAwait,
             DbProbe dbProbe,
             TenantFixtures tenantFixtures,
-            RoomFixtures roomFixtures) {
+            RoomFixtures roomFixtures,
+            AutomationRuleService automationRuleService,
+            ScenarioWorld world,
+            MutableClock clock) {
         this.outboxAwait = outboxAwait;
         this.dbProbe = dbProbe;
         this.tenantFixtures = tenantFixtures;
         this.roomFixtures = roomFixtures;
+        this.automationRuleService = automationRuleService;
+        this.world = world;
+        this.clock = clock;
     }
 
     /**
-     * 固定丟出：沒有 {@code PmsAdapter} 介面可以注入模擬實作，見本類別 class Javadoc。
+     * 把一筆今日房態交給 production 的自動化規則引擎比對建單，並把建出的準備工單
+     * 以房號登記進 {@link ScenarioWorld}——後續 Then 句（「{房號} 的準備工單…」）
+     * 都以房號取任務 id，不登記就找不到規則引擎建出的那張單。
      */
     public void pushTodayRoomState(String roomNo, List<String> attrs, LocalDate checkinDate) {
-        throw new UnsupportedOperationException(
-                "main 尚未建立批次拉取今日房態的 PmsAdapter，等 Feature GREEN 建立後接上："
-                        + "roomNo=" + roomNo + ", attrs=" + attrs + ", checkinDate=" + checkinDate);
+        long tenantId = tenantFixtures.testTenantId();
+        automationRuleService.applyTodayRoomState(tenantId, roomNo, attrs, checkinDate);
+
+        LocalDate today = clock.instant().atZone(clock.getZone()).toLocalDate();
+        Optional<Map<String, Object>> created = dbProbe.queryOne(
+                """
+                SELECT t.id FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? AND r.room_no = ? AND t.rule_hit IS NOT NULL
+                   AND t.created_at >= ? AND t.created_at < ?
+                 ORDER BY t.created_at DESC
+                 LIMIT 1
+                """,
+                tenantId, roomNo,
+                today.atStartOfDay(clock.getZone()).toOffsetDateTime(),
+                today.plusDays(1).atStartOfDay(clock.getZone()).toOffsetDateTime());
+        created.ifPresent(row -> world.rememberTask(roomNo, String.valueOf(row.get("id"))));
     }
 
     /**

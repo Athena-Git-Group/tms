@@ -37,11 +37,11 @@ AccessDeniedHandler {
     }
 
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException {
-        this.write(response, 401, "unauthorized", "\u7f3a\u5c11\u6709\u6548\u6191\u8b49");
+        this.write(response, 401, "unauthorized", "缺少有效憑證");
     }
 
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException {
-        this.write(response, 403, "forbidden", "\u6b64\u89d2\u8272\u4e0d\u5141\u8a31\u547c\u53eb\u6b64\u52d5\u4f5c");
+        this.write(response, 403, "forbidden", "此角色不允許呼叫此動作");
     }
 
     public void write(HttpServletResponse response, int status, String code, String message) throws IOException {

@@ -10,13 +10,12 @@ package com.athena.tms.service;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.dto.IntegrationEventsResponse;
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
-import com.athena.tms.service.IntegrationBadRequestException;
-import com.athena.tms.service.IntegrationRoomStatusWhitelist;
 import jakarta.persistence.EntityManager;
+import org.springframework.stereotype.Service;
+
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.stereotype.Service;
 
 @Service
 public class IntegrationEventsService {
@@ -51,7 +50,7 @@ public class IntegrationEventsService {
 
     private static String nextCursor(List<IntegrationRoomStatusEvent> events, String after) {
         if (!events.isEmpty()) {
-            return ((IntegrationRoomStatusEvent)events.getLast()).eventId();
+            return events.getLast().eventId();
         }
         return after == null ? "0" : after;
     }
@@ -63,12 +62,12 @@ public class IntegrationEventsService {
         try {
             long value = Long.parseLong(after);
             if (value < 0L) {
-                throw new IntegrationBadRequestException("after \u5fc5\u9808\u662f\u975e\u8ca0\u5341\u9032\u4f4d\u6574\u6578");
+                throw new IntegrationBadRequestException("after 必須是非負十進位整數");
             }
             return value;
         }
         catch (NumberFormatException e) {
-            throw new IntegrationBadRequestException("after \u5fc5\u9808\u662f\u975e\u8ca0\u5341\u9032\u4f4d\u6574\u6578");
+            throw new IntegrationBadRequestException("after 必須是非負十進位整數");
         }
     }
 
@@ -81,10 +80,10 @@ public class IntegrationEventsService {
             value = Integer.parseInt(limit);
         }
         catch (NumberFormatException e) {
-            throw new IntegrationBadRequestException("limit \u5fc5\u9808\u662f 1 \u5230 500 \u7684\u6574\u6578");
+            throw new IntegrationBadRequestException("limit 必須是 1 到 500 的整數");
         }
         if (value < 1 || value > 500) {
-            throw new IntegrationBadRequestException("limit \u5fc5\u9808\u662f 1 \u5230 500 \u7684\u6574\u6578");
+            throw new IntegrationBadRequestException("limit 必須是 1 到 500 的整數");
         }
         return value;
     }

@@ -61,12 +61,12 @@ public class IntegrationStreamController {
         try {
             long value = Long.parseLong(cursor);
             if (value < 0L) {
-                throw new IntegrationBadRequestException("cursor \u5fc5\u9808\u662f\u975e\u8ca0\u5341\u9032\u4f4d\u6574\u6578");
+                throw new IntegrationBadRequestException("cursor 必須是非負十進位整數");
             }
             return value;
         }
         catch (NumberFormatException e) {
-            throw new IntegrationBadRequestException("cursor \u5fc5\u9808\u662f\u975e\u8ca0\u5341\u9032\u4f4d\u6574\u6578");
+            throw new IntegrationBadRequestException("cursor 必須是非負十進位整數");
         }
     }
 }

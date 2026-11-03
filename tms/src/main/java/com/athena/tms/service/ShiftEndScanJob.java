@@ -118,10 +118,8 @@ public class ShiftEndScanJob {
         if (returned.isEmpty()) {
             return;
         }
-        ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("recipientStaffId", staffId.toString());
-        payload.put("event", "shift_end_returned");
-        payload.put("title", returned.size() + " 單還沒開始，已退回待接池交給下一班；進行中的單仍由您完成");
+        ObjectNode payload = PushOutboxWriter.payload(objectMapper, staffId, "shift_end_returned",
+                returned.size() + " 單還沒開始，已退回待接池交給下一班；進行中的單仍由您完成");
         ObjectNode target = payload.putObject("target");
         target.put("kind", "pool");
         target.put("dept", dept);
@@ -142,9 +140,7 @@ public class ShiftEndScanJob {
         if (interrupted.isEmpty()) {
             return;
         }
-        List<UUID> managers = jdbcTemplate.queryForList(
-                "SELECT id FROM staff_accounts WHERE tenant_id = ? AND role = 'manager' AND active = true",
-                UUID.class, tenantId);
+        List<UUID> managers = pushOutboxWriter.activeManagerIds(tenantId);
         LocalDate today = LocalDate.ofInstant(clock.instant(), clock.getZone());
         for (Map<String, Object> row : interrupted) {
             UUID taskId = (UUID) row.get("id");
@@ -153,10 +149,8 @@ public class ShiftEndScanJob {
                     ? String.valueOf(roomNo)
                     : String.valueOf(row.get("title"));
             for (UUID manager : managers) {
-                ObjectNode payload = objectMapper.createObjectNode();
-                payload.put("recipientStaffId", manager.toString());
-                payload.put("event", "shift_end_interrupted");
-                payload.put("title", label + " 班末仍中斷，需要附交代退池");
+                ObjectNode payload = PushOutboxWriter.payload(
+                        objectMapper, manager, "shift_end_interrupted", label + " 班末仍中斷，需要附交代退池");
                 ObjectNode target = payload.putObject("target");
                 target.put("kind", "task");
                 target.put("taskId", taskId.toString());

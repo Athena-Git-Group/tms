@@ -72,7 +72,7 @@ public class OutboxWriter {
             return this.objectMapper.readTree(json);
         }
         catch (JacksonException e) {
-            throw new IllegalStateException("outbox payload \u4e0d\u662f\u5408\u6cd5 JSON", e);
+            throw new IllegalStateException("outbox payload 不是合法 JSON", e);
         }
     }
 }

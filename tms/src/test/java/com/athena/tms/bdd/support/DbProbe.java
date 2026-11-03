@@ -43,7 +43,7 @@ public class DbProbe {
     /** 泛用查詢：筆數（例如 {@code SELECT count(*) FROM ...}）。 */
     public long count(String sql, Object... params) {
         Long result = jdbcClient.sql(sql).params(params).query(Long.class).single();
-        return result == null ? 0L : result;
+        return result;
     }
 
     /** 任務目前的權威狀態（tasks 表整列）。 */

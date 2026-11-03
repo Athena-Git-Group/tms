@@ -24,7 +24,7 @@ public class KafkaTopicsProperties {
             case "task_event" -> this.taskEvents;
             case "push" -> this.push;
             case "pms_status" -> this.pmsStatus;
-            default -> throw new IllegalArgumentException("\u672a\u77e5 outbox kind: " + kind);
+            default -> throw new IllegalArgumentException("未知 outbox kind: " + kind);
         };
     }
 
