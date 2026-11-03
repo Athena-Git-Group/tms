@@ -1,33 +1,66 @@
 package com.athena.tms.controller;
 
+import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.codes.RolePermissions;
+import com.athena.tms.common.error.ForbiddenException;
+import com.athena.tms.common.error.UnprocessableEntityException;
+import com.athena.tms.dto.InspectionRequest;
+import com.athena.tms.entity.Inspection;
+import com.athena.tms.service.InspectionReviewService;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 查房抽查與合格率（本 plan 新增，FR-026、FR-027）。
- *
- * <p>骨架階段：僅預留路由落點，一律回 501，不含業務邏輯。
- * 對照 {@code specs/truth/contracts/groups/現場作業/查房.yaml}：createSpotCheck、getInspectionPassRate。
- *
- * <p>沿用既有 {@link InspectionController} 的扁平 controller 慣例與
- * {@code /admin} 路由前綴，新增獨立類別以避免動到既有（已反編譯）類別。
+ * 抽查與查房合格率 API，對應 contracts 查房.yaml 的 createSpotCheck
+ * （POST /inspections/spot-checks）與 getInspectionPassRate（GET /inspections/pass-rate）。
+ * 抽查和一般查房（{@link InspectionApiController}）同屬查房判定，進業務邏輯前
+ * 先過同一套角色×動作矩陣：沒有查房判定（inspect_submit）權限的角色一律 403。
  */
 @RestController
-@RequestMapping("/admin/inspections")
+@RequestMapping("/api/v1/inspections")
 public class InspectionReviewController {
 
+    private final InspectionReviewService inspectionReviewService;
+
+    public InspectionReviewController(InspectionReviewService inspectionReviewService) {
+        this.inspectionReviewService = inspectionReviewService;
+    }
+
+    /** 請求形狀對應 contracts 查房.yaml 的 SpotCheckRequest：taskId＋抽查判定的項目清單。 */
+    public record SpotCheckRequest(UUID taskId, List<InspectionRequest.Item> items) {}
+
     @PostMapping("/spot-checks")
-    public ResponseEntity<Void> createSpotCheck() {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    @ResponseStatus(HttpStatus.CREATED)
+    public Inspection createSpotCheck(@RequestBody SpotCheckRequest request) {
+        requireInspectSubmit();
+        if (request == null || request.taskId() == null) {
+            throw new UnprocessableEntityException("taskId 必填");
+        }
+        return inspectionReviewService.spotCheck(request.taskId(), request.items());
     }
 
     @GetMapping("/pass-rate")
-    public ResponseEntity<Void> getInspectionPassRate() {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    public InspectionReviewService.PassRate getInspectionPassRate(
+            @RequestParam(name = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate date) {
+        requireInspectSubmit();
+        return inspectionReviewService.passRate(date);
+    }
+
+    private void requireInspectSubmit() {
+        CurrentActor actor = CurrentActor.require();
+        if (!RolePermissions.canInspectSubmit(actor.role())) {
+            throw new ForbiddenException("此角色沒有查房判定（inspect_submit）權限");
+        }
     }
 }

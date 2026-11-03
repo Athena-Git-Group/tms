@@ -7,6 +7,7 @@ import com.athena.tms.bdd.support.StaffFixtures;
 import com.athena.tms.bdd.support.TaskFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.common.codes.RolePermissions;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 import java.time.OffsetDateTime;
@@ -73,9 +74,8 @@ public class InspectionGivenSteps {
 
     @假設("飯店的 PMS 為手動匯入模式")
     public void hotelPmsIsManualImportMode() {
-        // dsl.md 沒有指名鍵值；沿用姊妹鍵「pms.writeback.room_status」的命名慣例另開一鍵，
-        // 兩者都還不在 tenant_config.key 的 CHECK 封閉鍵集內（見 data-model.dbml Table
-        // tenant_config 的 note），呼叫 updateTenantConfig 目前必然打不到任何已實作的路由。
+        // dsl.md 沒有指名鍵值；沿用姊妹鍵「pms.writeback.room_status」的命名慣例，
+        // 供應商記在 pms.provider，值 manual 表示沒有可回寫的 PMS 對象。
         updateTenantConfig("pms.provider", "manual");
     }
 
@@ -140,18 +140,30 @@ public class InspectionGivenSteps {
         world.rememberTask(roomNo, taskId.toString());
 
         // dsl.md：「再呼叫 tasksStart」——走真正的 API 路徑而非直接呼叫 TaskEngine，
-        // 讓「開工當下鎖定 inspection_waived」這段產品邏輯（尚未實作）成為後續 Then 的 RED 訊號。
+        // 讓「開工當下鎖定 inspection_waived」這段產品邏輯經過和 production 相同的入口被驗證。
         apiClient.post("/tasks/" + taskId + "/start", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
+    /**
+     * 確認這位員工的查房判定會被系統拒絕。角色對動作的權限由程式碼
+     * （{@link RolePermissions}）決定，資料庫沒有任何列可以把單一員工的
+     * inspect_submit 設成未勾選。這個前提成立與否取決於員工的角色，
+     * 所以這裡查出角色後交給同一份權限程式碼判斷。角色其實有權限時若
+     * 當作成立，後面的「操作被拒絕」斷言驗的是系統裡不存在的行為。
+     */
     @假設("{string} 的角色沒有查房判定（inspect_submit）權限")
     public void staffLacksInspectSubmitPermission(String staffName) {
-        // specs/truth/contracts/components/schemas/員工帳號與登入.yaml 明寫「角色×動作矩陣在
-        // 程式/設定，不在表裡」：staff_accounts 沒有任何欄位或關聯表可以承載「這個角色的
-        // inspect_submit 權限」，現在沒有地方可以落這個設定。等 Feature GREEN 建立權限設定
-        // 後再接上真正的落地方式。
-        throw new UnsupportedOperationException(
-                "目前沒有角色權限矩陣可調整，無法把「" + staffName + "」的 inspect_submit 權限設為未勾選。");
+        UUID staffId = UUID.fromString(world.staffId(staffName));
+        String role = jdbcClient
+                .sql("SELECT role FROM staff_accounts WHERE id = ?")
+                .params(staffId)
+                .query(String.class)
+                .single();
+        if (RolePermissions.canInspectSubmit(role)) {
+            throw new IllegalStateException(
+                    "「" + staffName + "」的角色 " + role + " 具備 inspect_submit 權限，"
+                            + "無法把這個情境建成「沒有查房判定權限」。");
+        }
     }
 
     private void updateTenantConfig(String key, Object value) {

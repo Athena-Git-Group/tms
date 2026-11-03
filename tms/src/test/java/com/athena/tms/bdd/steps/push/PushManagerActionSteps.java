@@ -72,6 +72,8 @@ public class PushManagerActionSteps {
         LastOperationGuard.captureFor(dbProbe, taskId);
 
         long tenantId = tenantFixtures.testTenantId();
+        // V2 seed 只替示範租戶（id=1）種查房項目，測試租戶的查房項目要由 fixture 自己落地。
+        tenantFixtures.ensureInspectionSopItems();
         List<Map<String, Object>> sopItems = jdbcClient
                 .sql(
                         "SELECT item_key, label FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' AND active = true ORDER BY sort_order")

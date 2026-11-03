@@ -21,12 +21,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
     @ExceptionHandler(value={ApiException.class})
     public ResponseEntity<ApiError> handleApiException(ApiException ex) {
-        return ResponseEntity.status((int)ex.getStatus()).body(ApiError.of(ex.getCode(), ex.getMessage()));
+        return ResponseEntity.status((int)ex.getStatus()).body(new ApiError(ex.getCode(), ex.getMessage(), null, ex.getContext()));
     }
 
     @ExceptionHandler(value={MethodArgumentNotValidException.class})
     public ResponseEntity<ApiError> handleBeanValidation(MethodArgumentNotValidException ex) {
         List<ApiError.Detail> details = ex.getBindingResult().getFieldErrors().stream().map(fieldError -> new ApiError.Detail(fieldError.getField(), fieldError.getDefaultMessage())).toList();
-        return ResponseEntity.unprocessableEntity().body(new ApiError("validation_failed", "\u8acb\u6c42\u5167\u5bb9\u9a57\u8b49\u5931\u6557", details));
+        return ResponseEntity.unprocessableEntity().body(new ApiError("validation_failed", "\u8acb\u6c42\u5167\u5bb9\u9a57\u8b49\u5931\u6557", details, null));
     }
 }

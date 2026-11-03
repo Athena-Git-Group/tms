@@ -1,5 +1,7 @@
 package com.athena.tms.bdd.support;
 
+import com.athena.tms.service.EscalationScanJob;
+import com.athena.tms.service.ShiftEndScanJob;
 import com.athena.tms.service.IdempotencyRetentionJob;
 import com.athena.tms.service.OutboxRelay;
 import com.athena.tms.service.OutboxRetentionJob;
@@ -33,8 +35,7 @@ public class JobTrigger {
      *                {@code idempotency-retention}、{@code stream-heartbeat}、
      *                {@code escalation-scan}
      * @throws IllegalArgumentException 名稱不在已知清單時，訊息會列出目前已知的名稱
-     * @throws UnsupportedOperationException {@code escalation-scan}：main 尚未建立這個排程
-     *                （見 dsl.md「時間來到」列「排程建單、逾時升級」的週期掃描），見方法內註解
+     * @throws UnsupportedOperationException main 尚未建立對應排程的名稱（見方法內各 case 的說明）
      */
     public void run(String jobName) {
         switch (jobName) {
@@ -43,13 +44,10 @@ public class JobTrigger {
             case "idempotency-retention" ->
                     applicationContext.getBean(IdempotencyRetentionJob.class).purgeExpiredOps();
             case "stream-heartbeat" -> applicationContext.getBean(StreamHeartbeat.class).beat();
-            case "shift-end-scan" -> throw new UnsupportedOperationException(
-                    "main 尚未建立班末掃描 job，等 Feature GREEN 建立後接上");
+            case "shift-end-scan" -> applicationContext.getBean(ShiftEndScanJob.class).scan();
             case "schedule-rule-scan" -> throw new UnsupportedOperationException(
                     "main 尚未建立自動化規則排程掃描 job，等 Feature GREEN 建立後接上");
-            case "escalation-scan" -> throw new UnsupportedOperationException(
-                    "main 尚未建立逾時升級與排程建單的週期掃描 job（dsl.md「時間來到」列點名的"
-                            + "「排程建單、逾時升級」），等 Feature GREEN 建立對應的 @Scheduled job 後再接上。");
+            case "escalation-scan" -> applicationContext.getBean(EscalationScanJob.class).scan();
             default -> throw new IllegalArgumentException(
                     "未知的排程工作名稱：" + jobName + "；已知名稱：" + KNOWN_JOBS);
         }

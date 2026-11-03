@@ -80,7 +80,15 @@ public class RepairWhenSteps {
                 "photoIds", world.photoIds(),
                 "urgent", false,
                 "interruptSourceTask", true);
-        apiClient.post("/repair-tickets", BddApiClient.Auth.staff(world.jwt(staffName)), body);
+        ScenarioWorld.ApiResponse resp =
+                apiClient.post("/repair-tickets", BddApiClient.Auth.staff(world.jwt(staffName)), body);
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
     }
 
     @當("{string} 對 {string} 選擇工務單類別 {string}")

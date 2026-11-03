@@ -64,6 +64,8 @@
 | ADD | `.../data-model.dbml` -> `Table desk_notes`、`handover_reads` | 櫃檯房間備註（有效期間待 clarify，先不加失效欄位）；交辦已讀以 PK 防止重複記錄。 | FR-037、FR-038。 |
 | ADD | `.../data-model.dbml` -> `Table kb_audit_logs`、`kb_escalations` | 查一下稽核紀錄（引用來源、回答、回饋、是否轉問）；問主管（一則回答只能轉問一次，主管回覆後推播）。 | FR-043–045。 |
 | ADD | `.../data-model.dbml` -> 18 條新 Ref | 新表的複合外鍵，以及 tasks.linked_repair_task_id 指向自身。 | 同上。 |
+| ADD | `.../data-model.dbml` -> `Table automation_rules`、`tasks.due_at`、`tasks.rule_hit`；tenant_config 封閉鍵加 5 個 SLA 鍵 | SLA/自動化規則增補的 data 側補遺：規則表、到期時間與命中規則名投影欄、SLA 時限／升級層距／升級鏈開關鍵；`tasks.esc_level` 由保留欄位啟用（0–3）。 | `/implement` T012 發現 dsl.md 點名但 data truth 漏記的 drift 缺口，依 DSL 機械推導補記並以 V6 migration 落地。 |
+| MODIFY | `.../data-model.dbml` -> `staff_accounts.role` CHECK | 加 `duty_manager`（值班經理，逾時升級 L3 收件人），V7 migration 落地。 | DSL 部門用語有值班經理，dbml 與 V1 CHECK 漏列；Phase 3 建測試資料時觸發 CHECK violation 發現。 |
 | NOOP | `.../data-model.dbml` -> `rooms.floor`、`plan_rooms`、`handovers.snapshot`、`reservations_cache.attrs`、`staff_accounts`、`leaves` | 已檢查。同樓層用本班 plan_rooms 對應的 rooms.floor 推導（FR-032 推定，待 clarify）；交班單該房項目在 snapshot 內；VIP 與今日入住用 reservations_cache；一員工一部門已由 staff_accounts.dept 承接。 | 不需要新增欄位。 |
 
 ## /dsl-refine
@@ -100,4 +102,7 @@
 | MODIFY | `從 PMS 拉今日房態，"{房號}" 的訂房帶 "{屬性}" 屬性` 權威位置：`backend/待接池/dsl.md` ＋ `backend/推播/dsl.md` 雙列 -> 合併為 `backend/dsl.md` 一列（介面根 When） | 把推播列的「進池時寫入部門成員 push outbox」語意併入待接池列的完整定義；合併後語意為兩列聯集，句型不變。待接池的 `匯入今日房態 CSV` 列改引用介面根句型。 | 同一句型有兩個權威位置（稽核 error）；兩模組共用，依唯一歸屬判準上收。 |
 | MODIFY | `"{員工}" 判定 "{任務}" 查房全部項目通過` 權威位置：`backend/dsl.md`（`"{主管}"` 版）＋ `backend/查房/dsl.md`（`"{員工}"` 版）雙列 -> 合併為 `backend/dsl.md` 一列 `"{員工}"` 版 | 合併語意：有 `inspect_submit` 權限時同原主管版落地，無權限時被拒；句型形狀不變（參數改名不影響 step 匹配）。 | 同形句型在根與模組各一列造成稽核 ambiguous match（5 個 error）。 |
 | MODIFY | `backend/待接池/系統準備工單派給負責人.feature` -> 「刪除或停用規則」場景大綱拆成刪除、停用兩個場景 | 驗收語意不變；`刪除規則`、`停用規則` 兩列 DSL 本就存在。 | 稽核器不展開場景大綱的 `<操作>` 佔位，無法對應 DSL row（稽核 error）。 |
+| MODIFY | `specs/truth/features/backend/dsl.md`、`backend/待接池/dsl.md` -> 自動化規則的 `pool_source` 實作語意 | `automation_rule` 更正為 `system`，對齊 contracts `PoolSource` enum 與 data truth 的 CHECK（兩個 truth owner 均為 `system`）。句型與驗證責任不變。 | `/implement` T009 建立用語對照時發現三方不一致，依多數 truth 更正。 |
 | NOOP | `specs/truth/features/**` 其餘 feature 與 dsl.md | 已檢查。句型與驗證責任不變；ios-app 與 backend 拓樸稽核均 PASSED。 | 本輪只回補 runner 實作語意與修復稽核缺陷。 |
+| MODIFY | `specs/truth/features/backend/工務單/dsl.md` -> `Then: "{房號}" 未結案的 "{類別}" 工務單只有 {張數} 張` 的 StepDef 實作語意 | 跨視角措辭語意精確化：池中應出現的是未結案單裡 state 仍是 pool 的那些、以 ticketNo 集合比對（池只回 pool 的單，doing 不在池；`PoolItem.category` 是池分類 repair，不是工務類別）。權威狀態半段與驗收意圖不變。 | BDD Phase 4H 執行時發現原「待接池裡該房該類別的單也一致」對已認領未結案單語意不唯一，與 `listDeptPool` 契約（只回 state=pool、PoolCategory enum）衝突；依使用者裁決對齊契約。 |
+| MODIFY | `specs/truth/features/backend/待接池/dsl.md` -> `Then: 待接池中 "{任務}" 的位置顯示為 "公共區域"` 的 StepDef 實作語意 | 權威狀態措辭語意精確化：原「`tasks.room_no` 為空」改為「`tasks.room_id` 指向公共區域佔位房（`rooms.room_no`＝公共區域、`floor`＝0），不屬於任何客房」；呈現結果半段明確為 `PoolItem.roomNo`＝公共區域。驗收意圖不變。 | data truth 的 `tasks` 沒有 `room_no` 欄位且 `room_id` NOT NULL，原措辭在資料模型上不可能成立；對齊 data-model 與既有 fixture 的公共區域佔位房落地。 |

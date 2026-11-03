@@ -129,6 +129,12 @@ public class RepairThenSteps {
     @那麼("工務待接池不包含 {string}")
     public void poolDoesNotContainTicket(String ticketNo) {
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
+        // 純負向斷言會假綠：listDeptPool 回 403／500 或 items 空陣列也「不包含」。
+        // 先斷言這次讀取本身成功，再驗不包含。
+        if (resp.status() != 200 || resp.json() == null) {
+            throw new AssertionError(
+                    "listDeptPool 預期 200，實際 status=" + resp.status() + "，body=" + resp.body());
+        }
         if (containsTicketNo(resp, ticketNo)) {
             throw new AssertionError("預期工務待接池不包含 " + ticketNo + "，但找到了（body=" + resp.body() + "）");
         }
@@ -238,19 +244,33 @@ public class RepairThenSteps {
                             + actualCount + " 張");
         }
 
+        // 跨視角：待接池只收 state='pool' 的單，所以池中應出現的是未結案單裡仍在 pool 的那些；
+        // 比對鍵用 ticketNo（池 item 的 category 是 PoolCategory（repair），不是工務類別）。
+        List<String> expectedPoolTicketNos = dbProbe.queryMaps(
+                """
+                SELECT rt.ticket_no FROM repair_tickets rt
+                  JOIN tasks t ON t.id = rt.task_id AND t.tenant_id = rt.tenant_id
+                 WHERE rt.tenant_id = ? AND rt.room_id = ? AND rt.category = ?
+                   AND t.state = 'pool'
+                """,
+                tenantId, roomId, category)
+                .stream().map(r -> String.valueOf(r.get("ticket_no"))).sorted().toList();
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
-        long poolCount = 0;
+        List<String> actualPoolTicketNos = new java.util.ArrayList<>();
         if (resp.json() != null) {
             for (JsonNode item : resp.json().path("items")) {
-                if (roomNo.equals(item.path("roomNo").asText(null)) && category.equals(item.path("category").asText(null))) {
-                    poolCount++;
+                String ticketNo = item.path("ticketNo").asText(null);
+                if (roomNo.equals(item.path("roomNo").asText(null)) && ticketNo != null
+                        && expectedPoolTicketNos.contains(ticketNo)) {
+                    actualPoolTicketNos.add(ticketNo);
                 }
             }
         }
-        if (poolCount != expectedCount) {
+        actualPoolTicketNos.sort(String::compareTo);
+        if (!actualPoolTicketNos.equals(expectedPoolTicketNos)) {
             throw new AssertionError(
-                    "工務待接池裡 " + roomNo + " 的「" + categoryChinese + "」單預期 " + expectedCount + " 張，實際 " + poolCount
-                            + " 張（status=" + resp.status() + "）");
+                    "工務待接池裡 " + roomNo + " 的「" + categoryChinese + "」單預期 " + expectedPoolTicketNos + "，實際 "
+                            + actualPoolTicketNos + "（status=" + resp.status() + "）");
         }
     }
 

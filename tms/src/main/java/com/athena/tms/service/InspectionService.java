@@ -96,6 +96,9 @@ public class InspectionService {
             this.taskEngine.passInspection(tenantId, taskId, actor);
             this.updateHkState(room, "inspected");
             this.recordInspection(tenantId, taskId, inspector.staffId(), "passed", judgements);
+            // 查房通過＝合格結案：回寫 PMS 房況（回寫開關關閉或手動匯入模式時由該方法自行略過），
+            // 任務事件因此在 inspection_passed 之後多一筆 pms_writeback。
+            this.taskEngine.writebackRoomStatusIfEnabled(tenantId, taskId, actor);
             return new InspectionResponse(taskId, "passed", "inspected", task.getRedoCount(), false);
         }
         String failedLabels = String.join((CharSequence)"\u3001", requiredItems.stream().filter(item -> (Boolean)judgements.get(item.getItemKey()) == false).map(SopItem::getLabel).toList());
@@ -115,7 +118,9 @@ public class InspectionService {
 
     private Map<String, Boolean> validateCoverage(InspectionRequest request, List<SopItem> requiredItems) {
         if (requiredItems.isEmpty()) {
-            throw new UnprocessableEntityException("\u79df\u6236\u5c1a\u672a\u8a2d\u5b9a\u67e5\u623f\u9805\u76ee\uff0c\u7121\u6cd5\u67e5\u623f");
+            // \u79df\u6236\u6c92\u6709\u8a2d\u5b9a\u67e5\u623f\u9805\u76ee\uff1a\u6c92\u6709\u53ef\u9010\u9805\u5224\u5b9a\u7684\u6e05\u55ae\uff0c\u300c\u6db5\u84cb\u5168\u96c6\u300d\u7a7a\u96c6\u5408\u6210\u7acb\uff0c
+            // \u6574\u9ad4\u5224\u5b9a\u8996\u70ba\u5168\u90e8\u901a\u904e\uff08\u4e0d\u5f37\u8feb\u6bcf\u500b\u79df\u6236\u90fd\u5f97\u5148\u5efa\u67e5\u623f\u9805\u76ee\u624d\u80fd\u7d50\u6848\uff09\u3002
+            return new LinkedHashMap<String, Boolean>();
         }
         if (request == null || request.items() == null || request.items().isEmpty()) {
             throw new UnprocessableEntityException("items \u5fc5\u586b\uff1a\u9808\u6db5\u84cb\u79df\u6236\u67e5\u623f\u9805\u76ee\u5168\u96c6");

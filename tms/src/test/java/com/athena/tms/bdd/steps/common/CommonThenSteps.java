@@ -79,19 +79,41 @@ public class CommonThenSteps {
     @那麼("{string} 的狀態為 {string}")
     public void taskStateIs(String taskKey, String stateChinese) {
         UUID taskId = resolveTaskId(taskKey);
-        final String expected = resolveExpectedState(stateChinese);
+        final ExpectedTaskState expected = resolveExpectedState(stateChinese);
         Map<String, Object> row = requireTaskRow(taskId);
-        check("tasks.state", expected, row.get("state"));
+        check("tasks.state", expected.state(), row.get("state"));
+        if (expected.inspection() != null) {
+            check("tasks.inspection", expected.inspection(), row.get("inspection"));
+        }
+        if (expected.cancelReason() != null) {
+            check("tasks.cancel_reason", expected.cancelReason(), row.get("cancel_reason"));
+        }
 
-        withAssigneeReadTasks(taskId, row, json -> check("readTasks.state", expected, textOrNull(json, "state")));
+        withAssigneeReadTasks(
+                taskId, row, json -> check("readTasks.state", expected.state(), textOrNull(json, "state")));
     }
 
-    private static String resolveExpectedState(String stateChinese) {
+    /**
+     * dsl.md「{任務} 的狀態為 {狀態}」必查的不只 tasks.state：狀態用語對照裡
+     * 「查房通過」「完成 · 免查房」還規定了 tasks.inspection（passed／waived），
+     * 工務單「已撤回」還規定了 tasks.cancel_reason（staff_withdrew）；沒有附帶
+     * 子欄位的用語，對應欄位為 null 表示不必查。
+     */
+    private record ExpectedTaskState(String state, String inspection, String cancelReason) {}
+
+    private static ExpectedTaskState resolveExpectedState(String stateChinese) {
+        if ("查房通過".equals(stateChinese)) {
+            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("通過"), null);
+        }
+        if ("完成 · 免查房".equals(stateChinese)) {
+            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("免查"), null);
+        }
         try {
-            return Terms.taskState(stateChinese);
+            return new ExpectedTaskState(Terms.taskState(stateChinese), null, null);
         } catch (IllegalArgumentException notPlainTaskState) {
             // 工務單專屬狀態詞（已認領/處理中/已完修/已撤回）走工務單對照
-            return Terms.repairTicketState(stateChinese);
+            String cancelReason = "已撤回".equals(stateChinese) ? Terms.repairTicketWithdrawnReason() : null;
+            return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason);
         }
     }
 
@@ -151,6 +173,17 @@ public class CommonThenSteps {
         outboxAwait.waitForPush(
                 v -> staffId.equals(v.recipientStaffId()) && title.equals(v.title()),
                 staffName + " 收到標題「" + title + "」的推播");
+
+        // dsl.md 必查「不該發生：同一事件不會對該員工推播兩次」——同收件人、同標題的
+        // kind push outbox 必須恰好一筆。
+        long count = dbProbe.outboxRows("push").stream()
+                .map(this::parsePush)
+                .filter(v -> staffId.equals(v.recipientStaffId()) && title.equals(v.title()))
+                .count();
+        if (count != 1) {
+            throw new AssertionError(staffName + " 的標題「" + title + "」推播預期恰好一筆（同一事件不推兩次），實際 outbox 有 "
+                    + count + " 筆");
+        }
     }
 
     @那麼("{string} 收到以下推播：")

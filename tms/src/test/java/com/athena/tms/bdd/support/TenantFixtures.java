@@ -1,6 +1,8 @@
 package com.athena.tms.bdd.support;
 
+import com.athena.tms.common.UuidV7;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -44,5 +46,35 @@ public class TenantFixtures {
                 .single();
         cachedTenantId = id;
         return id;
+    }
+
+    /** 查房項目（applies_to=inspection）的 item_key → label，與 V2__seed_dev.sql 示範租戶的清單同構。 */
+    private static final List<String[]> INSPECTION_SOP_ITEMS = List.of(
+            new String[] {"bed", "床鋪平整"},
+            new String[] {"bathroom", "浴室無水痕"},
+            new String[] {"amenities", "備品齊全"},
+            new String[] {"floor", "地面乾淨"},
+            new String[] {"odor", "無異味"});
+
+    /**
+     * 確保「測試飯店」有一套查房項目（sop_items，applies_to=inspection）。V2__seed_dev.sql
+     * 只替示範租戶（id=1）種查房項目，而且 ResetHooks 每個 scenario 都會 TRUNCATE sop_items，
+     * 所以需要查房項目全集的 stepdef（例如 createInspections 的 items 必須涵蓋全集）要先呼叫
+     * 這裡落地。以 uq_sop_items_key 做 ON CONFLICT DO NOTHING，同一 scenario 內重複呼叫無害。
+     */
+    public void ensureInspectionSopItems() {
+        long tenantId = testTenantId();
+        int sortOrder = 1;
+        for (String[] item : INSPECTION_SOP_ITEMS) {
+            jdbcClient
+                    .sql(
+                            """
+                            INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at)
+                            VALUES (?, ?, 'inspection', ?, ?, ?, true, ?)
+                            ON CONFLICT (tenant_id, applies_to, item_key) DO NOTHING
+                            """)
+                    .params(UuidV7.generate(), tenantId, item[0], item[1], sortOrder++, OffsetDateTime.now())
+                    .update();
+        }
     }
 }

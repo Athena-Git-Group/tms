@@ -124,18 +124,14 @@ public class PoolThenSteps {
             throw new AssertionError("PoolItem.roomNo 預期顯示「公共區域」，實際 " + roomNo);
         }
 
+        // dsl.md：權威狀態是 tasks.room_id 指向公共區域佔位房（rooms.room_no＝公共區域、floor＝0），
+        // 不屬於任何客房。
         Map<String, Object> taskRow = requireTaskRow(UUID.fromString(world.taskId(taskKey)));
-        Optional<Map<String, Object>> roomRow =
-                dbProbe.queryOne("SELECT room_no FROM rooms WHERE id = ?", taskRow.get("room_id"));
-        Object actualRoomNo = roomRow.map(r -> r.get("room_no")).orElse(null);
-        if (actualRoomNo != null && !String.valueOf(actualRoomNo).isBlank()) {
-            // dsl.md 的必查寫「tasks.room_no 為空」，但 tasks 沒有獨立的 room_no 欄位、
-            // 只有 NOT NULL 的 room_id；公共區域目前是用一個 room_no='公共區域' 的佔位房間
-            // 承接（見 common CommonGivenSteps.poolHasTasks），兩者對不上——這是權威狀態
-            // 設計還沒跟 dsl.md 對齊的缺口，照實讓斷言失敗，不要為了過關放寬標準。
-            throw new AssertionError(
-                    "tasks 對應房間的 room_no 依 dsl.md 預期為空，實際 " + actualRoomNo);
-        }
+        Map<String, Object> roomRow =
+                dbProbe.queryOne("SELECT room_no, floor FROM rooms WHERE id = ?", taskRow.get("room_id"))
+                        .orElseThrow(() -> new AssertionError("tasks.room_id 查無對應 rooms 列"));
+        check("rooms.room_no", "公共區域", roomRow.get("room_no"));
+        check("rooms.floor", 0, ((Number) roomRow.get("floor")).intValue());
     }
 
     @那麼("待接池分類筆數如下：")

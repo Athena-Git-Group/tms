@@ -14,6 +14,10 @@ extends ApiException {
     }
 
     public StateConflictException(String code, String message) {
-        super(409, code, message);
+        this(code, message, null);
+    }
+
+    public StateConflictException(String code, String message, java.util.Map<String, Object> context) {
+        super(409, code, message, context);
     }
 }

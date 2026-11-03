@@ -13,11 +13,10 @@ import java.util.Map;
  * {@code IntegrationEventsController}／{@code IntegrationStreamController} 是反方向——
  * TMS 把房況往外推給 PMS 拉取或訂閱，兩者接不上本句的事件。
  *
- * <p>目前 main 完全沒有這個介面、也沒有 PMS 回寫消費者的資料落地：
- * {@code reservations_cache} 只被既有 fixture 以直接 SQL 寫入，不經任何 adapter；
- * outbox 的 {@code pms_status} kind 已在 V3 migration 清空且不再產生。本類別兩個方法
- * 先保留簽章讓 stepdef 及早串接，呼叫會直接失敗，等 Feature GREEN 把對應的
- * production 介面與回寫落地建起來後再補上真正的呼叫與 {@link OutboxAwait} 輪詢。
+ * <p>拉訂房方向（PMS 推訂房進 TMS）main 仍然沒有任何入口：{@code reservations_cache}
+ * 只被既有 fixture 以直接 SQL 寫入，不經任何 adapter。{@link #pushTodayRoomState}
+ * 因此保留簽章但拒絕執行——若改成假裝成功，依賴這句的情境會在沒有任何
+ * production 行為的情況下通過，失敗訊號就消失了。
  */
 public class PmsProbe {
 
@@ -47,10 +46,23 @@ public class PmsProbe {
     }
 
     /**
-     * 固定丟出：沒有 PMS 回寫消費者落地資料，見本類別 class Javadoc。
+     * 模擬 PMS adapter 視角查「這間房最後收到的房況回寫」。非同步契約（shared.yaml
+     * PmsRoomStatusWriteback）的邊界是 outbox kind={@code pms_status}：回寫消費者原樣把
+     * payload 送到 PMS adapter，所以 adapter 會收到什麼＝這裡查到的 payload 內容
+     * （roomNo＋status）。查無任何回寫時回傳空 Map——「有沒有回寫」的斷言責任在
+     * stepdef，本方法只提供視角，不做斷言。
      */
     public Map<String, Object> lastWritebackFor(String roomNo) {
-        throw new UnsupportedOperationException(
-                "main 尚未建立 PMS 回寫消費者的資料落地，等 Feature GREEN 建立後接上：roomNo=" + roomNo);
+        return dbProbe
+                .queryOne(
+                        """
+                        SELECT payload ->> 'roomNo' AS room_no, payload ->> 'status' AS status
+                          FROM outbox
+                         WHERE tenant_id = ? AND kind = 'pms_status' AND payload ->> 'roomNo' = ?
+                         ORDER BY id DESC
+                         LIMIT 1
+                        """,
+                        tenantFixtures.testTenantId(), roomNo)
+                .orElse(Map.of());
     }
 }

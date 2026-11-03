@@ -17,13 +17,23 @@ import org.springframework.stereotype.Component;
 public class KafkaTopicsProperties {
     private String taskEvents = "tms.task-events";
     private String push = "tms.push";
+    private String pmsStatus = "tms.pms-status";
 
     public String topicFor(String kind) {
         return switch (kind) {
             case "task_event" -> this.taskEvents;
             case "push" -> this.push;
+            case "pms_status" -> this.pmsStatus;
             default -> throw new IllegalArgumentException("\u672a\u77e5 outbox kind: " + kind);
         };
+    }
+
+    public String getPmsStatus() {
+        return this.pmsStatus;
+    }
+
+    public void setPmsStatus(String pmsStatus) {
+        this.pmsStatus = pmsStatus;
     }
 
     @Generated

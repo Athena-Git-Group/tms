@@ -22,7 +22,7 @@ Table tenants {
 
 Table tenant_config {
   tenant_id  bigint      [not null, ref: > tenants.id]
-  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）']
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled（SLA/自動化規則增補：各類 SLA 時限分鐘、升級層距分鐘、升級鏈總開關）']
   value      jsonb       [not null, note: '結構依 key 而異']
   updated_at timestamptz [not null]
   updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
@@ -38,7 +38,7 @@ Table staff_accounts {
   name          text        [not null, note: 'PII：離職去識別化換不可回推代號']
   login_id      text        [not null, note: 'PII；UNIQUE (tenant_id, login_id)']
   password_hash text        [not null, note: 'bcrypt/argon2，絕不存明文']
-  role          text        [not null, note: 'CHECK: frontdesk|housekeeping|engineering|manager|owner']
+  role          text        [not null, note: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 為 SLA/自動化規則增補：逾時升級 L3 收件人）']
   dept          text        [note: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空']
   active        boolean     [not null, default: true, note: '停用=不能登入，歷史保留']
   created_at    timestamptz [not null]
@@ -172,12 +172,14 @@ Table tasks {
   pool_source    text        [note: '本 plan 新增投影欄位。最近一次進池的來源標籤。CHECK: guest_scan|desk_forward|manager_requeue|leave_return|shift_end_return|inspection_return|staff_report|system']
   return_reason  text        [note: '本 plan 新增投影欄位。最近一次退池的原因，例如「小陳請假」、「班末退池 · 交給下一班」']
   requeue_note   text        [note: '本 plan 新增投影欄位。接手進度交代，例如「浴室已刷完，還沒換床單」；任務詳情的交辦以 requeue_progress 顯示。PII 去識別化範圍']
+  due_at         timestamptz [note: 'SLA/自動化規則增補。到期時間；排序與逾時判定優先於 SLA 時限']
+  rule_hit       text        [note: 'SLA/自動化規則增補。自動化規則命中的規則名；冪等鍵＝房號｜規則｜當地日期']
   redo_count     int         [not null, default: 0]
   rating         int         [note: 'CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）']
   plan_id        uuid        [note: '打掃任務回鏈排房計畫']
   work_date      date        [note: '打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描']
   sla_min        int         [note: '保留欄位，SLA 升級鏈啟用前不寫']
-  esc_level      int         [note: '保留欄位']
+  esc_level      int         [note: 'SLA/自動化規則增補啟用：逾時升級已達層級 0–3；每層只升一次，0 或 NULL=未升級']
   created_at     timestamptz [not null]
   updated_at     timestamptz [not null]
   Indexes {
@@ -654,3 +656,21 @@ Ref: kb_audit_logs.(tenant_id, task_id) > tasks.(tenant_id, id)
 Ref: kb_escalations.(tenant_id, audit_log_id) > kb_audit_logs.(tenant_id, id)
 Ref: kb_escalations.(tenant_id, asked_by) > staff_accounts.(tenant_id, id)
 Ref: kb_escalations.(tenant_id, replied_by) > staff_accounts.(tenant_id, id)
+
+Table automation_rules {
+  id                uuid        [pk]
+  tenant_id         bigint      [not null, ref: > tenants.id]
+  name              text        [not null, note: 'UNIQUE (tenant_id, name)；出廠內建四條訂房屬性規則（VIP、親子、寵物、紀念日）']
+  trigger_source    text        [not null, note: 'CHECK: reservation|schedule（訂房屬性｜每日排程）']
+  condition         text        [not null, note: '訂房屬性值（如 VIP）或每日時點 HH:mm']
+  category          text        [not null, note: 'CHECK: cleaning|amenity|other']
+  room_no           text        [note: '排程規則可空＝公共區域']
+  due_after_minutes int         [note: '建單後 N 分鐘到期，寫入 tasks.due_at']
+  enabled           boolean     [not null, default: true]
+  created_at        timestamptz [not null]
+  updated_at        timestamptz [not null]
+  Indexes {
+    (tenant_id, name) [unique]
+  }
+  Note: 'SLA/自動化規則增補。規則命中建準備工單：source=system、pool_source=system、rule_hit=name；冪等鍵＝房號｜規則｜當地日期。刪除/停用不回收已建任務。'
+}

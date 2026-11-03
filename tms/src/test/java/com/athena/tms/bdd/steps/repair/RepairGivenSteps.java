@@ -8,7 +8,10 @@ import com.athena.tms.bdd.support.RoomFixtures;
 import com.athena.tms.bdd.support.TaskFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.UuidV7;
+import com.athena.tms.dto.Actor;
+import com.athena.tms.service.TaskEngine;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 import java.time.LocalDate;
@@ -39,6 +42,7 @@ public class RepairGivenSteps {
     private final ReservationFixtures reservationFixtures;
     private final MutableClock clock;
     private final JdbcClient jdbcClient;
+    private final TaskEngine taskEngine;
 
     /** G5／G6 共用：最近一次「準備照片」批次裡，上傳失敗的那張照片 id（給 G6 重試）。 */
     private String lastFailedPhotoId;
@@ -51,7 +55,8 @@ public class RepairGivenSteps {
             TaskFixtures taskFixtures,
             ReservationFixtures reservationFixtures,
             MutableClock clock,
-            JdbcClient jdbcClient) {
+            JdbcClient jdbcClient,
+            TaskEngine taskEngine) {
         this.world = world;
         this.apiClient = apiClient;
         this.tenantFixtures = tenantFixtures;
@@ -60,6 +65,7 @@ public class RepairGivenSteps {
         this.reservationFixtures = reservationFixtures;
         this.clock = clock;
         this.jdbcClient = jdbcClient;
+        this.taskEngine = taskEngine;
     }
 
     @假設("本飯店下一張工務單號為 {string}")
@@ -98,6 +104,15 @@ public class RepairGivenSteps {
 
             String state = repairTaskState(stateChinese);
             String category = Terms.repairCategory(categoryChinese);
+
+            // uq_tasks_one_doing_per_staff：一位員工同時最多一筆 doing。Background 可能已讓
+            // 同一位處理人有處理中的單（例如 W-0412），這裡要再建他的處理中新單時，先把他
+            // 手上既有的 doing 單完修結案（「已完修」＝done，工務單狀態對照表裡合法的非處理
+            // 中狀態，事件歷程也由 TaskEngine 完整留下）；直接硬插會撞唯一索引噴
+            // DuplicateKeyException，那不是場景要驗的事。
+            if ("doing".equals(state) && assigneeId != null) {
+                completeExistingDoingTasks(tenantId, assigneeId);
+            }
 
             TaskFixtures.Builder builder = taskFixtures
                     .builder()
@@ -255,6 +270,27 @@ public class RepairGivenSteps {
 
         Map<String, Object> completeBody = Map.of("photoIds", List.of(photoId));
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), completeBody);
+    }
+
+    /** 見 {@link #existingRepairTickets}：把該員工名下所有 doing 任務透過 TaskEngine 完修結案。 */
+    private void completeExistingDoingTasks(long tenantId, UUID assigneeId) {
+        List<Map<String, Object>> doingRows = jdbcClient
+                .sql("SELECT id, dept FROM tasks WHERE tenant_id = ? AND assignee_id = ? AND state = 'doing'")
+                .params(tenantId, assigneeId)
+                .query()
+                .listOfRows();
+        if (doingRows.isEmpty()) {
+            return;
+        }
+        TenantContext.set(tenantId);
+        try {
+            for (Map<String, Object> row : doingRows) {
+                taskEngine.complete(
+                        tenantId, (UUID) row.get("id"), Actor.staff(String.valueOf(row.get("dept")), assigneeId));
+            }
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     private String nowIso() {

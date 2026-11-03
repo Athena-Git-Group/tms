@@ -59,7 +59,26 @@ public class SecurityConfig {
     SecurityFilterChain apiSecurityFilterChain(HttpSecurity http, JwtService jwtService, StaffAccountRepository staffAccountRepository, GuestSessionRepository guestSessionRepository, IntegrationApiKeyRepository integrationApiKeyRepository, ApiErrorResponses apiErrorResponses, Clock clock) throws Exception {
         BearerTokenAuthFilter bearerTokenAuthFilter = new BearerTokenAuthFilter(jwtService, staffAccountRepository, guestSessionRepository, apiErrorResponses, clock);
         IntegrationApiKeyAuthFilter integrationApiKeyAuthFilter = new IntegrationApiKeyAuthFilter(integrationApiKeyRepository, apiErrorResponses);
-        http.csrf(AbstractHttpConfigurer::disable).logout(AbstractHttpConfigurer::disable).sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)).authorizeHttpRequests(matrix -> ((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)((AuthorizeHttpRequestsConfigurer.AuthorizedUrl)matrix.dispatcherTypeMatchers(new DispatcherType[]{DispatcherType.ERROR})).permitAll().requestMatchers(new String[]{"/auth/login"})).permitAll().requestMatchers(new String[]{"/guest/**"})).hasRole("guest").requestMatchers(HttpMethod.GET, new String[]{"/staff/**"})).hasAnyRole(new String[]{"housekeeping", "engineering", "manager", "frontdesk"}).requestMatchers(new String[]{"/staff/**"})).hasAnyRole(new String[]{"housekeeping", "engineering", "manager"}).requestMatchers(new String[]{"/desk/**"})).hasAnyRole(new String[]{"frontdesk", "manager"}).requestMatchers(new String[]{"/admin/**"})).hasRole("manager").requestMatchers(HttpMethod.GET, new String[]{"/owner/**"})).hasRole("owner").requestMatchers(new String[]{"/integration/**"})).hasRole("INTEGRATION").anyRequest()).denyAll()).exceptionHandling(handling -> handling.authenticationEntryPoint((AuthenticationEntryPoint)apiErrorResponses).accessDeniedHandler((AccessDeniedHandler)apiErrorResponses)).addFilterBefore((Filter)bearerTokenAuthFilter, AuthorizationFilter.class).addFilterBefore((Filter)integrationApiKeyAuthFilter, AuthorizationFilter.class);
+        http.csrf(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(matrix -> matrix
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers("/auth/login").permitAll()
+                        .requestMatchers("/guest/**").hasRole("guest")
+                        .requestMatchers(HttpMethod.GET, "/staff/**")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
+                        .requestMatchers("/staff/**").hasAnyRole("housekeeping", "engineering", "manager")
+                        .requestMatchers("/desk/**").hasAnyRole("frontdesk", "manager")
+                        .requestMatchers("/admin/**").hasRole("manager")
+                        .requestMatchers(HttpMethod.GET, "/owner/**").hasRole("owner")
+                        .requestMatchers("/integration/**").hasRole("INTEGRATION")
+                        .requestMatchers("/api/v1/tenant-configs/**").hasRole("manager")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/**")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
+                        .requestMatchers("/api/v1/**").hasAnyRole("housekeeping", "engineering", "manager")
+                        .anyRequest().denyAll())
+                .exceptionHandling(handling -> handling.authenticationEntryPoint((AuthenticationEntryPoint)apiErrorResponses).accessDeniedHandler((AccessDeniedHandler)apiErrorResponses)).addFilterBefore((Filter)bearerTokenAuthFilter, AuthorizationFilter.class).addFilterBefore((Filter)integrationApiKeyAuthFilter, AuthorizationFilter.class);
         return (SecurityFilterChain)http.build();
     }
 }

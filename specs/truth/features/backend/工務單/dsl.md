@@ -43,5 +43,5 @@
 | `以下員工都收到 "{單號}" 的急件推播：` | `單號`：字串。 | 支援：`員工`（必填，字串） | 無 | `必查`：每位員工都有一筆 kind `push` 的 outbox，`PushPayload.event`=repair_urgent，`target.highlightTaskId` 是該單。`跨視角`：推播消費者已寫入對應資料列。 |
 | `系統提示同房已有未結案的工務單 "{單號}"，狀態為 "{狀態}"` | `單號`：字串。<br>`狀態`：字串。 | 不支援 | 無 | `必查`：`呈現結果`：`duplicate.ticketNo` 與 `duplicate.state` 相符（狀態用語見對照表）。`不該發生`：沒有建立工務單。 |
 | `"{單號}" 共有 {張數} 張照片` | `單號`：字串。<br>`張數`：整數。 | 不支援 | 無 | `必查`：`權威狀態`：該工務單 purpose=report 的 `repair_photos` 筆數等於張數。`跨視角`：處理人呼叫 `readRepairTicket`（`GET /repair-tickets/{ticketId}`）時 `photoCount` 相同。 |
-| `"{房號}" 未結案的 "{類別}" 工務單只有 {張數} 張` | `房號`：字串。<br>`類別`：字串。<br>`張數`：整數。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets` JOIN `tasks`，該房該類別、state 不是 done 也不是 cancelled 的筆數等於張數。`跨視角`：工務待接池裡該房該類別的單也一致。 |
+| `"{房號}" 未結案的 "{類別}" 工務單只有 {張數} 張` | `房號`：字串。<br>`類別`：字串。<br>`張數`：整數。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets` JOIN `tasks`，該房該類別、state 不是 done 也不是 cancelled 的筆數等於張數。`跨視角`：工務員工呼叫 `listDeptPool`，池裡該房出現的單（以 ticketNo 比對）恰好等於上述未結案單中 state 仍是 pool 的那些——池只回 pool 的單，已被認領（doing）的未結案單不在池裡；`PoolItem.category` 是池分類（固定 repair），不是工務類別，所以不得拿它當類別過濾條件。 |
 | `"{單號}" 的處理說明為 "{說明}"` | `單號`：字串。<br>`說明`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets.resolution_note` 相等。`再讀確認`：`readRepairTicket` 的 `resolutionNote` 一致。 |
