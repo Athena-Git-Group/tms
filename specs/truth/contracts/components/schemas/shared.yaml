@@ -723,7 +723,7 @@ RepairTicketSummary:
       - doing
       - done
       - cancelled
-      description: 待接、已認領、處理中、已完修、已撤回（cancelled 且原因為 staff_withdrew）。
+      description: 待認領、已接單、維修中、已完修、已撤回（cancelled 且原因為 staff_withdrew）。
     reporterName:
       type: string
     createdAt:
@@ -771,7 +771,7 @@ PushPayload:
       $ref: '#/PushTarget'
 PushTarget:
   type: object
-  description: 點開推播後的去處。屬於本人的任務帶 taskId；不屬於本人的帶待接池入口。
+  description: 點開推播後的去處。屬於本人的任務帶 taskId；不屬於本人的帶待認領入口。
   required:
   - kind
   properties:

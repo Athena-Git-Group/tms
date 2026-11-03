@@ -107,10 +107,10 @@ listRepairTicketsAndcreateRepairTicket:
     description: >-
       負責人從自己未取消的任務開立工務單，房號由原任務帶入。
       工務單是工務部門的修繕任務（dept=engineering、type=repair、source=staff），
-      送出後直接進工務待接池，不經主管審核。
+      送出後直接進工務待認領，不經主管審核。
       照片 1–3 張，而且每張都必須已上傳（status=uploaded）；否則回 422，不建立工務單，原任務也不變。
       interruptSourceTask=true 時同時把 doing 的原任務轉為 interrupted，停住原因記為「等工務：<類別>」並連結單號。
-      urgent=true 時排在工務待接池的所有非急件之前，並推播該租戶所有工務與主管。
+      urgent=true 時排在工務待認領的所有非急件之前，並推播該租戶所有工務與主管。
       必須帶 Idempotency-Key；離線重送時回放第一次的回應，不會產生第二張單。
     tags:
     - 工務單 API
@@ -192,7 +192,7 @@ withdrawRepairTicket:
     operationId: withdrawRepairTicket
     summary: 撤回工務單
     description: >-
-      報修人在工務認領前撤回：pool→cancelled，原因 staff_withdrew，之後不再出現在工務待接池。
+      報修人在工務認領前撤回：pool→cancelled，原因 staff_withdrew，之後不再出現在工務待認領。
       已經被認領時回 409 already_claimed，message 為「已被工務認領」。
     tags:
     - 工務單 API

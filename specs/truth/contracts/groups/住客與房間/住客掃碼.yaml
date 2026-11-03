@@ -82,7 +82,7 @@ cancelGuestRequest:
     description: >-
       只有 state 是 triage 或 pool 時能撤回，轉為 cancelled，cancel_reason=guest_withdrew；
       其他狀態回 409 state_conflict（基線 FR-006、E-04）。
-      撤回 pool 中的需求時推播該部門員工（PushPayload.event=guest_withdrew），去處為待接池（FR-047）。
+      撤回 pool 中的需求時推播該部門員工（PushPayload.event=guest_withdrew），去處為待認領（FR-047）。
       只能撤回自己這次住宿（session 綁定的 reservation）的需求，其他的回 404。
     tags:
     - 住客掃碼 API

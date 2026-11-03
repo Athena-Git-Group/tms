@@ -167,8 +167,8 @@ Table tasks {
   deferred_by_self boolean   [not null, default: false, note: '本 plan 新增。state=deferred 時，true＝本人延後（保留 assignee，班末掃描退池）；false＝主管延後（無 assignee，隔日自動回池、可 undefer）']
   linked_repair_task_id uuid [note: '本 plan 新增。以中斷模式開立工務單時，原任務連結到那張工務單（→ tasks.id，type=repair）']
   cancel_reason  text        [note: '本 plan 新增投影欄位（原本只在事件 payload）。CHECK: guest_withdrew|manager_void|plan_superseded|staff_withdrew；staff_withdrew 為本 plan 新增']
-  urgent         boolean     [not null, default: false, note: '本 plan 新增。只有 repair 會是 true；待接池排在所有非急件之前']
-  priority_notify boolean    [not null, default: false, note: '本 plan 新增投影欄位（原本只在事件）。請假退回、主管附交代退池時為 true；待接池排序第二鍵']
+  urgent         boolean     [not null, default: false, note: '本 plan 新增。只有 repair 會是 true；待認領排在所有非急件之前']
+  priority_notify boolean    [not null, default: false, note: '本 plan 新增投影欄位（原本只在事件）。請假退回、主管附交代退池時為 true；待認領排序第二鍵']
   pool_source    text        [note: '本 plan 新增投影欄位。最近一次進池的來源標籤。CHECK: guest_scan|desk_forward|manager_requeue|leave_return|shift_end_return|inspection_return|staff_report|system']
   return_reason  text        [note: '本 plan 新增投影欄位。最近一次退池的原因，例如「小陳請假」、「班末退池 · 交給下一班」']
   requeue_note   text        [note: '本 plan 新增投影欄位。接手進度交代，例如「浴室已刷完，還沒換床單」；任務詳情的交辦以 requeue_progress 顯示。PII 去識別化範圍']
@@ -183,14 +183,14 @@ Table tasks {
   created_at     timestamptz [not null]
   updated_at     timestamptz [not null]
   Indexes {
-    (tenant_id, dept, state) [note: '待接池與看板']
+    (tenant_id, dept, state) [note: '待認領與看板']
     (tenant_id, assignee_id, state) [note: '個人在手']
     (tenant_id, room_id, created_at) [note: '單房歷程']
     (tenant_id, reservation_id, created_at) [note: '住客本次住宿需求']
     (tenant_id, id) [unique, note: '複合外鍵落點']
     (tenant_id, room_id, work_date) [unique, note: 'partial UNIQUE WHERE type=\'cleaning\' AND state NOT IN (\'done\',\'inspected\',\'cancelled\')——一房一天僅一筆未完成打掃（E-09）']
     (tenant_id, assignee_id) [unique, name: 'uq_tasks_one_doing_per_staff', note: '本 plan 新增。partial UNIQUE WHERE state=\'doing\'——一位員工同時最多一筆 doing（FR-001）。守衛 UPDATE 違反時回 409 doing_task_exists']
-    (tenant_id, dept, state, urgent, priority_notify) [note: '本 plan 新增。待接池排序（急件→優先通知→同樓層→房號）']
+    (tenant_id, dept, state, urgent, priority_notify) [note: '本 plan 新增。待認領排序（急件→優先通知→同樓層→房號）']
   }
   Note: '''
   任務投影（可由 task_events 重放重建）。

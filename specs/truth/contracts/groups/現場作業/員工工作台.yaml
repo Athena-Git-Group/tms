@@ -23,9 +23,9 @@ getMyToday:
 listDeptPool:
   get:
     operationId: listDeptPool
-    summary: 查看本部門待接池
+    summary: 查看本部門待認領
     description: >-
-      依登入員工的部門回傳待接池；工務員工看到的是工務池。
+      依登入員工的部門回傳待認領；工務員工看到的是工務池。
       排序為：急件 → 優先通知 → 與查詢者同樓層 → 房號遞增。
       同樓層以查詢者本班排房負責的樓層判斷（推定，FR-032 NEEDS CLARIFICATION）。
       回應包含分類筆數；帶 category 時只回傳該類別，但 counts 仍回傳全部類別。
