@@ -1,0 +1,22 @@
+package com.athena.tms.bdd;
+
+import org.junit.platform.suite.api.ConfigurationParameter;
+import org.junit.platform.suite.api.ConfigurationParameters;
+import org.junit.platform.suite.api.IncludeEngines;
+import org.junit.platform.suite.api.SelectDirectories;
+import org.junit.platform.suite.api.Suite;
+
+/**
+ * 跑 specs/truth/features/backend 的 truth feature（zh-TW Gherkin，不複製進 classpath）。
+ * 路徑相對於 Maven module 工作目錄（tms/）。
+ */
+@Suite
+@IncludeEngines("cucumber")
+@SelectDirectories("../specs/truth/features/backend")
+@ConfigurationParameters({
+        @ConfigurationParameter(key = "cucumber.glue", value = "com.athena.tms.bdd"),
+        @ConfigurationParameter(key = "cucumber.plugin",
+                value = "pretty, html:target/cucumber-reports/truth.html, json:target/cucumber-reports/truth.json")
+})
+public class RunTruthFeaturesTest {
+}

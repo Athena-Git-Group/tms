@@ -1,0 +1,49 @@
+/*
+ * Decompiled with CFR 0.152.
+ * 
+ * Could not load the following classes:
+ *  com.athena.tms.dto.TaskCreateCommand
+ *  com.athena.tms.entity.Task
+ *  com.athena.tms.service.TaskEngine
+ */
+package com.athena.tms.integration.stepdefs.utils;
+
+import com.athena.tms.dto.TaskCreateCommand;
+import com.athena.tms.entity.Task;
+import com.athena.tms.integration.stepdefs.utils.Tenants;
+import com.athena.tms.integration.stepdefs.utils.TestData;
+import com.athena.tms.service.TaskEngine;
+import java.util.UUID;
+
+public class TaskFixtures {
+    private final TaskEngine engine;
+
+    public TaskFixtures(TaskEngine engine) {
+        this.engine = engine;
+    }
+
+    public TaskEngine engine() {
+        return this.engine;
+    }
+
+    public Task newPoolTask(String title) {
+        return Tenants.asTenant(1L, () -> this.engine.create(new TaskCreateCommand(1L, "amenity", "desk", TestData.ROOM_305, TestData.RESERVATION_B001, "housekeeping", "pool", null, title, null, null, null, null, TestData.FD1)));
+    }
+
+    public void claimAndStartAsHk1(UUID taskId) {
+        Tenants.runAsTenant(1L, () -> {
+            this.engine.claim(1L, taskId, "housekeeping", TestData.HK1);
+            this.engine.start(1L, taskId, TestData.HK1);
+        });
+    }
+
+    public UUID newDoneTask(String title) {
+        Task task = this.newPoolTask(title);
+        Tenants.runAsTenant(1L, () -> {
+            this.engine.claim(1L, task.getId(), "housekeeping", TestData.HK1);
+            this.engine.start(1L, task.getId(), TestData.HK1);
+            this.engine.complete(1L, task.getId(), TestData.HK1);
+        });
+        return task.getId();
+    }
+}
