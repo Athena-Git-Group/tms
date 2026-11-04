@@ -150,12 +150,12 @@ public class RepairGivenSteps {
                             """
                             INSERT INTO repair_tickets
                                 (task_id, tenant_id, ticket_no, room_id, category, description,
-                                 reporter_id, source_task_id, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 reporter_id, source_task_id, created_at, is_urgent)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """)
                     .params(
                             taskId, tenantId, ticketNo, roomId, category, description, reporterId, sourceTaskId,
-                            OffsetDateTime.now(clock))
+                            OffsetDateTime.now(clock), urgent)
                     .update();
 
             if (sourceTaskId != null) {

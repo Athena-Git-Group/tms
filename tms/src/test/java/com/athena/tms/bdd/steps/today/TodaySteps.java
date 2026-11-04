@@ -81,6 +81,11 @@ public class TodaySteps {
                 check("tasks 重算 cleaningDone", expectedDone, totals.cleaningDone());
                 check("tasks 重算 cleaningTotal", expectedTotal, totals.cleaningTotal());
             }
+            case "查房通過" -> {
+                int expected = Integer.parseInt(expectedValue.trim());
+                checkField(item, "inspectedCount", json, expected);
+                check("tasks 重算 inspectedCount", expected, totals.inspectedCount());
+            }
             case "今天完成單數" -> {
                 int expected = Integer.parseInt(expectedValue.trim());
                 checkField(item, "completedCount", json, expected);
@@ -147,7 +152,7 @@ public class TodaySteps {
     private TodayTotals recomputeTotals(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         List<Map<String, Object>> rows = dbProbe.queryMaps(
-                "SELECT type, state, est_min, worked_sec, segment_started_at"
+                "SELECT type, state, est_min, worked_sec, segment_started_at, inspection"
                         + " FROM tasks WHERE tenant_id = ? AND assignee_id = ?",
                 tenantId, staffId);
 
@@ -156,6 +161,7 @@ public class TodaySteps {
         int completedCount = 0;
         int adHocCompleted = 0;
         int remainingMinutes = 0;
+        int inspectedCount = 0;
 
         for (Map<String, Object> row : rows) {
             String type = String.valueOf(row.get("type"));
@@ -180,8 +186,12 @@ public class TodaySteps {
                 int workedMinutes = workedMinutesOf(state, row);
                 remainingMinutes += Math.max(0, estMin - workedMinutes);
             }
+            if ("passed".equals(row.get("inspection"))) {
+                inspectedCount++;
+            }
         }
-        return new TodayTotals(cleaningDone, cleaningTotal, completedCount, adHocCompleted, remainingMinutes);
+        return new TodayTotals(
+                cleaningDone, cleaningTotal, completedCount, adHocCompleted, remainingMinutes, inspectedCount);
     }
 
     /**
@@ -245,6 +255,11 @@ public class TodaySteps {
     }
 
     private record TodayTotals(
-            int cleaningDone, int cleaningTotal, int completedCount, int adHocCompleted, int remainingMinutes) {
+            int cleaningDone,
+            int cleaningTotal,
+            int completedCount,
+            int adHocCompleted,
+            int remainingMinutes,
+            int inspectedCount) {
     }
 }

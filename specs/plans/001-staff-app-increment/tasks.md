@@ -19,8 +19,8 @@
 以下子範圍本輪**不產生** `[BDD-RED]`/`[BDD-GREEN]` 任務，原因與回交對象列在下方；DSL 句本身在 truth 都有唯一權威定義，缺口是下游 planner 產物未跟上：
 
 1. **ios-app 全部本輪 /dsl-refine 列**（Group B 的 ios-app 任務卡/待認領/今日進度/推播去處 feature、Group C 的 `ios-app/工務單/開單提示.feature`、Group D 4 支新 feature、10 筆用語落差中涉及 ios-app 的部分）：`plan.md:49,55` 與 `research.md:60-78` 已明文決議「App 不在本 repo」、Appium＋Cucumber-JVM runner「已選、尚未落地」，Wave 2（iOS 員工 App 介面）可延後、不影響後端進入 `/tasks`。本輪沒有 App 專案與 Appium harness 可執行 GREEN，依 plan.md 既有範圍決議全數排除，非回交 `/dsl-refine`。
-2. **急件改系統判定（裁決 C）全部內容**（`backend/工務單/開立工務單與急件.feature` 的「系統依飯店設定規則判定急件」「主管可將急件降級為一般件」2 個 Rule，以及 `工務單/dsl.md` 新增的 `系統判定…為急件／一般件`、`…不是急件`、`…的急件降級原因為`、`"{主管}" 以原因…將…降級為一般件` 句型）：**回交 `/api-plan`**（`RepairTicketSummary`/`RepairTicket` 缺 `isUrgent` 之外的 `urgentRule`／`urgentDowngradeReason`、`openapi.yaml` 缺 `downgradeRepairTicketUrgency` 端點、precheck 回應的 `urgentSuggestion` 語意需從建議改判定結果；`CreateRepairTicketRequest.urgent` 目前仍是必填的客戶端輸入，裁決 C 要求「請求不帶急件欄位」與現況直接衝突）**與 `/data-plan`**（`repair_tickets` 表沒有 `is_urgent`／`urgent_rule`／`urgent_downgrade_reason` 欄位；dsl.md 的 StepDef 語意寫 `repair_tickets.is_urgent`，但現有 `tasks.urgent` 才是實際承接急件排序的欄位，兩者歸屬需裁決）。此缺口已記在 `truth-delta.md` 自己的「程式碼待改清單」第 4、5 項。`開立工務單與急件.feature` 中「送出就進工務待認領不經審核」「中斷/不中斷模式」3 個既有 Rule 只是移除 Data Table 的 `急件` 輸入欄位，不依賴新欄位，但因 Test Scope 以整個 feature file 為單位、同檔仍有被擋的 Rule 無法全綠，本輪整檔不排入 Phase 3/4。
-3. **今日進度「查房通過」四格（用語落差表 #11 的 backend 半邊）**（`backend/今日進度/今日進度與下一間.feature` 新 Rule「查房通過數只計通過查房的單」、`今日進度/dsl.md` 的 `項目` enum 新增「查房通過」）：**回交 `/api-plan`**——`員工工作台.yaml` 的 `MyToday` 缺 `inspectedCount` 欄位，已記在 `truth-delta.md` 程式碼待改清單第 3 項。同檔其餘既有 Rule 未變，但因新 Rule 與既有 Rule 同檔、Test Scope 要求整檔全綠，本輪整檔不排入 Phase 3/4。
+2. ~~**急件改系統判定（裁決 C）全部內容**（`backend/工務單/開立工務單與急件.feature` 的「系統依飯店設定規則判定急件」「主管可將急件降級為一般件」2 個 Rule，以及 `工務單/dsl.md` 新增的 `系統判定…為急件／一般件`、`…不是急件`、`…的急件降級原因為`、`"{主管}" 以原因…將…降級為一般件` 句型）：回交 `/api-plan` 與 `/data-plan`。~~ **已解鎖**：`/api-plan`（`RepairTicketSummary.isUrgent`、`RepairTicket.urgentJudgement`{suggested,rule}、`RepairTicket.urgentDowngradeReason`、`RepairTicketPrecheckResponse.urgentJudgement`、`CreateRepairTicketRequest` 移除 `urgent`、`downgradeRepairTicketUrgency` 端點）與 `/data-plan`（`repair_tickets.is_urgent`／`urgent_rule`／`urgent_downgrade_reason`、`task_events.type` 新增 `urgent_downgraded`）已完成（commit `c74add2`，見 `truth-delta.md` `/api-plan` 行 49–56、程式碼待改清單行 189–192，`/data-plan` 行 86–87）。由下方 **Phase 1b（V14 migration）、Phase 2b（T226–T232 相關任務）、Phase 3F** 承接。
+3. ~~**今日進度「查房通過」四格（用語落差表 #11 的 backend 半邊）**（`backend/今日進度/今日進度與下一間.feature` 新 Rule「查房通過數只計通過查房的單」、`今日進度/dsl.md` 的 `項目` enum 新增「查房通過」）：回交 `/api-plan`。~~ **已解鎖**：`/api-plan` 已補 `MyToday.inspectedCount`（commit `c74add2`，見 `truth-delta.md` 行 57–58）。`tasks.inspection` 欄位本身在 V5 就已存在，不需額外 migration。由下方 **Phase 2b（T233）、Phase 3G** 承接。
 
 以下項目**不停止**，已內含在下方 Phase 1/2 任務中，理由一併說明：
 
@@ -210,3 +210,119 @@
 - `RunCucumberTest`（tms/src/test/resources/features 全套）
 
 - [X] T225 [BDD-ALIGN] 舊整合套件用語置換，置於 Phase 3A–3D 完成後執行。完成條件＝用語對齊後 RunCucumberTest 無「因本輪產品改動或用語」造成的非綠；該套件既有的 4 failures＋1 error（outbox 順序、唯一約束、SOP 勾記筆數，T224 時已存在且與用語無關）逐筆歸因——若查明是本輪產品改動（認領路由、未接提醒、排序）造成就修到綠，若是先前就壞的既有缺陷則列清單回報上游，不在本任務修。
+
+## Phase 1b: Foundational（急件系統判定與查房通過的資料側骨架）
+
+**Goal**: 只建立 Phase 2b／3F 會用到的 `repair_tickets` 欄位骨架，不寫判定規則引擎或降級業務邏輯。比照 T204 先例：封閉結構變動（新欄位）先進 Foundational 當機械補遺，業務邏輯留給後面的 RED/GREEN。
+
+- [X] T226 新增 `V14__repair_ticket_urgent_judgement.sql`：`repair_tickets` 補 `is_urgent`／`urgent_rule`／`urgent_downgrade_reason` 三欄
+  - Read:
+    - `truth-delta.md` -> `/data-plan` 段 `Table repair_tickets` 欄位 ADD（`is_urgent`、`urgent_rule`、`urgent_downgrade_reason`）、`Table task_events.type` MODIFY（新增 `urgent_downgraded`）
+    - `specs/truth/data/data-model.dbml:532-535` -> `repair_tickets.is_urgent`／`urgent_rule`／`urgent_downgrade_reason` 欄位定義與型別、預設值、nullable
+    - `tms/src/main/resources/db/migration/V5__staff_app_increment.sql:66-87`（`repair_tickets` 現有欄位與 FK，新欄位加在這張表上）、`V5__staff_app_increment.sql:9`（`task_events.type` 刻意不設 CHECK 的既有決定，本次沿用同一決定）
+    - `tms/src/main/resources/db/migration/V13__unclaimed_reminder_stage.sql`（最近一次對 `tasks` 加欄位＋調整索引的寫法慣例）
+  - 只做：`ALTER TABLE repair_tickets ADD COLUMN is_urgent boolean NOT NULL DEFAULT false`、`ADD COLUMN urgent_rule text`（nullable）、`ADD COLUMN urgent_downgrade_reason text`（nullable），欄位語意與型別對齊 dbml 的三行註解。既有資料列（若有）用預設值 `false`／`NULL` 補齊，不需要額外 backfill 邏輯（本輪之前建立的工務單都沒有急件判定資料可回填）。
+  - 不做：`task_events.type` **不需要** migration——V1 建表時刻意不對 `type` 加 CHECK（見 `V5__staff_app_increment.sql:9` 註解「加值不改表」），dbml 新增的列舉值 `urgent_downgraded` 純粹是文件列舉，沒有對應的 DB 結構變動；不建索引（`is_urgent` 的排序需求已由既有 `tasks.urgent` 承接，`idx_tasks_pool_order` 不需要再加這張表的欄位）；不寫 `tasks.urgent` 與 `repair_tickets.is_urgent` 的同步觸發器或程式邏輯（留給 Phase 3F `[BDD-GREEN]` 在應用層同一交易內寫兩邊）。
+
+## Phase 2b: Test Alignment（急件系統判定與查房通過）
+
+**Goal**: 把 `/api-plan`、`/data-plan` 解鎖後，本輪兩個 feature 用到、尚無 stepdef 或語意過時的 DSL 句對齊最新版 truth。不寫產品行為。
+
+**DSL 參照**:
+- 下列 8 句分屬兩個模組 dsl.md：7 句在 `specs/truth/features/backend/工務單/dsl.md`（T227–T233），1 句在 `specs/truth/features/backend/今日進度/dsl.md`（T234）。每句在其所屬 `dsl.md` 都只有唯一一列。
+- 讀法同 Phase 2：Given/When 讀 `怎麼做`、`權威狀態落地`、`回寫`；Then 讀 `必查`。`truth-delta.md` 只告訴 ADD/MODIFY/DELETE，語意以 `dsl.md` 該列為準。
+
+**Markers**：定義同 Phase 2（`[BDD-ALIGN]`=MODIFY、`[BDD-REMOVE]`=DELETE、`[BDD-RED]`=ADD 或本輪 Feature 用到尚無 stepdef 的句）。三個 marker 都只動測試層，不寫產品碼——T232 的 Data Table 欄位移除會讓目前必填的 `urgent` 欄位送不出去，預期結果是 422 業務拒絕（`request.urgent() == null`），不是 undefined step，產品端移除這個必填限制留給 Phase 3F `[BDD-GREEN]`。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/dsl.md`
+  -> Then `系統判定 "{單號}" 為急件，理由 "{理由}"`、`系統判定 "{單號}" 為一般件`、`"{單號}" 不是急件`、`"{單號}" 的急件降級原因為 "{原因}"`
+  -> When `"{主管}" 以原因 "{原因}" 將 "{單號}" 降級為一般件`、`"{員工}" 中斷 "{任務}" 並開立以下工務單：`、`"{員工}" 從 "{任務}" 開立以下工務單：`
+- `specs/truth/features/backend/今日進度/dsl.md` -> Then `今日進度的 "{項目}" 為 "{值}"`（`項目` enum 新增「查房通過」）
+- `truth-delta.md` -> `/api-plan` 行 49–58（`isUrgent`／`urgentJudgement`／`urgentDowngradeReason`／`downgradeRepairTicketUrgency`／`MyToday.inspectedCount`）；`/dsl-refine` 後的本輪補遺行 158–164、173（dsl.md 與 feature 的 ADD/MODIFY/DELETE 列表）
+- `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java`、`RepairWhenSteps.java`、`RepairThenSteps.java`
+- `tms/src/test/java/com/athena/tms/bdd/steps/today/TodaySteps.java`
+- `tms/src/main/java/com/athena/tms/repair/RepairController.java:40-47`（`CreateTicketRequest` 目前仍把 `urgent` 列為必填）—— T232 只改測試，這裡只是讓 subagent 知道 422 從哪來
+
+**Boundary**:
+- 一條 DSL 一個 task；T232 因屬同一個 truth-delta 列（行 161）的單一「移除急件輸入欄位」動作、同時涵蓋 3 個 When 句型（`中斷…並開立`、`從…開立`、`中斷…並以已準備的照片開立水電工務單`），比照既有 T209／T223 先例不拆成 3 個 task。
+- 只改該句的 stepdef／assertion／直接依賴的 helper；不改產品碼（`RepairService`／`RepairController`／`TaskExecutionService` 的實際改寫留給 Phase 3F／3G 的 `[BDD-GREEN]`）。
+- T227–T230、T231 都依賴 T226 新增的 `repair_tickets` 三欄位才能查得到權威狀態，實作前先確認 T226 已完成。
+- review 啟動 subagent；本輪所有 Test Scope 不得再有 undefined step，失敗只能是 assertion 或產品行為。有 issues 就修正再 review，直到沒有任何問題。通過前不解鎖 Phase 3F／3G。
+
+**Parallel Hint**:
+- T227–T234 各派一個獨立 subagent；T235 等全部回來再啟動 subagent 來 review。
+
+- [X] T227 [P] [BDD-RED] `Then: 系統判定 "{單號}" 為急件，理由 "{理由}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java`（依賴 T226 的 `repair_tickets.is_urgent`／`urgent_rule`）
+
+- [X] T228 [P] [BDD-RED] `Then: 系統判定 "{單號}" 為一般件`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java`（依賴 T226）
+
+- [X] T229 [P] [BDD-RED] `Then: "{單號}" 不是急件`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java`（依賴 T226；`再讀確認` 需呼叫 `readRepairTicket` 比對 `isUrgent`）
+
+- [X] T230 [P] [BDD-RED] `Then: "{單號}" 的急件降級原因為 "{原因}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java`（依賴 T226；`再讀確認` 需呼叫 `readRepairTicket` 比對 `urgentDowngradeReason`）
+
+- [X] T231 [P] [BDD-RED] `When: "{主管}" 以原因 "{原因}" 將 "{單號}" 降級為一般件`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java`（依賴 T226；呼叫 `POST /repair-tickets/{ticketId}/downgrade-urgency`，body 的 `note` 帶原因文字，auth 用 `"{主管}"` 的 JWT）
+
+- [X] T232 [P] [BDD-ALIGN] 開單 When 句型移除 Data Table／請求的 `急件` 欄位：`"{員工}" 中斷 "{任務}" 並開立以下工務單：`、`"{員工}" 從 "{任務}" 開立以下工務單：`、`"{員工}" 中斷 "{任務}" 並以已準備的照片開立水電工務單`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java`（私有 `createTicket` 方法目前 `requireCell(row, "急件")` 且把 `urgent` 塞進 request body；`interruptAndOpenTicketWithPreparedPhotos` 方法目前硬編 `"urgent", false`）
+  - 不讀 Data Table 的 `急件` 欄位（目前 feature 的 Data Table 已經沒有這欄，`requireCell` 現在就是今天 11 筆非綠之一的來源）；request body 不再放 `urgent` 鍵。完成後這 3 句可被跑到，預期失敗是產品端 422（`CreateTicketRequest.urgent` 仍必填），不是 undefined step 或 Data Table 缺欄位的 IllegalArgumentException。
+
+- [X] T233 [P] [BDD-REMOVE] `Then: 系統建議設為急件，提示 "{提示}"`（precheck 的急件判定結果語意由「建議」改為「判定」，舊斷言綁 `urgentSuggestion` 欄位）
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:163-172`（`systemSuggestsUrgent` 方法）、`specs/truth/features/backend/工務單/dsl.md`（Then 區已無此句，`回立即建議` 相關敘述已全部改為「系統判定」）
+  - 這句 Gherkin 文字在目前所有 `specs/truth/features/backend/工務單/*.feature` 都已不存在（已確認 grep 無結果），stepdef 是保護已廢除行為的殘留——直接移除 `systemSuggestsUrgent` 方法，不得改寫成繼續斷言 `urgentSuggestion`。
+
+- [X] T234 [P] [BDD-RED] `Then: 今日進度的 "{項目}" 為 "{值}"`（`項目` enum 新增「查房通過」）
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/today/TodaySteps.java:63-99`（`todayFieldIs` 的 `switch (item)`，目前缺「查房通過」分支，會落入 `default` 丟 `IllegalArgumentException`）、`specs/truth/features/backend/今日進度/dsl.md`（`inspectedCount`／`inspection=passed` 口徑）
+  - 新增 `case "查房通過"`：比對 `MyToday.inspectedCount`，並在 `recomputeTotals`／`TodayTotals`（同檔 `tms/src/test/java/com/athena/tms/bdd/steps/today/TodaySteps.java` 其餘私有方法）加一個以 `tasks.inspection = 'passed'` 且 `work_date` 為今天的本人任務數重算的欄位，口徑與 `MyToday.cleaningDone` 同一批資料來源，不另外查表。
+
+- [X] T235 subagent review (phase quality gate)（PASS；一筆暫態 422 紅燈由 Phase 3F 收斂，T236 回歸須確認 照片完整性與冪等送出.feature 轉綠）
+
+## Phase 3F: MODIFY Feature File - backend/工務單/開立工務單與急件.feature
+
+**Goal**: 急件判定全面改由系統依飯店設定規則判定（裁決 C）：開單請求不再接受 `urgent` 欄位，系統依 VIP／今日入住規則判定並寫入 `repair_tickets.is_urgent`／`urgent_rule`（同步 `tasks.urgent`），主管可附原因事後降級；讓更新後的 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/開立工務單與急件.feature` -> `Feature: 開立工務單與急件`（整檔，含 7 個 Rule：3 個既有 Rule 的 Data Table 已移除 `急件` 欄位、「系統依飯店設定規則判定急件」、「急件在工務待認領排在所有非急件之前」、「急件推播給所有工務與主管」、「主管可將急件降級為一般件，須附原因」）
+- `specs/truth/features/backend/工務單/dsl.md` -> Given `"{房號}" 今天是 VIP 房，住客 "{時刻}" 入住`；When `"{員工}" 中斷 "{任務}" 並開立以下工務單：`、`"{員工}" 從 "{任務}" 開立以下工務單：`、`"{主管}" 以原因 "{原因}" 將 "{單號}" 降級為一般件`；Then `系統判定 "{單號}" 為急件，理由 "{理由}"`、`系統判定 "{單號}" 為一般件`、`"{單號}" 不是急件`、`"{單號}" 的急件降級原因為 "{原因}"`
+- `truth-delta.md` -> `/api-plan` 行 49–56（`isUrgent`／`urgentJudgement`／`urgentDowngradeReason`／`downgradeRepairTicketUrgency`）、`/data-plan` 行 86–87（`repair_tickets` 三欄位、`task_events.type` 新值）、本輪補遺行 158–164（Rule 內容的 MODIFY/ADD 明細）
+- `tms/src/main/java/com/athena/tms/repair/RepairService.java:148-215`（`precheck` 方法，`urgentSuggestion` 要改名並改語意為 `urgentJudgement`）、`:401-466`（`create` 方法，`urgent` 參數要改為系統計算、同步寫 `repair_tickets.is_urgent`／`urgent_rule`）
+- `tms/src/main/java/com/athena/tms/repair/RepairController.java:40-47,76-90`（`CreateTicketRequest` 移除 `urgent` 欄位與必填檢查；新增 `downgradeRepairTicketUrgency` 端點路由）
+- `specs/truth/contracts/components/schemas/工務單.yaml`（`UrgentJudgement`、`RepairTicketPrecheckResponse.urgentJudgement`、`CreateRepairTicketRequest` 無 `urgent`、`RepairTicket.urgentJudgement`/`urgentDowngradeReason`、`DowngradeRepairTicketUrgencyRequest`）、`specs/truth/contracts/components/schemas/shared.yaml`（`RepairTicketSummary.isUrgent`）、對應的 `groups/現場作業/工務單.yaml`（`downgradeRepairTicketUrgency` 端點）
+
+**Boundary**:
+- 急件判定規則固定讀「原任務房間今天是否有訂單、`vip=true`」（沿用 `precheck` 既有的 `reservations_cache` 查詢條件與理由文案組法 `(vip ? "VIP · " : "") + checkinTime + " 入住"`），不新增其他判定維度；規則本身不可設定（tenant_config 不新增判定規則鍵）。
+- 開單交易內同步寫 `tasks.urgent` 與 `repair_tickets.is_urgent`／`urgent_rule`（同一個 `@Transactional` 方法內完成，不拆成兩次呼叫）；降級只改 `is_urgent`／`urgent_downgrade_reason`，`urgent_rule` 保留原判定理由供追溯。
+- 降級寫入 `task_events.type = 'urgent_downgraded'`，`payload.downgradeReason` 帶原因文字；不新增 `task_events.type` 以外的事件結構。
+- 不動既有「免審核進池」「中斷/不中斷模式」兩個 Rule 的狀態轉移邏輯，只配合 Data Table 移除 `急件` 欄位調整呼叫參數。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/開立工務單與急件.feature`
+
+- [X] T236 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T237 [BDD-REFACTOR] 在綠燈下整理急件判定規則的計算邏輯（`precheck`／`create` 共用同一個判定函式，不重複查 `reservations_cache` 兩次），清掉 `urgentSuggestion` 殘留命名
+
+## Phase 3G: MODIFY Feature File - backend/今日進度/今日進度與下一間.feature
+
+**Goal**: 首頁今日進度第四格改採「查房通過數」（`inspectedCount`，口徑為本人今日 `inspection=passed` 的任務數），讓更新後的 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/今日進度/今日進度與下一間.feature` -> `Feature: 今日進度與下一間`（整檔，含新 Rule「查房通過數只計通過查房的單」與既有 5 個 Rule）
+- `specs/truth/features/backend/今日進度/dsl.md` -> Then `今日進度的 "{項目}" 為 "{值}"`（`項目` enum 含「查房通過」、`inspectedCount` 計算口徑）
+- `truth-delta.md` -> `/api-plan` 行 57–58（`MyToday.inspectedCount` ADD、`getMyToday` description MODIFY）、本輪補遺行 173（Rule 標題與 enum 異動明細）
+- `tms/src/main/java/com/athena/tms/service/TaskExecutionService.java:412-493`（`myToday` 方法：查詢 SQL 未選 `inspection` 欄位、迴圈統計未計 `inspectedCount`、回應 body 未放這個鍵）
+- `specs/truth/contracts/components/schemas/員工工作台.yaml`（`MyToday.inspectedCount` 欄位定義）
+
+**Boundary**:
+- 只在既有查詢與迴圈裡加入 `inspection` 欄位與 `inspectedCount` 計數，計算口徑比照既有 `cleaningDone`／`completedCount`（同一個 `work_date`＝今天、同一批 `rows` 迴圈），不另開新查詢。
+- 不改 `cleaningDone`／`completedCount`／`adHocCompleted`／`remainingMinutes`／`nextTasks` 既有欄位的計算邏輯與既有 Rule 的驗收結果。
+
+**Test Scope**:
+- `specs/truth/features/backend/今日進度/今日進度與下一間.feature`
+
+- [X] T238 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T239 [BDD-REFACTOR] 在綠燈下檢查 `myToday` 方法的欄位計算是否可共用既有迴圈變數命名與註解風格，無重複邏輯則 NOOP（NOOP：風格一致、無重複邏輯）

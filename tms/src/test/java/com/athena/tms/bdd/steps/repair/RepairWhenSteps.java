@@ -78,7 +78,6 @@ public class RepairWhenSteps {
                 "sourceTaskId", sourceTaskId.toString(),
                 "category", Terms.repairCategory("水電"),
                 "photoIds", world.photoIds(),
-                "urgent", false,
                 "interruptSourceTask", true);
         ScenarioWorld.ApiResponse resp =
                 apiClient.post("/repair-tickets", BddApiClient.Auth.staff(world.jwt(staffName)), body);
@@ -89,6 +88,18 @@ public class RepairWhenSteps {
                 world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
             }
         }
+    }
+
+    @當("{string} 以原因 {string} 將 {string} 降級為一般件")
+    public void downgradeTicketUrgency(String managerName, String reason, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+
+        Map<String, Object> body = Map.of("note", reason);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/downgrade-urgency",
+                BddApiClient.Auth.staff(world.jwt(managerName)),
+                body);
     }
 
     @當("{string} 對 {string} 選擇工務單類別 {string}")
@@ -150,7 +161,6 @@ public class RepairWhenSteps {
         String categoryChinese = requireCell(row, "類別");
         String description = blankToNull(row.get("說明"));
         int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
-        boolean urgent = "是".equals(requireCell(row, "急件"));
 
         UUID sourceTaskId = UUID.fromString(world.taskId(taskKey));
         LastOperationGuard.captureFor(dbProbe, sourceTaskId);
@@ -166,7 +176,6 @@ public class RepairWhenSteps {
             body.put("description", description);
         }
         body.put("photoIds", photoIds);
-        body.put("urgent", urgent);
         body.put("interruptSourceTask", interrupt);
 
         ScenarioWorld.ApiResponse resp = idempotencyKey != null

@@ -141,9 +141,12 @@ public class RepairService {
      * 照片時才認得出他和這張單的關係。少了這筆紀錄，他回頭補照片會被當成
      * 無關人員擋下，提示就變成一條死路。
      *
-     * <p>急件建議看原任務房間今天的訂單——今日入住或 VIP 的房間，
-     * 工務太慢會直接影響住客入住，所以提前建議設為急件，提示文字組成
-     * 「這間『VIP · 15:00 入住』，影響入住的話建議設為急件」讓報修人自行決定。
+     * <p>急件判定（裁決 C）看原任務房間今天的訂單——今日入住或 VIP 的房間，
+     * 工務太慢會直接影響住客入住，所以系統直接判定為急件，不是提示房務自行
+     * 決定；判定結果與理由在這裡先算一次給報修人看，開單時 {@link #create} 會
+     * 再算一次並真正寫入 repair_tickets／tasks。兩處都呼叫 {@link #judgeUrgent}，
+     * 是為了讓同一間房在開單前與開單時判到同一個結果，不會因為各自維護一套
+     * 規則而兩邊兜不起來。
      */
     @Transactional
     public Map<String, Object> precheck(UUID sourceTaskId, String category) {
@@ -155,7 +158,7 @@ public class RepairService {
         List<Map<String, Object>> duplicates = jdbcTemplate.queryForList(
                 """
                 SELECT rt.task_id, rt.ticket_no, rt.category, rt.created_at, rt.reporter_id,
-                       t.state, t.urgent, r.room_no, s.name AS reporter_name
+                       t.state, rt.is_urgent, r.room_no, s.name AS reporter_name
                   FROM repair_tickets rt
                   JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
                   JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
@@ -184,8 +187,24 @@ public class RepairService {
             }
         }
 
-        Map<String, Object> suggestion = new LinkedHashMap<>();
-        suggestion.put("suggested", false);
+        UUID roomId = UUID.fromString(String.valueOf(sourceTask.get("room_id")));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("duplicate", duplicate);
+        body.put("urgentJudgement", judgeUrgent(tenantId, roomId));
+        return body;
+    }
+
+    /**
+     * 急件判定（裁決 C）：系統依飯店設定規則判定，不是提示——房務不能更改
+     * 判定結果，只能由主管事後呼叫 {@link #downgradeUrgency} 降級。目前唯一的
+     * 判定維度是原任務房間今天是否有入住訂單、是否 VIP（{@code reservations_cache}），
+     * 沒有命中規則時 {@code suggested=false}、{@code rule=null}，判定為一般件。
+     */
+    private Map<String, Object> judgeUrgent(long tenantId, UUID roomId) {
+        Map<String, Object> judgement = new LinkedHashMap<>();
+        judgement.put("suggested", false);
+        judgement.put("rule", null);
+
         LocalDate today = OffsetDateTime.now(clock).toLocalDate();
         List<Map<String, Object>> reservations = jdbcTemplate.queryForList(
                 """
@@ -196,27 +215,54 @@ public class RepairService {
                  ORDER BY checkin_at
                  LIMIT 1
                 """,
-                tenantId, sourceTask.get("room_id"), clock.getZone().getId(), today);
+                tenantId, roomId, clock.getZone().getId(), today);
         if (!reservations.isEmpty()) {
             Map<String, Object> reservation = reservations.get(0);
             boolean vip = Boolean.TRUE.equals(reservation.get("vip"));
             String checkinTime = toOffsetDateTime(reservation.get("checkin_at"))
                     .atZoneSameInstant(clock.getZone())
                     .format(CHECKIN_TIME);
-            String label = (vip ? "VIP · " : "") + checkinTime + " 入住";
-            suggestion.put("suggested", true);
-            suggestion.put("message", "這間『" + label + "』，影響入住的話建議設為急件");
+            String rule = (vip ? "VIP · " : "") + checkinTime + " 入住";
+            judgement.put("suggested", true);
+            judgement.put("rule", rule);
         }
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("duplicate", duplicate);
-        body.put("urgentSuggestion", suggestion);
-        return body;
+        return judgement;
     }
 
     /** 查看工務單詳情（contracts readRepairTicket）。 */
     public Map<String, Object> read(UUID ticketTaskId) {
         long tenantId = TenantContext.require();
+        return ticketView(tenantId, ticketTaskId);
+    }
+
+    /**
+     * 主管將急件降級為一般件（contracts downgradeRepairTicketUrgency）：急件判定
+     * 本身是系統算出的，房務開單時不能更改，只有主管可以事後用這個操作降級；
+     * 不能反向把一般件升為急件，所以目前不是急件時回 409。只改 is_urgent／
+     * urgent_downgrade_reason，urgent_rule 保留開單當下的原始判定理由供追溯；
+     * 同一交易內把 tasks.urgent 同步改回 false（待認領排序看這欄）並寫
+     * task_events（type=urgent_downgraded），事件本身不是狀態轉移，委派
+     * {@link TaskEngine#recordUrgentDowngraded} 沿用 sopCheck 同一套「不靠 state
+     * 轉移」的事件落地方式。
+     */
+    @Transactional
+    public Map<String, Object> downgradeUrgency(UUID ticketTaskId, String downgradeReason) {
+        long tenantId = TenantContext.require();
+        CurrentActor actor = CurrentActor.require();
+        Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
+        if (!Boolean.TRUE.equals(ticket.get("is_urgent"))) {
+            throw new StateConflictException("not_urgent", "這張單目前不是急件");
+        }
+
+        jdbcTemplate.update(
+                "UPDATE repair_tickets SET is_urgent = false, urgent_downgrade_reason = ? WHERE tenant_id = ? AND task_id = ?",
+                downgradeReason, tenantId, ticketTaskId);
+        jdbcTemplate.update(
+                "UPDATE tasks SET urgent = false WHERE tenant_id = ? AND id = ?", tenantId, ticketTaskId);
+
+        taskEngine.recordUrgentDowngraded(
+                tenantId, ticketTaskId, downgradeReason, Actor.staff(actor.role(), actor.staffId()));
+
         return ticketView(tenantId, ticketTaskId);
     }
 
@@ -334,7 +380,8 @@ public class RepairService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT rt.ticket_no, rt.category, rt.description, rt.created_at, rt.source_task_id,
-                       rt.resolution_note, t.state, t.urgent, r.room_no, s.name AS reporter_name,
+                       rt.resolution_note, rt.is_urgent, rt.urgent_rule, rt.urgent_downgrade_reason,
+                       t.state, r.room_no, s.name AS reporter_name,
                        (SELECT count(*) FROM repair_photos p
                          WHERE p.tenant_id = rt.tenant_id AND p.ticket_task_id = rt.task_id
                            AND p.purpose = 'report') AS photo_count
@@ -356,6 +403,12 @@ public class RepairService {
         if (row.get("source_task_id") != null) {
             body.put("sourceTaskId", String.valueOf(row.get("source_task_id")));
         }
+        String urgentRule = (String) row.get("urgent_rule");
+        Map<String, Object> urgentJudgement = new LinkedHashMap<>();
+        urgentJudgement.put("suggested", urgentRule != null);
+        urgentJudgement.put("rule", urgentRule);
+        body.put("urgentJudgement", urgentJudgement);
+        body.put("urgentDowngradeReason", row.get("urgent_downgrade_reason"));
         return body;
     }
 
@@ -370,7 +423,7 @@ public class RepairService {
         body.put("ticketNo", row.get("ticket_no"));
         body.put("roomNo", row.get("room_no"));
         body.put("category", row.get("category"));
-        body.put("urgent", Boolean.TRUE.equals(row.get("urgent")));
+        body.put("isUrgent", Boolean.TRUE.equals(row.get("is_urgent")));
         body.put("state", row.get("state"));
         body.put("reporterName", row.get("reporter_name"));
         body.put("createdAt", toOffsetDateTime(row.get("created_at")).toString());
@@ -397,6 +450,10 @@ public class RepairService {
      * 並連結新單；急件時推播全體工務與主管。整段在同一個交易裡——契約要求
      * 任一步失敗時工務單不落地、原任務也不變，不能出現「單建了但原任務沒中斷」
      * 的中間態。
+     *
+     * <p>急件（裁決 C）不再接受請求參數：開單時系統依 {@link #judgeUrgent} 的規則
+     * 自行判定，房務不能更改；判定結果同一交易內寫入 repair_tickets.is_urgent／
+     * urgent_rule，並同步 tasks.urgent（待認領池排序看這欄）。
      */
     @Transactional
     public Map<String, Object> create(
@@ -404,7 +461,6 @@ public class RepairService {
             String category,
             String description,
             List<UUID> photoIds,
-            boolean urgent,
             boolean interruptSourceTask) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
@@ -419,9 +475,15 @@ public class RepairService {
                 tenantId, "repair", "staff", roomId, null, "engineering", "pool", null,
                 categoryLabel + " 工務單", null, null, null, null, staffActor));
         UUID ticketTaskId = ticketTask.getId();
+
+        Map<String, Object> urgentJudgement = judgeUrgent(tenantId, roomId);
+        boolean isUrgent = Boolean.TRUE.equals(urgentJudgement.get("suggested"));
+        String urgentRule = (String) urgentJudgement.get("rule");
+
         // urgent 不在 TaskCreateCommand 的欄位裡（它是工務單這個 plan 才加的
-        // tasks 欄位），建完再補一筆 UPDATE，仍在同一個交易內。
-        if (urgent) {
+        // tasks 欄位），建完再補一筆 UPDATE，仍在同一個交易內；repair_tickets.is_urgent／
+        // urgent_rule 下面緊接著同一個交易寫入，兩邊判定結果一致。
+        if (isUrgent) {
             jdbcTemplate.update(
                     "UPDATE tasks SET urgent = true WHERE tenant_id = ? AND id = ?", tenantId, ticketTaskId);
         }
@@ -431,11 +493,11 @@ public class RepairService {
                 """
                 INSERT INTO repair_tickets
                     (task_id, tenant_id, ticket_no, room_id, category, description,
-                     reporter_id, source_task_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     reporter_id, source_task_id, created_at, is_urgent, urgent_rule)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 ticketTaskId, tenantId, ticketNo, roomId, category, description,
-                actor.staffId(), sourceTaskId, now);
+                actor.staffId(), sourceTaskId, now, isUrgent, urgentRule);
 
         bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
 
@@ -447,7 +509,7 @@ public class RepairService {
         }
 
         String roomNo = String.valueOf(sourceTask.get("room_no"));
-        if (urgent) {
+        if (isUrgent) {
             notifyUrgent(tenantId, ticketTaskId, ticketNo, roomNo, categoryLabel);
         }
 
@@ -456,12 +518,14 @@ public class RepairService {
         body.put("ticketNo", ticketNo);
         body.put("roomNo", roomNo);
         body.put("category", category);
-        body.put("urgent", urgent);
+        body.put("isUrgent", isUrgent);
         body.put("state", "pool");
         body.put("reporterName", staffName(tenantId, actor.staffId()));
         body.put("createdAt", now.toString());
         body.put("photoCount", photoIds.size());
         body.put("sourceTaskId", sourceTaskId.toString());
+        body.put("urgentJudgement", urgentJudgement);
+        body.put("urgentDowngradeReason", null);
         return body;
     }
 

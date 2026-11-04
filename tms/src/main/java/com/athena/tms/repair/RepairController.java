@@ -18,7 +18,8 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * 工務單與照片 API，路由對應 contracts 的 createRepairPhoto、
  * uploadRepairPhotoContent、precheckRepairTicket、createRepairTicket、
- * readRepairTicket、appendRepairTicketPhotos、withdrawRepairTicket。
+ * readRepairTicket、appendRepairTicketPhotos、withdrawRepairTicket、
+ * downgradeRepairTicketUrgency。
  * listRepairTickets 屬於後續 phase，先維持 501 佔位。
  */
 @RestController
@@ -42,8 +43,10 @@ public class RepairController {
             String category,
             String description,
             List<UUID> photoIds,
-            Boolean urgent,
             Boolean interruptSourceTask) {
+    }
+
+    public record DowngradeUrgencyRequest(String note) {
     }
 
     @PostMapping("/repair-photos")
@@ -76,8 +79,8 @@ public class RepairController {
     @PostMapping("/repair-tickets")
     public ResponseEntity<Map<String, Object>> createRepairTicket(@RequestBody CreateTicketRequest request) {
         if (request == null || request.sourceTaskId() == null || request.category() == null
-                || request.urgent() == null || request.interruptSourceTask() == null) {
-            throw new UnprocessableEntityException("sourceTaskId、category、photoIds、urgent、interruptSourceTask 必填");
+                || request.interruptSourceTask() == null) {
+            throw new UnprocessableEntityException("sourceTaskId、category、photoIds、interruptSourceTask 必填");
         }
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(repairService.create(
@@ -85,7 +88,6 @@ public class RepairController {
                         request.category(),
                         request.description(),
                         request.photoIds() == null ? List.of() : request.photoIds(),
-                        request.urgent(),
                         request.interruptSourceTask()));
     }
 
@@ -114,5 +116,14 @@ public class RepairController {
     @PostMapping("/repair-tickets/{ticketId}/withdraw")
     public Map<String, Object> withdrawRepairTicket(@PathVariable UUID ticketId) {
         return repairService.withdraw(ticketId);
+    }
+
+    @PostMapping("/repair-tickets/{ticketId}/downgrade-urgency")
+    public Map<String, Object> downgradeRepairTicketUrgency(
+            @PathVariable UUID ticketId, @RequestBody DowngradeUrgencyRequest request) {
+        if (request == null || request.note() == null || request.note().isBlank()) {
+            throw new UnprocessableEntityException("note 必填");
+        }
+        return repairService.downgradeUrgency(ticketId, request.note());
     }
 }

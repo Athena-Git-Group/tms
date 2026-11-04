@@ -92,7 +92,8 @@ public class CommonGivenSteps {
             if (estMin == null) {
                 estMin = defaultEstMin(content);
             }
-            String state = Terms.taskState(requireCell(row, "狀態"));
+            String stateChinese = requireCell(row, "狀態");
+            String state = Terms.taskState(stateChinese);
             Integer workedMinutes = parseIntOrNull(row.get("已做分鐘"));
             String holdReason = blankToNull(row.get("停住原因"));
             Integer redoCount = parseIntOrNull(row.get("重做次數"));
@@ -118,6 +119,11 @@ public class CommonGivenSteps {
             }
             if ("deferred".equals(state)) {
                 builder.deferredBySelf(true);
+            }
+            if ("inspected".equals(state) && "完成 · 免查房".equals(stateChinese)) {
+                // 「查房通過」與「完成 · 免查房」都對應 tasks.state=inspected，差別只在
+                // tasks.inspection（passed｜waived），見 Terms.taskState 的說明。
+                builder.inspectionWaived(true);
             }
 
             UUID taskId = builder.create();

@@ -412,7 +412,8 @@ public class TaskExecutionService {
     /**
      * 查看呼叫者的今日進度與下一間，形狀對應 contracts 的 MyToday。統計的口徑：
      * 打掃總數＝本人今日（work_date＝今天）未取消的打掃任務數，打掃完成數＝其中
-     * done 或 inspected 的數量；今日完成單數＝本人今天完成（done_at 落在今天）且
+     * done 或 inspected 的數量；查房通過數＝本人 inspection 為 passed 的任務數；
+     * 今日完成單數＝本人今天完成（done_at 落在今天）且
      * 狀態 done 或 inspected 的任務數；臨時需求完成數＝其中非打掃類 done 的數量；
      * 預估剩餘工時＝Σ（accepted、doing、deferred、interrupted）max(0, 預估分鐘 −
      * 已做分鐘），進行中的段落以現在時刻折算。下一間只列 accepted，排序為 redo
@@ -430,7 +431,7 @@ public class TaskExecutionService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
-                       t.work_date, t.done_at, t.redo_count, r.room_no
+                       t.work_date, t.done_at, t.redo_count, t.inspection, r.room_no
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
                  WHERE t.tenant_id = ? AND t.assignee_id = ?
@@ -439,6 +440,7 @@ public class TaskExecutionService {
 
         int cleaningTotal = 0;
         int cleaningDone = 0;
+        int inspectedCount = 0;
         int completedCount = 0;
         int adHocCompleted = 0;
         long remainingMinutes = 0;
@@ -453,6 +455,9 @@ public class TaskExecutionService {
                 if (doneLike) {
                     cleaningDone++;
                 }
+            }
+            if ("passed".equals(row.get("inspection"))) {
+                inspectedCount++;
             }
             OffsetDateTime doneAt = SqlTimestamps.toOffsetDateTime(row.get("done_at"));
             boolean doneToday = doneAt != null && !doneAt.isBefore(dayStart) && doneAt.isBefore(dayEnd);
@@ -484,6 +489,7 @@ public class TaskExecutionService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("cleaningDone", cleaningDone);
         result.put("cleaningTotal", cleaningTotal);
+        result.put("inspectedCount", inspectedCount);
         result.put("completedCount", completedCount);
         result.put("adHocCompleted", adHocCompleted);
         result.put("remainingMinutes", (int) Math.max(0, remainingMinutes));

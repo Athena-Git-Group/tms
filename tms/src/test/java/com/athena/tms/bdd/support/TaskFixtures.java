@@ -75,6 +75,7 @@ public class TaskFixtures {
         private String state;
         private UUID assigneeId;
         private UUID inspectorId;
+        private boolean inspectionWaived = false;
         private Integer workedMinutes;
         private String holdReason;
         private int redoCount = 0;
@@ -128,6 +129,17 @@ public class TaskFixtures {
 
         public Builder inspector(UUID v) {
             this.inspectorId = v;
+            return this;
+        }
+
+        /**
+         * 只在 state=inspected 時有意義：是否以「開工當下鎖定免查」收尾（對應「完成 ·
+         * 免查房」，tasks.inspection=waived），而不是主管查房通過（tasks.inspection=passed）。
+         * 兩者在 {@code 狀態用語對照} 都對應同一個 tasks.state=inspected，差別只在
+         * tasks.inspection，見 {@link com.athena.tms.bdd.support.Terms#taskState}。
+         */
+        public Builder inspectionWaived(boolean v) {
+            this.inspectionWaived = v;
             return this;
         }
 
@@ -364,9 +376,21 @@ public class TaskFixtures {
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
-                    engine.complete(tenantId, task.getId(), actor);
-                    Actor inspector = inspectorId != null ? Actor.staff("manager", inspectorId) : Actor.staff("manager", null);
-                    engine.passInspection(tenantId, task.getId(), inspector);
+                    if (inspectionWaived) {
+                        // 「完成 · 免查房」：比照正式流程在開工當下鎖定免查（tasks.inspection_waived），
+                        // 這裡用 UPDATE 直接補這個投影欄位（不是事件本身，本身也不代表任何事件），
+                        // 讓接下來的 complete() 照正式的 CASE 邏輯把狀態收在 inspected、
+                        // inspection 記為 waived，事件歷程跟正式流程一致。
+                        jdbcClient
+                                .sql("UPDATE tasks SET inspection_waived = true WHERE tenant_id = ? AND id = ?")
+                                .params(tenantId, task.getId())
+                                .update();
+                        engine.complete(tenantId, task.getId(), actor);
+                    } else {
+                        engine.complete(tenantId, task.getId(), actor);
+                        Actor inspector = inspectorId != null ? Actor.staff("manager", inspectorId) : Actor.staff("manager", null);
+                        engine.passInspection(tenantId, task.getId(), inspector);
+                    }
                     return task;
                 }
                 case "deferred": {

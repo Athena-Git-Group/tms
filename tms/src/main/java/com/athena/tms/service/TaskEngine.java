@@ -396,6 +396,19 @@ public class TaskEngine {
         return this.recordEvent(tenantId, taskId, seq, "sop_checked", actor, TaskEngine.payload("item_key", itemKey, "label", label, "checked", checked, "skipped", skipped));
     }
 
+    /**
+     * 主管將急件降級為一般件（contracts downgradeRepairTicketUrgency）。急件判定
+     * 不是任務狀態轉移，is_urgent／urgent_downgrade_reason 的實際改寫在
+     * {@code RepairService}（repair_tickets 延伸資料），這裡只負責和
+     * {@link #sopCheck} 一樣「不靠 state 轉移」的事件落地：遞增 event_seq、
+     * 寫 task_events（type=urgent_downgraded，payload.downgradeReason 帶原因）。
+     */
+    @Transactional
+    public int recordUrgentDowngraded(long tenantId, UUID taskId, String downgradeReason, Actor actor) {
+        int seq = this.guard("急件降級", "UPDATE tasks\n   SET event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\nRETURNING event_seq\n", tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "urgent_downgraded", actor, TaskEngine.payload("downgradeReason", downgradeReason));
+    }
+
     private int guard(String operation, String sql, Object ... params) {
         try {
             Integer seq = (Integer)this.jdbcTemplate.queryForObject(sql, Integer.class, params);

@@ -93,6 +93,52 @@ public class RepairThenSteps {
         check("tasks.source", "staff", taskRow.get("source"));
     }
 
+    @那麼("系統判定 {string} 為急件，理由 {string}")
+    public void systemJudgesTicketAsUrgent(String ticketNo, String reason) {
+        long tenantId = tenantFixtures.testTenantId();
+        Map<String, Object> ticketRow = dbProbe
+                .queryOne(
+                        "SELECT is_urgent, urgent_rule FROM repair_tickets WHERE tenant_id = ? AND ticket_no = ?",
+                        tenantId, ticketNo)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無單號 " + ticketNo));
+        boolean isUrgent = Boolean.TRUE.equals(ticketRow.get("is_urgent"));
+        if (!isUrgent) {
+            throw new AssertionError("repair_tickets.is_urgent 預期 true，實際 false（單號 " + ticketNo + "）");
+        }
+        check("repair_tickets.urgent_rule", reason, ticketRow.get("urgent_rule"));
+
+        ScenarioWorld.ApiResponse resp = world.lastResponse();
+        JsonNode json = resp.json();
+        boolean suggested = json != null && json.path("urgentJudgement").path("suggested").asBoolean(false);
+        String rule = json != null ? json.path("urgentJudgement").path("rule").asText(null) : null;
+        if (!suggested || !reason.equals(rule)) {
+            throw new AssertionError(
+                    "預期 urgentJudgement.suggested=true, rule=" + reason + "，實際 status=" + resp.status()
+                            + " suggested=" + suggested + " rule=" + rule + "，body=" + resp.body());
+        }
+    }
+
+    @那麼("系統判定 {string} 為一般件")
+    public void systemJudgesTicketAsNormal(String ticketNo) {
+        long tenantId = tenantFixtures.testTenantId();
+        Map<String, Object> ticketRow = dbProbe
+                .queryOne("SELECT is_urgent FROM repair_tickets WHERE tenant_id = ? AND ticket_no = ?", tenantId, ticketNo)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無單號 " + ticketNo));
+        boolean isUrgent = Boolean.TRUE.equals(ticketRow.get("is_urgent"));
+        if (isUrgent) {
+            throw new AssertionError("repair_tickets.is_urgent 預期 false，實際 true（單號 " + ticketNo + "）");
+        }
+
+        ScenarioWorld.ApiResponse resp = world.lastResponse();
+        JsonNode json = resp.json();
+        boolean suggested = json != null && json.path("urgentJudgement").path("suggested").asBoolean(true);
+        if (suggested) {
+            throw new AssertionError(
+                    "預期 urgentJudgement.suggested=false，實際 status=" + resp.status() + " suggested=" + suggested
+                            + "，body=" + resp.body());
+        }
+    }
+
     @那麼("系統沒有建立工務單")
     public void noRepairTicketCreated() {
         RepairCountGuard.Snapshot before = RepairCountGuard.current();
@@ -156,20 +202,6 @@ public class RepairThenSteps {
             throw new AssertionError(
                     "工務待認領順序預期 " + expected + "，實際 " + actual + "（status=" + resp.status() + "）");
         }
-    }
-
-    @那麼("系統建議設為急件，提示 {string}")
-    public void systemSuggestsUrgent(String hint) {
-        ScenarioWorld.ApiResponse resp = world.lastResponse();
-        JsonNode json = resp.json();
-        boolean suggested = json != null && json.path("urgentSuggestion").path("suggested").asBoolean(false);
-        String message = json != null ? json.path("urgentSuggestion").path("message").asText(null) : null;
-        if (!suggested || !hint.equals(message)) {
-            throw new AssertionError(
-                    "預期 urgentSuggestion.suggested=true, message=" + hint + "，實際 status=" + resp.status()
-                            + " suggested=" + suggested + " message=" + message);
-        }
-        assertNoRepairTicketCreatedSinceGuard();
     }
 
     @那麼("以下員工都收到 {string} 的急件推播：")
@@ -271,6 +303,40 @@ public class RepairThenSteps {
             throw new AssertionError(
                     "工務待認領裡 " + roomNo + " 的「" + categoryChinese + "」單預期 " + expectedPoolTicketNos + "，實際 "
                             + actualPoolTicketNos + "（status=" + resp.status() + "）");
+        }
+    }
+
+    @那麼("{string} 不是急件")
+    public void ticketIsNotUrgent(String ticketNo) {
+        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        Map<String, Object> row = dbProbe
+                .queryOne("SELECT is_urgent, reporter_id FROM repair_tickets WHERE task_id = ?", taskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無此工務單 id=" + taskId));
+        check("repair_tickets.is_urgent", Boolean.FALSE, row.get("is_urgent"));
+
+        String jwt = mintJwtFor(toUuid(row.get("reporter_id")));
+        ScenarioWorld.ApiResponse resp = apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(jwt));
+        boolean actualIsUrgent = resp.json() != null && resp.json().path("isUrgent").asBoolean(true);
+        if (actualIsUrgent) {
+            throw new AssertionError(
+                    "readRepairTicket.isUrgent 預期 false，實際 " + actualIsUrgent + "（status=" + resp.status() + "）");
+        }
+    }
+
+    @那麼("{string} 的急件降級原因為 {string}")
+    public void urgentDowngradeReasonIs(String ticketNo, String reason) {
+        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        Map<String, Object> row = dbProbe
+                .queryOne("SELECT urgent_downgrade_reason, reporter_id FROM repair_tickets WHERE task_id = ?", taskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無此工務單 id=" + taskId));
+        check("repair_tickets.urgent_downgrade_reason", reason, row.get("urgent_downgrade_reason"));
+
+        String jwt = mintJwtFor(toUuid(row.get("reporter_id")));
+        ScenarioWorld.ApiResponse resp = apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(jwt));
+        String actual = resp.json() != null ? resp.json().path("urgentDowngradeReason").asText(null) : null;
+        if (!reason.equals(actual)) {
+            throw new AssertionError("readRepairTicket.urgentDowngradeReason 預期 " + reason + "，實際 " + actual
+                    + "（status=" + resp.status() + "）");
         }
     }
 
