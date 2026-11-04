@@ -1,0 +1,46 @@
+package com.athena.app.bdd.steps.common;
+
+import com.athena.app.bdd.AppiumWorld;
+import io.cucumber.java.PendingException;
+import io.cucumber.java.zh_tw.當;
+
+/** 介面根共通句的 When（dsl.md When 句型區）。 */
+public class CommonWhenSteps {
+
+    private final AppiumWorld world;
+
+    public CommonWhenSteps(AppiumWorld world) {
+        this.world = world;
+    }
+
+    /** 怎麼做：以該員工登入後進入首頁，等今日進度載入完成。accessibility id：{@code home.*}。 */
+    @當("{string} 在 App 打開首頁")
+    public void openHome(String staffName) {
+        throw new PendingException();
+    }
+
+    /**
+     * 怎麼做：在首頁或任務頁點該房的開始按鈕。權威狀態落地：成功時後端任務為 doing；
+     * 被拒時後端不變。回寫：畫面上的提示與任務卡。accessibility id：{@code task.primary-button}。
+     */
+    @當("{string} 在 App 開始 {string}")
+    public void startTask(String staffName, String task) {
+        throw new PendingException();
+    }
+
+    /** 怎麼做：在首頁點該房的任務卡，進入任務頁。回寫：任務頁內容。 */
+    @當("{string} 在 App 打開 {string} 的任務頁")
+    public void openTaskDetail(String staffName, String task) {
+        throw new PendingException();
+    }
+
+    /**
+     * 怎麼做：在任務頁點主按鈕「完成」。權威狀態落地：成功時後端任務依 {@code tasksComplete}
+     * 語意轉為 done 或 inspected；失敗時後端不變。回寫：畫面提示、任務頁或完成慶祝頁內容。
+     * accessibility id：{@code task.primary-button}。
+     */
+    @當("{string} 在 App 完成 {string}")
+    public void completeTask(String staffName, String task) {
+        throw new PendingException();
+    }
+}

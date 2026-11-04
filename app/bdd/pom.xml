@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.athena</groupId>
+	<artifactId>app-bdd</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+	<name>app-bdd</name>
+	<description>員工 App（Flutter，iOS＋Android）BDD harness：Appium ＋ Cucumber-JVM 直讀 specs/truth/features/ios-app/。
+		獨立 Maven module，不掛進 tms/ 的 pom。</description>
+
+	<properties>
+		<maven.compiler.release>25</maven.compiler.release>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<!-- 與 tms/pom.xml 對齊的版本 -->
+		<cucumber.version>7.22.1</cucumber.version>
+		<!-- 與 tms/pom.xml 透過 spring-boot-starter-parent 4.1.1 鎖定的 junit-jupiter.version 對齊 -->
+		<junit-bom.version>6.0.3</junit-bom.version>
+		<!-- io.appium:java-client 最新 9.x（10.x／11.x 另有 breaking change，本輪只要 9.x） -->
+		<appium-java-client.version>9.5.0</appium-java-client.version>
+		<!-- java-client 9.5.0 與 Selenium >=4.34.0 不相容（org.openqa.selenium.html5.* 被移除），
+			釘在最後一個相容版（spike 實測驗證，見 research.md 殘餘風險） -->
+		<selenium-bom.version>4.33.0</selenium-bom.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.junit</groupId>
+				<artifactId>junit-bom</artifactId>
+				<version>${junit-bom.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.seleniumhq.selenium</groupId>
+				<artifactId>selenium-bom</artifactId>
+				<version>${selenium-bom.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+		<!-- Appium client：driver 走 vanilla XCUITest（iOS）＋ UiAutomator2（Android），
+			不用 appium-flutter-driver（研究決策 5、6） -->
+		<dependency>
+			<groupId>io.appium</groupId>
+			<artifactId>java-client</artifactId>
+			<version>${appium-java-client.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Cucumber-JVM：與 tms/ 共用同一套中文 Gherkin 生態 -->
+		<dependency>
+			<groupId>io.cucumber</groupId>
+			<artifactId>cucumber-java</artifactId>
+			<version>${cucumber.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- 本模組沒有 Spring，DI 容器改用 PicoContainer（cucumber-java 預設不綁定任何
+			ObjectFactory，需要明確引入一個才能讓 step 類別之間用建構子注入共用
+			AppiumWorld） -->
+		<dependency>
+			<groupId>io.cucumber</groupId>
+			<artifactId>cucumber-picocontainer</artifactId>
+			<version>${cucumber.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.cucumber</groupId>
+			<artifactId>cucumber-junit-platform-engine</artifactId>
+			<version>${cucumber.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-suite</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- 避免 Appium/Selenium 在跑 dry-run 時印出「No SLF4J providers were found」警告 -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-simple</artifactId>
+			<version>2.0.17</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.14.0</version>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.5.2</version>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

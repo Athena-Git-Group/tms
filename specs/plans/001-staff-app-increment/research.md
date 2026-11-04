@@ -73,7 +73,7 @@
 
 ## 決策 6：accessibility id 的雙平台定位策略（兩平台不共用同一個 Appium locator）
 
-- **Decision**: 沿用 `ui-plan.md` 的 dot 分段＋kebab-case id 命名約定，App 側一律經由 `Semantics(identifier: ...)` 掛上這個 id（實作上收斂成一個共用的 `TmsSemantics` 包裝元件，禁止用 `Key`／`ValueKey` 當測試標的）。兩平台的 Appium locator **不是同一個**：iOS 用 `AppiumBy.accessibilityId(id)`；Android 的 id 落在 `resource-id`，要用 `AppiumBy.id(appPackage + ":id/" + id)` 或等效的 resource-id 比對，不能用 `AppiumBy.accessibilityId`。Java step 層封裝一個 `byTestId(String id)` helper 依平台分流，feature 檔與 dsl 層仍然只看到一個 id。
+- **Decision**: 沿用 `ui-plan.md` 的 dot 分段＋kebab-case id 命名約定，App 側一律經由 `Semantics(identifier: ...)` 掛上這個 id（實作上收斂成一個共用的 `TmsSemantics` 包裝元件，禁止用 `Key`／`ValueKey` 當測試標的）。`TmsSemantics` 必須同時負責 `enabled` 狀態的顯式曝露（`Semantics(enabled: onPressed != null, ...)`）——`CupertinoButton` 等元件在 `onPressed: null` 時**不會**自動把禁用狀態寫進 accessibility 樹，漏掉這層包裝的按鈕在 Appium 端讀起來永遠是可用的。App 進入點呼叫 `SemanticsBinding.instance.ensureSemantics()` 強制啟用語意樹，且必須在 `WidgetsFlutterBinding.ensureInitialized()` 之後呼叫，順序反了 App 會在啟動時白屏崩潰。兩平台的 Appium locator **不是同一個**：iOS 用 `AppiumBy.accessibilityId(id)`；Android 的 id 落在 `resource-id`，要用 `AppiumBy.id(appPackage + ":id/" + id)` 或等效的 resource-id 比對，不能用 `AppiumBy.accessibilityId`。Java step 層封裝一個 `byTestId(String id)` helper 依平台分流，feature 檔與 dsl 層仍然只看到一個 id。
 - **Rationale**: Flutter 官方文件明確寫 `identifier` 在 Android 對應 `resource-id`、在 iOS 對應 `accessibilityIdentifier`，這是兩個不同的原生概念，單一個 `accessibilityId()` locator 呼叫沒辦法同時命中兩平台。若 step 層假設兩平台共用同一個 locator，Android 端會定位失敗。
 - **Alternatives considered**:
   - 假設兩平台都用 `accessibilityId()` 定位：在 Android 會因為 id 落在 `resource-id` 而非 `content-desc` 而定位失敗，查證官方文件後排除。
@@ -99,7 +99,7 @@
 
 - **後端程式碼目前不在本機**：`tms/tms` 是 gitlink（160000，指向 `1b65c99`），沒有 `.gitmodules`，所以目錄是空的。這輪的技術堆疊依據是基線 spec 與 `docker-compose.yml`。進入 `/system-analysis` 或 `/implement` 前要先取回子模組，確認 Spring Boot、Java、Kafka 實際版本，以及 Cucumber 與 Testcontainers 跟 Spring Boot 4.1.1 的相容性。
 - **照片儲存媒介未決**：工務單照片每張 1–3 張、完修照片必填、可補照片，這是本 plan 新增的大量二進位資料。存資料庫、本機檔案系統，或物件儲存介面，交由 `/data-plan` 決定。浮水印與壓縮依 spec 假設在 App 端處理，後端不引入影像處理函式庫。
-- **Flutter 採用尚未通過 spike 閘門**：決策 5 的一日 Appium spike 還沒執行。spike 必須在實機 iOS（不只模擬器，歷史問題正是 real device 上 page source 不完整）與一台低階 Android 上跑，確認 id 定位、文字讀取、`enabled` 屬性三者皆可，才能真正定案；失敗時改採 React Native 是本審查已確認的現成退路，不需重新論證。
+- **spike 閘門已過 iOS simulator 半邊，實機 iOS 與低階 Android 半邊未補**：五種 widget 形態在 iOS simulator 上 id 定位（含多 dot、`--` 修飾）、文字讀取（`getText()` 與 `label` 屬性皆可）、`enabled` 屬性（`isEnabled()` 與 `enabled` 屬性皆可；`accessible` 屬性恆為 true、不可用於分辨）全數通過。實機 iOS（歷史問題正是 real device 上 page source 不完整）與低階 Android 要在硬體到位後補驗；失敗時改採 React Native 的退路維持有效。另一個已知版本釘：`io.appium:java-client:9.5.0` 與 Selenium ≥4.34.0 不相容（`org.openqa.selenium.html5.*` 被移除），selenium-bom 必須釘在 `4.33.0`。
 - **後端推播消費者只寫日誌、App 端要驗真的點開行為，兩者如何接上尚未定案**：既有 techstack truth 寫明後端推播消費者 MVP 只寫日誌與資料列、不接真的 APNS/FCM。但決策 7 要把 F3「點開推播的去處」當第一支金絲雀，驗的是裝置真的收到推播並點開後的導頁行為。E2E 情境下 App 端如何取得「已收到推播」這個狀態（例如透過決策 7 的測試後門模擬收到，而非等待後端真的送出 FCM/APNS），要在 App 開發啟動前與後端推播消費者的實作方式對齊，避免兩邊各自假設。
 - **浮水印若燒進圖片 pixel，Appium 讀不到**：`報修照片與送出.feature` 要斷言浮水印文字（如「305 · 10/22 14:32」），若浮水印是用 `dart:ui` Canvas 直接畫進縮圖像素，Appium 永遠讀不到那段文字。App 必須在縮圖上額外渲染一個帶同樣字串、掛了 accessibility id 的可及節點，這要在實作時就設計好，不能等寫 step definitions 才發現。
 - **中低階 Android 相機與渲染負擔**：Flutter 3.44 起 Android 10+ 移除 Skia fallback，Impeller/Vulkan 成為強制渲染器，沒有退路；同時工務單照片要跑相機預覽、壓縮、Canvas 浮水印。壓縮要用 `flutter_image_compress`（原生 Kotlin／ObjC）而非純 Dart `image` 套件（release build decode/encode 過慢），壓縮與浮水印要丟進 `compute()`／isolate，否則中低階機型會掉幀甚至 OOM；第一個月要買兩台低階 Android 實機進測試矩陣，不能只用模擬器。
