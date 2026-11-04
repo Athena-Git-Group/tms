@@ -66,14 +66,6 @@ tasks:
       type: string
       format: date
       description: 打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描
-    slaMin:
-      type: integer
-      format: int32
-      description: 保留欄位，SLA 升級鏈啟用前不寫
-    escLevel:
-      type: integer
-      format: int32
-      description: 保留欄位
     createdAt:
       type: string
       format: date-time
@@ -194,14 +186,6 @@ tasksRequest:
       type: string
       format: date
       description: 打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描
-    slaMin:
-      type: integer
-      format: int32
-      description: 保留欄位，SLA 升級鏈啟用前不寫
-    escLevel:
-      type: integer
-      format: int32
-      description: 保留欄位
   required:
   - tenantId
   - type

@@ -46,6 +46,22 @@
 | ADD | `components/parameters.yaml` -> `GuestSession`（header `X-Guest-Session`）、`GuestRequestId`；`components/responses.yaml` -> `Unauthorized`、`TooManyRequests` | 住客 session 的傳遞方式與 401、429 回應。 | 基線 E-17（session 驗證）、E-01（同房限流）。 |
 | MODIFY | `.../groups/現場作業/任務.yaml` -> `tasksCancel` description | 註明住客撤回改用 `cancelGuestRequest`；request 與 response 不變。 | 讓作廢入口的責任邊界清楚。 |
 | NOOP | `.../任務.yaml` -> `tasksClaim`、`tasksRequeue`、`tasksReassign`；`.../請假.yaml`；`.../查房.yaml` -> `createInspections` | 已檢查。工務認領沿用 claim；班末中斷單由主管用既有附交代 requeue 處理；改派限制不變；請假連鎖不變；查房通過與退回的行為由 `tasks.inspection` 欄位承接，request 與 response 不變。 | spec 假設「既有行為不變，只列入推播」。 |
+| MODIFY | `components/schemas/shared.yaml` -> `RepairTicketSummary.urgent` | 欄位改名為 `isUrgent`；語意由單純布林改為「目前是否仍視為急件」，由系統依飯店設定規則判定、房務不能更改，主管可事後降級為 false。 | 使用者裁決 C：急件由系統判定，不再是任意輸入。 |
+| ADD | `components/schemas/工務單.yaml` -> `UrgentJudgement`（`suggested`、`rule`） | 系統急件判定結果的共用形狀：`suggested` 是否判定為急件、`rule` 命中的規則說明（如「VIP · 15:00 入住」），一般件時 `rule` 為 null。 | 承接 `開立工務單與急件.feature` 新 Rule「系統依飯店設定規則判定急件」。 |
+| MODIFY | `components/schemas/工務單.yaml` -> `RepairTicketPrecheckResponse` | `urgentSuggestion`（`suggested`/`message`）改名為 `urgentJudgement`（`$ref UrgentJudgement`），語意由「建議」改為「判定結果」。 | 使用者裁決 C；precheck 回應由建議改判定。 |
+| MODIFY | `components/schemas/工務單.yaml` -> `CreateRepairTicketRequest` | 移除 `urgent` 欄位（含 required），請求不再接受急件輸入；新增 `description` 說明急件改由系統判定。 | 使用者裁決 C：房務開單時不能指定或更改急件判定。 |
+| MODIFY | `components/schemas/工務單.yaml` -> `RepairTicket` | 新增必填 `urgentJudgement`（開單當下系統判定的原始結果與理由，主管降級後仍保留供追溯）與選填 `urgentDowngradeReason`（主管降級原因，未降級為 null）。 | 承接「系統判定急件，理由…」「急件降級原因為…」兩個 Then 句型。 |
+| ADD | `components/schemas/工務單.yaml` -> `DowngradeRepairTicketUrgencyRequest`（`note` 必填） | 主管降級急件的請求 body，`note` 為降級原因，必填。 | 承接 Rule「主管可將急件降級為一般件，須附原因」。 |
+| ADD | `.../groups/現場作業/工務單.yaml` -> `downgradeRepairTicketUrgency`（`POST /repair-tickets/{ticketId}/downgrade-urgency`） | 主管將急件降級為一般件；200 回 `RepairTicket`，403/404/409/422 錯誤路徑比照既有工務單操作慣例。 | 承接同一 Rule；`openapi.yaml`、`components/parameters.yaml#RepairTicketId`、`components/parameters.yaml#IdempotencyKey` 均沿用既有元件。 |
+| MODIFY | `.../groups/現場作業/工務單.yaml` -> `precheckRepairTicket`、`createRepairTicket` description；`openapi.yaml` 工務單 API tag description | 「急件建議」措辭全部改為「急件判定」，並說明判定結果房務不能更改、只能由主管降級。 | 使用者裁決 C；全文一次掃完同語意措辭。 |
+| ADD | `components/schemas/員工工作台.yaml` -> `MyToday.inspectedCount` | 查房通過數：本人今日 `inspection=passed` 的任務數；首頁今日進度第四格顯示這個值，`completedCount`（今天完成單數）保留供完成慶祝頁使用、不在首頁四格顯示。 | ui-plan §5 用語落差表 #11；`今日進度與下一間.feature` 新 Rule「查房通過數只計通過查房的單」。 |
+| MODIFY | `.../groups/現場作業/員工工作台.yaml` -> `getMyToday` description | 補上 `inspectedCount`／`completedCount` 的計算口徑與「首頁顯示／不顯示」區分說明。 | 同上。 |
+| ADD | `components/schemas/員工工作台.yaml` -> `PoolItem.reminderStage`（`staff_reminded`、`manager_notified`，nullable） | 待認領單目前到達的未接提醒階段；供排序（未接超時排最前）與 App 單卡標籤（「未接 · 已提醒同仁」／「未接 · 已通知主管」）使用。 | 掃描第 3 項發現的缺口：`推播/員工推播事件.feature` 與 `ios-app/待認領/待認領列表.feature` 已斷言此狀態，但 `PoolItem` 原本沒有對應欄位。 |
+| MODIFY | `.../groups/現場作業/員工工作台.yaml` -> `listDeptPool` description | 排序規則補上「未接超時排最前（彼此間依房號），其餘維持既有排序」。 | 使用者裁決 B；對齊 `待認領/dsl.md` 的 `待認領順序為` 句型與 `待認領排序與篩選.feature` 新 Rule。 |
+| ADD | `components/schemas/shared.yaml` -> `PushPayload.event` 新增 `unclaimed_reminder_staff`、`unclaimed_reminder_manager` | 待認領未接超時兩段提醒推播（一般單、急件門檻各自可設定，各段只發一次，認領後不再發）。 | 掃描第 3 項發現的缺口：`員工推播事件.feature` 新增 4 個 Rule（提醒同仁、通知主管、不重複、認領後不再提醒）斷言了這兩段推播，但 `PushPayload.event` 列舉沒有對應值。 |
+| NOOP | `specs/truth/features/backend/待認領/系統準備工單派給負責人.feature` -> Rule「刪除或停用規則，不回收已建立的任務」隱含的自動化規則 CRUD（`"{主管}" 刪除／停用 "{規則}" 規則`） | 已檢查。這是既有（非本輪 `/dsl-refine` 新增）句型，且不在本輪裁決 A–C 與回交清單範圍內；`specs/truth/contracts/**` 目前沒有 `automation_rules` 的任何 CRUD 端點，句型目前只能由測試直接操作權威狀態落地，不經 HTTP。是否需要開放管理 API 超出本輪裁決範圍，不擅自擴大改動。 | 掃描第 3 項的副產品；回交：若要讓這句型走 HTTP API，需另立 plan 請 `/api-plan` 設計 automation-rules 管理端點。 |
+| DELETE | `components/schemas/任務.yaml` -> `tasks.slaMin`、`tasks.escLevel` | 移除已廢除的 L1/L2/L3 升級鏈遺留在 contracts 的兩個保留欄位（原描述「保留欄位，SLA 升級鏈啟用前不寫」／「保留欄位」）；兩欄都不在 `tasks` 的 required 清單中，移除不影響 required。 | `/data-plan` 回交：data truth 的 `tasks.esc_level`、`tasks.sla_min` 已依使用者裁決 B 刪除，contracts 側同名保留欄位需一併移除以保持一致；全 `specs/truth/contracts/**` 已 grep 確認無 `slaMin`／`escLevel`／`sla_min`／`esc_level` 殘留引用。 |
+| DELETE | `components/schemas/任務.yaml` -> `tasksRequest.slaMin`、`tasksRequest.escLevel` | 同上，`tasksRequest` 鏡像移除；兩欄同樣不在 required 清單中。 | 同上。 |
 
 ## /data-plan
 
@@ -67,6 +83,17 @@
 | ADD | `.../data-model.dbml` -> `Table automation_rules`、`tasks.due_at`、`tasks.rule_hit`；tenant_config 封閉鍵加 5 個 SLA 鍵 | SLA/自動化規則增補的 data 側補遺：規則表、到期時間與命中規則名投影欄、SLA 時限／升級層距／升級鏈開關鍵；`tasks.esc_level` 由保留欄位啟用（0–3）。 | `/implement` T012 發現 dsl.md 點名但 data truth 漏記的 drift 缺口，依 DSL 機械推導補記並以 V6 migration 落地。 |
 | MODIFY | `.../data-model.dbml` -> `staff_accounts.role` CHECK | 加 `duty_manager`（值班經理，逾時升級 L3 收件人），V7 migration 落地。 | DSL 部門用語有值班經理，dbml 與 V1 CHECK 漏列；Phase 3 建測試資料時觸發 CHECK violation 發現。 |
 | NOOP | `.../data-model.dbml` -> `rooms.floor`、`plan_rooms`、`handovers.snapshot`、`reservations_cache.attrs`、`staff_accounts`、`leaves` | 已檢查。同樓層用本班 plan_rooms 對應的 rooms.floor 推導（FR-032 推定，待 clarify）；交班單該房項目在 snapshot 內；VIP 與今日入住用 reservations_cache；一員工一部門已由 staff_accounts.dept 承接。 | 不需要新增欄位。 |
+| ADD | `.../data-model.dbml` -> `Table repair_tickets` 欄位 | 新增 `is_urgent`（bool，預設 false）、`urgent_rule`（text，nullable）、`urgent_downgrade_reason`（text，nullable）；與 `tasks.urgent` 同步寫入，供排序索引直接用不需 JOIN。 | `/api-plan` 回交清單第 1 項（truth-delta :179）；對齊 contracts `RepairTicketSummary.isUrgent`／`RepairTicket.urgentJudgement.rule`／`urgentDowngradeReason`；使用者裁決 C。 |
+| MODIFY | `.../data-model.dbml` -> `Table task_events.type` | 新增 `urgent_downgraded`（21→22）；`payload` note 補 `downgradeReason`（即 `repair_tickets.urgent_downgrade_reason`）。 | `/api-plan` 回交清單第 2 項（truth-delta :179）；供 `downgradeRepairTicketUrgency` 寫入。 |
+| MODIFY | `.../data-model.dbml` -> `Table tasks` 欄位 | 新增 `reminder_stage`（text，nullable，CHECK staff_reminded\|manager_notified）：排程依 `tenant_config.unclaimed_reminder_minutes` 掃描 pool 任務，到門檻寫入該階段並各發一次推播，離開 pool 時清空；不另開新表或新 task_events 型別（既有 `outbox.kind=push` 已承載推播證據）。 | `/api-plan` 回交清單第 3 項（truth-delta :179）；對齊 contracts `PoolItem.reminderStage`、`待認領/dsl.md`、`推播/員工推播事件.feature` 新 Rule（兩段式未接提醒）。判斷點：既有結構已足夠，不重複建表。 |
+| MODIFY | `.../data-model.dbml` -> `Table tasks` 索引 `(tenant_id, dept, state, urgent, priority_notify)` | 加入 `reminder_stage` 成為排序索引領先欄（未接超時→急件→優先通知→同樓層→房號）。 | 同上；對齊 `listDeptPool` 排序規則補述（使用者裁決 B）。 |
+| MODIFY | `.../data-model.dbml` -> `Table tasks.urgent` note | 補充與 `repair_tickets.is_urgent` 同步（開單判定與主管降級時一併寫入），本欄只供排序索引、權威判定看 `repair_tickets`。 | 避免新增 `repair_tickets.is_urgent` 後兩欄語意漂移。 |
+| DELETE | `.../data-model.dbml` -> `Table tasks.esc_level`、`tasks.sla_min` | 移除逾時升級鏈（L1/L2/L3）用的兩個保留欄位；`due_at`、`rule_hit`、`automation_rules.due_after_minutes` 是獨立概念（準備工單到期時間），維持不動，見下方 NOOP。 | 使用者裁決 B；`/dsl-refine` 段 :175 回交「若要讓 data truth 完全對齊裁決 B，需在下一輪 `/data-plan` 移除或重新定義這兩個欄位」。 |
+| MODIFY | `.../data-model.dbml` -> `Table tasks.due_at` note | 移除「排序與逾時判定優先於 SLA 時限」措辭（SLA 升級鏈已廢除），改為只強調系統準備工單到期時間顯示，與未接提醒無關。 | 同上；避免刪除 esc_level/sla_min 後 due_at 的說明仍殘留過時的 SLA 升級語意。 |
+| MODIFY | `.../data-model.dbml` -> `Table tenant_config.key` 封閉鍵集合 | 移除 `sla_minutes_cleaning`、`sla_minutes_amenity`、`sla_minutes_other`、`escalation_step_minutes`、`escalation_chain_enabled`；新增 `unclaimed_reminder_minutes`（待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，預設一般 10/20 分、急件 3/8 分）。 | 使用者裁決 B；對齊 `backend/dsl.md` 新 Given「飯店的未接提醒門檻如下：」。 |
+| MODIFY | `.../data-model.dbml` -> `Table staff_accounts.role` note | `duty_manager` 的理由說明由「逾時升級 L3 收件人」改為「原為 L3 收件人，該升級鏈已廢除，角色值由 features truth 背景保留但目前無對應收件情境」。 | 使用者裁決 B；避免欄位註記與現行 truth（兩段式未接提醒，收件人為既有 manager）矛盾；`duty_manager` 列舉值本身不刪，因 `背景`：feature 背景仍宣告「李經理｜值班經理」。 |
+| NOOP | `.../data-model.dbml` -> `Table tasks.due_at`、`rule_hit`、`Table automation_rules.due_after_minutes` | 已檢查。「建單後到期分鐘」是系統準備工單派給負責人獨立概念（`系統準備工單派給負責人.feature` 的到期時間顯示），與已廢除的逾時升級鏈無關，不隨裁決 B 刪除；只修正 `due_at` note 的過時措辭（見上方 MODIFY）。 | `/dsl-refine` 段 :173 明確提示「不要混為一談一起砍掉」。 |
+| NOOP | `.../data-model.dbml` -> `Table outbox.kind` note、既有 `PushPayload` 形狀 | 已檢查。`unclaimed_reminder_staff`／`unclaimed_reminder_manager` 兩個推播事件沿用既有 `outbox.kind=push`，payload 形狀＝contracts `PushPayload`（本輪 `/api-plan` 已補 enum 值），不需新表或新欄位承接推播紀錄本身。 | 判斷點：既有 outbox 已承載推播紀錄，`tasks.reminder_stage` 只記「已到哪個階段」，不重複建表。 |
 
 ## /dsl-refine
 
@@ -155,16 +182,18 @@
 
 ### 程式碼待改清單（本輪 truth 已領先程式碼，記錄供後續排入）
 
-- `EscalationScanJob`、`Task.escLevel` 欄位、`automation_rules` 的 L1/L2/L3 升級邏輯：需改寫為兩段式未接提醒 job，門檻改讀 `tenant_config` 新鍵（一般單 10/20 分、急件 3/8 分，飯店可設定）。
+- `EscalationScanJob`、`Task.escLevel` 欄位、`automation_rules` 的 L1/L2/L3 升級邏輯：需改寫為兩段式未接提醒 job，門檻改讀 `tenant_config` 新鍵（一般單 10/20 分、急件 3/8 分，飯店可設定）；寫入時機與 `PoolItem.reminderStage`、`PushPayload.event`=`unclaimed_reminder_staff`/`unclaimed_reminder_manager`（本輪 `/api-plan` 已補，見上方）對齊：進入提醒同仁階段寫 `staff_reminded`、通知主管階段寫 `manager_notified`，各段只發一次推播。
 - `tasks.due_at`、`automation_rules.due_after_minutes` 的 V6 migration：SLA 升級用途的 `due_at` 隨裁決 B 退場；但「建單後到期分鐘」這個獨立概念（系統準備工單派給負責人.feature 的到期時間顯示，與 SLA 升級無關）維持不動，不要混為一談一起砍掉。
 - `Terms.java` 與其餘 34 檔程式碼內的「待接」用語：需同步改為「待認領」（`tms/` 不在本輪 `/dsl-refine` 改動範圍，列為後續程式碼變更）。
 - `specs/truth/data/data-model.dbml` 的 `esc_level`、`sla_min` 欄位目前標註「保留欄位，SLA 升級鏈啟用前不寫」：本輪只完成「待接→待認領」文字置換，未改動欄位結構；若要讓 data truth 完全對齊裁決 B，需在下一輪 `/data-plan` 移除或重新定義這兩個欄位。
-- `specs/truth/contracts/components/schemas/員工工作台.yaml` 的 `MyToday` 缺少 `inspectedCount`（查房通過數）欄位：E#11 的「查房通過」四格顯示需要這個新欄位，本輪 contracts 僅完成文字置換，未新增結構欄位，需排入下一輪 `/api-plan`。
-- `specs/truth/contracts/components/schemas/任務.yaml` 的 `RepairTicket` 缺少 `isUrgent`／`urgentRule`／`urgentDowngradeReason` 欄位，且 `openapi.yaml` 缺少 `downgradeRepairTicketUrgency`（`POST /repair-tickets/{ticketId}/downgrade-urgency`）端點：裁決 C 的系統急件判定與主管降級需要這些新結構，本輪只在 features/dsl 描述目標行為，contracts 結構變更需排入下一輪 `/api-plan`。
-- 既有 `urgentSuggestion`（precheck 回應中的建議欄位）語意需從「建議」改為「判定結果」，相關後端程式碼與 contracts 的 `description` 措辭需在下一輪一併處理。
+- ~~`specs/truth/contracts/components/schemas/員工工作台.yaml` 的 `MyToday` 缺少 `inspectedCount`（查房通過數）欄位~~：**本輪 `/api-plan` 已補**（`MyToday.inspectedCount`，見上方 `/api-plan` 段）。後續程式碼待改：`getMyToday` 實作需依 `inspection=passed` 口徑計算並回傳這個欄位。
+- ~~`specs/truth/contracts/components/schemas/任務.yaml` 的 `RepairTicket` 缺少 `isUrgent`／`urgentRule`／`urgentDowngradeReason` 欄位，且 `openapi.yaml` 缺少 `downgradeRepairTicketUrgency` 端點~~：**本輪 `/api-plan` 已補**（`RepairTicketSummary.isUrgent`、`RepairTicket.urgentJudgement`{suggested,rule}、`RepairTicket.urgentDowngradeReason`、`downgradeRepairTicketUrgency` POST `/repair-tickets/{ticketId}/downgrade-urgency`，見上方 `/api-plan` 段；注意最終欄位是 `urgentJudgement.rule` 而非原筆記寫的扁平 `urgentRule`）。後續程式碼待改：`createRepairTicket`／`precheckRepairTicket`／`downgradeRepairTicketUrgency` 的規則引擎判定與寫入邏輯；`repair_tickets` 表需要 `is_urgent`／`urgent_rule`／`urgent_downgrade_reason` 欄位（回交 `/data-plan`，見下）。
+- ~~既有 `urgentSuggestion`（precheck 回應中的建議欄位）語意需從「建議」改為「判定結果」~~：**本輪 `/api-plan` 已補**（`RepairTicketPrecheckResponse.urgentJudgement`，見上方 `/api-plan` 段）。後續程式碼待改：precheck 的規則引擎判定邏輯本身（目前程式碼可能仍是純提示文字）。
+- ~~回交 `/data-plan`：`repair_tickets` 表補 `is_urgent`（bool）、`urgent_rule`（text, nullable）、`urgent_downgrade_reason`（text, nullable）三欄，對齊本輪 contracts 的 `isUrgent`／`urgentJudgement.rule`／`urgentDowngradeReason`；並補一筆 `urgent_downgraded` 事件類型（`task_events.type`）供 `downgradeRepairTicketUrgency` 寫入；另需補 `tasks.reminder_stage`（或等效欄位）承接 `PoolItem.reminderStage`。~~ **本輪 `/data-plan` 已補**（見上方 `/data-plan` 段三筆 ADD/MODIFY）。
 
 ### 上游缺口與 acceptance 衝突
 
 - `specs/plans/001-staff-app-increment/features/acceptance/工務單從報修到完修.feature:26-34`：仍寫「系統提示『建議設為急件』，房務勾選急件後送出」，與本輪裁決 C（系統判定、房務不能更改、只能事後降級）直接相反。acceptance 屬上游 plan package，本輪未改動；需待上游下一次修訂時同步，否則 acceptance 與 truth 對「急件」欄位的輸入/輸出方向會互相矛盾。
 - `specs/plans/001-staff-app-increment/features/acceptance/{今日進度與待接池排序,員工推播事件,房務員自行延後中斷與一次一間}.feature`：仍全面使用「待接池」用語（畫面、狀態、句型），與本輪裁決 A（truth 全面改「待認領」）不一致；acceptance 未同步更新，下游若直接拿 acceptance 原文件對照 truth 會出現用語不匹配，需待上游修訂。
 - `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature`（本輪新增 D-4）刻意不建「等主管審核／核准／未核准（補資料再送出）」狀態：`ui-plan.md`、`prototype-feature-coverage.md` 的原型畫面描述（工務單詳情狀態摘要卡、工務首頁 chip）都出現「等主管審核」，但既有 backend truth 的 Rule「房務開立的工務單送出就進工務待認領，不經主管審核」（本輪未改動，也不在使用者裁決 A–E 的明文範圍內）與之直接衝突。本輪依既有 truth（不經主管審核）為準，未新增審核流程；是否要讓一般件工務單真的走主管審核，屬於產品決策缺口，建議另開 clarify 確認。
+- ~~`specs/truth/contracts/components/schemas/任務.yaml` 的 `tasks`／`TaskDetail` schema 仍保留 `slaMin`、`escLevel` 兩個欄位（描述為「保留欄位，SLA 升級鏈啟用前不寫」／「保留欄位」）。~~ **已處理**：`/api-plan` 已從 `tasks`、`tasksRequest` 移除 `slaMin`、`escLevel` 兩欄（含 description，兩個欄位都不在 required 清單中，故 required 無需改動），對齊 `/data-plan` 已刪除的 `tasks.esc_level`、`tasks.sla_min`；全 `specs/truth/contracts/**` 已 grep 確認無殘留引用。

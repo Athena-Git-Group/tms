@@ -3,6 +3,7 @@ MyToday:
   required:
   - cleaningDone
   - cleaningTotal
+  - inspectedCount
   - completedCount
   - adHocCompleted
   - remainingMinutes
@@ -15,9 +16,17 @@ MyToday:
     cleaningTotal:
       type: integer
       format: int32
+    inspectedCount:
+      type: integer
+      format: int32
+      description: >-
+        查房通過數。計算口徑：本人今日 inspection=passed 的任務數（排除免查，只計通過查房的單）。
+        首頁今日進度第四格顯示這個值。
     completedCount:
       type: integer
       format: int32
+      description: >-
+        今天完成單數：本人 done 或 inspected 的任務數。首頁四格不顯示，供完成慶祝頁「第 N 單」使用。
     adHocCompleted:
       type: integer
       format: int32
@@ -117,6 +126,15 @@ PoolItem:
       type: boolean
     sameFloor:
       type: boolean
+    reminderStage:
+      type: string
+      nullable: true
+      enum:
+      - staff_reminded
+      - manager_notified
+      description: >-
+        未接提醒已到達的階段；還沒進入提醒階段為 null。排序時依優先序排在最前（彼此間依房號），
+        App 單卡標示為「未接 · 已提醒同仁」或「未接 · 已通知主管」。
     returnReason:
       type: string
       nullable: true

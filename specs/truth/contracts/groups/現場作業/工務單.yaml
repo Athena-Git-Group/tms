@@ -59,8 +59,8 @@ precheckRepairTicket:
       報修人選定類別時呼叫。這個操作不建立工務單。
       重複提示：同房、同類別、還沒結案（不是 done 也不是 cancelled）的工務單存在時，回傳它的單號與狀態，
       並記錄呼叫者可以對那張單補照片。
-      急件建議：房間今日有入住或是 VIP 時，回傳 suggested=true 與提示文字，
-      例如「這間『VIP · 15:00 入住』，影響入住的話建議設為急件」。
+      急件判定：系統依飯店設定規則判定是否為急件（例如房間今日有入住或是 VIP），回傳 urgentJudgement，
+      suggested=true 時 rule 附判定理由，例如「VIP · 15:00 入住」；房務不能更改這個判定結果，只能由主管事後降級。
     tags:
     - 工務單 API
     requestBody:
@@ -110,7 +110,9 @@ listRepairTicketsAndcreateRepairTicket:
       送出後直接進工務待認領，不經主管審核。
       照片 1–3 張，而且每張都必須已上傳（status=uploaded）；否則回 422，不建立工務單，原任務也不變。
       interruptSourceTask=true 時同時把 doing 的原任務轉為 interrupted，停住原因記為「等工務：<類別>」並連結單號。
-      urgent=true 時排在工務待認領的所有非急件之前，並推播該租戶所有工務與主管。
+      請求不接受急件欄位：急件由系統依飯店設定規則判定（寫入 isUrgent 與 urgentJudgement），
+      判定為急件時排在工務待認領的所有非急件之前，並推播該租戶所有工務與主管；判定結果開單時房務不能更改，
+      只能由主管事後呼叫 downgradeRepairTicketUrgency 降級為一般件。
       必須帶 Idempotency-Key；離線重送時回放第一次的回應，不會產生第二張單。
     tags:
     - 工務單 API
@@ -210,3 +212,38 @@ withdrawRepairTicket:
         $ref: '../../components/responses.yaml#/Forbidden'
       '409':
         $ref: '../../components/responses.yaml#/Conflict'
+downgradeRepairTicketUrgency:
+  post:
+    operationId: downgradeRepairTicketUrgency
+    summary: 主管將急件降級為一般件
+    description: >-
+      主管對既有急件工務單降級為一般件，必須附原因。急件判定本身是系統依飯店設定規則算出的，
+      房務開單時不能更改，只有主管可以事後用這個操作降級；不能反向把一般件升為急件。
+      降級後 isUrgent 轉為 false、urgentDowngradeReason 寫入原因；開單當下系統判定的原始結果與理由
+      （urgentJudgement）維持不變，供追溯「當時為什麼被判定為急件」。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/RepairTicketId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/工務單.yaml#/DowngradeRepairTicketUrgencyRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'

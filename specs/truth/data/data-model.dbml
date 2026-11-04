@@ -22,7 +22,7 @@ Table tenants {
 
 Table tenant_config {
   tenant_id  bigint      [not null, ref: > tenants.id]
-  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled（SLA/自動化規則增補：各類 SLA 時限分鐘、升級層距分鐘、升級鏈總開關）']
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）']
   value      jsonb       [not null, note: '結構依 key 而異']
   updated_at timestamptz [not null]
   updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
@@ -38,7 +38,7 @@ Table staff_accounts {
   name          text        [not null, note: 'PII：離職去識別化換不可回推代號']
   login_id      text        [not null, note: 'PII；UNIQUE (tenant_id, login_id)']
   password_hash text        [not null, note: 'bcrypt/argon2，絕不存明文']
-  role          text        [not null, note: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 為 SLA/自動化規則增補：逾時升級 L3 收件人）']
+  role          text        [not null, note: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 原為逾時升級鏈 L3 收件人；該升級鏈隨裁決 B 廢除為兩段式未接提醒，收件人改為既有 manager 角色，duty_manager 值由 features truth 背景保留但目前無對應收件情境）']
   dept          text        [note: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空']
   active        boolean     [not null, default: true, note: '停用=不能登入，歷史保留']
   created_at    timestamptz [not null]
@@ -167,19 +167,18 @@ Table tasks {
   deferred_by_self boolean   [not null, default: false, note: '本 plan 新增。state=deferred 時，true＝本人延後（保留 assignee，班末掃描退池）；false＝主管延後（無 assignee，隔日自動回池、可 undefer）']
   linked_repair_task_id uuid [note: '本 plan 新增。以中斷模式開立工務單時，原任務連結到那張工務單（→ tasks.id，type=repair）']
   cancel_reason  text        [note: '本 plan 新增投影欄位（原本只在事件 payload）。CHECK: guest_withdrew|manager_void|plan_superseded|staff_withdrew；staff_withdrew 為本 plan 新增']
-  urgent         boolean     [not null, default: false, note: '本 plan 新增。只有 repair 會是 true；待認領排在所有非急件之前']
+  urgent         boolean     [not null, default: false, note: '本 plan 新增。只有 repair 會是 true；待認領排在所有非急件之前。本輪起與 repair_tickets.is_urgent 同步（開單判定與主管降級時一併寫入），本欄只是供排序索引直接用、避免 JOIN repair_tickets，權威判定結果看 repair_tickets.is_urgent/urgent_rule']
   priority_notify boolean    [not null, default: false, note: '本 plan 新增投影欄位（原本只在事件）。請假退回、主管附交代退池時為 true；待認領排序第二鍵']
+  reminder_stage text        [note: '本輪新增。CHECK: staff_reminded|manager_notified，NULL＝尚未進入未接提醒。只有 state=pool 時有意義：排程依 tenant_config.unclaimed_reminder_minutes（依 urgent 分一般／急件門檻）掃描，到門檻時寫入該階段並各發一次推播（PushPayload.event=unclaimed_reminder_staff|unclaimed_reminder_manager），每階段只發一次；任務離開 pool（認領、改派、撤回等）時清空為 NULL。待認領排序以「不是 NULL」排最前（彼此間依房號），其餘維持既有排序。對應 contracts PoolItem.reminderStage']
   pool_source    text        [note: '本 plan 新增投影欄位。最近一次進池的來源標籤。CHECK: guest_scan|desk_forward|manager_requeue|leave_return|shift_end_return|inspection_return|staff_report|system']
   return_reason  text        [note: '本 plan 新增投影欄位。最近一次退池的原因，例如「小陳請假」、「班末退池 · 交給下一班」']
   requeue_note   text        [note: '本 plan 新增投影欄位。接手進度交代，例如「浴室已刷完，還沒換床單」；任務詳情的交辦以 requeue_progress 顯示。PII 去識別化範圍']
-  due_at         timestamptz [note: 'SLA/自動化規則增補。到期時間；排序與逾時判定優先於 SLA 時限']
-  rule_hit       text        [note: 'SLA/自動化規則增補。自動化規則命中的規則名；冪等鍵＝房號｜規則｜當地日期']
+  due_at         timestamptz [note: '自動化規則增補。系統準備工單的到期時間顯示（規則可設「建單後 N 分鐘到期」），與未接提醒／裁決 B 廢除的逾時升級鏈無關，純粹是準備工單自己的到期時刻標示']
+  rule_hit       text        [note: '自動化規則增補。自動化規則命中的規則名；冪等鍵＝房號｜規則｜當地日期']
   redo_count     int         [not null, default: 0]
   rating         int         [note: 'CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）']
   plan_id        uuid        [note: '打掃任務回鏈排房計畫']
   work_date      date        [note: '打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描']
-  sla_min        int         [note: '保留欄位，SLA 升級鏈啟用前不寫']
-  esc_level      int         [note: 'SLA/自動化規則增補啟用：逾時升級已達層級 0–3；每層只升一次，0 或 NULL=未升級']
   created_at     timestamptz [not null]
   updated_at     timestamptz [not null]
   Indexes {
@@ -190,7 +189,7 @@ Table tasks {
     (tenant_id, id) [unique, note: '複合外鍵落點']
     (tenant_id, room_id, work_date) [unique, note: 'partial UNIQUE WHERE type=\'cleaning\' AND state NOT IN (\'done\',\'inspected\',\'cancelled\')——一房一天僅一筆未完成打掃（E-09）']
     (tenant_id, assignee_id) [unique, name: 'uq_tasks_one_doing_per_staff', note: '本 plan 新增。partial UNIQUE WHERE state=\'doing\'——一位員工同時最多一筆 doing（FR-001）。守衛 UPDATE 違反時回 409 doing_task_exists']
-    (tenant_id, dept, state, urgent, priority_notify) [note: '本 plan 新增。待認領排序（急件→優先通知→同樓層→房號）']
+    (tenant_id, dept, state, reminder_stage, urgent, priority_notify) [note: '本 plan 新增，本輪補 reminder_stage。待認領排序（未接超時＝reminder_stage 不是 NULL→急件→優先通知→同樓層→房號）；reminder_stage 只要求「是否為 NULL」排前後，兩個非 NULL 值之間不分順序']
   }
   Note: '''
   任務投影（可由 task_events 重放重建）。
@@ -203,6 +202,9 @@ Table tasks {
     inspected(waived)→accepted（抽查退回：redo+1、worked_sec 與勾記歸零、inspection=failed）；
     repair 的 pool→cancelled（報修人撤回，cancel_reason=staff_withdrew）。
   班末掃描：assignee 名下 accepted 與 deferred(self) →pool（pool_source=shift_end_return）；doing 不動；interrupted 不動並推播主管。
+  待認領未接提醒（本輪新增，取代原逾時升級鏈 L1/L2/L3）：排程依 tenant_config.unclaimed_reminder_minutes 掃描 state=pool 的任務，
+  一般單與急件各自的「提醒同仁」「通知主管」門檻各只跨越一次、各發一次推播並寫入 reminder_stage；離開 pool 時 reminder_stage 清空，
+  不保留歷史（沿用既有投影可清空重建的精神，由排程重新計算，不需要額外的 task_events 型別）。
   '''
 }
 
@@ -211,10 +213,10 @@ Table task_events {
   tenant_id  bigint      [not null, ref: > tenants.id]
   task_id    uuid        [not null]
   seq        int         [not null, note: '這個任務的第幾步；取自 tasks.event_seq 的 RETURNING']
-  type       text        [not null, note: '21 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled，加上本 plan 新增 resumed|inspection_waived|repair_photos_appended（可擴充，加值不改表）']
+  type       text        [not null, note: '22 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled，加上先前 plan 新增 resumed|inspection_waived|repair_photos_appended，以及本輪新增 urgent_downgraded（主管將工務單急件降級為一般件；可擴充，加值不改表）']
   actor_role text        [not null, note: 'guest|frontdesk|housekeeping|engineering|manager|system']
   actor_id   uuid        [note: '住客與系統為空']
-  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）']
+  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）']
   created_at timestamptz [not null]
   Indexes {
     (tenant_id, task_id, seq) [unique]
@@ -527,6 +529,9 @@ Table repair_tickets {
   reporter_id     uuid        [not null, note: '報修人；撤回與補照片的授權依據']
   source_task_id  uuid        [note: '開單時所在的原任務']
   resolution_note text        [note: '工務處理說明；判斷不需維修時在這裡註明']
+  is_urgent       boolean     [not null, default: false, note: '本輪新增。目前是否仍視為急件；開單當下由系統依飯店設定規則判定寫入，房務不能更改，主管降級時轉為 false。與 tasks.urgent 同步（建單與降級時一併寫入），供待認領排序索引直接用 tasks.urgent 不需 JOIN 本表。對應 contracts RepairTicketSummary.isUrgent']
+  urgent_rule     text        [note: '本輪新增，nullable。開單當下系統判定命中的規則說明（如「VIP · 15:00 入住」）；判定為一般件時為 NULL。主管降級後仍保留，供追溯原始判定理由。對應 contracts RepairTicket.urgentJudgement.rule']
+  urgent_downgrade_reason text [note: '本輪新增，nullable。主管將急件降級為一般件時附的原因；未降級為 NULL。寫入時同一交易補一筆 task_events.type=urgent_downgraded。對應 contracts RepairTicket.urgentDowngradeReason']
   created_at      timestamptz [not null]
   Indexes {
     (tenant_id, ticket_no) [unique]
@@ -535,6 +540,7 @@ Table repair_tickets {
   Note: '''
   工務單（FR-011–021）。生命週期沿用 tasks：pool→accepted→doing→done；pool→cancelled（staff_withdrew）。
   送出時與原任務的中斷、照片綁定在同一交易：所有照片 status=uploaded 才能建立，否則整筆不落地，原任務也不變（FR-014）。
+  急件改由系統判定（使用者裁決 C）：開單交易同時寫入 is_urgent／urgent_rule 與 tasks.urgent；主管降級（downgradeRepairTicketUrgency）只改 is_urgent 與 urgent_downgrade_reason，urgent_rule 保留原判定理由不變。
   '''
 }
 

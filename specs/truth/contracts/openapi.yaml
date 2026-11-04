@@ -43,7 +43,10 @@ tags:
 - name: 租戶設定 API
   description: 封閉鍵集合的讀寫（含住客資訊頁 guest-home 的前台讀取面）；sop_items/inspection_items 兩鍵為 sop_items 表的門面。
 - name: 工務單 API
-  description: 本 plan 新增。房務從任務開工務單交給工務（工務部門的修繕任務），照片兩段式上傳、開單前檢查（重複與急件建議）、補照片、撤回。認領、開始、完成沿用任務 API。
+  description: >-
+    本 plan 新增。房務從任務開工務單交給工務（工務部門的修繕任務），照片兩段式上傳、開單前檢查（重複提示與急件判定）、
+    補照片、撤回。急件由系統依飯店設定規則判定，開單時房務不能更改，只有主管能事後降級為一般件（附原因）。
+    認領、開始、完成沿用任務 API。
 - name: 員工工作台 API
   description: 本 plan 新增。員工首頁的今日進度與下一間，以及依部門的待認領（排序、同樓層、分類篩選與筆數）。
 - name: 房間交辦 API
@@ -169,6 +172,8 @@ paths:
     $ref: './groups/現場作業/工務單.yaml#/appendRepairTicketPhotos'
   /repair-tickets/{ticketId}/withdraw:
     $ref: './groups/現場作業/工務單.yaml#/withdrawRepairTicket'
+  /repair-tickets/{ticketId}/downgrade-urgency:
+    $ref: './groups/現場作業/工務單.yaml#/downgradeRepairTicketUrgency'
   /me/today:
     $ref: './groups/現場作業/員工工作台.yaml#/getMyToday'
   /pool:
@@ -360,6 +365,10 @@ components:
       $ref: './components/schemas/工務單.yaml#/AppendRepairPhotosRequest'
     RepairTicket:
       $ref: './components/schemas/工務單.yaml#/RepairTicket'
+    UrgentJudgement:
+      $ref: './components/schemas/工務單.yaml#/UrgentJudgement'
+    DowngradeRepairTicketUrgencyRequest:
+      $ref: './components/schemas/工務單.yaml#/DowngradeRepairTicketUrgencyRequest'
     MyToday:
       $ref: './components/schemas/員工工作台.yaml#/MyToday'
     NextTask:

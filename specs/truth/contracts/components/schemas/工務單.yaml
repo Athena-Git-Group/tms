@@ -54,10 +54,25 @@ RepairTicketPrecheckRequest:
       format: uuid
     category:
       $ref: '#/RepairCategory'
+UrgentJudgement:
+  type: object
+  description: >-
+    系統依飯店設定規則判定急件的結果（例如 VIP 或今日入住）。房務不能更改這個判定，只能由主管事後降級。
+    suggested=false 時 rule 為 null；沒有命中任何規則時判定為一般件。
+  required:
+  - suggested
+  properties:
+    suggested:
+      type: boolean
+      description: true 表示系統判定為急件。
+    rule:
+      type: string
+      nullable: true
+      description: 命中的判定規則說明，例如「VIP · 15:00 入住」；判定為一般件時為 null。
 RepairTicketPrecheckResponse:
   type: object
   required:
-  - urgentSuggestion
+  - urgentJudgement
   properties:
     duplicate:
       type: object
@@ -65,23 +80,16 @@ RepairTicketPrecheckResponse:
       - $ref: './shared.yaml#/RepairTicketSummary'
       nullable: true
       description: 同房、同類別、未結案的工務單；沒有時為 null。
-    urgentSuggestion:
-      type: object
-      required:
-      - suggested
-      properties:
-        suggested:
-          type: boolean
-        message:
-          type: string
-          description: 例如「這間『VIP · 15:00 入住』，影響入住的話建議設為急件」。
+    urgentJudgement:
+      $ref: '#/UrgentJudgement'
 CreateRepairTicketRequest:
   type: object
+  description: >-
+    不接受急件欄位：急件由系統依飯店設定規則判定（UrgentJudgement），房務不能在開單時指定或更改。
   required:
   - sourceTaskId
   - category
   - photoIds
-  - urgent
   - interruptSourceTask
   properties:
     sourceTaskId:
@@ -100,8 +108,6 @@ CreateRepairTicketRequest:
         type: string
         format: uuid
       description: 0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；有任一張還沒上傳回 422 photo_not_uploaded。
-    urgent:
-      type: boolean
     interruptSourceTask:
       type: boolean
       description: true 表示「中斷 → 需要工務協助」模式。
@@ -124,6 +130,7 @@ RepairTicket:
   - type: object
     required:
     - photoCount
+    - urgentJudgement
     properties:
       description:
         type: string
@@ -149,3 +156,21 @@ RepairTicket:
       resolutionNote:
         type: string
         nullable: true
+      urgentJudgement:
+        allOf:
+        - $ref: '#/UrgentJudgement'
+        description: >-
+          開單當下系統判定的原始結果與理由；主管降級後這筆紀錄仍保留（追溯用），目前是否仍視為急件看 isUrgent。
+      urgentDowngradeReason:
+        type: string
+        nullable: true
+        description: 主管將急件降級為一般件時附的原因；未降級為 null。
+DowngradeRepairTicketUrgencyRequest:
+  type: object
+  required:
+  - note
+  properties:
+    note:
+      type: string
+      minLength: 1
+      description: 降級原因，必填，例如「已確認不影響入住」。

@@ -30,13 +30,13 @@
 
 **Goal**: 只建立 Phase 2 會用到的 tenant_config 鍵骨架與未接提醒 fixture 落點，不寫門檻比對或推播判斷邏輯。
 
-- [ ] T204 擴充 `tenant_config.key` CHECK，新增未接提醒門檻 4 鍵
+- [ ] T204 擴充 `tenant_config.key` CHECK，新增未接提醒門檻鍵 `unclaimed_reminder_minutes`
   - Read:
     - `truth-delta.md` -> `/dsl-refine` ADD `飯店的未接提醒門檻如下：`
     - `specs/truth/data/data-model.dbml` -> `Table tenant_config.key` 封閉鍵集
     - `tms/src/main/resources/db/migration/V7__duty_manager_role.sql`、`V8__inspection_waiver_and_pms_writeback_keys.sql` -> CHECK 擴充慣例（`DROP CONSTRAINT` 再 `ADD CONSTRAINT` 整個鍵集）
-  - 只做：新增 `V12__unclaimed_reminder_thresholds.sql`，仿 V8 寫法把 4 個未接提醒門檻鍵加進 `chk_tenant_config_key`（鍵名比照既有 snake_case 慣例自訂，例如 `unclaimed_reminder_minutes_*`），並回補 `specs/truth/data/data-model.dbml` 的 `tenant_config.key` CHECK 註解文字（比照 `duty_manager` 當時的回補方式）。
-  - 不做：不寫讀取門檻值的 StepDef 或 Job 邏輯；不動 `escalation_step_minutes`、`sla_minutes_*`、`escalation_chain_enabled` 既有鍵（裁決 B 不要求移除，只要求不再使用）。
+  - 只做：新增 `V12__unclaimed_reminder_thresholds.sql`，仿 V8 寫法重建 `chk_tenant_config_key` 為 dbml 的封閉鍵集——加入單一鍵 `unclaimed_reminder_minutes`（value 為 jsonb，結構 `{"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}`，與 dbml 註解一致）、移除已隨裁決 B 廢除的 `sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled` 五鍵（migration 內先 DELETE 這五鍵的既有資料列再 ADD CONSTRAINT，否則約束加不上）。dbml 的 `tenant_config.key` 註解已是新鍵集，不需回補。
+  - 不做：不寫讀取門檻值的 StepDef 或 Job 邏輯。
 
 - [ ] T205 建立待認領「提醒狀態」staging fixture 落點
   - Read:
