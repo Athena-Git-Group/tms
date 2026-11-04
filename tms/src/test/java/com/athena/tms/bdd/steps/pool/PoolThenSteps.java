@@ -25,10 +25,10 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 待接池模組的 Then（待接池/dsl.md Then 句型區）。
+ * 待認領模組的 Then（待認領/dsl.md Then 句型區）。
  *
- * <p>「待接池順序為」「標示同樓層的單為」「待接池中…資訊如下」「待接池分類筆數如下」
- * 這四句都接在前一句「查看待接池」之後，斷言的是那次呼叫留在 {@link ScenarioWorld#lastResponse()}
+ * <p>「待認領順序為」「標示同樓層的單為」「待認領中…資訊如下」「待認領分類筆數如下」
+ * 這四句都接在前一句「查看待認領」之後，斷言的是那次呼叫留在 {@link ScenarioWorld#lastResponse()}
  * 的 {@code DeptPool} JSON，不另外重打一次 API（比照 dsl.md 根目錄 Then 句型的既有模式）。
  * 其餘幾句是獨立的權威狀態斷言，各自視需要另外呼叫一次 API 核對「跨視角」。
  */
@@ -56,12 +56,16 @@ public class PoolThenSteps {
         this.jwtService = jwtService;
     }
 
-    @那麼("^待接池順序為 (.+)$")
+    @那麼("^待認領順序為 (.+)$")
     public void poolOrderIs(String roomNoList) {
+        // dsl.md（待認領/dsl.md）：呈現結果只核對 DeptPool.items[].roomNo 的最終順序與
+        // 房號清單完全一致（不多不少）。排序條件本身（未接超時的單排最前、彼此間依房號，
+        // 其餘依優先通知、同樓層、房號）是產品碼（PoolService）的職責，這裡不重新實作
+        // 排序規則，只核對呈現結果。
         List<String> expected = splitList(roomNoList);
         List<String> actual = poolItems().stream().map(item -> textOrNull(item, "roomNo")).toList();
         if (!expected.equals(actual)) {
-            throw new AssertionError("待接池順序預期 " + expected + "，實際 " + actual);
+            throw new AssertionError("待認領順序預期 " + expected + "，實際 " + actual);
         }
     }
 
@@ -79,7 +83,7 @@ public class PoolThenSteps {
         }
     }
 
-    @那麼("待接池中 {string} 的資訊如下：")
+    @那麼("待認領中 {string} 的資訊如下：")
     public void poolItemInfo(String taskKey, DataTable table) {
         JsonNode item = findPoolItem(taskKey);
         Map<String, Object> taskRow = requireTaskRow(UUID.fromString(world.taskId(taskKey)));
@@ -111,12 +115,12 @@ public class PoolThenSteps {
                             : expected;
                     check("tasks.rule_hit", expectedRuleHit, taskRow.get("rule_hit"));
                 }
-                default -> throw new IllegalArgumentException("待接池資訊不支援的項目: " + field);
+                default -> throw new IllegalArgumentException("待認領資訊不支援的項目: " + field);
             }
         }
     }
 
-    @那麼("待接池中 {string} 的位置顯示為 \"公共區域\"")
+    @那麼("待認領中 {string} 的位置顯示為 \"公共區域\"")
     public void poolItemLocationIsPublicArea(String taskKey) {
         JsonNode item = findPoolItem(taskKey);
         String roomNo = textOrNull(item, "roomNo");
@@ -134,7 +138,7 @@ public class PoolThenSteps {
         check("rooms.floor", 0, ((Number) roomRow.get("floor")).intValue());
     }
 
-    @那麼("待接池分類筆數如下：")
+    @那麼("待認領分類筆數如下：")
     public void poolCategoryCounts(DataTable table) {
         JsonNode counts = world.lastResponse().json().path("counts");
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
@@ -181,7 +185,7 @@ public class PoolThenSteps {
         }
     }
 
-    @那麼("{string} 的準備工單在房務待接池")
+    @那麼("{string} 的準備工單在房務待認領")
     public void prepTaskInHousekeepingPool(String roomNo) {
         UUID taskId = UUID.fromString(world.taskId(roomNo));
         Map<String, Object> row = requireTaskRow(taskId);
@@ -195,7 +199,7 @@ public class PoolThenSteps {
                 "房號「" + roomNo + "」");
     }
 
-    @那麼("{string} 的排程工單在房務待接池")
+    @那麼("{string} 的排程工單在房務待認領")
     public void scheduledTaskInHousekeepingPool(String content) {
         UUID taskId = UUID.fromString(world.taskId(content));
         Map<String, Object> row = requireTaskRow(taskId);
@@ -252,7 +256,7 @@ public class PoolThenSteps {
         if (actual == null || actual.toInstant().compareTo(expected.toInstant()) != 0) {
             throw new AssertionError("tasks.due_at 預期 " + expected + "，實際 " + actual);
         }
-        // dsl.md 的「再讀確認」要呼叫 readTasks，但待接池任務沒有負責人，沒有自然對應的
+        // dsl.md 的「再讀確認」要呼叫 readTasks，但待認領任務沒有負責人，沒有自然對應的
         // 身分可用（比照 CommonThenSteps.withAssigneeReadTasks 同樣的理由），這裡跳過，
         // 不杜撰一個不存在的操作者。
     }
@@ -273,7 +277,7 @@ public class PoolThenSteps {
                 return item;
             }
         }
-        throw new AssertionError("待接池回應裡找不到「" + taskKey + "」");
+        throw new AssertionError("待認領回應裡找不到「" + taskKey + "」");
     }
 
     /** 以在職的房務員身分呼叫 listDeptPool，核對回應裡有一筆符合 predicate 的 PoolItem。 */
@@ -293,7 +297,7 @@ public class PoolThenSteps {
             }
         }
         if (!found) {
-            throw new AssertionError("listDeptPool 看不到" + describe + "的待接池任務");
+            throw new AssertionError("listDeptPool 看不到" + describe + "的待認領任務");
         }
     }
 

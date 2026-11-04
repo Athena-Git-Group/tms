@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# IDE
+.idea/
+
 # Claude / Athena 工作目錄（本機工具狀態，不進 repo）
 .agents/
 .athena/

@@ -50,7 +50,7 @@ public class TaskExecutionThenSteps {
         this.objectMapper = objectMapper;
     }
 
-    @那麼("房務待接池不包含 {string}")
+    @那麼("房務待認領不包含 {string}")
     public void poolDoesNotContain(String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
         Map<String, Object> row = requireTaskRow(taskId);
@@ -183,13 +183,13 @@ public class TaskExecutionThenSteps {
                 .queryOne(
                         "SELECT id, role, dept FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active = true ORDER BY id LIMIT 1",
                         tenantId, dept)
-                .orElseThrow(() -> new IllegalStateException("找不到部門「" + dept + "」的在職員工，無法跨視角驗證待接池"));
+                .orElseThrow(() -> new IllegalStateException("找不到部門「" + dept + "」的在職員工，無法跨視角驗證待認領"));
         UUID staffId = UUID.fromString(String.valueOf(staff.get("id")));
         return jwtService.issue(tenantId, staffId, (String) staff.get("role"), (String) staff.get("dept")).token();
     }
 
     /**
-     * 待接池等沒有負責人的任務，dsl.md「以負責人或主管身分」沒有自然對應的身分可用；
+     * 待認領等沒有負責人的任務，dsl.md「以負責人或主管身分」沒有自然對應的身分可用；
      * 跳過跨視角檢查，不杜撰一個不存在的操作者。
      */
     private void withAssigneeReadTasks(UUID taskId, Map<String, Object> taskRow, Consumer<JsonNode> check) {

@@ -119,7 +119,7 @@ public class ShiftEndScanJob {
             return;
         }
         ObjectNode payload = PushOutboxWriter.payload(objectMapper, staffId, "shift_end_returned",
-                returned.size() + " 單還沒開始，已退回待接池交給下一班；進行中的單仍由您完成");
+                returned.size() + " 單還沒開始，已退回待認領交給下一班；進行中的單仍由您完成");
         ObjectNode target = payload.putObject("target");
         target.put("kind", "pool");
         target.put("dept", dept);

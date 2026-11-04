@@ -125,7 +125,7 @@ public class StaffDeskWhenSteps {
         this.ctx.lastResponse(this.sop(this.ctx.entityId(taskSymbol), itemKey, Map.of("checked", true), this.api.staffToken(1L, this.ctx.staffLogin("\u5c0f\u7f8e"))));
     }
 
-    @When(value="^\u300c(\u5c0f\u7f8e|\u963f\u5f37)\u300d\u67e5\u8a62\u5f85\u63a5\u6c60$")
+    @When(value="^\u300c(\u5c0f\u7f8e|\u963f\u5f37)\u300d\u67e5\u8a62\u5f85\u8a8d\u9818$")
     public void staffListsPool(String name) {
         ScenarioContext.HttpResult pool = this.api.get("/staff/pool", this.api.staffToken(1L, this.ctx.staffLogin(name)));
         Assertions.assertEquals((int)200, (int)pool.status(), (String)("\u67e5\u6c60\u8a72\u6210\u529f: " + pool.body()));

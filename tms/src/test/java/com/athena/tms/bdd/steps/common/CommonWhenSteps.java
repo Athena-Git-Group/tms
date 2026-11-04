@@ -96,9 +96,10 @@ public class CommonWhenSteps {
     @當("時間來到 {string}")
     public void timeAdvancesTo(String hhmm) {
         clock.setTodayAt(hhmm);
-        // 時間推進後，所有依賴時間的週期工作都該有機會跑一輪：逾時升級與排程建單
-        // 在正式環境各自定時掃描，測試裡同步觸發，情境才不用等真實排程間隔。
-        jobTrigger.run("escalation-scan");
+        // 時間推進後，所有依賴時間的週期工作都該有機會跑一輪：排程建單、待認領
+        // 未接提醒（兩段：先提醒同仁，逾更久再通知主管）在正式環境各自定時掃描，
+        // 測試裡同步觸發，情境才不用等真實排程間隔。
+        jobTrigger.run("unclaimed-reminder-scan");
         jobTrigger.run("schedule-rule-scan");
         registerRuleCreatedTasks();
     }

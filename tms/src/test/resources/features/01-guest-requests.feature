@@ -107,7 +107,7 @@
       那麼 建立任務 type 為 <type>、dept 為 <dept>、state 為 <state>
       並且 事件 "created" 的快照之種類為 <type>、來源為 "guest"、房號為 "305"、訂單為 "PMS-88321"、標題為 "<title>"
 
-      # 自由文字「冷氣不冷」命中工務的規則，直接入工務待接池。
+      # 自由文字「冷氣不冷」命中工務的規則，直接入工務待認領。
       例子:
         | 輸入                 | type    | dept         | state | title    |
         | 選單項「加毛巾」     | amenity | housekeeping | pool  | 加毛巾   |

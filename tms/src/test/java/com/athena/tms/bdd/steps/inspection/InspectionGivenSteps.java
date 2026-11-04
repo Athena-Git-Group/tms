@@ -22,8 +22,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
  * 「必查」清單在 {@link InspectionThenSteps}。
  *
  * <p>本套件兩個設定鍵（{@code inspection_waived_enabled}、{@code pms.writeback.room_status}）
- * 與既有 {@code CommonGivenSteps#slaEscalationConfig} 同樣的「以主管身分呼叫
- * updateTenantConfig」慣例：臨時建一個不對外曝光姓名的主管帳號純粹用來滿足認證要求。
+ * 沿用「以主管身分呼叫 updateTenantConfig」慣例：臨時建一個不對外曝光姓名的主管帳號
+ * 純粹用來滿足認證要求。
  */
 public class InspectionGivenSteps {
 

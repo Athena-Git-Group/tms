@@ -111,7 +111,7 @@ public class CommonThenSteps {
         try {
             return new ExpectedTaskState(Terms.taskState(stateChinese), null, null);
         } catch (IllegalArgumentException notPlainTaskState) {
-            // 工務單專屬狀態詞（已認領/處理中/已完修/已撤回）走工務單對照
+            // 工務單專屬狀態詞（已接單/維修中/已完修/已撤回）走工務單對照
             String cancelReason = "已撤回".equals(stateChinese) ? Terms.repairTicketWithdrawnReason() : null;
             return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason);
         }
@@ -244,7 +244,7 @@ public class CommonThenSteps {
     }
 
     /**
-     * 待接池等沒有負責人的任務，dsl.md「以負責人或主管身分」沒有自然對應的身分可用；
+     * 待認領等沒有負責人的任務，dsl.md「以負責人或主管身分」沒有自然對應的身分可用；
      * 跳過跨視角檢查，不杜撰一個不存在的操作者。
      */
     private void withAssigneeReadTasks(
@@ -276,13 +276,13 @@ public class CommonThenSteps {
     }
 
     private void assertDestinationMatches(PushPayloadView.Target target, String destination) {
-        if ("待接池".equals(destination)) {
+        if ("待認領".equals(destination)) {
             requireKind(target, "pool");
         } else if ("首頁".equals(destination)) {
             requireKind(target, "home");
-        } else if (destination.startsWith("待接池並標亮 ")) {
+        } else if (destination.startsWith("待認領並標亮 ")) {
             requireKind(target, "pool");
-            String label = destination.substring("待接池並標亮 ".length());
+            String label = destination.substring("待認領並標亮 ".length());
             if (world.hasTask(label)) {
                 requireUuidEquals("highlightTaskId", target.highlightTaskId(), UUID.fromString(world.taskId(label)));
             }

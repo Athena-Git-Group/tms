@@ -15,10 +15,10 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 房間交辦模組的 Then（dsl.md Then 句型區）。「交辦如下／不包含主管交代／退回資訊為」
- * 三句都讀最近一次呼叫（前一個 When「打開 … 的任務」留下的）{@code readTasks} 回應，
- * 不重新發一次請求；「已讀」兩句則直接查權威狀態 {@code handover_reads}，其中一句
- * 另外用 {@code readTasks} 做跨視角再讀確認（dsl.md 的「再讀確認」）。
+ * 房間交辦模組的 Then（dsl.md Then 句型區）。「交辦如下／不包含主管交代／退回資訊逐欄顯示如下／
+ * 退回資訊包含操作提示內文」四句都讀最近一次呼叫（前一個 When「打開 … 的任務」留下的）
+ * {@code readTasks} 回應，不重新發一次請求；「已讀」兩句則直接查權威狀態 {@code handover_reads}，
+ * 其中一句另外用 {@code readTasks} 做跨視角再讀確認（dsl.md 的「再讀確認」）。
  */
 public class HandoverThenSteps {
 
@@ -114,14 +114,46 @@ public class HandoverThenSteps {
         }
     }
 
-    @那麼("{string} 的退回資訊為 {string}")
-    public void returnInfoIs(String taskKey, String expectedSummary) {
+    @那麼("{string} 的退回資訊逐欄顯示如下：")
+    public void returnInfoColumnsAre(String taskKey, DataTable table) {
         JsonNode json = requireJson(world.lastResponse());
         JsonNode returnInfo = json.path("returnInfo");
         String actual = returnInfo.path("summary").asText(null);
-        if (!expectedSummary.equals(actual)) {
-            throw new AssertionError(
-                    "「" + taskKey + "」的 TaskDetail.returnInfo.summary 預期「" + expectedSummary + "」，實際「" + actual + "」");
+        if (actual == null) {
+            throw new AssertionError("「" + taskKey + "」的 TaskDetail.returnInfo.summary 預期非空，實際為 null");
+        }
+
+        // summary 組裝格式（見 HandoverService#returnInfoOf）固定以 " · " 串接，第一段是
+        // 「標題」（查房退回：{failedItems}不合格），其餘段落合併成「原因」（第 N 次重做，
+        // 選配再接換人原因），所以用 limit=2 切，不把「原因」內部的 " · " 再拆開。
+        String[] segments = actual.split(" · ", 2);
+        String title = segments[0];
+        String reason = segments.length > 1 ? segments[1] : "";
+
+        List<Map<String, String>> rows = table.asMaps(String.class, String.class);
+        for (Map<String, String> row : rows) {
+            String item = requireCell(row, "項目");
+            String expectedValue = requireCell(row, "值");
+            String actualColumn = switch (item) {
+                case "標題" -> title;
+                case "原因" -> reason;
+                default -> throw new IllegalArgumentException(
+                        "找不到「" + item + "」在退回資訊項目對照表中的權威值");
+            };
+            if (!actualColumn.equals(expectedValue)) {
+                throw new AssertionError("「" + taskKey + "」的 TaskDetail.returnInfo.summary「" + item
+                        + "」段預期等於「" + expectedValue + "」，實際為「" + actualColumn + "」（整欄原文＝「" + actual + "」）");
+            }
+        }
+    }
+
+    @那麼("{string} 的退回資訊包含操作提示內文")
+    public void returnInfoHasHint(String taskKey) {
+        JsonNode json = requireJson(world.lastResponse());
+        JsonNode returnInfo = json.path("returnInfo");
+        String actual = returnInfo.path("summary").asText(null);
+        if (actual == null || actual.isBlank()) {
+            throw new AssertionError("「" + taskKey + "」的 TaskDetail.returnInfo.summary 預期非空，實際為「" + actual + "」");
         }
     }
 

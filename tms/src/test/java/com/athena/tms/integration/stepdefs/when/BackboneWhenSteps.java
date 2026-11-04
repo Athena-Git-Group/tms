@@ -99,7 +99,7 @@ public class BackboneWhenSteps {
         }
     }
 
-    @When(value="^\u4f9d\u5e8f\u5617\u8a66 \u5f85\u63a5\u6c60\u76f4\u63a5\u958b\u5de5\u3001\u8de8\u90e8\u9580\u8a8d\u9818\u3001\u8a8d\u9818\u5f8c\u4f4f\u5ba2\u6536\u56de \u4e09\u7a2e\u975e\u6cd5\u8f49\u79fb$")
+    @When(value="^\u4f9d\u5e8f\u5617\u8a66 \u5f85\u8a8d\u9818\u76f4\u63a5\u958b\u5de5\u3001\u8de8\u90e8\u9580\u8a8d\u9818\u3001\u8a8d\u9818\u5f8c\u4f4f\u5ba2\u6536\u56de \u4e09\u7a2e\u975e\u6cd5\u8f49\u79fb$")
     public void threeIllegalTransitions() {
         UUID taskId = this.ctx.taskId();
         this.attemptIllegal(() -> this.fixtures.engine().start(1L, taskId, TestData.HK1));

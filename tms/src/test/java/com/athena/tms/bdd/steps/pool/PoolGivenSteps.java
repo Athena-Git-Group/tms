@@ -10,7 +10,7 @@ import java.util.Map;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * 待接池模組的 Given（待接池/dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言。
+ * 待認領模組的 Given（待認領/dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言。
  *
  * <p>自動化規則直接用 {@link JdbcClient} 寫 {@code automation_rules} 表
  * （欄位依 {@code V6__automation_rules_and_due_at.sql}），比照 {@code RoomFixtures}／

@@ -43,8 +43,11 @@ public class RepairService {
      * 任務標題是給現場員工看的，必須用中文；對照表收錄 contracts RepairCategory
      * enum 的全部值，collection 查不到時退回原代碼而不是炸掉——類別值域由
      * request 驗證把關，這裡不重複承擔。
+     *
+     * <p>公開供 {@link com.athena.tms.service.UnclaimedReminderScanJob} 共用——
+     * 未接提醒推播的工務單標籤要用同一套中文對照，不另開第二份。
      */
-    private static final Map<String, String> CATEGORY_LABELS = Map.of(
+    public static final Map<String, String> CATEGORY_LABELS = Map.of(
             "air_conditioning", "冷氣",
             "plumbing_electrical", "水電",
             "furniture_equipment", "家具／設備",

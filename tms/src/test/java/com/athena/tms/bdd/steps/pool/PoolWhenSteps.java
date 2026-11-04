@@ -10,8 +10,9 @@ import com.athena.tms.service.AutomationRuleService;
 import io.cucumber.java.zh_tw.當;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
-/** 待接池模組的 When（待接池/dsl.md When 句型區）。 */
+/** 待認領模組的 When（待認領/dsl.md When 句型區）。 */
 public class PoolWhenSteps {
 
     private final ScenarioWorld world;
@@ -36,12 +37,12 @@ public class PoolWhenSteps {
         this.tenantFixtures = tenantFixtures;
     }
 
-    @當("{string} 查看待接池")
+    @當("{string} 查看待認領")
     public void staffViewsPool(String staffName) {
         apiClient.get("/pool", BddApiClient.Auth.staff(world.jwt(staffName)));
     }
 
-    @當("{string} 只看 {string} 類的待接池")
+    @當("{string} 只看 {string} 類的待認領")
     public void staffViewsPoolByCategory(String staffName, String categoryChinese) {
         String category = Terms.poolCategory(categoryChinese);
         apiClient.get("/pool?category=" + category, BddApiClient.Auth.staff(world.jwt(staffName)));
@@ -65,5 +66,19 @@ public class PoolWhenSteps {
     @當("{string} 停用 {string} 規則")
     public void managerDisablesRule(String managerName, String ruleName) {
         automationRuleService.disableRule(tenantFixtures.testTenantId(), ruleName);
+    }
+
+    @當("{string} 認領 {string}")
+    public void staffClaimsTask(String staffName, String taskKey) {
+        UUID taskId = resolveTaskId(taskKey);
+        apiClient.post("/tasks/" + taskId + "/claim", BddApiClient.Auth.staff(world.jwt(staffName)), null);
+    }
+
+    /** 任務：房號（對應 {@link ScenarioWorld#taskId}）或工務單號 W-NNNN（對應 {@link ScenarioWorld#repairTicketTaskId}）。 */
+    private UUID resolveTaskId(String key) {
+        if (key.startsWith("W-")) {
+            return UUID.fromString(world.repairTicketTaskId(key));
+        }
+        return UUID.fromString(world.taskId(key));
     }
 }

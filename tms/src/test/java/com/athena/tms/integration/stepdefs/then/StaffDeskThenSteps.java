@@ -113,7 +113,7 @@ public class StaffDeskThenSteps {
         }
     }
 
-    @Then(value="^\u300c\u963f\u5f37\u300d\u67e5\u8a62\u5f85\u63a5\u6c60\u6642\u6e05\u55ae\u542b\u300c([^\u300d]+)\u300d\u4f46\u4e0d\u542b\u300c([^\u300d]+)\u300d$")
+    @Then(value="^\u300c\u963f\u5f37\u300d\u67e5\u8a62\u5f85\u8a8d\u9818\u6642\u6e05\u55ae\u542b\u300c([^\u300d]+)\u300d\u4f46\u4e0d\u542b\u300c([^\u300d]+)\u300d$")
     public void mt1PoolFiltered(String expectedTitle, String excludedTitle) {
         ScenarioContext.HttpResult pool = this.api.get("/staff/pool", this.api.staffToken(1L, this.ctx.staffLogin("\u963f\u5f37")));
         Assertions.assertEquals((int)200, (int)pool.status(), (String)pool.body());
@@ -127,7 +127,7 @@ public class StaffDeskThenSteps {
         Assertions.assertEquals((Object)"triage", (Object)this.db.taskRow(this.ctx.taskId()).get("state"), (String)"\u88ab\u62d2\u7684\u5224\u8b80\u4e0d\u5f97\u6539\u72c0\u614b");
     }
 
-    @Then(value="^\u623f\u52d9\u300c\u5c0f\u7f8e\u300d\u7684\u5f85\u63a5\u6c60\u7acb\u523b\u770b\u5f97\u5230\u9019\u55ae$")
+    @Then(value="^\u623f\u52d9\u300c\u5c0f\u7f8e\u300d\u7684\u5f85\u8a8d\u9818\u7acb\u523b\u770b\u5f97\u5230\u9019\u55ae$")
     public void housekeepingPoolSeesTaskImmediately() {
         ScenarioContext.HttpResult pool = this.api.get("/staff/pool", this.api.staffToken(1L, this.ctx.staffLogin("\u5c0f\u7f8e")));
         Assertions.assertEquals((int)200, (int)pool.status(), (String)pool.body());

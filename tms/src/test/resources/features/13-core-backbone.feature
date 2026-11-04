@@ -52,7 +52,7 @@
       假設 系統中存在以下任務:
         | id      | tenant_id | type    | source | room_id | dept         | state | title  |
         | t-305-1 | 1         | amenity | desk   | r-305   | housekeeping | pool  | 毛巾×2 |
-      當 依序嘗試 待接池直接開工、跨部門認領、認領後住客收回 三種非法轉移
+      當 依序嘗試 待認領直接開工、跨部門認領、認領後住客收回 三種非法轉移
       那麼 三次請求應該都失敗，回應皆為 409 且原因都是 "state_conflict"
       並且 被擋的轉移不產生任何事件
 

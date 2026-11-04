@@ -61,7 +61,7 @@ public class TaskFixtures {
         return new Builder();
     }
 
-    /** 待接池任務的簡便入口，等同 {@code builder().state("pool")...create()}。 */
+    /** 待認領任務的簡便入口，等同 {@code builder().state("pool")...create()}。 */
     public UUID createPoolTask(String roomNo, String title, String typeCode, String deptCode, Integer estMin) {
         return builder().roomNo(roomNo).title(title).type(typeCode).dept(deptCode).estMin(estMin).state("pool").create();
     }
@@ -89,7 +89,7 @@ public class TaskFixtures {
         private String ruleHit;
         private String dueAtHHmm;
         private Boolean deferredBySelf;
-        private int escalateLevel = 0;
+        private String reminderStage;
 
         public Builder roomNo(String v) {
             this.roomNo = v;
@@ -173,7 +173,7 @@ public class TaskFixtures {
             return this;
         }
 
-        /** 待接池排序第二鍵（tasks.priority_notify 本 plan 新增投影欄位）。 */
+        /** 待認領排序第二鍵（tasks.priority_notify 本 plan 新增投影欄位）。 */
         public Builder priorityNotify(boolean v) {
             this.priorityNotify = v;
             return this;
@@ -210,11 +210,17 @@ public class TaskFixtures {
         }
 
         /**
-         * 補寫到第 N 層為止的逾時升級歷程（dsl.md「已升級」欄，L1/L2/L3 對應 1/2/3）。
-         * 0＝未升級（預設）。
+         * 直接把待認領任務 staging 到未接提醒的某個階段（dsl.md「提醒狀態」欄：
+         * {@code staff_reminded}＝已提醒同仁、{@code manager_notified}＝已通知主管），
+         * 補寫到該階段為止的 push outbox 紀錄，不需要真的把 {@link MutableClock} 推進到
+         * 門檻分鐘數。只在 state=pool 時有意義（tasks.reminder_stage 的設計只在池中才有意義，
+         * 見 data-model.dbml Table tasks 的 reminder_stage note）。
+         *
+         * <p>只負責「staging 到某個階段」這個資料落地動作，不判斷任何門檻比對規則
+         * （一般單/急件各自的分鐘數門檻由 Phase 2 的排程掃描 stepdef 負責）。
          */
-        public Builder escalateToLevel(int level) {
-            this.escalateLevel = level;
+        public Builder reminderStage(String stage) {
+            this.reminderStage = stage;
             return this;
         }
 
@@ -232,6 +238,10 @@ public class TaskFixtures {
                 throw new IllegalArgumentException(
                         "workedMinutes 代表「已做分鐘」，只在 state=doing 或 interrupted 時有意義，收到 state="
                                 + state);
+            }
+            if (reminderStage != null && !"pool".equals(state)) {
+                throw new IllegalArgumentException(
+                        "tasks.reminder_stage 只在 state=pool 時有意義，收到 state=" + state);
             }
 
             long tenantId = tenantFixtures.testTenantId();
@@ -287,8 +297,8 @@ public class TaskFixtures {
 
             backdateTimeline(tenantId, taskId);
             applyWorkedSeconds(tenantId, taskId);
-            if (escalateLevel > 0) {
-                escalateTask(tenantId, taskId, escalateLevel, assigneeId, dept, roomNo, title);
+            if (reminderStage != null) {
+                stageReminder(tenantId, taskId, reminderStage, assigneeId, dept, roomNo, title);
             }
             return taskId;
         }
@@ -472,62 +482,58 @@ public class TaskFixtures {
         }
 
         /**
-         * dsl.md「已升級」欄：補寫到第 {@code level} 層為止的 {@code escalated} 事件與對應推播紀錄。
-         * actor_role 固定 'system'（逾時升級是系統判定，不是哪個人做的），避開
-         * task_events.actor_role 的 CHECK 值域裡沒有 duty_manager 這件事。
-         * L1 收件人＝接單人（有 assignee 時）或部門在職成員（否則）；L2＝在職的 manager；
-         * L3＝在職的 duty_manager——V1 schema 的 staff_accounts.role CHECK 還沒有這個值，
-         * 查得到的清單必然是空的，這裡優雅跳過，不是本類別要蒙混過去的事。
+         * dsl.md「提醒狀態」欄：補寫到 {@code targetStage} 為止的未接提醒 push outbox 紀錄，
+         * 最後把 tasks.reminder_stage 寫到 {@code targetStage}。「已通知主管」隱含「已提醒同仁」
+         * 已經先發生過，所以兩段都在門檻之內的情境會補兩筆推播，不是只補最終那一段。
+         *
+         * <p>收件人慣例：提醒同仁＝接單人（有 assignee 時）或部門在職成員；通知主管＝在職的
+         * manager。兩段都只各發一次（冪等鍵帶 stage）。
          */
-        private void escalateTask(
-                long tenantId, UUID taskId, int level, UUID assigneeId, String dept, String roomNo, String title) {
-            jdbcClient
-                    .sql("UPDATE tasks SET esc_level = ? WHERE tenant_id = ? AND id = ?")
-                    .params(level, tenantId, taskId)
-                    .update();
+        private void stageReminder(
+                long tenantId, UUID taskId, String targetStage, UUID assigneeId, String dept, String roomNo,
+                String title) {
+            List<String> stages = List.of("staff_reminded", "manager_notified");
+            int targetIndex = stages.indexOf(targetStage);
+            if (targetIndex < 0) {
+                throw new IllegalArgumentException(
+                        "tasks.reminder_stage 只支援 staff_reminded|manager_notified，收到: " + targetStage);
+            }
 
             String label = (roomNo != null && !roomNo.isBlank()) ? roomNo : title;
-            for (int l = 1; l <= level; l++) {
-                Integer seq = jdbcClient
-                        .sql("UPDATE tasks SET event_seq = event_seq + 1 WHERE tenant_id = ? AND id = ? RETURNING event_seq")
-                        .params(tenantId, taskId)
-                        .query(Integer.class)
-                        .single();
-                jdbcClient
-                        .sql(
-                                """
-                                INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
-                                VALUES (?, ?, ?, 'escalated', 'system', NULL, ?::jsonb, ?)
-                                """)
-                        .params(tenantId, taskId, seq, "{\"level\":" + l + "}", OffsetDateTime.ofInstant(clock.instant(), clock.getZone()))
-                        .update();
+            String targetJson = assigneeId != null
+                    ? "{\"kind\":\"task\",\"taskId\":\"" + taskId + "\"}"
+                    : "{\"kind\":\"pool\",\"dept\":\"" + dept + "\"}";
 
-                String pushTitle = l == 1 ? label + " 已逾時 · 升級 L1" : label + " 已升級 L" + l;
-                String target = assigneeId != null
-                        ? "{\"kind\":\"task\",\"taskId\":\"" + taskId + "\"}"
-                        : "{\"kind\":\"pool\",\"dept\":\"" + dept + "\"}";
-                for (UUID recipient : escalationRecipients(tenantId, l, assigneeId, dept)) {
-                    insertEscalationPush(tenantId, taskId, recipient, pushTitle, target, l);
+            for (int i = 0; i <= targetIndex; i++) {
+                String stage = stages.get(i);
+                boolean isStaffStage = "staff_reminded".equals(stage);
+                String pushEvent = isStaffStage ? "unclaimed_reminder_staff" : "unclaimed_reminder_manager";
+                String pushTitle = isStaffStage ? label + " 已等提醒，還沒人接" : label + " 已通知主管";
+                List<UUID> recipients = isStaffStage
+                        ? reminderRecipients(tenantId, "staff", assigneeId, dept)
+                        : reminderRecipients(tenantId, "manager", assigneeId, dept);
+                for (UUID recipient : recipients) {
+                    insertReminderPush(tenantId, taskId, recipient, pushEvent, pushTitle, targetJson, stage);
                 }
             }
+
+            jdbcClient
+                    .sql("UPDATE tasks SET reminder_stage = ? WHERE tenant_id = ? AND id = ?")
+                    .params(targetStage, tenantId, taskId)
+                    .update();
         }
 
-        private List<UUID> escalationRecipients(long tenantId, int level, UUID assigneeId, String dept) {
-            return switch (level) {
-                case 1 -> assigneeId != null
+        private List<UUID> reminderRecipients(long tenantId, String kind, UUID assigneeId, String dept) {
+            return switch (kind) {
+                case "staff" -> assigneeId != null
                         ? List.of(assigneeId)
                         : jdbcClient
                                 .sql("SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active = true")
                                 .params(tenantId, dept)
                                 .query(UUID.class)
                                 .list();
-                case 2 -> jdbcClient
+                case "manager" -> jdbcClient
                         .sql("SELECT id FROM staff_accounts WHERE tenant_id = ? AND role = 'manager' AND active = true")
-                        .params(tenantId)
-                        .query(UUID.class)
-                        .list();
-                case 3 -> jdbcClient
-                        .sql("SELECT id FROM staff_accounts WHERE tenant_id = ? AND role = 'duty_manager' AND active = true")
                         .params(tenantId)
                         .query(UUID.class)
                         .list();
@@ -535,10 +541,11 @@ public class TaskFixtures {
             };
         }
 
-        private void insertEscalationPush(
-                long tenantId, UUID taskId, UUID recipient, String title, String targetJson, int level) {
-            String payload = "{\"recipientStaffId\":\"" + recipient + "\",\"event\":\"escalated\",\"title\":\""
-                    + escapeJson(title) + "\",\"target\":" + targetJson + "}";
+        private void insertReminderPush(
+                long tenantId, UUID taskId, UUID recipient, String event, String title, String targetJson,
+                String stage) {
+            String payload = "{\"recipientStaffId\":\"" + recipient + "\",\"event\":\"" + event
+                    + "\",\"title\":\"" + escapeJson(title) + "\",\"target\":" + targetJson + "}";
             jdbcClient
                     .sql(
                             """
@@ -549,7 +556,7 @@ public class TaskFixtures {
                             tenantId,
                             "task:" + taskId,
                             payload,
-                            "fx-escalate:" + taskId + ":L" + level + ":" + recipient,
+                            "fx-reminder:" + taskId + ":" + stage + ":" + recipient,
                             OffsetDateTime.ofInstant(clock.instant(), clock.getZone()))
                     .update();
         }

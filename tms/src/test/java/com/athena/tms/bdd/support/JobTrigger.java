@@ -1,6 +1,6 @@
 package com.athena.tms.bdd.support;
 
-import com.athena.tms.service.EscalationScanJob;
+import com.athena.tms.service.UnclaimedReminderScanJob;
 import com.athena.tms.service.ShiftEndScanJob;
 import com.athena.tms.service.IdempotencyRetentionJob;
 import com.athena.tms.service.OutboxRelay;
@@ -20,7 +20,8 @@ import org.springframework.context.ApplicationContext;
 public class JobTrigger {
 
     private static final Set<String> KNOWN_JOBS = Set.of(
-            "outbox-relay", "outbox-retention", "idempotency-retention", "stream-heartbeat", "escalation-scan", "shift-end-scan", "schedule-rule-scan");
+            "outbox-relay", "outbox-retention", "idempotency-retention", "stream-heartbeat",
+            "unclaimed-reminder-scan", "shift-end-scan", "schedule-rule-scan");
 
     private final ApplicationContext applicationContext;
 
@@ -33,7 +34,7 @@ public class JobTrigger {
      *
      * @param jobName 已知名稱：{@code outbox-relay}、{@code outbox-retention}、
      *                {@code idempotency-retention}、{@code stream-heartbeat}、
-     *                {@code escalation-scan}
+     *                {@code unclaimed-reminder-scan}
      * @throws IllegalArgumentException 名稱不在已知清單時，訊息會列出目前已知的名稱
      * @throws UnsupportedOperationException main 尚未建立對應排程的名稱（見方法內各 case 的說明）
      */
@@ -47,7 +48,10 @@ public class JobTrigger {
             case "shift-end-scan" -> applicationContext.getBean(ShiftEndScanJob.class).scan();
             case "schedule-rule-scan" ->
                     applicationContext.getBean(com.athena.tms.service.ScheduleRuleScanJob.class).scan();
-            case "escalation-scan" -> applicationContext.getBean(EscalationScanJob.class).scan();
+            // dsl.md「時間來到」的權威語意是待認領未接提醒兩段掃描；底層 bean 已改名為
+            // UnclaimedReminderScanJob（Phase 3A 的 [BDD-REFACTOR] 範圍），叫用名
+            // "unclaimed-reminder-scan" 不受影響。
+            case "unclaimed-reminder-scan" -> applicationContext.getBean(UnclaimedReminderScanJob.class).scan();
             default -> throw new IllegalArgumentException(
                     "未知的排程工作名稱：" + jobName + "；已知名稱：" + KNOWN_JOBS);
         }

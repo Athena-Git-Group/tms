@@ -16,9 +16,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 員工 App 的任務執行 API，路由對應 contracts 的 readTasks、tasksDefer、
- * tasksStart、tasksSopCheck、tasksInterrupt、tasksComplete、tasksRequeue、
- * tasksResume、listDeptPool 與 getMyToday。
+ * 員工 App 的任務執行 API，路由對應 contracts 的 readTasks、tasksClaim、
+ * tasksDefer、tasksStart、tasksSopCheck、tasksInterrupt、tasksComplete、
+ * tasksRequeue、tasksResume、listDeptPool 與 getMyToday。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -38,6 +38,11 @@ public class TaskExecutionController {
     @PostMapping("/tasks/{id}/defer")
     public Map<String, Object> defer(@PathVariable UUID id, @RequestBody(required = false) HoldReasonRequest request) {
         return taskExecutionService.deferBySelf(id, request);
+    }
+
+    @PostMapping("/tasks/{id}/claim")
+    public Map<String, Object> claim(@PathVariable UUID id) {
+        return taskExecutionService.claim(id);
     }
 
     @PostMapping("/tasks/{id}/start")

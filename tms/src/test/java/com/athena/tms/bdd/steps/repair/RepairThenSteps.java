@@ -107,12 +107,12 @@ public class RepairThenSteps {
         }
     }
 
-    @那麼("工務待接池包含 {string}")
+    @那麼("工務待認領包含 {string}")
     public void poolContainsTicket(String ticketNo) {
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
         if (!containsTicketNo(resp, ticketNo)) {
             throw new AssertionError(
-                    "預期工務待接池包含 " + ticketNo + "，實際 status=" + resp.status() + "，body=" + resp.body());
+                    "預期工務待認領包含 " + ticketNo + "，實際 status=" + resp.status() + "，body=" + resp.body());
         }
 
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -126,7 +126,7 @@ public class RepairThenSteps {
         }
     }
 
-    @那麼("工務待接池不包含 {string}")
+    @那麼("工務待認領不包含 {string}")
     public void poolDoesNotContainTicket(String ticketNo) {
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
         // 純負向斷言會假綠：listDeptPool 回 403／500 或 items 空陣列也「不包含」。
@@ -136,13 +136,13 @@ public class RepairThenSteps {
                     "listDeptPool 預期 200，實際 status=" + resp.status() + "，body=" + resp.body());
         }
         if (containsTicketNo(resp, ticketNo)) {
-            throw new AssertionError("預期工務待接池不包含 " + ticketNo + "，但找到了（body=" + resp.body() + "）");
+            throw new AssertionError("預期工務待認領不包含 " + ticketNo + "，但找到了（body=" + resp.body() + "）");
         }
     }
 
-    // dsl.md「工務待接池順序為 {單號清單}」在 Gherkin 裡不加引號（以「、」分隔的裸文字），
+    // dsl.md「工務待認領順序為 {單號清單}」在 Gherkin 裡不加引號（以「、」分隔的裸文字），
     // {string} 無法匹配沒有引號的文字；用 ^...$ 讓 Cucumber 當成 Regular Expression 編譯。
-    @那麼("^工務待接池順序為 (.+)$")
+    @那麼("^工務待認領順序為 (.+)$")
     public void poolOrderIs(String rawList) {
         List<String> expected = Arrays.asList(rawList.split("、"));
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
@@ -154,7 +154,7 @@ public class RepairThenSteps {
         }
         if (!expected.equals(actual)) {
             throw new AssertionError(
-                    "工務待接池順序預期 " + expected + "，實際 " + actual + "（status=" + resp.status() + "）");
+                    "工務待認領順序預期 " + expected + "，實際 " + actual + "（status=" + resp.status() + "）");
         }
     }
 
@@ -244,7 +244,7 @@ public class RepairThenSteps {
                             + actualCount + " 張");
         }
 
-        // 跨視角：待接池只收 state='pool' 的單，所以池中應出現的是未結案單裡仍在 pool 的那些；
+        // 跨視角：待認領只收 state='pool' 的單，所以池中應出現的是未結案單裡仍在 pool 的那些；
         // 比對鍵用 ticketNo（池 item 的 category 是 PoolCategory（repair），不是工務類別）。
         List<String> expectedPoolTicketNos = dbProbe.queryMaps(
                 """
@@ -269,7 +269,7 @@ public class RepairThenSteps {
         actualPoolTicketNos.sort(String::compareTo);
         if (!actualPoolTicketNos.equals(expectedPoolTicketNos)) {
             throw new AssertionError(
-                    "工務待接池裡 " + roomNo + " 的「" + categoryChinese + "」單預期 " + expectedPoolTicketNos + "，實際 "
+                    "工務待認領裡 " + roomNo + " 的「" + categoryChinese + "」單預期 " + expectedPoolTicketNos + "，實際 "
                             + actualPoolTicketNos + "（status=" + resp.status() + "）");
         }
     }
@@ -316,7 +316,7 @@ public class RepairThenSteps {
         return false;
     }
 
-    /** 待接池查詢需要「工務員工」的身分，dsl.md 這幾句本身沒有指名是哪一位，就取任一在職工務員工。 */
+    /** 待認領查詢需要「工務員工」的身分，dsl.md 這幾句本身沒有指名是哪一位，就取任一在職工務員工。 */
     private String engineeringStaffJwt() {
         long tenantId = tenantFixtures.testTenantId();
         UUID staffId = dbProbe
@@ -338,7 +338,7 @@ public class RepairThenSteps {
     }
 
     private static String repairStatus(String chinese) {
-        if ("待接".equals(chinese)) {
+        if ("待認領".equals(chinese)) {
             return "pool";
         }
         return Terms.repairTicketState(chinese);

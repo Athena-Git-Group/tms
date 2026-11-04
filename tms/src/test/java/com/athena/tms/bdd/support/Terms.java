@@ -18,7 +18,7 @@ public final class Terms {
 
     // 來源：specs/truth/features/backend/dsl.md 「狀態用語對照」表前半（任務狀態，非工務單）。
     private static final Map<String, String> TASK_STATE = Map.ofEntries(
-            Map.entry("待接", "pool"),
+            Map.entry("待認領", "pool"),
             Map.entry("待開始", "accepted"),
             Map.entry("進行中", "doing"),
             Map.entry("已延後", "deferred"),
@@ -31,8 +31,8 @@ public final class Terms {
 
     // 來源：specs/truth/features/backend/dsl.md 「狀態用語對照」表後段（工務單狀態）。
     private static final Map<String, String> REPAIR_TICKET_STATE = Map.ofEntries(
-            Map.entry("已認領", "accepted"),
-            Map.entry("處理中", "doing"),
+            Map.entry("已接單", "accepted"),
+            Map.entry("維修中", "doing"),
             Map.entry("已完修", "done"),
             Map.entry("已撤回", "cancelled"));
 
@@ -59,7 +59,7 @@ public final class Terms {
             Map.entry("免查", "waived"),
             Map.entry("退回重做", "failed"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「房務待接池有以下任務：」列的「來源」Data Table
+    // 來源：specs/truth/features/backend/dsl.md 「房務待認領有以下任務：」列的「來源」Data Table
     // 參數說明，權威值對齊 specs/truth/data/data-model.dbml 的 tasks.pool_source CHECK
     // 與 specs/truth/contracts/components/schemas/員工工作台.yaml 的 PoolSource enum。
     private static final Map<String, String> POOL_SOURCE = Map.ofEntries(
@@ -71,6 +71,12 @@ public final class Terms {
             Map.entry("查房退回", "inspection_return"),
             Map.entry("房務報修", "staff_report"),
             Map.entry("自動化規則", "system"));
+
+    // 來源：specs/truth/features/backend/dsl.md 「房務待認領有以下任務：」列的「提醒狀態」Data
+    // Table 參數說明，權威值對齊 data-model.dbml 的 tasks.reminder_stage。
+    private static final Map<String, String> REMINDER_STAGE = Map.ofEntries(
+            Map.entry("已提醒同仁", "staff_reminded"),
+            Map.entry("已通知主管", "manager_notified"));
 
     // 來源：specs/truth/features/backend/工務單/dsl.md 的工務單類別，權威代碼以
     // specs/truth/contracts/components/schemas/工務單.yaml 的 RepairCategory enum 為準。
@@ -87,14 +93,6 @@ public final class Terms {
             Map.entry("備品", "amenity"),
             Map.entry("修繕", "repair"),
             Map.entry("其他", "other"));
-
-    // 來源：specs/truth/features/backend/dsl.md「飯店的逾時升級設定如下：」列的「項目」Data
-    // Table 參數說明，權威鍵對齊 specs/truth/data/data-model.dbml 的 tenant_config.key CHECK（V6 增補）。
-    private static final Map<String, String> TENANT_CONFIG_SLA_ITEM = Map.ofEntries(
-            Map.entry("打掃類 SLA 時限", "sla_minutes_cleaning"),
-            Map.entry("備品類 SLA 時限", "sla_minutes_amenity"),
-            Map.entry("其他類 SLA 時限", "sla_minutes_other"),
-            Map.entry("升級層距", "escalation_step_minutes"));
 
     /**
      * 任務（非工務單）狀態中文 → 權威 {@code tasks.state}。「待查房」與「已送達」都對應
@@ -138,9 +136,9 @@ public final class Terms {
         return lookup(INSPECTION, chinese, "查房結果");
     }
 
-    /** 待接池來源中文 → 權威 {@code tasks.pool_source}（與 PoolSource enum 對齊）。 */
+    /** 待認領來源中文 → 權威 {@code tasks.pool_source}（與 PoolSource enum 對齊）。 */
     public static String poolSource(String chinese) {
-        return lookup(POOL_SOURCE, chinese, "待接池來源");
+        return lookup(POOL_SOURCE, chinese, "待認領來源");
     }
 
     /** 工務單類別中文 → 權威 {@code repair_tickets.category}（RepairCategory enum）。 */
@@ -148,14 +146,14 @@ public final class Terms {
         return lookup(REPAIR_CATEGORY, chinese, "工務單類別");
     }
 
-    /** 待接池類別中文 → 權威 {@code PoolCategory} enum。 */
+    /** 待認領類別中文 → 權威 {@code PoolCategory} enum。 */
     public static String poolCategory(String chinese) {
-        return lookup(POOL_CATEGORY, chinese, "待接池類別");
+        return lookup(POOL_CATEGORY, chinese, "待認領類別");
     }
 
-    /** 逾時升級設定「項目」中文 → 權威 {@code tenant_config.key}（sla_minutes_*／escalation_step_minutes）。 */
-    public static String tenantConfigSlaItem(String chinese) {
-        return lookup(TENANT_CONFIG_SLA_ITEM, chinese, "逾時升級設定項目");
+    /** 未接提醒階段中文 → 權威 {@code tasks.reminder_stage}（staff_reminded|manager_notified）。 */
+    public static String reminderStage(String chinese) {
+        return lookup(REMINDER_STAGE, chinese, "未接提醒階段");
     }
 
     private static String lookup(Map<String, String> table, String chinese, String tableName) {

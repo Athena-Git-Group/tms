@@ -92,4 +92,15 @@ public class PushOutboxWriter {
                 "SELECT id FROM staff_accounts WHERE tenant_id = ? AND role = 'manager' AND active = true",
                 UUID.class, tenantId);
     }
+
+    /**
+     * 給「通知整個部門」類推播查收件人：回傳該部門所有在職成員。同 {@link #activeManagerIds}，
+     * 收件人的認定集中在這裡，不同事件（新需求進池、住客撤回、未接提醒）各自呼叫這裡，
+     * 不會各自維護一份查詢而彼此跑掉。
+     */
+    public List<UUID> activeDeptStaffIds(long tenantId, String dept) {
+        return jdbcTemplate.queryForList(
+                "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active = true",
+                UUID.class, tenantId, dept);
+    }
 }

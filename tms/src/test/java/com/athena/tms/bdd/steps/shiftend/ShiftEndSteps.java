@@ -66,7 +66,7 @@ public class ShiftEndSteps {
      * dsl.md 怎麼做：以主管身分呼叫 tasksRequeue（POST /tasks/{id}/requeue），附交代。
      * 交代對應 contracts tasksRequest 的 note 欄位（note：住客原文/翻譯/交代/當場回答）。
      */
-    @當("{string} 以交代 {string} 把 {string} 退回待接池")
+    @當("{string} 以交代 {string} 把 {string} 退回待認領")
     public void managerRequeuesTaskWithHandoverNote(String managerName, String handoverNote, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
         LastOperationGuard.captureFor(dbProbe, taskId);
@@ -78,7 +78,7 @@ public class ShiftEndSteps {
      * dsl.md 必查：權威狀態——每一列都有 dept housekeeping、狀態 pool 的任務，
      * 並且有給的欄位都相符；跨視角——房務員呼叫 listDeptPool（GET /pool）時看得到這些單。
      */
-    @那麼("房務待接池包含以下任務：")
+    @那麼("房務待認領包含以下任務：")
     public void poolContainsTasks(DataTable table) {
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
             String roomNo = requireCell(row, "房號");

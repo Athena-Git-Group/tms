@@ -29,6 +29,10 @@ import tools.jackson.databind.JsonNode;
  * {@link RepairThenSteps} 的事；G4 是例外：dsl.md 本身就把「確認 duplicate.ticketNo」
  * 寫在這句 Given 的語意裡，所以直接在這裡比對。
  *
+ * <p>例外：{@link #existingRepairTickets} 的權威列不在本模組 dsl.md，已搬到介面根
+ * {@code specs/truth/features/backend/dsl.md}（跨模組共用句，語意不變，只是收斂到單一權威
+ * 位置），glue code 留在這個類別純粹是沿用既有檔案落點，不代表權威歸屬。
+ *
  * <p>repair_tickets／repair_photos／repair_ticket_counters 沒有對應的 TestFixtures 入口
  * （{@code bdd/support} 範圍不包含工務單專屬資料），依任務指示直接注入 {@link JdbcClient} 落地。
  */
@@ -82,6 +86,10 @@ public class RepairGivenSteps {
                 .update();
     }
 
+    /**
+     * 權威列：介面根 {@code specs/truth/features/backend/dsl.md} Given
+     * {@code 已有以下工務單：}（非本模組 dsl.md）。
+     */
     @假設("已有以下工務單：")
     public void existingRepairTickets(DataTable table) {
         long tenantId = tenantFixtures.testTenantId();
@@ -106,8 +114,8 @@ public class RepairGivenSteps {
             String category = Terms.repairCategory(categoryChinese);
 
             // uq_tasks_one_doing_per_staff：一位員工同時最多一筆 doing。Background 可能已讓
-            // 同一位處理人有處理中的單（例如 W-0412），這裡要再建他的處理中新單時，先把他
-            // 手上既有的 doing 單完修結案（「已完修」＝done，工務單狀態對照表裡合法的非處理
+            // 同一位處理人有維修中的單（例如 W-0412），這裡要再建他的維修中新單時，先把他
+            // 手上既有的 doing 單完修結案（「已完修」＝done，工務單狀態對照表裡合法的非維修
             // 中狀態，事件歷程也由 TaskEngine 完整留下）；直接硬插會撞唯一索引噴
             // DuplicateKeyException，那不是場景要驗的事。
             if ("doing".equals(state) && assigneeId != null) {
@@ -298,7 +306,7 @@ public class RepairGivenSteps {
     }
 
     private static String repairTaskState(String chinese) {
-        if ("待接".equals(chinese)) {
+        if ("待認領".equals(chinese)) {
             return "pool";
         }
         return Terms.repairTicketState(chinese);

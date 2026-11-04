@@ -31,7 +31,7 @@
       並且 住客 A 的 resync 的 refetch 指向 "/guest/home"
 
     @boundary
-    場景: 員工連線依序收到 init、resync，resync 指向待接池端點
+    場景: 員工連線依序收到 init、resync，resync 指向待認領端點
       假設 房務「小美」開啟員工事件串流
       那麼 「小美」的連線依序收到 "init"、"resync"
       並且 「小美」的 resync 的 refetch 指向 "/staff/pool"
@@ -47,7 +47,7 @@
       並且 住客 B 收到自己任務的 "created"
       並且 彼此的串流不出現對方任務的任何事件
 
-  Rule: 員工串流推本部門待接池與本人任務
+  Rule: 員工串流推本部門待認領與本人任務
 
     @happy
     場景: 新單即時出現在部門看板

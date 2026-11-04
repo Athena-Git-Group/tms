@@ -88,7 +88,7 @@ public class PushGuestSteps {
 
     /**
      * dsl.md 怎麼做：以該房的住客 session 呼叫 cancelGuestRequest（POST
-     * /guest-requests/{id}/cancel）撤回其在待接池的需求。權威狀態落地：任務轉為
+     * /guest-requests/{id}/cancel）撤回其在待認領的需求。權威狀態落地：任務轉為
      * cancelled，cancel_reason=guest_withdrew，並寫入本部門的 push outbox
      * （PushPayload.event=guest_withdrew）。回寫：回應。
      */

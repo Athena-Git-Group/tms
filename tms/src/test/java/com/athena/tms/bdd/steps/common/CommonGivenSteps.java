@@ -96,8 +96,6 @@ public class CommonGivenSteps {
             Integer workedMinutes = parseIntOrNull(row.get("已做分鐘"));
             String holdReason = blankToNull(row.get("停住原因"));
             Integer redoCount = parseIntOrNull(row.get("重做次數"));
-            String dueAt = blankToNull(row.get("到期時間"));
-            String escalated = blankToNull(row.get("已升級"));
 
             TaskFixtures.Builder builder = taskFixtures.builder()
                     .roomNo(roomNo)
@@ -118,14 +116,8 @@ public class CommonGivenSteps {
             if (redoCount != null) {
                 builder.redoCount(redoCount);
             }
-            if (dueAt != null) {
-                builder.dueAtToday(dueAt);
-            }
             if ("deferred".equals(state)) {
                 builder.deferredBySelf(true);
-            }
-            if (escalated != null) {
-                builder.escalateToLevel(parseEscalationLevel(escalated));
             }
 
             UUID taskId = builder.create();
@@ -133,7 +125,7 @@ public class CommonGivenSteps {
         }
     }
 
-    @假設("房務待接池有以下任務：")
+    @假設("房務待認領有以下任務：")
     public void poolHasTasks(DataTable table) {
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
             String roomNo = blankToNull(row.get("房號"));
@@ -153,8 +145,7 @@ public class CommonGivenSteps {
             boolean automationRule = "自動化規則".equals(sourceChinese);
 
             boolean priorityNotify = "優先通知".equals(blankToNull(row.get("標記")));
-            String dueAt = blankToNull(row.get("到期時間"));
-            String escalated = blankToNull(row.get("已升級"));
+            String reminderStageChinese = blankToNull(row.get("提醒狀態"));
 
             String noteOrReason = blankToNull(row.get("交代或原因"));
             String ruleHit = null;
@@ -189,11 +180,8 @@ public class CommonGivenSteps {
             if (requeueNote != null) {
                 builder.requeueNote(requeueNote);
             }
-            if (dueAt != null) {
-                builder.dueAtToday(dueAt);
-            }
-            if (escalated != null) {
-                builder.escalateToLevel(parseEscalationLevel(escalated));
+            if (reminderStageChinese != null) {
+                builder.reminderStage(Terms.reminderStage(reminderStageChinese));
             }
 
             UUID taskId = builder.create();
@@ -206,22 +194,45 @@ public class CommonGivenSteps {
         staffFixtures.deactivate(UUID.fromString(world.staffId(staffName)));
     }
 
-    @假設("飯店的逾時升級設定如下：")
-    public void slaEscalationConfig(DataTable table) {
-        // 沒有對應的 {員工} 參數：dsl.md 只說「以主管身分」，這裡臨時建一個不對外曝光
-        // 姓名的主管帳號純粹用來滿足呼叫 updateTenantConfig 的認證要求。
+    /**
+     * dsl.md「飯店的未接提醒門檻如下：」：一般單與急件各自獨立的「提醒同仁」「通知主管」
+     * 分鐘數，寫進單一 tenant_config 鍵 {@code unclaimed_reminder_minutes}（value 為
+     * {"cleaning":{"staffReminded":n,"managerNotified":n},"urgent":{"staffReminded":n,"managerNotified":n}}，
+     * 見 V12__unclaimed_reminder_thresholds.sql 與 data-model.dbml 的鍵集註解）。Data Table 沒列到的
+     * 項目用「預設參數」欄的值：一般單提醒同仁 10、通知主管 20；急件提醒同仁 3、通知主管 8。
+     */
+    @假設("飯店的未接提醒門檻如下：")
+    public void unclaimedReminderThresholds(DataTable table) {
         StaffFixtures.CreatedStaff manager = staffFixtures.createManagerLikeStaff(
                 "系統管理者-" + UUID.randomUUID(), "manager", "active");
         long tenantId = tenantFixtures.testTenantId();
 
+        int cleaningStaffReminded = 10;
+        int cleaningManagerNotified = 20;
+        int urgentStaffReminded = 3;
+        int urgentManagerNotified = 8;
+
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
-            String key = Terms.tenantConfigSlaItem(requireCell(row, "項目"));
-            String raw = requireCell(row, "值");
-            String numeric = raw.replaceAll("[^0-9]", "");
-            Map<String, Object> body = Map.of("tenantId", tenantId, "key", key, "value", numeric);
-            apiClient.exchange(
-                    HttpMethod.PUT, "/tenant-configs/" + key, BddApiClient.Auth.staff(manager.jwt()), body, null);
+            String item = requireCell(row, "項目");
+            int minutes = Integer.parseInt(requireCell(row, "值").replaceAll("[^0-9]", ""));
+            switch (item) {
+                case "一般單提醒同仁" -> cleaningStaffReminded = minutes;
+                case "一般單通知主管" -> cleaningManagerNotified = minutes;
+                case "急件提醒同仁" -> urgentStaffReminded = minutes;
+                case "急件通知主管" -> urgentManagerNotified = minutes;
+                default -> throw new IllegalArgumentException(
+                        "找不到「" + item + "」在未接提醒門檻項目對照表中的權威欄位（原詞：" + item + "）");
+            }
         }
+
+        String key = "unclaimed_reminder_minutes";
+        String value = String.format(
+                "{\"cleaning\":{\"staffReminded\":%d,\"managerNotified\":%d},"
+                        + "\"urgent\":{\"staffReminded\":%d,\"managerNotified\":%d}}",
+                cleaningStaffReminded, cleaningManagerNotified, urgentStaffReminded, urgentManagerNotified);
+        Map<String, Object> body = Map.of("tenantId", tenantId, "key", key, "value", value);
+        apiClient.exchange(
+                HttpMethod.PUT, "/tenant-configs/" + key, BddApiClient.Auth.staff(manager.jwt()), body, null);
     }
 
     @假設("{string} 今天沒有打掃負責人")
@@ -255,10 +266,6 @@ public class CommonGivenSteps {
             return 20;
         }
         return 5;
-    }
-
-    private static int parseEscalationLevel(String levelChinese) {
-        return Integer.parseInt(levelChinese.replaceAll("[^0-9]", ""));
     }
 
     private static Integer parseIntOrNull(String s) {

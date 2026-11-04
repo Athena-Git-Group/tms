@@ -103,6 +103,18 @@ public class TaskExecutionService {
     }
 
     /**
+     * 員工認領部門待認領池中的任務（contracts tasksClaim）。只有同部門、還在池中
+     * 的任務才能被認領；條件不符時 {@link TaskEngine#claim} 的條件式 UPDATE 一列
+     * 也不改，轉成 409 由共用的狀態衝突路徑回應（已被他人認領也是這個狀態碼）。
+     */
+    public Map<String, Object> claim(UUID taskId) {
+        long tenantId = TenantContext.require();
+        CurrentActor actor = CurrentActor.require();
+        return transition(tenantId, taskId, actor,
+                (actorRef) -> taskEngine.claim(tenantId, taskId, actor.dept(), actorRef));
+    }
+
+    /**
      * 負責人開工，接受待開始與本人延後的任務。同一位員工同時只能有一間進行中。
      * 開工時順帶記交辦已讀（contracts tasksStart、FR-038）——開工前 App 會把
      * 交辦攤在確認頁上，走到開工就代表看過了；重複開工或先展開過都不重記
@@ -325,10 +337,11 @@ public class TaskExecutionService {
      * items 只回傳該類別，但 counts 仍統計全部類別（contracts listDeptPool），
      * 所以先撈整個部門池、再在組裝時過濾，不在 SQL 先砍掉其他類別。
      *
-     * <p>排序依 feature「待接池排序與篩選」：已逾期（過 due_at）或已升級（esc_level）
-     * 的單排最前、彼此間依房號；其餘依急件、優先通知、與查詢者同樓層、房號遞增。
-     * 「同樓層」以查詢者本班排房（plan_rooms）負責房間的樓層判斷，和附交代退池的
-     * 推播收件人用同一個樓層口徑（見 {@link #notifySameFloorHousekeepers}）。
+     * <p>排序依 feature「待認領排序與篩選」：未接超時（reminder_stage 不是 NULL，
+     * 已進入提醒同仁或通知主管階段）的單排最前、彼此間依房號；其餘依急件、優先通知、
+     * 與查詢者同樓層、房號遞增。「同樓層」以查詢者本班排房（plan_rooms）負責房間的
+     * 樓層判斷，和附交代退池的推播收件人用同一個樓層口徑
+     * （見 {@link #notifySameFloorHousekeepers}）。
      */
     public Map<String, Object> deptPool(String categoryFilter) {
         long tenantId = TenantContext.require();
@@ -336,18 +349,16 @@ public class TaskExecutionService {
         if (actor.dept() == null) {
             throw new UnprocessableEntityException("此帳號未設部門，沒有對應的部門待接池");
         }
-        OffsetDateTime now = OffsetDateTime.now(clock);
-        // 先在內層算好 overdue_or_escalated 與 same_floor 兩個旗標，外層 ORDER BY
+        // 先在內層算好 unclaimed_overdue 與 same_floor 兩個旗標，外層 ORDER BY
         // 直接引用。SQL 不允許在 ORDER BY 的運算式裡引用同一層 SELECT 的別名，
-        // 不包一層就得在排序鍵重抄整段逾期判斷。
+        // 不包一層就得在排序鍵重抄整段未接超時判斷。
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT * FROM (
                     SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source,
                            t.return_reason, t.requeue_note, t.created_at, r.room_no, r.floor,
                            rt.ticket_no,
-                           ((t.due_at IS NOT NULL AND t.due_at < ?) OR COALESCE(t.esc_level, 0) > 0)
-                               AS overdue_or_escalated,
+                           (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
                            EXISTS (SELECT 1
                                      FROM plan_rooms pr
                                      JOIN rooms pl ON pl.tenant_id = pr.tenant_id AND pl.id = pr.room_id
@@ -358,12 +369,12 @@ public class TaskExecutionService {
                       LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
                      WHERE t.tenant_id = ? AND t.dept = ? AND t.state = 'pool'
                 ) pool
-                ORDER BY pool.overdue_or_escalated DESC,
-                         CASE WHEN pool.overdue_or_escalated THEN pool.room_no END,
+                ORDER BY pool.unclaimed_overdue DESC,
+                         CASE WHEN pool.unclaimed_overdue THEN pool.room_no END,
                          pool.urgent DESC, pool.priority_notify DESC, pool.same_floor DESC,
                          pool.room_no, pool.created_at
                 """,
-                now, actor.staffId(), tenantId, actor.dept());
+                actor.staffId(), tenantId, actor.dept());
 
         List<Map<String, Object>> items = new ArrayList<>();
         Map<String, Integer> byCategory = new LinkedHashMap<>();

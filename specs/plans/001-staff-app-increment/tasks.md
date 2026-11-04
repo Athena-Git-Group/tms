@@ -30,7 +30,7 @@
 
 **Goal**: 只建立 Phase 2 會用到的 tenant_config 鍵骨架與未接提醒 fixture 落點，不寫門檻比對或推播判斷邏輯。
 
-- [ ] T204 擴充 `tenant_config.key` CHECK，新增未接提醒門檻鍵 `unclaimed_reminder_minutes`
+- [X] T204 擴充 `tenant_config.key` CHECK，新增未接提醒門檻鍵 `unclaimed_reminder_minutes`
   - Read:
     - `truth-delta.md` -> `/dsl-refine` ADD `飯店的未接提醒門檻如下：`
     - `specs/truth/data/data-model.dbml` -> `Table tenant_config.key` 封閉鍵集
@@ -38,7 +38,7 @@
   - 只做：新增 `V12__unclaimed_reminder_thresholds.sql`，仿 V8 寫法重建 `chk_tenant_config_key` 為 dbml 的封閉鍵集——加入單一鍵 `unclaimed_reminder_minutes`（value 為 jsonb，結構 `{"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}`，與 dbml 註解一致）、移除已隨裁決 B 廢除的 `sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled` 五鍵（migration 內先 DELETE 這五鍵的既有資料列再 ADD CONSTRAINT，否則約束加不上）。dbml 的 `tenant_config.key` 註解已是新鍵集，不需回補。
   - 不做：不寫讀取門檻值的 StepDef 或 Job 邏輯。
 
-- [ ] T205 建立待認領「提醒狀態」staging fixture 落點
+- [X] T205 建立待認領「提醒狀態」staging fixture 落點
   - Read:
     - `truth-delta.md` -> `/dsl-refine` MODIFY `房務待認領有以下任務：` 新增選填欄位 `提醒狀態`
     - `tms/src/test/java/com/athena/tms/bdd/steps/pool/PoolGivenSteps.java`
@@ -88,41 +88,41 @@
 - T206–T214、T222、T223 各派一個獨立 subagent；T215 等全部回來（含 T222、T223）再啟動 subagent 來 review。
 - 編號說明：T222、T223 是驗收後補列的任務，為避免引用錯位沿用既有編號接續（不重編 T204–T221），因此編號大於 T215，但實際執行順序排在 T215 review 之前；T215 的任務編號維持不變。
 
-- [ ] T206 [P] [BDD-REMOVE] `Given: 飯店的逾時升級設定如下：`
+- [X] T206 [P] [BDD-REMOVE] `Given: 飯店的逾時升級設定如下：`
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`
 
-- [ ] T207 [P] [BDD-RED] `Given: 飯店的未接提醒門檻如下：`
+- [X] T207 [P] [BDD-RED] `Given: 飯店的未接提醒門檻如下：`
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`（依賴 T204 的 tenant_config 鍵）
 
-- [ ] T208 [P] [BDD-ALIGN] `Given: "{員工}" 名下有以下任務：`（移除到期時間／已升級欄位）
+- [X] T208 [P] [BDD-ALIGN] `Given: "{員工}" 名下有以下任務：`（移除到期時間／已升級欄位）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`
 
-- [ ] T209 [P] [BDD-ALIGN] `Given: 房務待認領有以下任務：`（待接池→待認領置換＋新增提醒狀態欄位）
+- [X] T209 [P] [BDD-ALIGN] `Given: 房務待認領有以下任務：`（待接池→待認領置換＋新增提醒狀態欄位）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/pool/PoolGivenSteps.java`（依賴 T205 的 fixture 落點）
 
-- [ ] T210 [P] [BDD-ALIGN] `Given: 已有以下工務單：`（權威位置搬移到介面根，語意不變，只對齊參照）
+- [X] T210 [P] [BDD-ALIGN] `Given: 已有以下工務單：`（權威位置搬移到介面根，語意不變，只對齊參照）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java`、`tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`
 
-- [ ] T211 [P] [BDD-RED] `When: "{員工}" 認領 "{任務}"`
+- [X] T211 [P] [BDD-RED] `When: "{員工}" 認領 "{任務}"`
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/pool/PoolWhenSteps.java`
 
-- [ ] T212 [P] [BDD-ALIGN] `When: 時間來到 "{時刻}"`（排程掃描語意由逾時升級改為未接提醒兩段）
+- [X] T212 [P] [BDD-ALIGN] `When: 時間來到 "{時刻}"`（排程掃描語意由逾時升級改為未接提醒兩段）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonWhenSteps.java`、`tms/src/test/java/com/athena/tms/bdd/support/JobTrigger.java`
 
-- [ ] T213 [P] [BDD-ALIGN] `Then: 待認領順序為 {房號清單}`（排序條件由已逾期／已升級改為未接超時）
+- [X] T213 [P] [BDD-ALIGN] `Then: 待認領順序為 {房號清單}`（排序條件由已逾期／已升級改為未接超時）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/pool/PoolThenSteps.java`
 
-- [ ] T214 [P] [BDD-ALIGN] 全面用語置換：既有 stepdef 的 Given/When/Then 比對字串與 `Terms.java` 顯示字串，`待接`／`待接池` 改為 `待認領`（不含 T207–T213 已列的語意變更句）
+- [X] T214 [P] [BDD-ALIGN] 全面用語置換：既有 stepdef 的 Given/When/Then 比對字串與 `Terms.java` 顯示字串，`待接`／`待接池` 改為 `待認領`（不含 T207–T213 已列的語意變更句）
   - Read: `tms/src/test/java/com/athena/tms/bdd/support/Terms.java`、`tms/src/test/java/com/athena/tms/bdd/steps/pool/PoolGivenSteps.java`、`PoolWhenSteps.java`、`PoolThenSteps.java`、`tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java`
 
-- [ ] T222 [P] [BDD-ALIGN] `Terms.java` 工務單狀態用語映射：`已認領`→`已接單`、`處理中`→`維修中`（鍵不變，顯示字串對齊介面根 `dsl.md` 狀態用語對照表）
+- [X] T222 [P] [BDD-ALIGN] `Terms.java` 工務單狀態用語映射：`已認領`→`已接單`、`處理中`→`維修中`（鍵不變，顯示字串對齊介面根 `dsl.md` 狀態用語對照表）
   - Read: `tms/src/test/java/com/athena/tms/bdd/support/Terms.java:34-35`、`specs/truth/features/backend/dsl.md` 狀態用語對照表（工務單狀態半段）
   - 一併改掉其餘仍引用舊中文值 `已認領`／`處理中`（工務單語境）的 stepdef／fixture；不影響任務狀態對照表的 `已延後`／`已中斷` 等既有鍵。
 
-- [ ] T223 [P] [BDD-ALIGN] 查房退回資訊 Then 句型改為逐欄顯示：移除舊句型 `"{任務}" 的退回資訊為 "{退回資訊}"`，實作 `"{任務}" 的退回資訊逐欄顯示如下：`與`"{任務}" 的退回資訊包含操作提示內文`
+- [X] T223 [P] [BDD-ALIGN] 查房退回資訊 Then 句型改為逐欄顯示：移除舊句型 `"{任務}" 的退回資訊為 "{退回資訊}"`，實作 `"{任務}" 的退回資訊逐欄顯示如下：`與`"{任務}" 的退回資訊包含操作提示內文`
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/handover/HandoverThenSteps.java:117-118`、`specs/truth/features/backend/房間交辦/dsl.md`
 
-- [ ] T215 subagent review (phase quality gate)
+- [X] T215 subagent review (phase quality gate)
 
 ## Phase 3A: MODIFY Feature File - backend/推播/員工推播事件.feature
 
@@ -144,8 +144,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/推播/員工推播事件.feature`
 
-- [ ] T216 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T217 [BDD-REFACTOR] 在綠燈下整理兩段式未接提醒掃描與推播文案組裝的共用邏輯，清掉已停用的 L1/L2/L3 升級分支
+- [X] T216 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T217 [BDD-REFACTOR] 在綠燈下整理兩段式未接提醒掃描與推播文案組裝的共用邏輯，清掉已停用的 L1/L2/L3 升級分支
 
 ## Phase 3B: MODIFY Feature File - backend/任務執行/本人延後與開工.feature
 
@@ -162,8 +162,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/任務執行/本人延後與開工.feature`
 
-- [ ] T218 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T219 [BDD-REFACTOR] 在綠燈下整理「不在 pool 的單不掃描」判斷與 Phase 3A 共用的掃描入口
+- [X] T218 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T219 [BDD-REFACTOR] 在綠燈下整理「不在 pool 的單不掃描」判斷與 Phase 3A 共用的掃描入口（NOOP：語意已顯性、入口已單一）
 
 ## Phase 3C: MODIFY Feature File - backend/待認領/待認領排序與篩選.feature
 
@@ -181,5 +181,32 @@
 **Test Scope**:
 - `specs/truth/features/backend/待認領/待認領排序與篩選.feature`
 
-- [ ] T220 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T221 [BDD-REFACTOR] 在綠燈下整理排序鍵計算的共用邏輯
+- [X] T220 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T221 [BDD-REFACTOR] 在綠燈下整理排序鍵計算的共用邏輯（NOOP：無重複邏輯、殘留已清、註解已對齊）
+
+## Phase 3D: MODIFY Feature File - backend/班末掃描/班末掃描與中斷單交接.feature（T215 review 補列）
+
+**Goal**: 裁決 A 的產品碼殘留——`ShiftEndScanJob.java:122` 推播文案硬編碼「待接池」，truth feature 已斷言「待認領」，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/班末掃描/班末掃描與中斷單交接.feature`
+- `truth-delta.md` -> `/dsl-refine` 裁決 A（待接→待認領全面置換）
+- `tms/src/main/java/com/athena/tms/service/ShiftEndScanJob.java:122`
+
+**Boundary**: 只改使用者可見文案字串（待接池→待認領），不動班末掃描邏輯。
+
+**Test Scope**:
+- `specs/truth/features/backend/班末掃描/班末掃描與中斷單交接.feature`
+
+- [X] T224 [BDD-GREEN] 讓 Test Scope 全綠
+
+## Phase 3E: 舊整合測試套件用語對齊（T215 review 補列）
+
+**Goal**: `tms/src/test/resources/features/{01,02,03,04,13,14}*.feature`＋glue `com.athena.tms.integration.stepdefs` 是獨立舊整合套件，仍用「待接池」保護舊用語；Phase 3A–3D 改產品字串後 `mvn test`（RunCucumberTest 在 surefire 預設範圍內）會被它擋下。對齊其用語至「待認領」。
+
+**Boundary**: 只做 待接／待接池→待認領 的字串對齊（feature 文字與 stepdef 比對字串），不改該套件的測試結構與資料表風格。
+
+**Test Scope**:
+- `RunCucumberTest`（tms/src/test/resources/features 全套）
+
+- [X] T225 [BDD-ALIGN] 舊整合套件用語置換，置於 Phase 3A–3D 完成後執行。完成條件＝用語對齊後 RunCucumberTest 無「因本輪產品改動或用語」造成的非綠；該套件既有的 4 failures＋1 error（outbox 順序、唯一約束、SOP 勾記筆數，T224 時已存在且與用語無關）逐筆歸因——若查明是本輪產品改動（認領路由、未接提醒、排序）造成就修到綠，若是先前就壞的既有缺陷則列清單回報上游，不在本任務修。
