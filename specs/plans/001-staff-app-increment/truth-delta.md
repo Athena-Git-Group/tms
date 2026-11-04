@@ -16,6 +16,20 @@
 | MODIFY | `specs/truth/techstack.md` -> `前端` 員工端 | 員工 App 拍板為 Swift、iOS ＋ Android 雙平台；跨平台工具鏈未拍板。 | 2026-11-02 clarify：使用者拍板「Swift 寫、支援雙平台」。 |
 | MODIFY | `specs/truth/techstack.md` -> `測試與驗證` 員工 App BDD techstack | 由「尚無 runner」改為 Appium ＋ Cucumber-JVM（iOS：XCUITest driver；Android：UiAutomator2 driver），Java step definitions 與後端共用生態。 | 2026-11-02 clarify 使用者選 B；回補 research.md 殘餘風險「App 端測項無執行器」。 |
 | MODIFY | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 「App 自動化 runner 延後」改為排除 iOS 專屬 runner（XCUITest ＋ Cucumberish）與 Maestro。 | runner 已拍板，排除項改為被淘汰的替代方案。 |
+| MODIFY | `specs/truth/techstack.md` -> `前端` 員工端 App 框架（原「員工端」） | 由 Swift／iOS＋Android 雙平台改為 `Flutter`（stable 3.47）單一程式碼庫；App 程式碼改落在本 repo `app/`（含 `app/bdd/`），不再是「App 不在本 repo」；標記為有條件採用，gate 在一日 Appium spike，失敗改採 React Native。 | 使用者 2026-11-04 拍板放棄 Swift 雙平台路線（Android 側押在 Skip／Swift SDK for Android 這類生態幾乎為零的工具鏈），改採 Flutter；獨立技術審查報告判定「有條件成立」。 |
+| ADD | `specs/truth/techstack.md` -> `前端` App 推播 | 新增 `firebase_messaging` 作為 App 推播收件與導頁套件。 | 決策 7：F3 推播為第一支金絲雀 feature，需要收件框架；審查指出 iOS `getInitialMessage()` 歷史缺陷為關鍵風險。 |
+| ADD | `specs/truth/techstack.md` -> `前端` App 相機與照片 | 新增 `camera`＋`image_picker`（拍攝選取）、`flutter_image_compress`（壓縮）、`dart:ui` Canvas（浮水印，isolate／`compute()` 執行）。 | 工務單照片 1–3 張的拍攝、壓縮、浮水印需求（沿用 spec 假設：此處理在 App 端，後端不引入影像處理函式庫）；審查指出純 Dart `image` 套件過慢、需丟 isolate。 |
+| ADD | `specs/truth/techstack.md` -> `前端` App 掃碼 | 新增 `mobile_scanner`。 | 住客 QR 掃碼進需求；審查指出已知黑屏風險需鎖版本與 dispose／re-init 紀律。 |
+| ADD | `specs/truth/techstack.md` -> `前端` App 視覺 | 新增「Flutter 自訂 Cupertino 風主題，以 `ui/prototype/Main.dc.html` 為準」，iOS 不追 Liquid Glass／Live Activity。 | 決策 8：使用者 2026-11-04 簽核 iOS 視覺降級；Flutter 無官方 Liquid Glass／Live Activity 支援。 |
+| MODIFY | `specs/truth/techstack.md` -> `前端` App 端驗收規格 | 用途說明移除「App 實作啟動前仍只當規格」，改為「runner 見『測試與驗證』」。 | App 本輪即在本 repo 開始實作（決策 8），不再是純規格階段。 |
+| MODIFY | `specs/truth/techstack.md` -> `測試與驗證` 員工 App BDD techstack | driver 由「XCUITest driver／UiAutomator2 driver」明確改為「vanilla XCUITest／vanilla UiAutomator2」，並補上「讀取 Flutter `Semantics(identifier:)` 曝露到原生 accessibility API 的節點」。 | 決策 5：明確排除 `appium-flutter-driver`／`appium-flutter-integration-driver`，改採讀取 Flutter 原生 semantics 曝露節點的 vanilla driver，以保留 runner 與 App 實作解耦、可測 release build。 |
+| ADD | `specs/truth/techstack.md` -> `測試與驗證` App 元素定位 | 新增：`Semantics(identifier:)` 掛 dot＋kebab accessibility id，Java step 層 `byTestId()` helper 依平台分流；iOS 用 `accessibilityId()`、Android 用 resource-id 比對，兩平台 locator 不同不可共用。 | 決策 6：Flutter 官方文件確認 `identifier` 在 Android 落成 `resource-id`、iOS 落成 `accessibilityIdentifier`，單一 locator 呼叫無法同時命中兩平台。 |
+| ADD | `specs/truth/techstack.md` -> `測試與驗證` App 測試後門 | 新增：`--dart-define` 隔離的 debug build ＋ localhost debug HTTP endpoint，提供裝置時間注入、強制離線、強制第 N 張上傳失敗。 | 決策 7：`報修照片與送出.feature` 要求的三種注入，Appium 黑箱無法從外部提供，必須在 App 骨架第一波內建。 |
+| MODIFY | `specs/truth/techstack.md` -> `本次開發不引入的技術` 真實 APNS/FCM 推播投遞 | 補上「後端」限定詞，由「真實 APNS/FCM 推播投遞（MVP 只寫日誌與資料列）」改為「（後端 MVP 只寫日誌與資料列）」。 | App 側本輪引入 `firebase_messaging` 做真實收件，需明確這條排除只針對後端推播消費者，避免與 App 端新增技術矛盾；兩者如何對接列為研究殘餘風險。 |
+| ADD | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 新增：`Skip`、`Swift SDK for Android` 等跨平台工具鏈。 | 隨 Swift 雙平台路線一併放棄，改採 Flutter 單一程式碼庫；原技術堆疊僅標「尚未拍板」，本輪明確排除。 |
+| ADD | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 新增：`appium-flutter-driver`、`appium-flutter-integration-driver`。 | 前者只能測 debug/profile build 且用已棄用 API，後者要把測試 harness 編進 App，兩者都會打破 Appium 黑箱驅動與 App 實作解耦。 |
+| ADD | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 新增：純 Dart `image` 套件做照片壓縮。 | release build 下 decode/encode 過慢，改用 `flutter_image_compress`。 |
+| ADD | `specs/truth/techstack.md` -> `本次開發不引入的技術` | 新增：iOS 26 Liquid Glass、Live Activity／動態島。 | Flutter 無官方支援；決策 8 的視覺降級已簽核，本增量不追求。 |
 
 ## /api-plan
 

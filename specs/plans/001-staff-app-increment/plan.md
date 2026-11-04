@@ -46,13 +46,13 @@ tms/                         # Spring Boot 4.1.1 後端（gitlink，原始碼尚
     ├── java/…/steps/        # Cucumber-JVM step definitions
     └── resources/features/  # 由 specs/truth/features/backend 同步
 
-（iOS 員工 App 不在本 repo；本輪只有 specs/truth/features/ios-app 測項）
+（員工 App 在本 repo 的 app/，Flutter；BDD harness 規劃於 app/bdd/）
 ```
 
 **結構決策**：沿用基線的單體 Spring Boot 架構。worker 與 API 在同一個程序，任務引擎是狀態變更的唯一入口。
 
 - **工務單不另起服務。** 它是 dept `engineering`、type `repair` 的任務，照樣走任務引擎。新增的只有工務單專屬欄位與照片。
-- **App 不在本 repo。** 後端以 API 與推播內容跟 App 銜接。
+- **App 在本 repo 的 `app/`（Flutter，iOS＋Android 同一套程式碼）。** 後端以 API 與推播內容跟 App 銜接。
 - **套件分層是推定。** 上面的分層依基線類別圖推定。`tms/tms` 子模組取回後，要以實際結構校正本節。
 
 ## 分析流程規劃

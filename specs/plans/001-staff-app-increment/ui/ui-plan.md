@@ -2,7 +2,7 @@
 
 ## 介面範圍
 
-- 目標系統介面：`房務／工務員工 App（iOS，Swift；Android 另案）`——單一 App 依登入者部門切換房務／工務視角，無獨立主管視角（主管／住客／櫃檯的動作一律由「情境模擬」操作面板代打，App 畫面只呈現員工端看到的結果）。
+- 目標系統介面：`房務／工務員工 App（Flutter，iOS＋Android 同一套程式碼；iOS 先行驗證）`——單一 App 依登入者部門切換房務／工務視角，無獨立主管視角（主管／住客／櫃檯的動作一律由「情境模擬」操作面板代打，App 畫面只呈現員工端看到的結果）。
 - 需求來源：`spec.md` 的 FR-001–048、`specs/truth/features/ios-app/` 9 支 feature（任務執行、工務單、今日進度、待接池、房間交辦、查一下、推播）。
 - 上游依據：`spec.md`、`plan.md`（Wave 2 `iOS 員工 App 介面`）、`truth-delta.md`、`ui/prototype-feature-coverage.md`（本次最重要的輸入）、`specs/truth/features/ios-app/**`、`specs/truth/features/backend/dsl.md` 狀態用語對照表。
 - 產出順序：`先定稿 ui/ui-plan.md，再依這份 plan 對 ui/prototype/Main.dc.html 做「你→您」文案掃除，輸出 ui/index.html。`
@@ -14,7 +14,7 @@
 ## 視覺方向
 
 - 風格來源：`既有可互動原型`（Claude Design 匯出，`ui/prototype/Main.dc.html`），品牌色票、M3／iOS 雙設計語言 token、間距與圓角在原型的 `<style data-dc-design-system-vars>` 已完整定義，本輪沿用，不重新設計。
-- 本次風格結論：延續原型既有視覺——品牌青綠 `#0C7680`、iOS 26 Liquid Glass 風格 Tab bar 為預設、M3／iOS 元件並存（依載體切換）。
+- 本次風格結論：延續原型既有視覺——品牌青綠 `#0C7680`、以 Flutter 自訂主題照原型視覺實作（不追 iOS 26 Liquid Glass 系統質感）、M3／iOS 元件並存（依載體切換）。
 - 視覺重點：任務卡狀態 chip 的色語意（橘＝待認領、灰＝待開始、紅＝退回重做、青綠＝進行中…，見下方「畫面↔feature 歸屬矩陣」後的狀態對照）、進度環與計時 hero、工務單照片流程的上傳狀態回饋。
 - 審美原則：`ui/index.html` 必須像產品本身，不得把分析備註、元件樹、TODO 或 reviewer 說明寫進畫面；「情境模擬」面板例外——它本就是原型自帶、供人判讀的操作區，不算产品文案，但同樣不得新增任何 ui-plan 自己的說明文字進去。
 
@@ -233,7 +233,7 @@
 
 - 採 **dot 分段＋kebab-case**：`{畫面}.{區塊}.{元素}[--{修飾}]`，例如 `task.handover.unread-dot`、`pool.card.status-tag--unaccepted-manager`。
 - 畫面層級用簡稱（`home`、`pool`、`task`、`celebrate`、`hold`、`repair`、`ticket`、`ask`、`notification`、`me`、`login`、`engHome`、`engPool`），與原型內部 state 名稱對齊，方便實作時互查。
-- 重複元素（列表項）在 id 後加房號／單號等識別值作為執行期變數，例如 `pool.card.{roomNo}.status-tag`；Appium 定位時以此做動態匹配，兩平台共用同一組 id（`accessibilityIdentifier` / `contentDescription`）。
+- 重複元素（列表項）在 id 後加房號／單號等識別值作為執行期變數，例如 `pool.card.{roomNo}.status-tag`；Appium 定位時以此做動態匹配。id 字串兩平台相同，但映射的屬性不同——App 以 Flutter `Semantics(identifier:)` 掛上後，iOS 曝露為 `accessibilityIdentifier`、Android 曝露為 `resource-id`——所以 step definitions 要用一個 `byTestId()` helper 依平台分流定位，不能兩平台共用同一個 locator 寫法。
 - 狀態類元素（chip、badge、dot）用 `--state` 修飾而不是另開新 id，讓同一元素在不同狀態下仍可用同一 id 定位、只讀取其文字或狀態屬性斷言。
 
 ### 逐一列出 dsl 驗收點需要的 id（以 coverage 報告 §6 第 2 點為起點擴充）
@@ -283,7 +283,7 @@
 - 進行中脈動點、按鈕按壓態、頁面轉場等動畫效果。
 - 完成慶祝頁的彩帶／慶祝動效。
 - 即時動態（Live Activity）動態島精簡／展開／最小三種呈現的版面排法與縮放。
-- iOS 18 vs iOS 26（Liquid Glass）的 Tab bar／導覽列／按鈕視覺差異（原型供人對照用，App 只會照拍板版本實作一種）。
+- iOS 18 vs iOS 26（Liquid Glass）的 Tab bar／導覽列／按鈕視覺差異（原型供人對照用，App 一律以 Flutter 自訂主題照原型視覺實作，不追系統質感）。
 - 文字大小滑桿的七段具體 px／行高數值。
 - 觸覺回饋（原型本身就說明網頁無法真的震動，只是示意）。
 - 「情境模擬」操作面板整體（視角切換、實機載體、iOS 版本選項說明文字）——見上方「介面範圍」已明確排除。
