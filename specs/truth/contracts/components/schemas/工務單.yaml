@@ -86,16 +86,28 @@ CreateRepairTicketRequest:
   type: object
   description: >-
     不接受急件欄位：急件由系統依飯店設定規則判定（UrgentJudgement），房務不能在開單時指定或更改。
+    三種開單路徑擇一：①房務從自己未取消的任務開單，帶 sourceTaskId，房號由原任務帶入；
+    ②工務不經過任何房務任務直接開單，或櫃檯交辦開單，sourceTaskId 留空，改帶 roomId 或 isPublicArea=true
+    （兩者擇一，不可同時帶 sourceTaskId 與 roomId／isPublicArea，否則回 422 repair_source_conflict；
+    三者都沒帶回 422 repair_source_missing）。呼叫者部門決定 tasks.source：房務報修與工務自開都是 staff，
+    櫃檯交辦是 desk。
   required:
-  - sourceTaskId
   - category
   - photoIds
-  - interruptSourceTask
   properties:
     sourceTaskId:
       type: string
       format: uuid
-      description: 原任務。房號由原任務帶入。
+      nullable: true
+      description: 原任務。提供時房號由原任務帶入；與 roomId／isPublicArea 互斥。
+    roomId:
+      type: string
+      format: uuid
+      nullable: true
+      description: 工務自開或櫃檯交辦時指定客房；與 sourceTaskId、isPublicArea 互斥。
+    isPublicArea:
+      type: boolean
+      description: true 表示開給公共區域（無房號），省略視為 false；與 sourceTaskId、roomId 互斥。
     category:
       $ref: '#/RepairCategory'
     description:
@@ -110,7 +122,14 @@ CreateRepairTicketRequest:
       description: 0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；有任一張還沒上傳回 422 photo_not_uploaded。
     interruptSourceTask:
       type: boolean
-      description: true 表示「中斷 → 需要工務協助」模式。
+      description: true 表示「中斷 → 需要工務協助」模式；只有帶 sourceTaskId 時才有意義，省略視為 false。
+    assigneeId:
+      type: string
+      format: uuid
+      nullable: true
+      description: >-
+        只用於工務自開或櫃檯交辦路徑：直接指定處理人，略過工務待認領與審核，單直接轉為 accepted 給該人。
+        房務報修路徑（帶 sourceTaskId）不支援這個欄位。
 AppendRepairPhotosRequest:
   type: object
   required:
@@ -165,6 +184,28 @@ RepairTicket:
         type: string
         nullable: true
         description: 主管將急件降級為一般件時附的原因；未降級為 null。
+      rejectReason:
+        type: string
+        nullable: true
+        description: >-
+          主管退回一般件（state=rejected）時附的原因，例如「照片看不清楚，請補拍」；房務補資料重新送出
+          （回到 pending_review）後清空。非 rejected 狀態為 null。本 plan 新增，待 /data-plan 補對應欄位。
+      verifiedBy:
+        type: string
+        nullable: true
+        description: 驗收通過的主管顯示名稱；尚未驗收為 null。本 plan 新增，待 /data-plan 補驗收人欄位。
+      verifiedAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: 主管驗收通過的時間；尚未驗收為 null。本 plan 新增，待 /data-plan 補驗收時間欄位。
+      originTicketNo:
+        type: string
+        pattern: ^W-\d{4}$
+        nullable: true
+        description: >-
+          若本單是完修回報「暫時處理」時系統自動建立的追蹤單，這裡是原單的單號；非追蹤單為 null。
+          本 plan 新增，待 /data-plan 補原單關聯欄位。
 DowngradeRepairTicketUrgencyRequest:
   type: object
   required:
@@ -174,3 +215,12 @@ DowngradeRepairTicketUrgencyRequest:
       type: string
       minLength: 1
       description: 降級原因，必填，例如「已確認不影響入住」。
+RejectRepairTicketRequest:
+  type: object
+  required:
+  - reason
+  properties:
+    reason:
+      type: string
+      minLength: 1
+      description: 退回原因，必填，例如「照片看不清楚，請補拍」；空白回 422 reject_reason_required。

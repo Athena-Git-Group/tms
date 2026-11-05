@@ -25,6 +25,18 @@ staff_accounts:
     active:
       type: boolean
       description: 停用=不能登入，歷史保留
+    mustChangePassword:
+      type: boolean
+      description: 臨時密碼登入成功後為 true；完成改密前不得用這組憑證呼叫其他需要身分的 API。本 plan 新增，待 /data-plan 補 staff_accounts.must_change_password 欄位。
+    failedLoginCount:
+      type: integer
+      format: int32
+      description: 連續輸入錯誤密碼的次數；登入成功即清零。本 plan 新增，待 /data-plan 補 staff_accounts.failed_login_count 欄位。
+    lockedUntil:
+      type: string
+      format: date-time
+      nullable: true
+      description: 連續輸入錯誤密碼達 5 次時鎖定 15 分鐘的到期時間；未鎖定為 null。本 plan 新增，待 /data-plan 補 staff_accounts.locked_until 欄位。
     createdAt:
       type: string
       format: date-time
@@ -40,6 +52,8 @@ staff_accounts:
   - passwordHash
   - role
   - active
+  - mustChangePassword
+  - failedLoginCount
   - createdAt
   - updatedAt
 staff_accountsRequest:
@@ -73,3 +87,49 @@ staff_accountsRequest:
   - passwordHash
   - role
   - active
+LoginRequest:
+  type: object
+  description: 登入專屬請求形狀，與「建立員工帳號」的 staff_accountsRequest 分開——明文密碼只用於登入比對，不落地存儲。
+  required:
+  - loginId
+  - password
+  properties:
+    loginId:
+      type: string
+      description: 對應 staff_accounts.login_id；畫面與推播文案一律用「員工編號」。
+    password:
+      type: string
+      description: 明文密碼，後端以 bcrypt/argon2 雜湊後比對 staff_accounts.passwordHash，絕不回傳或落地明文。
+LoginResponse:
+  type: object
+  description: 登入成功的回應形狀，銜接 techstack 已拍板的 JWT（TTL 12h）。
+  required:
+  - token
+  - expiresAt
+  - staffId
+  - name
+  - role
+  - mustChangePassword
+  properties:
+    token:
+      type: string
+      description: JWT，後續請求帶 Authorization 標頭使用。
+    expiresAt:
+      type: string
+      format: date-time
+      description: token 到期時間，登入當下 + 12h。
+    staffId:
+      type: string
+      format: uuid
+    name:
+      type: string
+    dept:
+      type: string
+      nullable: true
+      description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+    role:
+      type: string
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+    mustChangePassword:
+      type: boolean
+      description: true 表示這是臨時密碼登入，必須先設定新密碼才能繼續使用；完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。

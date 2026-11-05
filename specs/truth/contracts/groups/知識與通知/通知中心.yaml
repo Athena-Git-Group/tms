@@ -1,0 +1,55 @@
+listNotifications:
+  get:
+    operationId: listNotifications
+    summary: 查看我的通知中心
+    description: >-
+      回傳呼叫者名下的通知清單，依 createdAt 新到舊排序。App 端依 createdAt 與目前日期分「今天」「更早」兩組顯示；
+      本端點本身不分組，只回單一排序好的清單。保留天數／過期政策待 /data-plan 於資料設計時定預設值，
+      不是本端點的行為。
+    tags:
+    - 通知中心 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/通知中心.yaml#/notifications'
+markNotificationRead:
+  post:
+    operationId: markNotificationRead
+    summary: 標記單則通知已讀
+    description: 只有該通知的收件人可以標記；標記後 readAt 寫入，不影響其他通知。重複標記為冪等，不報錯。
+    tags:
+    - 通知中心 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/NotificationId'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/通知中心.yaml#/notifications'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+markAllNotificationsRead:
+  post:
+    operationId: markAllNotificationsRead
+    summary: 全部標為已讀
+    description: 把呼叫者名下每一則通知的 readAt 都寫入目前時間；已經是已讀的不受影響，回傳標記後的完整清單（新到舊）。
+    tags:
+    - 通知中心 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/通知中心.yaml#/notifications'

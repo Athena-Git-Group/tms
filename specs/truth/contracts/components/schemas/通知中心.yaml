@@ -1,0 +1,39 @@
+notifications:
+  type: object
+  description: >-
+    員工可查詢、可標記已讀的持久通知清單；每筆對應一次推播事件的單一收件人紀錄（outbox kind=push 展開一人一封後落地）。
+    本 plan 新增：既有 outbox 只是一次性 relay 給推播消費者，沒有為每位收件人保留可查詢、可標已讀的清單。
+  required:
+  - id
+  - tenantId
+  - recipientStaffId
+  - title
+  - target
+  - createdAt
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    recipientStaffId:
+      type: string
+      format: uuid
+    title:
+      type: string
+      description: 推播標題全文，與 PushPayload.title 相同文案，例如「305 水電已修好」。
+    body:
+      type: string
+      nullable: true
+    target:
+      $ref: './shared.yaml#/PushTarget'
+    createdAt:
+      type: string
+      format: date-time
+      description: 收到時間；通知中心依這個時間新到舊排序，並以呼叫者所在時區的日期分「今天」「更早」兩組。
+    readAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: 標記已讀的時間；未讀為 null。

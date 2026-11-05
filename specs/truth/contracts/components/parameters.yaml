@@ -56,3 +56,11 @@ GuestRequestId:
   schema:
     type: string
     format: uuid
+NotificationId:
+  name: id
+  in: path
+  required: true
+  description: 通知中心單筆通知 id。
+  schema:
+    type: string
+    format: uuid

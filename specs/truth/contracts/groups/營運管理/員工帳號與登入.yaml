@@ -16,7 +16,14 @@ listStaffAccounts:
 staffAccountsLogin:
   post:
     operationId: staffAccountsLogin
-    summary: login
+    summary: 員工登入
+    description: >-
+      用員工編號（loginId）＋明文密碼登入，後端雜湊比對 staff_accounts.passwordHash，換發 JWT（TTL 12h）。
+      密碼錯誤或員工編號不存在一律回 401 credentials_invalid，提示「員工編號或密碼不正確」，不洩漏員工編號是否存在。
+      連續輸入錯誤密碼達 5 次鎖定 15 分鐘，鎖定期間即使密碼正確也回 429 account_locked
+      （context 帶 lockedUntil、remainingMinutes）。帳號停用（active=false）一律回 403 account_disabled，
+      即使密碼正確也不放行，歷史資料保留。臨時密碼登入成功仍回 200，body 的 mustChangePassword=true，
+      完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
     tags:
     - 員工帳號與登入 API
     requestBody:
@@ -24,15 +31,19 @@ staffAccountsLogin:
       content:
         application/json:
           schema:
-            $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accountsRequest'
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/LoginRequest'
     responses:
       '200':
         description: 成功
         content:
           application/json:
             schema:
-              $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accounts'
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/LoginResponse'
       '400':
         $ref: '../../components/responses.yaml#/BadRequest'
-      '409':
-        $ref: '../../components/responses.yaml#/Conflict'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '429':
+        $ref: '../../components/responses.yaml#/TooManyRequests'

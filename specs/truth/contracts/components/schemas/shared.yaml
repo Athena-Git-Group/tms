@@ -10,7 +10,14 @@ Error:
     photo_not_uploaded（422，有照片還沒上傳成功）；
     completion_photo_required（422，「需要完修照片」）；
     already_claimed（409，「已被工務認領」）；
-    ticket_closed（409，工務單已結案）。
+    ticket_closed（409，工務單已結案）；
+    credentials_invalid（401，「員工編號或密碼不正確」；員工編號不存在時提示相同，不洩漏是否存在）；
+    account_locked（429，context 帶 lockedUntil、remainingMinutes）；
+    account_disabled（403，帳號停用，即使密碼正確也被拒）；
+    reject_reason_required（422，主管退回工務單時原因空白）；
+    repair_source_missing（422，createRepairTicket 沒有提供 sourceTaskId、roomId 或 isPublicArea 任何一種來源）；
+    repair_source_conflict（422，同時提供 sourceTaskId 與 roomId 或 isPublicArea）；
+    room_ticket_not_requeueable（409，客房工務單不能放回工務待認領，只能暫停）。
     違反狀態機守衛時沿用 state_conflict（409）。
   required:
   - code
@@ -720,12 +727,19 @@ RepairTicketSummary:
     state:
       type: string
       enum:
+      - pending_review
+      - rejected
       - pool
       - accepted
       - doing
       - done
       - cancelled
-      description: 待認領、已接單、維修中、已完修、已撤回（cancelled 且原因為 staff_withdrew）。
+      description: >-
+        等主管審核、主管未核准、待認領、已接單、維修中、已完修、已撤回（cancelled 且原因為 staff_withdrew）。
+        pending_review／rejected 是本 plan 新增的狀態值，只有房務報修的一般件（非急件、tasks.source=staff
+        且帶 sourceTaskId）送出後會先進 pending_review；急件（不論來源）、工務自開、櫃檯交辦開單一律直接進 pool，
+        不經過審核。已完修（done）之後是否已驗收是另一組欄位（見 RepairTicket.verifiedBy／verifiedAt），
+        不新增獨立狀態值。
     reporterName:
       type: string
     createdAt:

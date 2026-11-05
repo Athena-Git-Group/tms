@@ -12,6 +12,8 @@ getMyToday:
       預估剩餘工時＝Σ（accepted、doing、deferred、interrupted 的本人任務）max(0, 預估分鐘 − 已做分鐘)。
       下一間推薦只列 accepted，排序為：redo 次數多的先、非打掃類先於打掃類、最後依房號遞增。
       連續零退回天數的計算定義待 clarify（FR-030）。
+      呼叫者是工務（dept=engineering）時另外回傳 engineeringSummary：手上張數（accepted／doing 的工務單數）、
+      今天已完修（今天 done 的工務單數）、急件數（手上單中 isUrgent 的數量）；非工務呼叫者這個欄位為 null。
     tags:
     - 員工工作台 API
     responses:
@@ -31,6 +33,8 @@ listDeptPool:
       與查詢者同樓層 → 房號遞增；未接超時的單彼此間只依房號排序，其餘維持既有排序。
       同樓層以查詢者本班排房負責的樓層判斷（推定，FR-032 NEEDS CLARIFICATION）。
       回應包含分類筆數；帶 category 時只回傳該類別，但 counts 仍回傳全部類別。
+      工務池另支援 urgent、source 兩個篩選維度：urgent=true 只回急件；source 只回該來源（staff_report＝
+      房務報修、desk_forward＝櫃檯），可與 category 並用；三者都可省略（全部）。
     tags:
     - 員工工作台 API
     parameters:
@@ -39,6 +43,18 @@ listDeptPool:
       required: false
       schema:
         $ref: '../../components/schemas/員工工作台.yaml#/PoolCategory'
+    - name: urgent
+      in: query
+      required: false
+      description: 只回急件（isUrgent=true）。
+      schema:
+        type: boolean
+    - name: source
+      in: query
+      required: false
+      description: 只回該來源，例如工務池的「房務報修」（staff_report）或「櫃檯」（desk_forward）。
+      schema:
+        $ref: '../../components/schemas/員工工作台.yaml#/PoolSource'
     responses:
       '200':
         description: 成功

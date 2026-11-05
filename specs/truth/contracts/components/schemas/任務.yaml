@@ -25,7 +25,7 @@ tasks:
       description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
     state:
       type: string
-      description: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled'
+      description: 'CHECK 十一值: triage|pending_review|rejected|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled（pending_review／rejected 為本 plan 新增：工務單審核流程專用）'
     eventSeq:
       type: integer
       format: int32
@@ -145,7 +145,7 @@ tasksRequest:
       description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
     state:
       type: string
-      description: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled'
+      description: 'CHECK 十一值: triage|pending_review|rejected|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled（pending_review／rejected 為本 plan 新增：工務單審核流程專用）'
     eventSeq:
       type: integer
       format: int32
@@ -222,6 +222,17 @@ CompleteTaskRequest:
     resolutionNote:
       type: string
       description: 處理說明，選填。判斷不需維修時在這裡註明，例如「不需維修：已重新設定門鎖，測試正常」。
+    resolutionType:
+      type: string
+      enum:
+      - fixed
+      - temporary
+      - cannot_fix
+      description: >-
+        處理結果，只對修繕任務（工務單）有意義；省略視為 fixed（已修好）。
+        temporary（暫時處理）：工務單仍轉 done，系統另外自動建立一張房號、類別都相同的追蹤單進工務待認領
+        （見 RepairTicket.originTicketNo）。cannot_fix（無法修復）：工務單轉 done，該房 rooms.hk_state
+        轉為 out_of_order（停用待確認）。
 CancelTaskRequest:
   type: object
   required:

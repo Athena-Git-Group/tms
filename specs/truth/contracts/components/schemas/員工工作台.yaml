@@ -42,6 +42,27 @@ MyToday:
       type: integer
       format: int32
       minimum: 0
+    engineeringSummary:
+      type: object
+      nullable: true
+      description: 只有工務部門（dept=engineering）的呼叫者才有值；其他部門為 null。本 plan 新增，供工務視角今日進度卡使用。
+      required:
+      - openCount
+      - completedToday
+      - urgentCount
+      properties:
+        openCount:
+          type: integer
+          format: int32
+          description: 手上張數：本人目前 accepted／doing 的工務單筆數。
+        completedToday:
+          type: integer
+          format: int32
+          description: 今天已完修：本人今天 done 的工務單筆數。
+        urgentCount:
+          type: integer
+          format: int32
+          description: 急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
 NextTask:
   type: object
   required:

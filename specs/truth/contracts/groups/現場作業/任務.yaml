@@ -126,8 +126,12 @@ tasksComplete:
       打掃任務：未勾也未跳過的 SOP 項記為跳過。開工時鎖定為免查的，直接轉 inspected、inspection=waived，
       PMS 回寫 occupied_clean（OC）；其他的轉 done 等查房。
       修繕任務（工務單）：photoIds 至少 1 張，否則回 422 completion_photo_required；resolutionNote 選填。
-      判斷不需維修也用完成結案，並在 resolutionNote 註明。
+      判斷不需維修也用完成結案，並在 resolutionNote 註明。resolutionType 選填（fixed／temporary／cannot_fix，
+      省略視為 fixed）：temporary 會自動建立追蹤單並進工務待認領；cannot_fix 會把房況轉為停用待確認
+      （rooms.hk_state=out_of_order）。
       工務單完成時推播報修人，連結的原任務停住原因改為「工務已修好：<類別>」，但原任務不自動恢復。
+      完修後的工務單新增「等主管驗收」子狀態（不開新狀態值，見 RepairTicket.verifiedBy／verifiedAt）；
+      主管驗收通過後呼叫 verifyRepairTicket。
     tags:
     - 任務 API
     parameters:

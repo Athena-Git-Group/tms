@@ -51,6 +51,10 @@ tags:
   description: 本 plan 新增。員工首頁的今日進度與下一間，以及依部門的待認領（排序、同樓層、分類篩選與筆數）。
 - name: 房間交辦 API
   description: 本 plan 新增。櫃檯房間備註與交辦已讀；合併後的交辦呈現在任務詳情。
+- name: 通知中心 API
+  description: >-
+    本 plan 新增。每位員工可查詢、可標記已讀的持久通知清單，承接所有推播事件（outbox 展開一人一封後落地），
+    不是只有通知板（公告）的已讀。
 paths:
   /alerts:
     $ref: './groups/營運管理/主管手動上報.yaml#/createAlerts'
@@ -174,6 +178,22 @@ paths:
     $ref: './groups/現場作業/工務單.yaml#/withdrawRepairTicket'
   /repair-tickets/{ticketId}/downgrade-urgency:
     $ref: './groups/現場作業/工務單.yaml#/downgradeRepairTicketUrgency'
+  /repair-tickets/{ticketId}/approve:
+    $ref: './groups/現場作業/工務單.yaml#/approveRepairTicket'
+  /repair-tickets/{ticketId}/reject:
+    $ref: './groups/現場作業/工務單.yaml#/rejectRepairTicket'
+  /repair-tickets/{ticketId}/resubmit:
+    $ref: './groups/現場作業/工務單.yaml#/resubmitRepairTicket'
+  /repair-tickets/{ticketId}/verify:
+    $ref: './groups/現場作業/工務單.yaml#/verifyRepairTicket'
+  /repair-tickets/{ticketId}/release-to-pool:
+    $ref: './groups/現場作業/工務單.yaml#/releaseRepairTicketToPool'
+  /notifications:
+    $ref: './groups/知識與通知/通知中心.yaml#/listNotifications'
+  /notifications/{id}/read:
+    $ref: './groups/知識與通知/通知中心.yaml#/markNotificationRead'
+  /notifications/read-all:
+    $ref: './groups/知識與通知/通知中心.yaml#/markAllNotificationsRead'
   /me/today:
     $ref: './groups/現場作業/員工工作台.yaml#/getMyToday'
   /pool:
@@ -212,6 +232,8 @@ components:
       $ref: './components/parameters.yaml#/AnswerId'
     EscalationId:
       $ref: './components/parameters.yaml#/EscalationId'
+    NotificationId:
+      $ref: './components/parameters.yaml#/NotificationId'
   schemas:
     Error:
       $ref: './components/schemas/shared.yaml#/Error'
@@ -369,6 +391,14 @@ components:
       $ref: './components/schemas/工務單.yaml#/UrgentJudgement'
     DowngradeRepairTicketUrgencyRequest:
       $ref: './components/schemas/工務單.yaml#/DowngradeRepairTicketUrgencyRequest'
+    RejectRepairTicketRequest:
+      $ref: './components/schemas/工務單.yaml#/RejectRepairTicketRequest'
+    LoginRequest:
+      $ref: './components/schemas/員工帳號與登入.yaml#/LoginRequest'
+    LoginResponse:
+      $ref: './components/schemas/員工帳號與登入.yaml#/LoginResponse'
+    notifications:
+      $ref: './components/schemas/通知中心.yaml#/notifications'
     MyToday:
       $ref: './components/schemas/員工工作台.yaml#/MyToday'
     NextTask:
