@@ -442,6 +442,10 @@ class EngineeringSummary {
     required this.urgentCount,
   });
 
+  /// 三格都是 0 的彙總，給「回應裡沒有工務彙總」的呼叫端當顯示值用。
+  static const EngineeringSummary none =
+      EngineeringSummary(openCount: 0, completedToday: 0, urgentCount: 0);
+
   /// 手上張數：本人目前 accepted／doing 的工務單筆數。
   final int openCount;
 

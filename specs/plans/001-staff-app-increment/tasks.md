@@ -954,7 +954,11 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 產品碼只動 `app/mobile/lib/features/home/home_screen.dart`：四格＋連續零退回天數，抽一個 `_ProgressCell`。實跑打出一個真行為：把格子名稱和值放進同一個 `TmsSemantics` 時，節點的 label 會變成「顯式 label ＋子節點文字」兩段（讀到 `2 / 7\n打掃完成／總數 2 / 7`），所以名稱改放在 id 節點外面當兄弟節點，掛 id 的節點只包住值。
   - 測試層修正三筆，都是 fixture 表達不出背景狀態的真缺陷：(1) `BackendChannel.createTask` 不支援「已取消」「已延後」，補走正式端點的 `cancel`（原因 `manager_void`）與 `defer`；(2)「查房通過」與「完成 · 免查房」原本都只落 `state=inspected`，但今日進度的「查房通過」那格只數 `inspection='passed'`，補成兩條路（免查房照正式流程先鎖 `inspection_waived`，由產品碼自己落成 waived）；(3)「名下有以下任務」的表新增吃「類別／預估分鐘／重做次數」三欄（`tasks.type`／`est_min`／`redo_count`），否則臨時需求、剩餘工時、推薦順序都沒有真相可算。另外 `seedTasks` 把「終點就是進行中」的那筆挪到最後才建——後端「一次只做一間」會讓排在它後面、需要經過開工的狀態拿到 409 `doing_task_exists`，而表上的順序本來就只是在描述一組狀態。
   - 回歸：`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`；`run-module.sh 任務執行` `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`，與 T329 基準逐場景一致（延後與中斷原因面板 9/9 綠，紅的 9 個仍是 T326 那批，身分與歸因不變）。
-- [ ] T331 [BDD-REFACTOR] 在綠燈下整理進度環與今日進度四格的資料繫結，與 Phase 3P 的工務首頁彙總共用同一個 `MyToday` 取用路徑
+- [X] T331 [BDD-REFACTOR] 在綠燈下整理進度環與今日進度四格的資料繫結，與 Phase 3P 的工務首頁彙總共用同一個 `MyToday` 取用路徑
+  - 取用路徑收斂成 `MyTodayScope`（`app/mobile/lib/features/today/my_today_scope.dart`）：一個 `InheritedWidget`，在畫面樹上層取一次 `GET /me/today`，底下用 `MyTodayScope.todayOf(context)` 讀同一份資料、`errorOf(context)` 讀失敗原因。房務首頁與工務首頁原本各自在 `initState` 呼叫、各自用一套狀態欄位解構，現在兩邊同一條路；兩邊的差異（房務首頁載入失敗不佔版面、工務首頁要顯示一行提示）由各自的讀取端分支表達，不進共用元件。兩個首頁都因此從 `StatefulWidget` 變回 `StatelessWidget`。
+  - 進度格子只合併真正共用的那一層：`ProgressValue`（`app/mobile/lib/features/today/progress_value.dart`）保證「掛 id 的節點讀出來剛好是值本身」——值顯式放進 `TmsSemantics` 的 label、底下的文字用 `ExcludeSemantics` 擋掉自己的節點。這是兩邊各自踩過、各自寫了一套解法的同一件事（名稱包進去會讀到兩段、文字沒擋掉會讀到「2\n2」），收成一處並把理由講完整。外層排版不合併：房務是「名稱　值」一行、工務是「大字數值在上、名稱在下」，兩種版型沒有共同的視覺語意，硬塞進同一個元件只會多一個切版旗標。
+  - 工務首頁的單卡清單抽成 `_InHandTickets`，由它自己接 `MyTodayScope` 的資料後逐張打工務單詳情。「待認領」入口因此仍是永遠在的兄弟節點，不會被今日進度的載入結果連坐。另外把工務彙總缺值時那組寫死的 0 收成 `EngineeringSummary.none`，並清掉 T330 留下的失效註解（首頁 class 註解還寫著「只渲染一行文字證明資料線接通」、`F1 R1` 這類沒有白話說明的內部代號）。
+  - 驗收：`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4；三個基準重構前後逐項一致——`首頁今日進度.feature` `Tests run: 3, Failures: 0, Errors: 0, Skipped: 0`、`工務視角.feature` `Tests run: 13, Failures: 8, Errors: 0, Skipped: 0`（紅的 8 個場景身分與失敗訊息不變，全是等不到 `engHome.in-hand.{單號}.card`／`engPool.item.W-0501.claim-button`）、`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`。
 
 ## Phase 3V: ADD Feature File - ios-app/房間交辦（兩支）
 
