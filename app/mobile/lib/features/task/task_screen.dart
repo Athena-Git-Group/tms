@@ -196,6 +196,153 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
+  /// 交辦來源的畫面用詞。對照表出自 `房間交辦/dsl.md` 的「來源」欄，與後端
+  /// `HandoverEntry.kind` 的 enum 一對一。
+  static String _handoverSourceText(String kind) {
+    switch (kind) {
+      case 'shift_handover':
+        return '交班單';
+      case 'desk_note':
+        return '櫃檯備註';
+      case 'requeue_progress':
+        return '接手進度';
+      case 'manager_note':
+        return '主管交代';
+      default:
+        return kind;
+    }
+  }
+
+  static String _hhmm(DateTime at) {
+    return '${at.hour.toString().padLeft(2, '0')}:'
+        '${at.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 查房退回資訊：標題與原因分兩行顯示，底下再加一行操作提示。
+  ///
+  /// 標題與原因的文字都來自後端的 `returnInfo.summary`，App 只負責把它切成兩段
+  /// 排版——不合格項是哪一項、第幾次重做、為什麼換人，都是後端說了算。第三行的
+  /// 操作提示則是畫面自己的話：退回重做時計時與 SOP 勾記都歸零了，員工需要在
+  /// 這裡被告知接下來要做什麼。
+  Widget _buildReturnInfo(ReturnInfo info) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: TmsSemantics(
+        id: 'task.status-row.return-info',
+        explicitChildNodes: true,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFDECEC),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TmsSemantics(
+                id: 'task.status-row.return-info.title',
+                child: Text(
+                  info.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 4),
+              TmsSemantics(
+                id: 'task.status-row.return-info.reason',
+                child: Text(info.reason),
+              ),
+              const SizedBox(height: 4),
+              const TmsSemantics(
+                id: 'task.status-row.return-info.body',
+                child: Text('計時與 SOP 勾記已歸零，請重做不合格的項目後再送出。'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 交辦區：後端已經把交班單、櫃檯備註、接手進度併成一份清單，這裡照順序逐則
+  /// 顯示「來源 · 作者 · 時間」與內容。
+  ///
+  /// 沒看過的交辦在區塊標頭掛一個未讀圓點（`task.handover.unread-dot`）——未讀
+  /// 在畫面上只有這個視覺記號，不寫「未讀」兩個字。已讀與否以後端的
+  /// `handoverRead` 為準：開工那一刻後端自己記下已讀，所以按完「開始」拿回來的
+  /// 任務就不再帶圓點。
+  Widget _buildHandovers(TaskDetail task) {
+    final rows = <Widget>[];
+    for (var i = 0; i < task.handovers.length; i++) {
+      final entry = task.handovers[i];
+      final meta = <String>[
+        _handoverSourceText(entry.kind),
+        entry.author,
+        if (entry.at != null) _hhmm(entry.at!),
+      ].join(' · ');
+      rows.add(
+        Padding(
+          padding: EdgeInsets.only(top: i == 0 ? 8 : 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TmsSemantics(
+                id: 'task.handover.$i.meta',
+                child: Text(meta, style: const TextStyle(fontSize: 13)),
+              ),
+              const SizedBox(height: 2),
+              TmsSemantics(
+                id: 'task.handover.$i.content',
+                child: Text(entry.content),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: TmsSemantics(
+        id: 'task.handover.callout',
+        explicitChildNodes: true,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7E0),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('交辦'),
+                  if (!task.handoverRead) ...[
+                    const SizedBox(width: 6),
+                    TmsSemantics(
+                      id: 'task.handover.unread-dot',
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFD9342B),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              ...rows,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTask(TaskDetail? task) {
     final showResumeBanner = task != null &&
         task.state == 'interrupted' &&
@@ -256,6 +403,8 @@ class _TaskScreenState extends State<TaskScreen> {
               ),
             ),
           ),
+        if (task?.returnInfo != null) _buildReturnInfo(task!.returnInfo!),
+        if (task != null && task.handovers.isNotEmpty) _buildHandovers(task),
         // 停住原因只在任務真的停住時有值，所以沒有原因就整列不畫。不另外指定
         // label：文字本身就是子節點的 label，顯式再給一次會被接成兩份。
         if (task?.holdReason != null)

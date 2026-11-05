@@ -712,8 +712,74 @@ class NotificationItem {
   }
 }
 
-/// `TaskDetail`：任務頁需要的最小欄位集（契約還有 SOP 勾記、交辦、查房
-/// 退回等欄位，等對應畫面實作時再補進來，不預先鋪沒人讀的欄位）。
+/// `HandoverEntry`：任務頁交辦區的一則交辦。四個欄位全部來自後端——它已經把
+/// 交班單、櫃檯備註、接手進度三個來源併成同一份清單，App 只負責照單呈現。
+class HandoverEntry {
+  const HandoverEntry({
+    required this.kind,
+    required this.author,
+    required this.content,
+    this.at,
+  });
+
+  /// 來源，照契約 enum：shift_handover｜desk_note｜requeue_progress｜manager_note。
+  final String kind;
+
+  /// 寫下這則交辦的人。
+  final String author;
+
+  /// 交辦內容。
+  final String content;
+
+  /// 寫下的時刻；交班單以外的來源不一定有。
+  final DateTime? at;
+
+  factory HandoverEntry.fromJson(Map<String, dynamic> json) {
+    final at = json['at'] as String?;
+    return HandoverEntry(
+      kind: json['kind'] as String? ?? '',
+      author: json['author'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      at: at == null ? null : DateTime.parse(at).toLocal(),
+    );
+  }
+}
+
+/// `ReturnInfo`：查房退回後要給接手的人看的那段說明。
+///
+/// 後端把「不合格項」「第幾次重做」「為什麼換人」合成一句 [summary]，依序以
+/// ` · ` 串接，第一段是標題（查房退回：{SOP 項全名}不合格），其餘合起來是原因
+/// （第 N 次重做，換人時再接換人原因）。任務頁要把這兩段分行顯示，所以在這裡
+/// 就地切開——切法與後端組字的規則同一套，App 不自己重組任何一段文字。
+class ReturnInfo {
+  const ReturnInfo({required this.summary});
+
+  final String summary;
+
+  /// 標題段：`查房退回：換床單鋪床不合格`。
+  String get title => summary.split(' · ').first;
+
+  /// 原因段：`第 1 次重做 · 原清房者小林已下班，改由您接手`。原因本身內部也用
+  /// ` · ` 接，所以只切第一刀，不把原因再拆開。
+  String get reason {
+    final cut = summary.indexOf(' · ');
+    return cut < 0 ? '' : summary.substring(cut + 3);
+  }
+
+  static ReturnInfo? fromJson(Object? json) {
+    if (json is! Map<String, dynamic>) {
+      return null;
+    }
+    final summary = json['summary'] as String?;
+    if (summary == null || summary.isEmpty) {
+      return null;
+    }
+    return ReturnInfo(summary: summary);
+  }
+}
+
+/// `TaskDetail`：任務頁需要的最小欄位集（契約還有 SOP 勾記等欄位，等對應畫面
+/// 實作時再補進來，不預先鋪沒人讀的欄位）。
 class TaskDetail {
   const TaskDetail({
     required this.id,
@@ -726,6 +792,9 @@ class TaskDetail {
     this.elapsedMinutes = 0,
     this.holdReason,
     this.deferredBySelf = false,
+    this.handovers = const <HandoverEntry>[],
+    this.handoverRead = false,
+    this.returnInfo,
   });
 
   final String id;
@@ -754,6 +823,15 @@ class TaskDetail {
   /// 已經被拿掉，任務頁不給「開始」。
   final bool deferredBySelf;
 
+  /// 合併後的交辦清單，順序照後端給的順序。
+  final List<HandoverEntry> handovers;
+
+  /// 這位員工看過這張任務的交辦了沒有。開工那一刻後端會自己記下已讀。
+  final bool handoverRead;
+
+  /// 查房退回資訊；不在退回重做中的任務為 null。
+  final ReturnInfo? returnInfo;
+
   factory TaskDetail.fromJson(Map<String, dynamic> json) {
     return TaskDetail(
       id: json['id'] as String,
@@ -766,6 +844,12 @@ class TaskDetail {
       elapsedMinutes: json['elapsedMinutes'] as int? ?? 0,
       holdReason: json['holdReason'] as String?,
       deferredBySelf: json['deferredBySelf'] as bool? ?? false,
+      handovers: (json['handovers'] as List<dynamic>? ?? <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(HandoverEntry.fromJson)
+          .toList(),
+      handoverRead: json['handoverRead'] as bool? ?? false,
+      returnInfo: ReturnInfo.fromJson(json['returnInfo']),
     );
   }
 }

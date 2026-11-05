@@ -477,6 +477,18 @@ public class AppiumWorld {
                 .toList();
     }
 
+    /**
+     * 讀某個 accessibility id 節點目前的 label；元素不在畫面上時回 null。
+     *
+     * <p>給「要先掃出畫面上有哪些同類元素、再逐個讀值」的列表斷言用；期待值在掃之前
+     * 還不知道是哪一個，所以不能用 {@link #waitForLabelOf}（那支要先給期待值才等得了）。
+     * 呼叫端自己負責先等列表出現，再逐個讀。
+     */
+    public String labelOf(String id) {
+        List<WebElement> found = driver().findElements(byTestId(id));
+        return found.isEmpty() ? null : found.get(0).getAttribute("label");
+    }
+
     /** 查本情境已建立的員工；查不到直接噴錯——場景引用沒建過的員工是劇本錯誤，不是可忽略情況。 */
     public BackendChannel.CreatedStaff staff(String name) {
         BackendChannel.CreatedStaff staff = staffByName.get(name);
@@ -485,6 +497,22 @@ public class AppiumWorld {
                     "員工「" + name + "」尚未建立——場景是否漏了背景句「飯店有以下員工」？");
         }
         return staff;
+    }
+
+    /**
+     * 本情境唯一那位主管。查房判定只有主管身分送得出去（後端的角色×動作矩陣），但
+     * 「後端的 X 是 … 不合格 … 的單」這句的參數裡沒有查房者——劇本在背景已經建好一位
+     * 主管，就以那一位為準。沒有或不只一位時直接噴錯，不默默挑一個頂上。
+     */
+    public BackendChannel.CreatedStaff onlyManager() {
+        List<BackendChannel.CreatedStaff> managers = staffByName.values().stream()
+                .filter(s -> "manager".equals(s.role()))
+                .toList();
+        if (managers.size() != 1) {
+            throw new IllegalStateException("本情境有 " + managers.size()
+                    + " 位主管，無法推定查房者；背景「飯店有以下員工」需要剛好一位部門為「主管」的員工");
+        }
+        return managers.get(0);
     }
 
     /**

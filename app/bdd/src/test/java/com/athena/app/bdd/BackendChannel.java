@@ -17,6 +17,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -449,6 +450,92 @@ public class BackendChannel {
     public void setRedoCount(UUID taskId, int redoCount) {
         execute("UPDATE tasks SET redo_count = ? WHERE tenant_id = ? AND id = ?",
                 redoCount, ensureTenant(), taskId);
+    }
+
+    /**
+     * 凍結一張交班單，裡面只有一則指定對象的項目（欄位對照 tms {@code HandoverFixtures}：
+     * {@code snapshot} 是 {@code [{target, content, authorName}, …]}，{@code generated_by}
+     * 固定 {@code system}）。交班單沒有建立端點——它是班末掃描凍結出來的快照，所以直接落地。
+     *
+     * <p>{@code dept} 要和任務同部門：任務詳情的交辦是以「同部門交班單中對象＝這間房的項目」
+     * 併進來的（{@code HandoverService.handoversOf}），部門對不上就一則也併不進去。
+     * {@code shift} 只是標籤，沒有任何斷言比對它，用時刻的上下午粗分即可（同 tms 的作法）。
+     */
+    public void freezeHandoverItem(
+            String deptCode, OffsetDateTime frozenAt, String target, String content, String authorName) {
+        String shift = frozenAt.toLocalTime().isBefore(LocalTime.NOON) ? "morning" : "evening";
+        String snapshot = toJson(List.of(
+                Map.of("target", target, "content", content, "authorName", authorName)));
+        execute("""
+                INSERT INTO handovers
+                    (id, tenant_id, dept, shift, work_date, snapshot, generated_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?::jsonb, 'system', ?)
+                """, UUID.randomUUID(), ensureTenant(), deptCode, shift, frozenAt.toLocalDate(),
+                snapshot, frozenAt);
+    }
+
+    /**
+     * 以查房者身分判定某一項不合格（走正式的 {@code POST /inspections}）。後端要求判定要
+     * 涵蓋租戶查房項目全集，所以這裡先把全集讀出來，指定那一項落 false、其餘 true。
+     *
+     * <p>情境點名的項目（例如「換床單鋪床」）不一定在租戶的查房項目裡——每個情境開場會
+     * TRUNCATE 全部業務表（{@link #resetBusinessData}），{@code sop_items} 也在其中，所以
+     * 這裡現場補一筆再判定。權威來源仍然是 {@code sop_items}，不是繞過它直接竄改
+     * {@code inspections} 的結果。
+     */
+    public void failInspection(UUID taskId, CreatedStaff inspector, String failedItemLabel) {
+        long tenantId = ensureTenant();
+        String failKey = ensureInspectionItem(tenantId, failedItemLabel);
+        List<Map<String, Object>> items = queryRows(
+                "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection'"
+                        + " AND active = true ORDER BY sort_order", tenantId)
+                .stream()
+                .map(row -> Map.<String, Object>of(
+                        "key", row.get("item_key"),
+                        "pass", !failKey.equals(row.get("item_key"))))
+                .toList();
+
+        Map<String, Object> body = Map.of("taskId", taskId.toString(), "items", items);
+        HttpResponse<String> response = send(request("POST", "/inspections", jwt(inspector))
+                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("fixture 查房判定失敗：POST /inspections -> HTTP "
+                    + response.statusCode() + "，body=" + response.body());
+        }
+    }
+
+    private String ensureInspectionItem(long tenantId, String label) {
+        Optional<Object> existing = queryScalar(
+                "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' AND label = ?",
+                tenantId, label);
+        if (existing.isPresent()) {
+            return String.valueOf(existing.get());
+        }
+        String itemKey = "adhoc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        execute("""
+                INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at)
+                VALUES (?, ?, 'inspection', ?, ?, 999, true, ?)
+                """, UUID.randomUUID(), tenantId, itemKey, label, OffsetDateTime.now());
+        return itemKey;
+    }
+
+    /**
+     * 班末換人的落地結果：把查房退回重做的單改掛給接手人，並把退池來源記成班末退池
+     * （{@code tasks.pool_source = shift_end_return}）——退回資訊裡那句「原清房者 X 已下班，
+     * 改由您接手」就是後端從這個欄位推導出來的（{@code HandoverService.returnInfoOf}）。
+     *
+     * <p>為什麼直接落地而不走端點：產品上這是班末掃描 job 的結果，main 還沒有這個 job，
+     * 也沒有任何「把單改派給誰」的員工端或主管端端點（後端自己的 BDD 同一句 Given 走
+     * {@code JobTrigger}，固定丟 UnsupportedOperationException）。退回重做時後端自動退池
+     * 的那條路（{@code TaskEngine.returnToPool}）也沒有寫 {@code pool_source}，所以就算
+     * 讓原清房者真的不在班上，換人原因一樣生不出來。見 tasks.md 末節的上游缺口。
+     */
+    public void reassignAfterShiftEnd(UUID taskId, CreatedStaff successor) {
+        execute("UPDATE tasks SET state = 'accepted', assignee_id = ?, pool_source = 'shift_end_return',"
+                        + " updated_at = ? WHERE tenant_id = ? AND id = ?",
+                successor.id(), OffsetDateTime.now(), ensureTenant(), taskId);
     }
 
     /**

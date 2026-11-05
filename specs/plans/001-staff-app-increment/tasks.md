@@ -980,7 +980,12 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/房間交辦/任務頁交辦區.feature`
 - `specs/truth/features/ios-app/房間交辦/查房退回資訊.feature`
 
-- [ ] T332 [BDD-GREEN] 讓 Test Scope 全綠（5 個場景）
+- [X] T332 [BDD-GREEN] 讓 Test Scope 全綠（5 個場景）
+  - 5/5 綠（2026-11-06，連兩次執行結果一致：`Tests run: 5, Failures: 0, Errors: 0, Skipped: 0`）。任務頁多了兩個區塊：交辦區照後端已經併好的 `handovers` 逐則畫「來源 · 作者 · 時間」與內容，退回資訊照 `returnInfo.summary` 畫標題、原因、操作提示三行。兩邊的文字都由後端說了算——交辦的三個來源（交班單、櫃檯備註、接手進度）是後端合併的，退回那句不合格項與換人原因也是後端組的，App 只負責切段排版。
+  - 退回資訊的切段與後端組字規則同一套：`summary` 以 ` · ` 串接，第一段是標題（`查房退回：{SOP 項全名}不合格`），其餘合起來是原因（`第 N 次重做 · 原清房者 X 已下班，改由您接手`），所以只切第一刀，不把原因內部的 ` · ` 再拆開（與 tms `HandoverThenSteps` 的 `split(" · ", 2)` 同口徑）。不合格項帶的是 SOP 項全名，因為它本來就是後端從 `sop_items.label` 還原出來的動態值。
+  - 未讀只有一顆圓點（`task.handover.unread-dot`），畫面上沒有「未讀」兩個字；已讀與否一律以 `handoverRead` 為準，按下「開始」後後端在同一個交易裡記下已讀並在回應帶回 `handoverRead=true`，畫面換成那一筆就自然不再有圓點，App 不自己猜。換人原因不另列一條主管交代——後端早就把它併進退回資訊了，交辦清單裡本來就沒有 `manager_note`。
+  - 測試層新增三筆 fixture，都是背景狀態在既有入口表達不出來的：(1) `freezeHandoverItem` 直接落地 `handovers` 一列（交班單是班末凍結出來的快照，沒有建立端點，欄位對照 tms `HandoverFixtures`）；(2) `failInspection` 走正式的 `POST /inspections`，判定前先確認情境點名的查房項目存在——每個情境開場 TRUNCATE 全部業務表，`sop_items` 也在其中，所以「換床單鋪床」要現場補一筆，權威來源仍是 `sop_items`；(3) `reassignAfterShiftEnd` 落地班末換人的結果，理由見上游缺口 #21。另外 `AppiumWorld` 補了 `onlyManager()`（查房者在 DSL 句型裡沒有參數，取背景唯一那位主管）與 `labelOf()`（列表類斷言要先掃出有哪些項目才知道該讀誰，`waitForLabelOf` 得先給期待值）。
+  - 回歸：`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`；`run-module.sh 今日進度`（`首頁今日進度.feature`）`Tests run: 3, Failures: 0, Errors: 0, Skipped: 0`。`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）。
 - [ ] T333 [BDD-REFACTOR] 在綠燈下整理交辦 callout 與狀態列退回資訊兩個區塊的共用版面元件
 
 ## Phase 3W: ADD Feature File - ios-app/查一下/查一下畫面.feature
@@ -1041,7 +1046,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 20 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#20 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
+以下 22 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#22 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1063,3 +1068,5 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 18. **`GET /sop-items` 後端未實作（T326 實跑發現，2026-11-06）**：契約 `openapi.yaml:119` 有 `/sop-items`（`listSopItems`），但 `tms/` 沒有任何 controller 掛這條路由（全專案 grep `sop-items` 無結果），而 `TaskDetail.checkedSopItems` 只給 id、不給名稱，App 沒有任何方式取得「擦拭桌面與鏡面」這類 SOP 項名稱來畫清單與勾／跳過——在缺口 #12 之後接著擋住 Phase 3S 的 2 個 SOP 場景。回交後端實作 `listSopItems`。
 19. **延後／中斷面板的預設原因文字兩份規格不一致，面板元素也沒有命名 accessibility id（T328 實跑發現，2026-11-06）**：`ui-plan.md:110` 寫「缺備品去拿」與「其他」，`任務執行/dsl.md` 與 `延後與中斷原因面板.feature` 寫「缺備品，去拿」與「其他原因」；原因文字同時是送到後端的 `hold_reason` 內容與測試指認選項的依據，兩份不同會讓實作與驗收各挑一份。本次以 truth feature 的寫法為準落地。另外 `ui-plan.md` 的 accessibility id 表沒有延後／中斷面板任何一列，本次自行命名 `hold.reason.{原因}`、`hold.other-reason-field`、`hold.char-count`、`hold.confirm-button`、`task.defer-button`、`task.interrupt-button`、`task.status-row.hold-reason`。回交 `/ui-plan`：統一原因文字，並把這七個 id 補進約定表。
 20. **`MyToday.zeroReturnStreakDays` 後端寫死 0（T330 實跑發現，2026-11-06）**：契約要求這個欄位，`TaskExecutionService.myToday` 的 Javadoc 也明寫「連續零退回天數的計算定義尚未拍板，先固定回 0」，回應裡永遠是 0。`首頁今日進度.feature` 自己帶著 `[need clarification]`（以有出勤的工作日連續計還是日曆日？當天有一筆退回就歸零嗎？），場景只驗「首頁顯示得出這個數值且與後端一致」，所以本輪綠燈成立，但畫面上的數字目前沒有業務意義。回交 `/dsl-refine` 定義口徑 → 後端實作計算。與缺口 #1（這塊的視覺規格待補）同一處畫面。
+21. **班末換人沒有任何可走的路徑，自動退池也不記 `pool_source`（T332 實跑發現，2026-11-06）**：退回資訊的換人原因（`原清房者 X 已下班，改由您接手`）是 `HandoverService.returnInfoOf`（`tms/.../handover/HandoverService.java:222`）從 `tasks.pool_source = 'shift_end_return'` 推導的，但後端生不出這個值——(a) 班末掃描 job 不存在（後端自己的同義 Given 走 `JobTrigger`，固定丟 `UnsupportedOperationException`），也沒有任何「把單改派給誰」的員工端或主管端端點；(b) 查房退回時原清房者不在班上的那條自動退池（`InspectionService:104` → `TaskEngine.returnToPool:265`）只改 `state` 與 `assignee_id`，整句 UPDATE 沒碰 `pool_source`，所以就算真的讓原清房者下班，換人原因一樣是 null。App 的 fixture 因此只能直接落地這個結果（`BackendChannel.reassignAfterShiftEnd`）。回交後端：`returnToPool` 補寫 `pool_source`，並補上班末掃描換人的 job（或端點）。
+22. **交辦區與退回資訊的分欄 accessibility id 不在 ui-plan 的約定表（T332 實跑發現，2026-11-06）**：`ui-plan.md:263-266` 只列了 `task.handover.{index}.meta`（來源／作者／時間）與 `task.status-row.return-info`（整塊），但 truth 的驗法是逐欄——交辦要分別驗「來源／作者／時間」與「內容」，退回資訊要分別驗標題、原因、操作提示內文，整塊只有一個 id 時三段會被讀成一串、驗不出是哪一段不對。本次自行命名 `task.handover.{index}.content`、`task.handover.callout`、`task.status-row.return-info.title`、`task.status-row.return-info.reason`、`task.status-row.return-info.body`。回交 `/ui-plan` 補進約定表。同一類問題見缺口 #19。
