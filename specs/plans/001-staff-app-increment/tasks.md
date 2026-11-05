@@ -5,6 +5,8 @@
 
 本輪承接 commit `6fff7c7`（owner `/dsl-refine`）落下的四項裁決：A「待接池／待接」全面改「待認領」、B 廢 L1/L2/L3＋`due_at` 升級鏈改「未接超時」兩段提醒、C 急件改系統判定、D 新增 4 支 ios-app feature；以及 10 筆用語落差。上一輪 T165–T203（116 場景全綠，commit `175ca16`）已完成之前的 truth 內容，本輪只處理 `truth-delta.md` `/dsl-refine` 段新增的列。
 
+T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 起新增的 Phase 1c／2c／3H–3M 承接 `truth-delta.md` `/dsl-refine` 段「第二輪」（commit `4e7f9dd`：登入帳號、通知中心、工務視角三缺口）、「第三輪」（commit `bd9ab9a`：櫃檮直通工務）、「第四輪」（commit `d27487b`：主管審核與驗收），以及對應解鎖的 `/api-plan`（commit `42683ae`）、`/data-plan`（commit `fdb5a2e`）內容，全部範圍為 backend。
+
 ## Task Binding Contract
 
 - 每個**開發任務**都必須對應 `truth-delta.md` 中 `/dsl-refine` 段的 ADD / MODIFY / DELETE 語意。
@@ -326,3 +328,274 @@
 
 - [X] T238 [BDD-GREEN] 讓 Test Scope 全綠
 - [X] T239 [BDD-REFACTOR] 在綠燈下檢查 `myToday` 方法的欄位計算是否可共用既有迴圈變數命名與註解風格，無重複邏輯則 NOOP（NOOP：風格一致、無重複邏輯）
+
+## Scope Note（本輪新增範圍：登入／通知中心／工務視角／審核與驗收，全部 backend）
+
+本輪承接 `truth-delta.md` `/dsl-refine` 段「第二輪」「第三輪」「第四輪」（commit `4e7f9dd`、`bd9ab9a`、`d27487b`）落下的七項缺口，以及 `/api-plan`（commit `42683ae`）、`/data-plan`（commit `fdb5a2e`）的對應解鎖：登入帳號、通知中心、工務視角（直開、放回、池篩選、首頁彙總）、櫃檮直通工務、工務單審核與驗收、完修三選一。
+
+**ios-app 本輪不產生 Feature phase，原因與上一輪不同（記錄取捨，供下一輪 `/tasks` 檢視）**：上一輪排除 ios-app 的理由是「App 不在本 repo、Appium 尚未落地」；該理由已不成立——`app/mobile/`、`app/bdd/` 現已存在且 F3 推播金絲雀已 Appium 真跑 12/12 綠。本輪改為範圍取捨：orchestrator 本輪指派的背景（七項缺口、5 個新端點、`/data-plan` 8 列遷移清單）全部指向 backend／data 側，`truth-delta.md` 第二～四輪新增的 ios-app feature（`帳號與登入/登入與登出守衛.feature`、`推播/通知中心.feature`、`工務單/工務視角.feature` 的對應 App 行為）本輪未排入——這不是「DSL 無法唯一承接」而是本輪任務邊界的取捨，下一輪 `/tasks` 應針對 ios-app 這批 ADD feature 另開一輪 Phase 3/4（沿用本輪 backend 已解鎖的 contracts）。
+
+**task_events 新增 4 個事件型別（`repair_approved`／`repair_rejected`／`repair_resubmitted`／`repair_verified`）盤點結果：不回交 `/dsl-refine`**——`backend/工務單/dsl.md` 本輪已有對應的 4 個 When／3 個 Then 句型（`"{主管}" 核准`、`"{主管}" 以原因退回`、`"{員工}" 補資料再送出`、`"{主管}" 驗收通過`；`"{單號}" 的退回原因為`、`"{單號}" 已由驗收`、`"{單號}" 尚未驗收`），一一對應這 4 個事件型別，唯一 DSL 定義存在，收斂進下方 Phase 2c。`task_events.type` 本身依 V5 既有決定不加 CHECK，故無對應 migration task。
+
+**`backend/工務單/dsl.md`、`backend/帳號與登入/dsl.md` 多處仍殘留「待 `/api-plan` 補」字樣的取捨**：這些句型是 `/dsl-refine` 在 `/api-plan` 解鎖前寫的，字面上還沒更新；但逐一核對後，這些句型預先假設的欄位名與端點（`LoginRequest{loginId,password}`、`approveRepairTicket` 等 4 端點、`RepairTicket.rejectReason`/`verifiedBy`/`verifiedAt`）與 `truth-delta.md` `/api-plan` 段落已解鎖的實際契約逐字相符，判斷為唯一 DSL 定義仍成立、只是文件未來得及回頭補一輪 `/dsl-refine` 清掉「待」字樣，不構成停止條件。下方各 Feature phase 的 `Shared Must Read` 另外列出對應 `specs/truth/contracts/**` 檔案，供 subagent 核對確切欄位名稱。
+
+## Phase 1c: Foundational（登入鎖定／通知中心／審核驗收的資料側骨架）
+
+**Goal**: 只建立 Phase 2c／3H–3M 會用到的資料結構與 stepdef 落點骨架，不寫判定規則或業務邏輯。比照 T204、T226 先例：封閉結構變動（新欄位、新表、CHECK 擴值）先進 Foundational 當機械補遺。
+
+- [ ] T240 新增 `V15__staff_account_login_lockout.sql`：`staff_accounts` 補 `must_change_password`／`failed_login_count`／`locked_until` 三欄
+  - Read:
+    - `truth-delta.md` -> `/api-plan` 行 79–82（`LoginRequest`／`LoginResponse`／`staff_accounts.mustChangePassword`等）、`/data-plan` 行 131（`staff_accounts` 新增三欄）
+    - `specs/truth/data/data-model.dbml` -> `staff_accounts.must_change_password`／`failed_login_count`／`locked_until` 欄位定義、型別、預設值、nullable
+    - `tms/src/main/resources/db/migration/V11__staff_account_status.sql` -> 對 `staff_accounts` 加欄位的既有寫法慣例
+  - 只做：`ALTER TABLE staff_accounts ADD COLUMN must_change_password boolean NOT NULL DEFAULT false`、`ADD COLUMN failed_login_count integer NOT NULL DEFAULT 0`、`ADD COLUMN locked_until timestamptz`（nullable），型別與預設值對齊 dbml 註解。
+  - 不做：不寫登入成功清零／錯誤累加／鎖定 15 分的業務邏輯（留給 Phase 3H `[BDD-GREEN]`）；不建索引。
+
+- [ ] T241 新增 `V16__notifications.sql`：新建 `notifications` 表＋索引，`tenant_config.key` CHECK 新增 `notification_retention_days`
+  - Read:
+    - `truth-delta.md` -> `/api-plan` 行 83–84（`通知中心.yaml`／`listNotifications`等）、`/data-plan` 行 132–133（`notifications` 新表、`notification_retention_days` 新鍵）
+    - `specs/truth/data/data-model.dbml` -> `Table notifications` 欄位定義、索引、`tenant_config.key` 註解新增值
+    - `tms/src/main/resources/db/migration/V12__unclaimed_reminder_thresholds.sql` -> `chk_tenant_config_key` 重建寫法（`DROP CONSTRAINT` 再 `ADD CONSTRAINT` 整個鍵集，本次只新增不移除任何既有鍵）
+  - 只做：`CREATE TABLE notifications`（`recipient_staff_id`、`title`、`body`、`target` jsonb、`created_at`、`read_at` nullable，FK 到 `staff_accounts`）＋索引 `(tenant_id, recipient_staff_id, created_at)`；重建 `chk_tenant_config_key` 加入 `notification_retention_days`（既有鍵集全部保留）。
+  - 不做：不寫 outbox push 展開時同步寫入本表的程式邏輯（留給 Phase 3I `[BDD-GREEN]`）；不寫保留天數的排程清除 job；不幫 `notification_retention_days` 塞初始值（沒有 DSL 句斷言這個值，使用者裁決「不進行為 truth」，程式讀不到值時的預設落在應用層，非本輪 migration 範圍）。
+
+- [ ] T242 新增 `V17__repair_ticket_review_and_verification.sql`：`tasks.state` CHECK 九值→十一值、`repair_tickets` 補 `reject_reason`／`verified_by`／`verified_at`／`origin_ticket_task_id` 四欄
+  - Read:
+    - `truth-delta.md` -> `/api-plan` 行 85–92（`tasks.state`／`RepairTicketSummary.state`、4 個新端點、`RepairTicket.rejectReason`等）、`/data-plan` 行 134–136（CHECK 擴值、`repair_tickets` 四欄、2 條新 Ref）
+    - `specs/truth/data/data-model.dbml` -> `Table tasks.state` CHECK 十一值定義、`Table repair_tickets` 新增四欄定義與兩條 Ref（`verified_by`→`staff_accounts`、`origin_ticket_task_id`→`repair_tickets` 自參照）
+    - `tms/src/main/resources/db/migration/V1__schema.sql:207-209` -> `chk_tasks_state` 現有九值
+    - `tms/src/main/resources/db/migration/V14__repair_ticket_urgent_judgement.sql` -> 對 `repair_tickets` 加欄位的既有寫法慣例
+  - 只做：`ALTER TABLE tasks DROP CONSTRAINT chk_tasks_state` 再 `ADD CONSTRAINT`，九值加入 `pending_review`、`rejected`（十一值）；`ALTER TABLE repair_tickets ADD COLUMN reject_reason text`（nullable）、`ADD COLUMN verified_by uuid`（nullable）、`ADD COLUMN verified_at timestamptz`（nullable）、`ADD COLUMN origin_ticket_task_id uuid`（nullable）；加 FK `verified_by`→`staff_accounts(tenant_id, id)`、`origin_ticket_task_id`→`repair_tickets(tenant_id, task_id)`（自參照）。
+  - 不做：不寫審核／退回／重送／驗收四個動作的狀態轉移程式邏輯（留給 Phase 3K／3M `[BDD-GREEN]`）；`task_events.type` 不建 CHECK（沿用 V5 既有決定，`repair_approved`／`repair_rejected`／`repair_resubmitted`／`repair_verified` 純文件列舉）。
+
+- [ ] T243 建立帳號與登入 stepdef 落點骨架
+  - Read:
+    - `specs/truth/features/backend/帳號與登入/dsl.md`
+    - `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`（既有 package 慣例）
+  - 只做：新建 `tms/src/test/java/com/athena/tms/bdd/steps/account/`（`AccountGivenSteps.java`、`AccountWhenSteps.java`、`AccountThenSteps.java`），每個檔案留空殼（package、class、必要 import），確認 Phase 2c 只寫進這三個檔。
+  - 不做：不寫任何 Given／When／Then 語意（由 Phase 2c 的 RED 任務填入）。
+
+- [ ] T244 建立通知中心 stepdef 落點骨架
+  - Read:
+    - `specs/truth/features/backend/推播/dsl.md`（通知中心段落）
+    - `tms/src/test/java/com/athena/tms/bdd/steps/push/`（既有推播 package，確認是否已有可擴充的 Given/When/Then 檔案）
+  - 只做：在既有 `steps/push/` package 下新建（或確認既有檔案可擴充）`PushGivenSteps.java`／`PushWhenSteps.java`／`PushThenSteps.java` 的通知中心函式殼，不與既有升級鏈／未接提醒的 stepdef 混寫在同一區塊（用註解分段）。
+  - 不做：不寫任何通知中心語意（由 Phase 2c 的 RED 任務填入）。
+
+## Phase 2c: Test Alignment & Implementation（登入／通知中心／工務視角／審核與驗收）
+
+**Goal**: 把本輪新增 Feature（Phase 3H–3M）用到、尚無 stepdef 的 DSL 句對齊最新版 truth；以及兩句既有 Given 因新增選填欄位需要的 ALIGN。不寫產品行為。
+
+**DSL 參照**:
+- 帳號與登入 9 句（T245–T253）在 `specs/truth/features/backend/帳號與登入/dsl.md`（新模組，本輪首次承接）。
+- 通知中心 8 句（T254–T261）在 `specs/truth/features/backend/推播/dsl.md`（通知中心段落）。
+- 工務視角／審核／驗收／櫃檮直通 22 句（T262–T283）在 `specs/truth/features/backend/工務單/dsl.md`。
+- 介面根 `specs/truth/features/backend/dsl.md` 有 1 句本輪新增選填欄位的 ALIGN（T284：`已有以下工務單：` 新增 `來源`／`退回原因`／`驗收人` 三個選填欄位）。
+- 讀法同 Phase 2／2b：Given/When 讀 `怎麼做`、`權威狀態落地`、`回寫`；Then 讀 `必查`。`truth-delta.md` 只告訴 ADD/MODIFY，語意以 `dsl.md` 該列為準。
+
+**Markers**：定義同 Phase 2（`[BDD-ALIGN]`=MODIFY、`[BDD-RED]`=ADD 或本輪 Feature 用到尚無 stepdef 的句）。本輪沒有 DELETE。三個 marker 都只動測試層，不寫產品碼。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/帳號與登入/dsl.md` -> 全部 Given／When／Then
+- `specs/truth/features/backend/推播/dsl.md` -> 通知中心段落全部 Given／When／Then
+- `specs/truth/features/backend/工務單/dsl.md` -> 工務視角、審核與驗收、櫃檮直通相關 Given／When／Then（見上方 DSL 參照）
+- `specs/truth/features/backend/dsl.md` -> Given `已有以下工務單：`、狀態用語對照表新增 2 列（等主管審核／主管未核准）
+- `truth-delta.md` -> `/dsl-refine` 第二輪（行 225–233）、第三輪（行 260–268）、第四輪（行 280–294）
+- `specs/truth/contracts/components/schemas/員工帳號與登入.yaml`（`LoginRequest`／`LoginResponse`）、`groups/營運管理/員工帳號與登入.yaml`（`staffAccountsLogin`）
+- `specs/truth/contracts/components/schemas/通知中心.yaml`、`groups/知識與通知/通知中心.yaml`
+- `specs/truth/contracts/components/schemas/工務單.yaml`（`RepairTicket.rejectReason`/`verifiedBy`/`verifiedAt`/`originTicketNo`）、`groups/現場作業/工務單.yaml`（4 個審核/驗收端點、`releaseRepairTicketToPool`）、`groups/現場作業/員工工作台.yaml`（`listDeptPool` 篩選、`MyToday.engineeringSummary`）
+- `tms/src/test/java/com/athena/tms/bdd/steps/account/`（T243 骨架）
+- `tms/src/test/java/com/athena/tms/bdd/steps/push/`（T244 骨架）
+- `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java`、`RepairWhenSteps.java`、`RepairThenSteps.java`
+- `tms/src/test/java/com/athena/tms/bdd/support/Terms.java`
+
+**Boundary**:
+- 一條 DSL 一個 task。
+- 只改該句的 stepdef／assertion／直接依賴的 helper；不寫產品碼（登入鎖定、通知中心寫入、審核/驗收/直開/放回的實際改寫留給 Phase 3H–3M 的 `[BDD-GREEN]`）。
+- T245–T253 依賴 T240、T243；T254–T261 依賴 T241、T244；T262–T283、T284 依賴 T242（審核/驗收/來源相關）與既有 `repair` stepdef 骨架；T285 不依賴 migration，只改 `Terms.java` 對照表。
+- review 啟動 subagent；本輪所有 Test Scope 不得再有 undefined step，失敗只能是 assertion 或產品行為。有 issues 就修正再 review，直到沒有任何問題。通過前不解鎖 Phase 3H–3M。
+
+**Parallel Hint**:
+- T245–T285 各派一個獨立 subagent；T286 等全部回來再啟動 subagent 來 review。
+
+- [ ] T245 [P] [BDD-RED] `Given: "{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"`
+- [ ] T246 [P] [BDD-RED] `Given: "{員工}" 的帳號是臨時密碼`
+- [ ] T247 [P] [BDD-RED] `Given: "{員工}" 已連續輸入錯誤密碼 {次數} 次`
+- [ ] T248 [P] [BDD-RED] `When: "{員工}" 用員工編號 "{員工編號}" 密碼 "{密碼}" 登入`
+- [ ] T249 [P] [BDD-RED] `Then: 登入成功，取得 "{員工}" 的身分與可用憑證`
+- [ ] T250 [P] [BDD-RED] `Then: 登入失敗，提示 "{提示}"`
+- [ ] T251 [P] [BDD-RED] `Then: "{員工}" 的帳號已鎖定 {分鐘} 分鐘`
+- [ ] T252 [P] [BDD-RED] `Then: "{員工}" 的帳號已停用，登入被拒`
+- [ ] T253 [P] [BDD-RED] `Then: "{員工}" 必須先設定新密碼才能繼續`
+
+- [ ] T254 [P] [BDD-RED] `Given: "{員工}" 在 "{時刻}" 收到以下通知：`
+- [ ] T255 [P] [BDD-RED] `When: "{員工}" 查看通知中心`
+- [ ] T256 [P] [BDD-RED] `When: "{員工}" 將 "{標題}" 的通知標為已讀`
+- [ ] T257 [P] [BDD-RED] `When: "{員工}" 將所有通知標為已讀`
+- [ ] T258 [P] [BDD-RED] `Then: "{員工}" 的通知中心依序包含 {標題清單}`
+- [ ] T259 [P] [BDD-RED] `Then: "{員工}" 的通知中心「{分組}」分組包含 {標題清單}`
+- [ ] T260 [P] [BDD-RED] `Then: "{員工}" 的 "{標題}" 通知已讀`
+- [ ] T261 [P] [BDD-RED] `Then: "{員工}" 的所有通知都已讀`
+
+- [ ] T262 [P] [BDD-RED] `Given: "{工務}" 手上有 {張數} 張維修中的工務單，今天已完修 {已完修張數} 張，其中 {急件數} 張是急件`
+- [ ] T263 [P] [BDD-RED] `When: "{主管}" 核准 "{單號}"`
+- [ ] T264 [P] [BDD-RED] `When: "{主管}" 以原因 "{原因}" 退回 "{單號}"`
+- [ ] T265 [P] [BDD-RED] `When: "{員工}" 補資料再送出 "{單號}"`
+- [ ] T266 [P] [BDD-RED] `When: "{主管}" 驗收通過 "{單號}"`
+- [ ] T267 [P] [BDD-RED] `When: "{工務}" 附 {張數} 張完修照片，回報 "{單號}" 暫時處理，說明 "{說明}"`
+- [ ] T268 [P] [BDD-RED] `When: "{工務}" 附 {張數} 張完修照片，回報 "{單號}" 無法修復，說明 "{說明}"`
+- [ ] T269 [P] [BDD-RED] `When: "{工務}" 為 "{房號}" 開立以下工務單，不經過任何房務任務：`
+- [ ] T270 [P] [BDD-RED] `When: "{員工}" 為 "{房號}" 交辦工務部門，開立以下工務單：`
+- [ ] T271 [P] [BDD-RED] `When: "{工務}" 把 "{單號}" 放回工務待認領`
+- [ ] T272 [P] [BDD-RED] `When: "{工務}" 查看工務視角今日進度`
+- [ ] T273 [P] [BDD-RED] `When: "{工務}" 只看 "{分流}" 的工務待認領`
+- [ ] T274 [P] [BDD-RED] `Then: "{單號}" 的來源為 "{來源}"`
+- [ ] T275 [P] [BDD-RED] `Then: 工務待認領包含 "{單號}"`
+- [ ] T276 [P] [BDD-RED] `Then: 工務待認領不包含 "{單號}"`
+- [ ] T277 [P] [BDD-RED] `Then: 工務待認領順序為 {單號清單}`
+- [ ] T278 [P] [BDD-RED] `Then: "{單號}" 的退回原因為 "{原因}"`
+- [ ] T279 [P] [BDD-RED] `Then: "{單號}" 已由 "{主管}" 驗收`
+- [ ] T280 [P] [BDD-RED] `Then: "{單號}" 尚未驗收`
+- [ ] T281 [P] [BDD-RED] `Then: "{房號}" 的房況轉為停用待確認`
+- [ ] T282 [P] [BDD-RED] `Then: 系統為 "{單號}" 自動建立一張追蹤單，進工務待認領`
+- [ ] T283 [P] [BDD-RED] `Then: "{工務}" 的工務視角今日進度為：`
+
+- [ ] T284 [P] [BDD-ALIGN] `Given: 已有以下工務單：`（新增選填欄位 `來源`、`退回原因`、`驗收人`）
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java:93`
+
+- [ ] T285 [P] [BDD-ALIGN] `Terms.java` 工務單狀態用語對照新增：`等主管審核`→`pending_review`、`主管未核准`→`rejected`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/support/Terms.java`（`REPAIR_TICKET_STATE` map）、`specs/truth/features/backend/dsl.md` 狀態用語對照表
+
+- [ ] T286 subagent review (phase quality gate)
+
+## Phase 3H: ADD Feature File - backend/帳號與登入/員工登入.feature
+
+**Goal**: 實作登入（`staffAccountsLogin`）的成功、密碼錯誤、鎖定、停用、臨時密碼強制改密 5 種結果，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/帳號與登入/員工登入.feature` -> `Feature: 員工登入`（6 Rule／6 場景）
+- `specs/truth/features/backend/帳號與登入/dsl.md` -> 本檔 Given／When／Then 全部列
+- `truth-delta.md` -> `/dsl-refine` 第二輪 ADD 員工登入（行 227）；`/api-plan` 行 79–82（`LoginRequest`／`LoginResponse`／`staffAccountsLogin`／`staff_accounts` 三欄）
+- `specs/truth/contracts/components/schemas/員工帳號與登入.yaml` -> `LoginRequest`、`LoginResponse`
+- `specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `staffAccountsLogin`（401/403/429 錯誤路徑）
+- `tms/src/main/java/com/athena/tms/`（既有員工帳號 controller/service，供定位 `staffAccountsLogin` 實作落點）
+
+**Boundary**:
+- 只處理登入本身（成功、密碼錯、員編不存在、鎖定、停用、臨時密碼強制改密），不處理改密 API 本身是否存在（若 truth 未定義改密端點，以回應標示 `mustChangePassword` 為準，不另外開發改密流程）。
+- 連續 5 次錯誤鎖定 15 分鐘、成功登入清零失敗次數，依 T240 新增的三欄實作。
+
+**Test Scope**:
+- `specs/truth/features/backend/帳號與登入/員工登入.feature`
+
+- [ ] T287 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T288 [BDD-REFACTOR] 在綠燈下整理登入失敗計數、鎖定判斷與密碼雜湊比對的共用邏輯
+
+## Phase 3I: ADD Feature File - backend/推播/通知中心.feature
+
+**Goal**: 實作通知中心（`listNotifications`、`markNotificationRead`、`markAllNotificationsRead`）與 outbox push 展開時同步寫入持久通知紀錄，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/推播/通知中心.feature` -> `Feature: 通知中心`（4 Rule／4 場景）
+- `specs/truth/features/backend/推播/dsl.md` -> 通知中心段落 Given／When／Then
+- `truth-delta.md` -> `/dsl-refine` 第二輪 ADD 通知中心（行 229）；`/api-plan` 行 83–84（`通知中心.yaml`、3 個端點）；`/data-plan` 行 132–133（`notifications` 新表、保留天數鍵）
+- `specs/truth/contracts/components/schemas/通知中心.yaml` -> `notifications`
+- `specs/truth/contracts/groups/知識與通知/通知中心.yaml` -> `listNotifications`、`markNotificationRead`、`markAllNotificationsRead`
+- `tms/src/main/java/com/athena/tms/`（既有 outbox push 展開程式碼落點，供新增同交易寫入 `notifications` 的改動點）
+
+**Boundary**:
+- 只處理通知中心本身的查詢、分組（今天／更早）、標記已讀；不寫保留天數排程清除 job（`notification_retention_days` 只是鍵存在，沒有 DSL 句斷言排程清除行為，不在 Test Scope 內）。
+- outbox push 展開時同一交易寫入一筆 `notifications`；不改動既有 outbox 本身的 relay 語意。
+
+**Test Scope**:
+- `specs/truth/features/backend/推播/通知中心.feature`
+
+- [ ] T289 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T290 [BDD-REFACTOR] 在綠燈下整理通知分組（今天／更早）計算與已讀標記的共用邏輯
+
+## Phase 3J: ADD Feature File - backend/工務單/工務視角維修與開單.feature
+
+**Goal**: 實作工務視角能力——完修三選一（已修好／暫時處理自動建追蹤單／無法修復轉房況停用待確認）、工務自開與櫃檮交辦直開（`sourceTaskId` 選填＋`roomId`／`isPublicArea`／`assigneeId`）、放回待認領（限公共區域）、`listDeptPool` 急件／來源篩選、工務視角今日進度彙總，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/工務視角維修與開單.feature` -> `Feature: 工務視角維修與開單`（整檔，含第二輪 9 Rule 與第三輪櫃檮直通新增內容）
+- `specs/truth/features/backend/工務單/dsl.md` -> 工務視角相關 Given／When／Then（見 Phase 2c T262–T283 清單）
+- `truth-delta.md` -> `/dsl-refine` 第二輪 ADD 工務視角維修與開單（行 231）、第三輪 ADD 櫃檮直通（行 262–265）；`/api-plan` 行 93–98（`CompleteTaskRequest.resolutionType`、`CreateRepairTicketRequest` 三欄、`releaseRepairTicketToPool`、`listDeptPool` 篩選、`MyToday.engineeringSummary`）
+- `specs/truth/contracts/components/schemas/任務.yaml` -> `CompleteTaskRequest.resolutionType`
+- `specs/truth/contracts/components/schemas/工務單.yaml` -> `CreateRepairTicketRequest`（`roomId`／`isPublicArea`／`assigneeId`、`sourceTaskId` 選填）
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `releaseRepairTicketToPool`
+- `specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `listDeptPool`（`urgent`／`source` 參數）、`getMyToday`（`engineeringSummary`）
+- `tms/src/main/java/com/athena/tms/repair/RepairService.java`、`RepairController.java`、`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java`（`tasksComplete`、`myToday` 現行實作）
+
+**Boundary**:
+- 完修三選一：`fixed`（既有行為不變）、`temporary`（自動建立追蹤單，房號類別同原單，狀態 pool）、`cannot_fix`（`rooms.hk_state`=`out_of_order`）。
+- 工務自開／櫃檮交辦開單共用同一個 `createRepairTicket` 路徑，差異只在呼叫者部門決定 `tasks.source`（staff／desk）；不新增第二個開單端點。
+- 放回待認領只允許公共區域（無房號）的工務單；客房工務單維持既有「只能暫停」，回 409 `room_ticket_not_requeueable`。
+- 不處理本輪另立的審核／驗收狀態轉移（`pending_review`／`rejected`／驗收），那是 Phase 3K／3M 的範圍；本檔場景若涉及開單去向（急件/工務自開/櫃檮直接進 pool vs 一般件進審核），只驗證「直接進 pool」這三條路徑，不驗證審核路徑本身的核准/退回細節。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/工務視角維修與開單.feature`
+
+- [ ] T291 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T292 [BDD-REFACTOR] 在綠燈下整理完修三選一分支與工務視角今日統計查詢的共用邏輯，避免與 `myToday` 既有統計邏輯重複查表
+
+## Phase 3K: MODIFY Feature File - backend/工務單/開立工務單與急件.feature（第四輪：補主管審核與退回/重送）
+
+**Goal**: 在既有急件判定（上一輪已綠）基礎上，實作主管審核流程——房務報修一般件送出後進 `pending_review`，急件/工務自開/櫃檮交辦直接進 pool；主管核准（`approveRepairTicket`）、退回附原因（`rejectRepairTicket`）、房務補資料重送（`resubmitRepairTicket`），讓更新後的 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/開立工務單與急件.feature` -> 本輪新增／改寫的 Rule（一般件進審核、急件直接進池、核准、退回須附原因、補資料重送）
+- `specs/truth/features/backend/工務單/dsl.md` -> When `"{主管}" 核准`、`"{主管}" 以原因退回`、`"{員工}" 補資料再送出`；Then `"{單號}" 的退回原因為`
+- `truth-delta.md` -> `/dsl-refine` 第四輪（行 280–289）；`/api-plan` 行 85–92（`tasks.state` 十一值、4 個新端點）
+- `specs/truth/contracts/components/schemas/shared.yaml` -> `RepairTicketSummary.state`（`pending_review`／`rejected`）
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `approveRepairTicket`、`rejectRepairTicket`、`resubmitRepairTicket`
+- `tms/src/main/java/com/athena/tms/repair/RepairService.java:401-466`（`create` 方法，開單去向判斷需加入一般件/急件分流）、`RepairController.java`
+
+**Boundary**:
+- 只改開單去向分流與審核三個端點的狀態轉移；不動 Phase 3J 已實作的工務自開／櫃檮交辦判斷呼叫者部門的邏輯本身（只是這裡要確認這兩條路徑確實跳過審核直接進 pool）。
+- 審核只套用在房務報修（`source`=staff）且非急件的單；急件不論來源都不經審核。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/開立工務單與急件.feature`
+
+- [ ] T293 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T294 [BDD-REFACTOR] 在綠燈下整理開單去向判斷（審核 vs 直接進池）與審核三動作的共用狀態轉移邏輯
+
+## Phase 3L: MODIFY Feature File - backend/工務單/重複報修補照片與撤回.feature
+
+**Goal**: 審核前（`pending_review`、`rejected`）報修人仍可撤回工務單，讓更新後的 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature` -> 新 Rule「等主管審核時，報修人也可以撤回工務單」
+- `specs/truth/features/backend/工務單/dsl.md` -> When `"{員工}" 撤回 "{單號}"`
+- `truth-delta.md` -> `/dsl-refine` 第四輪（行 286）
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `withdrawRepairTicket` description（`pending_review` 也可撤回）
+
+**Boundary**:
+- 只擴充撤回允許的來源狀態（`pending_review`、`rejected`、pool），不改既有「認領後不可撤回」409 語意。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature`
+
+- [ ] T295 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T296 [BDD-REFACTOR] 在綠燈下整理撤回允許狀態集合的判斷（NOOP：若與 T293 的狀態轉移共用同一張狀態表則確認無重複邏輯）
+
+## Phase 3M: MODIFY Feature File - backend/工務單/完修與回到原任務.feature
+
+**Goal**: 完修後新增「等主管驗收」子狀態（不開新狀態值，只補驗收人／驗收時間），主管驗收通過後記錄驗收人，讓更新後的 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/完修與回到原任務.feature` -> 新 Rule「主管驗收通過已完修的工務單後，記錄驗收人並結案」
+- `specs/truth/features/backend/工務單/dsl.md` -> When `"{主管}" 驗收通過 "{單號}"`；Then `"{單號}" 已由 "{主管}" 驗收`、`"{單號}" 尚未驗收`
+- `truth-delta.md` -> `/dsl-refine` 第四輪（行 287–288）；`/api-plan` 行 92（`verifyRepairTicket`）
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `verifyRepairTicket`
+- `specs/truth/contracts/components/schemas/工務單.yaml` -> `RepairTicket.verifiedBy`／`verifiedAt`
+
+**Boundary**:
+- 驗收不開新狀態值，工務單狀態仍是 `done`；只寫 `verified_by`／`verified_at`。
+- 不實作「驗收退回」分支（原型未描繪，上游缺口，見 `truth-delta.md` 行 304）。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/完修與回到原任務.feature`
+
+- [ ] T297 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T298 [BDD-REFACTOR] 在綠燈下整理驗收人／驗收時間寫入與既有完修共用事件歷程邏輯
