@@ -86,6 +86,12 @@ public class AppiumWorld {
     private final Map<String, BackendChannel.CreatedStaff> staffByName = new LinkedHashMap<>();
 
     /**
+     * 還沒在 App 裡按過「開始」的房號。情境要求起始狀態是進行中、而任務被改種成
+     * 待開始時記在這裡，進任務頁時補按一次開始（見 {@link #startInAppIfPending}）。
+     */
+    private final java.util.Set<String> roomsToStartInApp = new java.util.LinkedHashSet<>();
+
+    /**
      * 上一次送出的推播 payload 檔案與標題。banner 自動收起的時間很短，{@link #tapPushNotification()}
      * 第一次找不到時要能照原樣重送同一則推播再試一次，所以要留著。
      */
@@ -349,6 +355,80 @@ public class AppiumWorld {
         waitForTestId("pool.screen", timeout);
     }
 
+    /**
+     * 確保 App 已以這位員工的身分登入，並停在該房號的任務頁（{@code task.screen}）。
+     * 進任務頁的 App 路徑只有一條：首頁的今日任務列表點該房的卡
+     * （{@code home.task.{roomNo}.card}）；已經停在那間房的任務頁上就不重複點。
+     *
+     * <p>首頁的清單來自 {@code GET /me/today} 的 {@code nextTasks}，後端只收
+     * {@code accepted}，所以進行中／已中斷的單在首頁上沒有卡可點，這裡會以
+     * 「等不到 {@code home.task.{roomNo}.card}」失敗——那是上游缺口 #12
+     * （App 無端點可列舉進行中的任務），不是這一層可以繞過的。
+     */
+    public void ensureOnTaskDetail(BackendChannel.CreatedStaff staff, String roomNo) {
+        ensureLoggedInAs(staff);
+        Duration timeout = Duration.ofSeconds(10);
+        if (driver().findElements(byTestId("task.screen")).isEmpty()
+                || driver().findElements(
+                        AppiumBy.iOSNsPredicateString(
+                                "label CONTAINS " + nsPredicateString(roomNo + " 的任務頁")))
+                        .isEmpty()) {
+            waitForTestId("home.screen", timeout);
+            tapTestId("home.task." + roomNo + ".card", timeout);
+            waitForTestId("task.screen", timeout);
+        }
+        startInAppIfPending(roomNo, timeout);
+    }
+
+    /**
+     * 把「進行中」這個起始狀態補齊：在任務頁按一次「開始」，讓後端自己把任務轉成
+     * {@code doing}。
+     *
+     * <p>情境要求的起始狀態是進行中，但首頁的任務清單只列得出待開始的單
+     * （上游缺口 #12：{@code GET /me/today} 的 {@code nextTasks} 只收 {@code accepted}），
+     * 直接把任務種成進行中的話，App 端連進任務頁的入口都沒有。所以 {@link #seedTasks}
+     * 改種成待開始，真正的開工交給這裡用 App 的主按鈕完成——按鈕打的是正式的開工
+     * 端點，後端落地的狀態與事件和員工自己操作完全一樣，不是繞過產品碼改資料庫。
+     *
+     * <p>按完要等後端真的翻成 {@code doing} 才往下走。開工是一次 HTTP 來回，畫面先
+     * 回應、後端稍後才落地的話，接著的中斷操作會打在還是待開始的任務上，被後端以
+     * 狀態不符擋掉。
+     */
+    private void startInAppIfPending(String roomNo, Duration timeout) {
+        if (!roomsToStartInApp.remove(roomNo)) {
+            return;
+        }
+        tapTestId("task.primary-button", timeout);
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if ("doing".equals(String.valueOf(taskRowByRoomNo(roomNo).get("state")))) {
+                return;
+            }
+            sleep(200);
+        }
+        throw new AssertionError("在 App 按下「開始」後，後端沒有把「" + roomNo
+                + "」轉成進行中（逾時 " + timeout.getSeconds() + "s）");
+    }
+
+    /**
+     * 權威讀回：某房號在本情境中唯一那筆任務的 {@code tasks} 整列。句型用房號代表任務
+     * （backend dsl.md「任務識別」：同一案例不得出現同房兩筆無法區分的任務），所以查到
+     * 不是剛好一筆就是劇本或 fixture 有問題，直接噴錯而不是挑一筆用。
+     */
+    public Map<String, Object> taskRowByRoomNo(String roomNo) {
+        List<Map<String, Object>> rows = backend.queryRows(
+                """
+                SELECT t.* FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? AND r.room_no = ?
+                """, backend.ensureTenant(), roomNo);
+        if (rows.size() != 1) {
+            throw new IllegalStateException(
+                    "房號「" + roomNo + "」在後端有 " + rows.size() + " 筆任務，無法以房號唯一指認");
+        }
+        return rows.get(0);
+    }
+
     /** 記下通知中心情境的當事員工（由通知的 Given 句呼叫）。 */
     public void setNotificationViewer(BackendChannel.CreatedStaff staff) {
         this.notificationViewer = staff;
@@ -454,6 +534,11 @@ public class AppiumWorld {
     public void seedTasks(String staffName, List<TaskFixture> tasks) {
         BackendChannel.CreatedStaff assignee = staff(staffName);
         for (TaskFixture task : tasks) {
+            String stateCode = BackendChannel.taskState(task.status());
+            if (startableInApp(stateCode, task)) {
+                stateCode = "accepted";
+                roomsToStartInApp.add(task.roomNo());
+            }
             backend.createTask(
                     task.roomNo(),
                     task.content(),
@@ -462,11 +547,25 @@ public class AppiumWorld {
                     "cleaning",
                     "housekeeping",
                     null,
-                    BackendChannel.taskState(task.status()),
+                    stateCode,
                     assignee,
                     task.elapsedMinutes() > 0 ? task.elapsedMinutes() : null,
                     task.pausedReason());
         }
+    }
+
+    /**
+     * 判斷這筆任務的「進行中」能不能改用 App 的開始按鈕達成。
+     *
+     * <p>進行中的任務在 App 首頁上沒有卡可點（上游缺口 #12），情境只好先種成待開始，
+     * 進任務頁後再按一次開始。但這條路會把已做時間從零開始算，也不會留下停住原因，
+     * 所以情境指定了已做分鐘或停住原因時不能走——那些值必須由測試資料直接落地，
+     * 讓情境在缺口 #12 上誠實地紅。
+     */
+    private static boolean startableInApp(String stateCode, TaskFixture task) {
+        return "doing".equals(stateCode)
+                && task.elapsedMinutes() == 0
+                && task.pausedReason() == null;
     }
 
     /**
@@ -706,8 +805,69 @@ public class AppiumWorld {
                     .withTimeout(Duration.ofSeconds(4))
                     .pollingEvery(Duration.ofMillis(200))
                     .ignoring(NoSuchElementException.class);
-            wait.until(d -> d.findElement(pasteItem)).click();
+            try {
+                wait.until(d -> d.findElement(pasteItem)).click();
+            } catch (RuntimeException e) {
+                dumpPageSource("/tmp/tms-app-bdd-paste-menu-missing.xml");
+                throw e;
+            }
         });
+    }
+
+    /**
+     * 把目前畫面的元素樹寫到檔案，給定位失敗時回頭看畫面上到底有什麼用。
+     *
+     * <p>寫檔本身失敗就放著不管：這只是輔助資訊，為了它再丟一個例外會蓋掉真正的失敗原因。
+     */
+    private void dumpPageSource(String path) {
+        try {
+            Files.writeString(Path.of(path), driver().getPageSource(), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            // 見方法說明。
+        }
+    }
+
+    /**
+     * 讀某個元素的文字，讀到期待值就回傳，否則重讀到逾時為止，最後回傳最近一次讀到的值。
+     *
+     * <p>App 在一次操作之後更新畫面，中間常隔著一次網路來回。只讀一次會讀到還沒更新的
+     * 舊文字，讓斷言誤報成功能壞掉。逾時仍不符時不自己丟錯，把實際讀到的值交回給呼叫端
+     * 組斷言訊息，才看得出畫面究竟停在哪個狀態。
+     */
+    public String waitForLabelOf(String id, String expected, Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        String actual = null;
+        while (System.nanoTime() < deadline) {
+            try {
+                actual = driver().findElement(byTestId(id)).getAttribute("label");
+            } catch (RuntimeException e) {
+                actual = null;
+            }
+            if (expected.equals(actual)) {
+                return actual;
+            }
+            sleep(200);
+        }
+        dumpPageSource("/tmp/tms-app-bdd-label-mismatch.xml");
+        return actual;
+    }
+
+    /**
+     * 等某個 accessibility id 的元素從畫面上消失。
+     *
+     * <p>用在「送出後面板關閉」這種需要等 App 把一次網路來回做完的地方。Appium 的點擊
+     * 只保證手勢送到了，不保證 App 已經收到後端回應並更新畫面；緊接著斷言畫面狀態會
+     * 讀到還沒更新的舊值，看起來像功能壞掉，其實是測試跑在 App 前面。
+     */
+    public void waitForTestIdGone(String id, Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (driver().findElements(byTestId(id)).isEmpty()) {
+                return;
+            }
+            sleep(200);
+        }
+        throw new AssertionError("畫面元素 " + id + " 沒有如期消失（逾時 " + timeout.getSeconds() + "s）");
     }
 
     /** 等某個 accessibility id 的元素出現後點擊（stale 時以 id 重找重試，見 {@link #withStaleRetry}）。 */

@@ -3,9 +3,16 @@ package com.athena.app.bdd.steps.taskexecution;
 import com.athena.app.bdd.AppiumWorld;
 import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.那麼;
+import org.openqa.selenium.WebElement;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 /** 任務執行模組的 Then。 */
 public class TaskExecutionThenSteps {
+
+    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
 
     private final AppiumWorld world;
 
@@ -47,7 +54,15 @@ public class TaskExecutionThenSteps {
      */
     @那麼("任務頁只顯示一個主按鈕，文字為 {string}")
     public void showsOnlyOnePrimaryButton(String buttonText) {
-        throw new PendingException();
+        world.waitForTestId("task.primary-button", SCREEN_TIMEOUT);
+        List<WebElement> buttons = world.driver().findElements(world.byTestId("task.primary-button"));
+        if (buttons.size() != 1) {
+            throw new AssertionError("任務頁的主按鈕應該只有一顆，實際有 " + buttons.size() + " 顆");
+        }
+        String actual = buttons.get(0).getAttribute("label");
+        if (!buttonText.equals(actual)) {
+            throw new AssertionError("主按鈕文字不符：預期「" + buttonText + "」，實際「" + actual + "」");
+        }
     }
 
     /**
@@ -90,22 +105,62 @@ public class TaskExecutionThenSteps {
 
     /**
      * 必查：任務頁狀態列顯示的停住原因文字與後端 {@code tasks.hold_reason} 一致。
-     * accessibility id：TODO（狀態列停住原因節點尚未在 ui-plan.md 逐一命名）。
+     * accessibility id：{@code task.status-row.hold-reason}。
+     *
+     * <p>兩邊都要對上才算通過。只讀畫面的話，一個把原因寫死在版面上的元件也會過關；
+     * 只讀後端的話，則驗不到員工在任務頁上究竟看見什麼。
      */
     @那麼("任務頁顯示停住原因 {string}")
     public void showsHoldReason(String reason) {
-        throw new PendingException();
+        List<Map<String, Object>> rows = world.backend().queryRows(
+                "SELECT id FROM tasks WHERE tenant_id = ? AND hold_reason = ?",
+                world.backend().ensureTenant(), reason);
+        if (rows.size() != 1) {
+            throw new AssertionError("後端停住原因是「" + reason + "」的任務應該剛好一筆，實際 "
+                    + rows.size() + " 筆");
+        }
+        WebElement element = world.waitForTestId("task.status-row.hold-reason", SCREEN_TIMEOUT);
+        String actual = element.getAttribute("label");
+        if (!reason.equals(actual)) {
+            throw new AssertionError(
+                    "任務頁的停住原因不符：預期「" + reason + "」，實際「" + actual + "」");
+        }
     }
 
-    /** 必查：延後面板送出鈕的可互動狀態符合；禁用時無法真的送出。accessibility id：TODO。 */
+    /**
+     * 必查：延後面板送出鈕的可互動狀態符合；禁用時無法真的送出。
+     * accessibility id：{@code hold.confirm-button}。
+     *
+     * <p>讀的是 accessibility 樹上的 enabled 屬性，不是按鈕的顏色。App 端要把這個狀態
+     * 顯式掛上去，沒掛的按鈕在這裡一律讀成可用。
+     */
     @那麼("延後面板的送出鈕為 {string}")
     public void deferPanelSubmitButtonState(String enabledOrDisabled) {
-        throw new PendingException();
+        boolean expected = switch (enabledOrDisabled) {
+            case "啟用" -> true;
+            case "禁用" -> false;
+            default -> throw new IllegalArgumentException(
+                    "送出鈕狀態只收「啟用」或「禁用」，收到：" + enabledOrDisabled);
+        };
+        WebElement button = world.waitForTestId("hold.confirm-button", SCREEN_TIMEOUT);
+        boolean actual = Boolean.parseBoolean(button.getAttribute("enabled"));
+        if (expected != actual) {
+            throw new AssertionError("延後面板送出鈕的狀態不符：預期「" + enabledOrDisabled
+                    + "」，實際 enabled=" + actual);
+        }
     }
 
-    /** 必查：延後面板「其他原因」欄位下方即時字數提示等於該文字。accessibility id：TODO。 */
+    /**
+     * 必查：延後面板「其他原因」欄位下方即時字數提示等於該文字。
+     * accessibility id：{@code hold.char-count}。
+     */
     @那麼("延後面板顯示字數 {string}")
     public void deferPanelCharCount(String countText) {
-        throw new PendingException();
+        WebElement element = world.waitForTestId("hold.char-count", SCREEN_TIMEOUT);
+        String actual = element.getAttribute("label");
+        if (!countText.equals(actual)) {
+            throw new AssertionError(
+                    "延後面板的字數提示不符：預期「" + countText + "」，實際「" + actual + "」");
+        }
     }
 }

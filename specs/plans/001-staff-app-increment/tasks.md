@@ -899,7 +899,9 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/任務執行/任務卡狀態與提示.feature`
 
 - [ ] T326 [BDD-GREEN] 讓 Test Scope 全綠（12 個場景）
+  - 現況 2/12 綠（2026-11-06）：「待開始時主按鈕為開始」（`任務頁核心互動.feature:38`）與「一次一間提示」（`任務卡狀態與提示.feature:11`）已綠——這兩個場景的受測任務是 `accepted`，首頁列得出來、點得進任務頁，開工 409 的提示與維持待開始也都走真後端。其餘 10 個場景的受測任務在 Given 就被種成 `doing`／`done`／`interrupted`／`inspected`，而 `GET /me/today` 的 `nextTasks` 只收 `accepted`，首頁沒有卡可點，其中 8 個一致卡在「等不到 `home.task.{房號}.card`」——缺口 #12。剩下 2 個 SOP 場景連 stepdef 都還沒實作：App 取不到 SOP 項名稱（缺口 #18），`ui-plan.md` 也還沒替 SOP 列與跳過鈕命名 accessibility id。超時提示與慶祝頁的預估分鐘另外卡在缺口 #17。端點補齊後以既有實作與既有 stepdef 續推。
 - [ ] T327 [BDD-REFACTOR] 在綠燈下整理步驟條、主按鈕與狀態 chip 的狀態映射，收斂成單一狀態→呈現對照表
+  - 暫緩（2026-11-06）：T326 僅 2/12 綠，狀態映射的多數分支（進行中／已中斷／免查房）根本沒被綠燈覆蓋過，重構缺乏保護（`refactor-綠燈保護重構判準` Rule 1）。待缺口 #12／#17／#18 解除、T326 收綠後再做。
 
 ## Phase 3T: ADD Feature File - ios-app/任務執行/延後與中斷原因面板.feature
 
@@ -920,7 +922,9 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/ios-app/任務執行/延後與中斷原因面板.feature`
 
-- [ ] T328 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
+- [X] T328 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
+  - 9/9 綠（2026-11-06，`Tests run: 9, Failures: 0, Errors: 0, Skipped: 0`）。中斷那 4 個場景的 Given 要求「進行中」，首頁列不出進行中的單（缺口 #12），改走合法路徑：任務種成待開始 → 從首頁進任務頁 → 在 App 按「開始」讓後端自己翻成 `doing`，再開中斷面板。這條路只在場景沒有指定「已做分鐘」「停住原因」時啟用（那兩個值只能由測試資料落地），所以 T326 那些帶已做分鐘的場景仍然卡在 #12，但不帶那兩欄的場景現在有路可走，下次重測 T326 要重新計數。
+  - 實跑打出兩個 App 側真缺陷：(1) `setState(() => _taskFuture = Future…)` 的箭頭函式把 Future 當回傳值交給 `setState`，Flutter 在 debug 版拒絕這個回呼，送出後畫面一次也不會更新（`_start` 也有同一個寫法，一併改成區塊寫法）；(2) 面板貼在畫面最下緣，鍵盤升起時整個蓋住說明欄與送出鈕，中文說明根本貼不進去。
 - [ ] T329 [BDD-REFACTOR] 在綠燈下把延後與中斷兩個面板收斂成同一個元件（差異只在預設原因清單與送出端點）
 
 ## Phase 3U: ADD Feature File - ios-app/今日進度/首頁今日進度.feature
@@ -1026,7 +1030,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 16 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#16 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
+以下 19 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#19 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1044,3 +1048,6 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 14. **「設定新密碼」端點缺席（T316 實跑發現，2026-11-05）**：`登入與登出守衛.feature:59` 要求設定新密碼後進入首頁，但 `員工帳號與登入.yaml` 只有 `staffAccountsLogin`，無改密端點；後端在 `must_change_password` 清掉前對業務端點一律 403。回交 `/api-plan` 補「設定新密碼」端點（重雜湊密碼＋清 `must_change_password`）→ 後端實作後，T316 的最後 1 個場景用既有 stepdef 即可轉綠。在此之前 T316 收 9/10，不假綠。
 15. **`GET /pool` 不回 `reminderStage`（T324 實跑發現，2026-11-06）**：契約 `員工工作台.yaml` 的 `PoolItem.reminderStage` 已定義（`staff_reminded`／`manager_notified`），`tasks.reminder_stage` 也確實落地（V13；實跑以 SQL 確認 fixture 寫入成功），但 `TaskExecutionService.deptPool`（`tms/.../TaskExecutionService.java:369`）只把它當 `unclaimed_overdue` 排序旗標用，組裝 `PoolItem` 時（:405-419）沒有放進回應，App 永遠讀到 null，未接超時兩段標籤畫不出來——**擋住 Phase 3R 的 2 個場景**。回交後端：`deptPool` 補 `item.put("reminderStage", …)`。與缺口 #10／#12 同一族（App 看不見後端已有的資料）。
 16. **主管看不到任何部門待認領池，後端也沒有「部門沒有在職員工」的訊號（T324 實跑發現，2026-11-06）**：`待認領列表.feature:88` 要王主管打開房務待認領看到空狀態，但 (a) `listDeptPool` 只依登入者自己的 `dept` 分流、沒有部門查詢參數，主管的 `dept` 是 NULL，`TaskExecutionService.deptPool:357` 直接回 422「此帳號未設部門」；(b) 整個後端沒有任何地方判斷「這個部門沒有在職員工」，`GET /pool` 對這個情況只會回一般的空 `items`，App 無從分辨「沒有單」與「沒有人可以搶單」。回交 `/api-plan`：補部門參數（或主管視角的部門池端點）＋在回應中帶出部門可搶單人力的狀態。
+17. **`readTasks` 回應缺 `estMin`／`skippedSopItems`／`inspectionWaived`（T326 實跑發現，2026-11-06）**：契約 `TaskDetail` 以 `allOf` 併入 `tasks`（含 `estMin`、`inspectionWaived`）並另外定義 `skippedSopItems`，但 `TaskExecutionService.toDetail`（`tms/.../TaskExecutionService.java:584-607`）逐欄組裝回應時這三欄都沒放。App 因此算不出「超時 N 分」（＝已做分鐘 − 預估分鐘）、慶祝頁印不出「預估 35 分」、SOP 進度的 `x / y` 也少了跳過的那一半——在缺口 #12 之後接著擋住 Phase 3S 的超時與慶祝頁 2 個場景。回交後端：`toDetail` 補這三欄。
+18. **`GET /sop-items` 後端未實作（T326 實跑發現，2026-11-06）**：契約 `openapi.yaml:119` 有 `/sop-items`（`listSopItems`），但 `tms/` 沒有任何 controller 掛這條路由（全專案 grep `sop-items` 無結果），而 `TaskDetail.checkedSopItems` 只給 id、不給名稱，App 沒有任何方式取得「擦拭桌面與鏡面」這類 SOP 項名稱來畫清單與勾／跳過——在缺口 #12 之後接著擋住 Phase 3S 的 2 個 SOP 場景。回交後端實作 `listSopItems`。
+19. **延後／中斷面板的預設原因文字兩份規格不一致，面板元素也沒有命名 accessibility id（T328 實跑發現，2026-11-06）**：`ui-plan.md:110` 寫「缺備品去拿」與「其他」，`任務執行/dsl.md` 與 `延後與中斷原因面板.feature` 寫「缺備品，去拿」與「其他原因」；原因文字同時是送到後端的 `hold_reason` 內容與測試指認選項的依據，兩份不同會讓實作與驗收各挑一份。本次以 truth feature 的寫法為準落地。另外 `ui-plan.md` 的 accessibility id 表沒有延後／中斷面板任何一列，本次自行命名 `hold.reason.{原因}`、`hold.other-reason-field`、`hold.char-count`、`hold.confirm-button`、`task.defer-button`、`task.interrupt-button`、`task.status-row.hold-reason`。回交 `/ui-plan`：統一原因文字，並把這七個 id 補進約定表。

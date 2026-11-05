@@ -93,10 +93,115 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
+  /// 狀態 chip 的文字。對照表出自 `features/backend/dsl.md` 的「狀態用語對照」，
+  /// 全 App 共用同一套用詞：`done` 在打掃類是「待查房」、其他類是「已送達」；
+  /// `inspected` 依查房結果分「查房通過」與「完成 · 免查房」。
+  static String _statusChipText(TaskDetail task) {
+    switch (task.state) {
+      case 'pool':
+        return '待認領';
+      case 'accepted':
+        return '待開始';
+      case 'doing':
+        return '進行中';
+      case 'deferred':
+        return '已延後';
+      case 'interrupted':
+        return '已中斷';
+      case 'done':
+        return task.type == 'cleaning' ? '待查房' : '已送達';
+      case 'inspected':
+        return task.inspection == 'waived' ? '完成 · 免查房' : '查房通過';
+      case 'cancelled':
+        return '已取消';
+      default:
+        return task.state;
+    }
+  }
+
+  /// 開工：成功就把畫面換成後端回的新狀態；後端用 409 擋下「一次一間」時
+  /// 跳提示，任務狀態一個字都不動（被擋下的那一間仍然是待開始）。
+  Future<void> _start(TaskDetail task) async {
+    try {
+      final started = await ApiClient.instance.startTask(task.id);
+      if (!mounted) {
+        return;
+      }
+      // 這裡不能寫成 setState(() => ...)：箭頭函式會把 Future 當成回傳值交給
+      // setState，Flutter 在 debug 版會直接拒絕這個回呼，畫面一次也不會更新。
+      setState(() {
+        _taskFuture = Future<TaskDetail?>.value(started);
+      });
+    } on ApiException catch (e) {
+      if (!mounted) {
+        return;
+      }
+      await _showBusyAlert(e.errorMessage ?? '還有另一間在進行中');
+    }
+  }
+
+  /// 任務停在哪個狀態、停住原因記成什麼，一律以後端送出後回傳的那一筆為準。
+  /// 畫面若自己先改成「已延後」再送出，後端拒收時員工會看著一個不存在的狀態
+  /// 繼續操作下去。
+  Future<void> _openHoldSheet(TaskDetail task, HoldSheetMode mode) async {
+    final updated = await HoldSheet.show(context, mode: mode, taskId: task.id);
+    if (updated == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _taskFuture = Future<TaskDetail?>.value(updated);
+    });
+  }
+
+  /// 「一次一間」提示（ui-plan F2-R1 的 `task.busy-alert`）。訊息直接用後端
+  /// 409 的 message——哪一間還在進行中是後端說了算，App 不自己湊這句話。
+  Future<void> _showBusyAlert(String message) {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => TmsSemantics(
+        id: 'task.busy-alert',
+        child: CupertinoAlertDialog(
+          content: Text(message),
+          actions: [
+            TmsSemantics(
+              id: 'task.busy-alert.dismiss-button',
+              child: CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('知道了'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 目前狀態對應的主按鈕文字；這個狀態沒有主要動作時回 null。
+  ///
+  /// 對照表出自 `任務執行/dsl.md` 的「任務頁只顯示一個主按鈕」：待開始與
+  /// 本人延後都是「開始」（主管延後沒有負責人，不能自己開工），進行中是
+  /// 「完成」，已中斷是「恢復處理」。延後／中斷是次要按鈕，不走這裡。
+  static String? _primaryActionLabel(TaskDetail task) {
+    switch (task.state) {
+      case 'accepted':
+        return '開始';
+      case 'deferred':
+        return task.deferredBySelf ? '開始' : null;
+      case 'doing':
+        return '完成';
+      case 'interrupted':
+        return '恢復處理';
+      default:
+        return null;
+    }
+  }
+
   Widget _buildTask(TaskDetail? task) {
     final showResumeBanner = task != null &&
         task.state == 'interrupted' &&
         (task.holdReason?.contains('工務已修好') ?? false);
+    final primaryActionLabel =
+        task == null ? null : _primaryActionLabel(task);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,6 +237,38 @@ class _TaskScreenState extends State<TaskScreen> {
               ),
             ),
           ),
+        if (task != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TmsSemantics(
+                id: 'task.status-chip',
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFEFF4),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(_statusChipText(task)),
+                ),
+              ),
+            ),
+          ),
+        // 停住原因只在任務真的停住時有值，所以沒有原因就整列不畫。不另外指定
+        // label：文字本身就是子節點的 label，顯式再給一次會被接成兩份。
+        if (task?.holdReason != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TmsSemantics(
+                id: 'task.status-row.hold-reason',
+                child: Text(task!.holdReason!),
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Text(
@@ -145,13 +282,23 @@ class _TaskScreenState extends State<TaskScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Wrap(
             children: [
-              TmsSemantics(
-                id: 'task.hold-button',
-                child: CupertinoButton(
-                  onPressed: () => HoldSheet.show(context),
-                  child: const Text('延後／中斷'),
+              if (task != null)
+                TmsSemantics(
+                  id: 'task.defer-button',
+                  child: CupertinoButton(
+                    onPressed: () => _openHoldSheet(task, HoldSheetMode.defer),
+                    child: const Text('延後'),
+                  ),
                 ),
-              ),
+              if (task != null)
+                TmsSemantics(
+                  id: 'task.interrupt-button',
+                  child: CupertinoButton(
+                    onPressed: () =>
+                        _openHoldSheet(task, HoldSheetMode.interrupt),
+                    child: const Text('中斷'),
+                  ),
+                ),
               TmsSemantics(
                 id: 'task.repair-button',
                 child: CupertinoButton(
@@ -189,6 +336,30 @@ class _TaskScreenState extends State<TaskScreen> {
             ],
           ),
         ),
+        const Spacer(),
+        // 置底主按鈕：一個狀態只露出一個，文字由 [_primaryActionLabel] 的
+        // 狀態對照表決定。沒有主要動作的狀態（待查房、已送達、完成…）
+        // 整顆不顯示。
+        if (primaryActionLabel != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
+              // 會被 Flutter 接成「開始\n開始」。
+              child: TmsSemantics(
+                id: 'task.primary-button',
+                child: CupertinoButton.filled(
+                  // 目前只接「開始」；完成與恢復處理的動作等對應情境進場
+                  // 再接（接了也沒有情境在驗，會變成沒人讀的分支）。
+                  onPressed: primaryActionLabel == '開始'
+                      ? () => _start(task!)
+                      : () {},
+                  child: Text(primaryActionLabel),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

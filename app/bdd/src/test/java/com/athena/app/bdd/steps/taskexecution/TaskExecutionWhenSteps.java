@@ -4,8 +4,17 @@ import com.athena.app.bdd.AppiumWorld;
 import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.當;
 
+import java.time.Duration;
+
 /** 任務執行模組的 When。 */
 public class TaskExecutionWhenSteps {
+
+    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
+
+    /** 自填說明要湊到指定字數時重複的字（dsl.md 指定用「住」）。 */
+    private static final String FILLER_CHARACTER = "住";
+
+    private static final String OTHER_REASON = "其他原因";
 
     private final AppiumWorld world;
 
@@ -30,7 +39,8 @@ public class TaskExecutionWhenSteps {
      */
     @當("{string} 在 App 為 {string} 選擇延後原因 {string} 並確認")
     public void chooseDeferReason(String staffName, String task, String reason) {
-        throw new PendingException();
+        openHoldSheet(staffName, task, "task.defer-button");
+        chooseReasonAndConfirm(reason);
     }
 
     /**
@@ -39,7 +49,8 @@ public class TaskExecutionWhenSteps {
      */
     @當("{string} 在 App 為 {string} 選擇中斷原因 {string} 並確認")
     public void chooseInterruptReason(String staffName, String task, String reason) {
-        throw new PendingException();
+        openHoldSheet(staffName, task, "task.interrupt-button");
+        chooseReasonAndConfirm(reason);
     }
 
     /**
@@ -49,7 +60,8 @@ public class TaskExecutionWhenSteps {
      */
     @當("{string} 在 App 為 {string} 選擇延後原因「其他原因」，填入 {string} 並確認")
     public void chooseOtherDeferReason(String staffName, String task, String note) {
-        throw new PendingException();
+        typeOtherDeferReason(staffName, task, note);
+        confirm();
     }
 
     /**
@@ -58,6 +70,37 @@ public class TaskExecutionWhenSteps {
      */
     @當("{string} 在 App 為 {string} 的延後面板選「其他原因」並輸入 {int} 字的說明")
     public void typeOtherDeferReasonChars(String staffName, String task, int charCount) {
-        throw new PendingException();
+        typeOtherDeferReason(staffName, task, FILLER_CHARACTER.repeat(charCount));
+    }
+
+    /** 進該房的任務頁，點延後或中斷的入口，等面板出現。 */
+    private void openHoldSheet(String staffName, String task, String entryTestId) {
+        world.ensureOnTaskDetail(world.staff(staffName), task);
+        world.tapTestId(entryTestId, SCREEN_TIMEOUT);
+        world.waitForTestId("hold.sheet", SCREEN_TIMEOUT);
+    }
+
+    /** 選一個預設原因後送出。 */
+    private void chooseReasonAndConfirm(String reason) {
+        world.tapTestId("hold.reason." + reason, SCREEN_TIMEOUT);
+        confirm();
+    }
+
+    /**
+     * 送出並等到面板收起來。
+     *
+     * <p>面板是在後端回應之後才關閉的，所以它消失代表這次操作整個做完了，接下來的
+     * 斷言讀到的才是更新後的任務頁。少了這一步，斷言會趕在 App 收到回應之前讀畫面。
+     */
+    private void confirm() {
+        world.tapTestId("hold.confirm-button", SCREEN_TIMEOUT);
+        world.waitForTestIdGone("hold.sheet", SCREEN_TIMEOUT);
+    }
+
+    /** 開延後面板、選「其他原因」、把說明打進去；送不送出由呼叫端決定。 */
+    private void typeOtherDeferReason(String staffName, String task, String note) {
+        openHoldSheet(staffName, task, "task.defer-button");
+        world.tapTestId("hold.reason." + OTHER_REASON, SCREEN_TIMEOUT);
+        world.typeInto("hold.other-reason-field", SCREEN_TIMEOUT, note);
     }
 }

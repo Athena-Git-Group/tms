@@ -188,6 +188,41 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
+  /// `POST /tasks/{id}/start`：負責人開工（契約 `tasksStart`）。同一位員工
+  /// 已經有另一筆進行中的單時後端回 409 `doing_task_exists`，message 是給人
+  /// 看的「{房號} 還在進行中」、context 帶那一筆的 taskId 與 roomNo——「一次
+  /// 一間」的判定全在後端，App 只負責把它呈現出來。
+  Future<TaskDetail> startTask(String taskId) async {
+    final json = await _requestJson('POST', '/tasks/$taskId/start', idempotent: true);
+    return TaskDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /tasks/{id}/defer`：負責人把自己名下待開始的任務延後（契約
+  /// `tasksDefer`）。[reason] 是預設原因或自填文字，長度規則（去頭尾空白後
+  /// 1–60 字）由後端把關，回 422 `reason_invalid`；App 端的字數上限提示只是
+  /// 讓員工在送出前就知道，不是權威判定。
+  Future<TaskDetail> deferTask(String taskId, String reason) async {
+    final json = await _requestJson(
+      'POST',
+      '/tasks/$taskId/defer',
+      body: {'reason': reason},
+      idempotent: true,
+    );
+    return TaskDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /tasks/{id}/interrupt`：負責人把自己進行中的任務轉為已中斷
+  /// （契約 `tasksInterrupt`）。[reason] 的規則同 [deferTask]。
+  Future<TaskDetail> interruptTask(String taskId, String reason) async {
+    final json = await _requestJson(
+      'POST',
+      '/tasks/$taskId/interrupt',
+      body: {'reason': reason},
+      idempotent: true,
+    );
+    return TaskDetail.fromJson(json as Map<String, dynamic>);
+  }
+
   /// `GET /tasks/{id}`：單一任務的員工視角詳情。
   Future<TaskDetail> getTask(String taskId) async {
     final json = await _requestJson('GET', '/tasks/$taskId');
@@ -679,11 +714,14 @@ class TaskDetail {
   const TaskDetail({
     required this.id,
     required this.state,
+    this.type = 'cleaning',
+    this.inspection,
     this.roomNo,
     this.title,
     this.note,
     this.elapsedMinutes = 0,
     this.holdReason,
+    this.deferredBySelf = false,
   });
 
   final String id;
@@ -691,6 +729,13 @@ class TaskDetail {
   /// 任務狀態，照契約 enum：triage｜pending_review｜rejected｜pool｜
   /// accepted｜doing｜done｜inspected｜deferred｜interrupted｜cancelled。
   final String state;
+
+  /// 任務類別，照契約 enum：cleaning｜amenity｜repair｜other。狀態文字要靠它
+  /// 分流（`done` 在打掃類是「待查房」，其他類是「已送達」）。
+  final String type;
+
+  /// 打掃任務的查房結果：passed｜waived｜failed；還沒查房時為 null。
+  final String? inspection;
   final String? roomNo;
   final String? title;
   final String? note;
@@ -701,15 +746,22 @@ class TaskDetail {
   /// 停住原因，例如「等工務：水電」或「工務已修好：水電」。
   final String? holdReason;
 
+  /// 延後時是否為本人延後（有負責人）。主管延後為 false——那種單的負責人
+  /// 已經被拿掉，任務頁不給「開始」。
+  final bool deferredBySelf;
+
   factory TaskDetail.fromJson(Map<String, dynamic> json) {
     return TaskDetail(
       id: json['id'] as String,
       state: json['state'] as String,
+      type: json['type'] as String? ?? 'cleaning',
+      inspection: json['inspection'] as String?,
       roomNo: json['roomNo'] as String?,
       title: json['title'] as String?,
       note: json['note'] as String?,
       elapsedMinutes: json['elapsedMinutes'] as int? ?? 0,
       holdReason: json['holdReason'] as String?,
+      deferredBySelf: json['deferredBySelf'] as bool? ?? false,
     );
   }
 }

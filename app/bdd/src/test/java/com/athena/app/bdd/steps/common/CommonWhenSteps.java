@@ -4,8 +4,12 @@ import com.athena.app.bdd.AppiumWorld;
 import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.當;
 
+import java.time.Duration;
+
 /** 介面根共通句的 When（dsl.md When 句型區）。 */
 public class CommonWhenSteps {
+
+    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
 
     private final AppiumWorld world;
 
@@ -25,13 +29,14 @@ public class CommonWhenSteps {
      */
     @當("{string} 在 App 開始 {string}")
     public void startTask(String staffName, String task) {
-        throw new PendingException();
+        world.ensureOnTaskDetail(world.staff(staffName), task);
+        world.tapTestId("task.primary-button", SCREEN_TIMEOUT);
     }
 
     /** 怎麼做：在首頁點該房的任務卡，進入任務頁。回寫：任務頁內容。 */
     @當("{string} 在 App 打開 {string} 的任務頁")
     public void openTaskDetail(String staffName, String task) {
-        throw new PendingException();
+        world.ensureOnTaskDetail(world.staff(staffName), task);
     }
 
     /**
@@ -41,6 +46,7 @@ public class CommonWhenSteps {
      */
     @當("{string} 在 App 完成 {string}")
     public void completeTask(String staffName, String task) {
-        throw new PendingException();
+        world.ensureOnTaskDetail(world.staff(staffName), task);
+        world.tapTestId("task.primary-button", SCREEN_TIMEOUT);
     }
 }
