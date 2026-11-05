@@ -10,6 +10,8 @@
 
 **本輪裁決（櫃檯直通工務）**：櫃檯交辦介面在交辦時選目標部門（房務／工務）；選房務時維持現狀，沿用既有「櫃檯轉單」來源值（目前只是房務待認領 Given 背景資料，見 `../dsl.md` 的 `房務待認領有以下任務：` 與 `../待認領/待認領排序與篩選.feature`，非本模組範圍）。選工務時直接開立工務單進工務待認領，不經過任何房務任務，來源標「櫃檯」（`tasks.source`=desk）；急件沿用既有系統判定規則，不由櫃檯人員填寫。住客掃碼不直通工務：住客掃碼仍只進房務，房務到場後需要工務時才用既有「中斷任務並開立工務單」流程轉工務；工務待認領「住客」來源篩選不建 truth（見本模組 When 句型「只看…的工務待認領」說明）。
 
+**本輪裁決（主管審核與驗收，以 `ui/prototype/Main.dc.html` 為準）**：開單審核只針對「房務報修的一般件」——房務報修（來源 staff）且非急件時，送出後狀態為「等主管審核」，不進工務待認領，主管核准後才轉為「待認領」；主管退回時須附原因，狀態轉為「主管未核准」，房務可補資料後重新送出，回到「等主管審核」。審核前（等主管審核、主管未核准兩個狀態）報修人仍可補照片或撤回，沿用既有「撤回限認領前」規則（此時單尚未進池，自然在認領前）。以下三種路徑不經過審核、直接進工務待認領：①系統判定的急件（不論來源）；②工務自行開單（`tasks.source`=staff，見 `工務視角維修與開單.feature`）；③櫃檯交辦開單（`tasks.source`=desk）。完修流程在「維修中」之後新增「驗收」：工務附完修照片完成後，單維持「已完修」狀態，新增「尚未驗收」事實；主管驗收通過後記錄驗收人，不新增獨立狀態值（原型 `tkd.sum`／`en.d.alert` 的 `stage` 欄位在驗收前後都維持 `done`，只是多了 `verified` 這個欄位）。完修當下通知原報修人、原任務恢復不變（既有 Rule）；驗收是主管端結案動作，不擋房務恢復，原型未描繪「驗收退回」，本輪不建這個分支，列為上游缺口。待回交 `/api-plan`、`/data-plan`：`tasks.state` 需新增 `pending_review`、`rejected` 兩個值並補對應端點（核准、退回、重新送出、驗收），`repair_tickets`（或 `tasks`）需補退回原因、驗收人、驗收時間欄位。
+
 ## Given 句型
 
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | StepDef 實作語意 |
@@ -26,14 +28,18 @@
 
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | StepDef 實作語意 |
 | --- | --- | --- | --- | --- |
-| `"{員工}" 中斷 "{任務}" 並開立以下工務單：` | `員工`：字串。<br>`任務`：字串；原任務房號。 | 支援：`類別`（必填，字串）、`說明`（選填，字串）、`照片張數`（必填，整數） | 無 | `怎麼做`：逐張呼叫 `createRepairPhoto` 與 `uploadRepairPhotoContent`，再呼叫 `createRepairTicket`（`POST /repair-tickets`，`interruptSourceTask`=true），房號由原任務帶入；請求不帶急件欄位，急件由系統依飯店設定的規則判定。`權威狀態落地`：成功時建立 pool 的修繕任務、`repair_tickets`（`is_urgent` 與 `urgent_rule` 由系統判定寫入）、綁定的 `repair_photos`，以及 `created` 事件（payload 只記 photo_count）；原任務轉為 interrupted，`hold_reason`=「等工務：<類別>」，`linked_repair_task_id` 指向新單。失敗時兩者都不變。`回寫`：回應與新單號。 |
-| `"{員工}" 從 "{任務}" 開立以下工務單：` | `員工`：字串。<br>`任務`：字串；原任務房號。 | 支援：`類別`（必填，字串）、`說明`（選填，字串）、`照片張數`（必填，整數） | 無 | `怎麼做`：同上一列，但 `interruptSourceTask`=false；請求不帶急件欄位，急件由系統依飯店設定的規則判定。`權威狀態落地`：成功時建立工務單（`is_urgent`、`urgent_rule` 由系統判定寫入）；系統判定為急件時會寫入全體工務與主管的 push outbox；原任務不變。`回寫`：回應與新單號。 |
+| `"{員工}" 中斷 "{任務}" 並開立以下工務單：` | `員工`：字串。<br>`任務`：字串；原任務房號。 | 支援：`類別`（必填，字串）、`說明`（選填，字串）、`照片張數`（必填，整數） | 無 | `怎麼做`：逐張呼叫 `createRepairPhoto` 與 `uploadRepairPhotoContent`，再呼叫 `createRepairTicket`（`POST /repair-tickets`，`interruptSourceTask`=true），房號由原任務帶入；請求不帶急件欄位，急件由系統依飯店設定的規則判定。`權威狀態落地`：成功時建立修繕任務、`repair_tickets`（`is_urgent` 與 `urgent_rule` 由系統判定寫入）、綁定的 `repair_photos`，以及 `created` 事件（payload 只記 photo_count）；系統判定為急件時直接進 pool（待認領），否則進 `pending_review`（等主管審核），待 `/api-plan` 補這個狀態值與對應的建立邏輯；原任務轉為 interrupted，`hold_reason`=「等工務：<類別>」，`linked_repair_task_id` 指向新單。失敗時兩者都不變。`回寫`：回應與新單號。 |
+| `"{員工}" 從 "{任務}" 開立以下工務單：` | `員工`：字串。<br>`任務`：字串；原任務房號。 | 支援：`類別`（必填，字串）、`說明`（選填，字串）、`照片張數`（必填，整數） | 無 | `怎麼做`：同上一列，但 `interruptSourceTask`=false；請求不帶急件欄位，急件由系統依飯店設定的規則判定。`權威狀態落地`：成功時建立工務單（`is_urgent`、`urgent_rule` 由系統判定寫入）；系統判定為急件時直接進 pool 並寫入全體工務與主管的 push outbox，否則進 `pending_review`（等主管審核，待 `/api-plan` 補狀態值）；原任務不變。`回寫`：回應與新單號。 |
 | `"{員工}" 從 "{任務}" 開立以下工務單，同一請求共送出 {次數} 次：` | `員工`：字串。<br>`任務`：字串。<br>`次數`：整數；包含第一次。 | 支援：同 `從 … 開立以下工務單：` | 無 | `怎麼做`：照片上傳後，用同一個 `Idempotency-Key` 連續呼叫 `createRepairTicket`，內容相同。`權威狀態落地`：只建立一張工務單，後續請求由 `processed_ops` 回放第一次的回應。`回寫`：每次回應。 |
-| `"{員工}" 中斷 "{任務}" 並以已準備的照片開立水電工務單` | `員工`：字串。<br>`任務`：字串。 | 不支援 | `類別`：水電。 | `怎麼做`：用 Given 準備的全部照片 id 呼叫 `createRepairTicket`（`interruptSourceTask`=true）；急件由系統依飯店設定的規則判定。`權威狀態落地`：只有每張照片都有內容時才建立工務單並中斷原任務；否則都不變。`回寫`：回應。 |
+| `"{員工}" 中斷 "{任務}" 並以已準備的照片開立水電工務單` | `員工`：字串。<br>`任務`：字串。 | 不支援 | `類別`：水電。 | `怎麼做`：用 Given 準備的全部照片 id 呼叫 `createRepairTicket`（`interruptSourceTask`=true）；急件由系統依飯店設定的規則判定。`權威狀態落地`：只有每張照片都有內容時才建立工務單並中斷原任務（一般件進 `pending_review`，急件進 pool）；否則都不變。`回寫`：回應。 |
 | `"{員工}" 對 "{房號}" 選擇工務單類別 "{類別}"` | `員工`：字串。<br>`房號`：字串。<br>`類別`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫 `precheckRepairTicket`（`POST /repair-tickets/precheck`）。`權威狀態落地`：查詢不建立工務單；觸發重複提示時，在 `repair_ticket_contributors` 記錄該員工。`回寫`：重複單號與狀態、系統急件判定結果與理由。 |
 | `"{主管}" 以原因 "{原因}" 將 "{單號}" 降級為一般件` | `主管`：字串。<br>`原因`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以主管身分呼叫 `downgradeRepairTicketUrgency`（`POST /repair-tickets/{ticketId}/downgrade-urgency`，note 為原因文字）。`權威狀態落地`：`repair_tickets.is_urgent` 轉為 false，`urgent_downgrade_reason` 寫入原因，`urgent_rule` 保留原判定規則供追溯；寫入 `urgent_downgraded` 事件。`回寫`：回應。 |
+| `"{主管}" 核准 "{單號}"` | `主管`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以主管身分呼叫待 `/api-plan` 補的核准端點（假設 `POST /repair-tickets/{ticketId}/approve`）。待 `/api-plan`：目前沒有這個端點與 `pending_review` 狀態值。`權威狀態落地`：只有 `pending_review` 的單能轉為 pool（待認領）；其他狀態不變；寫入對應的 `approved` 事件，記錄核准人。`回寫`：回應。 |
+| `"{主管}" 以原因 "{原因}" 退回 "{單號}"` | `主管`：字串。<br>`原因`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以主管身分呼叫待 `/api-plan` 補的退回端點（假設 `POST /repair-tickets/{ticketId}/reject`，body 帶原因）。待 `/api-plan`：目前沒有這個端點與 `rejected` 狀態值，`/data-plan` 需補退回原因欄位。`權威狀態落地`：只有 `pending_review` 的單能轉為 `rejected`；寫入退回原因與對應事件；不進入工務待認領。`回寫`：回應。 |
+| `"{員工}" 補資料再送出 "{單號}"` | `員工`：字串；原報修人。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以原報修人身分呼叫待 `/api-plan` 補的重新送出端點（假設 `POST /repair-tickets/{ticketId}/resubmit`）。待 `/api-plan`：目前沒有這個端點。`權威狀態落地`：只有 `rejected` 的單能轉回 `pending_review`，退回原因清空；其他狀態不變。`回寫`：回應。 |
+| `"{主管}" 驗收通過 "{單號}"` | `主管`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以主管身分呼叫待 `/api-plan` 補的驗收端點（假設 `POST /repair-tickets/{ticketId}/verify`）。待 `/api-plan`：目前沒有這個端點與驗收人／驗收時間欄位（`/data-plan` 待補）。`權威狀態落地`：只有已完修（`done`）且尚未驗收的單能被驗收；狀態值仍是 `done`，另外寫入驗收人與驗收時間，並寫入對應事件；原型未描繪「驗收退回」，本輪不建這個分支。`回寫`：回應。 |
 | `"{員工}" 補 {張數} 張照片到 "{單號}"` | `員工`：字串。<br>`張數`：整數。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分建立並上傳照片，再呼叫 `appendRepairTicketPhotos`（`POST /repair-tickets/{ticketId}/photos`）。`權威狀態落地`：工務單照片增加，事件只記增加的張數。`回寫`：回應。 |
-| `"{員工}" 撤回 "{單號}"` | `員工`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以報修人身分呼叫 `withdrawRepairTicket`（`POST /repair-tickets/{ticketId}/withdraw`）。`權威狀態落地`：只有 pool 能轉為 cancelled，`cancel_reason`=staff_withdrew，並寫入 `cancelled` 事件；其他狀態都不變。`回寫`：回應。 |
+| `"{員工}" 撤回 "{單號}"` | `員工`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以報修人身分呼叫 `withdrawRepairTicket`（`POST /repair-tickets/{ticketId}/withdraw`）。`權威狀態落地`：只有 `pending_review`（等主管審核，待 `/api-plan` 補狀態值）或 pool 能轉為 cancelled，`cancel_reason`=staff_withdrew，並寫入 `cancelled` 事件；其他狀態都不變。`回寫`：回應。 |
 | `"{工務}" 附 {張數} 張完修照片、處理說明 "{說明}" 完成 "{單號}"` | `工務`：字串。<br>`張數`：整數。<br>`說明`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以工務身分建立並上傳 purpose=completion 的照片，再呼叫 `tasksComplete`（`POST /tasks/{id}/complete`，body 為 `CompleteTaskRequest`）。`權威狀態落地`：工務單轉為 done，綁定完修照片並寫入 `repair_tickets.resolution_note`；連結原任務的 `hold_reason` 改為「工務已修好：<類別>」，但狀態不變；寫入報修人的 push outbox。`回寫`：回應。 |
 | `"{工務}" 不附完修照片完成 "{單號}"` | `工務`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以工務身分呼叫 `tasksComplete`，`photoIds` 是空的。`權威狀態落地`：工務單維持 doing。`回寫`：回應。 |
 | `"{工務}" 附 {張數} 張完修照片，回報 "{單號}" 暫時處理，說明 "{說明}"` | `工務`：字串。<br>`張數`：整數。<br>`單號`：字串。<br>`說明`：字串。 | 不支援 | 無 | `怎麼做`：以工務身分建立並上傳完修照片，呼叫 `tasksComplete` 並標明處理結果為暫時處理。待 `/api-plan`：`CompleteTaskRequest` 目前沒有處理結果欄位，假設會新增 `resolutionType`=`temporary`。`權威狀態落地`：原單轉為 done；系統另外自動建立一張新的工務單（追蹤單），房號、類別與原單相同，狀態為 pool，`resolution_note` 帶入說明；追蹤單與原單的關聯待 `/data-plan` 補欄位。`回寫`：回應與追蹤單號。 |
@@ -58,6 +64,9 @@
 | `系統判定 "{單號}" 為一般件` | `單號`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets.is_urgent`=false。`呈現結果`：建立回應的 `urgentJudgement.suggested`=false。 |
 | `"{單號}" 不是急件` | `單號`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets.is_urgent`=false。`再讀確認`：`readRepairTicket` 的 `isUrgent` 一致。 |
 | `"{單號}" 的急件降級原因為 "{原因}"` | `單號`：字串。<br>`原因`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets.urgent_downgrade_reason` 相等。`再讀確認`：`readRepairTicket` 的 `urgentDowngradeReason` 一致。 |
+| `"{單號}" 的退回原因為 "{原因}"` | `單號`：字串。<br>`原因`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：待 `/data-plan` 補的退回原因欄位相等。`再讀確認`：`readRepairTicket` 的對應欄位一致。 |
+| `"{單號}" 已由 "{主管}" 驗收` | `單號`：字串。<br>`主管`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：待 `/data-plan` 補的驗收人欄位等於該主管，驗收時間已寫入；工務單狀態仍為已完修（`done`），不另開新狀態值。`再讀確認`：`readRepairTicket` 的對應欄位一致。 |
+| `"{單號}" 尚未驗收` | `單號`：字串。 | 不支援 | 無 | `必查`：`不該發生`：待 `/data-plan` 補的驗收人欄位為空。 |
 | `以下員工都收到 "{單號}" 的急件推播：` | `單號`：字串。 | 支援：`員工`（必填，字串） | 無 | `必查`：每位員工都有一筆 kind `push` 的 outbox，`PushPayload.event`=repair_urgent，`target.highlightTaskId` 是該單。`跨視角`：推播消費者已寫入對應資料列。 |
 | `系統提示同房已有未結案的工務單 "{單號}"，狀態為 "{狀態}"` | `單號`：字串。<br>`狀態`：字串。 | 不支援 | 無 | `必查`：`呈現結果`：`duplicate.ticketNo` 與 `duplicate.state` 相符（狀態用語見對照表）。`不該發生`：沒有建立工務單。 |
 | `"{單號}" 共有 {張數} 張照片` | `單號`：字串。<br>`張數`：整數。 | 不支援 | 無 | `必查`：`權威狀態`：該工務單 purpose=report 的 `repair_photos` 筆數等於張數。`跨視角`：處理人呼叫 `readRepairTicket`（`GET /repair-tickets/{ticketId}`）時 `photoCount` 相同。 |
