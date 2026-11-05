@@ -2,14 +2,15 @@ import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
 import '../../core/tms_semantics.dart';
-import '../ticket/repair_labels.dart';
+import '../pool/pool_widgets.dart';
 import '../ticket/repair_ticket_form_screen.dart';
 
 /// 工務待認領（ui-plan 畫面 13 的 `engPool`）。
 ///
 /// 分流與排序一律交給後端：來源分流磚只是把選擇換成 `GET /pool` 的
 /// urgent／source 查詢參數重新取一次，App 不在本機重排、不在本機過濾；
-/// 列表照後端回應順序呈現。
+/// 列表照後端回應順序呈現。單卡與分流磚的外觀與房務待認領共用
+/// `features/pool/pool_widgets.dart` 的元件。
 class EngPoolScreen extends StatefulWidget {
   const EngPoolScreen({super.key});
 
@@ -20,11 +21,12 @@ class EngPoolScreen extends StatefulWidget {
 class _EngPoolScreenState extends State<EngPoolScreen> {
   /// 分流磚：畫面文字與 accessibility id 的 {source} 段；urgent 是急件
   /// 維度、staff／desk 是來源維度（契約 listDeptPool 的兩個篩選參數）。
+  /// `sourceParam` 是該磚要送給後端的 `source` 值，沒有值代表不帶這個參數。
   static const _categories = [
-    (source: 'all', label: '全部'),
-    (source: 'urgent', label: '急件'),
-    (source: 'staff', label: '房務報修'),
-    (source: 'desk', label: '櫃檯'),
+    (key: 'all', label: '全部', sourceParam: null),
+    (key: 'urgent', label: '急件', sourceParam: null),
+    (key: 'staff', label: '房務報修', sourceParam: 'staff_report'),
+    (key: 'desk', label: '櫃檯', sourceParam: 'desk_forward'),
   ];
 
   String _selected = 'all';
@@ -45,13 +47,12 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       _error = null;
     });
     try {
+      final selected = _categories.firstWhere(
+        (category) => category.key == _selected,
+      );
       final pool = await ApiClient.instance.getPool(
-        urgent: _selected == 'urgent' ? true : null,
-        source: switch (_selected) {
-          'staff' => 'staff_report',
-          'desk' => 'desk_forward',
-          _ => null,
-        },
+        urgent: selected.key == 'urgent' ? true : null,
+        source: selected.sourceParam,
       );
       if (mounted) {
         setState(() {
@@ -116,37 +117,14 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
             spacing: 8,
             children: [
               for (final category in _categories)
-                TmsSemantics(
-                  id: 'engPool.category.${category.source}.chip',
-                  child: GestureDetector(
-                    onTap: () {
-                      _selected = category.source;
-                      _fetch();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _selected == category.source
-                            ? CupertinoColors.activeBlue
-                            : CupertinoColors.white,
-                        border: Border.all(
-                          color: CupertinoColors.systemGrey4,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        category.label,
-                        style: TextStyle(
-                          color: _selected == category.source
-                              ? CupertinoColors.white
-                              : CupertinoColors.black,
-                        ),
-                      ),
-                    ),
-                  ),
+                PoolFilterChip(
+                  id: 'engPool.category.${category.key}.chip',
+                  label: category.label,
+                  selected: _selected == category.key,
+                  onTap: () {
+                    _selected = category.key;
+                    _fetch();
+                  },
                 ),
             ],
           ),
@@ -170,7 +148,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
           Expanded(
             child: ListView(
               children: [
-                for (final item in pool.items) _poolCard(item),
+                for (final item in pool.items) _engPoolCard(item),
               ],
             ),
           ),
@@ -202,54 +180,40 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     );
   }
 
-  Widget _poolCard(PoolItem item) {
-    // 工務池的單都是工務單、一定有單號；防衛性地跳過沒有單號的資料列，
-    // 單卡的 accessibility id 以單號當識別段。
+  /// 一張工務待認領單卡，id 以工務單號當識別段：
+  /// `engPool.item.{單號}.card`，卡內各列是 `engPool.item.{單號}.{欄位}`。
+  Widget _engPoolCard(PoolItem item) {
+    // 工務池的單都是工務單、一定有單號；沒有單號的資料列不是這個畫面能
+    // 呈現的東西，直接跳過而不是畫出一張定位不到的卡。
     final ticketNo = item.ticketNo;
     if (ticketNo == null) {
       return const SizedBox.shrink();
     }
-    final sourceLabel = poolSourceLabels[item.source];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: TmsSemantics(
-        id: 'engPool.item.$ticketNo.card',
-        label: '$ticketNo ${item.roomNo} ${item.title}',
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: CupertinoColors.white,
-            border: Border.all(color: CupertinoColors.systemGrey4),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('$ticketNo · ${item.roomNo}'),
-                  if (item.urgent) const Text('急件'),
-                ],
-              ),
-              Text(item.title),
-              if (sourceLabel != null)
-                TmsSemantics(
-                  id: 'engPool.item.$ticketNo.source-label',
-                  label: sourceLabel,
-                  child: Text(sourceLabel),
-                ),
-              TmsSemantics(
-                id: 'engPool.item.$ticketNo.claim-button',
-                child: CupertinoButton(
-                  onPressed: () => _claim(item),
-                  child: const Text('認領這單'),
-                ),
-              ),
-            ],
+    final itemId = 'engPool.item.$ticketNo';
+    final sourceLabel = engineeringPoolSourceLabels[item.source];
+
+    return PoolCard(
+      id: '$itemId.card',
+      semanticsLabel: '$ticketNo ${item.roomNo} ${item.title}',
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('$ticketNo · ${item.roomNo}'),
+            if (item.urgent) const Text('急件'),
+          ],
+        ),
+        Text(item.title),
+        if (sourceLabel != null)
+          PoolCardField(id: '$itemId.source-label', text: sourceLabel),
+        TmsSemantics(
+          id: '$itemId.claim-button',
+          child: CupertinoButton(
+            onPressed: () => _claim(item),
+            child: const Text('認領這單'),
           ),
         ),
-      ),
+      ],
     );
   }
 }

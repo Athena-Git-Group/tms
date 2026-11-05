@@ -119,6 +119,43 @@ public class BackendChannel {
             Map.entry("主管", "manager"),
             Map.entry("值班經理", "duty_manager"));
 
+    /**
+     * 任務類別中文 → 權威 {@code tasks.type}（＝契約 PoolCategory 的值域）。
+     * 來源：specs/truth/features/backend/dsl.md 的任務類別對照。
+     */
+    private static final Map<String, String> TASK_TYPE = Map.ofEntries(
+            Map.entry("打掃", "cleaning"),
+            Map.entry("備品", "amenity"),
+            Map.entry("修繕", "repair"),
+            Map.entry("其他", "other"));
+
+    /**
+     * 待認領來源中文 → 權威 {@code tasks.pool_source}（＝契約 PoolSource 的值域）。
+     * 「自動化規則」落 {@code system}，對照 backend dsl.md「房務待認領有以下任務：」
+     * 的「自動化規則＝system」。
+     */
+    private static final Map<String, String> POOL_SOURCE = Map.ofEntries(
+            Map.entry("住客掃碼", "guest_scan"),
+            Map.entry("櫃檯轉單", "desk_forward"),
+            Map.entry("主管退回", "manager_requeue"),
+            Map.entry("請假退回", "leave_return"),
+            Map.entry("班末退池", "shift_end_return"),
+            Map.entry("查房退回", "inspection_return"),
+            Map.entry("房務報修", "staff_report"),
+            Map.entry("自動化規則", "system"));
+
+    /** 未接提醒階段中文 → 權威 {@code tasks.reminder_stage}（V13 的 CHECK 值域）。 */
+    private static final Map<String, String> REMINDER_STAGE = Map.ofEntries(
+            Map.entry("已提醒同仁", "staff_reminded"),
+            Map.entry("已通知主管", "manager_notified"));
+
+    /**
+     * 公共區域佔位房的房號。後端用一間 {@code room_type='public_area'} 的佔位房代表
+     * 「沒有房號」的單（{@code tasks.room_id} 是 NOT NULL），房號字串與
+     * {@code AutomationRuleService.PUBLIC_AREA_ROOM_NO} 同值。
+     */
+    public static final String PUBLIC_AREA_ROOM_NO = "公共區域";
+
     private final String baseUrl;
     private final String dbUrl;
     private final String dbUser;
@@ -161,6 +198,33 @@ public class BackendChannel {
         String value = ROLE.get(chinese);
         if (value == null) {
             throw new IllegalArgumentException("找不到「" + chinese + "」在角色對照表中的權威值");
+        }
+        return value;
+    }
+
+    /** 任務類別中文 → 權威 tasks.type（＝契約 PoolCategory）；查不到就噴錯帶原詞。 */
+    public static String taskType(String chinese) {
+        String value = TASK_TYPE.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在任務類別對照表中的權威值");
+        }
+        return value;
+    }
+
+    /** 待認領來源中文 → 權威 tasks.pool_source（＝契約 PoolSource）；查不到就噴錯帶原詞。 */
+    public static String poolSource(String chinese) {
+        String value = POOL_SOURCE.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在待認領來源對照表中的權威值");
+        }
+        return value;
+    }
+
+    /** 未接提醒階段中文 → 權威 tasks.reminder_stage；查不到就噴錯帶原詞。 */
+    public static String reminderStage(String chinese) {
+        String value = REMINDER_STAGE.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在未接提醒階段對照表中的權威值");
         }
         return value;
     }
@@ -219,6 +283,90 @@ public class BackendChannel {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, id, tenantId, roomNo, floor, "standard_double", "dirty", "vacant", OffsetDateTime.now());
         return id;
+    }
+
+    /**
+     * 確保公共區域佔位房存在，回傳 rooms.id。欄位（floor 0、room_type public_area、
+     * hk_state cleaned）照抄 {@code AutomationRuleService.ensurePublicAreaRoom}：
+     * 沒有房號的單在後端一律掛在這間房上，fixture 建的那間必須和產品碼建的同形狀，
+     * 否則同一個房號會長出兩種房間資料。
+     */
+    public UUID ensurePublicAreaRoom() {
+        long tenantId = ensureTenant();
+        Optional<Object> existing = queryScalar(
+                "SELECT id FROM rooms WHERE tenant_id = ? AND room_no = ?", tenantId, PUBLIC_AREA_ROOM_NO);
+        if (existing.isPresent()) {
+            return (UUID) existing.get();
+        }
+        UUID id = UUID.randomUUID();
+        execute("""
+                INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at)
+                VALUES (?, ?, ?, 0, 'public_area', 'cleaned', 'vacant', ?)
+                """, id, tenantId, PUBLIC_AREA_ROOM_NO, OffsetDateTime.now());
+        return id;
+    }
+
+    /**
+     * 幫這位員工掛一筆最小可用的 {@code plan_rooms} 列，讓「這位員工負責哪一層樓」查得到。
+     * SQL 與佔位房號／預留值逐句對照 {@code tms StaffFixtures.assignPlanRoom}。
+     *
+     * <p>為什麼非有不可：{@code GET /pool} 的 {@code sameFloor} 是用查詢者的
+     * {@code plan_rooms} 所屬房間樓層去比對（TaskExecutionService.deptPool 的
+     * EXISTS 子查詢），員工身上沒有任何 plan_rooms 列時，所有單的同樓層標示都會是
+     * false——「負責樓層」這一欄不落地，同樓層的場景就沒有真相可驗。
+     */
+    public void assignPlanRoom(UUID staffId, int floor) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom("PLANROOM-F" + floor, floor);
+        OffsetDateTime now = OffsetDateTime.now();
+        UUID planId = UUID.randomUUID();
+        execute("""
+                INSERT INTO cleaning_plans
+                    (id, tenant_id, work_date, shift, status, version, generated_by, algo_version, generated_at)
+                VALUES (?, ?, ?, ?, 'draft', 0, 'system', 'v1', ?)
+                """, planId, tenantId, now.toLocalDate(), "17:00", now);
+        execute("""
+                INSERT INTO plan_rooms (id, tenant_id, plan_id, room_id, staff_id, est_min, route_seq)
+                VALUES (?, ?, ?, ?, ?, 30, 1)
+                """, UUID.randomUUID(), tenantId, planId, roomId, staffId);
+    }
+
+    /** 「{@code "X" 已停用}」：沒有對應的 admin API，直接落地（對照 tms StaffFixtures.deactivate）。 */
+    public void deactivateStaff(UUID staffId) {
+        execute("UPDATE staff_accounts SET active = false, status = 'inactive', updated_at = ?"
+                        + " WHERE tenant_id = ? AND id = ?",
+                OffsetDateTime.now(), ensureTenant(), staffId);
+    }
+
+    /**
+     * 「房務待認領有以下任務：」一列：建一張房務部門、狀態 {@code pool} 的任務，並補上
+     * 待認領池單卡要用的欄位。欄位對照 backend dsl.md 同名句型的「怎麼做」欄
+     * （{@code pool_source}、{@code priority_notify}、{@code return_reason}、
+     * {@code requeue_note}、{@code rule_hit}）加上未接提醒階段（{@code reminder_stage}）。
+     *
+     * @param roomNo 房號；null 代表沒有房號的單，掛到公共區域佔位房
+     * @param floor  樓層；null 時由房號第一位數字推導（與 RoomFixtures 同口徑）
+     */
+    public UUID createHousekeepingPoolTask(
+            String roomNo, Integer floor, String title, String typeCode, String poolSourceCode,
+            boolean priorityNotify, String returnReason, String handoverNote, String ruleHit,
+            String reminderStageCode) {
+        long tenantId = ensureTenant();
+        UUID roomId = roomNo == null
+                ? ensurePublicAreaRoom()
+                : ensureRoom(roomNo, floor != null ? floor : floorFromRoomNo(roomNo));
+        LocalDate workDate = "cleaning".equals(typeCode) ? LocalDate.now() : null;
+
+        UUID taskId = insertTaskAtCreatableState(
+                tenantId, roomId, title, typeCode, "housekeeping", null, workDate, "pool", "desk");
+        execute("""
+                UPDATE tasks
+                   SET pool_source = ?, priority_notify = ?, return_reason = ?, requeue_note = ?,
+                       rule_hit = ?, reminder_stage = ?
+                 WHERE tenant_id = ? AND id = ?
+                """, poolSourceCode, priorityNotify, returnReason, handoverNote, ruleHit,
+                reminderStageCode, tenantId, taskId);
+        return taskId;
     }
 
     /** 由房號推導樓層：取房號第一位數字（對照 RoomFixtures.floorFromRoomNo）。 */

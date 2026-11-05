@@ -70,12 +70,15 @@ class ApiClient {
     return MyToday.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /pool`：本部門待認領池（含分類筆數）。工務池另支援兩個篩選維度
-  /// （契約 `listDeptPool`）：[urgent]=true 只回急件；[source] 只回該來源
-  /// （`staff_report`＝房務報修、`desk_forward`＝櫃檯）。分流與排序一律交給
-  /// 後端——App 只把磚的選擇換成查詢參數，不在本機重排或過濾。
-  Future<DeptPool> getPool({bool? urgent, String? source}) async {
+  /// `GET /pool`：本部門待認領池（含分類筆數）。三個篩選維度都來自契約
+  /// `listDeptPool`：[category] 只回該類別（`cleaning`／`amenity`／`repair`／
+  /// `other`，房務待認領的分類磚用它）；[urgent]=true 只回急件；[source] 只回
+  /// 該來源（`staff_report`＝房務報修、`desk_forward`＝櫃檯）。帶 [category]
+  /// 時 `counts` 仍是整個池的筆數，分類磚的數字不會跟著縮水。分流與排序一律
+  /// 交給後端——App 只把磚的選擇換成查詢參數，不在本機重排或過濾。
+  Future<DeptPool> getPool({String? category, bool? urgent, String? source}) async {
     final query = <String, String>{
+      if (category != null) 'category': category,
       if (urgent != null) 'urgent': '$urgent',
       if (source != null) 'source': source,
     };

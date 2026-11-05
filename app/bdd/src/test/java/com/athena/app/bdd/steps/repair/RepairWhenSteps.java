@@ -85,20 +85,76 @@ public class RepairWhenSteps {
     /** 怎麼做：從任務頁進入報修畫面，點選類別。App 會呼叫開單前檢查。 */
     @當("{string} 在 {string} 的報修畫面選擇類別 {string}")
     public void chooseRepairCategory(String staffName, String task, String category) {
-        throw new PendingException();
+        openRepairSheet(staffName, task);
+        world.tapTestId("repair.category." + categoryKey(category) + ".chip", SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 房務報修的進法：登入 → 首頁該房的任務列（{@code home.task.{房號}.card}）→ 任務頁
+     * → 報修圖示（{@code task.repair-button}）→ 報修面板（{@code repair.sheet}）。
+     * 已經停在報修面板時不重複進入。
+     */
+    private void openRepairSheet(String staffName, String roomNo) {
+        world.ensureLoggedInAs(world.staff(staffName));
+        if (!world.driver().findElements(world.byTestId("repair.sheet")).isEmpty()) {
+            return;
+        }
+        world.tapTestId("home.task." + roomNo + ".card", SCREEN_TIMEOUT);
+        world.waitForTestId("task.screen", SCREEN_TIMEOUT);
+        world.tapTestId("task.repair-button", SCREEN_TIMEOUT);
+        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+    }
+
+    /** 類別中文 → 契約 enum；查不到就噴錯帶原詞，不猜。 */
+    private static String categoryKey(String categoryLabel) {
+        String key = CATEGORY_KEY_BY_LABEL.get(categoryLabel);
+        if (key == null) {
+            throw new IllegalArgumentException("認不得的工務單類別：「" + categoryLabel + "」"
+                    + "（合法值：" + CATEGORY_KEY_BY_LABEL.keySet() + "）");
+        }
+        return key;
     }
 
     /**
      * 怎麼做：從任務頁、通知或「我的」進入該工務單的詳情頁。回寫：工務單詳情內容。
      *
-     * <p>工務視角的進法是工務首頁的單卡（{@code engHome.in-hand.{單號}.card}）：
-     * 工務的單一定掛在自己名下，首頁列的就是這批單。
+     * <p>兩個視角的進法不同，依登入者部門分流：
+     * <ul>
+     *   <li>工務：工務首頁「手上」列表的單卡（{@code engHome.in-hand.{單號}.card}）
+     *       ——工務的單一定掛在自己名下。</li>
+     *   <li>房務（報修人）：dsl 的三條路（任務頁／通知／「我的」）裡只有任務頁的
+     *       同房工務單區有契約可依（{@code listRepairTickets?roomId=}），所以走
+     *       首頁該房任務列 → 任務頁 → 該單的工務單列
+     *       （{@code task.repair-ticket.{單號}.card}）。</li>
+     * </ul>
      */
     @當("{string} 在 App 打開 {string} 的工務單詳情")
     public void openTicketDetail(String staffName, String ticketNo) {
-        world.ensureLoggedInAs(world.staff(staffName));
-        world.tapTestId("engHome.in-hand." + ticketNo + ".card", SCREEN_TIMEOUT);
+        BackendChannel.CreatedStaff staff = world.staff(staffName);
+        world.ensureLoggedInAs(staff);
+        if ("engineering".equals(staff.dept())) {
+            world.tapTestId("engHome.in-hand." + ticketNo + ".card", SCREEN_TIMEOUT);
+        } else {
+            world.tapTestId("home.task." + roomNoOf(ticketNo) + ".card", SCREEN_TIMEOUT);
+            world.waitForTestId("task.screen", SCREEN_TIMEOUT);
+            world.tapTestId("task.repair-ticket." + ticketNo + ".card", SCREEN_TIMEOUT);
+        }
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
+    }
+
+    /** 權威讀回：該工務單所在的房號（房務端從同房任務頁進詳情要用）。 */
+    private String roomNoOf(String ticketNo) {
+        List<Map<String, Object>> rows = world.backend().queryRows(
+                """
+                SELECT r.room_no FROM repair_tickets rt
+                JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
+                WHERE rt.tenant_id = ? AND rt.ticket_no = ?
+                """, world.backend().ensureTenant(), ticketNo);
+        if (rows.size() != 1) {
+            throw new IllegalStateException("單號「" + ticketNo + "」在後端應恰有 1 張工務單，實際 "
+                    + rows.size() + " 張");
+        }
+        return (String) rows.get(0).get("room_no");
     }
 
     /** 怎麼做：把裝置切回有網路，等待待送出佇列處理完。 */

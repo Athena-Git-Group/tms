@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/tms_semantics.dart';
+import '../ticket/repair_labels.dart';
 
 /// 報修面板骨架（ui-plan 畫面 6 的 `repairSheet`，即工務單表單）：只放
 /// 版面與 accessibility id，不接資料、不實作互動。
@@ -40,6 +41,30 @@ class RepairSheet extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text('問題類別'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final category in repairCategories)
+                    TmsSemantics(
+                      id: 'repair.category.${category.key}.chip',
+                      child: GestureDetector(
+                        // 選類別要呼叫開單前檢查（重複提示＋急件判定）；
+                        // 骨架只先讓 chip 可定位、可點。
+                        onTap: () {},
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemGrey5,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(category.label),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 16),
               const TmsSemantics(
                 id: 'repair.photo.count-label',

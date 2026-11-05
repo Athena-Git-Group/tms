@@ -20,13 +20,6 @@ const List<({String key, String label})> repairResolutions = [
   (key: 'cannot_fix', label: '無法修復'),
 ];
 
-/// 待認領池的來源標示：契約 PoolSource → 單卡上的來源文字。工務待認領
-/// 只標示這兩種來源，其他來源的單卡不帶來源標示。
-const Map<String, String> poolSourceLabels = {
-  'staff_report': '房務報修',
-  'desk_forward': '櫃檯',
-};
-
 /// 工務單詳情的狀態摘要卡文案，對照後端工務單狀態：已完修之後是否已驗收
 /// 不是獨立狀態值，看 verifiedBy 是否有值（契約 RepairTicketSummary.state
 /// 的說明）。

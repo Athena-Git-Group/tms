@@ -333,6 +333,22 @@ public class AppiumWorld {
         waitForTestId("engPool.screen", timeout);
     }
 
+    /**
+     * 確保 App 已以這位員工的身分登入，並停在房務待認領（{@code pool}）。待認領不是
+     * 登入後的落地畫面，要從首頁再點一次入口；已經在待認領上時不重複點（與
+     * {@link #ensureOnEngineeringPool} 同一套作法）。
+     */
+    public void ensureOnPool(BackendChannel.CreatedStaff staff) {
+        ensureLoggedInAs(staff);
+        Duration timeout = Duration.ofSeconds(10);
+        if (!driver().findElements(byTestId("pool.screen")).isEmpty()) {
+            return;
+        }
+        waitForTestId("home.screen", timeout);
+        waitForLabelContaining("待認領", timeout).click();
+        waitForTestId("pool.screen", timeout);
+    }
+
     /** 記下通知中心情境的當事員工（由通知的 Given 句呼叫）。 */
     public void setNotificationViewer(BackendChannel.CreatedStaff staff) {
         this.notificationViewer = staff;
@@ -345,6 +361,39 @@ public class AppiumWorld {
                     "通知中心的當事員工尚未設定——場景是否漏了「X 的通知中心已有以下通知」或「X 已在 App 打開通知中心」？");
         }
         return notificationViewer;
+    }
+
+    /**
+     * 目前登入 App 的員工；還沒登入時噴錯。給「句型不帶員工參數、但權威讀回要以
+     * 當事人身分查」的 Then 用（例如待認領的列表斷言：後端只回登入者自己部門的池）。
+     */
+    public BackendChannel.CreatedStaff loggedInStaff() {
+        if (loggedInStaff == null) {
+            throw new IllegalStateException("App 尚未登入——場景是否漏了打開畫面的 When／Given？");
+        }
+        return loggedInStaff;
+    }
+
+    /**
+     * 找出畫面上所有 accessibility id 以某前綴開頭的元素，依畫面由上而下排序後回傳
+     * 它們的 id。給「列表順序」這類必須知道同類元素有哪些、各自排第幾的斷言用——
+     * id 帶執行期變數（房號）時沒辦法逐一指名定位，只能先掃再比。
+     *
+     * <p>iOS 的 {@code name} 屬性就是 {@code accessibilityIdentifier}，所以用
+     * NSPredicate 的 {@code BEGINSWITH} 掃。Android（UiAutomator2）要改掃
+     * {@code resource-id}，本輪 iOS 先行，踩到時再補。
+     */
+    public List<String> findTestIdsWithPrefix(String prefix) {
+        if (PLATFORM_ANDROID.equals(platform)) {
+            throw new UnsupportedOperationException(
+                    "findTestIdsWithPrefix()：Android 的 resource-id 前綴掃描本輪未實作。");
+        }
+        By locator = AppiumBy.iOSNsPredicateString("name BEGINSWITH " + nsPredicateString(prefix));
+        return driver().findElements(locator).stream()
+                .sorted(java.util.Comparator.comparingInt(e -> e.getRect().getY()))
+                .map(e -> e.getAttribute("name"))
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     /** 查本情境已建立的員工；查不到直接噴錯——場景引用沒建過的員工是劇本錯誤，不是可忽略情況。 */
@@ -379,10 +428,26 @@ public class AppiumWorld {
      * 參數時，由對應模組的 stepdef 直接呼叫 {@link #backend()}。
      */
     public void seedStaff(String name, String deptChinese) {
-        staffByName.computeIfAbsent(name, n ->
-                ("主管".equals(deptChinese) || "值班經理".equals(deptChinese))
-                        ? backend.createManagerLikeStaff(n, BackendChannel.role(deptChinese), "active")
-                        : backend.createFieldStaff(n, BackendChannel.dept(deptChinese), "active"));
+        seedStaff(name, deptChinese, null);
+    }
+
+    /**
+     * 同上，另外吃「負責樓層」欄：現場部門員工有這一欄時補一筆 {@code plan_rooms}
+     * （{@link BackendChannel#assignPlanRoom}），待認領的同樓層標示才有真相可依。
+     * 主管／值班經理沒有負責樓層的概念，給了也不落地。
+     */
+    public void seedStaff(String name, String deptChinese, Integer floor) {
+        staffByName.computeIfAbsent(name, n -> {
+            if ("主管".equals(deptChinese) || "值班經理".equals(deptChinese)) {
+                return backend.createManagerLikeStaff(n, BackendChannel.role(deptChinese), "active");
+            }
+            BackendChannel.CreatedStaff created =
+                    backend.createFieldStaff(n, BackendChannel.dept(deptChinese), "active");
+            if (floor != null) {
+                backend.assignPlanRoom(created.id(), floor);
+            }
+            return created;
+        });
     }
 
     /** 「{@code "X" 名下有以下任務}」：在真後端建立掛在這位員工名下、帶到指定狀態的任務。 */

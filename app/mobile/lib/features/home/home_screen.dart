@@ -6,6 +6,7 @@ import '../engineering/eng_home_screen.dart';
 import '../me/me_screen.dart';
 import '../notification/notification_screen.dart';
 import '../pool/pool_screen.dart';
+import '../task/task_screen.dart';
 
 /// 首頁骨架畫面。
 ///
@@ -51,16 +52,42 @@ class _HomeScreenState extends State<HomeScreen> {
                     // 今日進度（進度環卡）的第一格，id 照 ui-plan 的 F1 R1；
                     // 「登入成功，進入首頁」的驗收也以這一格出現＝今日進度
                     // 已載入為準。
-                    return TmsSemantics(
-                      id: 'home.progress.cleaned-ratio',
-                      label:
-                          '今日打掃 ${today.cleaningDone}/${today.cleaningTotal}',
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          '今日打掃 ${today.cleaningDone}/${today.cleaningTotal}',
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TmsSemantics(
+                          id: 'home.progress.cleaned-ratio',
+                          label:
+                              '今日打掃 ${today.cleaningDone}/${today.cleaningTotal}',
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              '今日打掃 ${today.cleaningDone}/${today.cleaningTotal}',
+                            ),
+                          ),
                         ),
-                      ),
+                        // 今日任務列表：點一列進那間房的任務頁（ui-plan 畫面 1
+                        // 「點任務列表項目進任務頁」）。資料只有 GET /me/today
+                        // 的 nextTasks 這一個來源。
+                        for (final next in today.nextTasks)
+                          TmsSemantics(
+                            id: 'home.task.${next.roomNo}.card',
+                            label: '${next.roomNo} ${next.title}',
+                            child: CupertinoButton(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  CupertinoPageRoute<void>(
+                                    builder: (_) => TaskScreen(
+                                      roomNo: next.roomNo,
+                                      taskId: next.taskId,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Text('${next.roomNo} ${next.title}'),
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),

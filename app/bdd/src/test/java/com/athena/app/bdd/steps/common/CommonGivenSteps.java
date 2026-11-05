@@ -36,8 +36,14 @@ public class CommonGivenSteps {
     @假設("飯店有以下員工：")
     public void hotelHasStaff(DataTable table) {
         for (Map<String, String> row : table.asMaps()) {
-            world.seedStaff(requireCell(row, "姓名"), requireCell(row, "部門"));
+            world.seedStaff(requireCell(row, "姓名"), requireCell(row, "部門"), optionalInt(row, "負責樓層"));
         }
+    }
+
+    /** 選填的整數欄；缺欄或留白一律當沒給（dsl.md 的選填欄語意）。 */
+    private static Integer optionalInt(Map<String, String> row, String column) {
+        String value = row.get(column);
+        return (value == null || value.isBlank()) ? null : Integer.valueOf(value.trim());
     }
 
     private static String requireCell(Map<String, String> row, String column) {

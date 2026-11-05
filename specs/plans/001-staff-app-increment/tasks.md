@@ -776,7 +776,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature`
 
 - [ ] T316 [BDD-GREEN] 讓 Test Scope 全綠（`app/bdd/run-module.sh 帳號與登入`，10 個場景全綠）
-  - 現況 9/10 綠（2026-11-05）：唯一紅燈是行 59「設定新密碼後進入首頁」——契約無「設定新密碼」端點（`員工帳號與登入.yaml` 只有 `staffAccountsLogin`），且後端 `BearerTokenAuthFilter` 在 `must_change_password` 清掉前對 `/me/today` 一律 403，App 邊界內無合法路徑轉綠。見上游缺口 #13；端點補齊後用既有 stepdef 即可收綠，勿假綠。
+  - 現況 9/10 綠（2026-11-05）：唯一紅燈是行 59「設定新密碼後進入首頁」——契約無「設定新密碼」端點（`員工帳號與登入.yaml` 只有 `staffAccountsLogin`），且後端 `BearerTokenAuthFilter` 在 `must_change_password` 清掉前對 `/me/today` 一律 403，App 邊界內無合法路徑轉綠。見上游缺口 #14；端點補齊後用既有 stepdef 即可收綠，勿假綠。
 - [X] T317 [BDD-REFACTOR] 在綠燈下整理登入／改密／登出三個流程共用的錯誤呈現與守衛判斷，清掉 `login_screen.dart` 的過時註解
 
 ## Phase 3O: ADD Feature File - ios-app/推播/通知中心.feature
@@ -822,9 +822,9 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/工務單/工務視角.feature`
 
 - [ ] T320 [BDD-GREEN] 讓 Test Scope 全綠（13 個場景）
-  - 現況 5/13 綠（2026-11-06，連兩輪結果一致非 flaky）：首頁彙總、急件／櫃檯分流、來源標示、待認領開單已綠；其餘 8 個場景被上游缺口 #11（7 個）與 #12（1 個）阻塞，端點／Given 補齊後以既有實作續推。
+  - 現況 5/13 綠（2026-11-06，連兩輪結果一致非 flaky）：首頁彙總、急件／櫃檯分流、來源標示、待認領開單已綠；其餘 8 個場景被上游缺口 #10（7 個）與 #11（1 個）阻塞，端點／Given 補齊後以既有實作續推。
 - [ ] T321 [BDD-REFACTOR] 在綠燈下整理工務／房務兩個視角共用的待認領單卡與工務單詳情元件，避免兩套平行實作
-  - 暫緩（2026-11-06）：T320 僅 5/13 綠，重構缺乏綠燈保護（`refactor-綠燈保護重構判準` Rule 1）。待缺口 #11／#12 解除、T320 收全綠後再做；屆時連同 T323 一起處理共用元件。
+  - 暫緩（2026-11-06）：T320 僅 5/13 綠，重構缺乏綠燈保護（`refactor-綠燈保護重構判準` Rule 1）。待缺口 #10／#11 解除、T320 收全綠後再做；屆時連同 T323 一起處理共用元件。
 
 ## Phase 3Q: ADD Feature File - ios-app/工務單（房務端三支）
 
@@ -851,7 +851,9 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature`
 
 - [ ] T322 [BDD-GREEN] 讓 Test Scope 全綠（18 個場景）
+  - 現況 0/18 綠（2026-11-06）：三支 feature 都卡在同一個入口缺口——房務的受測任務是「進行中」（doing），而 `/me/today` 的 `nextTasks` 只收 accepted、`/pool` 只回 pool，實跑對該情境的員工打這兩個端點都查不到那張單，App 沒有任何資料來源可以把人導到任務頁，報修面板（6＋3 個場景）因此進不去；工務單房務端生命週期（9 個場景）走同一條任務頁入口，後面 `listRepairTickets?roomId=` 後端也還回 501。端點補齊後以既有實作續推。
 - [ ] T323 [BDD-REFACTOR] 在綠燈下整理照片上傳佇列（壓縮、浮水印、單張重試、離線重送）的共用邏輯與 Phase 3P 共用的工務單詳情元件
+  - 暫緩（2026-11-06）：T322 0/18，無綠燈保護可重構。待缺口 #12／#13 解除、T322 收綠後，連同 T321 一起處理工務／房務共用元件。
 
 ## Phase 3R: ADD Feature File - ios-app/待認領/待認領列表.feature
 
@@ -873,7 +875,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/待認領/待認領列表.feature`
 
 - [ ] T324 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
-- [ ] T325 [BDD-REFACTOR] 在綠燈下整理池內單卡與分類磚元件，與 Phase 3P 的工務待認領共用同一組元件
+  - 現況 6/9 綠（2026-11-06）：後端排序、同樓層標示、退回單卡（來源／原因／接手進度）、分類筆數、分類篩選、公共區域規則單都已綠。其餘 3 個場景被上游缺口阻塞：未接超時兩段標籤（2 個）卡在缺口 #15（`GET /pool` 不回 `reminderStage`），部門全員停用空狀態（1 個）卡在缺口 #16（主管無部門池可看、後端也沒有「沒有在職員工」的訊號）。端點補齊後以既有實作與既有 stepdef 續推。
+- [X] T325 [BDD-REFACTOR] 在綠燈下整理池內單卡與分類磚元件，與 Phase 3P 的工務待認領共用同一組元件
 
 ## Phase 3S: ADD Feature File - ios-app/任務執行（任務頁核心互動＋任務卡狀態與提示）
 
@@ -1023,7 +1026,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 8 項是本輪**不產生** `[BDD-GREEN]` 任務的部分。前 4 項是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），後 4 項是環境與硬體未到位的 blocked 項：
+以下 16 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#16 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1034,6 +1037,10 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 7. **Android 端全部驗證**：`research.md:92`、`techstack.md:9` 記錄開發機 Android SDK 尚未安裝、低階 Android 實機未採購。本輪全部 Test Scope 只在 iOS simulator 驗收；Android locator 走 resource-id 的分流已在 `byTestId()` 就位，但未實測。blocked。
 8. **兩筆未裁決的用語落差**：`ui-plan.md:313-315` 的 #4（`due_at`／到期概念是否以其他形式保留）與 #10（`PushPayload.title` 的括號入題 vs 獨立 chip）。目前 16 支 feature 都沒有承接這兩項的 Rule，不影響本輪綠燈；回交產品決議。另記 `ui-plan.md:5,236` 仍有 Swift 前提與 Android locator 寫成 `contentDescription` 的文件殘留（`research.md:107` 已盤點），屬文件修正，回交 `/ui-plan`。
 9. **`V16__notifications.sql` 漏 GRANT（T318 實跑發現，2026-11-05）**：`notifications` 表沒有 `GRANT ... TO tms_app`，執行期 `GET /notifications` 500 permission denied（後端 BDD 以超級使用者跑，抓不到）。T318 已對跑著的 DB 手動 GRANT 解鎖；`tms/` 需補一支 GRANT migration，回交後端。
-11. **工務「我手上的工務單」無端點可列舉（T320 實跑發現，2026-11-06）**：`工務視角.feature` 有 7 個場景要從工務首頁點進維修中／已完修的工務單詳情，但現有端點都到不了——`/pool` 只回 `state=pool`，`/me/today` 的 `nextTasks` 只收 `accepted`（`TaskExecutionService:498`），契約的 `listRepairTickets` 是「依房間列出同房工務單」（必帶 `roomId`，非本人視角）且後端回 501，`listTasks` 實際掛在 `/desk` 僅限櫃檯／主管。回交 `/api-plan`：`MyToday.engineeringSummary` 補手上單清單，或新增 `GET /repair-tickets?assignee=me`（含 doing／今日 done）。
-12. **撞單場景的 Given 順序產生不出被測狀態（T320 實跑發現，2026-11-06）**：`工務視角.feature` 的「小李剛接走」場景，Given 先把單建成「已接單／小李」才打開待認領，該單此時已不在池中、依規格本就不該顯示，無法表達 Rule 要的「列表過期」語意。回交 `/dsl-refine`：Given 應改為先進池、開池後才被他人接走。
-13. **「設定新密碼」端點缺席（T316 實跑發現，2026-11-05）**：`登入與登出守衛.feature:59` 要求設定新密碼後進入首頁，但 `員工帳號與登入.yaml` 只有 `staffAccountsLogin`，無改密端點；後端在 `must_change_password` 清掉前對業務端點一律 403。回交 `/api-plan` 補「設定新密碼」端點（重雜湊密碼＋清 `must_change_password`）→ 後端實作後，T316 的最後 1 個場景用既有 stepdef 即可轉綠。在此之前 T316 收 9/10，不假綠。
+10. **工務「我手上的工務單」無端點可列舉（T320 實跑發現，2026-11-06）**：`工務視角.feature` 有 7 個場景要從工務首頁點進維修中／已完修的工務單詳情，但現有端點都到不了——`/pool` 只回 `state=pool`，`/me/today` 的 `nextTasks` 只收 `accepted`（`TaskExecutionService:498`），契約的 `listRepairTickets` 是「依房間列出同房工務單」（必帶 `roomId`，非本人視角）且後端回 501，`listTasks` 實際掛在 `/desk` 僅限櫃檯／主管。回交 `/api-plan`：`MyToday.engineeringSummary` 補手上單清單，或新增 `GET /repair-tickets?assignee=me`（含 doing／今日 done）。
+11. **撞單場景的 Given 順序產生不出被測狀態（T320 實跑發現，2026-11-06）**：`工務視角.feature` 的「小李剛接走」場景，Given 先把單建成「已接單／小李」才打開待認領，該單此時已不在池中、依規格本就不該顯示，無法表達 Rule 要的「列表過期」語意。回交 `/dsl-refine`：Given 應改為先進池、開池後才被他人接走。
+12. **App 無端點可列舉「進行中（doing）」的任務（T322 實跑發現，2026-11-06）**：房務端三支 feature 的受測任務都是 doing，但 `MyToday.nextTasks` 只收 `accepted`（`tms/.../TaskExecutionService.java:498` 逐字確認），`/pool` 只回 `state=pool`，因此 App 進不了任務頁，報修面板與工務單詳情全部到不了——**擋住 Phase 3Q 全部 18 個場景**。ui-plan 畫面 1 的「繼續處理」本來就需要這份清單。回交 `/api-plan`：`MyToday` 補進行中的單。與缺口 #10 同一族（App 看不見自己手上的工作）。
+13. **`listRepairTickets` 後端未實作（T322 實跑發現，2026-11-06）**：`GET /api/v1/repair-tickets?roomId=` 回 501（`tms/.../repair/RepairController.java:118` 明寫佔位），且契約無「我報的工務單」清單端點；即使 #12 解除，房務端仍進不了工務單詳情。回交後端實作＋`/api-plan` 評估是否補本人視角清單。
+14. **「設定新密碼」端點缺席（T316 實跑發現，2026-11-05）**：`登入與登出守衛.feature:59` 要求設定新密碼後進入首頁，但 `員工帳號與登入.yaml` 只有 `staffAccountsLogin`，無改密端點；後端在 `must_change_password` 清掉前對業務端點一律 403。回交 `/api-plan` 補「設定新密碼」端點（重雜湊密碼＋清 `must_change_password`）→ 後端實作後，T316 的最後 1 個場景用既有 stepdef 即可轉綠。在此之前 T316 收 9/10，不假綠。
+15. **`GET /pool` 不回 `reminderStage`（T324 實跑發現，2026-11-06）**：契約 `員工工作台.yaml` 的 `PoolItem.reminderStage` 已定義（`staff_reminded`／`manager_notified`），`tasks.reminder_stage` 也確實落地（V13；實跑以 SQL 確認 fixture 寫入成功），但 `TaskExecutionService.deptPool`（`tms/.../TaskExecutionService.java:369`）只把它當 `unclaimed_overdue` 排序旗標用，組裝 `PoolItem` 時（:405-419）沒有放進回應，App 永遠讀到 null，未接超時兩段標籤畫不出來——**擋住 Phase 3R 的 2 個場景**。回交後端：`deptPool` 補 `item.put("reminderStage", …)`。與缺口 #10／#12 同一族（App 看不見後端已有的資料）。
+16. **主管看不到任何部門待認領池，後端也沒有「部門沒有在職員工」的訊號（T324 實跑發現，2026-11-06）**：`待認領列表.feature:88` 要王主管打開房務待認領看到空狀態，但 (a) `listDeptPool` 只依登入者自己的 `dept` 分流、沒有部門查詢參數，主管的 `dept` 是 NULL，`TaskExecutionService.deptPool:357` 直接回 422「此帳號未設部門」；(b) 整個後端沒有任何地方判斷「這個部門沒有在職員工」，`GET /pool` 對這個情況只會回一般的空 `items`，App 無從分辨「沒有單」與「沒有人可以搶單」。回交 `/api-plan`：補部門參數（或主管視角的部門池端點）＋在回應中帶出部門可搶單人力的狀態。
