@@ -1,11 +1,11 @@
-# Tasks: 001-staff-app-increment（/dsl-refine 待認領改名／未接超時兩段模型／急件系統判定／ios-app 新規格 回補）
+# Tasks: 001-staff-app-increment（/dsl-refine 待認領改名／未接超時兩段模型／急件系統判定／ios-app 新規格 回補／ios-app 員工 App 實作）
 
 **Plan Package**: `specs/plans/001-staff-app-increment`
 **Core Inputs**: `spec.md`, `plan.md`, `research.md`, `truth-delta.md`（`## /dsl-refine` 段，commit `6fff7c7` 新增的列）, `specs/truth/techstack.md`, `specs/truth/contracts/**`, `specs/truth/data/data-model.dbml`, `specs/truth/features/backend/**`, `specs/truth/features/ios-app/**`
 
 本輪承接 commit `6fff7c7`（owner `/dsl-refine`）落下的四項裁決：A「待接池／待接」全面改「待認領」、B 廢 L1/L2/L3＋`due_at` 升級鏈改「未接超時」兩段提醒、C 急件改系統判定、D 新增 4 支 ios-app feature；以及 10 筆用語落差。上一輪 T165–T203（116 場景全綠，commit `175ca16`）已完成之前的 truth 內容，本輪只處理 `truth-delta.md` `/dsl-refine` 段新增的列。
 
-T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 起新增的 Phase 1c／2c／3H–3M 承接 `truth-delta.md` `/dsl-refine` 段「第二輪」（commit `4e7f9dd`：登入帳號、通知中心、工務視角三缺口）、「第三輪」（commit `bd9ab9a`：櫃檮直通工務）、「第四輪」（commit `d27487b`：主管審核與驗收），以及對應解鎖的 `/api-plan`（commit `42683ae`）、`/data-plan`（commit `fdb5a2e`）內容，全部範圍為 backend。
+T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 起新增的 Phase 1c／2c／3H–3M 承接 `truth-delta.md` `/dsl-refine` 段「第二輪」（commit `4e7f9dd`：登入帳號、通知中心、工務視角三缺口）、「第三輪」（commit `bd9ab9a`：櫃檮直通工務）、「第四輪」（commit `d27487b`：主管審核與驗收），以及對應解鎖的 `/api-plan`（commit `42683ae`）、`/data-plan`（commit `fdb5a2e`）內容，全部範圍為 backend。T299 起新增的 Phase 1d／2d／3N–3X／4 是第一輪 ios-app 任務，承接上一輪 Scope Note 明文留下的決議（下一輪針對 ios-app 的 ADD feature 另開 Phase 3/4，沿用 backend 已解鎖的 contracts），範圍是 `app/mobile/`（Flutter App）與 `app/bdd/`（Appium harness）兩個目錄，驗收真相為 `specs/truth/features/ios-app/` 的 16 支 feature。
 
 ## Task Binding Contract
 
@@ -599,3 +599,434 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 - [X] T297 [BDD-GREEN] 讓 Test Scope 全綠
 - [X] T298 [BDD-REFACTOR] 在綠燈下整理驗收人／驗收時間寫入與既有完修共用事件歷程邏輯（NOOP：已共用 guard+recordEvent 骨架，寫入模式與 reject 一致）
+
+## Scope Note（本輪新增範圍：ios-app 員工 App 實作，全部 App／harness 側）
+
+本輪承接上一輪 Scope Note 的明文決議（「下一輪 `/tasks` 應針對 ios-app 這批 ADD feature 另開一輪 Phase 3/4（沿用本輪 backend 已解鎖的 contracts）」）。範圍是 `app/mobile/`（Flutter App）與 `app/bdd/`（Appium＋Cucumber-JVM harness）兩個目錄，不改 `tms/`、不改 `specs/truth/**`。
+
+驗收真相是 `specs/truth/features/ios-app/` 的 16 支 feature／108 個場景（`RunTruthFeaturesTest` dry-run 現況：108 scenarios、30 errors 全為 undefined step）。其中 `推播/點開推播的去處.feature`（12 個場景，含 Scenario Outline 展開）已於 App 骨架期經 `app/bdd/run-f3.sh` 真跑全綠（F3 推播金絲雀），本輪不重做，只在 Phase 4 回歸；其餘 14 支 feature／96 個場景是本輪的 Test Scope。（場景數一律以 runner 展開後為準，不是 feature 檔裡的 `場景` 行數。）
+
+**現況盤點（本輪的起點，`/implement` 不必重查）**：
+
+- `app/mobile/lib/`：`main.dart`＋`core/{push_gateway,test_backdoor,tms_semantics,theme}.dart`＋4 個畫面（`features/{login,home,pool,task}`）。13 個邏輯畫面中已有 4 個；`login_screen.dart` 是唯一真的打後端的畫面，`home`／`pool`／`task` 全部從測試後門 `/seed` 灌進來的 fixture 渲染，沒有 API client。
+- `app/bdd/`：harness 可跑（`AppiumWorld` 有 session 生命週期、`byTestId()` 雙平台分流、`waitForTestId`、`sendPush`／`backgroundApp`／`tapPushNotification`、`/seed` 通道）。step 包 9 個（`ask`、`common`、`handover`、`pool`、`push`、`repair`、`system`、`taskexecution`、`today`），其中只有 `push` 是真實作；其餘 8 包共 118 處 `PendingException` stub。`steps/account/` 不存在。
+- 測試後門（`core/test_backdoor.dart`）現有端點：`GET /state`、`POST /clock`、`POST /offline`、`POST /upload-fail`、`POST /seed`。
+- undefined step 共 **49 句**（30 個場景）：帳號與登入 19 句（整個模組，無 stepdef 包）、通知中心 9 句、工務單（工務視角＋房務端生命週期）21 句。其餘 104 句 dsl 已有 stepdef，但多為 `PendingException`。
+
+**任務邊界取捨（記錄，供下一輪檢視）**：Phase 2d 不採「一條 DSL 一個 task」（那會是 49 個 task，與本輪 Phase 3 的 14 支 feature GREEN 合計逾 80 項）。改以「模組 × Given／When／Then」切 9 個 task，每個 task 把它負責的句型逐句列出，驗收仍以 `dry-run` 的 undefined 句數為機械判準。這是本輪為了讓 Phase 3 能進入同一份清單所做的取捨，不是認定這些句型不必逐句對照 `dsl.md`。
+
+**`工務單/dsl.md` 有 1 句沒有任何 feature 使用**（`工務待認領分類標籤顯示如下：`，dsl.md:72）：`工務視角.feature` 的分流場景改用 `工務待認領依序為 {單號清單}` 驗，這句沒有 Test Scope 承接，本輪不排 RED 任務，列入下方上游缺口。
+
+## Phase 1d: Foundational（App↔後端通道、stepdef 落點、分模組 runner）
+
+**Goal**: 只建立 Phase 2d／3N–3X 會用到的資料通道、落點骨架與執行工具，不實作任何畫面行為或斷言語意。比照 T204、T226、T240 先例：共用結構先進 Foundational 當機械補遺。
+
+- [ ] T299 App 端 API client：把畫面資料來源從測試後門 fixture 換成真後端
+  - Read:
+    - `specs/truth/features/ios-app/dsl.md` -> 共通實作約定「Given 透過後端測試資料準備權威狀態」「每個 Then 除了檢查畫面，還要確認畫面與後端權威狀態一致」
+    - `app/mobile/lib/features/login/login_screen.dart:9-14`（`API_BASE_URL` 的 `--dart-define` 既有慣例）、`:18-24`（登入 request body 欄位名的 TODO）
+    - `app/mobile/lib/core/test_backdoor.dart:31-51`（`/seed` 目前存什麼）
+    - `specs/truth/contracts/components/schemas/員工帳號與登入.yaml` -> `LoginRequest`／`LoginResponse`（T287 已實作，欄位為 `loginId`／`password`，回應帶 `mustChangePassword`）
+    - `specs/plans/001-staff-app-increment/ui/ui-plan.md:305`（App 端依賴的後端契約清單，不得自創欄位）
+  - 只做：新增 `app/mobile/lib/core/api_client.dart`——以 `API_BASE_URL` 為基底、帶登入取得的 JWT，封裝 `GET /me/today`、`GET /pool`、`GET /tasks/{id}` 三個讀取端點與登入端點；`login_screen.dart` 的 request body 欄位名改為契約的 `loginId`／`password`（移除該檔 TODO）。`home`／`pool`／`task` 三個畫面改從 `api_client` 取資料，測試後門 `/seed` 退回只負責裝置側注入（時間、離線、上傳失敗），不再當資料來源。
+  - 不做：不新增 `ui-plan.md:305` 清單以外的端點呼叫；不實作任何本輪 feature 的畫面行為（留給 Phase 3 的 `[BDD-GREEN]`）；不碰 `push_gateway.dart`（F3 已綠）。
+
+- [ ] T300 harness 端後端通道：真資料 fixture 與「後端權威狀態」斷言入口
+  - Read:
+    - `app/bdd/src/test/java/com/athena/app/bdd/AppiumWorld.java:255-345`（`seedStaff`／`seedTasks`／`ensurePoolTask`／`postSeed` 目前只打 App 後門）
+    - `app/bdd/run-f3.sh`（啟動流程：flutter build → boot simulator → appium → mvn；本輪要在前面加「後端就緒」一段）
+    - `tms/src/test/java/com/athena/tms/bdd/support/`（後端 BDD 的 fixture 建法，供對照欄位與 enum 值，不得自創）
+    - `.athena/handoff/2026-11-04-183000-staff-app-ios-kickoff.md` §6 -> 跑測試的 `JAVA_HOME`／`TESTCONTAINERS_RYUK_DISABLED` 陷阱
+  - 只做：在 `AppiumWorld`（或同層新 helper）加一組對後端 REST 的 fixture／讀回通道：建員工與帳號、建任務與工務單、讀回任務與工務單權威狀態；後端位址用系統屬性（比照 `appium.server.url` 既有風格）設定，預設 `http://127.0.0.1:8080`。`run-f3.sh` 抽出共用的環境準備片段供 T304 的分模組腳本沿用。
+  - 不做：不在 harness 內啟動後端容器（後端由 `docker-compose`＋`tms` 既有方式先起好，腳本只檢查就緒並在未就緒時明確失敗）；不寫任何 Given／Then 語意。
+
+- [ ] T301 測試後門補兩個注入開關：登入情境與連線不穩
+  - Read:
+    - `app/mobile/lib/core/test_backdoor.dart:140-180`（`case 'POST /clock'`／`'POST /offline'`／`'POST /upload-fail'` 既有寫法）
+    - `specs/truth/features/ios-app/帳號與登入/dsl.md` -> Given `這支手機已記住 "{員工}" 的帳號`、`這支手機是共用手機，沒有記住任何帳號`
+    - `specs/truth/features/ios-app/系統層/dsl.md` -> Given `"{員工}" 的連線目前不穩定`
+  - 只做：新增 `POST /remembered-account`（設定／清除「這支手機記住的帳號」）與 `POST /flaky-connection`（把即時連線切成異常態），兩者都沿用既有 `TEST_BACKDOOR=true` 編譯期旗標與 JSON 風格。
+  - 不做：不實作登入畫面兩種模式的版面差異與連線異常列（留給 Phase 3N／3X 的 `[BDD-GREEN]`）；不新增 dsl 未要求的注入能力。
+
+- [ ] T302 建立帳號與登入 stepdef 落點骨架
+  - Read:
+    - `specs/truth/features/ios-app/帳號與登入/dsl.md`（19 句的歸屬）
+    - `app/bdd/src/test/java/com/athena/app/bdd/steps/push/`（既有包的 Given／When／Then 分檔與 `package-info.java` 慣例）
+  - 只做：新建 `app/bdd/src/test/java/com/athena/app/bdd/steps/account/`（`AccountGivenSteps.java`、`AccountWhenSteps.java`、`AccountThenSteps.java`、`package-info.java`），每個檔案留空殼（package、class、建構子注入 `AppiumWorld`、必要 import），確認 Phase 2d 的 T306–T308 只寫進這三個檔。
+  - 不做：不寫任何 Given／When／Then 語意。
+
+- [ ] T303 通知中心與工務視角的 stepdef 落點分段
+  - Read:
+    - `app/bdd/src/test/java/com/athena/app/bdd/steps/push/PushGivenSteps.java`、`PushWhenSteps.java`、`PushThenSteps.java`（F3 的真實作，本輪不得改動其行為）
+    - `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairGivenSteps.java`、`RepairWhenSteps.java`、`RepairThenSteps.java`
+  - 只做：在 `steps/push/` 三個檔用註解分出「通知中心」區塊、在 `steps/repair/` 三個檔用註解分出「工務視角」與「房務端生命週期」區塊，留出 T309–T314 的落點，不與 F3 推播去處的既有實作混寫。
+  - 不做：不寫任何語意；不動 `push` 包既有的 3 個已實作 step。
+
+- [ ] T304 分模組 runner 與執行腳本
+  - Read:
+    - `app/bdd/src/test/java/com/athena/app/bdd/RunTruthFeaturesTest.java`（`@SelectDirectories` 寫死全目錄）、`RunF3PushFeatureTest.java`（只選推播目錄的理由：避免 pending 場景逐一重開模擬器）
+    - `app/bdd/run-f3.sh`（五段式流程）
+  - 只做：新增 `RunModuleFeatureTest`，要跑的目錄改由系統屬性 `cucumber.features` 指定（不寫死）；新增 `app/bdd/run-module.sh <模組目錄名>`，沿用 T300 抽出的環境準備片段，跑 `-Dtest=RunModuleFeatureTest -Dcucumber.features=../../specs/truth/features/ios-app/<模組>`。
+  - 不做：不改 `RunTruthFeaturesTest`／`RunF3PushFeatureTest` 的既有選擇範圍（Phase 4 要靠它們做全量與 F3 回歸）。
+  - 驗收：`app/bdd/run-module.sh 查一下` 只跑 `查一下/查一下畫面.feature` 的 4 個場景，不觸發其他模組。
+
+- [ ] T305 建立缺的畫面與路由骨架
+  - Read:
+    - `specs/plans/001-staff-app-increment/ui/ui-plan.md:69-184`（13 個邏輯畫面的目的、進入條件、流轉）、`:230-276`（accessibility id 命名規則與逐項 id 表）
+    - `app/mobile/lib/core/tms_semantics.dart`（`Semantics(identifier:)` 與 `enabled` 顯式曝露的共用包裝，所有新畫面一律經它掛 id）
+    - `app/mobile/lib/features/pool/pool_screen.dart`（既有畫面的檔案結構與 id 掛法範本）
+  - 只做：建立本輪 Test Scope 需要但尚不存在的畫面檔與路由骨架——`features/notification/`（通知中心）、`features/ticket/`（工務單詳情）、`features/celebrate/`（完成慶祝）、`features/me/`（我的，只需到「登出」入口）、`features/engineering/`（工務首頁 `engHome`、工務待認領 `engPool`）、以及任務頁的三個 sheet（`hold`／`repair`／`ask`）落點；每個畫面只放版面骨架與按 ui-plan 約定掛好的 accessibility id，不接資料、不實作互動。
+  - 不做：不實作任何 feature 行為；不建 ui-plan 標「待原型補畫面」的 id（`home.streak-badge`、`task.card.due-badge`、`pool.card.common-area-label`、`pool.empty-state--no-active-staff`——見下方上游缺口）；不碰「情境模擬」操作面板（ui-plan:12 明訂不進 App）。
+
+## Phase 2d: Test Alignment（ios-app 49 句 undefined step → RED）
+
+**Goal**: 把 16 支 ios-app feature 用到、尚無 stepdef 的 49 句 DSL 依各模組 `dsl.md` 的「App 實作語意（Appium）」落成可被跑到的 step definitions。不實作畫面行為。
+
+**DSL 參照**:
+- 帳號與登入 19 句（T306–T308）在 `specs/truth/features/ios-app/帳號與登入/dsl.md`（新模組，本輪首次承接）。
+- 通知中心 9 句（T309–T311）在 `specs/truth/features/ios-app/推播/dsl.md`（通知中心段落）。
+- 工務單 21 句（T312–T314）在 `specs/truth/features/ios-app/工務單/dsl.md`（工務視角 11 句、房務端生命週期 3 句、共用 7 句）。
+- 讀法：用 task 列出的句型對到該檔那一列，以「App 實作語意（Appium）」當實作語意。Given／When 讀 `怎麼做`、`權威狀態落地`、`回寫`；Then 讀 `必查`。元素一律以 dsl 該列指定的 accessibility id 定位（經 `byTestId()` 分流），不用文字座標或截圖比對。
+- `specs/truth/features/ios-app/dsl.md` 的共通實作約定（Given 經後端準備權威狀態、Then 同時查畫面與後端）對 49 句全部適用。
+
+**Markers**:
+- `[BDD-RED]`：本輪 feature 用到、尚無 stepdef 的句。依 `dsl.md` 該列寫出 stepdef。完成時這句可被跑到，失敗只能是定位不到元素或產品行為，不能是 undefined step。
+- 本輪 ios-app feature 沒有 MODIFY／DELETE，故無 `[BDD-ALIGN]`／`[BDD-REMOVE]`。
+- marker 只動 `app/bdd/` 測試層，不動 `app/mobile/` 產品碼。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/dsl.md` -> 共通實作約定與共用 Given／When／Then
+- `specs/truth/features/ios-app/帳號與登入/dsl.md`、`推播/dsl.md`、`工務單/dsl.md` -> 全部 Given／When／Then
+- `app/bdd/src/test/java/com/athena/app/bdd/AppiumWorld.java` -> `byTestId()`、`waitForTestId()`、`waitForLabelContaining()`、T300 新增的後端通道
+- `app/bdd/src/test/java/com/athena/app/bdd/steps/push/`（F3 真實作，唯一可參考的完成範本）
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:230-276` -> accessibility id 命名規則與逐項 id 表
+- `specs/plans/001-staff-app-increment/research.md:74-81` -> 兩平台 locator 不同、不得用 `Key`／`ValueKey` 當測試標的
+- `specs/truth/contracts/components/schemas/員工帳號與登入.yaml`、`通知中心.yaml`、`工務單.yaml` -> Then 查後端權威狀態時的欄位名（不得自創）
+
+**Boundary**:
+- 一個 task 負責「一個模組的一種 step 類型」，task 內逐句列出；只改該些句的 stepdef／直接依賴的 helper。
+- 不寫 `app/mobile/` 產品碼（畫面行為留給 Phase 3N–3X 的 `[BDD-GREEN]`）。
+- `通知中心「{分組}」分組依序包含 {標題清單}`、`工務待認領依序為 {單號清單}` 這類帶清單參數的句，要比照既有 `待認領列表依序為 (.+)` 用正則註記，不能讓 Cucumber 把中文清單切成 `{int}` 參數（dry-run 產生的 snippet 正是這樣切錯的）。
+- T306–T308 依賴 T299、T300、T301、T302；T309–T311 依賴 T299、T300、T303、T305；T312–T314 依賴 T299、T300、T303、T305。
+- review 啟動 subagent；通過前不解鎖 Phase 3N–3X。
+
+**Parallel Hint**:
+- T306–T314 各派一個獨立 subagent；T315 等全部回來再啟動 subagent 來 review。
+
+- [ ] T306 [P] [BDD-RED] 帳號與登入 Given 8 句
+  - `這支手機已記住 "{員工}" 的帳號`、`這支手機是共用手機，沒有記住任何帳號`、`"{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"`、`"{員工}" 已在 App 登入，目前手機離線`、`"{員工}" 已在 App 登入，名下有進行中的任務 "{任務}"`、`"{員工}" 已用臨時密碼登入，正在強制改密畫面`、`"{員工}" 已連續輸入錯誤密碼 {次數} 次`、`"{員工}" 的帳號是臨時密碼`
+  - Read: `app/bdd/.../steps/account/AccountGivenSteps.java`（T302 骨架）；`specs/truth/contracts/components/schemas/員工帳號與登入.yaml`；後端 `staff_accounts.must_change_password`／`failed_login_count`／`locked_until` 三欄由 T240 建立、登入語意由 T287 實作，Given 經後端準備這三欄的值，不在 App 端假造
+  - 註：斜線句型 `"{員工編號}" / "{密碼}"` 的 Cucumber expression 要寫成 `\\/`（Cucumber 把 `/` 當替代字元分隔符）
+
+- [ ] T307 [P] [BDD-RED] 帳號與登入 When 4 句
+  - `"{員工}" 在記住帳號畫面輸入密碼 "{密碼}" 並登入`、`"{員工}" 在共用手機畫面輸入員工編號 "{員工編號}" 密碼 "{密碼}" 並登入`、`"{員工}" 設定新密碼 "{新密碼}" 並確認`、`"{員工}" 在「我的」點登出`
+  - Read: `app/bdd/.../steps/account/AccountWhenSteps.java`（T302 骨架）、`app/mobile/lib/features/login/login_screen.dart`（既有欄位與送出鈕的 id）
+
+- [ ] T308 [P] [BDD-RED] 帳號與登入 Then 7 句
+  - `登入畫面顯示 "{員工}" 的身分卡，只有密碼欄位`、`登入畫面顯示員工編號與密碼兩個欄位`、`登入畫面顯示錯誤 "{提示}"`、`登入畫面顯示帳號已鎖定，剩餘 {分鐘} 分鐘`、`App 進入強制改密畫面，完成前無法使用其他畫面`、`"{員工}" 登入成功，進入首頁`、`App 顯示登出被攔住，原因為 "{原因}"`
+  - Read: `app/bdd/.../steps/account/AccountThenSteps.java`（T302 骨架）；`必查` 的「後端權威狀態一致」半邊走 T300 的後端讀回通道（登入成功要確認後端 `failed_login_count` 已清零、鎖定要確認 `locked_until`）
+
+- [ ] T309 [P] [BDD-RED] 通知中心 Given 2 句
+  - `"{員工}" 的通知中心已有以下通知：`、`"{員工}" 已在 App 打開通知中心`
+  - Read: `specs/truth/features/ios-app/推播/dsl.md`（通知中心段落）、`app/bdd/.../steps/push/PushGivenSteps.java`（T303 分段）；通知資料經後端 `notifications` 表（T241 建表、T289 實作 `listNotifications`）準備，不在 App 端假造
+
+- [ ] T310 [P] [BDD-RED] 通知中心 When 3 句
+  - `"{員工}" 在 App 打開通知中心`、`"{員工}" 在通知中心點選 "{標題}"`、`"{員工}" 在通知中心點「全部標為已讀」`
+  - Read: `app/bdd/.../steps/push/PushWhenSteps.java`（T303 分段）、`specs/truth/contracts/groups/知識與通知/通知中心.yaml`（`markNotificationRead`／`markAllNotificationsRead`，Then 查權威狀態用）
+
+- [ ] T311 [P] [BDD-RED] 通知中心 Then 4 句
+  - `通知中心「{分組}」分組依序包含 {標題清單}`、`"{標題}" 的通知顯示未讀藍點`、`"{標題}" 的通知沒有未讀藍點`、`通知中心顯示空狀態 "{文案}"`
+  - Read: `app/bdd/.../steps/push/PushThenSteps.java`（T303 分段）、`specs/plans/001-staff-app-increment/ui/ui-plan.md:274`（`notification.item.{id}.unread-dot`、`notification.mark-all-read-button`）
+  - 註：`分組依序包含 {標題清單}` 要用正則註記（見 Boundary），未讀藍點以 id 的可見性驗、不要求畫面有「未讀」文字（ui-plan §5 #9 的驗法）
+
+- [ ] T312 [P] [BDD-RED] 工務單模組 Given 2 句
+  - `"{工務}" 手上有 {張數} 張維修中的工務單，今天已完修 {已完修張數} 張，其中 {急件數} 張是急件`、`"{工務}" 已在 App 打開工務待認領`
+  - Read: `app/bdd/.../steps/repair/RepairGivenSteps.java`（T303 分段）；資料經後端 `repair_tickets` 準備（對應後端 T262 同名 Given 的既有建法，欄位與 enum 值沿用，不自創）
+
+- [ ] T313 [P] [BDD-RED] 工務單模組 When 7 句
+  - `"{工務}" 在 App 打開工務首頁`、`"{工務}" 在 App 打開工務待認領`、`"{工務}" 點選工務待認領分類 "{來源}"`、`"{工務}" 在 App 認領 "{單號}"`、`"{工務}" 在工務單詳情點「放回待認領」`、`"{工務}" 在工務單詳情完修，回報結果 "{結果}"，附 {張數} 張照片`、`"{工務}" 在待認領點「開工單」，填寫以下資訊並送出：`
+  - Read: `app/bdd/.../steps/repair/RepairWhenSteps.java`（T303 分段）、`specs/truth/contracts/groups/現場作業/工務單.yaml`（`releaseRepairTicketToPool`）、`specs/truth/contracts/components/schemas/任務.yaml`（`CompleteTaskRequest.resolutionType` 的 `fixed`／`temporary`／`cannot_fix`）、`specs/truth/contracts/components/schemas/工務單.yaml`（`CreateRepairTicketRequest` 的 `roomId`／`isPublicArea`／`assigneeId`）
+
+- [ ] T314 [P] [BDD-RED] 工務單模組 Then 12 句
+  - 工務視角 9 句：`工務首頁顯示手上 {張數} 張、今天已完修 {已完修張數} 張、急件 {急件數} 張`、`工務待認領中 "{單號}" 的來源標示為 "{來源}"`、`工務待認領依序為 {單號清單}`、`工務認領撞單，畫面顯示「已被 "{員工}" 認領」`、`工務單詳情沒有「放回待認領」按鈕`、`"{單號}" 回到工務待認領，不再指派給任何人`、`工務單詳情顯示已完修，結果為 "{結果}"`、`工務單詳情的步驟條依序為 "{步驟清單}"，目前在 "{目前步驟}"`、`App 停在新建工務單的詳情`
+  - 房務端生命週期 3 句：`工務單詳情顯示退回原因 "{原因}"`、`工務單詳情顯示撤回按鈕`、`工務單詳情顯示「補資料再送出」按鈕`
+  - Read: `app/bdd/.../steps/repair/RepairThenSteps.java`（T303 分段）、`specs/truth/features/ios-app/工務單/dsl.md`（每列的 `engPool.*`／`ticket.*` id）
+  - 註：`工務待認領依序為 {單號清單}` 要用正則註記（見 Boundary）
+
+- [ ] T315 subagent review (phase quality gate)
+  - 驗收：`JAVA_HOME=$(/usr/libexec/java_home -v 25) mvn -f app/bdd/pom.xml test -Dtest=RunTruthFeaturesTest -Dcucumber.execution.dry-run=true` 回報 **108 scenarios、0 undefined step**（本輪起點是 30 個 undefined errors）。有 issues 就修正再 review，直到沒有任何問題。
+
+## Phase 3N: ADD Feature File - ios-app/帳號與登入/登入與登出守衛.feature
+
+**Goal**: 實作登入畫面兩種模式（記住帳號／共用手機）、錯誤文案與剩餘次數、連錯 5 次鎖定剩餘時間、臨時密碼強制改密守衛、以及登出的兩個攔阻（離線、名下有進行中的任務），讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature` -> 整檔（9 Rule／10 場景）
+- `specs/truth/features/ios-app/帳號與登入/dsl.md` -> 全部 19 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:159-166`（登入畫面）、`:150-157`（我的，登出入口與攔阻）
+- `specs/truth/contracts/components/schemas/員工帳號與登入.yaml`、`specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `staffAccountsLogin`（401／403／429 路徑與 `mustChangePassword`）
+- `app/mobile/lib/features/login/login_screen.dart`、`app/mobile/lib/features/me/`（T305 骨架）、`app/mobile/lib/core/api_client.dart`（T299）
+
+**Boundary**:
+- 鎖定剩餘時間、失敗次數、臨時密碼旗標一律以後端回應為準（後端 T287 已實作），App 不自己算鎖定時間、不在本機累計失敗次數。
+- 「我的」頁只做到登出入口與兩個攔阻 Alert；推播設定／文字大小／語言／個人資料／遺失物無 feature 承接，不實作（見上游缺口）。
+- 離線登出攔阻讀 T301 的離線注入開關，不另做網路偵測機制。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature`
+
+- [ ] T316 [BDD-GREEN] 讓 Test Scope 全綠（`app/bdd/run-module.sh 帳號與登入`，10 個場景全綠）
+- [ ] T317 [BDD-REFACTOR] 在綠燈下整理登入／改密／登出三個流程共用的錯誤呈現與守衛判斷，清掉 `login_screen.dart` 的過時註解
+
+## Phase 3O: ADD Feature File - ios-app/推播/通知中心.feature
+
+**Goal**: 實作通知中心畫面——今天／更早分組、未讀藍點、點選導頁並轉已讀、全部標為已讀、空狀態，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/推播/通知中心.feature` -> 整檔（6 Rule／6 場景）
+- `specs/truth/features/ios-app/推播/dsl.md` -> 通知中心段落全部列（含 `App 停在 "{畫面}"` 的去處對照）
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:141-148`（通知中心畫面）、`:274`（`notification.item.{id}.unread-dot`、`notification.mark-all-read-button`）
+- `specs/truth/contracts/groups/知識與通知/通知中心.yaml` -> `listNotifications`／`markNotificationRead`／`markAllNotificationsRead`（後端 T289 已實作）
+- `app/mobile/lib/features/notification/`（T305 骨架）、`app/mobile/lib/core/push_gateway.dart`（F3 既有的 `dest`／`room`／`highlight` 導頁約定，通知中心點選要走同一套去處解析）
+
+**Boundary**:
+- 分組（今天／更早）在 App 端依通知的 `createdAt` 與裝置時間切，後端只回單一列表（後端 T290 已記錄「分組屬 App 端」）。
+- 點選通知的導頁重用 `push_gateway.dart` 既有的去處解析，不另寫第二套對照。
+- 不動 F3（`點開推播的去處.feature`）的既有實作與 `run-f3.sh`。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/推播/通知中心.feature`
+
+- [ ] T318 [BDD-GREEN] 讓 Test Scope 全綠（`app/bdd/run-module.sh 推播`，18 個場景全綠＝通知中心 6＋F3 既有 12）
+- [ ] T319 [BDD-REFACTOR] 在綠燈下整理通知列表項與去處解析的共用邏輯，確認 F3 的 12 個場景沒有因重構轉紅
+
+## Phase 3P: ADD Feature File - ios-app/工務單/工務視角.feature
+
+**Goal**: 實作工務視角——工務首頁彙總（手上張數／今天已完修／急件數）、工務待認領的來源分流與來源標示、認領撞單、放回待認領（限公共區域）、完修三選一回報、工務自開工單、工務單詳情四步步驟條與驗收人，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/工務單/工務視角.feature` -> 整檔（11 Rule／13 場景）
+- `specs/truth/features/ios-app/工務單/dsl.md` -> 工務視角相關全部列（含 `engHome.*`／`engPool.*`／`ticket.*` id）
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:177-184`（工務視角畫面）、`:11`（部門切換不是獨立產品）
+- `specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `listDeptPool`（`urgent`／`source` 參數）、`getMyToday`（`engineeringSummary`）；`groups/現場作業/工務單.yaml` -> `releaseRepairTicketToPool`、`verifyRepairTicket`；`components/schemas/任務.yaml` -> `CompleteTaskRequest.resolutionType`（後端 T291／T297 已實作）
+- `app/mobile/lib/features/engineering/`、`features/ticket/`（T305 骨架）、`app/mobile/lib/core/api_client.dart`（T299）
+
+**Boundary**:
+- 分流與排序一律用後端 `listDeptPool` 的回應順序與篩選參數，App 不在本機重排、不在本機過濾。
+- 完修三選一只呼叫 `tasksComplete` 的 `resolutionType`；追蹤單自動建立與房況轉停用待確認都是後端行為（T291 已實作），App 只呈現結果。
+- 放回待認領按鈕的有無依後端回應的公共區域旗標決定；客房單的 409 `room_ticket_not_requeueable` 不該被使用者看到（按鈕直接不出現，比照 ui-plan:227 撤回按鈕的同一原則）。
+- 「主管驗收通過後顯示驗收人」只讀 `verifiedBy`／`verifiedAt`，App 沒有驗收動作（無主管視角）。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/工務單/工務視角.feature`
+
+- [ ] T320 [BDD-GREEN] 讓 Test Scope 全綠（13 個場景）
+- [ ] T321 [BDD-REFACTOR] 在綠燈下整理工務／房務兩個視角共用的待認領單卡與工務單詳情元件，避免兩套平行實作
+
+## Phase 3Q: ADD Feature File - ios-app/工務單（房務端三支）
+
+**Goal**: 實作房務端報修全程——照片浮水印、張數上下限與按鈕禁用、單張上傳失敗重試、離線暫存與恢復連線後的冪等重送、開單提示（重複報修、系統判定急件）、工務單詳情的狀態摘要卡與撤回／退回／補資料再送出，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/工務單/報修照片與送出.feature`（6 Rule／6 場景）、`開單提示.feature`（2 Rule／3 場景）、`工務單房務端生命週期.feature`（5 Rule／9 場景）
+- `specs/truth/features/ios-app/工務單/dsl.md` -> 房務端相關全部列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:114-131`（報修面板與工務單詳情）、`:267-272`（`repair.photo.*`／`repair.duplicate-ticket.*`／`repair.urgent-judgement.*`／`ticket.summary.offline-queued-label`）
+- `specs/plans/001-staff-app-increment/research.md:104`（浮水印若燒進 pixel，Appium 讀不到——必須額外渲染一個帶同樣字串且掛 id 的可及節點）、`:105`（壓縮用 `flutter_image_compress`，浮水印丟 `compute()`／isolate）
+- `specs/truth/contracts/components/schemas/工務單.yaml` -> `CreateRepairTicketRequest`（無 `urgent`）、`RepairTicket.urgentJudgement`／`urgentDowngradeReason`／`rejectReason`；`groups/現場作業/工務單.yaml` -> `withdrawRepairTicket`、`resubmitRepairTicket`（後端 T236／T293／T295 已實作）
+- `specs/truth/techstack.md:44-46` -> `Idempotency-Key` ＋ `processed_ops` 的冪等約定
+- `app/mobile/lib/core/test_backdoor.dart`（`/clock` 注裝置時間、`/offline` 強制離線、`/upload-fail` 強制第 N 張失敗）
+
+**Boundary**:
+- 急件判定卡只呈現後端回的 `urgentJudgement`（judgement／rule），畫面明示「房務不能更改」；App 不送 `urgent` 欄位、不自行判定。
+- 照片張數限制以「送出鈕禁用＋欄位標題提示」表達（ui-plan §5 #14 已裁決為等效判定），不做事後 toast。
+- 離線重送走 `Idempotency-Key`：同一張工務單的重送必須攜帶同一個 key，`後端只有 {張數} 張 ... 工務單` 這句由 T300 的後端讀回通道驗。
+- 浮水印字串必須掛在可及節點上（`repair.photo.{index}.watermark-label`），不得只畫進圖片像素。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/工務單/報修照片與送出.feature`
+- `specs/truth/features/ios-app/工務單/開單提示.feature`
+- `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature`
+
+- [ ] T322 [BDD-GREEN] 讓 Test Scope 全綠（18 個場景）
+- [ ] T323 [BDD-REFACTOR] 在綠燈下整理照片上傳佇列（壓縮、浮水印、單張重試、離線重送）的共用邏輯與 Phase 3P 共用的工務單詳情元件
+
+## Phase 3R: ADD Feature File - ios-app/待認領/待認領列表.feature
+
+**Goal**: 實作房務待認領列表——後端排序、同樓層標示、單卡資訊（來源／原因／接手進度）、分類標籤與筆數、分類篩選、未接超時兩段標籤，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/待認領/待認領列表.feature` -> 整檔（8 Rule／9 場景）
+- `specs/truth/features/ios-app/待認領/dsl.md` -> 全部 13 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:78-86`（待認領畫面）、`:254-259`（`pool.card.*`／`pool.category.*`／未接超時兩段標籤 id）
+- `specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `listDeptPool`（後端 T220 排序、T209 提醒狀態已實作）
+- `app/mobile/lib/features/pool/pool_screen.dart`（既有畫面，本輪要接上 T299 的 API client）
+
+**Boundary**:
+- 列表順序與分類筆數一律用後端回應，App 不重排、不重算筆數。
+- 未接超時標籤只有「已提醒同仁」「已通知主管」兩段（裁決 2），不做橫幅、不做徽章、不做 L 層。
+- 公共區域單卡與「部門沒有在職員工」空狀態的視覺規格缺件，相關場景的處理見下方上游缺口。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/待認領/待認領列表.feature`
+
+- [ ] T324 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
+- [ ] T325 [BDD-REFACTOR] 在綠燈下整理池內單卡與分類磚元件，與 Phase 3P 的工務待認領共用同一組元件
+
+## Phase 3S: ADD Feature File - ios-app/任務執行（任務頁核心互動＋任務卡狀態與提示）
+
+**Goal**: 實作任務頁核心互動——打掃四段／備品三段步驟條、一狀態一主按鈕、SOP 勾選與跳過、超時 N 分純提示、完成慶祝頁；以及一次一間提示、中斷停住時間、完成·免查房 chip，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/任務執行/任務頁核心互動.feature`（7 Rule／9 場景）、`任務卡狀態與提示.feature`（3 Rule／3 場景）
+- `specs/truth/features/ios-app/任務執行/dsl.md` -> 全部 17 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:88-104`（任務頁與完成慶祝）、`:247-251`（`task.busy-alert.*`／`task.card.paused-elapsed`／`task.status-chip--inspected-waived`）、`:273`（`task.status-chip` 的 `--state` 修飾）
+- `specs/truth/features/backend/dsl.md` -> 狀態用語對照表（App 的 chip 文字與它一致）
+- `app/mobile/lib/features/task/task_screen.dart`、`features/celebrate/`（T305 骨架）
+
+**Boundary**:
+- 「超時 N 分」是純畫面提示，不觸發任何推播（feature 有一句專門斷言後端沒送推播）；超時基準是預估工時，不是已廢除的 `due_at`。
+- 計時與已做分鐘以後端回的任務狀態與時間為準，裝置時間由 T301 的 `/clock` 注入；App 不自己持久化計時。
+- 「一次一間」的拒絕由後端 409 決定，App 只呈現 Alert 並維持另一間為待開始。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/任務執行/任務頁核心互動.feature`
+- `specs/truth/features/ios-app/任務執行/任務卡狀態與提示.feature`
+
+- [ ] T326 [BDD-GREEN] 讓 Test Scope 全綠（12 個場景）
+- [ ] T327 [BDD-REFACTOR] 在綠燈下整理步驟條、主按鈕與狀態 chip 的狀態映射，收斂成單一狀態→呈現對照表
+
+## Phase 3T: ADD Feature File - ios-app/任務執行/延後與中斷原因面板.feature
+
+**Goal**: 實作延後／中斷原因面板——預設原因清單、選後直接送出、「其他原因」60 字以內可送出、超過 60 字送出鈕禁用並即時顯示字數，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/任務執行/延後與中斷原因面板.feature` -> 整檔（4 Rule／9 場景）
+- `specs/truth/features/ios-app/任務執行/dsl.md` -> 延後／中斷相關列（含 `延後面板的送出鈕為 "{按鈕狀態}"`、`延後面板顯示字數 "{字數文字}"`）
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:106-112`（延後／中斷面板，兩組預設原因逐字清單）、`:226`（60 字上限即時提示）
+- `specs/plans/001-staff-app-increment/research.md:76`（`TmsSemantics` 必須顯式曝露 `enabled`，`onPressed: null` 的 Cupertino 按鈕在 Appium 端讀起來永遠是可用的）
+- `app/mobile/lib/core/tms_semantics.dart`、`app/mobile/lib/features/task/`（`holdSheet` 落點由 T305 建立）
+
+**Boundary**:
+- 兩組預設原因文字以 ui-plan:110 的清單為準，不自行增刪。
+- 送出鈕禁用狀態必須經 `TmsSemantics` 曝露，Appium 讀得到；不得只靠視覺灰階。
+- 原因與說明的落地語意（`hold_reason`／`deferred_by_self`）是後端既有行為，本 phase 不改後端。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/任務執行/延後與中斷原因面板.feature`
+
+- [ ] T328 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
+- [ ] T329 [BDD-REFACTOR] 在綠燈下把延後與中斷兩個面板收斂成同一個元件（差異只在預設原因清單與送出端點）
+
+## Phase 3U: ADD Feature File - ios-app/今日進度/首頁今日進度.feature
+
+**Goal**: 實作首頁今日進度——四格數值、待開始的單依推薦順序列出、連續零退回天數，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/今日進度/首頁今日進度.feature` -> 整檔（3 Rule／3 場景）
+- `specs/truth/features/ios-app/今日進度/dsl.md` -> 全部 3 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:69-76`（首頁）、`:243-245`（`home.progress.*` 四格與 `home.streak-badge`）
+- `specs/truth/contracts/components/schemas/員工工作台.yaml` -> `MyToday`（含 `inspectedCount`，後端 T238 已實作）
+- `app/mobile/lib/features/home/home_screen.dart`、`app/mobile/lib/core/api_client.dart`（T299）
+
+**Boundary**:
+- 四格數值與待開始順序全部用 `GET /me/today` 的回應，App 不自己算、不自己排。
+- 第四格是「查房通過」（`inspectedCount`，裁決已落地於後端 T238），不是已廢除的「今天完成單數」。
+- 連續零退回天數的畫面節點（`home.streak-badge`）在 ui-plan 標為「待補畫面」，本 phase 依 feature 的 Rule 掛上這個 id 實作最薄呈現；視覺規格缺件見上游缺口。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/今日進度/首頁今日進度.feature`
+
+- [ ] T330 [BDD-GREEN] 讓 Test Scope 全綠（3 個場景）
+- [ ] T331 [BDD-REFACTOR] 在綠燈下整理進度環與今日進度四格的資料繫結，與 Phase 3P 的工務首頁彙總共用同一個 `MyToday` 取用路徑
+
+## Phase 3V: ADD Feature File - ios-app/房間交辦（兩支）
+
+**Goal**: 實作任務頁交辦區（來源／作者／時間／內容、未讀標示、開始後轉已讀）與查房退回資訊（逐欄顯示、換人原因不另列主管交代），讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/房間交辦/任務頁交辦區.feature`（3 Rule／3 場景）、`查房退回資訊.feature`（2 Rule／2 場景）
+- `specs/truth/features/ios-app/房間交辦/dsl.md` -> 全部 7 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:263-266`（`task.handover.*`／`task.status-row.return-info`）、`:58`（未讀以 id 的狀態／可見性驗，不要求畫面有「未讀」文字）
+- `specs/truth/features/backend/房間交辦/dsl.md` -> Then `"{任務}" 的退回資訊逐欄顯示如下：`（後端 T223 已對齊逐欄語意，App 的逐欄驗法與它同一口徑）
+- `app/mobile/lib/features/task/task_screen.dart`
+
+**Boundary**:
+- 退回資訊逐欄顯示（標題／原因／內文三段分別驗），不是一句全文比對；不合格項帶 SOP 項全名。
+- 未讀以 `task.handover.unread-dot` 的可見性驗，不加「未讀」文字。
+- 換人原因不進交辦列表（後端已併入狀態列），App 不得另列一條主管交代。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/房間交辦/任務頁交辦區.feature`
+- `specs/truth/features/ios-app/房間交辦/查房退回資訊.feature`
+
+- [ ] T332 [BDD-GREEN] 讓 Test Scope 全綠（5 個場景）
+- [ ] T333 [BDD-REFACTOR] 在綠燈下整理交辦 callout 與狀態列退回資訊兩個區塊的共用版面元件
+
+## Phase 3W: ADD Feature File - ios-app/查一下/查一下畫面.feature
+
+**Goal**: 實作查一下面板——依任務情境列出推薦問題與範圍、回答下方出處卡、查不到時明說且不顯示任何回答、查不到時提供問主管，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/查一下/查一下畫面.feature` -> 整檔（4 Rule／4 場景）
+- `specs/truth/features/ios-app/查一下/dsl.md` -> 全部 10 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:133-139`（查一下面板）、`:260-262`（`ask.suggestion.{index}`／`ask.answer.source-card.*`／`ask.not-found-message`／`ask.ask-manager-button`）、`:220`（不得帶出住客身分）
+- `app/mobile/lib/features/task/`（`askSheet` 落點由 T305 建立）
+
+**Boundary**:
+- 推薦問題順序與出處卡內容全部來自後端，App 不自己排序、不自己生成答案。
+- 查不到時畫面不得出現任何回答區塊（不是顯示空字串）。
+- 不顯示住客身分相關欄位，即使後端回應含有。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/查一下/查一下畫面.feature`
+
+- [ ] T334 [BDD-GREEN] 讓 Test Scope 全綠（4 個場景）
+- [ ] T335 [BDD-REFACTOR] 在綠燈下整理推薦問題列與出處卡的清單渲染（NOOP 可接受，但要寫明判斷依據）
+
+## Phase 3X: ADD Feature File - ios-app/系統層/離線模式與連線異常.feature
+
+**Goal**: 實作跨畫面系統層——離線時進行中的單仍可完成、離線時開始／認領／延後／開新工務單一律被擋並顯示離線提示、離線列顯示待同步筆數、即時連線異常時顯示降級列且每 5 秒自動更新，讓 Test Scope 全綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature` -> 整檔（4 Rule／7 場景）
+- `specs/truth/features/ios-app/系統層/dsl.md` -> 全部 6 列
+- `specs/plans/001-staff-app-increment/ui/ui-plan.md:168-175`（系統層跨畫面元件）
+- `app/mobile/lib/core/test_backdoor.dart`（`/offline` 既有、`/flaky-connection` 由 T301 新增）
+- `app/mobile/lib/core/api_client.dart`（T299；離線佇列與待同步筆數的落點）
+
+**Boundary**:
+- 離線可完成的只有「進行中的單」；其餘四個動作一律擋在 App 端並顯示離線提示，不送出請求。
+- 待同步筆數是 App 端離線佇列的長度，恢復連線後走 `Idempotency-Key` 重送（與 Phase 3Q 共用同一個佇列實作）。
+- 連線異常列的 5 秒輪詢是降級行為，不改後端 SSE 契約。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature`
+
+- [ ] T336 [BDD-GREEN] 讓 Test Scope 全綠（7 個場景）
+- [ ] T337 [BDD-REFACTOR] 在綠燈下把離線佇列、離線列、連線異常列收斂成單一連線狀態來源，供全部畫面共用
+
+## Phase 4: 整合驗收（ios-app 全量）
+
+**Goal**: 確認 14 支新 feature 全綠之後，16 支 feature 一次跑不互相干擾，且 F3 推播金絲雀沒有因本輪改動轉紅。
+
+**Boundary**: 只跑既有 runner 與腳本、只修本輪造成的非綠；不新增 feature、不改 truth。
+
+- [ ] T338 全量 ios-app truth suite 真跑全綠
+  - 驗收：`RunTruthFeaturesTest`（非 dry-run，走 `app/bdd/run-module.sh` 抽出的環境準備）回報 **108 scenarios 全綠、0 undefined、0 failure**。場景間的 App 狀態殘留（`AppiumWorld` 的 session 重用與 `resetAppState`）若造成偶發紅燈，修在 harness，不改 feature。
+- [ ] T339 F3 推播金絲雀回歸
+  - 驗收：`app/bdd/run-f3.sh` 回報 12/12 綠（冷啟動／背景／前景三種點開情境），與本輪起點一致。
+- [ ] T340 subagent review (phase quality gate)
+  - 驗收：T299–T339 全部 `[X]`；`flutter analyze` 在 `app/mobile/` 無 error；本輪沒有改到 `tms/`、`specs/truth/**` 與 T204–T298 的任何內容。有 issues 就修正再 review，直到沒有任何問題。
+
+## 上游缺口（本輪不排實作任務，回交對象列在各項）
+
+以下 8 項是本輪**不產生** `[BDD-GREEN]` 任務的部分。前 4 項是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），後 4 項是環境與硬體未到位的 blocked 項：
+
+1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
+2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
+3. **`pool.empty-state--no-active-staff`（F4-R8 部門沒有在職員工空狀態）**：`coverage:230` 判定原型無員工停用概念，`ui-plan.md:258` 標「待原型補畫面」。同上，文案回交 `/ui-plan`。
+4. **`工務單/dsl.md:72` 的 `工務待認領分類標籤顯示如下：` 沒有任何 feature 使用**：`工務視角.feature` 的分流場景改用 `工務待認領依序為 {單號清單}` 驗。這句沒有 Test Scope 承接，本輪不排 RED 任務，回交 `/dsl-refine` 決定是補場景還是刪句。
+5. **Firebase 正式接入（`firebase_messaging`）**：`research.md:103` 明訂等 Firebase 專案建立後再做，F3 現以 `xcrun simctl push` 注入真 APNs payload 驗收。blocked，不排成可執行任務；接入時 `PushGateway` 只換內部實作，不動 `dest`／`room`／`highlight` 欄位約定。
+6. **Flutter spike 閘門的實機 iOS 半邊**：`research.md:102` 記錄 iOS simulator 半邊已全數通過，實機 iOS（歷史問題正是 real device 上 page source 不完整）待硬體到位後補驗。blocked；失敗時改採 React Native 的退路仍然有效。
+7. **Android 端全部驗證**：`research.md:92`、`techstack.md:9` 記錄開發機 Android SDK 尚未安裝、低階 Android 實機未採購。本輪全部 Test Scope 只在 iOS simulator 驗收；Android locator 走 resource-id 的分流已在 `byTestId()` 就位，但未實測。blocked。
+8. **兩筆未裁決的用語落差**：`ui-plan.md:313-315` 的 #4（`due_at`／到期概念是否以其他形式保留）與 #10（`PushPayload.title` 的括號入題 vs 獨立 chip）。目前 16 支 feature 都沒有承接這兩項的 Rule，不影響本輪綠燈；回交產品決議。另記 `ui-plan.md:5,236` 仍有 Swift 前提與 Android locator 寫成 `contentDescription` 的文件殘留（`research.md:107` 已盤點），屬文件修正，回交 `/ui-plan`。
