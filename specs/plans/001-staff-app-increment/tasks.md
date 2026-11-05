@@ -899,7 +899,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/任務執行/任務卡狀態與提示.feature`
 
 - [ ] T326 [BDD-GREEN] 讓 Test Scope 全綠（12 個場景）
-  - 現況 2/12 綠（2026-11-06）：「待開始時主按鈕為開始」（`任務頁核心互動.feature:38`）與「一次一間提示」（`任務卡狀態與提示.feature:11`）已綠——這兩個場景的受測任務是 `accepted`，首頁列得出來、點得進任務頁，開工 409 的提示與維持待開始也都走真後端。其餘 10 個場景的受測任務在 Given 就被種成 `doing`／`done`／`interrupted`／`inspected`，而 `GET /me/today` 的 `nextTasks` 只收 `accepted`，首頁沒有卡可點，其中 8 個一致卡在「等不到 `home.task.{房號}.card`」——缺口 #12。剩下 2 個 SOP 場景連 stepdef 都還沒實作：App 取不到 SOP 項名稱（缺口 #18），`ui-plan.md` 也還沒替 SOP 列與跳過鈕命名 accessibility id。超時提示與慶祝頁的預估分鐘另外卡在缺口 #17。端點補齊後以既有實作與既有 stepdef 續推。
+  - 現況 3/12 綠（2026-11-06 重新計數，T328 的在 App 內按開始路徑上線後）：綠的是「一次一間提示」（`任務卡狀態與提示.feature:11`）、「308 待開始時主按鈕為開始」與「305 進行中時主按鈕為完成」（`任務頁核心互動.feature` 場景大綱前兩列）。最後那一列是本次新轉綠的——場景沒有指定已做分鐘，任務種成待開始後可以在 App 內按開始讓後端翻成 `doing`，不必靠首頁列出進行中的單。
+  - 其餘 9 紅的歸因：6 個卡在「等不到 `home.task.{房號}.card`」——受測任務在 Given 就被種成 `doing`＋已做分鐘／`interrupted`＋停住原因／`done`／`inspected`，這些值只能由測試資料落地，走不了在 App 內開始的路，而 `GET /me/today` 的 `nextTasks` 只收 `accepted`，首頁沒有卡可點（缺口 #12；「超時 5 分」與「完成慶祝頁」兩個另外還卡著缺口 #17 的 `estMin`）。另外 3 個是 stepdef 仍為 `PendingException`：「步驟條停在進行中」現在進得了任務頁，紅在步驟條本身還沒做；兩個 SOP 場景則是 App 取不到 SOP 項名稱（缺口 #18），`ui-plan.md` 也還沒替 SOP 列與跳過鈕命名 accessibility id。
 - [ ] T327 [BDD-REFACTOR] 在綠燈下整理步驟條、主按鈕與狀態 chip 的狀態映射，收斂成單一狀態→呈現對照表
   - 暫緩（2026-11-06）：T326 僅 2/12 綠，狀態映射的多數分支（進行中／已中斷／免查房）根本沒被綠燈覆蓋過，重構缺乏保護（`refactor-綠燈保護重構判準` Rule 1）。待缺口 #12／#17／#18 解除、T326 收綠後再做。
 
@@ -925,7 +926,9 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - [X] T328 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
   - 9/9 綠（2026-11-06，`Tests run: 9, Failures: 0, Errors: 0, Skipped: 0`）。中斷那 4 個場景的 Given 要求「進行中」，首頁列不出進行中的單（缺口 #12），改走合法路徑：任務種成待開始 → 從首頁進任務頁 → 在 App 按「開始」讓後端自己翻成 `doing`，再開中斷面板。這條路只在場景沒有指定「已做分鐘」「停住原因」時啟用（那兩個值只能由測試資料落地），所以 T326 那些帶已做分鐘的場景仍然卡在 #12，但不帶那兩欄的場景現在有路可走，下次重測 T326 要重新計數。
   - 實跑打出兩個 App 側真缺陷：(1) `setState(() => _taskFuture = Future…)` 的箭頭函式把 Future 當回傳值交給 `setState`，Flutter 在 debug 版拒絕這個回呼，送出後畫面一次也不會更新（`_start` 也有同一個寫法，一併改成區塊寫法）；(2) 面板貼在畫面最下緣，鍵盤升起時整個蓋住說明欄與送出鈕，中文說明根本貼不進去。
-- [ ] T329 [BDD-REFACTOR] 在綠燈下把延後與中斷兩個面板收斂成同一個元件（差異只在預設原因清單與送出端點）
+- [X] T329 [BDD-REFACTOR] 在綠燈下把延後與中斷兩個面板收斂成同一個元件（差異只在預設原因清單與送出端點）
+  - 元件本身 T328 就已收斂成單一 `HoldSheet`＋`HoldSheetMode`，本輪只把散在三處的分支收到同一個地方：新增 `HoldSheetModeCopy` extension，標題、預設原因清單、送出端點各一個 `switch`（`app/mobile/lib/features/task/hold_sheet.dart:22-56`），面板本體不再逐處判斷 mode（`:116` 送出、`:147` 標題、`:121` 選項清單）。順手移除只有自己用的公開靜態 `HoldSheet.presetReasons`。行為零改動。
+  - 驗收：`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4；重構前後三個基準逐場景一致——`任務執行` 模組 `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`（延後與中斷原因面板 9/9 綠，T326 的 12 個場景 3 綠 9 紅，紅的身分與歸因不變）、`推播` 模組 `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`。
 
 ## Phase 3U: ADD Feature File - ios-app/今日進度/首頁今日進度.feature
 

@@ -7,7 +7,7 @@ import '../../core/tms_semantics.dart';
 ///
 /// 延後與中斷是同一套互動：點一個預設原因把它選起來，再點確認送出；預設原因
 /// 都不適用時選「其他原因」，多出一個說明欄，說明要 1 到 60 字才送得出去。
-/// 兩者的差別只有預設原因清單與送出時呼叫的端點。
+/// 兩者的差別只有標題、預設原因清單與送出時呼叫的端點，都收在 [HoldSheetModeCopy]。
 ///
 /// 說明的字數上限是後端自己把關的，超過時後端拒收整筆操作。面板這層的字數
 /// 提示與送出鈕禁用，是為了讓員工在按下去之前就知道寫太長了，不是權威判定。
@@ -17,6 +17,38 @@ enum HoldSheetMode {
 
   /// 做到一半被打斷，任務暫停並停止計時。
   interrupt,
+}
+
+/// 兩種用途的全部差異都收在這裡：面板標題、預設原因清單、送出走哪個端點。
+/// 面板本體不再逐處分支，新增用途時也只要補這個 extension 的三個分支。
+extension HoldSheetModeCopy on HoldSheetMode {
+  /// 面板標題用的名稱，也是說明文字「延後原因」「中斷原因」的前半。
+  String get title => switch (this) {
+        HoldSheetMode.defer => '延後',
+        HoldSheetMode.interrupt => '中斷',
+      };
+
+  /// 各自的預設原因。
+  ///
+  /// 這些文字同時是送到後端的原因內容，也是測試用來指認選項的依據，改動要連同
+  /// 畫面規格一起改，不在這裡自行增刪。
+  List<String> get presetReasons => switch (this) {
+        HoldSheetMode.defer => const ['請勿打擾', '住客還在房內', '先處理別的單'],
+        HoldSheetMode.interrupt => const [
+            '缺備品，去拿',
+            '需要工務協助',
+            '住客回房',
+            '臨時被叫去支援',
+          ],
+      };
+
+  /// 送出這筆原因，回傳後端認定的新任務狀態。
+  Future<TaskDetail> submit(String taskId, String reason) => switch (this) {
+        HoldSheetMode.defer =>
+          ApiClient.instance.deferTask(taskId, reason),
+        HoldSheetMode.interrupt =>
+          ApiClient.instance.interruptTask(taskId, reason),
+      };
 }
 
 /// 這個選項本身不是原因文字，選它代表員工要自己填一段說明。
@@ -46,22 +78,6 @@ class HoldSheet extends StatefulWidget {
       context: context,
       builder: (_) => HoldSheet(mode: mode, taskId: taskId),
     );
-  }
-
-  /// 兩種用途各自的預設原因。
-  ///
-  /// 這些文字同時是送到後端的原因內容，也是測試用來指認選項的依據，改動要連同
-  /// 畫面規格一起改，不在這裡自行增刪。
-  static List<String> presetReasons(HoldSheetMode mode) {
-    return switch (mode) {
-      HoldSheetMode.defer => const ['請勿打擾', '住客還在房內', '先處理別的單'],
-      HoldSheetMode.interrupt => const [
-          '缺備品，去拿',
-          '需要工務協助',
-          '住客回房',
-          '臨時被叫去支援',
-        ],
-    };
   }
 
   @override
@@ -115,12 +131,7 @@ class _HoldSheetState extends State<HoldSheet> {
     if (reason == null) {
       return;
     }
-    final updated = switch (widget.mode) {
-      HoldSheetMode.defer =>
-        await ApiClient.instance.deferTask(widget.taskId, reason),
-      HoldSheetMode.interrupt =>
-        await ApiClient.instance.interruptTask(widget.taskId, reason),
-    };
+    final updated = await widget.mode.submit(widget.taskId, reason);
     if (!mounted) {
       return;
     }
@@ -129,11 +140,7 @@ class _HoldSheetState extends State<HoldSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.mode == HoldSheetMode.defer ? '延後' : '中斷';
-    final options = [
-      ...HoldSheet.presetReasons(widget.mode),
-      _otherReasonOption,
-    ];
+    final options = [...widget.mode.presetReasons, _otherReasonOption];
 
     return TmsSemantics(
       id: 'hold.sheet',
@@ -156,7 +163,7 @@ class _HoldSheetState extends State<HoldSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$title原因',
+                '${widget.mode.title}原因',
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
