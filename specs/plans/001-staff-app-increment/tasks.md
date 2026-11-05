@@ -949,7 +949,11 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/ios-app/今日進度/首頁今日進度.feature`
 
-- [ ] T330 [BDD-GREEN] 讓 Test Scope 全綠（3 個場景）
+- [X] T330 [BDD-GREEN] 讓 Test Scope 全綠（3 個場景）
+  - 3/3 綠（2026-11-06，`Tests run: 3, Failures: 0, Errors: 0, Skipped: 0`）。四格與待開始順序全部讀 `GET /me/today`，App 只負責畫：第四格掛 `inspectedCount`，待開始的卡沿用首頁既有的 `home.task.{房號}.card`（它本來就是 `nextTasks` 照後端順序畫出來的）。`home.streak-badge` 依 feature 的 Rule 以同一套格子做最薄呈現（上游缺口 #1）。每一條斷言都先比後端回應、再比畫面，避免「App 自己湊出正確數字」也算過。
+  - 產品碼只動 `app/mobile/lib/features/home/home_screen.dart`：四格＋連續零退回天數，抽一個 `_ProgressCell`。實跑打出一個真行為：把格子名稱和值放進同一個 `TmsSemantics` 時，節點的 label 會變成「顯式 label ＋子節點文字」兩段（讀到 `2 / 7\n打掃完成／總數 2 / 7`），所以名稱改放在 id 節點外面當兄弟節點，掛 id 的節點只包住值。
+  - 測試層修正三筆，都是 fixture 表達不出背景狀態的真缺陷：(1) `BackendChannel.createTask` 不支援「已取消」「已延後」，補走正式端點的 `cancel`（原因 `manager_void`）與 `defer`；(2)「查房通過」與「完成 · 免查房」原本都只落 `state=inspected`，但今日進度的「查房通過」那格只數 `inspection='passed'`，補成兩條路（免查房照正式流程先鎖 `inspection_waived`，由產品碼自己落成 waived）；(3)「名下有以下任務」的表新增吃「類別／預估分鐘／重做次數」三欄（`tasks.type`／`est_min`／`redo_count`），否則臨時需求、剩餘工時、推薦順序都沒有真相可算。另外 `seedTasks` 把「終點就是進行中」的那筆挪到最後才建——後端「一次只做一間」會讓排在它後面、需要經過開工的狀態拿到 409 `doing_task_exists`，而表上的順序本來就只是在描述一組狀態。
+  - 回歸：`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`；`run-module.sh 任務執行` `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`，與 T329 基準逐場景一致（延後與中斷原因面板 9/9 綠，紅的 9 個仍是 T326 那批，身分與歸因不變）。
 - [ ] T331 [BDD-REFACTOR] 在綠燈下整理進度環與今日進度四格的資料繫結，與 Phase 3P 的工務首頁彙總共用同一個 `MyToday` 取用路徑
 
 ## Phase 3V: ADD Feature File - ios-app/房間交辦（兩支）
@@ -1033,7 +1037,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 19 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#19 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
+以下 20 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#20 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1054,3 +1058,4 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 17. **`readTasks` 回應缺 `estMin`／`skippedSopItems`／`inspectionWaived`（T326 實跑發現，2026-11-06）**：契約 `TaskDetail` 以 `allOf` 併入 `tasks`（含 `estMin`、`inspectionWaived`）並另外定義 `skippedSopItems`，但 `TaskExecutionService.toDetail`（`tms/.../TaskExecutionService.java:584-607`）逐欄組裝回應時這三欄都沒放。App 因此算不出「超時 N 分」（＝已做分鐘 − 預估分鐘）、慶祝頁印不出「預估 35 分」、SOP 進度的 `x / y` 也少了跳過的那一半——在缺口 #12 之後接著擋住 Phase 3S 的超時與慶祝頁 2 個場景。回交後端：`toDetail` 補這三欄。
 18. **`GET /sop-items` 後端未實作（T326 實跑發現，2026-11-06）**：契約 `openapi.yaml:119` 有 `/sop-items`（`listSopItems`），但 `tms/` 沒有任何 controller 掛這條路由（全專案 grep `sop-items` 無結果），而 `TaskDetail.checkedSopItems` 只給 id、不給名稱，App 沒有任何方式取得「擦拭桌面與鏡面」這類 SOP 項名稱來畫清單與勾／跳過——在缺口 #12 之後接著擋住 Phase 3S 的 2 個 SOP 場景。回交後端實作 `listSopItems`。
 19. **延後／中斷面板的預設原因文字兩份規格不一致，面板元素也沒有命名 accessibility id（T328 實跑發現，2026-11-06）**：`ui-plan.md:110` 寫「缺備品去拿」與「其他」，`任務執行/dsl.md` 與 `延後與中斷原因面板.feature` 寫「缺備品，去拿」與「其他原因」；原因文字同時是送到後端的 `hold_reason` 內容與測試指認選項的依據，兩份不同會讓實作與驗收各挑一份。本次以 truth feature 的寫法為準落地。另外 `ui-plan.md` 的 accessibility id 表沒有延後／中斷面板任何一列，本次自行命名 `hold.reason.{原因}`、`hold.other-reason-field`、`hold.char-count`、`hold.confirm-button`、`task.defer-button`、`task.interrupt-button`、`task.status-row.hold-reason`。回交 `/ui-plan`：統一原因文字，並把這七個 id 補進約定表。
+20. **`MyToday.zeroReturnStreakDays` 後端寫死 0（T330 實跑發現，2026-11-06）**：契約要求這個欄位，`TaskExecutionService.myToday` 的 Javadoc 也明寫「連續零退回天數的計算定義尚未拍板，先固定回 0」，回應裡永遠是 0。`首頁今日進度.feature` 自己帶著 `[need clarification]`（以有出勤的工作日連續計還是日曆日？當天有一筆退回就歸零嗎？），場景只驗「首頁顯示得出這個數值且與後端一致」，所以本輪綠燈成立，但畫面上的數字目前沒有業務意義。回交 `/dsl-refine` 定義口徑 → 後端實作計算。與缺口 #1（這塊的視覺規格待補）同一處畫面。

@@ -13,6 +13,37 @@ import '../task/task_screen.dart';
 /// 資料來源是 [ApiClient.getMyToday]（`GET /me/today`）：目前只把今日進度
 /// 的打掃完成數／總數渲染成一行文字，證明資料線已接通。F1（今日進度四項、
 /// 下一間順序…）的完整畫面留給後續 feature 補。
+/// 今日進度的一格：畫面上是「名稱　值」一行，但掛 id 的節點只包住值。
+///
+/// 讀值的一方要的是值本身（「2 / 7」「135 分」），所以格子名稱放在 [TmsSemantics]
+/// 外面當兄弟節點。名稱若包進同一個節點，它的文字會跟節點的 label 併在一起，讀值
+/// 的一方得去剝前綴——這是實跑打出來的行為，不是推測。
+class _ProgressCell extends StatelessWidget {
+  const _ProgressCell({
+    required this.id,
+    required this.caption,
+    required this.value,
+  });
+
+  final String id;
+  final String caption;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$caption  '),
+          TmsSemantics(id: id, child: Text(value)),
+        ],
+      ),
+    );
+  }
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -55,16 +86,35 @@ class _HomeScreenState extends State<HomeScreen> {
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        TmsSemantics(
+                        // 今日進度四格。四個值全部直接取自 GET /me/today，App 不
+                        // 自己算也不自己湊：第四格是「查房通過」（inspectedCount），
+                        // 不是今天完成單數（completedCount，那個值留給完成慶祝頁）。
+                        _ProgressCell(
                           id: 'home.progress.cleaned-ratio',
-                          label:
-                              '今日打掃 ${today.cleaningDone}/${today.cleaningTotal}',
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              '今日打掃 ${today.cleaningDone}/${today.cleaningTotal}',
-                            ),
-                          ),
+                          caption: '打掃完成／總數',
+                          value: '${today.cleaningDone} / ${today.cleaningTotal}',
+                        ),
+                        _ProgressCell(
+                          id: 'home.progress.inspected-count',
+                          caption: '查房通過',
+                          value: '${today.inspectedCount}',
+                        ),
+                        _ProgressCell(
+                          id: 'home.progress.ad-hoc-count',
+                          caption: '臨時需求完成',
+                          value: '${today.adHocCompleted}',
+                        ),
+                        _ProgressCell(
+                          id: 'home.progress.remaining-minutes',
+                          caption: '預估剩餘工時',
+                          value: '${today.remainingMinutes} 分',
+                        ),
+                        // 連續零退回天數。ui-plan 把這塊標成「待補畫面」，視覺規格
+                        // 還沒下來，所以先用與四格同一套的最薄呈現把數值放上畫面。
+                        _ProgressCell(
+                          id: 'home.streak-badge',
+                          caption: '連續零退回天數',
+                          value: '${today.zeroReturnStreakDays}',
                         ),
                         // 今日任務列表：點一列進那間房的任務頁（ui-plan 畫面 1
                         // 「點任務列表項目進任務頁」）。資料只有 GET /me/today

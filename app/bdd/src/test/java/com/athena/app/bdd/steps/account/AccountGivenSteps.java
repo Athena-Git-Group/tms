@@ -68,7 +68,7 @@ public class AccountGivenSteps {
     @假設("{string} 已在 App 登入，名下有進行中的任務 {string}")
     public void loggedInWithTaskInProgress(String staffName, String roomNo) {
         world.seedTasks(staffName, List.of(
-                new AppiumWorld.TaskFixture(roomNo, "退房清潔", "進行中", 0, null)));
+                new AppiumWorld.TaskFixture(roomNo, "退房清潔", null, null, "進行中", 0, null, null)));
         loginViaSharedDevice(staffName);
         openMeTab();
     }

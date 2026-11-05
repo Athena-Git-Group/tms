@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -530,27 +531,52 @@ public class AppiumWorld {
         });
     }
 
-    /** 「{@code "X" 名下有以下任務}」：在真後端建立掛在這位員工名下、帶到指定狀態的任務。 */
+    /**
+     * 「{@code "X" 名下有以下任務}」：在真後端建立掛在這位員工名下、帶到指定狀態的任務。
+     *
+     * <p>停在進行中的那筆留到最後才建。後端有「一次只做一間」的規則（開工時已有
+     * {@code doing} 的單會回 409 {@code doing_task_exists}），而中斷／完成／查房通過這幾種
+     * 狀態都得先經過開工；表上的順序只是在描述一組狀態、不是操作先後，照表順序建會讓
+     * 排在進行中後面的那幾筆開不了工。離開 {@code doing} 的狀態之間彼此不衝突，所以只要
+     * 把「終點就是進行中」的挪到最後，同一組 fixture 的相對順序其餘不變。
+     */
     public void seedTasks(String staffName, List<TaskFixture> tasks) {
         BackendChannel.CreatedStaff assignee = staff(staffName);
+        List<TaskFixture> ordered = new ArrayList<>(tasks.size());
+        List<TaskFixture> endingInDoing = new ArrayList<>();
         for (TaskFixture task : tasks) {
+            if ("doing".equals(BackendChannel.taskState(task.status())) && !startableInApp("doing", task)) {
+                endingInDoing.add(task);
+            } else {
+                ordered.add(task);
+            }
+        }
+        ordered.addAll(endingInDoing);
+
+        for (TaskFixture task : ordered) {
             String stateCode = BackendChannel.taskState(task.status());
             if (startableInApp(stateCode, task)) {
                 stateCode = "accepted";
                 roomsToStartInApp.add(task.roomNo());
             }
-            backend.createTask(
+            UUID taskId = backend.createTask(
                     task.roomNo(),
                     task.content(),
-                    // F3 的任務表沒有「類別」欄，內容都是打掃類（退房清潔）；要帶類別的
-                    // 模組（通知中心）進場時，stepdef 再讀表上的類別欄換掉這個預設。
-                    "cleaning",
+                    // 表上沒有「類別」欄時一律當打掃（多數模組的表只有房號內容狀態，
+                    // 內容都是打掃類）；有這一欄就照權威對照表換成 tasks.type。
+                    task.categoryChinese() == null
+                            ? "cleaning"
+                            : BackendChannel.taskType(task.categoryChinese()),
                     "housekeeping",
-                    null,
+                    task.estMinutes(),
                     stateCode,
                     assignee,
                     task.elapsedMinutes() > 0 ? task.elapsedMinutes() : null,
-                    task.pausedReason());
+                    task.pausedReason(),
+                    "完成 · 免查房".equals(task.status()));
+            if (task.redoCount() != null) {
+                backend.setRedoCount(taskId, task.redoCount());
+            }
         }
     }
 
@@ -1027,11 +1053,18 @@ public class AppiumWorld {
     }
 
     /** 單筆任務 fixture，欄位對應 feature 檔「名下有以下任務」data table（狀態存中文原詞）。 */
+    /**
+     * 「名下有以下任務」一列的 fixture。類別／預估分鐘／重做次數是選填欄：沒給時
+     * 類別預設打掃（多數情境的表只有房號內容狀態），預估分鐘與重做次數不落地。
+     */
     public record TaskFixture(
             String roomNo,
             String content,
+            String categoryChinese,
+            Integer estMinutes,
             String status,
             int elapsedMinutes,
+            Integer redoCount,
             String pausedReason) {
     }
 }

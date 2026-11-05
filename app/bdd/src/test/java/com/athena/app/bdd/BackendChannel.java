@@ -443,6 +443,15 @@ public class BackendChannel {
     }
 
     /**
+     * Given 表的「重做次數」：直接落地 {@code tasks.redo_count}。重做是查房退回那條路累積的
+     * 計數，沒有「把次數設成 N」的端點；今日進度的推薦順序（重做多的先）要有這個真相才排得出來。
+     */
+    public void setRedoCount(UUID taskId, int redoCount) {
+        execute("UPDATE tasks SET redo_count = ? WHERE tenant_id = ? AND id = ?",
+                redoCount, ensureTenant(), taskId);
+    }
+
+    /**
      * 建一張任務並帶到指定狀態。起點列（tasks＋created 事件）直接落地（欄位對照
      * TaskEngine.create 寫出的形狀），之後的狀態轉移走正式 REST 端點（claim／start／
      * interrupt／complete），事件歷程由產品碼產生。支援的狀態：
@@ -457,6 +466,21 @@ public class BackendChannel {
     public UUID createTask(
             String roomNo, String title, String typeCode, String deptCode, Integer estMin,
             String stateCode, CreatedStaff assignee, Integer workedMinutes, String holdReason) {
+        return createTask(roomNo, title, typeCode, deptCode, estMin, stateCode, assignee,
+                workedMinutes, holdReason, false);
+    }
+
+    /**
+     * 同上，另外吃「免查房」旗標。「查房通過」與「完成 · 免查房」在狀態對照表上都是
+     * {@code inspected}，差別只在 {@code tasks.inspection}（passed／waived），而今日進度的
+     * 「查房通過」那一格只數 {@code inspection = 'passed'}，所以兩者必須落成不同的真相。
+     * 免查房照正式流程在開工前鎖定 {@code inspection_waived}，由產品碼自己在完成時落成
+     * inspected／waived（對照 tms {@code TaskFixtures} 的作法）。
+     */
+    public UUID createTask(
+            String roomNo, String title, String typeCode, String deptCode, Integer estMin,
+            String stateCode, CreatedStaff assignee, Integer workedMinutes, String holdReason,
+            boolean inspectionWaived) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
         // 打掃任務的 work_date 是 NOT NULL 的業務約束（一房一天），其他種類不帶。
@@ -486,20 +510,43 @@ public class BackendChannel {
                 postTaskAction(taskId, "start", assignee);
                 postTaskAction(taskId, "complete", assignee);
             }
+            case "deferred" -> {
+                // 「已延後」：本人延後（POST /tasks/{id}/defer）只從 accepted 出發，原因 1–60 字。
+                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                postTaskAction(taskId, "defer", assignee,
+                        Map.of("reason", holdReason != null ? holdReason : "測試資料準備：延後"));
+            }
+            case "cancelled" -> {
+                // 「已取消」＝主管作廢（POST /tasks/{id}/cancel），原因 enum 只收
+                // manager_void／plan_superseded。情境只說這張單被取消、沒指定誰取消，
+                // 先認領成本人名下再作廢，讓這筆真相跟其他幾筆一樣掛在同一位員工底下。
+                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                postTaskAction(taskId, "cancel", assignee, Map.of("reason", "manager_void"));
+            }
             case "inspected" -> {
                 // 「查房通過」：先照正式流程走到 done，最後一步（查房通過）直接落地
                 // 狀態欄位。不走正式查房 REST（POST /inspections）是刻意的：那條路
                 // 會由產品碼自動補寫一筆「{房號} 查房通過」的 notifications（見 tms
                 // InspectionService.notifyAssignee），跟通知中心 Given 鋪的同標題通知
                 // 撞在一起，把「剛好一筆」的權威讀回弄成兩筆。
+                //
+                // 「完成 · 免查房」走另一條：開工前鎖定免查，產品碼在完成那一步自己
+                // 落成 inspected／waived，不需要也不可以補寫 inspection = 'passed'。
                 postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                if (inspectionWaived) {
+                    execute("UPDATE tasks SET inspection_waived = true WHERE tenant_id = ? AND id = ?",
+                            tenantId, taskId);
+                }
                 postTaskAction(taskId, "start", assignee);
                 postTaskAction(taskId, "complete", assignee);
-                execute("UPDATE tasks SET state = 'inspected' WHERE tenant_id = ? AND id = ?",
-                        tenantId, taskId);
+                if (!inspectionWaived) {
+                    execute("UPDATE tasks SET state = 'inspected', inspection = 'passed'"
+                            + " WHERE tenant_id = ? AND id = ?", tenantId, taskId);
+                }
             }
             default -> throw new IllegalArgumentException(
-                    "BackendChannel.createTask 目前支援 pool|accepted|doing|interrupted|done|inspected，收到: "
+                    "BackendChannel.createTask 目前支援 pool|accepted|doing|deferred|interrupted"
+                            + "|cancelled|done|inspected，收到: "
                             + stateCode + "（其他狀態等對應情境實作時再擴充）");
         }
 

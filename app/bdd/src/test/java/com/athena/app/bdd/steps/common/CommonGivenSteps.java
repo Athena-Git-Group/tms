@@ -67,19 +67,23 @@ public class CommonGivenSteps {
     }
 
     private static AppiumWorld.TaskFixture toTaskFixture(Map<String, String> row) {
-        String elapsedMinutesText = row.get("已做分鐘");
-        int elapsedMinutes = (elapsedMinutesText == null || elapsedMinutesText.isBlank())
-                ? 0
-                : Integer.parseInt(elapsedMinutesText.trim());
+        Integer elapsedMinutes = optionalInt(row, "已做分鐘");
         String pausedReason = row.get("停住原因");
         if (pausedReason != null && pausedReason.isBlank()) {
             pausedReason = null;
         }
+        String category = row.get("類別");
+        if (category != null && category.isBlank()) {
+            category = null;
+        }
         return new AppiumWorld.TaskFixture(
                 row.get("房號"),
                 row.get("內容"),
+                category,
+                optionalInt(row, "預估分鐘"),
                 row.get("狀態"),
-                elapsedMinutes,
+                elapsedMinutes == null ? 0 : elapsedMinutes,
+                optionalInt(row, "重做次數"),
                 pausedReason);
     }
 
