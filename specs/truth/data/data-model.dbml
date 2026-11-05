@@ -22,7 +22,7 @@ Table tenants {
 
 Table tenant_config {
   tenant_id  bigint      [not null, ref: > tenants.id]
-  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）']
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）']
   value      jsonb       [not null, note: '結構依 key 而異']
   updated_at timestamptz [not null]
   updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
@@ -41,6 +41,9 @@ Table staff_accounts {
   role          text        [not null, note: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 原為逾時升級鏈 L3 收件人；該升級鏈隨裁決 B 廢除為兩段式未接提醒，收件人改為既有 manager 角色，duty_manager 值由 features truth 背景保留但目前無對應收件情境）']
   dept          text        [note: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空']
   active        boolean     [not null, default: true, note: '停用=不能登入，歷史保留']
+  must_change_password boolean [not null, default: false, note: '本輪新增。臨時密碼登入成功後為 true；完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。對應 contracts staff_accounts.mustChangePassword、LoginResponse.mustChangePassword']
+  failed_login_count   int     [not null, default: 0, note: '本輪新增。連續輸入錯誤密碼的次數；登入成功即清零；達 5 次時連同 locked_until 一併寫入鎖定']
+  locked_until         timestamptz [note: '本輪新增，nullable。連續輸入錯誤密碼達 5 次時鎖定 15 分鐘的到期時間；未鎖定為 NULL；鎖定中登入一律 429 account_locked']
   created_at    timestamptz [not null]
   updated_at    timestamptz [not null]
   Indexes {
@@ -48,7 +51,10 @@ Table staff_accounts {
     (tenant_id, id) [unique, note: '複合外鍵落點']
     (tenant_id, dept)
   }
-  Note: '員工帳號。角色×動作矩陣在程式/設定，不在表裡（docs/11 需求 15）。'
+  Note: '''
+  員工帳號。角色×動作矩陣在程式/設定，不在表裡（docs/11 需求 15）。
+  不變條件：登入成功清零 failed_login_count 並清空 locked_until；登入密碼錯誤 failed_login_count+1，達 5 次時寫入 locked_until=now()+15min；鎖定中一律 429，不再累加次數。
+  '''
 }
 
 Table staff_devices {
@@ -151,7 +157,7 @@ Table tasks {
   room_id        uuid        [not null]
   reservation_id uuid        [note: 'guest 來源必填；住客查詢一律以它過濾（不按房號）']
   dept           text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）']
-  state          text        [not null, note: 'CHECK 九值: triage|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled']
+  state          text        [not null, note: 'CHECK 十一值: triage|pending_review|rejected|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled（pending_review／rejected 本輪新增：工務單審核流程專用，只有 type=repair 的單會出現）']
   event_seq      int         [not null, default: 0, note: '事件取號器：守衛 UPDATE 同句 +1 RETURNING']
   assignee_id    uuid        [note: '池中為空']
   title          text        [not null]
@@ -201,6 +207,15 @@ Table tasks {
     doing→inspected（cleaning 且 inspection_waived=true，inspection=waived）；
     inspected(waived)→accepted（抽查退回：redo+1、worked_sec 與勾記歸零、inspection=failed）；
     repair 的 pool→cancelled（報修人撤回，cancel_reason=staff_withdrew）。
+  本輪新增的工務單審核／驗收轉移（只適用 type=repair，由任務引擎守衛）：
+    pending_review→pool（主管核准）；pending_review→rejected（主管退回，須寫 repair_tickets.reject_reason）；
+    rejected→pending_review（原報修人補資料重新送出，清空 reject_reason）；
+    pending_review／rejected→cancelled（審核前仍可撤回，cancel_reason=staff_withdrew）；
+    done 內寫入 repair_tickets.verified_by／verified_at（主管驗收通過，不開新狀態值）。
+  工務單開單去向（由 source/urgent/assigneeId 決定，見 repair_tickets Note）：
+    房務報修一般件（source=staff、經原任務、非急件）→pending_review；
+    急件、工務自開（source=staff 不經原任務）、櫃檯交辦（source=desk）→直接 pool；
+    直開且帶 assigneeId→直接 accepted（略過待認領與審核）。
   班末掃描：assignee 名下 accepted 與 deferred(self) →pool（pool_source=shift_end_return）；doing 不動；interrupted 不動並推播主管。
   待認領未接提醒（本輪新增，取代原逾時升級鏈 L1/L2/L3）：排程依 tenant_config.unclaimed_reminder_minutes 掃描 state=pool 的任務，
   一般單與急件各自的「提醒同仁」「通知主管」門檻各只跨越一次、各發一次推播並寫入 reminder_stage；離開 pool 時 reminder_stage 清空，
@@ -213,10 +228,10 @@ Table task_events {
   tenant_id  bigint      [not null, ref: > tenants.id]
   task_id    uuid        [not null]
   seq        int         [not null, note: '這個任務的第幾步；取自 tasks.event_seq 的 RETURNING']
-  type       text        [not null, note: '22 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled，加上先前 plan 新增 resumed|inspection_waived|repair_photos_appended，以及本輪新增 urgent_downgraded（主管將工務單急件降級為一般件；可擴充，加值不改表）']
+  type       text        [not null, note: '26 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled，加上先前 plan 新增 resumed|inspection_waived|repair_photos_appended，以及先前本輪新增 urgent_downgraded（主管將工務單急件降級為一般件），再加上本輪新增 repair_approved|repair_rejected|repair_resubmitted|repair_verified（工務單審核／驗收流程，只適用 type=repair；可擴充，加值不改表）']
   actor_role text        [not null, note: 'guest|frontdesk|housekeeping|engineering|manager|system']
   actor_id   uuid        [note: '住客與系統為空']
-  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）']
+  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）；本輪新增：repair_rejected 帶 reason（即 repair_tickets.reject_reason）；completed 本輪新增帶 resolutionType（fixed｜temporary｜cannot_fix），temporary 時另帶 originTicketTaskId（新建追蹤單的 task_id，即 repair_tickets.origin_ticket_task_id 的對方）']
   created_at timestamptz [not null]
   Indexes {
     (tenant_id, task_id, seq) [unique]
@@ -532,6 +547,10 @@ Table repair_tickets {
   is_urgent       boolean     [not null, default: false, note: '本輪新增。目前是否仍視為急件；開單當下由系統依飯店設定規則判定寫入，房務不能更改，主管降級時轉為 false。與 tasks.urgent 同步（建單與降級時一併寫入），供待認領排序索引直接用 tasks.urgent 不需 JOIN 本表。對應 contracts RepairTicketSummary.isUrgent']
   urgent_rule     text        [note: '本輪新增，nullable。開單當下系統判定命中的規則說明（如「VIP · 15:00 入住」）；判定為一般件時為 NULL。主管降級後仍保留，供追溯原始判定理由。對應 contracts RepairTicket.urgentJudgement.rule']
   urgent_downgrade_reason text [note: '本輪新增，nullable。主管將急件降級為一般件時附的原因；未降級為 NULL。寫入時同一交易補一筆 task_events.type=urgent_downgraded。對應 contracts RepairTicket.urgentDowngradeReason']
+  reject_reason   text        [note: '本輪新增，nullable。主管退回一般件（tasks.state=rejected）時附的原因；房務補資料重新送出（回到 pending_review）後清空；非 rejected 狀態為 NULL。對應 contracts RepairTicket.rejectReason']
+  verified_by     uuid        [note: '本輪新增，nullable。主管驗收通過的 staff_accounts.id；尚未驗收為 NULL。對應 contracts RepairTicket.verifiedBy（顯示名稱由 JOIN staff_accounts 取得）']
+  verified_at     timestamptz [note: '本輪新增，nullable。主管驗收通過的時間；尚未驗收為 NULL。對應 contracts RepairTicket.verifiedAt']
+  origin_ticket_task_id uuid  [note: '本輪新增，nullable，自我參照 repair_tickets.task_id。完修時 resolutionType=temporary 系統自動建立追蹤單時，追蹤單這欄指回原單；原單（非追蹤單）為 NULL。對應 contracts RepairTicket.originTicketNo（顯示時 JOIN 取原單 ticket_no）']
   created_at      timestamptz [not null]
   Indexes {
     (tenant_id, ticket_no) [unique]
@@ -541,6 +560,13 @@ Table repair_tickets {
   工務單（FR-011–021）。生命週期沿用 tasks：pool→accepted→doing→done；pool→cancelled（staff_withdrew）。
   送出時與原任務的中斷、照片綁定在同一交易：所有照片 status=uploaded 才能建立，否則整筆不落地，原任務也不變（FR-014）。
   急件改由系統判定（使用者裁決 C）：開單交易同時寫入 is_urgent／urgent_rule 與 tasks.urgent；主管降級（downgradeRepairTicketUrgency）只改 is_urgent 與 urgent_downgrade_reason，urgent_rule 保留原判定理由不變。
+  本輪新增審核／驗收流程（使用者翻案裁決，以原型 Main.dc.html 為準，只適用房務報修一般件；急件、工務自開、櫃檮交辦三種路徑不經審核）：
+  送出時 tasks.state 去向——房務報修一般件→pending_review；急件／工務自開／櫃檮交辦→pool（直開且帶 assigneeId 時→accepted）。
+  主管核准：pending_review→pool。主管退回：pending_review→rejected＋寫 reject_reason＋task_events.type=repair_rejected。
+  原報修人補資料重新送出：rejected→pending_review＋清空 reject_reason＋task_events.type=repair_resubmitted。
+  主管驗收：tasks.state 維持 done，寫入 verified_by／verified_at＋task_events.type=repair_verified（不開新狀態值，原型未描繪「驗收退回」分支，本輪不建）。
+  完修三選一（CompleteTaskRequest.resolutionType）：fixed（預設，無額外動作）；temporary（暫時處理）——同一交易自動建立一張房號、類別都相同的新 repair_tickets 列（origin_ticket_task_id 指回本單），走一般開單去向判定；cannot_fix（無法修復）——tasks.room_id 對應的 rooms.hk_state 轉 out_of_order（值已在 CHECK 內，見 rooms 表）。
+  工務直開欄位對應（CreateRepairTicketRequest）：roomId／isPublicArea 決定 tasks.room_id（isPublicArea 時用既有公共區域佔位房，見 tasks 表待認領 NOOP 慣例，不新增欄位）；assigneeId 直接寫 tasks.assignee_id；呼叫者部門決定 tasks.source（房務報修與工務自開皆為 staff，櫃檮交辦為 desk，兩值已在既有 CHECK 內）。
   '''
 }
 
@@ -644,11 +670,35 @@ Table kb_escalations {
   Note: '問主管（FR-043）。主管從哪個入口回覆尚未決定（NEEDS CLARIFICATION），兩種入口都寫這張表。'
 }
 
+Table notifications {
+  id                 uuid        [pk]
+  tenant_id          bigint      [not null, ref: > tenants.id]
+  recipient_staff_id uuid        [not null, note: '收件人']
+  title              text        [not null, note: '推播標題全文，與 PushPayload.title 相同文案']
+  body               text        [note: '選填']
+  target             jsonb       [not null, note: '導頁去處，形狀＝contracts PushTarget（kind=task|pool|home，task 帶 taskId，pool 帶 dept）；App 依 kind 決定點開後去向']
+  created_at         timestamptz [not null, note: '收到時間；通知中心依此新到舊排序，並以呼叫者時區日期分「今天」「更早」兩組（App 端分組，不在本表落地）']
+  read_at            timestamptz [note: '標記已讀的時間；未讀為 NULL']
+  Indexes {
+    (tenant_id, recipient_staff_id, created_at) [note: '通知中心清單：新到舊']
+  }
+  Note: '''
+  本輪新增。每位收件人可查詢、可標記已讀的持久通知清單；每筆對應一次推播事件的單一收件人紀錄
+  （outbox kind=push 展開一人一封後，於同一交易一併寫入一筆本表，供 GET /notifications 等端點查詢；
+  outbox 本身仍是一次性 relay，不保留可查詢歷史）。
+  保留政策：依 tenant_config.notification_retention_days（預設 30 天）排程清除逾期列。
+  '''
+}
+
+Ref: notifications.(tenant_id, recipient_staff_id) > staff_accounts.(tenant_id, id)
+
 Ref: tasks.(tenant_id, linked_repair_task_id) > tasks.(tenant_id, id)
 Ref: repair_tickets.(tenant_id, task_id) > tasks.(tenant_id, id) // 一對一：task_id 為 PK
 Ref: repair_tickets.(tenant_id, room_id) > rooms.(tenant_id, id)
 Ref: repair_tickets.(tenant_id, reporter_id) > staff_accounts.(tenant_id, id)
 Ref: repair_tickets.(tenant_id, source_task_id) > tasks.(tenant_id, id)
+Ref: repair_tickets.(tenant_id, verified_by) > staff_accounts.(tenant_id, id)
+Ref: repair_tickets.(tenant_id, origin_ticket_task_id) > repair_tickets.(tenant_id, task_id) // 追蹤單→原單，自我參照
 Ref: repair_ticket_contributors.(tenant_id, ticket_task_id) > tasks.(tenant_id, id)
 Ref: repair_ticket_contributors.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
 Ref: repair_photos.(tenant_id, ticket_task_id) > tasks.(tenant_id, id)
