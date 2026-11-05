@@ -2,6 +2,8 @@ package com.athena.tms.bdd.steps.pool;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.PmsProbe;
 import com.athena.tms.bdd.support.TenantFixtures;
@@ -21,6 +23,7 @@ public class PoolWhenSteps {
     private final PmsProbe pmsProbe;
     private final AutomationRuleService automationRuleService;
     private final TenantFixtures tenantFixtures;
+    private final DbProbe dbProbe;
 
     public PoolWhenSteps(
             ScenarioWorld world,
@@ -28,13 +31,15 @@ public class PoolWhenSteps {
             MutableClock clock,
             PmsProbe pmsProbe,
             AutomationRuleService automationRuleService,
-            TenantFixtures tenantFixtures) {
+            TenantFixtures tenantFixtures,
+            DbProbe dbProbe) {
         this.world = world;
         this.apiClient = apiClient;
         this.clock = clock;
         this.pmsProbe = pmsProbe;
         this.automationRuleService = automationRuleService;
         this.tenantFixtures = tenantFixtures;
+        this.dbProbe = dbProbe;
     }
 
     @當("{string} 查看待認領")
@@ -71,6 +76,9 @@ public class PoolWhenSteps {
     @當("{string} 認領 {string}")
     public void staffClaimsTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
+        // 認領可能撞單（任務已被他人認領），接下來的「這次操作被拒絕」Then 句要比對
+        // 操作前後的任務列、事件數與 outbox 數有沒有變動，靠的是這裡先留一份快照。
+        LastOperationGuard.captureFor(dbProbe, taskId);
         apiClient.post("/tasks/" + taskId + "/claim", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 

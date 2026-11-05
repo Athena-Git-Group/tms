@@ -31,6 +31,12 @@ public class StaffAccount {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
+    // V15__staff_account_login_lockout.sql 新增三欄：登入本身的狀態（強制改密／連續失敗次數／鎖定到期），
+    // 清零／累加／達 5 次鎖 15 分鐘的規則落在 StaffAccountLoginService，這裡只承載狀態。
+    private boolean mustChangePassword = false;
+    private int failedLoginCount = 0;
+    private OffsetDateTime lockedUntil;
+
     @Generated
     public UUID getId() {
         return this.id;
@@ -129,6 +135,36 @@ public class StaffAccount {
     @Generated
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    @Generated
+    public boolean isMustChangePassword() {
+        return this.mustChangePassword;
+    }
+
+    @Generated
+    public void setMustChangePassword(boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
+    @Generated
+    public int getFailedLoginCount() {
+        return this.failedLoginCount;
+    }
+
+    @Generated
+    public void setFailedLoginCount(int failedLoginCount) {
+        this.failedLoginCount = failedLoginCount;
+    }
+
+    @Generated
+    public OffsetDateTime getLockedUntil() {
+        return this.lockedUntil;
+    }
+
+    @Generated
+    public void setLockedUntil(OffsetDateTime lockedUntil) {
+        this.lockedUntil = lockedUntil;
     }
 
     @Generated

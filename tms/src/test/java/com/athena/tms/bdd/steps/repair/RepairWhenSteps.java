@@ -5,6 +5,7 @@ import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
+import com.athena.tms.bdd.support.RoomFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import io.cucumber.datatable.DataTable;
@@ -33,18 +34,21 @@ public class RepairWhenSteps {
     private final DbProbe dbProbe;
     private final MutableClock clock;
     private final TenantFixtures tenantFixtures;
+    private final RoomFixtures roomFixtures;
 
     public RepairWhenSteps(
             ScenarioWorld world,
             BddApiClient apiClient,
             DbProbe dbProbe,
             MutableClock clock,
-            TenantFixtures tenantFixtures) {
+            TenantFixtures tenantFixtures,
+            RoomFixtures roomFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
         this.clock = clock;
         this.tenantFixtures = tenantFixtures;
+        this.roomFixtures = roomFixtures;
     }
 
     @當("{string} 中斷 {string} 並開立以下工務單：")
@@ -90,6 +94,102 @@ public class RepairWhenSteps {
         }
     }
 
+    /**
+     * dsl.md：工務不經過任何房務任務直接開單（`sourceTaskId` 留空，改帶 `roomId`／`isPublicArea`）。
+     * 「處理人」留空則進工務待認領（pool），有填時直接 accepted 給該人。
+     */
+    @當("{string} 為 {string} 開立以下工務單，不經過任何房務任務：")
+    public void engineeringStaffOpensTicketDirectly(String engineerName, String roomNo, DataTable table) {
+        Map<String, String> row = table.asMaps(String.class, String.class).get(0);
+        String categoryChinese = requireCell(row, "類別");
+        String description = blankToNull(row.get("說明"));
+        int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
+        String assigneeName = blankToNull(row.get("處理人"));
+
+        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+
+        String jwt = world.jwt(engineerName);
+        List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        if ("公共區域".equals(roomNo)) {
+            body.put("isPublicArea", true);
+        } else {
+            body.put("roomId", roomFixtures.roomId(roomNo).toString());
+        }
+        body.put("category", Terms.repairCategory(categoryChinese));
+        if (description != null) {
+            body.put("description", description);
+        }
+        body.put("photoIds", photoIds);
+        if (assigneeName != null) {
+            body.put("assigneeId", world.staffId(assigneeName));
+        }
+
+        ScenarioWorld.ApiResponse resp = apiClient.post("/repair-tickets", BddApiClient.Auth.staff(jwt), body);
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
+    }
+
+    /**
+     * dsl.md：櫃檯交辦工務部門走同一個 {@code createRepairTicket} 路徑，`sourceTaskId` 留空，
+     * 改帶 `roomId`／`isPublicArea`；「處理人」留空則進工務待認領，有填時直接 accepted 給該人。
+     * 請求不帶急件欄位——急件沿用既有 {@code UrgentJudgement} 系統判定。來源（`tasks.source`=desk）
+     * 由後端依呼叫者（櫃檯員工）部門決定，這裡不需要另外傳欄位。
+     */
+    @當("{string} 為 {string} 交辦工務部門，開立以下工務單：")
+    public void deskStaffForwardsTicketToEngineering(String deskStaffName, String roomNo, DataTable table) {
+        Map<String, String> row = table.asMaps(String.class, String.class).get(0);
+        String categoryChinese = requireCell(row, "類別");
+        String description = blankToNull(row.get("說明"));
+        int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
+        String assigneeName = blankToNull(row.get("處理人"));
+
+        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+
+        String jwt = world.jwt(deskStaffName);
+        List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        if ("公共區域".equals(roomNo)) {
+            body.put("isPublicArea", true);
+        } else {
+            roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
+            body.put("roomId", roomFixtures.roomId(roomNo).toString());
+        }
+        body.put("category", Terms.repairCategory(categoryChinese));
+        if (description != null) {
+            body.put("description", description);
+        }
+        body.put("photoIds", photoIds);
+        if (assigneeName != null) {
+            body.put("assigneeId", world.staffId(assigneeName));
+        }
+
+        ScenarioWorld.ApiResponse resp = apiClient.post("/repair-tickets", BddApiClient.Auth.staff(jwt), body);
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
+    }
+
+    /**
+     * dsl.md：以該工務身分查詢今日進度統計，沿用 {@code GET /me/today}（呼叫者是
+     * dept=engineering 時回應另外帶 engineeringSummary）；不是獨立端點。
+     */
+    @當("{string} 查看工務視角今日進度")
+    public void engineeringStaffViewsToday(String staffName) {
+        apiClient.get("/me/today", BddApiClient.Auth.staff(world.jwt(staffName)));
+    }
+
     @當("{string} 以原因 {string} 將 {string} 降級為一般件")
     public void downgradeTicketUrgency(String managerName, String reason, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -100,6 +200,16 @@ public class RepairWhenSteps {
                 "/repair-tickets/" + ticketTaskId + "/downgrade-urgency",
                 BddApiClient.Auth.staff(world.jwt(managerName)),
                 body);
+    }
+
+    @當("{string} 核准 {string}")
+    public void approveTicket(String managerName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/approve",
+                BddApiClient.Auth.staff(world.jwt(managerName)),
+                null);
     }
 
     @當("{string} 對 {string} 選擇工務單類別 {string}")
@@ -125,12 +235,71 @@ public class RepairWhenSteps {
         apiClient.post("/repair-tickets/" + ticketTaskId + "/photos", BddApiClient.Auth.staff(jwt), body);
     }
 
+    @當("{string} 以原因 {string} 退回 {string}")
+    public void rejectTicket(String managerName, String reason, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+
+        Map<String, Object> body = Map.of("reason", reason);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/reject", BddApiClient.Auth.staff(world.jwt(managerName)), body);
+    }
+
+    @當("{string} 驗收通過 {string}")
+    public void verifyTicket(String managerName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/verify", BddApiClient.Auth.staff(world.jwt(managerName)), null);
+    }
+
+    @當("{string} 把 {string} 放回工務待認領")
+    public void releaseTicketToPool(String staffName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/release-to-pool",
+                BddApiClient.Auth.staff(world.jwt(staffName)),
+                null);
+    }
+
+    @當("{string} 只看 {string} 的工務待認領")
+    public void staffViewsEngineeringPoolByTriage(String staffName, String triageChinese) {
+        apiClient.get(
+                "/pool?category=repair" + triageQueryString(triageChinese),
+                BddApiClient.Auth.staff(world.jwt(staffName)));
+    }
+
+    /**
+     * dsl.md「只看…的工務待認領」的分流對照 listDeptPool 的 urgent／source 篩選參數（見
+     * specs/truth/contracts/groups/現場作業/員工工作台.yaml）：全部＝不加篩選；急件＝
+     * urgent=true；房務報修＝source=staff_report；櫃檯＝source=desk_forward。「住客」分流磚是
+     * dsl.md 點名的過時敘述，不建 truth，不收進這個對照。
+     */
+    private static String triageQueryString(String triageChinese) {
+        return switch (triageChinese) {
+            case "全部" -> "";
+            case "急件" -> "&urgent=true";
+            case "房務報修" -> "&source=staff_report";
+            case "櫃檯" -> "&source=desk_forward";
+            default -> throw new IllegalArgumentException("「只看…的工務待認領」不支援的分流: " + triageChinese);
+        };
+    }
+
     @當("{string} 撤回 {string}")
     public void withdrawTicket(String staffName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
         LastOperationGuard.captureFor(dbProbe, ticketTaskId);
         apiClient.post(
                 "/repair-tickets/" + ticketTaskId + "/withdraw", BddApiClient.Auth.staff(world.jwt(staffName)), null);
+    }
+
+    @當("{string} 補資料再送出 {string}")
+    public void resubmitTicket(String staffName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/resubmit", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
     @當("{string} 附 {int} 張完修照片、處理說明 {string} 完成 {string}")
@@ -142,6 +311,37 @@ public class RepairWhenSteps {
         List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
 
         Map<String, Object> body = Map.of("photoIds", photoIds, "resolutionNote", note);
+        apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
+    }
+
+    @當("{string} 附 {int} 張完修照片，回報 {string} 暫時處理，說明 {string}")
+    public void completeWithTemporaryResolution(String staffName, int photoCount, String ticketNo, String note) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
+
+        Map<String, Object> body = Map.of(
+                "photoIds", photoIds,
+                "resolutionType", "temporary",
+                "resolutionNote", note);
+        apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
+    }
+
+    @當("{string} 附 {int} 張完修照片，回報 {string} 無法修復，說明 {string}")
+    public void completeWithCannotFixResolution(String staffName, int photoCount, String ticketNo, String note) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
+
+        Map<String, Object> body = Map.of(
+                "photoIds", photoIds,
+                "resolutionType", "cannot_fix",
+                "resolutionNote", note);
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
     }
 

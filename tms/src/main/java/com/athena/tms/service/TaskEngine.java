@@ -27,7 +27,13 @@ import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class TaskEngine {
-    private static final Set<String> CREATABLE_STATES = Set.of("triage", "pool", "accepted");
+    /**
+     * 任務可以直接建立起點的狀態。pending_review（等主管審核）在這裡，是因為房務報修
+     * 的一般件（contracts createRepairTicket）開單那一刻就該進這個狀態等主管看，不必
+     * 先停在別的狀態。rejected 不收進這個集合：一張單只能由主管把等審核中的單退回才會
+     * 變成這個狀態，開單這個操作本身不該讓任何單一出生就是「被退回」。
+     */
+    private static final Set<String> CREATABLE_STATES = Set.of("triage", "pool", "accepted", "pending_review");
     /**
      * 中斷與完成共用的 SET 片段：把目前段落（segment_started_at 到傳入時刻）的秒數
      * 併進 worked_sec，並清空段落起點。佔一個參數位（段落結束時刻）。
@@ -329,6 +335,26 @@ public class TaskEngine {
     }
 
     /**
+     * 工務自行把公共區域的工務單放回工務待認領（contracts releaseRepairTicketToPool）：
+     * accepted／doing → pool，assignee 清空；是否只限公共區域由 {@link
+     * com.athena.tms.repair.RepairService#releaseToPool} 事先擋下，這裡只管狀態轉移。
+     * doing 時目前這段的秒數併進 worked_sec 並清空段落起點，和其他「進行中轉非進行中」
+     * 的轉移共用同一套已做時間結算；pool_source 清空——這是負責人自己放回，不屬於
+     * PoolSource enum 既有任何一種「被動退池」情境。
+     */
+    @Transactional
+    public int releaseToPool(long tenantId, UUID taskId, Actor actor) {
+        OffsetDateTime now = OffsetDateTime.now(this.clock);
+        int seq = this.guard(
+                "放回工務待認領",
+                "UPDATE tasks\n   SET state = 'pool', assignee_id = NULL, pool_source = NULL,\n       "
+                        + CLOSE_SEGMENT_SET
+                        + ",\n       event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('accepted', 'doing')\nRETURNING event_seq\n",
+                now, tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "returned_to_pool", actor, null);
+    }
+
+    /**
      * 請假連鎖的退池：請假員工名下未完成的任務（accepted/doing/interrupted/deferred）
      * 回到部門待接池，標請假退回並優先通知；進行中的單先把目前段落的秒數併進
      * worked_sec，接手的人看得到已做時間。
@@ -356,11 +382,12 @@ public class TaskEngine {
     }
 
     /**
-     * 報修人在工務認領前撤回工務單：pool 直接轉 cancelled，取消原因固定記
-     * staff_withdrew。前提條件直接寫在 UPDATE 的 WHERE 裡（state = 'pool'），
+     * 報修人在工務認領前撤回工務單：pool（待認領）或 pending_review（還在等主管
+     * 審核，尚未進池）都直接轉 cancelled，取消原因固定記 staff_withdrew。前提
+     * 條件直接寫在 UPDATE 的 WHERE 裡（state IN ('pool', 'pending_review')），
      * 條件不符就一列也不改並丟 409；已被認領的單若也能撤回，工務手上的工作
-     * 會憑空消失。cancel_reason 與事件 payload 的 reason 同值，查任務列與查
-     * 事件歷程得到同一個答案。
+     * 會憑空消失，所以 accepted／doing 等認領後狀態不在允許集合裡。cancel_reason
+     * 與事件 payload 的 reason 同值，查任務列與查事件歷程得到同一個答案。
      */
     @Transactional
     public int withdrawFromPool(long tenantId, UUID taskId, Actor actor) {
@@ -369,7 +396,7 @@ public class TaskEngine {
                 """
                 UPDATE tasks
                    SET state = 'cancelled', cancel_reason = 'staff_withdrew', event_seq = event_seq + 1, updated_at = now()
-                 WHERE tenant_id = ? AND id = ? AND state = 'pool'
+                 WHERE tenant_id = ? AND id = ? AND state IN ('pool', 'pending_review')
                 RETURNING event_seq
                 """,
                 tenantId, taskId);
@@ -407,6 +434,66 @@ public class TaskEngine {
     public int recordUrgentDowngraded(long tenantId, UUID taskId, String downgradeReason, Actor actor) {
         int seq = this.guard("急件降級", "UPDATE tasks\n   SET event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\nRETURNING event_seq\n", tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "urgent_downgraded", actor, TaskEngine.payload("downgradeReason", downgradeReason));
+    }
+
+    /**
+     * 主管核准等審核中的一般件工務單（contracts approveRepairTicket）：pending_review→pool，
+     * 轉入工務待認領讓工務開始認領。是否限主管呼叫由
+     * {@link com.athena.tms.repair.RepairService#approve} 事先擋下，這裡只管狀態轉移本身——
+     * 單不在 pending_review 時一列也不改，回 409。
+     */
+    @Transactional
+    public int approveRepairTicket(long tenantId, UUID taskId, Actor actor) {
+        int seq = this.guard(
+                "核准",
+                "UPDATE tasks\n   SET state = 'pool', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'pending_review'\nRETURNING event_seq\n",
+                tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "repair_approved", actor, null);
+    }
+
+    /**
+     * 主管退回等審核中的一般件工務單（contracts rejectRepairTicket）：pending_review→rejected，
+     * 不進工務待認領，讓報修人知道要補資料。原因是否必填由
+     * {@link com.athena.tms.repair.RepairService#reject} 事先擋下；repair_tickets.reject_reason
+     * 的實際落地也在那裡同一交易完成，這裡的 payload 只是讓事件歷程也留一份理由可查。
+     */
+    @Transactional
+    public int rejectRepairTicket(long tenantId, UUID taskId, String reason, Actor actor) {
+        int seq = this.guard(
+                "退回",
+                "UPDATE tasks\n   SET state = 'rejected', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'pending_review'\nRETURNING event_seq\n",
+                tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "repair_rejected", actor, TaskEngine.payload("reason", reason));
+    }
+
+    /**
+     * 報修人補資料後重新送出被退回的工務單（contracts resubmitRepairTicket）：
+     * rejected→pending_review，回到主管審核佇列。是否限原報修人呼叫由
+     * {@link com.athena.tms.repair.RepairService#resubmit} 事先擋下。
+     */
+    @Transactional
+    public int resubmitRepairTicket(long tenantId, UUID taskId, Actor actor) {
+        int seq = this.guard(
+                "補資料再送出",
+                "UPDATE tasks\n   SET state = 'pending_review', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'rejected'\nRETURNING event_seq\n",
+                tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "repair_resubmitted", actor, null);
+    }
+
+    /**
+     * 主管驗收通過已完修的工務單（contracts verifyRepairTicket）：state 仍是 done，
+     * 不開新狀態值，只是推進 event_seq／updated_at 並留一筆 repair_verified 事件。
+     * 是否限主管呼叫、verified_by／verified_at 的落地由
+     * {@link com.athena.tms.repair.RepairService#verify} 負責；這裡只管單目前是不是 done——
+     * 不是 done 時一列也不改，回 409。
+     */
+    @Transactional
+    public int verifyRepairTicket(long tenantId, UUID taskId, Actor actor) {
+        int seq = this.guard(
+                "驗收",
+                "UPDATE tasks\n   SET event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'done'\nRETURNING event_seq\n",
+                tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "repair_verified", actor, null);
     }
 
     private int guard(String operation, String sql, Object ... params) {

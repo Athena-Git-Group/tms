@@ -77,11 +77,56 @@ public class StaffFixtures {
         return insertStaff(name, roleCode, null, stateCode);
     }
 
+    /**
+     * 改這位員工的登入帳密（dsl.md 帳號與登入「"{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"」）：
+     * 沒有對應的 admin API，直接落地權威狀態——把 {@code login_id} 設成指定值、{@code password_hash}
+     * 設成指定明文密碼的雜湊，供後續登入情境用這組帳密呼叫 {@code staffAccountsLogin}。
+     */
+    public void setCredentials(UUID staffId, String loginId, String rawPassword) {
+        long tenantId = tenantFixtures.testTenantId();
+        String passwordHash = passwordEncoder.encode(rawPassword);
+        jdbcClient
+                .sql(
+                        "UPDATE staff_accounts SET login_id = ?, password_hash = ?, updated_at = ?"
+                                + " WHERE tenant_id = ? AND id = ?")
+                .params(loginId, passwordHash, OffsetDateTime.now(), tenantId, staffId)
+                .update();
+    }
+
+    /**
+     * 查這位員工目前的 {@code login_id}（dsl.md 帳號與登入 Given「"{員工}" 已連續輸入錯誤密碼
+     * {次數} 次」用：先確認帳密（通常由同模組的「的員工編號密碼為」Given 落地），再用這個
+     * login_id 帶錯誤密碼呼叫登入 N 次，不是直接改資料庫的失敗次數欄位）。
+     */
+    public String loginId(UUID staffId) {
+        long tenantId = tenantFixtures.testTenantId();
+        return jdbcClient
+                .sql("SELECT login_id FROM staff_accounts WHERE tenant_id = ? AND id = ?")
+                .params(tenantId, staffId)
+                .query(String.class)
+                .single();
+    }
+
     /** 停用員工（dsl.md「"{員工}" 已停用」）：沒有對應的 admin API，直接落地權威狀態。 */
     public void deactivate(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         jdbcClient
                 .sql("UPDATE staff_accounts SET active = false, updated_at = ? WHERE tenant_id = ? AND id = ?")
+                .params(OffsetDateTime.now(), tenantId, staffId)
+                .update();
+    }
+
+    /**
+     * 帳號是臨時密碼（dsl.md 帳號與登入 Given「"{員工}" 的帳號是臨時密碼」）：標記
+     * {@code staff_accounts.must_change_password = true}（V15 新增欄位），沒有對應的
+     * admin API，直接落地權威狀態。
+     */
+    public void markMustChangePassword(UUID staffId) {
+        long tenantId = tenantFixtures.testTenantId();
+        jdbcClient
+                .sql(
+                        "UPDATE staff_accounts SET must_change_password = true, updated_at = ?"
+                                + " WHERE tenant_id = ? AND id = ?")
                 .params(OffsetDateTime.now(), tenantId, staffId)
                 .update();
     }

@@ -90,7 +90,14 @@ public class RepairThenSteps {
                 dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此工務單對應任務 id=" + taskId));
         check("tasks.type", "repair", taskRow.get("type"));
         check("tasks.dept", "engineering", taskRow.get("dept"));
-        check("tasks.source", "staff", taskRow.get("source"));
+        // 來源由開單者部門決定（truth：櫃檯交辦標 desk，房務報修與工務自開標 staff），
+        // 不能寫死 staff——本句被房務報修、工務自開、櫃檯交辦三種場景共用。
+        String reporterDept = dbProbe
+                .queryOne("SELECT dept FROM staff_accounts WHERE id = ?", expectedReporter)
+                .map(row -> String.valueOf(row.get("dept")))
+                .orElseThrow(() -> new AssertionError("staff_accounts 查無報修人 " + expectedReporter));
+        String expectedSource = "frontdesk".equals(reporterDept) ? "desk" : "staff";
+        check("tasks.source", expectedSource, taskRow.get("source"));
     }
 
     @那麼("系統判定 {string} 為急件，理由 {string}")
@@ -153,6 +160,34 @@ public class RepairThenSteps {
         }
     }
 
+    @那麼("{string} 的來源為 {string}")
+    public void ticketSourceIs(String ticketNo, String sourceChinese) {
+        String expectedTaskSource = repairTicketSource(sourceChinese);
+        String expectedPoolSource = repairTicketPoolSource(sourceChinese);
+
+        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        Map<String, Object> row = dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此工務單"));
+        check("tasks.source", expectedTaskSource, row.get("source"));
+
+        ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
+        String actualPoolSource = null;
+        if (resp.json() != null) {
+            for (JsonNode item : resp.json().path("items")) {
+                if (ticketNo.equals(item.path("ticketNo").asText(null))) {
+                    actualPoolSource = item.path("source").asText(null);
+                    break;
+                }
+            }
+        }
+        // 已認領（非 pool）的單不會出現在 listDeptPool，PoolItem.source 比對只在找得到該單時才做；
+        // 找不到不代表失敗，tasks.source 的權威狀態已在上面驗過。
+        if (actualPoolSource != null && !expectedPoolSource.equals(actualPoolSource)) {
+            throw new AssertionError(
+                    "預期 PoolItem.source=" + expectedPoolSource + "，實際 " + actualPoolSource + "（status="
+                            + resp.status() + "）");
+        }
+    }
+
     @那麼("工務待認領包含 {string}")
     public void poolContainsTicket(String ticketNo) {
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
@@ -191,7 +226,16 @@ public class RepairThenSteps {
     @那麼("^工務待認領順序為 (.+)$")
     public void poolOrderIs(String rawList) {
         List<String> expected = Arrays.asList(rawList.split("、"));
-        ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
+        // 這句被兩種前置 When 用到：①「只看…的工務待認領」已經帶著 urgent／source 篩選查過
+        // listDeptPool，這裡要沿用那次的回應，不能另外重查一次不帶篩選的池，否則篩選條件
+        // 就被洗掉；②開單類 When（例如「開立以下工務單」）沒有查過池，這裡才需要重新查。
+        // 用「上次回應有沒有 items 欄位」區分這兩種前置，而不是看 Gherkin 文字本身——
+        // DeptPool 是唯一會有這個欄位的回應形狀。
+        ScenarioWorld.ApiResponse lastResp = world.lastResponse();
+        boolean lastResponseIsPoolListing = lastResp.json() != null && lastResp.json().has("items");
+        ScenarioWorld.ApiResponse resp = lastResponseIsPoolListing
+                ? lastResp
+                : apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
         List<String> actual = new ArrayList<>();
         if (resp.json() != null) {
             for (JsonNode item : resp.json().path("items")) {
@@ -357,6 +401,165 @@ public class RepairThenSteps {
         }
     }
 
+    @那麼("{string} 的退回原因為 {string}")
+    public void rejectReasonIs(String ticketNo, String reason) {
+        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        Map<String, Object> row = dbProbe
+                .queryOne("SELECT reject_reason, reporter_id FROM repair_tickets WHERE task_id = ?", taskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無此工務單 id=" + taskId));
+        check("repair_tickets.reject_reason", reason, row.get("reject_reason"));
+
+        String jwt = mintJwtFor(toUuid(row.get("reporter_id")));
+        ScenarioWorld.ApiResponse resp = apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(jwt));
+        String actual = resp.json() != null ? resp.json().path("rejectReason").asText(null) : null;
+        if (!reason.equals(actual)) {
+            throw new AssertionError(
+                    "readRepairTicket.rejectReason 預期 " + reason + "，實際 " + actual + "（status=" + resp.status() + "）");
+        }
+    }
+
+    @那麼("{string} 已由 {string} 驗收")
+    public void ticketVerifiedBy(String ticketNo, String managerName) {
+        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        UUID expectedManager = UUID.fromString(world.staffId(managerName));
+
+        Map<String, Object> row = dbProbe
+                .queryOne("SELECT verified_by, verified_at FROM repair_tickets WHERE task_id = ?", taskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無此工務單 task_id=" + taskId));
+        if (!sameUuid(row.get("verified_by"), expectedManager)) {
+            throw new AssertionError("repair_tickets.verified_by 預期 " + expectedManager + "（" + managerName
+                    + "），實際 " + row.get("verified_by"));
+        }
+        if (row.get("verified_at") == null) {
+            throw new AssertionError("repair_tickets.verified_at 預期已寫入，實際 NULL（單號 " + ticketNo + "）");
+        }
+
+        Map<String, Object> taskRow =
+                dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此工務單 id=" + taskId));
+        check("tasks.state", "done", taskRow.get("state"));
+
+        ScenarioWorld.ApiResponse resp = apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(engineeringStaffJwt()));
+        JsonNode json = resp.json();
+        String actualVerifiedBy = json != null ? json.path("verifiedBy").asText(null) : null;
+        String actualVerifiedAt = json != null ? json.path("verifiedAt").asText(null) : null;
+        if (!managerName.equals(actualVerifiedBy) || actualVerifiedAt == null) {
+            throw new AssertionError("readRepairTicket 預期 verifiedBy=" + managerName + "、verifiedAt 已寫入，實際 verifiedBy="
+                    + actualVerifiedBy + "、verifiedAt=" + actualVerifiedAt + "（status=" + resp.status() + "）");
+        }
+    }
+
+    @那麼("{string} 尚未驗收")
+    public void ticketNotYetVerified(String ticketNo) {
+        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+
+        Map<String, Object> row = dbProbe
+                .queryOne("SELECT verified_by FROM repair_tickets WHERE task_id = ?", taskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無此工務單 task_id=" + taskId));
+        if (row.get("verified_by") != null) {
+            throw new AssertionError(
+                    "repair_tickets.verified_by 預期為空，實際 " + row.get("verified_by") + "（單號 " + ticketNo + "）");
+        }
+
+        ScenarioWorld.ApiResponse resp = apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(engineeringStaffJwt()));
+        JsonNode json = resp.json();
+        String actualVerifiedBy = json != null ? json.path("verifiedBy").asText(null) : null;
+        if (actualVerifiedBy != null) {
+            throw new AssertionError("readRepairTicket.verifiedBy 預期為空，實際 " + actualVerifiedBy + "（status="
+                    + resp.status() + "）");
+        }
+    }
+
+    /**
+     * dsl.md「系統為 {單號} 自動建立一張追蹤單，進工務待認領」：權威狀態查 repair_tickets
+     * 有一張新單的 origin_ticket_task_id 指回原單、房號與類別相同、狀態為 pool；
+     * 跨視角再查 listDeptPool 看得到這張追蹤單（用 ticketNo 比對，而非 task_id）。
+     */
+    @那麼("系統為 {string} 自動建立一張追蹤單，進工務待認領")
+    public void systemAutoCreatesFollowUpTicket(String ticketNo) {
+        UUID originTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        Map<String, Object> originTicket = dbProbe
+                .queryOne("SELECT room_id, category FROM repair_tickets WHERE task_id = ?", originTaskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無原單 task_id=" + originTaskId));
+
+        Map<String, Object> followUp = dbProbe
+                .queryOne(
+                        "SELECT task_id, ticket_no, room_id, category FROM repair_tickets"
+                                + " WHERE origin_ticket_task_id = ?",
+                        originTaskId)
+                .orElseThrow(() -> new AssertionError(
+                        "預期 " + ticketNo + " 自動建立追蹤單（origin_ticket_task_id 指回原單），實際查無"));
+
+        check("repair_tickets(追蹤單).room_id", originTicket.get("room_id"), followUp.get("room_id"));
+        check("repair_tickets(追蹤單).category", originTicket.get("category"), followUp.get("category"));
+
+        UUID followUpTaskId = toUuid(followUp.get("task_id"));
+        Map<String, Object> followUpTaskRow = dbProbe
+                .taskRow(followUpTaskId)
+                .orElseThrow(() -> new AssertionError("tasks 查無追蹤單對應任務 id=" + followUpTaskId));
+        check("tasks(追蹤單).state", "pool", followUpTaskRow.get("state"));
+
+        String followUpTicketNo = String.valueOf(followUp.get("ticket_no"));
+        ScenarioWorld.ApiResponse resp =
+                apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
+        if (!containsTicketNo(resp, followUpTicketNo)) {
+            throw new AssertionError("預期工務待認領包含追蹤單 " + followUpTicketNo + "，實際 status=" + resp.status()
+                    + "，body=" + resp.body());
+        }
+    }
+
+    /**
+     * dsl.md「"{房號}" 的房況轉為停用待確認」：權威狀態是 {@code rooms.hk_state}=out_of_order
+     * （既有 CHECK 值，只是目前沒有任何操作會寫入它）；再讀確認用 {@code GET /rooms/{id}}
+     * （contract readRooms）查 {@code hkState} 一致，代表該房在房況查詢中顯示停用待確認。
+     */
+    @那麼("{string} 的房況轉為停用待確認")
+    public void roomHkStateBecomesOutOfOrder(String roomNo) {
+        UUID roomId = roomFixtures.roomId(roomNo);
+        Map<String, Object> row = dbProbe
+                .queryOne("SELECT hk_state FROM rooms WHERE id = ?", roomId)
+                .orElseThrow(() -> new AssertionError("rooms 查無此房 id=" + roomId));
+        check("rooms.hk_state", "out_of_order", row.get("hk_state"));
+
+        ScenarioWorld.ApiResponse resp = apiClient.get("/rooms/" + roomId, BddApiClient.Auth.staff(engineeringStaffJwt()));
+        String actualHkState = resp.json() != null ? resp.json().path("hkState").asText(null) : null;
+        if (!"out_of_order".equals(actualHkState)) {
+            throw new AssertionError(
+                    "readRooms.hkState 預期 out_of_order，實際 " + actualHkState + "（status=" + resp.status() + "）");
+        }
+    }
+
+    /**
+     * dsl.md「"{工務}" 的工務視角今日進度為：」：查 {@code GET /me/today}（工務身分回應另外帶
+     * engineeringSummary，見 schema 員工工作台.yaml#MyToday.engineeringSummary），比對 Data
+     * Table 的「項目」／「值」：手上張數→openCount、今天已完修→completedToday、急件數→urgentCount。
+     */
+    @那麼("{string} 的工務視角今日進度為：")
+    public void engineeringTodaySummaryIs(String staffName, DataTable table) {
+        ScenarioWorld.ApiResponse resp =
+                apiClient.get("/me/today", BddApiClient.Auth.staff(world.jwt(staffName)));
+        JsonNode summary = resp.json() != null ? resp.json().path("engineeringSummary") : null;
+        for (Map<String, String> row : table.asMaps(String.class, String.class)) {
+            String item = requireCell(row, "項目");
+            int expected = Integer.parseInt(requireCell(row, "值"));
+            String field = engineeringSummaryField(item);
+            int actual = summary != null && !summary.isMissingNode() ? summary.path(field).asInt(Integer.MIN_VALUE) : Integer.MIN_VALUE;
+            if (actual != expected) {
+                throw new AssertionError("engineeringSummary." + field + "（" + item + "）預期 " + expected
+                        + "，實際 " + actual + "（status=" + resp.status() + "）");
+            }
+        }
+    }
+
+    /** dsl.md 工務視角今日進度表格的「項目」中文 → {@code MyToday.engineeringSummary} 欄位名。 */
+    private static String engineeringSummaryField(String item) {
+        return switch (item) {
+            case "手上張數" -> "openCount";
+            case "今天已完修" -> "completedToday";
+            case "急件數" -> "urgentCount";
+            default -> throw new IllegalArgumentException("工務視角今日進度項目查無對照：" + item);
+        };
+    }
+
     private void assertNoRepairTicketCreatedSinceGuard() {
         RepairCountGuard.Snapshot before = RepairCountGuard.current();
         long tenantId = tenantFixtures.testTenantId();
@@ -401,6 +604,24 @@ public class RepairThenSteps {
         return jwtService
                 .issue(tenantFixtures.testTenantId(), staffId, (String) staff.get("role"), (String) staff.get("dept"))
                 .token();
+    }
+
+    /** dsl.md「{單號} 的來源為 {來源}」的來源中文 → 權威 {@code tasks.source}（staff|desk）。 */
+    private static String repairTicketSource(String chinese) {
+        return switch (chinese) {
+            case "房務報修" -> "staff";
+            case "櫃檯" -> "desk";
+            default -> throw new IllegalArgumentException("工務單來源查無對照：" + chinese);
+        };
+    }
+
+    /** 同一個中文來源對照 {@code PoolItem.source}（staff_report|desk_forward），供跨視角比對。 */
+    private static String repairTicketPoolSource(String chinese) {
+        return switch (chinese) {
+            case "房務報修" -> "staff_report";
+            case "櫃檯" -> "desk_forward";
+            default -> throw new IllegalArgumentException("工務單來源查無對照：" + chinese);
+        };
     }
 
     private static String repairStatus(String chinese) {

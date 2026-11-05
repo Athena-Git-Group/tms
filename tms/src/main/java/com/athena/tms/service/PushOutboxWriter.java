@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.UuidV7;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -30,14 +31,46 @@ public class PushOutboxWriter {
         this.clock = clock;
     }
 
+    /**
+     * 同一筆推播也要能在收件人的通知中心被查到、標已讀，不是只送達裝置就結束
+     * （dsl.md 通知中心段落）。這裡是所有 push 事件「一人一封」展開後唯一的落地
+     * 入口，所以在 outbox 真的新增一列之後，原地也補寫一筆 notifications，兩筆
+     * 寫入落在呼叫端同一個交易裡——業務動作成立但通知沒寫進去的狀態不會出現。
+     *
+     * <p>outbox 插入撞到既有冪等鍵時影響列數是 0；冪等鍵只在第一次插入成功時
+     * 綁定過一筆 notifications，所以影響列數是 0 就跳過補寫，避免同一個收件人
+     * 看到同一筆推播變出多筆通知。
+     */
     public void enqueue(long tenantId, String aggregateKey, ObjectNode payload, String idempotencyKey) {
-        jdbcTemplate.update(
+        int inserted = jdbcTemplate.update(
                 """
                 INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)
                 VALUES (?, ?, 'push', ?::jsonb, ?, 'pending', 0, ?)
                 ON CONFLICT (tenant_id, kind, idempotency_key) DO NOTHING
                 """,
                 tenantId, aggregateKey, payload.toString(), idempotencyKey, OffsetDateTime.now(clock));
+        if (inserted > 0) {
+            writeNotification(tenantId, payload);
+        }
+    }
+
+    /**
+     * payload 的形狀固定由 {@link #payload} 與 {@code targetXxx} 系列組出來，
+     * 收件人、標題、去處三個欄位保證都在，所以這裡直接原樣轉成 notifications
+     * 的對應欄位，不用另外驗證欄位存在。body 是各通知自選的欄位，沒有就落 NULL，
+     * 對應 contracts notifications schema 的 nullable body。
+     */
+    private void writeNotification(long tenantId, ObjectNode payload) {
+        UUID recipientStaffId = UUID.fromString(payload.get("recipientStaffId").asText());
+        String title = payload.get("title").asText();
+        String body = payload.hasNonNull("body") ? payload.get("body").asText() : null;
+        String targetJson = payload.get("target").toString();
+        jdbcTemplate.update(
+                """
+                INSERT INTO notifications (id, tenant_id, recipient_staff_id, title, body, target, created_at)
+                VALUES (?, ?, ?, ?, ?, ?::jsonb, ?)
+                """,
+                UuidV7.generate(), tenantId, recipientStaffId, title, body, targetJson, OffsetDateTime.now(clock));
     }
 
     /**

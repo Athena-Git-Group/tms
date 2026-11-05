@@ -19,8 +19,9 @@ import org.springframework.web.server.ResponseStatusException;
  * 工務單與照片 API，路由對應 contracts 的 createRepairPhoto、
  * uploadRepairPhotoContent、precheckRepairTicket、createRepairTicket、
  * readRepairTicket、appendRepairTicketPhotos、withdrawRepairTicket、
- * downgradeRepairTicketUrgency。
- * listRepairTickets 屬於後續 phase，先維持 501 佔位。
+ * downgradeRepairTicketUrgency、approveRepairTicket、rejectRepairTicket、
+ * resubmitRepairTicket、verifyRepairTicket。
+ * listRepairTickets 屬於後續 phase，先維持 501 佔位／尚未路由。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -40,6 +41,9 @@ public class RepairController {
 
     public record CreateTicketRequest(
             UUID sourceTaskId,
+            UUID roomId,
+            Boolean isPublicArea,
+            UUID assigneeId,
             String category,
             String description,
             List<UUID> photoIds,
@@ -76,19 +80,39 @@ public class RepairController {
         return repairService.precheck(request.sourceTaskId(), request.category());
     }
 
+    /**
+     * 三種開單路徑擇一（contracts CreateRepairTicketRequest）：①帶 sourceTaskId（房務
+     * 從自己未取消的任務開單）；②③不帶 sourceTaskId，改帶 roomId 或 isPublicArea=true
+     * （工務自開或櫃檯交辦）。兩組互斥——同時帶回 422 repair_source_conflict，
+     * 都沒帶回 422 repair_source_missing；interruptSourceTask／assigneeId 只在對應路徑
+     * 才有意義，省略視為 false／null。
+     */
     @PostMapping("/repair-tickets")
     public ResponseEntity<Map<String, Object>> createRepairTicket(@RequestBody CreateTicketRequest request) {
-        if (request == null || request.sourceTaskId() == null || request.category() == null
-                || request.interruptSourceTask() == null) {
-            throw new UnprocessableEntityException("sourceTaskId、category、photoIds、interruptSourceTask 必填");
+        if (request == null || request.category() == null) {
+            throw new UnprocessableEntityException("category、photoIds 必填");
         }
+        boolean hasSourceTask = request.sourceTaskId() != null;
+        boolean hasDirectRoom = request.roomId() != null || Boolean.TRUE.equals(request.isPublicArea());
+        if (hasSourceTask && hasDirectRoom) {
+            throw new UnprocessableEntityException(
+                    "repair_source_conflict", "sourceTaskId 與 roomId／isPublicArea 不可同時提供");
+        }
+        if (!hasSourceTask && !hasDirectRoom) {
+            throw new UnprocessableEntityException(
+                    "repair_source_missing", "sourceTaskId、roomId、isPublicArea 必須擇一提供");
+        }
+        boolean interrupt = hasSourceTask && Boolean.TRUE.equals(request.interruptSourceTask());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(repairService.create(
                         request.sourceTaskId(),
+                        request.roomId(),
+                        request.isPublicArea(),
+                        request.assigneeId(),
                         request.category(),
                         request.description(),
                         request.photoIds() == null ? List.of() : request.photoIds(),
-                        request.interruptSourceTask()));
+                        interrupt));
     }
 
     @GetMapping("/repair-tickets")
@@ -125,5 +149,34 @@ public class RepairController {
             throw new UnprocessableEntityException("note 必填");
         }
         return repairService.downgradeUrgency(ticketId, request.note());
+    }
+
+    @PostMapping("/repair-tickets/{ticketId}/release-to-pool")
+    public Map<String, Object> releaseRepairTicketToPool(@PathVariable UUID ticketId) {
+        return repairService.releaseToPool(ticketId);
+    }
+
+    @PostMapping("/repair-tickets/{ticketId}/approve")
+    public Map<String, Object> approveRepairTicket(@PathVariable UUID ticketId) {
+        return repairService.approve(ticketId);
+    }
+
+    public record RejectRepairTicketRequest(String reason) {
+    }
+
+    @PostMapping("/repair-tickets/{ticketId}/reject")
+    public Map<String, Object> rejectRepairTicket(
+            @PathVariable UUID ticketId, @RequestBody RejectRepairTicketRequest request) {
+        return repairService.reject(ticketId, request == null ? null : request.reason());
+    }
+
+    @PostMapping("/repair-tickets/{ticketId}/resubmit")
+    public Map<String, Object> resubmitRepairTicket(@PathVariable UUID ticketId) {
+        return repairService.resubmit(ticketId);
+    }
+
+    @PostMapping("/repair-tickets/{ticketId}/verify")
+    public Map<String, Object> verifyRepairTicket(@PathVariable UUID ticketId) {
+        return repairService.verify(ticketId);
     }
 }

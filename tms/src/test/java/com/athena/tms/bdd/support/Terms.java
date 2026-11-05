@@ -34,7 +34,9 @@ public final class Terms {
             Map.entry("已接單", "accepted"),
             Map.entry("維修中", "doing"),
             Map.entry("已完修", "done"),
-            Map.entry("已撤回", "cancelled"));
+            Map.entry("已撤回", "cancelled"),
+            Map.entry("等主管審核", "pending_review"),
+            Map.entry("主管未核准", "rejected"));
 
     // 來源：specs/truth/features/backend/dsl.md 「部門用語」表（dept 列）。
     private static final Map<String, String> DEPT = Map.ofEntries(
@@ -77,6 +79,12 @@ public final class Terms {
     private static final Map<String, String> REMINDER_STAGE = Map.ofEntries(
             Map.entry("已提醒同仁", "staff_reminded"),
             Map.entry("已通知主管", "manager_notified"));
+
+    // 來源：specs/truth/features/backend/dsl.md 「已有以下工務單：」列的「來源」Data Table
+    // 參數說明，權威值對齊 tasks.source（房務報修＝staff、櫃檯＝desk）。
+    private static final Map<String, String> REPAIR_TICKET_SOURCE = Map.ofEntries(
+            Map.entry("房務報修", "staff"),
+            Map.entry("櫃檯", "desk"));
 
     // 來源：specs/truth/features/backend/工務單/dsl.md 的工務單類別，權威代碼以
     // specs/truth/contracts/components/schemas/工務單.yaml 的 RepairCategory enum 為準。
@@ -144,6 +152,11 @@ public final class Terms {
     /** 工務單類別中文 → 權威 {@code repair_tickets.category}（RepairCategory enum）。 */
     public static String repairCategory(String chinese) {
         return lookup(REPAIR_CATEGORY, chinese, "工務單類別");
+    }
+
+    /** 工務單來源中文 → 權威 {@code tasks.source}（房務報修＝staff、櫃檯＝desk）。 */
+    public static String repairTicketSource(String chinese) {
+        return lookup(REPAIR_TICKET_SOURCE, chinese, "工務單來源");
     }
 
     /** 待認領類別中文 → 權威 {@code PoolCategory} enum。 */

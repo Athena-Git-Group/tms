@@ -351,6 +351,17 @@ public class TaskFixtures {
                     return poolOrTriageCreate(tenantId, roomId, workDate, "triage", systemActor);
                 case "pool":
                     return poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                case "pending_review":
+                    // 這是房務報修一般件真正的開單起點（contracts createRepairTicket），
+                    // 跟 pool/triage 同一層級，不是任何轉移的終點。
+                    return poolOrTriageCreate(tenantId, roomId, workDate, "pending_review", systemActor);
+                case "rejected": {
+                    // 退回理由這裡只是讓 engine 的必填檢查過關；場景實際要斷言的理由
+                    // 由 existingRepairTickets 接著直接寫入 repair_tickets.reject_reason。
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pending_review", systemActor);
+                    engine.rejectRepairTicket(tenantId, task.getId(), "測試資料備用退回原因", systemActor);
+                    return task;
+                }
                 case "accepted": {
                     Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
                     engine.claim(tenantId, task.getId(), dept, requireAssignee());

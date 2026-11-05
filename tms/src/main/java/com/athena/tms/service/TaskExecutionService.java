@@ -198,7 +198,8 @@ public class TaskExecutionService {
                 (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef));
         if ("repair".equals(String.valueOf(task.get("type")))) {
             // 修繕任務能走到這裡，表示上面的完修照片驗證已確認 request 與照片存在。
-            repairService.resolveOnComplete(taskId, request.photoIds(), request.resolutionNote());
+            repairService.resolveOnComplete(
+                    taskId, request.photoIds(), request.resolutionNote(), request.resolutionType());
         }
         return detail;
     }
@@ -342,8 +343,15 @@ public class TaskExecutionService {
      * 與查詢者同樓層、房號遞增。「同樓層」以查詢者本班排房（plan_rooms）負責房間的
      * 樓層判斷，和附交代退池的推播收件人用同一個樓層口徑
      * （見 {@link #notifySameFloorHousekeepers}）。
+     *
+     * <p>工務池另支援 urgent／source 兩個篩選維度（contracts listDeptPool），只篩選
+     * items，counts 仍統計全部（與既有 category 篩選同一套做法）。修繕單
+     * （category=repair）的 PoolItem.source 刻意不看 {@code tasks.pool_source}——那欄
+     * 是房務各種「被動退池」情境（住客掃碼、主管附交代、請假、班末、查房退回）專用的
+     * 標籤，工務單走的是完全不同的開單去向判定，改由 {@code tasks.source} 換算：
+     * staff（房務報修或工務自開）→staff_report、desk（櫃檯交辦）→desk_forward。
      */
-    public Map<String, Object> deptPool(String categoryFilter) {
+    public Map<String, Object> deptPool(String categoryFilter, Boolean urgentFilter, String sourceFilter) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         if (actor.dept() == null) {
@@ -355,7 +363,7 @@ public class TaskExecutionService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT * FROM (
-                    SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source,
+                    SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
                            t.return_reason, t.requeue_note, t.created_at, r.room_no, r.floor,
                            rt.ticket_no,
                            (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
@@ -384,13 +392,23 @@ public class TaskExecutionService {
             if (categoryFilter != null && !categoryFilter.equals(category)) {
                 continue;
             }
+            boolean urgent = Boolean.TRUE.equals(row.get("urgent"));
+            if (urgentFilter != null && urgentFilter != urgent) {
+                continue;
+            }
+            String poolItemSource = "repair".equals(category)
+                    ? ("desk".equals(row.get("source")) ? "desk_forward" : "staff_report")
+                    : (row.get("pool_source") != null ? String.valueOf(row.get("pool_source")) : "desk_forward");
+            if (sourceFilter != null && !sourceFilter.equals(poolItemSource)) {
+                continue;
+            }
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("taskId", String.valueOf(row.get("id")));
             item.put("roomNo", row.get("room_no"));
             item.put("floor", row.get("floor"));
             item.put("title", row.get("title"));
             item.put("category", category);
-            item.put("source", row.get("pool_source") != null ? row.get("pool_source") : "desk_forward");
+            item.put("source", poolItemSource);
             item.put("urgent", row.get("urgent"));
             item.put("ticketNo", row.get("ticket_no"));
             item.put("priorityNotify", row.get("priority_notify"));
@@ -431,7 +449,7 @@ public class TaskExecutionService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
-                       t.work_date, t.done_at, t.redo_count, t.inspection, r.room_no
+                       t.work_date, t.done_at, t.redo_count, t.inspection, t.urgent, r.room_no
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
                  WHERE t.tenant_id = ? AND t.assignee_id = ?
@@ -444,6 +462,12 @@ public class TaskExecutionService {
         int completedCount = 0;
         int adHocCompleted = 0;
         long remainingMinutes = 0;
+        // 工務視角今日進度（engineeringSummary）：手上張數（accepted／doing 的工務單）、
+        // 今天已完修（今天 done 的工務單）、急件數（手上單中 isUrgent 的數量）。與上面
+        // 幾個既有統計共用同一次 rows 查詢，不為了這三個數字另開一次查表。
+        int engineeringOpenCount = 0;
+        int engineeringCompletedToday = 0;
+        int engineeringUrgentCount = 0;
         List<Map<String, Object>> nextTasks = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             String type = String.valueOf(row.get("type"));
@@ -480,6 +504,18 @@ public class TaskExecutionService {
                 next.put("redoCount", row.get("redo_count"));
                 nextTasks.add(next);
             }
+            if ("repair".equals(type)) {
+                boolean open = "accepted".equals(state) || "doing".equals(state);
+                if (open) {
+                    engineeringOpenCount++;
+                    if (Boolean.TRUE.equals(row.get("urgent"))) {
+                        engineeringUrgentCount++;
+                    }
+                }
+                if ("done".equals(state) && doneToday) {
+                    engineeringCompletedToday++;
+                }
+            }
         }
         nextTasks.sort(Comparator
                 .comparingInt((Map<String, Object> n) -> ((Number) n.get("redoCount")).intValue()).reversed()
@@ -495,6 +531,15 @@ public class TaskExecutionService {
         result.put("remainingMinutes", (int) Math.max(0, remainingMinutes));
         result.put("nextTasks", nextTasks);
         result.put("zeroReturnStreakDays", 0);
+        if ("engineering".equals(actor.dept())) {
+            Map<String, Object> engineeringSummary = new LinkedHashMap<>();
+            engineeringSummary.put("openCount", engineeringOpenCount);
+            engineeringSummary.put("completedToday", engineeringCompletedToday);
+            engineeringSummary.put("urgentCount", engineeringUrgentCount);
+            result.put("engineeringSummary", engineeringSummary);
+        } else {
+            result.put("engineeringSummary", null);
+        }
         return result;
     }
 

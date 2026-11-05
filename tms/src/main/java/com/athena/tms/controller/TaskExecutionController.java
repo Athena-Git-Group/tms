@@ -98,8 +98,11 @@ public class TaskExecutionController {
     }
 
     @GetMapping("/pool")
-    public Map<String, Object> pool(@RequestParam(required = false) String category) {
-        return taskExecutionService.deptPool(category);
+    public Map<String, Object> pool(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Boolean urgent,
+            @RequestParam(required = false) String source) {
+        return taskExecutionService.deptPool(category, urgent, source);
     }
 
     /** 查看呼叫者的今日進度與下一間；統計口徑與排序規則在 {@link TaskExecutionService#myToday()}。 */

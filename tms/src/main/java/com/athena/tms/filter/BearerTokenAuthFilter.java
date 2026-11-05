@@ -86,6 +86,12 @@ extends OncePerRequestFilter {
             TenantContext.clear();
             return this.unauthorized(response, "帳號不存在或已停用");
         }
+        // dsl.md 帳號與登入「必須先設定新密碼才能繼續」：臨時密碼登入成功後憑證仍會發出，
+        // 但完成改密前這組憑證呼叫其他需要身分的 API 一律被拒（改密 API 本身不在本輪範圍）。
+        if (account.isMustChangePassword()) {
+            TenantContext.clear();
+            return this.forbidden(response, "必須先設定新密碼才能繼續使用");
+        }
         CurrentActor.set(CurrentActor.staff(claims.tenantId(), account.getId(), account.getRole(), account.getDept()));
         this.establishAuthentication("staff:" + String.valueOf(account.getId()), account.getRole());
         return true;
@@ -123,6 +129,11 @@ extends OncePerRequestFilter {
 
     private boolean unauthorized(HttpServletResponse response, String message) throws IOException {
         this.apiErrorResponses.write(response, 401, "unauthorized", message);
+        return false;
+    }
+
+    private boolean forbidden(HttpServletResponse response, String message) throws IOException {
+        this.apiErrorResponses.write(response, 403, "must_change_password", message);
         return false;
     }
 }

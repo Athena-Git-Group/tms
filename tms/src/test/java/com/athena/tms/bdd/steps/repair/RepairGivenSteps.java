@@ -104,14 +104,19 @@ public class RepairGivenSteps {
             int photoCount = parseIntOrDefault(row.get("照片張數"), 1);
             boolean urgent = "是".equals(blankToNull(row.get("急件")));
             String linkedRoom = blankToNull(row.get("連結任務"));
+            String sourceChinese = row.get("來源") == null || row.get("來源").isBlank() ? "房務報修" : row.get("來源");
+            String rejectReason = blankToNull(row.get("退回原因"));
+            String verifierName = blankToNull(row.get("驗收人"));
 
             roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
             UUID roomId = roomFixtures.roomId(roomNo);
             UUID reporterId = UUID.fromString(world.staffId(reporterName));
             UUID assigneeId = assigneeName != null ? UUID.fromString(world.staffId(assigneeName)) : null;
+            UUID verifierId = verifierName != null ? UUID.fromString(world.staffId(verifierName)) : null;
 
             String state = repairTaskState(stateChinese);
             String category = Terms.repairCategory(categoryChinese);
+            String taskSource = Terms.repairTicketSource(sourceChinese);
 
             // uq_tasks_one_doing_per_staff：一位員工同時最多一筆 doing。Background 可能已讓
             // 同一位處理人有維修中的單（例如 W-0412），這裡要再建他的維修中新單時，先把他
@@ -128,7 +133,7 @@ public class RepairGivenSteps {
                     .title(categoryChinese + " 工務單")
                     .type("repair")
                     .dept("engineering")
-                    .source("staff")
+                    .source(taskSource)
                     .state(state);
             if (assigneeId != null) {
                 builder.assignee(assigneeId);
@@ -144,18 +149,20 @@ public class RepairGivenSteps {
                     .update();
 
             UUID sourceTaskId = linkedRoom != null ? UUID.fromString(world.taskId(linkedRoom)) : null;
+            OffsetDateTime verifiedAt = verifierId != null ? OffsetDateTime.now(clock) : null;
 
             jdbcClient
                     .sql(
                             """
                             INSERT INTO repair_tickets
                                 (task_id, tenant_id, ticket_no, room_id, category, description,
-                                 reporter_id, source_task_id, created_at, is_urgent)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 reporter_id, source_task_id, created_at, is_urgent,
+                                 reject_reason, verified_by, verified_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """)
                     .params(
                             taskId, tenantId, ticketNo, roomId, category, description, reporterId, sourceTaskId,
-                            OffsetDateTime.now(clock), urgent)
+                            OffsetDateTime.now(clock), urgent, rejectReason, verifierId, verifiedAt)
                     .update();
 
             if (sourceTaskId != null) {
@@ -278,6 +285,93 @@ public class RepairGivenSteps {
 
         Map<String, Object> completeBody = Map.of("photoIds", List.of(photoId));
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), completeBody);
+    }
+
+    /**
+     * 工務視角今日進度的統計背景資料。dsl.md：`怎麼做` 透過後端測試資料建立符合統計數字的工務單
+     * （doing 指派給該工務；今天 done 的；is_urgent 的）。
+     *
+     * <p>「急件數」是「手上張數」（doing）裡 isUrgent 的子集，不是「今天已完修」的子集——
+     * 依據 {@code specs/truth/contracts/components/schemas/員工工作台.yaml}
+     * {@code engineeringSummary.urgentCount}：「手上單（accepted／doing）中 isUrgent=true 的筆數」。
+     * 今天已完修的那批單不影響這個統計，urgent 一律設 false，避免誤導後續斷言。
+     */
+    @假設("{string} 手上有 {int} 張維修中的工務單，今天已完修 {int} 張，其中 {int} 張是急件")
+    public void engineerWorkloadToday(String staffName, int doingCount, int doneTodayCount, int urgentCount) {
+        if (urgentCount > doingCount) {
+            throw new IllegalArgumentException(
+                    "急件數不能超過手上張數（維修中）：" + urgentCount + " > " + doingCount);
+        }
+        long tenantId = tenantFixtures.testTenantId();
+        UUID assigneeId = UUID.fromString(world.staffId(staffName));
+
+        // 建「今天已完修」要先建：它的狀態重演是 claim→start→complete，start() 那一步
+        // 會短暫佔用這個人唯一的 doing 名額（uq_tasks_one_doing_per_staff），complete()
+        // 後才釋放。先建完修單時這個人手上還沒有任何未結案的單，佔用後立刻釋放不會撞別的單；
+        // 若反過來先建「手上張數」那批（其中一張要停在 doing 不結案），完修單重演到 start()
+        // 就會跟那張還沒結案的 doing 撞唯一索引。
+        for (int i = 0; i < doneTodayCount; i++) {
+            createEngineeringTicketFor(tenantId, assigneeId, "done", false);
+        }
+        // 「手上張數」＝contracts engineeringSummary.openCount 的 accepted＋doing；
+        // 同一人同時只能有一張 doing（uq_tasks_one_doing_per_staff），其餘手上單落 accepted。
+        for (int i = 0; i < doingCount; i++) {
+            createEngineeringTicketFor(tenantId, assigneeId, i == 0 ? "doing" : "accepted", i < urgentCount);
+        }
+    }
+
+    /**
+     * {@link #engineerWorkloadToday} 專用：建一張最小可用的工務單（房號、單號均為合成值，
+     * 情境不依賴這兩者），落地 tasks 與 repair_tickets 兩張權威表。
+     */
+    private void createEngineeringTicketFor(long tenantId, UUID assigneeId, String state, boolean urgent) {
+        int n = allocateNextTicketNo(tenantId);
+        String ticketNo = String.format("W-%04d", n);
+        String roomNo = "ENG-" + ticketNo;
+        roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
+        UUID roomId = roomFixtures.roomId(roomNo);
+
+        UUID taskId = taskFixtures
+                .builder()
+                .roomNo(roomNo)
+                .title("其他 工務單")
+                .type("repair")
+                .dept("engineering")
+                .source("staff")
+                .state(state)
+                .assignee(assigneeId)
+                .create();
+
+        jdbcClient
+                .sql("UPDATE tasks SET urgent = ? WHERE tenant_id = ? AND id = ?")
+                .params(urgent, tenantId, taskId)
+                .update();
+
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO repair_tickets
+                            (task_id, tenant_id, ticket_no, room_id, category, reporter_id, created_at, is_urgent)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """)
+                .params(
+                        taskId, tenantId, ticketNo, roomId, Terms.repairCategory("其他"), assigneeId,
+                        OffsetDateTime.now(clock), urgent)
+                .update();
+    }
+
+    /** {@link #createEngineeringTicketFor}：租戶內遞增工務單號，與 {@code createRepairTicket} 取號語意一致。 */
+    private int allocateNextTicketNo(long tenantId) {
+        return jdbcClient
+                .sql(
+                        """
+                        INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
+                        ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
+                        RETURNING last_no
+                        """)
+                .param(tenantId)
+                .query(Integer.class)
+                .single();
     }
 
     /** 見 {@link #existingRepairTickets}：把該員工名下所有 doing 任務透過 TaskEngine 完修結案。 */

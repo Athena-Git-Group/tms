@@ -343,7 +343,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 **Goal**: 只建立 Phase 2c／3H–3M 會用到的資料結構與 stepdef 落點骨架，不寫判定規則或業務邏輯。比照 T204、T226 先例：封閉結構變動（新欄位、新表、CHECK 擴值）先進 Foundational 當機械補遺。
 
-- [ ] T240 新增 `V15__staff_account_login_lockout.sql`：`staff_accounts` 補 `must_change_password`／`failed_login_count`／`locked_until` 三欄
+- [X] T240 新增 `V15__staff_account_login_lockout.sql`：`staff_accounts` 補 `must_change_password`／`failed_login_count`／`locked_until` 三欄
   - Read:
     - `truth-delta.md` -> `/api-plan` 行 79–82（`LoginRequest`／`LoginResponse`／`staff_accounts.mustChangePassword`等）、`/data-plan` 行 131（`staff_accounts` 新增三欄）
     - `specs/truth/data/data-model.dbml` -> `staff_accounts.must_change_password`／`failed_login_count`／`locked_until` 欄位定義、型別、預設值、nullable
@@ -351,7 +351,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 只做：`ALTER TABLE staff_accounts ADD COLUMN must_change_password boolean NOT NULL DEFAULT false`、`ADD COLUMN failed_login_count integer NOT NULL DEFAULT 0`、`ADD COLUMN locked_until timestamptz`（nullable），型別與預設值對齊 dbml 註解。
   - 不做：不寫登入成功清零／錯誤累加／鎖定 15 分的業務邏輯（留給 Phase 3H `[BDD-GREEN]`）；不建索引。
 
-- [ ] T241 新增 `V16__notifications.sql`：新建 `notifications` 表＋索引，`tenant_config.key` CHECK 新增 `notification_retention_days`
+- [X] T241 新增 `V16__notifications.sql`：新建 `notifications` 表＋索引，`tenant_config.key` CHECK 新增 `notification_retention_days`
   - Read:
     - `truth-delta.md` -> `/api-plan` 行 83–84（`通知中心.yaml`／`listNotifications`等）、`/data-plan` 行 132–133（`notifications` 新表、`notification_retention_days` 新鍵）
     - `specs/truth/data/data-model.dbml` -> `Table notifications` 欄位定義、索引、`tenant_config.key` 註解新增值
@@ -359,7 +359,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 只做：`CREATE TABLE notifications`（`recipient_staff_id`、`title`、`body`、`target` jsonb、`created_at`、`read_at` nullable，FK 到 `staff_accounts`）＋索引 `(tenant_id, recipient_staff_id, created_at)`；重建 `chk_tenant_config_key` 加入 `notification_retention_days`（既有鍵集全部保留）。
   - 不做：不寫 outbox push 展開時同步寫入本表的程式邏輯（留給 Phase 3I `[BDD-GREEN]`）；不寫保留天數的排程清除 job；不幫 `notification_retention_days` 塞初始值（沒有 DSL 句斷言這個值，使用者裁決「不進行為 truth」，程式讀不到值時的預設落在應用層，非本輪 migration 範圍）。
 
-- [ ] T242 新增 `V17__repair_ticket_review_and_verification.sql`：`tasks.state` CHECK 九值→十一值、`repair_tickets` 補 `reject_reason`／`verified_by`／`verified_at`／`origin_ticket_task_id` 四欄
+- [X] T242 新增 `V17__repair_ticket_review_and_verification.sql`：`tasks.state` CHECK 九值→十一值、`repair_tickets` 補 `reject_reason`／`verified_by`／`verified_at`／`origin_ticket_task_id` 四欄
   - Read:
     - `truth-delta.md` -> `/api-plan` 行 85–92（`tasks.state`／`RepairTicketSummary.state`、4 個新端點、`RepairTicket.rejectReason`等）、`/data-plan` 行 134–136（CHECK 擴值、`repair_tickets` 四欄、2 條新 Ref）
     - `specs/truth/data/data-model.dbml` -> `Table tasks.state` CHECK 十一值定義、`Table repair_tickets` 新增四欄定義與兩條 Ref（`verified_by`→`staff_accounts`、`origin_ticket_task_id`→`repair_tickets` 自參照）
@@ -368,14 +368,14 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 只做：`ALTER TABLE tasks DROP CONSTRAINT chk_tasks_state` 再 `ADD CONSTRAINT`，九值加入 `pending_review`、`rejected`（十一值）；`ALTER TABLE repair_tickets ADD COLUMN reject_reason text`（nullable）、`ADD COLUMN verified_by uuid`（nullable）、`ADD COLUMN verified_at timestamptz`（nullable）、`ADD COLUMN origin_ticket_task_id uuid`（nullable）；加 FK `verified_by`→`staff_accounts(tenant_id, id)`、`origin_ticket_task_id`→`repair_tickets(tenant_id, task_id)`（自參照）。
   - 不做：不寫審核／退回／重送／驗收四個動作的狀態轉移程式邏輯（留給 Phase 3K／3M `[BDD-GREEN]`）；`task_events.type` 不建 CHECK（沿用 V5 既有決定，`repair_approved`／`repair_rejected`／`repair_resubmitted`／`repair_verified` 純文件列舉）。
 
-- [ ] T243 建立帳號與登入 stepdef 落點骨架
+- [X] T243 建立帳號與登入 stepdef 落點骨架
   - Read:
     - `specs/truth/features/backend/帳號與登入/dsl.md`
     - `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`（既有 package 慣例）
   - 只做：新建 `tms/src/test/java/com/athena/tms/bdd/steps/account/`（`AccountGivenSteps.java`、`AccountWhenSteps.java`、`AccountThenSteps.java`），每個檔案留空殼（package、class、必要 import），確認 Phase 2c 只寫進這三個檔。
   - 不做：不寫任何 Given／When／Then 語意（由 Phase 2c 的 RED 任務填入）。
 
-- [ ] T244 建立通知中心 stepdef 落點骨架
+- [X] T244 建立通知中心 stepdef 落點骨架
   - Read:
     - `specs/truth/features/backend/推播/dsl.md`（通知中心段落）
     - `tms/src/test/java/com/athena/tms/bdd/steps/push/`（既有推播 package，確認是否已有可擴充的 Given/When/Then 檔案）
@@ -418,55 +418,55 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Parallel Hint**:
 - T245–T285 各派一個獨立 subagent；T286 等全部回來再啟動 subagent 來 review。
 
-- [ ] T245 [P] [BDD-RED] `Given: "{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"`
-- [ ] T246 [P] [BDD-RED] `Given: "{員工}" 的帳號是臨時密碼`
-- [ ] T247 [P] [BDD-RED] `Given: "{員工}" 已連續輸入錯誤密碼 {次數} 次`
-- [ ] T248 [P] [BDD-RED] `When: "{員工}" 用員工編號 "{員工編號}" 密碼 "{密碼}" 登入`
-- [ ] T249 [P] [BDD-RED] `Then: 登入成功，取得 "{員工}" 的身分與可用憑證`
-- [ ] T250 [P] [BDD-RED] `Then: 登入失敗，提示 "{提示}"`
-- [ ] T251 [P] [BDD-RED] `Then: "{員工}" 的帳號已鎖定 {分鐘} 分鐘`
-- [ ] T252 [P] [BDD-RED] `Then: "{員工}" 的帳號已停用，登入被拒`
-- [ ] T253 [P] [BDD-RED] `Then: "{員工}" 必須先設定新密碼才能繼續`
+- [X] T245 [P] [BDD-RED] `Given: "{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"`
+- [X] T246 [P] [BDD-RED] `Given: "{員工}" 的帳號是臨時密碼`
+- [X] T247 [P] [BDD-RED] `Given: "{員工}" 已連續輸入錯誤密碼 {次數} 次`
+- [X] T248 [P] [BDD-RED] `When: "{員工}" 用員工編號 "{員工編號}" 密碼 "{密碼}" 登入`
+- [X] T249 [P] [BDD-RED] `Then: 登入成功，取得 "{員工}" 的身分與可用憑證`
+- [X] T250 [P] [BDD-RED] `Then: 登入失敗，提示 "{提示}"`
+- [X] T251 [P] [BDD-RED] `Then: "{員工}" 的帳號已鎖定 {分鐘} 分鐘`
+- [X] T252 [P] [BDD-RED] `Then: "{員工}" 的帳號已停用，登入被拒`
+- [X] T253 [P] [BDD-RED] `Then: "{員工}" 必須先設定新密碼才能繼續`
 
-- [ ] T254 [P] [BDD-RED] `Given: "{員工}" 在 "{時刻}" 收到以下通知：`
-- [ ] T255 [P] [BDD-RED] `When: "{員工}" 查看通知中心`
-- [ ] T256 [P] [BDD-RED] `When: "{員工}" 將 "{標題}" 的通知標為已讀`
-- [ ] T257 [P] [BDD-RED] `When: "{員工}" 將所有通知標為已讀`
-- [ ] T258 [P] [BDD-RED] `Then: "{員工}" 的通知中心依序包含 {標題清單}`
-- [ ] T259 [P] [BDD-RED] `Then: "{員工}" 的通知中心「{分組}」分組包含 {標題清單}`
-- [ ] T260 [P] [BDD-RED] `Then: "{員工}" 的 "{標題}" 通知已讀`
-- [ ] T261 [P] [BDD-RED] `Then: "{員工}" 的所有通知都已讀`
+- [X] T254 [P] [BDD-RED] `Given: "{員工}" 在 "{時刻}" 收到以下通知：`
+- [X] T255 [P] [BDD-RED] `When: "{員工}" 查看通知中心`
+- [X] T256 [P] [BDD-RED] `When: "{員工}" 將 "{標題}" 的通知標為已讀`
+- [X] T257 [P] [BDD-RED] `When: "{員工}" 將所有通知標為已讀`
+- [X] T258 [P] [BDD-RED] `Then: "{員工}" 的通知中心依序包含 {標題清單}`
+- [X] T259 [P] [BDD-RED] `Then: "{員工}" 的通知中心「{分組}」分組包含 {標題清單}`
+- [X] T260 [P] [BDD-RED] `Then: "{員工}" 的 "{標題}" 通知已讀`
+- [X] T261 [P] [BDD-RED] `Then: "{員工}" 的所有通知都已讀`
 
-- [ ] T262 [P] [BDD-RED] `Given: "{工務}" 手上有 {張數} 張維修中的工務單，今天已完修 {已完修張數} 張，其中 {急件數} 張是急件`
-- [ ] T263 [P] [BDD-RED] `When: "{主管}" 核准 "{單號}"`
-- [ ] T264 [P] [BDD-RED] `When: "{主管}" 以原因 "{原因}" 退回 "{單號}"`
-- [ ] T265 [P] [BDD-RED] `When: "{員工}" 補資料再送出 "{單號}"`
-- [ ] T266 [P] [BDD-RED] `When: "{主管}" 驗收通過 "{單號}"`
-- [ ] T267 [P] [BDD-RED] `When: "{工務}" 附 {張數} 張完修照片，回報 "{單號}" 暫時處理，說明 "{說明}"`
-- [ ] T268 [P] [BDD-RED] `When: "{工務}" 附 {張數} 張完修照片，回報 "{單號}" 無法修復，說明 "{說明}"`
-- [ ] T269 [P] [BDD-RED] `When: "{工務}" 為 "{房號}" 開立以下工務單，不經過任何房務任務：`
-- [ ] T270 [P] [BDD-RED] `When: "{員工}" 為 "{房號}" 交辦工務部門，開立以下工務單：`
-- [ ] T271 [P] [BDD-RED] `When: "{工務}" 把 "{單號}" 放回工務待認領`
-- [ ] T272 [P] [BDD-RED] `When: "{工務}" 查看工務視角今日進度`
-- [ ] T273 [P] [BDD-RED] `When: "{工務}" 只看 "{分流}" 的工務待認領`
-- [ ] T274 [P] [BDD-RED] `Then: "{單號}" 的來源為 "{來源}"`
-- [ ] T275 [P] [BDD-RED] `Then: 工務待認領包含 "{單號}"`
-- [ ] T276 [P] [BDD-RED] `Then: 工務待認領不包含 "{單號}"`
-- [ ] T277 [P] [BDD-RED] `Then: 工務待認領順序為 {單號清單}`
-- [ ] T278 [P] [BDD-RED] `Then: "{單號}" 的退回原因為 "{原因}"`
-- [ ] T279 [P] [BDD-RED] `Then: "{單號}" 已由 "{主管}" 驗收`
-- [ ] T280 [P] [BDD-RED] `Then: "{單號}" 尚未驗收`
-- [ ] T281 [P] [BDD-RED] `Then: "{房號}" 的房況轉為停用待確認`
-- [ ] T282 [P] [BDD-RED] `Then: 系統為 "{單號}" 自動建立一張追蹤單，進工務待認領`
-- [ ] T283 [P] [BDD-RED] `Then: "{工務}" 的工務視角今日進度為：`
+- [X] T262 [P] [BDD-RED] `Given: "{工務}" 手上有 {張數} 張維修中的工務單，今天已完修 {已完修張數} 張，其中 {急件數} 張是急件`
+- [X] T263 [P] [BDD-RED] `When: "{主管}" 核准 "{單號}"`
+- [X] T264 [P] [BDD-RED] `When: "{主管}" 以原因 "{原因}" 退回 "{單號}"`
+- [X] T265 [P] [BDD-RED] `When: "{員工}" 補資料再送出 "{單號}"`
+- [X] T266 [P] [BDD-RED] `When: "{主管}" 驗收通過 "{單號}"`
+- [X] T267 [P] [BDD-RED] `When: "{工務}" 附 {張數} 張完修照片，回報 "{單號}" 暫時處理，說明 "{說明}"`
+- [X] T268 [P] [BDD-RED] `When: "{工務}" 附 {張數} 張完修照片，回報 "{單號}" 無法修復，說明 "{說明}"`
+- [X] T269 [P] [BDD-RED] `When: "{工務}" 為 "{房號}" 開立以下工務單，不經過任何房務任務：`
+- [X] T270 [P] [BDD-RED] `When: "{員工}" 為 "{房號}" 交辦工務部門，開立以下工務單：`
+- [X] T271 [P] [BDD-RED] `When: "{工務}" 把 "{單號}" 放回工務待認領`
+- [X] T272 [P] [BDD-RED] `When: "{工務}" 查看工務視角今日進度`
+- [X] T273 [P] [BDD-RED] `When: "{工務}" 只看 "{分流}" 的工務待認領`
+- [X] T274 [P] [BDD-RED] `Then: "{單號}" 的來源為 "{來源}"`
+- [X] T275 [P] [BDD-RED] `Then: 工務待認領包含 "{單號}"`
+- [X] T276 [P] [BDD-RED] `Then: 工務待認領不包含 "{單號}"`
+- [X] T277 [P] [BDD-RED] `Then: 工務待認領順序為 {單號清單}`
+- [X] T278 [P] [BDD-RED] `Then: "{單號}" 的退回原因為 "{原因}"`
+- [X] T279 [P] [BDD-RED] `Then: "{單號}" 已由 "{主管}" 驗收`
+- [X] T280 [P] [BDD-RED] `Then: "{單號}" 尚未驗收`
+- [X] T281 [P] [BDD-RED] `Then: "{房號}" 的房況轉為停用待確認`
+- [X] T282 [P] [BDD-RED] `Then: 系統為 "{單號}" 自動建立一張追蹤單，進工務待認領`
+- [X] T283 [P] [BDD-RED] `Then: "{工務}" 的工務視角今日進度為：`
 
-- [ ] T284 [P] [BDD-ALIGN] `Given: 已有以下工務單：`（新增選填欄位 `來源`、`退回原因`、`驗收人`）
+- [X] T284 [P] [BDD-ALIGN] `Given: 已有以下工務單：`（新增選填欄位 `來源`、`退回原因`、`驗收人`）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java:93`
 
-- [ ] T285 [P] [BDD-ALIGN] `Terms.java` 工務單狀態用語對照新增：`等主管審核`→`pending_review`、`主管未核准`→`rejected`
+- [X] T285 [P] [BDD-ALIGN] `Terms.java` 工務單狀態用語對照新增：`等主管審核`→`pending_review`、`主管未核准`→`rejected`
   - Read: `tms/src/test/java/com/athena/tms/bdd/support/Terms.java`（`REPAIR_TICKET_STATE` map）、`specs/truth/features/backend/dsl.md` 狀態用語對照表
 
-- [ ] T286 subagent review (phase quality gate)
+- [X] T286 subagent review (phase quality gate)
 
 ## Phase 3H: ADD Feature File - backend/帳號與登入/員工登入.feature
 
@@ -487,8 +487,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/backend/帳號與登入/員工登入.feature`
 
-- [ ] T287 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T288 [BDD-REFACTOR] 在綠燈下整理登入失敗計數、鎖定判斷與密碼雜湊比對的共用邏輯
+- [X] T287 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T288 [BDD-REFACTOR] 在綠燈下整理登入失敗計數、鎖定判斷與密碼雜湊比對的共用邏輯（NOOP：結構已最小、無重複邏輯）
 
 ## Phase 3I: ADD Feature File - backend/推播/通知中心.feature
 
@@ -509,8 +509,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/backend/推播/通知中心.feature`
 
-- [ ] T289 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T290 [BDD-REFACTOR] 在綠燈下整理通知分組（今天／更早）計算與已讀標記的共用邏輯
+- [X] T289 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T290 [BDD-REFACTOR] 在綠燈下整理通知分組（今天／更早）計算與已讀標記的共用邏輯（查詢欄位常數抽共用；分組屬 App 端，後端無可整理）
 
 ## Phase 3J: ADD Feature File - backend/工務單/工務視角維修與開單.feature
 
@@ -535,8 +535,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/backend/工務單/工務視角維修與開單.feature`
 
-- [ ] T291 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T292 [BDD-REFACTOR] 在綠燈下整理完修三選一分支與工務視角今日統計查詢的共用邏輯，避免與 `myToday` 既有統計邏輯重複查表
+- [X] T291 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T292 [BDD-REFACTOR] 在綠燈下整理完修三選一分支與工務視角今日統計查詢的共用邏輯，避免與 `myToday` 既有統計邏輯重複查表（NOOP：統計已共用單次 rows 迴圈、三選一分支已抽共用方法）
 
 ## Phase 3K: MODIFY Feature File - backend/工務單/開立工務單與急件.feature（第四輪：補主管審核與退回/重送）
 
@@ -557,8 +557,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/backend/工務單/開立工務單與急件.feature`
 
-- [ ] T293 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T294 [BDD-REFACTOR] 在綠燈下整理開單去向判斷（審核 vs 直接進池）與審核三動作的共用狀態轉移邏輯
+- [X] T293 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T294 [BDD-REFACTOR] 在綠燈下整理開單去向判斷（審核 vs 直接進池）與審核三動作的共用狀態轉移邏輯（NOOP：轉移已共用 guard+recordEvent 骨架、分流單一出口、權限已抽 requireManager）
 
 ## Phase 3L: MODIFY Feature File - backend/工務單/重複報修補照片與撤回.feature
 
@@ -576,8 +576,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature`
 
-- [ ] T295 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T296 [BDD-REFACTOR] 在綠燈下整理撤回允許狀態集合的判斷（NOOP：若與 T293 的狀態轉移共用同一張狀態表則確認無重複邏輯）
+- [X] T295 [BDD-GREEN] 讓 Test Scope 全綠（rejected 依 dsl.md／contracts 權威文字維持 409，未納入可撤回集合）
+- [X] T296 [BDD-REFACTOR] 在綠燈下整理撤回允許狀態集合的判斷（NOOP：四個轉移各自單一狀態條件、共用 guard helper，無重複狀態表）
 
 ## Phase 3M: MODIFY Feature File - backend/工務單/完修與回到原任務.feature
 
@@ -597,5 +597,5 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/backend/工務單/完修與回到原任務.feature`
 
-- [ ] T297 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T298 [BDD-REFACTOR] 在綠燈下整理驗收人／驗收時間寫入與既有完修共用事件歷程邏輯
+- [X] T297 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T298 [BDD-REFACTOR] 在綠燈下整理驗收人／驗收時間寫入與既有完修共用事件歷程邏輯（NOOP：已共用 guard+recordEvent 骨架，寫入模式與 reject 一致）
