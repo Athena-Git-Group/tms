@@ -9,6 +9,7 @@ import io.cucumber.java.Before;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.remote.RemoteWebElement;
 import org.openqa.selenium.support.ui.FluentWait;
 
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -52,7 +54,9 @@ import java.util.concurrent.TimeUnit;
  * <p>測試後門（{@code TEST_BACKDOOR=true} 建置才會起的 localhost:9099 HTTP server，見
  * {@code app/mobile/lib/core/test_backdoor.dart}）：iOS simulator 的 localhost 與本機
  * host 共享同一個 loopback 介面，所以這裡的 Java 程式可以直接打
- * {@code 127.0.0.1:9099}，不用額外轉接。
+ * {@code 127.0.0.1:9099}，不用額外轉接。後門只負責裝置側注入（時間、離線、上傳失敗）
+ * 與 {@code GET /state} 探活；測試資料（員工、任務、工務單）一律走
+ * {@link BackendChannel} 打真後端，App 畫面再透過自己的 API client 讀回同一份真相。
  */
 public class AppiumWorld {
 
@@ -72,14 +76,14 @@ public class AppiumWorld {
     private final String bundleId;
     private final String appPath;
 
+    /** 對真後端的資料通道（fixture 落地與權威讀回）；連線懶建，dry-run 不需要後端在跑。 */
+    private final BackendChannel backend = new BackendChannel();
+
     /**
-     * 累積中的 {@code /seed} 狀態。後門的 {@code /seed} 是整包覆蓋（沒帶到的欄位視為清空），
-     * 不是合併；同一情境內可能有多個 Given 各自貢獻一部分資料（例如背景句先建員工，
-     * 後面又建任務），所以要在這裡先把目前情境累積到的全部狀態留著，每次改動後整包重送，
-     * 才不會後面的 Given 把前面 Given 建好的資料洗掉。
+     * 本情境已建立的員工，姓名 → 帳號。後續的 Given／Then 都用姓名指涉員工
+     * （「"阿美" 名下有以下任務」），要能回查出 fixture 給她的 staff id 與登入帳密。
      */
-    private final List<String> pendingStaffNames = new ArrayList<>();
-    private final List<TaskFixture> pendingTasks = new ArrayList<>();
+    private final Map<String, BackendChannel.CreatedStaff> staffByName = new LinkedHashMap<>();
 
     /**
      * 上一次送出的推播 payload 檔案與標題。banner 自動收起的時間很短，{@link #tapPushNotification()}
@@ -87,6 +91,20 @@ public class AppiumWorld {
      */
     private Path lastPushPayloadFile;
     private String lastPushTitle;
+
+    /**
+     * 通知中心情境的當事員工（通知的收件人＝打開通知中心的人）。通知的 Then 句
+     * （「X 的通知顯示未讀藍點」等）不帶員工參數，後端讀回要靠這裡記住的人把查詢
+     * 鎖在她自己的通知上，不然同租戶別人的同標題通知會被誤撈進來。
+     */
+    private BackendChannel.CreatedStaff notificationViewer;
+
+    /**
+     * 目前已在 App 裡登入的員工；App 還停在登入畫面時為 null。登入殼落地後
+     * （main.dart 起始畫面一律是登入，測試建置不再跳過），所有「以該員工身分
+     * 操作畫面」的 step 都要先經 {@link #ensureLoggedInAs} 換到她的身分。
+     */
+    private BackendChannel.CreatedStaff loggedInStaff;
 
     private static volatile AppiumDriver driver;
     private static volatile boolean shutdownHookRegistered;
@@ -218,10 +236,14 @@ public class AppiumWorld {
      * 會把前一個情境的資料帶到下一個情境。
      */
     private void resetAppState() {
-        pendingStaffNames.clear();
-        pendingTasks.clear();
+        staffByName.clear();
         lastPushPayloadFile = null;
         lastPushTitle = null;
+        notificationViewer = null;
+        loggedInStaff = null;
+        // 真後端的資料在情境之間會留下來（不像以前的記憶體 fixture 隨 App process 消失），
+        // 不清掉會讓上一個情境的任務繼續出現在待認領池；清法與 tms 的 ResetHooks 相同。
+        backend.resetBusinessData();
 
         runSimctl("terminate", udid, bundleId); // 第一個情境時 App 還沒啟動過，失敗沒關係
         runSimctlRequired("launch", udid, bundleId);
@@ -230,15 +252,16 @@ public class AppiumWorld {
 
     /**
      * App process 重開之後，Dart 側要先跑到 {@code main()} 把 {@code TestBackdoor} server
-     * 重新綁好 port，這中間有個短暫的空窗；用重試代替固定 sleep，是因為這段空窗長短跟
+     * 重新綁好 port，這中間有個短暫的空檔；用重試代替固定 sleep，是因為這段空檔長短跟
      * 模擬器當下的負載有關，固定等一個數字容易不是等太久、就是等不夠。
+     * 探活打 {@code GET /state}（後門唯一的讀取端點，不帶任何副作用）。
      */
     private void waitForBackdoorReady() {
         long deadline = System.nanoTime() + BACKDOOR_READY_TIMEOUT.toNanos();
         IOException lastError = null;
         while (System.nanoTime() < deadline) {
             try {
-                httpPostJson("/seed", "{\"staff\":[],\"tasks\":[]}");
+                httpGet("/state");
                 return;
             } catch (IOException e) {
                 lastError = e;
@@ -253,52 +276,150 @@ public class AppiumWorld {
                         + "--dart-define=TEST_BACKDOOR=true 建置？", lastError);
     }
 
-    /** 背景句「飯店有以下員工」：記下姓名清單，整包重送 /seed。 */
-    public void seedStaff(List<String> names) {
-        pendingStaffNames.clear();
-        pendingStaffNames.addAll(names);
-        postSeed();
+    /** 後端通道，給 stepdef 直接做權威讀回斷言或建立這裡沒有包裝的 fixture。 */
+    public BackendChannel backend() {
+        return backend;
     }
 
-    /** 「{@code "X" 名下有以下任務}」：把這批任務疊加進既有清單，整包重送 /seed。 */
-    public void seedTasks(List<TaskFixture> tasks) {
-        pendingTasks.addAll(tasks);
-        postSeed();
+    /**
+     * 確保 App 目前是以這位員工的身分登入；已經是她就不動。App 每個情境都從
+     * 登入畫面開始（{@code main.dart} 的起始畫面一律是登入，測試建置不再跳過
+     * 登入殼），所以需要身分的 step 先走一次共用手機模式的 UI 登入：清掉記住
+     * 帳號 → 輸入員工編號與密碼 → 送出 → 等首頁（{@code home.screen}）。
+     * fixture 的帳密都是 ASCII（fx-…／demo1234），{@link #typeInto} 直接 sendKeys。
+     *
+     * <p>同一情境要求換成另一位員工時直接噴錯：推播／通知中心的場景都只有一位
+     * 當事員工，換人代表劇本或 stepdef 寫錯，默默重登會把錯誤藏起來。
+     */
+    public void ensureLoggedInAs(BackendChannel.CreatedStaff staff) {
+        if (loggedInStaff != null) {
+            if (!loggedInStaff.id().equals(staff.id())) {
+                throw new IllegalStateException("App 已以「" + loggedInStaff.name()
+                        + "」登入，情境中途不支援換成「" + staff.name() + "」");
+            }
+            return;
+        }
+        Duration timeout = Duration.ofSeconds(10);
+        postBackdoorJson("/remembered-account", "{\"employee\":null}");
+        typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
+        typeInto("login.password-field", timeout, staff.password());
+        tapTestId("login.submit-button", timeout);
+        waitForTestId(landingScreenId(staff), timeout);
+        loggedInStaff = staff;
+    }
+
+    /**
+     * 登入成功後會停在哪個首頁。App 依登入者部門分流（工務走工務首頁，其他
+     * 部門走房務首頁），所以等待條件要跟著員工的部門走——一律等房務首頁會讓
+     * 工務的登入永遠逾時。
+     */
+    private static String landingScreenId(BackendChannel.CreatedStaff staff) {
+        return "engineering".equals(staff.dept()) ? "engHome.screen" : "home.screen";
+    }
+
+    /**
+     * 確保 App 已以這位工務的身分登入，並停在工務待認領（{@code engPool}）。
+     * 待認領不是登入後的落地畫面，要從工務首頁再點一次入口；已經在待認領上
+     * 時不重複點。
+     */
+    public void ensureOnEngineeringPool(BackendChannel.CreatedStaff staff) {
+        ensureLoggedInAs(staff);
+        Duration timeout = Duration.ofSeconds(10);
+        if (!driver().findElements(byTestId("engPool.screen")).isEmpty()) {
+            return;
+        }
+        waitForTestId("engHome.screen", timeout);
+        waitForLabelContaining("待認領", timeout).click();
+        waitForTestId("engPool.screen", timeout);
+    }
+
+    /** 記下通知中心情境的當事員工（由通知的 Given 句呼叫）。 */
+    public void setNotificationViewer(BackendChannel.CreatedStaff staff) {
+        this.notificationViewer = staff;
+    }
+
+    /** 通知中心情境的當事員工；沒設定過直接噴錯——通知 Then 沒有 Given 鋪當事人是劇本錯誤。 */
+    public BackendChannel.CreatedStaff notificationViewer() {
+        if (notificationViewer == null) {
+            throw new IllegalStateException(
+                    "通知中心的當事員工尚未設定——場景是否漏了「X 的通知中心已有以下通知」或「X 已在 App 打開通知中心」？");
+        }
+        return notificationViewer;
+    }
+
+    /** 查本情境已建立的員工；查不到直接噴錯——場景引用沒建過的員工是劇本錯誤，不是可忽略情況。 */
+    public BackendChannel.CreatedStaff staff(String name) {
+        BackendChannel.CreatedStaff staff = staffByName.get(name);
+        if (staff == null) {
+            throw new IllegalStateException(
+                    "員工「" + name + "」尚未建立——場景是否漏了背景句「飯店有以下員工」？");
+        }
+        return staff;
+    }
+
+    /**
+     * 改某位已建員工的登入帳密（「"X" 的員工編號密碼為 …」）。除了落地到後端
+     * （{@link BackendChannel#setCredentials}），還要把 {@link #staffByName} 裡那筆換成
+     * 帶新帳密的 record——後續的 Given／When 都用姓名查員工，查到舊的 fixture 帳密
+     * 會讓 UI 登入打錯密碼，錯在測試資料而不是產品。
+     */
+    public void setStaffCredentials(String name, String loginId, String password) {
+        BackendChannel.CreatedStaff old = staff(name);
+        backend.setCredentials(old.id(), loginId, password);
+        staffByName.put(name, new BackendChannel.CreatedStaff(
+                old.id(), old.name(), loginId, password, old.role(), old.dept()));
+    }
+
+    /**
+     * 背景句「飯店有以下員工」：在真後端建立員工與登入帳號。部門照表上的中文對照權威
+     * enum（{@link BackendChannel#dept}：房務→housekeeping、工務→engineering、
+     * 櫃檯→frontdesk）；「主管／值班經理」不是部門是角色，走
+     * {@link BackendChannel#createManagerLikeStaff}（dept 落 NULL），分流對照 tms
+     * {@code CommonGivenSteps.hotelHasStaff}。狀態先固定在職；負責樓層／狀態要開放
+     * 參數時，由對應模組的 stepdef 直接呼叫 {@link #backend()}。
+     */
+    public void seedStaff(String name, String deptChinese) {
+        staffByName.computeIfAbsent(name, n ->
+                ("主管".equals(deptChinese) || "值班經理".equals(deptChinese))
+                        ? backend.createManagerLikeStaff(n, BackendChannel.role(deptChinese), "active")
+                        : backend.createFieldStaff(n, BackendChannel.dept(deptChinese), "active"));
+    }
+
+    /** 「{@code "X" 名下有以下任務}」：在真後端建立掛在這位員工名下、帶到指定狀態的任務。 */
+    public void seedTasks(String staffName, List<TaskFixture> tasks) {
+        BackendChannel.CreatedStaff assignee = staff(staffName);
+        for (TaskFixture task : tasks) {
+            backend.createTask(
+                    task.roomNo(),
+                    task.content(),
+                    // F3 的任務表沒有「類別」欄，內容都是打掃類（退房清潔）；要帶類別的
+                    // 模組（通知中心）進場時，stepdef 再讀表上的類別欄換掉這個預設。
+                    "cleaning",
+                    "housekeeping",
+                    null,
+                    BackendChannel.taskState(task.status()),
+                    assignee,
+                    task.elapsedMinutes() > 0 ? task.elapsedMinutes() : null,
+                    task.pausedReason());
+        }
     }
 
     /**
      * 推播去處指向待認領池且要標亮某房號時（dsl.md「建立去處所指的任務」），畫面上要先
      * 有一張狀態是待認領的卡才有東西可以標亮，但 outline 場景並沒有另外一個「名下有以下
-     * 任務」步驟替它建這張卡，所以由這裡補。同房號已存在就覆蓋掉，不疊兩張重複的卡。
+     * 任務」步驟替它建這張卡，所以由這裡補。同房號已有待認領任務就不再建，不疊兩張重複的卡。
      */
     public void ensurePoolTask(String roomNo, String content) {
-        pendingTasks.removeIf(t -> t.roomNo.equals(roomNo));
-        pendingTasks.add(new TaskFixture(roomNo, content, "待認領", 0, null));
-        postSeed();
-    }
-
-    private void postSeed() {
-        StringBuilder json = new StringBuilder();
-        json.append("{\"staff\":[");
-        for (int i = 0; i < pendingStaffNames.size(); i++) {
-            if (i > 0) {
-                json.append(',');
-            }
-            json.append(jsonString(pendingStaffNames.get(i)));
+        long tenantId = backend.ensureTenant();
+        List<Map<String, Object>> existing = backend.queryRows(
+                """
+                SELECT t.id FROM tasks t JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                WHERE t.tenant_id = ? AND r.room_no = ? AND t.state = 'pool'
+                """, tenantId, roomNo);
+        if (!existing.isEmpty()) {
+            return;
         }
-        json.append("],\"tasks\":[");
-        for (int i = 0; i < pendingTasks.size(); i++) {
-            if (i > 0) {
-                json.append(',');
-            }
-            json.append(pendingTasks.get(i).toJson());
-        }
-        json.append("]}");
-        try {
-            httpPostJson("/seed", json.toString());
-        } catch (IOException | InterruptedException e) {
-            throw new IllegalStateException("呼叫測試後門 /seed 失敗", e);
-        }
+        backend.createTask(roomNo, content, "other", "housekeeping", null, "pool", null, null, null);
     }
 
     /**
@@ -308,18 +429,28 @@ public class AppiumWorld {
      * 自己設 {@code Connection} 這個 restricted header 去關掉 keep-alive，所以改成每次都
      * 開一個全新的 {@code HttpClient}（天生沒有舊連線可重用）＋失敗重送一次，比追查
      * Dart 那邊的連線池細節划算。
+     *
+     * <p>給後門僅存的職責用：裝置側注入（時間、離線、上傳失敗……）。測試資料不走
+     * 這裡，見類別 Javadoc。
      */
-    private void httpPostJson(String path, String json) throws IOException, InterruptedException {
-        IOException lastError = null;
-        for (int attempt = 1; attempt <= 2; attempt++) {
-            try {
-                sendOnce(path, json);
-                return;
-            } catch (IOException e) {
-                lastError = e;
+    public void postBackdoorJson(String path, String json) {
+        try {
+            IOException lastError = null;
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    sendOnce(path, json);
+                    return;
+                } catch (IOException e) {
+                    lastError = e;
+                }
             }
+            throw lastError;
+        } catch (IOException e) {
+            throw new IllegalStateException("呼叫測試後門 " + path + " 失敗", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("呼叫測試後門 " + path + " 時被中斷", e);
         }
-        throw lastError;
     }
 
     private void sendOnce(String path, String json) throws IOException, InterruptedException {
@@ -331,7 +462,7 @@ public class AppiumWorld {
                 .build();
         // 必須鎖 HTTP/1.1：JDK HttpClient 預設 HTTP/2，對 http:// 會帶 h2c 升級標頭，
         // Dart HttpServer 收到這種請求會回 200 但把 request body 整個吞掉（實測重現），
-        // seed 就會靜默變成空包。
+        // 注入內容就會靜默變成空包。
         HttpResponse<Void> response = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .build()
@@ -341,13 +472,29 @@ public class AppiumWorld {
         }
     }
 
+    private void httpGet(String path) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://127.0.0.1:" + BACKDOOR_PORT + path))
+                .GET()
+                .timeout(Duration.ofSeconds(5))
+                .build();
+        HttpResponse<Void> response = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build()
+                .send(request, HttpResponse.BodyHandlers.discarding());
+        if (response.statusCode() != 200) {
+            throw new IOException("GET " + path + " -> HTTP " + response.statusCode());
+        }
+    }
+
     /**
      * 送一則推播給 simulator。先把 App 切到背景再推：這支 feature 要驗證的是
      * 「背景中被推播喚回前景後導到哪裡」，所以推播必須在 App 不在前景時送出，App
      * 才會是被「喚回」而不是單純收到提示。payload 的 {@code dest}/{@code room}/
-     * {@code highlight} 欄位跟 {@code lib/core/push_gateway.dart} 的約定一致。
+     * {@code taskId}/{@code highlight} 欄位跟 {@code lib/core/push_gateway.dart}
+     * 的約定一致（{@code taskId} 可為 null，對應「去處房號沒有既存任務」的推播）。
      */
-    public void sendPush(String title, String body, String dest, String room, String highlight) {
+    public void sendPush(String title, String body, String dest, String room, String taskId, String highlight) {
         backgroundApp();
 
         StringBuilder json = new StringBuilder();
@@ -357,6 +504,9 @@ public class AppiumWorld {
         json.append(",\"dest\":").append(jsonString(dest));
         if (room != null) {
             json.append(",\"room\":").append(jsonString(room));
+        }
+        if (taskId != null) {
+            json.append(",\"taskId\":").append(jsonString(taskId));
         }
         if (highlight != null) {
             json.append(",\"highlight\":").append(jsonString(highlight));
@@ -461,6 +611,80 @@ public class AppiumWorld {
             } catch (Exception ignored) {
             }
             throw new AssertionError("等不到畫面元素 " + id + "（逾時 " + timeout.getSeconds() + "s）", e);
+        }
+    }
+
+    /**
+     * 對文字欄位輸入內容。先點一下取得焦點（XCUITest 對未聚焦欄位 sendKeys 偶發失敗），
+     * 再依內容選輸入路徑：
+     *
+     * <ul>
+     *   <li>純 ASCII 直接 {@code sendKeys}——WDA 的 typeText 逐字元敲軟體鍵盤，英文鍵盤
+     *       敲得出來；</li>
+     *   <li>含非 ASCII（中文等）改走剪貼簿＋長按「貼上」——英文軟體鍵盤敲不出 CJK，
+     *       WDA 會回 200 但整段文字被靜默丟掉（實測重現），欄位收到的是空字串。</li>
+     * </ul>
+     */
+    public void typeInto(String testId, Duration timeout, String text) {
+        withStaleRetry(testId, timeout, field -> {
+            field.click();
+            if (text.chars().allMatch(c -> c < 128)) {
+                field.sendKeys(text);
+                return;
+            }
+            ((IOSDriver) driver()).setClipboardText(text);
+            String elementId = ((RemoteWebElement) field).getId();
+            driver().executeScript("mobile: touchAndHold",
+                    Map.of("element", elementId, "elementId", elementId, "duration", 1.0));
+            By pasteItem = AppiumBy.iOSNsPredicateString("label == 'Paste' OR label == '貼上'");
+            FluentWait<AppiumDriver> wait = new FluentWait<>(driver())
+                    .withTimeout(Duration.ofSeconds(4))
+                    .pollingEvery(Duration.ofMillis(200))
+                    .ignoring(NoSuchElementException.class);
+            wait.until(d -> d.findElement(pasteItem)).click();
+        });
+    }
+
+    /** 等某個 accessibility id 的元素出現後點擊（stale 時以 id 重找重試，見 {@link #withStaleRetry}）。 */
+    public void tapTestId(String testId, Duration timeout) {
+        withStaleRetry(testId, timeout, element -> {
+            waitForStableRect(element);
+            element.click();
+        });
+    }
+
+    /**
+     * 等元素的畫面位置定下來再回傳。頁面轉場動畫進行中就點，XCUITest 以當下
+     * 座標落點，會點到還在移動的畫面之外（實測重現：通知中心剛推入時點
+     * 「全部標為已讀」沒有任何效果）；連續兩次讀到相同的 frame 才視為定格。
+     * 位置一直在動（例如跑不停的動畫）時最多等 2 秒就放行，交給 click 自己
+     * 成敗，不把這裡變成無上限的等待。
+     */
+    private void waitForStableRect(WebElement element) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        org.openqa.selenium.Rectangle last = element.getRect();
+        while (System.nanoTime() < deadline) {
+            sleep(150);
+            org.openqa.selenium.Rectangle now = element.getRect();
+            if (now.equals(last)) {
+                return;
+            }
+            last = now;
+        }
+    }
+
+    /**
+     * 以 id 找到元素後執行動作；吃到 {@code StaleElementReferenceException} 就以同一個
+     * id 重找一次再做。畫面轉場或 rebuild 會讓 Flutter 重發 semantics 節點，剛找到的
+     * element handle 在下一個指令前就可能失效——這在整個模組連跑（情境間 App 重啟、
+     * 轉場密集）時會間歇出現，單跑同一情境反而碰不到。重試一次就夠：第二次找到的
+     * handle 來自已定格的畫面。
+     */
+    private void withStaleRetry(String testId, Duration timeout, java.util.function.Consumer<WebElement> action) {
+        try {
+            action.accept(waitForTestId(testId, timeout));
+        } catch (org.openqa.selenium.StaleElementReferenceException e) {
+            action.accept(waitForTestId(testId, timeout));
         }
     }
 
@@ -577,23 +801,12 @@ public class AppiumWorld {
         return process.exitValue();
     }
 
-    /** {@code /seed} 的單筆任務 fixture，欄位對應 feature 檔「名下有以下任務」data table。 */
+    /** 單筆任務 fixture，欄位對應 feature 檔「名下有以下任務」data table（狀態存中文原詞）。 */
     public record TaskFixture(
             String roomNo,
             String content,
             String status,
             int elapsedMinutes,
             String pausedReason) {
-
-        String toJson() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{\"roomNo\":").append(jsonString(roomNo));
-            sb.append(",\"content\":").append(jsonString(content));
-            sb.append(",\"status\":").append(jsonString(status));
-            sb.append(",\"elapsedMinutes\":").append(elapsedMinutes);
-            sb.append(",\"pausedReason\":").append(pausedReason == null ? "null" : jsonString(pausedReason));
-            sb.append('}');
-            return sb.toString();
-        }
     }
 }

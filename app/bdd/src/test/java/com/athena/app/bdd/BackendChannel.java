@@ -1,0 +1,758 @@
+package com.athena.app.bdd;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * harness 對「真後端」的資料通道：fixture 建立（員工與帳號、任務與工務單）與
+ * 權威狀態讀回（REST 詳情＋資料庫整列）。
+ *
+ * <p><b>為什麼是 JDBC＋REST 混合，而不是純 REST：</b>後端沒有開任何「測試資料準備」
+ * REST 端點（正式 API 刻意不含 admin 造數入口），tms 自己的 BDD 是在同一個 JVM 裡用
+ * {@code tms/src/test/java/com/athena/tms/bdd/support/} 的 fixture 類別直接落地
+ * （JdbcClient＋TaskEngine）。harness 跑在另一個 JVM，拿不到那些 bean，所以：
+ * <ul>
+ *   <li><b>fixture 建立</b>走 JDBC，SQL 逐句對照 tms 的 {@code TenantFixtures}／
+ *       {@code RoomFixtures}／{@code StaffFixtures}／{@code RepairGivenSteps}，
+ *       欄位與 enum 值不自創；</li>
+ *   <li><b>狀態轉移</b>（認領／開工／中斷／完成）改走正式 REST 端點
+ *       （{@code POST /api/v1/tasks/{id}/claim} 等），事件歷程（task_events）由
+ *       產品碼自己長出來，跟正式流程同形狀；</li>
+ *   <li><b>讀回</b>提供兩條：REST（{@code GET /tasks/{id}} 等員工視角詳情）與
+ *       JDBC 整列（REST 沒曝露的權威欄位，例如 {@code staff_accounts.failed_login_count}）。</li>
+ * </ul>
+ *
+ * <p>與 tms fixture 的三個已知偏差（刻意為之，不是漏做）：
+ * <ol>
+ *   <li>JWT 不是直接簽發（harness 沒有簽章私鑰），改用正式登入端點
+ *       {@code POST /api/v1/staff-accounts/login} 以 fixture 帳密換取；</li>
+ *   <li>直接落地的 created 事件不寫 outbox（tms 經 TaskEngine 會送出 Kafka 事件）。
+ *       App UI 測試不消費那條事件流，不影響任何斷言；</li>
+ *   <li>id 用 UUID v4（tms 用 UuidV7；schema 對 uuid 版本沒有約束，差別只在
+ *       索引的排序局部性，對測試無感）。</li>
+ * </ol>
+ *
+ * <p>連線設定全用系統屬性（比照 {@code appium.server.url} 的風格）：
+ * {@code backend.base.url}（預設 {@code http://127.0.0.1:8080}）、
+ * {@code backend.db.url}（預設 {@code jdbc:postgresql://127.0.0.1:5433/tms}，
+ * 對齊 docker-compose.yml 對外開的 5433）、{@code backend.db.user}／
+ * {@code backend.db.password}（預設 tms／tms）。後端與資料庫由 docker-compose＋
+ * tms 既有方式先起好（就緒檢查在 {@code app/bdd/lib/env.sh}），本類別不負責啟動；
+ * 建構子也不發起任何連線，dry-run／純編譯驗證不需要後端在跑。
+ */
+public class BackendChannel {
+
+    /** API 的共同前綴，對齊 tms BddApiClient 的 BASE_PATH。 */
+    private static final String BASE_PATH = "/api/v1";
+
+    /** 冪等鍵 header 名稱，定義見 specs/truth/contracts/components/parameters.yaml 的 IdempotencyKey。 */
+    private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+    /** 固定明文密碼，僅供測試環境；對齊 tms StaffFixtures.DEFAULT_PASSWORD。 */
+    public static final String DEFAULT_PASSWORD = "demo1234";
+
+    /**
+     * fixture 照片的內容：一張合法的 1×1 JPEG。後端只驗「有沒有上傳成功」，
+     * 不看影像內容，所以不需要真的照片檔。
+     */
+    private static final byte[] PLACEHOLDER_JPEG = java.util.Base64.getDecoder().decode(
+            "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof"
+            + "Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAAB"
+            + "AAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==");
+
+    /** tms TenantFixtures 的共用測試租戶名，兩邊 BDD 用同一個，fixture 語意才同構。 */
+    private static final String TEST_TENANT_NAME = "測試飯店";
+
+    /**
+     * 任務狀態中文 → 權威 {@code tasks.state}。逐條照抄
+     * {@code tms/src/test/java/com/athena/tms/bdd/support/Terms.java} 的 TASK_STATE
+     * （權威來源：specs/truth/features/backend/dsl.md「狀態用語對照」表前半）。
+     * tms 那份在另一個 Maven module，harness 掛不進去，只能複製；改權威值時兩份要一起改。
+     */
+    private static final Map<String, String> TASK_STATE = Map.ofEntries(
+            Map.entry("待認領", "pool"),
+            Map.entry("待開始", "accepted"),
+            Map.entry("進行中", "doing"),
+            Map.entry("已延後", "deferred"),
+            Map.entry("已中斷", "interrupted"),
+            Map.entry("待查房", "done"),
+            Map.entry("已送達", "done"),
+            Map.entry("查房通過", "inspected"),
+            Map.entry("完成 · 免查房", "inspected"),
+            Map.entry("已取消", "cancelled"));
+
+    /**
+     * 部門中文 → 權威 {@code staff_accounts.dept}。逐條照抄 tms Terms 的 DEPT
+     * （權威來源：specs/truth/features/backend/dsl.md「部門用語」表 dept 列）；
+     * 複製的理由同 {@link #TASK_STATE}，改權威值時兩份要一起改。
+     */
+    private static final Map<String, String> DEPT = Map.ofEntries(
+            Map.entry("房務", "housekeeping"),
+            Map.entry("工務", "engineering"),
+            Map.entry("櫃檯", "frontdesk"));
+
+    /** 角色中文 → 權威 {@code role}（照抄 tms Terms 的 ROLE，僅收錄 dsl.md 點名的兩種）。 */
+    private static final Map<String, String> ROLE = Map.ofEntries(
+            Map.entry("主管", "manager"),
+            Map.entry("值班經理", "duty_manager"));
+
+    private final String baseUrl;
+    private final String dbUrl;
+    private final String dbUser;
+    private final String dbPassword;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    private Connection connection;
+    private Long cachedTenantId;
+    private final Map<UUID, String> jwtByStaffId = new ConcurrentHashMap<>();
+
+    public BackendChannel() {
+        this.baseUrl = System.getProperty("backend.base.url", "http://127.0.0.1:8080");
+        this.dbUrl = System.getProperty("backend.db.url", "jdbc:postgresql://127.0.0.1:5433/tms");
+        this.dbUser = System.getProperty("backend.db.user", "tms");
+        this.dbPassword = System.getProperty("backend.db.password", "tms");
+    }
+
+    /** 任務狀態中文 → 權威 tasks.state；查不到就噴錯帶原詞，不猜（對齊 tms Terms 的行為）。 */
+    public static String taskState(String chinese) {
+        String value = TASK_STATE.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在任務狀態對照表中的權威值");
+        }
+        return value;
+    }
+
+    /** 部門中文 → 權威 staff_accounts.dept；查不到就噴錯帶原詞，不猜（對齊 tms Terms.dept）。 */
+    public static String dept(String chinese) {
+        String value = DEPT.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在部門對照表中的權威值");
+        }
+        return value;
+    }
+
+    /** 角色中文 → 權威 role（manager|duty_manager）；查不到就噴錯帶原詞（對齊 tms Terms.role）。 */
+    public static String role(String chinese) {
+        String value = ROLE.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在角色對照表中的權威值");
+        }
+        return value;
+    }
+
+    /** fixture 建出的員工帳號；password 固定 {@link #DEFAULT_PASSWORD}，JWT 用 {@link #jwt} 換。 */
+    public record CreatedStaff(UUID id, String name, String loginId, String password, String role, String dept) {}
+
+    /** 確保「測試飯店」租戶存在，回傳 tenants.id（對照 TenantFixtures.testTenantId）。 */
+    public synchronized long ensureTenant() {
+        if (cachedTenantId != null) {
+            return cachedTenantId;
+        }
+        Optional<Object> existing = queryScalar("SELECT id FROM tenants WHERE name = ?", TEST_TENANT_NAME);
+        if (existing.isPresent()) {
+            cachedTenantId = ((Number) existing.get()).longValue();
+            return cachedTenantId;
+        }
+        Object id = queryScalar("INSERT INTO tenants (name, created_at) VALUES (?, ?) RETURNING id",
+                TEST_TENANT_NAME, OffsetDateTime.now())
+                .orElseThrow(() -> new IllegalStateException("INSERT tenants 沒有回傳 id"));
+        cachedTenantId = ((Number) id).longValue();
+        return cachedTenantId;
+    }
+
+    /**
+     * 每個情境開場清掉上一個情境的業務資料，避免跨情境的唯一鍵碰撞與待認領池殘留。
+     * 清法照抄 tms ResetHooks：TRUNCATE public 下所有 base table，
+     * 保留 flyway_schema_history 與 tenants（租戶 id 有快取重用）。
+     */
+    public void resetBusinessData() {
+        List<Map<String, Object>> rows = queryRows("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+                  AND table_name NOT IN ('flyway_schema_history', 'tenants')
+                """);
+        if (rows.isEmpty()) {
+            return;
+        }
+        List<String> tables = rows.stream().map(r -> (String) r.get("table_name")).toList();
+        execute("TRUNCATE TABLE " + String.join(", ", tables) + " RESTART IDENTITY CASCADE");
+        // staff_accounts 已被清空，快取的 JWT 全指向不存在的員工，留著只會害下一個情境 401。
+        jwtByStaffId.clear();
+    }
+
+    /** 確保房間存在，回傳 rooms.id（SQL 與預設值對照 RoomFixtures.ensureRoom）。 */
+    public UUID ensureRoom(String roomNo, int floor) {
+        long tenantId = ensureTenant();
+        Optional<Object> existing = queryScalar(
+                "SELECT id FROM rooms WHERE tenant_id = ? AND room_no = ?", tenantId, roomNo);
+        if (existing.isPresent()) {
+            return (UUID) existing.get();
+        }
+        UUID id = UUID.randomUUID();
+        execute("""
+                INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, tenantId, roomNo, floor, "standard_double", "dirty", "vacant", OffsetDateTime.now());
+        return id;
+    }
+
+    /** 由房號推導樓層：取房號第一位數字（對照 RoomFixtures.floorFromRoomNo）。 */
+    public static int floorFromRoomNo(String roomNo) {
+        if (roomNo == null || roomNo.isEmpty() || !Character.isDigit(roomNo.charAt(0))) {
+            return 0;
+        }
+        return Character.getNumericValue(roomNo.charAt(0));
+    }
+
+    /**
+     * 現場部門員工（房務／工務／櫃檯）：role 與 dept 同值（INSERT 欄位對照
+     * StaffFixtures.insertStaff）。「負責樓層／班次」的 plan_rooms 列這裡不建——
+     * 只有「查我的班次」類情境需要，要用時由 stepdef 另外補。
+     */
+    public CreatedStaff createFieldStaff(String name, String deptCode, String stateCode) {
+        return insertStaff(name, deptCode, deptCode, stateCode);
+    }
+
+    /** 主管／值班經理：dept 固定 NULL（對照 StaffFixtures.createManagerLikeStaff）。 */
+    public CreatedStaff createManagerLikeStaff(String name, String roleCode, String stateCode) {
+        return insertStaff(name, roleCode, null, stateCode);
+    }
+
+    private CreatedStaff insertStaff(String name, String roleCode, String deptCode, String stateCode) {
+        boolean active = "active".equals(stateCode);
+        long tenantId = ensureTenant();
+        UUID id = UUID.randomUUID();
+        String loginId = "fx-" + id.toString().replace("-", "").substring(0, 12);
+        String passwordHash = passwordEncoder.encode(DEFAULT_PASSWORD);
+        OffsetDateTime now = OffsetDateTime.now();
+        execute("""
+                INSERT INTO staff_accounts
+                    (id, tenant_id, name, login_id, password_hash, role, dept, active, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, tenantId, name, loginId, passwordHash, roleCode, deptCode, active, stateCode, now, now);
+        return new CreatedStaff(id, name, loginId, DEFAULT_PASSWORD, roleCode, deptCode);
+    }
+
+    /** 改這位員工的登入帳密（對照 StaffFixtures.setCredentials：沒有 admin API，直接落地）。 */
+    public void setCredentials(UUID staffId, String loginId, String rawPassword) {
+        execute("UPDATE staff_accounts SET login_id = ?, password_hash = ?, updated_at = ? WHERE tenant_id = ? AND id = ?",
+                loginId, passwordEncoder.encode(rawPassword), OffsetDateTime.now(), ensureTenant(), staffId);
+        jwtByStaffId.remove(staffId);
+    }
+
+    /**
+     * Given「已連續輸入錯誤密碼 N 次」：直接落地 {@code staff_accounts.failed_login_count}
+     * （T240 建的欄位）。真的在畫面上連打 N 次錯密碼又慢又把「準備狀態」跟「被測行為」
+     * 攪在一起，所以照 dsl 的「透過後端測試資料」直接寫欄位。
+     *
+     * <p>達到鎖定門檻（5 次）時要連 {@code locked_until} 一起落地：登入端點（T287）
+     * 是在「第 5 次失敗嘗試的當下」寫入鎖定到期時間，之後的登入只看
+     * {@code locked_until}、不回頭看次數——只寫次數不寫鎖定，等於造出一個產品
+     * 流程產生不出來的狀態（連錯 5 次卻沒被鎖），下一次密碼正確會直接登入成功，
+     * 「顯示鎖定剩餘時間」的場景就永遠到不了。門檻與時長照權威規格
+     * （contracts staffAccountsLogin：5 次鎖 15 分鐘）。
+     */
+    public void setFailedLoginCount(UUID staffId, int count) {
+        OffsetDateTime lockedUntil = count >= 5 ? OffsetDateTime.now().plusMinutes(15) : null;
+        execute("UPDATE staff_accounts SET failed_login_count = ?, locked_until = ?, updated_at = ?"
+                        + " WHERE tenant_id = ? AND id = ?",
+                count, lockedUntil, OffsetDateTime.now(), ensureTenant(), staffId);
+    }
+
+    /**
+     * Given「帳號是臨時密碼」：標記 {@code staff_accounts.must_change_password}（T240 建的
+     * 欄位），下次登入時後端（T287）會在 LoginResponse 帶 {@code mustChangePassword=true}，
+     * App 據此進強制改密畫面。沒有 admin API，直接落地（同 {@link #setCredentials} 的理由）。
+     */
+    public void markMustChangePassword(UUID staffId) {
+        execute("UPDATE staff_accounts SET must_change_password = true, updated_at = ? WHERE tenant_id = ? AND id = ?",
+                OffsetDateTime.now(), ensureTenant(), staffId);
+    }
+
+    /**
+     * 建一張任務並帶到指定狀態。起點列（tasks＋created 事件）直接落地（欄位對照
+     * TaskEngine.create 寫出的形狀），之後的狀態轉移走正式 REST 端點（claim／start／
+     * interrupt／complete），事件歷程由產品碼產生。支援的狀態：
+     * pool｜accepted｜doing｜interrupted｜done（pool 以外都需要 assignee）。
+     * 其他狀態（inspected 等）目前沒有員工視角 REST 可走，要用時再擴充，先丟明確錯誤。
+     *
+     * @param workedMinutes 「已做分鐘」；doing＝目前段落回推 segment_started_at、
+     *                      interrupted＝整段落在 worked_sec（落法對照 TaskFixtures.applyWorkedSeconds）
+     * @param holdReason    停住原因，直接 UPDATE tasks.hold_reason（狀態轉移不經手這個欄位，
+     *                      與 tms TaskFixtures 的落法一致）
+     */
+    public UUID createTask(
+            String roomNo, String title, String typeCode, String deptCode, Integer estMin,
+            String stateCode, CreatedStaff assignee, Integer workedMinutes, String holdReason) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        // 打掃任務的 work_date 是 NOT NULL 的業務約束（一房一天），其他種類不帶。
+        LocalDate workDate = "cleaning".equals(typeCode) ? LocalDate.now() : null;
+
+        UUID taskId = insertTaskAtCreatableState(
+                tenantId, roomId, title, typeCode, deptCode, estMin, workDate, "pool", "desk");
+
+        switch (stateCode) {
+            case "pool" -> { /* 起點即終點 */ }
+            case "accepted" -> postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+            case "doing" -> {
+                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                postTaskAction(taskId, "start", assignee);
+            }
+            case "interrupted" -> {
+                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                postTaskAction(taskId, "start", assignee);
+                // 中斷端點（contracts tasksInterrupt）要求 reason 1–60 字，不帶 body 會
+                // 被 422 擋下。場景有給停住原因就用它（之後的 hold_reason UPDATE 再覆
+                // 寫同值，形同正式流程）；沒給就落一個說明用途的佔位原因。
+                postTaskAction(taskId, "interrupt", assignee,
+                        Map.of("reason", holdReason != null ? holdReason : "測試資料準備：中斷"));
+            }
+            case "done" -> {
+                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                postTaskAction(taskId, "start", assignee);
+                postTaskAction(taskId, "complete", assignee);
+            }
+            case "inspected" -> {
+                // 「查房通過」：先照正式流程走到 done，最後一步（查房通過）直接落地
+                // 狀態欄位。不走正式查房 REST（POST /inspections）是刻意的：那條路
+                // 會由產品碼自動補寫一筆「{房號} 查房通過」的 notifications（見 tms
+                // InspectionService.notifyAssignee），跟通知中心 Given 鋪的同標題通知
+                // 撞在一起，把「剛好一筆」的權威讀回弄成兩筆。
+                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                postTaskAction(taskId, "start", assignee);
+                postTaskAction(taskId, "complete", assignee);
+                execute("UPDATE tasks SET state = 'inspected' WHERE tenant_id = ? AND id = ?",
+                        tenantId, taskId);
+            }
+            default -> throw new IllegalArgumentException(
+                    "BackendChannel.createTask 目前支援 pool|accepted|doing|interrupted|done|inspected，收到: "
+                            + stateCode + "（其他狀態等對應情境實作時再擴充）");
+        }
+
+        if (workedMinutes != null) {
+            if ("doing".equals(stateCode)) {
+                execute("UPDATE tasks SET worked_sec = 0, segment_started_at = ? WHERE tenant_id = ? AND id = ?",
+                        OffsetDateTime.now().minusMinutes(workedMinutes), tenantId, taskId);
+            } else if ("interrupted".equals(stateCode)) {
+                execute("UPDATE tasks SET worked_sec = ?, segment_started_at = NULL WHERE tenant_id = ? AND id = ?",
+                        workedMinutes * 60, tenantId, taskId);
+            } else {
+                throw new IllegalArgumentException(
+                        "workedMinutes 只在 doing|interrupted 有意義，收到 state=" + stateCode);
+            }
+        }
+        if (holdReason != null) {
+            execute("UPDATE tasks SET hold_reason = ? WHERE tenant_id = ? AND id = ?",
+                    holdReason, tenantId, taskId);
+        }
+        return taskId;
+    }
+
+    /**
+     * 建一張工務單：任務列（type=repair、dept=engineering、source=staff）＋
+     * repair_tickets 延伸列（INSERT 欄位對照 tms RepairGivenSteps.existingRepairTickets）。
+     * 任務部分沿用 {@link #createTask}，支援的狀態同它；工務單特有的 pending_review
+     * （等主管審核，開單起點）另外直接落地。
+     */
+    public UUID createRepairTicket(
+            String ticketNo, String roomNo, String categoryCode, String stateCode,
+            CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+
+        UUID taskId;
+        if ("pending_review".equals(stateCode)) {
+            taskId = insertTaskAtCreatableState(
+                    tenantId, roomId, categoryCode + " 工務單", "repair", "engineering", null, null,
+                    "pending_review", "staff");
+        } else {
+            // 已完修的單先帶到維修中，延到工務單列落地之後才完修：完修會走
+            // 後端的修繕結案路徑，它查不到 repair_tickets 列就回 404。
+            String taskState = "done".equals(stateCode) ? "doing" : stateCode;
+            taskId = createTask(roomNo, categoryCode + " 工務單", "repair", "engineering", null,
+                    taskState, assignee, null, null);
+            execute("UPDATE tasks SET source = 'staff' WHERE tenant_id = ? AND id = ?", tenantId, taskId);
+        }
+
+        execute("UPDATE tasks SET urgent = ? WHERE tenant_id = ? AND id = ?", urgent, tenantId, taskId);
+        execute("""
+                INSERT INTO repair_tickets
+                    (task_id, tenant_id, ticket_no, room_id, category, description, reporter_id,
+                     source_task_id, created_at, is_urgent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                """, taskId, tenantId, ticketNo, roomId, categoryCode, description, reporter.id(),
+                OffsetDateTime.now(), urgent);
+
+        if ("done".equals(stateCode)) {
+            completeRepairTask(taskId, requireAssignee(stateCode, assignee));
+        }
+        return taskId;
+    }
+
+    /**
+     * 改一張任務的來源。{@link #createRepairTicket} 一律落成房務報修，櫃檯
+     * 交辦的單要用這個改成 desk——櫃檯交辦是櫃檯端的動作，App 這側沒有可以
+     * 走的正式流程。
+     */
+    public void setTaskSource(UUID taskId, String source) {
+        execute("UPDATE tasks SET source = ? WHERE tenant_id = ? AND id = ?",
+                source, ensureTenant(), taskId);
+    }
+
+    /**
+     * 把工務單標成主管已驗收。驗收是主管端的動作，App 沒有對應畫面，而且
+     * 驗收端點要主管身分的 JWT，所以測試資料直接落地驗收人與驗收時間。
+     */
+    public void markRepairTicketVerified(UUID ticketTaskId, UUID verifierStaffId) {
+        execute("UPDATE repair_tickets SET verified_by = ?, verified_at = ?"
+                        + " WHERE tenant_id = ? AND task_id = ?",
+                verifierStaffId, OffsetDateTime.now(), ensureTenant(), ticketTaskId);
+    }
+
+    /**
+     * 以負責人身分走正式完修流程完修一張工務單。給「已完修」的工務單
+     * fixture 用：修繕任務的 complete 一定要附完修照片，所以這裡連照片一起
+     * 備齊，事件歷程與正式流程同形狀。
+     */
+    public void completeRepairTask(UUID taskId, CreatedStaff assignee) {
+        UUID photoId = createCompletionPhoto(assignee);
+        postTaskAction(taskId, "complete", assignee,
+                Map.of("photoIds", List.of(photoId.toString())));
+    }
+
+    /**
+     * 備一張可以被 complete 引用的完修照片。後端只認 status=uploaded 的照片，
+     * 所以建立位置之後一定要接著上傳內容，少了第二段 complete 會被 422 擋下。
+     */
+    private UUID createCompletionPhoto(CreatedStaff uploader) {
+        Map<String, Object> body = Map.of(
+                "purpose", "completion",
+                "takenAt", OffsetDateTime.now().toString());
+        HttpResponse<String> created = send(request("POST", "/repair-photos", jwt(uploader))
+                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        if (created.statusCode() != 201 && created.statusCode() != 200) {
+            throw new IllegalStateException("建立完修照片失敗：POST /repair-photos -> HTTP "
+                    + created.statusCode() + "，body=" + created.body());
+        }
+        UUID photoId = UUID.fromString(parseJson(created.body()).path("id").asText());
+
+        HttpResponse<String> uploaded = send(
+                request("PUT", "/repair-photos/" + photoId + "/content", jwt(uploader))
+                        .header("Content-Type", "image/jpeg")
+                        .PUT(HttpRequest.BodyPublishers.ofByteArray(PLACEHOLDER_JPEG)));
+        if (uploaded.statusCode() < 200 || uploaded.statusCode() >= 300) {
+            throw new IllegalStateException("上傳完修照片失敗：PUT /repair-photos/" + photoId
+                    + "/content -> HTTP " + uploaded.statusCode() + "，body=" + uploaded.body());
+        }
+        return photoId;
+    }
+
+    /**
+     * 租戶內遞增取下一個工務單號（取號 SQL 對照 tms RepairGivenSteps.allocateNextTicketNo，
+     * 與產品 createRepairTicket 共用同一個 repair_ticket_counters 計數器），給「手上有 N 張
+     * 維修中的工務單」這類合成單用，不會與場景點名的單號撞號。
+     */
+    public int allocateNextRepairTicketNo() {
+        Object lastNo = queryScalar("""
+                INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
+                ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
+                RETURNING last_no
+                """, ensureTenant())
+                .orElseThrow(() -> new IllegalStateException("repair_ticket_counters 取號沒有回傳 last_no"));
+        return ((Number) lastNo).intValue();
+    }
+
+    /**
+     * 建一筆通知中心的通知紀錄（INSERT 欄位對照 tms 後端 PushGivenSteps 對
+     * notifications 表的既有建法；該表沒有 REST 造數入口，走 JDBC 直接落地）。
+     *
+     * @param target 去處（contracts PushTarget 形狀，key→value；NOT NULL 欄位）。
+     *               通知的 Given 句型沒有去處參數，由呼叫端依標題對應的任務推導
+     *               （推導邏輯見 steps/push 的 PushGivenSteps），對不上任務時用
+     *               最小合法形狀 {@code kind=home}
+     * @param read   是否已讀；已讀時 {@code read_at} 落在與 {@code created_at}
+     *               相同的時刻，因為句型沒有規定已讀動作發生在何時，另外編一個
+     *               時間是在測試資料裡製造沒有規格依據的事實
+     */
+    public UUID createNotification(
+            UUID recipientStaffId, String title, OffsetDateTime createdAt, boolean read,
+            Map<String, Object> target) {
+        long tenantId = ensureTenant();
+        UUID id = UUID.randomUUID();
+        execute("""
+                INSERT INTO notifications
+                    (id, tenant_id, recipient_staff_id, title, target, created_at, read_at)
+                VALUES (?, ?, ?, ?, CAST(? AS jsonb), ?, ?)
+                """, id, tenantId, recipientStaffId, title, toJson(target),
+                createdAt, read ? createdAt : null);
+        return id;
+    }
+
+    /**
+     * 直接落地一列「可作為起點」的任務（pool｜pending_review）＋第 1 筆 created 事件，
+     * 欄位與事件形狀對照 TaskEngine.create（event_seq=1、task_events.seq=1、actor=system、
+     * payload 帶建立快照）。不寫 outbox，理由見類別 Javadoc 的偏差 2。
+     */
+    private UUID insertTaskAtCreatableState(
+            long tenantId, UUID roomId, String title, String typeCode, String deptCode,
+            Integer estMin, LocalDate workDate, String initialState, String source) {
+        UUID taskId = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now();
+        execute("""
+                INSERT INTO tasks
+                    (id, tenant_id, type, source, room_id, dept, state, event_seq, title, est_min,
+                     work_date, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+                """, taskId, tenantId, typeCode, source, roomId, deptCode, initialState, title, estMin,
+                workDate, now, now);
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("type", typeCode);
+        snapshot.put("source", source);
+        snapshot.put("room_id", roomId.toString());
+        snapshot.put("dept", deptCode);
+        snapshot.put("state", initialState);
+        snapshot.put("title", title);
+        snapshot.put("est_min", estMin);
+        snapshot.put("work_date", workDate == null ? null : workDate.toString());
+        execute("""
+                INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+                VALUES (?, ?, 1, 'created', 'system', NULL, CAST(? AS jsonb), ?)
+                """, tenantId, taskId, toJson(snapshot), now);
+        return taskId;
+    }
+
+    private static CreatedStaff requireAssignee(String stateCode, CreatedStaff assignee) {
+        if (assignee == null) {
+            throw new IllegalArgumentException("state=" + stateCode + " 需要 assignee（呼叫端未提供）");
+        }
+        return assignee;
+    }
+
+    /**
+     * 用 fixture 帳密走正式登入端點換 JWT，同一位員工快取重用。tms 的 StaffFixtures
+     * 是直接簽發 JWT，harness 沒有簽章私鑰，理由見類別 Javadoc 的偏差 1。
+     */
+    public String jwt(CreatedStaff staff) {
+        return jwtByStaffId.computeIfAbsent(staff.id(), ignored -> login(staff.loginId(), staff.password()));
+    }
+
+    /** POST /api/v1/staff-accounts/login，回傳 LoginResponse.token（欄位名依契約 員工帳號與登入.yaml）。 */
+    public String login(String loginId, String password) {
+        Map<String, Object> body = Map.of("loginId", loginId, "password", password);
+        HttpResponse<String> response = send(request("POST", "/staff-accounts/login", null)
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json"));
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("登入失敗：POST /staff-accounts/login -> HTTP "
+                    + response.statusCode() + "，body=" + response.body());
+        }
+        JsonNode token = parseJson(response.body()).path("token");
+        if (token.isMissingNode() || token.isNull()) {
+            throw new IllegalStateException("登入回應沒有 token 欄位：" + response.body());
+        }
+        return token.asText();
+    }
+
+    /** 以某員工身分對任務執行一個動作（claim/start/interrupt/complete/…），不帶 body。 */
+    public void postTaskAction(UUID taskId, String action, CreatedStaff actor) {
+        postTaskAction(taskId, action, actor, null);
+    }
+
+    /** 同上，但帶 JSON body（例如 interrupt 的 {@code {"reason": …}}）。 */
+    public void postTaskAction(UUID taskId, String action, CreatedStaff actor, Map<String, Object> body) {
+        HttpRequest.Builder builder = request("POST", "/tasks/" + taskId + "/" + action, jwt(actor))
+                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString());
+        if (body == null) {
+            builder.POST(HttpRequest.BodyPublishers.noBody());
+        } else {
+            builder.POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8))
+                    .header("Content-Type", "application/json");
+        }
+        HttpResponse<String> response = send(builder);
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("fixture 狀態轉移失敗：POST /tasks/" + taskId + "/" + action
+                    + " -> HTTP " + response.statusCode() + "，body=" + response.body());
+        }
+    }
+
+    /** 權威讀回（REST）：GET /api/v1 下任意路徑，回傳解析後的 JSON。斷言入口，非 200 直接噴錯。 */
+    public JsonNode getJson(String path, CreatedStaff viewer) {
+        HttpResponse<String> response = send(request("GET", path, jwt(viewer)).GET());
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("權威讀回失敗：GET " + path + " -> HTTP "
+                    + response.statusCode() + "，body=" + response.body());
+        }
+        return parseJson(response.body());
+    }
+
+    /** 權威讀回（JDBC）：tasks 整列，給 REST 沒曝露的欄位（state／hold_reason／worked_sec…）斷言用。 */
+    public Map<String, Object> taskRow(UUID taskId) {
+        return singleRow("SELECT * FROM tasks WHERE tenant_id = ? AND id = ?",
+                "tasks id=" + taskId, ensureTenant(), taskId);
+    }
+
+    /** 權威讀回（JDBC）：repair_tickets 連所屬任務的狀態欄位一起回。 */
+    public Map<String, Object> repairTicketRow(String ticketNo) {
+        return singleRow("""
+                SELECT rt.*, t.state AS task_state, t.urgent AS task_urgent
+                FROM repair_tickets rt JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
+                WHERE rt.tenant_id = ? AND rt.ticket_no = ?
+                """, "repair_tickets ticket_no=" + ticketNo, ensureTenant(), ticketNo);
+    }
+
+    /** 權威讀回（JDBC）：staff_accounts 整列（failed_login_count／locked_until／must_change_password…）。 */
+    public Map<String, Object> staffAccountRow(UUID staffId) {
+        return singleRow("SELECT * FROM staff_accounts WHERE tenant_id = ? AND id = ?",
+                "staff_accounts id=" + staffId, ensureTenant(), staffId);
+    }
+
+    /** 泛用唯讀查詢：上面三個整列入口涵蓋不到的權威斷言用（只給 SELECT）。 */
+    public List<Map<String, Object>> queryRows(String sql, Object... params) {
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            bind(statement, params);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return toRows(resultSet);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("後端資料庫查詢失敗：" + sql, e);
+        }
+    }
+
+    private Map<String, Object> singleRow(String sql, String what, Object... params) {
+        List<Map<String, Object>> rows = queryRows(sql, params);
+        if (rows.size() != 1) {
+            throw new IllegalStateException("預期剛好一列（" + what + "），實際 " + rows.size() + " 列");
+        }
+        return rows.get(0);
+    }
+
+    private synchronized Connection connection() {
+        try {
+            if (connection == null || connection.isClosed()) {
+                connection = DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+                connection.setAutoCommit(true);
+            }
+            return connection;
+        } catch (SQLException e) {
+            throw new IllegalStateException(
+                    "連不上後端資料庫（" + dbUrl + "）。docker compose 的 postgres 起了嗎？"
+                            + "（對外埠 5433，見 docker-compose.yml）", e);
+        }
+    }
+
+    private void execute(String sql, Object... params) {
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            bind(statement, params);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("後端資料庫寫入失敗：" + sql, e);
+        }
+    }
+
+    private Optional<Object> queryScalar(String sql, Object... params) {
+        try (PreparedStatement statement = connection().prepareStatement(sql)) {
+            bind(statement, params);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+                return Optional.ofNullable(resultSet.getObject(1));
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("後端資料庫查詢失敗：" + sql, e);
+        }
+    }
+
+    private static void bind(PreparedStatement statement, Object... params) throws SQLException {
+        for (int i = 0; i < params.length; i++) {
+            statement.setObject(i + 1, params[i]);
+        }
+    }
+
+    private static List<Map<String, Object>> toRows(ResultSet resultSet) throws SQLException {
+        ResultSetMetaData meta = resultSet.getMetaData();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        while (resultSet.next()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (int i = 1; i <= meta.getColumnCount(); i++) {
+                row.put(meta.getColumnLabel(i), resultSet.getObject(i));
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private HttpRequest.Builder request(String method, String path, String jwt) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + BASE_PATH + path))
+                .timeout(Duration.ofSeconds(10));
+        if (jwt != null) {
+            builder.header("Authorization", "Bearer " + jwt);
+        }
+        return builder;
+    }
+
+    private HttpResponse<String> send(HttpRequest.Builder builder) {
+        try {
+            // 鎖 HTTP/1.1：比照 AppiumWorld 對後門連線的既有設定，整個 harness 用同一種
+            // 連線行為，出問題時只有一種行為要排查。
+            return HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .build()
+                    .send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new IllegalStateException(
+                    "連不上後端（" + baseUrl + "）。後端起了嗎？（docker compose up -d ＋ "
+                            + "TMS_DB_URL=jdbc:postgresql://localhost:5433/tms ./mvnw -f tms/pom.xml spring-boot:run）", e);
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("序列化 JSON 失敗", e);
+        }
+    }
+
+    private JsonNode parseJson(String body) {
+        try {
+            return objectMapper.readTree(body);
+        } catch (Exception e) {
+            throw new IllegalStateException("解析後端回應 JSON 失敗：" + body, e);
+        }
+    }
+}

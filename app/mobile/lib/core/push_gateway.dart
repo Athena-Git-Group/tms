@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import 'api_client.dart';
 import '../features/home/home_screen.dart';
 import '../features/pool/pool_screen.dart';
 import '../features/task/task_screen.dart';
@@ -18,6 +19,9 @@ import '../features/task/task_screen.dart';
 /// payload 欄位約定（跟原生側共用）：
 /// - `dest`：`pool` / `task` / `home`。
 /// - `room`：`dest == 'task'` 時要帶，指定要開哪個房號的任務頁。
+/// - `taskId`：`dest == 'task'` 時可選帶。帶了就直接開這張任務的詳情；
+///   沒帶時任務頁只能用房號反查（反查只蓋得到待認領與下一間推薦，
+///   已中斷等狀態要靠這個欄位才找得到單）。
 /// - `highlight`：`dest == 'pool'` 時可選帶，指定待認領池要標亮哪個房號。
 class PushGateway {
   PushGateway._();
@@ -60,6 +64,38 @@ class PushGateway {
     }
   }
 
+  /// 通知中心點一則通知後的導頁入口：通知帶的是契約 `PushTarget` 形狀的
+  /// 去處描述（`kind` 是 pool／task／home，`kind == 'task'` 帶 `taskId`，
+  /// `kind == 'pool'` 可帶 `highlightTaskId`），這裡把它換算成推播 payload
+  /// 再交給 [handlePushPayload]，讓去處與畫面的對照只存在這個 class 一處。
+  ///
+  /// payload 以房號溝通，而去處描述帶的是任務 id，所以要先用
+  /// `GET /tasks/{id}` 把任務 id 換成房號。該帶任務 id 卻沒帶、或任務
+  /// 查不到房號時不導頁，留在原畫面。
+  Future<void> openTarget(Map<String, dynamic> target) async {
+    final kind = target['kind'] as String?;
+    final payload = <String, dynamic>{'dest': kind};
+    if (kind == 'task') {
+      final taskId = target['taskId'] as String?;
+      if (taskId == null) {
+        return;
+      }
+      final roomNo = (await ApiClient.instance.getTask(taskId)).roomNo;
+      if (roomNo == null) {
+        return;
+      }
+      payload['room'] = roomNo;
+      payload['taskId'] = taskId;
+    } else if (kind == 'pool') {
+      final highlightTaskId = target['highlightTaskId'] as String?;
+      if (highlightTaskId != null) {
+        payload['highlight'] =
+            (await ApiClient.instance.getTask(highlightTaskId)).roomNo;
+      }
+    }
+    handlePushPayload(payload);
+  }
+
   /// 實際導頁邏輯，拆成獨立的公開方法方便 widget test 直接呼叫——不必真的
   /// 走一趟 MethodChannel 往返，也能驗證「收到 payload 之後導到哪裡」。
   void handlePushPayload(Map<String, dynamic> payload) {
@@ -70,6 +106,7 @@ class PushGateway {
 
     final dest = payload['dest'] as String?;
     final room = payload['room'] as String?;
+    final taskId = payload['taskId'] as String?;
     final highlight = payload['highlight'] as String?;
 
     switch (dest) {
@@ -86,7 +123,9 @@ class PushGateway {
           return;
         }
         navigator.push(
-          CupertinoPageRoute<void>(builder: (_) => TaskScreen(roomNo: room)),
+          CupertinoPageRoute<void>(
+            builder: (_) => TaskScreen(roomNo: room, taskId: taskId),
+          ),
         );
         break;
       case 'home':

@@ -5,13 +5,7 @@ import 'package:flutter/semantics.dart';
 import 'core/push_gateway.dart';
 import 'core/test_backdoor.dart';
 import 'core/theme.dart';
-import 'features/home/home_screen.dart';
 import 'features/login/login_screen.dart';
-
-/// 跟 [TestBackdoor] 共用同一個旗標：`TEST_BACKDOOR=true` 時 App 直接進
-/// 首頁，跳過登入殼——這是給測試腳本用的捷徑，一般建置不帶這個旗標，
-/// 照舊要求登入。
-const bool _skipLoginForTesting = bool.fromEnvironment('TEST_BACKDOOR');
 
 /// 推播導頁要用的全域 navigator key，交給 [PushGateway] 操作導頁。
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -62,7 +56,10 @@ class _TmsStaffAppState extends State<TmsStaffApp> {
         // Theme.of(context)，所以在這裡補一層 Material 主題當底。
         return Theme(data: theme, child: child!);
       },
-      home: _skipLoginForTesting ? const HomeScreen() : const LoginScreen(),
+      // 起始畫面一律是登入（帳號與登入 feature 落地後，測試建置不再跳過
+      // 登入殼）。推播點開的導頁（PushGateway）用 pushAndRemoveUntil／push
+      // 直接換頁，不依賴起始畫面是誰。
+      home: const LoginScreen(),
     );
   }
 }

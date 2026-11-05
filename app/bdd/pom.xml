@@ -95,6 +95,37 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- T300 後端通道（BackendChannel）：後端沒有測試資料 REST 端點，fixture 走 JDBC
+			直接落地（SQL 對照 tms/src/test 的 bdd/support），讀回與狀態轉移走正式 REST。 -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>42.7.13</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- 解析登入回應與工作台詳情的 JSON（harness 原本只發不收，T300 起要讀回斷言） -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.19.4</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- bcrypt：fixture 員工帳號的 password_hash 要與後端 SecurityConfig 的
+			BCryptPasswordEncoder 同格式，直接用同一套實作，不自己拼雜湊 -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+			<version>6.5.10</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- spring-security-crypto 內部用 commons-logging 介面寫 log，spring-jcl 是它的橋接實作 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-jcl</artifactId>
+			<version>6.2.18</version>
+			<scope>test</scope>
+		</dependency>
+
 		<!-- 避免 Appium/Selenium 在跑 dry-run 時印出「No SLF4J providers were found」警告 -->
 		<dependency>
 			<groupId>org.slf4j</groupId>

@@ -1,8 +1,17 @@
 package com.athena.app.bdd.steps.push;
 
 import com.athena.app.bdd.AppiumWorld;
+import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,24 +39,165 @@ public class PushGivenSteps {
      * 待認領池要有一張房號 X、狀態待認領的卡才有東西可以標亮，所以連帶補上這張卡的
      * fixture（{@link AppiumWorld#ensurePoolTask}）；指向任務頁時不用額外建資料，
      * 任務頁的標題本身就帶房號，不靠 fixture 存在與否。
+     *
+     * <p>送推播前先以該員工登入（{@link AppiumWorld#ensureLoggedInAs}）：App 的
+     * 起始畫面一律是登入殼，點開推播後的去處畫面（待認領池等）要用她的 JWT 向
+     * 後端讀資料，沒登入時池子只會顯示載入失敗、沒有卡可標亮。
      */
     @假設("{string} 收到一則推播 {string}，去處為 {string}")
     public void receivesPushWithDestination(String staffName, String title, String destination) {
+        world.ensureLoggedInAs(world.staff(staffName));
         Matcher taskMatcher = TASK_SCREEN.matcher(destination);
         Matcher highlightMatcher = POOL_HIGHLIGHT.matcher(destination);
 
         if (taskMatcher.matches()) {
-            world.sendPush(title, "", "task", taskMatcher.group(1), null);
+            String room = taskMatcher.group(1);
+            // 去處房號已有既存任務（「名下有以下任務」先鋪的）就把 taskId 一起放進
+            // payload：任務頁的房號反查只蓋得到待認領與下一間推薦（accepted），
+            // 已中斷等狀態的單要靠 taskId 直取，跟後端真推播的 PushTarget 帶
+            // taskId 的行為同形。查不到既存任務（純導頁斷言的標題）就不帶。
+            world.sendPush(title, "", "task", room, taskIdByRoom(room), null);
         } else if (highlightMatcher.matches()) {
             String room = highlightMatcher.group(1);
             world.ensurePoolTask(room, title);
-            world.sendPush(title, "", "pool", null, room);
+            world.sendPush(title, "", "pool", null, null, room);
         } else if (HOME.matcher(destination).matches()) {
-            world.sendPush(title, "", "home", null, null);
+            world.sendPush(title, "", "home", null, null, null);
         } else if (POOL_PLAIN.matcher(destination).matches()) {
-            world.sendPush(title, "", "pool", null, null);
+            world.sendPush(title, "", "pool", null, null, null);
         } else {
             throw new IllegalArgumentException("認不得的去處字串：「" + destination + "」");
         }
+    }
+
+    /** 房號 → 既存任務 id；剛好一張才帶（多張無從指認哪張是推播講的那張），否則 null。 */
+    private String taskIdByRoom(String roomNo) {
+        List<Map<String, Object>> tasks = world.backend().queryRows("""
+                SELECT t.id FROM tasks t
+                JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                WHERE t.tenant_id = ? AND r.room_no = ?
+                """, world.backend().ensureTenant(), roomNo);
+        return tasks.size() == 1 ? tasks.get(0).get("id").toString() : null;
+    }
+
+    // ──── 通知中心（T309–T311 落點） ────
+
+    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(6);
+
+    /**
+     * 怎麼做：透過後端測試資料依表格建立該員工的通知紀錄。權威狀態落地：後端
+     * {@code notifications} 表有這些紀錄。Data Table 支援：標題（必填）、時刻
+     * （必填，{@code 今天 HH:mm} 或 {@code {日期} HH:mm}）、已讀（選填，是或否，
+     * 預設否）。
+     *
+     * <p>已讀的通知把 {@code read_at} 落在與 {@code created_at} 相同的時刻：
+     * 這句型只保證「這則通知已讀」這個旗標成立，不描述已讀動作發生在何時，
+     * 另外編一個時間反而是在測試資料裡製造沒有規格依據的事實。
+     *
+     * <p>去處（{@code target}，NOT NULL）：句型沒有這個參數，照後端產生通知的
+     * 慣例由標題推導——標題開頭的房號若對得上後端已存在的任務（「名下有以下
+     * 任務」先鋪的），就當作屬於本人的任務通知（{@code kind=task} 帶 taskId，
+     * 對照 contracts PushTarget「屬於本人的任務帶 taskId」）；對不上任務的
+     * 標題用最小合法形狀 {@code kind=home}。
+     */
+    @假設("{string} 的通知中心已有以下通知：")
+    public void notificationCenterHasNotifications(String staffName, DataTable table) {
+        var staff = world.staff(staffName);
+        world.setNotificationViewer(staff); // 收件人＝通知 Then 權威讀回的當事員工
+        for (Map<String, String> row : table.asMaps(String.class, String.class)) {
+            String title = requireCell(row, "標題");
+            OffsetDateTime createdAt = parseMoment(requireCell(row, "時刻"));
+            boolean read = "是".equals(row.get("已讀"));
+            world.backend().createNotification(
+                    staff.id(), title, createdAt, read, targetForTitle(title));
+        }
+    }
+
+    /** 標題開頭房號 → 既有任務的對照；推導規則見 {@link #notificationCenterHasNotifications}。 */
+    private Map<String, Object> targetForTitle(String title) {
+        Matcher roomPrefix = Pattern.compile("^(\\d+)\\s").matcher(title);
+        if (roomPrefix.find()) {
+            List<Map<String, Object>> tasks = world.backend().queryRows("""
+                    SELECT t.id FROM tasks t
+                    JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                    WHERE t.tenant_id = ? AND r.room_no = ?
+                    """, world.backend().ensureTenant(), roomPrefix.group(1));
+            if (tasks.size() == 1) {
+                return Map.of("kind", "task", "taskId", tasks.get(0).get("id").toString());
+            }
+        }
+        return Map.of("kind", "home");
+    }
+
+    /**
+     * 怎麼做：以該員工登入後點 Tab bar「通知」，等列表載入完成。
+     *
+     * <p>「登入」走 {@link AppiumWorld#ensureLoggedInAs}（登入殼落地後 App 一律從
+     * 登入畫面開始，不再有測試建置跳過登入的捷徑）。Tab 以可見文字「通知」定位
+     * 而不用 accessibility id，因為 id 清單（ui-plan 的約定）沒有給 Tab bar 項目
+     * 定 id，而測試不能自創 id——自創的 id 畫面上永遠不存在，會把「Tab 還沒實作」
+     * 的失敗偽裝成「id 打錯」。「列表載入完成」以通知中心畫面根節點
+     * {@code notification.screen} 出現為準。
+     */
+    @假設("{string} 已在 App 打開通知中心")
+    public void alreadyOpenedNotificationCenter(String staffName) {
+        // 員工沒建過就是劇本錯誤，照 AppiumWorld.staff 的語意早爆；開通知中心的人
+        // 就是後續通知 Then 權威讀回的當事員工。
+        var staff = world.staff(staffName);
+        world.setNotificationViewer(staff);
+        world.ensureLoggedInAs(staff);
+        world.waitForLabelContaining("通知", SCREEN_TIMEOUT).click();
+        world.waitForTestId("notification.screen", SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 把「時刻」參數（{@code 今天 HH:mm} 或 {@code {日期} HH:mm}）解析成通知的
+     * {@code created_at}。日期收相對詞（今天／昨天／前天／明天）、「11/02」這種
+     * 月/日省年形式與 ISO 日期；時間一律 24 小時制。
+     *
+     * <p>用系統時鐘與系統時區，因為「現在時間是」的裝置時間注入在這個 harness
+     * 尚未實作，沒有可對齊的測試時鐘；等它落地時這裡要改成跟它共用同一個時鐘，
+     * 否則「今天／更早」的分組斷言會因兩個時鐘的日期不同而誤判。
+     */
+    private static OffsetDateTime parseMoment(String momentExpr) {
+        String[] parts = momentExpr.trim().split("\\s+");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException(
+                    "時刻格式須為「今天 HH:mm」或「{日期} HH:mm」，實際=" + momentExpr);
+        }
+        LocalDate date = parseDateToken(parts[0]);
+        LocalTime time = LocalTime.parse(parts[1]);
+        return ZonedDateTime.of(date, time, ZoneId.systemDefault()).toOffsetDateTime();
+    }
+
+    private static LocalDate parseDateToken(String token) {
+        LocalDate today = LocalDate.now();
+        return switch (token) {
+            case "今天" -> today;
+            case "昨天" -> today.minusDays(1);
+            case "前天" -> today.minusDays(2);
+            case "明天" -> today.plusDays(1);
+            default -> {
+                // 月/日省年形式的年份取當年；算出來在今天之後（1 月的場景寫 12/31）
+                // 表示講的是去年，往前退一年，否則「更早」的通知會被排到未來。
+                Matcher monthDay = Pattern.compile("^(\\d{1,2})/(\\d{1,2})$").matcher(token);
+                if (monthDay.matches()) {
+                    LocalDate candidate = LocalDate.of(
+                            today.getYear(),
+                            Integer.parseInt(monthDay.group(1)),
+                            Integer.parseInt(monthDay.group(2)));
+                    yield candidate.isAfter(today) ? candidate.minusYears(1) : candidate;
+                }
+                yield LocalDate.parse(token);
+            }
+        };
+    }
+
+    private static String requireCell(Map<String, String> row, String column) {
+        String value = row.get(column);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("Data Table 缺少必填欄位「" + column + "」：" + row);
+        }
+        return value;
     }
 }

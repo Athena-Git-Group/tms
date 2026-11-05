@@ -1,0 +1,712 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
+/// 真後端的 API client：登入換 JWT，之後的讀取請求都帶這把 token。
+///
+/// 基礎 URL 沿用登入殼既有的 `--dart-define=API_BASE_URL=...` 慣例，沒帶
+/// 旗標時預設打本機 8080。目前只封裝本 increment 畫面需要的端點
+/// （`specs/plans/001-staff-app-increment/ui/ui-plan.md` 列出的後端契約
+/// 清單內）：
+///
+/// - `POST /staff-accounts/login`（`LoginRequest`／`LoginResponse`）
+/// - `GET /me/today`（`MyToday`）
+/// - `GET /pool`（`DeptPool`）
+/// - `GET /tasks/{id}`（`TaskDetail`）
+/// - `GET /notifications`、`POST /notifications/{id}/read`、
+///   `POST /notifications/read-all`（通知中心，`NotificationItem`）
+///
+/// 欄位名全部照抄 `specs/truth/contracts/components/schemas/` 的契約定義，
+/// 不自創欄位。
+class ApiClient {
+  ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl;
+
+  /// 預設打本機後端。路徑要含 `/api/v1`：後端所有 REST controller 都掛在
+  /// 這個前綴下，少了它會打到 Spring Security 眼中不存在的路徑，一律被
+  /// 回 401，連登入端點都進不去。
+  static const String _defaultBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:8080/api/v1',
+  );
+
+  /// 全 App 共用的 client。宣告成可覆寫的靜態欄位，widget 測試可以換成
+  /// fake 實作，不用真的起後端。
+  static ApiClient instance = ApiClient();
+
+  final String baseUrl;
+
+  /// 登入成功後存下的 JWT；之後的請求放進 `Authorization: Bearer` 標頭。
+  String? _token;
+
+  /// 登入成功的身分資訊（staffId／dept 等）。工務首頁要用 staffId 在任務
+  /// 清單裡挑出「我手上的工務單」、登入後的部門分流要看 dept，所以整份留著。
+  LoginResult? _session;
+
+  bool get isLoggedIn => _token != null;
+
+  /// 目前登入者；還沒登入為 null。
+  LoginResult? get session => _session;
+
+  /// `POST /staff-accounts/login`：員工編號＋明文密碼換 JWT。
+  /// 成功時把 token 存在 client 裡，後續讀取請求自動帶上。
+  Future<LoginResult> login({
+    required String loginId,
+    required String password,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/staff-accounts/login',
+      body: {'loginId': loginId, 'password': password},
+    );
+    final result = LoginResult.fromJson(json as Map<String, dynamic>);
+    _token = result.token;
+    _session = result;
+    return result;
+  }
+
+  /// `GET /me/today`：我的今日進度與下一間推薦。
+  Future<MyToday> getMyToday() async {
+    final json = await _requestJson('GET', '/me/today');
+    return MyToday.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `GET /pool`：本部門待認領池（含分類筆數）。工務池另支援兩個篩選維度
+  /// （契約 `listDeptPool`）：[urgent]=true 只回急件；[source] 只回該來源
+  /// （`staff_report`＝房務報修、`desk_forward`＝櫃檯）。分流與排序一律交給
+  /// 後端——App 只把磚的選擇換成查詢參數，不在本機重排或過濾。
+  Future<DeptPool> getPool({bool? urgent, String? source}) async {
+    final query = <String, String>{
+      if (urgent != null) 'urgent': '$urgent',
+      if (source != null) 'source': source,
+    };
+    final json = await _requestJson('GET', '/pool', query: query);
+    return DeptPool.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `GET /tasks`：租戶任務清單。工務首頁用它挑出「指派給我、還開著」的
+  /// 工務單（契約沒有「我的工務單」專用查詢，上游缺口已回報；這裡的挑選
+  /// 是補位，不是待認領池那種被禁止的本機過濾）。
+  Future<List<TaskSummary>> listTasks() async {
+    final json = await _requestJson('GET', '/tasks');
+    return (json as List<dynamic>? ?? <dynamic>[])
+        .map((entry) => TaskSummary.fromJson(entry as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `POST /tasks/{id}/claim`：認領待認領的任務（工務單也是任務）。
+  /// 已被別人認領時後端回 409，message 帶認領人姓名，丟出 [ApiException]
+  /// 讓畫面呈現撞單提示。
+  Future<void> claimTask(String taskId) async {
+    await _requestJson('POST', '/tasks/$taskId/claim', idempotent: true);
+  }
+
+  /// `POST /tasks/{id}/complete`：完修回報（契約 `tasksComplete`）。
+  /// 修繕任務必附完修照片；[resolutionType] 是完修三選一（fixed／temporary／
+  /// cannot_fix）。追蹤單自動建立與房況轉停用待確認都是後端行為，App 只送
+  /// 這個欄位、呈現結果。
+  Future<void> completeTask(
+    String taskId, {
+    required List<String> photoIds,
+    required String resolutionType,
+  }) async {
+    await _requestJson(
+      'POST',
+      '/tasks/$taskId/complete',
+      idempotent: true,
+      body: {'photoIds': photoIds, 'resolutionType': resolutionType},
+    );
+  }
+
+  /// `GET /repair-tickets/{ticketId}`：工務單詳情（路徑參數是工務單的任務
+  /// id，不是 W- 單號）。
+  Future<RepairTicketDetail> readRepairTicket(String taskId) async {
+    final json = await _requestJson('GET', '/repair-tickets/$taskId');
+    return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /repair-tickets/{ticketId}/release-to-pool`：負責人自行把公共區域
+  /// 的工務單放回待認領（契約 `releaseRepairTicketToPool`）。客房單後端回
+  /// 409 `room_ticket_not_requeueable`——畫面要在那之前就不顯示按鈕。
+  Future<RepairTicketDetail> releaseRepairTicketToPool(String taskId) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-tickets/$taskId/release-to-pool',
+      idempotent: true,
+    );
+    return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /repair-photos`：建立一張工務單照片的上傳位置（兩段式的第一段，
+  /// 契約 `createRepairPhoto`）。[purpose] 是 report（報修）或 completion
+  /// （完修）。回傳照片 id，接著用 [uploadRepairPhotoContent] 上傳內容。
+  Future<String> createRepairPhoto({required String purpose}) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-photos',
+      idempotent: true,
+      body: {
+        'purpose': purpose,
+        'takenAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+    return (json as Map<String, dynamic>)['id'] as String;
+  }
+
+  /// `PUT /repair-photos/{photoId}/content`：上傳一張照片的內容（兩段式的
+  /// 第二段，冪等）。
+  Future<void> uploadRepairPhotoContent(String photoId, List<int> jpegBytes) async {
+    await _requestJson(
+      'PUT',
+      '/repair-photos/$photoId/content',
+      binaryBody: jpegBytes,
+    );
+  }
+
+  /// `POST /repair-tickets`：開立工務單（契約 `createRepairTicket`）。
+  /// 工務自開路徑：不帶 sourceTaskId，改帶 [roomId] 或 [isPublicArea]=true
+  /// （擇一）。急件由系統判定，請求不帶任何急件欄位。
+  Future<RepairTicketDetail> createRepairTicket({
+    String? roomId,
+    bool isPublicArea = false,
+    required String category,
+    required List<String> photoIds,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-tickets',
+      idempotent: true,
+      body: {
+        if (roomId != null) 'roomId': roomId,
+        if (isPublicArea) 'isPublicArea': true,
+        'category': category,
+        'photoIds': photoIds,
+      },
+    );
+    return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `GET /tasks/{id}`：單一任務的員工視角詳情。
+  Future<TaskDetail> getTask(String taskId) async {
+    final json = await _requestJson('GET', '/tasks/$taskId');
+    return TaskDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `GET /notifications`：我的通知清單，後端已依 createdAt 新到舊排好；
+  /// 「今天／更早」分組是 App 端的呈現邏輯（契約明訂本端點不分組）。
+  Future<List<NotificationItem>> listNotifications() async {
+    final json = await _requestJson('GET', '/notifications');
+    return _asNotificationList(json);
+  }
+
+  /// `POST /notifications/{id}/read`：標記單則已讀（冪等），回更新後那筆。
+  Future<NotificationItem> markNotificationRead(String notificationId) async {
+    final json = await _requestJson('POST', '/notifications/$notificationId/read');
+    return NotificationItem.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /notifications/read-all`：全部標為已讀，回標記後的完整清單。
+  Future<List<NotificationItem>> markAllNotificationsRead() async {
+    final json = await _requestJson('POST', '/notifications/read-all');
+    return _asNotificationList(json);
+  }
+
+  static List<NotificationItem> _asNotificationList(Object? json) {
+    return (json as List<dynamic>? ?? <dynamic>[])
+        .map((entry) => NotificationItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Object?> _requestJson(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, String>? query,
+    List<int>? binaryBody,
+    bool idempotent = false,
+  }) async {
+    final client = HttpClient();
+    try {
+      var uri = Uri.parse('$baseUrl$path');
+      if (query != null && query.isNotEmpty) {
+        uri = uri.replace(queryParameters: {...uri.queryParameters, ...query});
+      }
+      final request = await client.openUrl(method, uri);
+      final token = _token;
+      if (token != null) {
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      }
+      if (idempotent) {
+        // 每次操作配一把新鍵：同一鍵只保護「同一次使用者動作的重送」，
+        // 跨動作重用會讓第二次動作拿到第一次的回放結果。
+        request.headers.set('Idempotency-Key', _randomUuid());
+      }
+      if (binaryBody != null) {
+        request.headers.contentType = ContentType('image', 'jpeg');
+        request.add(binaryBody);
+      } else if (body != null) {
+        request.headers.contentType = ContentType.json;
+        request.write(jsonEncode(body));
+      }
+      final response = await request.close();
+      final text = await response.transform(utf8.decoder).join();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(statusCode: response.statusCode, body: text);
+      }
+      return text.isEmpty ? null : jsonDecode(text);
+    } finally {
+      client.close();
+    }
+  }
+
+  /// 產生 UUID v4 字串（Idempotency-Key 用）。App 沒有引入 uuid 套件，
+  /// 這把鍵只要求「夠隨機、不重複」，用 [Random.secure] 自組即可。
+  static String _randomUuid() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    final hex =
+        bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+}
+
+/// 後端回非 2xx 時丟出的例外，帶狀態碼讓畫面決定要顯示哪句提示。
+///
+/// 後端錯誤 body 的固定形狀（`specs/truth/contracts/components/schemas/shared.yaml`
+/// 的 ApiError）：`{code, message, details?, context?}`。[errorCode]／
+/// [errorMessage]／[errorContext] 是對這個形狀的惰性解析，body 不是合法
+/// JSON 時回 null，讓畫面退回自己的固定文案。
+class ApiException implements Exception {
+  const ApiException({required this.statusCode, required this.body});
+
+  final int statusCode;
+  final String body;
+
+  /// ApiError.code，例如 `credentials_invalid`／`account_locked`。
+  String? get errorCode => _bodyJson()?['code'] as String?;
+
+  /// ApiError.message，後端已經是給人看的白話句，可直接上畫面。
+  String? get errorMessage => _bodyJson()?['message'] as String?;
+
+  /// ApiError.context，例如帳號鎖定時的 `lockedUntil`／`remainingMinutes`。
+  Map<String, dynamic>? get errorContext =>
+      _bodyJson()?['context'] as Map<String, dynamic>?;
+
+  /// 帳號鎖定（429 account_locked）時後端算好的剩餘鎖定分鐘；不是鎖定回應
+  /// 時為 null。鎖定剩餘時間一律以這個值為準，App 不自己計時，才不會和
+  /// 後端的解鎖時間點對不上。
+  int? get lockoutRemainingMinutes => statusCode == 429
+      ? (errorContext?['remainingMinutes'] as num?)?.toInt()
+      : null;
+
+  Map<String, dynamic>? _bodyJson() {
+    try {
+      final decoded = jsonDecode(body);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  @override
+  String toString() => 'ApiException($statusCode)';
+}
+
+/// `LoginResponse`（specs/truth/contracts/components/schemas/員工帳號與登入.yaml）。
+class LoginResult {
+  const LoginResult({
+    required this.token,
+    required this.expiresAt,
+    required this.staffId,
+    required this.name,
+    required this.role,
+    required this.mustChangePassword,
+    this.dept,
+  });
+
+  final String token;
+  final String expiresAt;
+  final String staffId;
+  final String name;
+  final String? dept;
+  final String role;
+
+  /// true 表示臨時密碼登入，必須先改密碼才能呼叫其他需要身分的 API。
+  final bool mustChangePassword;
+
+  factory LoginResult.fromJson(Map<String, dynamic> json) {
+    return LoginResult(
+      token: json['token'] as String,
+      expiresAt: json['expiresAt'] as String,
+      staffId: json['staffId'] as String,
+      name: json['name'] as String,
+      dept: json['dept'] as String?,
+      role: json['role'] as String,
+      mustChangePassword: json['mustChangePassword'] as bool,
+    );
+  }
+}
+
+/// `MyToday`（specs/truth/contracts/components/schemas/員工工作台.yaml）。
+class MyToday {
+  const MyToday({
+    required this.cleaningDone,
+    required this.cleaningTotal,
+    required this.inspectedCount,
+    required this.completedCount,
+    required this.adHocCompleted,
+    required this.remainingMinutes,
+    required this.nextTasks,
+    required this.zeroReturnStreakDays,
+    this.engineeringSummary,
+  });
+
+  final int cleaningDone;
+  final int cleaningTotal;
+  final int inspectedCount;
+  final int completedCount;
+  final int adHocCompleted;
+  final int remainingMinutes;
+  final List<NextTask> nextTasks;
+  final int zeroReturnStreakDays;
+
+  /// 工務視角今日進度；只有工務部門（dept=engineering）的呼叫者有值。
+  final EngineeringSummary? engineeringSummary;
+
+  factory MyToday.fromJson(Map<String, dynamic> json) {
+    final nextTasksJson = json['nextTasks'] as List<dynamic>? ?? <dynamic>[];
+    final engineeringJson = json['engineeringSummary'] as Map<String, dynamic>?;
+    return MyToday(
+      cleaningDone: json['cleaningDone'] as int,
+      cleaningTotal: json['cleaningTotal'] as int,
+      inspectedCount: json['inspectedCount'] as int,
+      completedCount: json['completedCount'] as int,
+      adHocCompleted: json['adHocCompleted'] as int,
+      remainingMinutes: json['remainingMinutes'] as int,
+      nextTasks: nextTasksJson
+          .map((entry) => NextTask.fromJson(entry as Map<String, dynamic>))
+          .toList(),
+      zeroReturnStreakDays: json['zeroReturnStreakDays'] as int,
+      engineeringSummary: engineeringJson == null
+          ? null
+          : EngineeringSummary.fromJson(engineeringJson),
+    );
+  }
+}
+
+/// `MyToday.engineeringSummary`：工務首頁三格數字的資料來源。
+class EngineeringSummary {
+  const EngineeringSummary({
+    required this.openCount,
+    required this.completedToday,
+    required this.urgentCount,
+  });
+
+  /// 手上張數：本人目前 accepted／doing 的工務單筆數。
+  final int openCount;
+
+  /// 今天已完修：本人今天 done 的工務單筆數。
+  final int completedToday;
+
+  /// 急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
+  final int urgentCount;
+
+  factory EngineeringSummary.fromJson(Map<String, dynamic> json) {
+    return EngineeringSummary(
+      openCount: json['openCount'] as int,
+      completedToday: json['completedToday'] as int,
+      urgentCount: json['urgentCount'] as int,
+    );
+  }
+}
+
+/// `GET /tasks` 清單的一筆，只收工務首頁挑「我手上的工務單」要看的欄位。
+class TaskSummary {
+  const TaskSummary({
+    required this.id,
+    required this.type,
+    required this.state,
+    this.assigneeId,
+  });
+
+  final String id;
+
+  /// cleaning｜amenity｜repair｜other，照契約 enum。
+  final String type;
+
+  /// 任務狀態，照契約 enum（pool｜accepted｜doing｜done…）。
+  final String state;
+  final String? assigneeId;
+
+  factory TaskSummary.fromJson(Map<String, dynamic> json) {
+    return TaskSummary(
+      id: json['id'] as String,
+      type: json['type'] as String,
+      state: json['state'] as String,
+      assigneeId: json['assigneeId'] as String?,
+    );
+  }
+}
+
+/// `RepairTicket`（specs/truth/contracts/components/schemas/工務單.yaml）中
+/// 工務視角畫面要用的欄位。
+class RepairTicketDetail {
+  const RepairTicketDetail({
+    required this.taskId,
+    required this.ticketNo,
+    required this.roomNo,
+    required this.category,
+    required this.isUrgent,
+    required this.state,
+    required this.reporterName,
+    this.verifiedBy,
+    this.verifiedAt,
+    this.resolutionNote,
+    this.rejectReason,
+    this.urgentDowngradeReason,
+    this.originTicketNo,
+  });
+
+  final String taskId;
+
+  /// W- 開頭的單號，例如 W-0410。
+  final String ticketNo;
+
+  /// 房號；公共區域的單固定是「公共區域」（後端以這個特殊房號代表無房號
+  /// 的公共區域單，契約沒有獨立的布林旗標）。
+  final String roomNo;
+
+  /// 工務單類別，照契約 RepairCategory enum（air_conditioning…other）。
+  final String category;
+  final bool isUrgent;
+
+  /// pending_review｜rejected｜pool｜accepted｜doing｜done｜cancelled。
+  final String state;
+  final String reporterName;
+
+  /// 驗收通過的主管顯示名稱；尚未驗收為 null。App 只讀不寫——驗收是主管端
+  /// 的動作，App 沒有驗收操作。
+  final String? verifiedBy;
+  final String? verifiedAt;
+  final String? resolutionNote;
+  final String? rejectReason;
+  final String? urgentDowngradeReason;
+  final String? originTicketNo;
+
+  /// 公共區域單（無房號）才可以放回待認領；客房單只能走暫停。
+  bool get isPublicArea => roomNo == '公共區域';
+
+  factory RepairTicketDetail.fromJson(Map<String, dynamic> json) {
+    return RepairTicketDetail(
+      taskId: json['taskId'] as String,
+      ticketNo: json['ticketNo'] as String,
+      roomNo: json['roomNo'] as String,
+      category: json['category'] as String,
+      isUrgent: json['isUrgent'] as bool? ?? false,
+      state: json['state'] as String,
+      reporterName: json['reporterName'] as String,
+      verifiedBy: json['verifiedBy'] as String?,
+      verifiedAt: json['verifiedAt'] as String?,
+      resolutionNote: json['resolutionNote'] as String?,
+      rejectReason: json['rejectReason'] as String?,
+      urgentDowngradeReason: json['urgentDowngradeReason'] as String?,
+      originTicketNo: json['originTicketNo'] as String?,
+    );
+  }
+}
+
+/// `NextTask`：下一間推薦清單的一筆（只列 accepted，後端已排好順序）。
+class NextTask {
+  const NextTask({
+    required this.taskId,
+    required this.roomNo,
+    required this.title,
+    required this.type,
+    required this.redoCount,
+  });
+
+  final String taskId;
+  final String roomNo;
+  final String title;
+
+  /// cleaning｜amenity｜repair｜other，照契約 enum，不縮寫。
+  final String type;
+  final int redoCount;
+
+  factory NextTask.fromJson(Map<String, dynamic> json) {
+    return NextTask(
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String,
+      title: json['title'] as String,
+      type: json['type'] as String,
+      redoCount: json['redoCount'] as int? ?? 0,
+    );
+  }
+}
+
+/// `DeptPool`：待認領池回應，items 已依後端定義的優先序排好。
+class DeptPool {
+  const DeptPool({required this.items, required this.counts});
+
+  final List<PoolItem> items;
+
+  /// 分類筆數，key 是 all／cleaning／amenity／repair／other。
+  final Map<String, int> counts;
+
+  factory DeptPool.fromJson(Map<String, dynamic> json) {
+    final itemsJson = json['items'] as List<dynamic>? ?? <dynamic>[];
+    final countsJson = json['counts'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    return DeptPool(
+      items: itemsJson
+          .map((entry) => PoolItem.fromJson(entry as Map<String, dynamic>))
+          .toList(),
+      counts: countsJson.map((key, value) => MapEntry(key, value as int)),
+    );
+  }
+}
+
+/// `PoolItem`：池中一張單卡需要的欄位。
+class PoolItem {
+  const PoolItem({
+    required this.taskId,
+    required this.roomNo,
+    required this.floor,
+    required this.title,
+    required this.category,
+    required this.source,
+    required this.urgent,
+    required this.priorityNotify,
+    required this.sameFloor,
+    required this.createdAt,
+    this.ticketNo,
+    this.reminderStage,
+    this.returnReason,
+    this.handoverNote,
+  });
+
+  final String taskId;
+
+  /// 只有工務單有值，例如 W-0412。
+  final String? ticketNo;
+  final String roomNo;
+  final int floor;
+  final String title;
+
+  /// cleaning｜amenity｜repair｜other。
+  final String category;
+
+  /// guest_scan｜desk_forward｜manager_requeue｜leave_return｜
+  /// shift_end_return｜inspection_return｜staff_report｜system。
+  final String source;
+  final bool urgent;
+  final bool priorityNotify;
+  final bool sameFloor;
+
+  /// 未接提醒階段：staff_reminded｜manager_notified；還沒進入提醒為 null。
+  final String? reminderStage;
+  final String? returnReason;
+  final String? handoverNote;
+  final String createdAt;
+
+  factory PoolItem.fromJson(Map<String, dynamic> json) {
+    return PoolItem(
+      taskId: json['taskId'] as String,
+      ticketNo: json['ticketNo'] as String?,
+      roomNo: json['roomNo'] as String,
+      floor: json['floor'] as int,
+      title: json['title'] as String,
+      category: json['category'] as String,
+      source: json['source'] as String,
+      urgent: json['urgent'] as bool,
+      priorityNotify: json['priorityNotify'] as bool,
+      sameFloor: json['sameFloor'] as bool,
+      reminderStage: json['reminderStage'] as String?,
+      returnReason: json['returnReason'] as String?,
+      handoverNote: json['handoverNote'] as String?,
+      createdAt: json['createdAt'] as String,
+    );
+  }
+}
+
+/// 通知中心單筆通知（`specs/truth/contracts/components/schemas/通知中心.yaml`
+/// 的 notifications schema；後端回應不帶 tenantId／recipientStaffId）。
+class NotificationItem {
+  const NotificationItem({
+    required this.id,
+    required this.title,
+    required this.target,
+    required this.createdAt,
+    this.body,
+    this.readAt,
+  });
+
+  final String id;
+  final String title;
+  final String? body;
+
+  /// 點開後的去處（shared.yaml 的 PushTarget）：`kind` 是 task｜pool｜home，
+  /// kind=task 帶 `taskId`，kind=pool 可帶 `highlightTaskId`。
+  final Map<String, dynamic> target;
+
+  final DateTime createdAt;
+
+  /// 已讀時間；未讀為 null——未讀藍點就看這個欄位。
+  final DateTime? readAt;
+
+  bool get isUnread => readAt == null;
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    final readAt = json['readAt'] as String?;
+    return NotificationItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      body: json['body'] as String?,
+      target: json['target'] as Map<String, dynamic>? ?? <String, dynamic>{},
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      readAt: readAt == null ? null : DateTime.parse(readAt),
+    );
+  }
+}
+
+/// `TaskDetail`：任務頁需要的最小欄位集（契約還有 SOP 勾記、交辦、查房
+/// 退回等欄位，等對應畫面實作時再補進來，不預先鋪沒人讀的欄位）。
+class TaskDetail {
+  const TaskDetail({
+    required this.id,
+    required this.state,
+    this.roomNo,
+    this.title,
+    this.note,
+    this.elapsedMinutes = 0,
+    this.holdReason,
+  });
+
+  final String id;
+
+  /// 任務狀態，照契約 enum：triage｜pending_review｜rejected｜pool｜
+  /// accepted｜doing｜done｜inspected｜deferred｜interrupted｜cancelled。
+  final String state;
+  final String? roomNo;
+  final String? title;
+  final String? note;
+
+  /// 已做分鐘。
+  final int elapsedMinutes;
+
+  /// 停住原因，例如「等工務：水電」或「工務已修好：水電」。
+  final String? holdReason;
+
+  factory TaskDetail.fromJson(Map<String, dynamic> json) {
+    return TaskDetail(
+      id: json['id'] as String,
+      state: json['state'] as String,
+      roomNo: json['roomNo'] as String?,
+      title: json['title'] as String?,
+      note: json['note'] as String?,
+      elapsedMinutes: json['elapsedMinutes'] as int? ?? 0,
+      holdReason: json['holdReason'] as String?,
+    );
+  }
+}
