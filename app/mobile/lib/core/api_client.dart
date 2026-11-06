@@ -10,6 +10,7 @@ import 'dart:math';
 /// 清單內）：
 ///
 /// - `POST /staff-accounts/login`（`LoginRequest`／`LoginResponse`）
+/// - `POST /staff-accounts/change-password`（`ChangePasswordRequest`／`LoginResponse`）
 /// - `GET /me/today`（`MyToday`）
 /// - `GET /pool`（`DeptPool`）
 /// - `GET /tasks/{id}`（`TaskDetail`）
@@ -57,6 +58,35 @@ class ApiClient {
       'POST',
       '/staff-accounts/login',
       body: {'loginId': loginId, 'password': password},
+    );
+    final result = LoginResult.fromJson(json as Map<String, dynamic>);
+    _token = result.token;
+    _session = result;
+    return result;
+  }
+
+  /// `POST /staff-accounts/change-password`：本人設定新密碼（契約
+  /// `changeOwnPassword`）。後端重新雜湊新密碼、清掉 `mustChangePassword`
+  /// 旗標，並換發一組新的 JWT 回傳——形狀與登入相同，所以回應沿用
+  /// [LoginResult]。
+  ///
+  /// 強制改密情境（臨時密碼登入後）身分已由登入換得的 token 證明，不帶
+  /// [currentPassword]；自願變更情境才需要帶。密碼強度規則 truth 尚未定義，
+  /// App 不自行發明長度或字元門檻，一律交給後端判斷。
+  ///
+  /// 成功後舊 token 立即失效，所以這裡把 client 裡的 token 與身分一起換成
+  /// 新的，後續請求才不會拿著已失效的憑證。
+  Future<LoginResult> changePassword({
+    String? currentPassword,
+    required String newPassword,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/staff-accounts/change-password',
+      body: {
+        if (currentPassword != null) 'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
     );
     final result = LoginResult.fromJson(json as Map<String, dynamic>);
     _token = result.token;

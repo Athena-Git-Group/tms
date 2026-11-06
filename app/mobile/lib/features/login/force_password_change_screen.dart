@@ -1,7 +1,11 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/api_client.dart';
 import '../../core/error_banner.dart';
+import '../../core/navigation.dart';
 import '../../core/tms_semantics.dart';
+import '../engineering/eng_home_screen.dart';
+import '../home/home_screen.dart';
 
 /// 臨時密碼登入後的強制改密畫面。
 ///
@@ -11,10 +15,12 @@ import '../../core/tms_semantics.dart';
 /// 可去；完成改密前後端（BearerTokenAuthFilter）也會把這組憑證對其他
 /// API 的呼叫一律擋下（403 must_change_password）。
 ///
-/// 送出「設定新密碼」目前是 App 端上游缺口：契約（`specs/truth/contracts/`）
-/// 與後端都還沒有改密端點（`BearerTokenAuthFilter` 註明「改密 API 本身不在
-/// 本輪範圍」），App 不得自創端點呼叫，所以按下確認後只能停在本畫面等
-/// 上游補齊；對應場景「阿美設定新密碼後進入首頁」在端點落地前無法轉綠。
+/// 送出走 [ApiClient.changePassword]（`POST /staff-accounts/change-password`）：
+/// 強制改密情境的身分已由登入換得的 token 證明，不帶 currentPassword。成功時
+/// 後端換發一組新的 JWT（舊的立即失效），client 換上新權杖後以 replaceAllRoutes
+/// 進首頁——登入流程到此結束，返回堆疊一併清掉。失敗時直接顯示後端回的訊息
+/// （新密碼與目前密碼相同等），App 不自行判斷密碼強度：長度與字元組成的門檻
+/// truth 尚未定義，發明一套會和後端對不上。
 class ForcePasswordChangeScreen extends StatefulWidget {
   const ForcePasswordChangeScreen({super.key});
 
@@ -30,6 +36,8 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
 
   String? _errorMessage;
 
+  bool _submitting = false;
+
   @override
   void dispose() {
     _newPasswordController.dispose();
@@ -37,7 +45,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_newPasswordController.text.isEmpty ||
         _newPasswordController.text != _confirmPasswordController.text) {
       setState(() {
@@ -45,11 +53,40 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
       });
       return;
     }
-    // 上游缺口：改密端點尚未存在（見類別 Javadoc），這裡還沒有可以呼叫的
-    // API。端點補齊後：呼叫改密 → 成功後 replaceAllRoutes 進首頁。
     setState(() {
-      _errorMessage = '目前無法完成設定，請稍後再試。';
+      _submitting = true;
+      _errorMessage = null;
     });
+    try {
+      final result = await ApiClient.instance.changePassword(
+        newPassword: _newPasswordController.text,
+      );
+      if (!mounted) {
+        return;
+      }
+      // 改密完成就離開登入流程，首頁依部門分流（與登入成功後同一套判斷）。
+      replaceAllRoutes(
+        context,
+        result.dept == 'engineering'
+            ? const EngHomeScreen()
+            : const HomeScreen(),
+      );
+      return;
+    } on ApiException catch (e) {
+      setState(() {
+        _errorMessage = e.errorMessage ?? '目前無法完成設定，請稍後再試。';
+      });
+    } catch (_) {
+      setState(() {
+        _errorMessage = '無法連線到伺服器，請確認網路後再試一次。';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
   }
 
   @override
@@ -95,9 +132,12 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
               if (_errorMessage != null) ErrorBanner(message: _errorMessage!),
               TmsSemantics(
                 id: 'login.force-password-change.submit-button',
+                enabled: !_submitting,
                 child: CupertinoButton.filled(
-                  onPressed: _submit,
-                  child: const Text('確認'),
+                  onPressed: _submitting ? null : _submit,
+                  child: _submitting
+                      ? const CupertinoActivityIndicator()
+                      : const Text('確認'),
                 ),
               ),
             ],
