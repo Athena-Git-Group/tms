@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
 import '../../core/tms_semantics.dart';
+import 'task_callouts.dart';
 
 /// 查一下面板（ui-plan 畫面 8 的 `askSheet`）：列出這張任務的推薦問題，
 /// 讓員工在房內遇到不確定的事時先查、查不到再麻煩主管。
@@ -77,10 +78,21 @@ class _AskSheetState extends State<AskSheet> {
               FutureBuilder<List<AskSuggestion>>(
                 future: _suggestions,
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  final suggestions = snapshot.data;
+                  if (suggestions == null) {
                     return const SizedBox.shrink();
                   }
-                  return _buildSuggestions(snapshot.data!);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < suggestions.length; i++)
+                        _SuggestionRow(
+                          index: i,
+                          suggestion: suggestions[i],
+                          onTap: () => _ask(suggestions[i].question),
+                        ),
+                    ],
+                  );
                 },
               ),
               if (_answer != null)
@@ -103,8 +115,110 @@ class _AskSheetState extends State<AskSheet> {
     );
   }
 
+  /// 查不到時只說一句「查不到」，畫面上不出現回答區，也不出現任何出處卡——
+  /// 不是畫一個空的回答區。空的回答區會讓員工以為「有查到，但系統沒話說」，
+  /// 而事實是這件事沒有記錄可查，該去問主管。訊息全文由後端給。
+  Widget _buildNotFound(AskAnswer answer) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: TmsSemantics(
+        id: 'ask.not-found-message',
+        child: Text(answer.notFoundMessage ?? ''),
+      ),
+    );
+  }
+
+  /// 回答區：回答全文在上，出處卡逐張排在下面。
+  Widget _buildAnswer(AskAnswer answer) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        TmsSemantics(
+          id: 'ask.answer.text',
+          child: Text(answer.answer ?? ''),
+        ),
+        for (var i = 0; i < answer.sources.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _SourceCard(index: i, source: answer.sources[i]),
+          ),
+      ],
+    );
+  }
+}
+
+/// 一則推薦問題：問題本身一行，底下一行小字是範圍，整則可點。
+///
+/// 問題與範圍各自掛 id，測試才讀得到「第幾則的問題是什麼、範圍是什麼」。整則
+/// 合成一個節點的話，兩段文字會被併成同一個 label，分不出哪一段是範圍。
+class _SuggestionRow extends StatelessWidget {
+  const _SuggestionRow({
+    required this.index,
+    required this.suggestion,
+    required this.onTap,
+  });
+
+  /// 這則在推薦清單裡的位置，用來組 accessibility id。順序由後端決定。
+  final int index;
+
+  final AskSuggestion suggestion;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TmsSemantics(
+      id: 'ask.suggestion.$index',
+      explicitChildNodes: true,
+      child: CupertinoButton(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        onPressed: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TmsSemantics(
+              id: 'ask.suggestion.$index.question',
+              child: Text(
+                suggestion.question,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: CupertinoColors.label,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            TmsSemantics(
+              id: 'ask.suggestion.$index.scope',
+              child: Text(
+                suggestion.scope,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 一張出處卡：種類與日期並排在第一行，底下是標題與原文。
+///
+/// 卡片只畫契約 `KbSource` 的四個欄位（種類、標題、原文、日期）——查一下不得
+/// 帶出住客身分，所以畫面連「要不要顯示住客欄位」這個選擇都不留。
+class _SourceCard extends StatelessWidget {
+  const _SourceCard({required this.index, required this.source});
+
+  /// 這張卡在回答底下的位置，用來組 accessibility id。順序由後端決定。
+  final int index;
+
+  final AskSource source;
+
   /// 出處種類的畫面用詞。對照表與契約 `KbSource.kind` 的 enum 一對一。
-  static String _sourceKindText(String kind) {
+  static String _kindText(String kind) {
     switch (kind) {
       case 'room_memory':
         return '房間記錄';
@@ -122,137 +236,43 @@ class _AskSheetState extends State<AskSheet> {
     return parts.length == 3 ? '${parts[1]}/${parts[2]}' : isoDate;
   }
 
-  /// 查不到時只說一句「查不到」，畫面上不出現回答區，也不出現任何出處卡——
-  /// 不是畫一個空的回答區。空的回答區會讓員工以為「有查到，但系統沒話說」，
-  /// 而事實是這件事沒有記錄可查，該去問主管。訊息全文由後端給。
-  Widget _buildNotFound(AskAnswer answer) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: TmsSemantics(
-        id: 'ask.not-found-message',
-        child: Text(answer.notFoundMessage ?? ''),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    const metaStyle = TextStyle(
+      fontSize: 13,
+      color: CupertinoColors.secondaryLabel,
     );
-  }
-
-  /// 回答區：回答全文在上，出處卡逐張排在下面。
-  ///
-  /// 出處卡只畫契約 `KbSource` 的四個欄位（種類、標題、原文、日期）——查一下
-  /// 不得帶出住客身分，所以畫面連「要不要顯示住客欄位」這個選擇都不留。
-  Widget _buildAnswer(AskAnswer answer) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return TaskCallout(
+      id: 'ask.answer.source-card.$index',
+      tint: calloutQuoteTint,
+      explicitChildNodes: true,
       children: [
-        const SizedBox(height: 12),
-        TmsSemantics(
-          id: 'ask.answer.text',
-          child: Text(answer.answer ?? ''),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TmsSemantics(
+              id: 'ask.answer.source-card.$index.type',
+              child: Text(_kindText(source.kind), style: metaStyle),
+            ),
+            TmsSemantics(
+              id: 'ask.answer.source-card.$index.date',
+              child: Text(_monthDay(source.updatedOn), style: metaStyle),
+            ),
+          ],
         ),
-        for (var i = 0; i < answer.sources.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: TmsSemantics(
-              id: 'ask.answer.source-card.$i',
-              explicitChildNodes: true,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2F2F7),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TmsSemantics(
-                          id: 'ask.answer.source-card.$i.type',
-                          child: Text(
-                            _sourceKindText(answer.sources[i].kind),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: CupertinoColors.secondaryLabel,
-                            ),
-                          ),
-                        ),
-                        TmsSemantics(
-                          id: 'ask.answer.source-card.$i.date',
-                          child: Text(
-                            _monthDay(answer.sources[i].updatedOn),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: CupertinoColors.secondaryLabel,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    TmsSemantics(
-                      id: 'ask.answer.source-card.$i.title',
-                      child: Text(
-                        answer.sources[i].title,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    TmsSemantics(
-                      id: 'ask.answer.source-card.$i.excerpt',
-                      child: Text(answer.sources[i].excerpt),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        const SizedBox(height: 4),
+        TmsSemantics(
+          id: 'ask.answer.source-card.$index.title',
+          child: Text(
+            source.title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-      ],
-    );
-  }
-
-  /// 一則推薦問題畫成兩行：問題本身，底下一行小字是範圍。兩段各自掛 id，
-  /// 測試才讀得到「第幾則的問題是什麼、範圍是什麼」——整則合成一個節點的話，
-  /// 兩段文字會被併成同一個 label，分不出哪一段是範圍。
-  Widget _buildSuggestions(List<AskSuggestion> suggestions) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < suggestions.length; i++)
-          TmsSemantics(
-            id: 'ask.suggestion.$i',
-            explicitChildNodes: true,
-            child: CupertinoButton(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              onPressed: () => _ask(suggestions[i].question),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TmsSemantics(
-                    id: 'ask.suggestion.$i.question',
-                    child: Text(
-                      suggestions[i].question,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: CupertinoColors.label,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  TmsSemantics(
-                    id: 'ask.suggestion.$i.scope',
-                    child: Text(
-                      suggestions[i].scope,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: CupertinoColors.secondaryLabel,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        ),
+        const SizedBox(height: 2),
+        TmsSemantics(
+          id: 'ask.answer.source-card.$index.excerpt',
+          child: Text(source.excerpt),
+        ),
       ],
     );
   }

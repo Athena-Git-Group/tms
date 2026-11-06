@@ -1017,7 +1017,11 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 查一下按鈕改成有任務才露出：推薦問題是依任務情境排出來的，沒有任務就沒有情境可查。
   - 測試層新增兩筆 fixture：`insertRoomMemory` 直接落地 `room_memory` 一列（理由見上游缺口 #23），`skipSopItem` 走正式端點 `POST /staff/tasks/{taskId}/sop/{itemKey}`，跳過前先確認情境點名的打掃 SOP 項存在（每個情境開場 TRUNCATE 全部業務表，`sop_items` 也在其中，作法同 `failInspection`）。`AppiumWorld` 補 `openAskPanel()`（Given 與 When 的「打開查一下」同一條路，要等第一則推薦問題載入才算打開）；推薦問題與出處卡的掃描收在 `AskPanel`，給 When（要按第幾則）與 Then（順序對不對）共用。回答的斷言除了比畫面，另外讀回 `kb_audit_logs.answer`——那是後端記下的、它回給 App 的那段文字，比對它才證明得了畫面上的字不是 App 自己生的。
   - 回歸：`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`；`run-module.sh 房間交辦` `Tests run: 5, Failures: 0, Errors: 0, Skipped: 0`。`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4。
-- [ ] T335 [BDD-REFACTOR] 在綠燈下整理推薦問題列與出處卡的清單渲染（NOOP 可接受，但要寫明判斷依據）
+- [X] T335 [BDD-REFACTOR] 在綠燈下整理推薦問題列與出處卡的清單渲染（NOOP 可接受，但要寫明判斷依據）
+  - 不是 NOOP：出處卡的外框與 `TaskCallout` 一字不差——`width: double.infinity`、`padding: EdgeInsets.all(12)`、`BoxDecoration` 圓角 12、內層 `Column` 靠左，差的只有底色與內容，連外面那層帶 `explicitChildNodes` 的 `TmsSemantics` 都一樣。這正是 T333 合併交辦與退回資訊兩塊時用的同一條判準，所以出處卡接上同一個元件，灰底收成有名字的 `calloutQuoteTint`（原樣引用既有記錄、沒有要員工做任何事的區塊）。`TaskCallout` 的說明跟著從「任務頁的提示卡片」擴寫成「任務頁與它開出來的面板共用的資訊方塊」，因為查一下面板是第四個用法。
+  - 兩份清單改成同一種讀法：各自一個 `for` 迴圈排出一個有名字的單列元件，`_SuggestionRow` 與 `_SourceCard` 各自帶走自己的欄位與排版。原本出處卡在同一個 build 方法裡展開六層、`answer.sources[i]` 連寫四次，讀的人得先在腦中把索引代進去才知道哪一段畫的是哪一欄；`_sourceKindText` 與 `_monthDay` 也從面板本體搬進出處卡，只有它在用。accessibility id 的組法沒變（`ask.suggestion.{i}`、`ask.answer.source-card.{i}.*`），輸出的 widget 樹與畫面一模一樣。
+  - 「問主管」按鈕維持常駐，本輪不動：feature 的 `Rule: 查不到時提供問主管` 與 dsl 的 `查一下畫面提供問主管按鈕` 都只驗「有可點的按鈕」，沒有任何場景或句型要求查得到時不准出現；ui-plan 畫面 8 寫的「查不到時點『問主管』」是操作敘事，不是顯示條件。規格沒規定的顯示條件若在重構裡改掉，就是把使用者看到的畫面悄悄換掉。若之後要讓它只在查不到時出現，那是行為變更，該開一輪 GREEN 並先補一條負向場景。
+  - 驗收：`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4。三個基準重構前後逐項一致——`run-module.sh 查一下` `Tests run: 4, Failures: 0, Errors: 0, Skipped: 0`、`run-module.sh 任務執行` `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`（9 個紅的場景身分與失敗訊息不變）、`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`。
 
 ## Phase 3X: ADD Feature File - ios-app/系統層/離線模式與連線異常.feature
 
