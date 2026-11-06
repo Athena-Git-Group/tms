@@ -622,6 +622,23 @@ public class AppiumWorld {
     }
 
     /**
+     * 本情境唯一那位工務。給「句型要指派一位工務、但參數裡沒有他」的 stepdef 用，
+     * 例如「後端已有 "X" 報的 … 工務單，狀態為 "維修中"」——維修中的單在後端必須有
+     * 負責人，劇本只在背景建了一位工務，就以那一位為準。沒有或不只一位時直接噴錯，
+     * 讓劇本自己補清楚是哪一位，不默默挑一個頂上（理由同 {@link #onlyManager()}）。
+     */
+    public BackendChannel.CreatedStaff onlyEngineer() {
+        List<BackendChannel.CreatedStaff> engineers = staffByName.values().stream()
+                .filter(s -> "engineering".equals(s.dept()))
+                .toList();
+        if (engineers.size() != 1) {
+            throw new IllegalStateException("本情境有 " + engineers.size()
+                    + " 位工務，無法推定處理人；背景「飯店有以下員工」需要剛好一位部門為「工務」的員工");
+        }
+        return engineers.get(0);
+    }
+
+    /**
      * 改某位已建員工的登入帳密（「"X" 的員工編號密碼為 …」）。除了落地到後端
      * （{@link BackendChannel#setCredentials}），還要把 {@link #staffByName} 裡那筆換成
      * 帶新帳密的 record——後續的 Given／When 都用姓名查員工，查到舊的 fixture 帳密

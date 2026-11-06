@@ -3,7 +3,6 @@ package com.athena.app.bdd.steps.repair;
 import com.athena.app.bdd.AppiumWorld;
 import com.athena.app.bdd.BackendChannel;
 import io.cucumber.datatable.DataTable;
-import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.當;
 import org.openqa.selenium.WebElement;
 
@@ -16,6 +15,9 @@ public class RepairWhenSteps {
 
     /** 畫面元素出現的等待上限：畫面切換有轉場動畫，用輪詢等待取代固定 sleep。 */
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(8);
+
+    /** 恢復連線後等待送出佇列清空的上限：每一筆都是一次 HTTP 來回，比畫面轉場久。 */
+    private static final Duration QUEUE_DRAIN_TIMEOUT = Duration.ofSeconds(20);
 
     /**
      * 來源分流磚文字 → {@code engPool.category.{source}.chip} 的 {source} 段
@@ -51,8 +53,11 @@ public class RepairWhenSteps {
 
     private final AppiumWorld world;
 
-    public RepairWhenSteps(AppiumWorld world) {
+    private final RepairContext context;
+
+    public RepairWhenSteps(AppiumWorld world, RepairContext context) {
         this.world = world;
+        this.context = context;
     }
 
     /**
@@ -61,7 +66,10 @@ public class RepairWhenSteps {
      */
     @當("{string} 在 {string} 的報修畫面拍 {int} 張照片")
     public void takePhotos(String staffName, String task, int photoCount) {
-        throw new PendingException();
+        context.openRepairSheet(staffName, task);
+        for (int i = 0; i < photoCount; i++) {
+            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+        }
     }
 
     /**
@@ -70,39 +78,33 @@ public class RepairWhenSteps {
      */
     @當("{string} 送出工務單")
     public void submitTicket(String staffName) {
-        throw new PendingException();
+        world.staff(staffName);
+        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+        world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
     }
 
     /**
      * 怎麼做：在報修畫面選「中斷 → 需要工務協助」後送出。權威狀態落地：同
-     * {@link #submitTicket(String)}。
+     * {@link #submitTicket(String)}，另外原任務會被中斷。
+     *
+     * <p>中斷開關的 accessibility id 取 {@code repair.interrupt-source-task-toggle}：
+     * 報修面板的開關一律以契約 {@code CreateRepairTicketRequest} 的欄位名命名再加
+     * {@code -toggle}（既有的 {@code repair.public-area-toggle} 對 {@code isPublicArea}
+     * 就是這樣），讀的人從 id 就知道它送的是哪一個欄位。
      */
     @當("{string} 以中斷模式送出工務單")
     public void submitTicketInInterruptMode(String staffName) {
-        throw new PendingException();
+        world.staff(staffName);
+        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+        world.tapTestId("repair.interrupt-source-task-toggle", SCREEN_TIMEOUT);
+        world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
     }
 
     /** 怎麼做：從任務頁進入報修畫面，點選類別。App 會呼叫開單前檢查。 */
     @當("{string} 在 {string} 的報修畫面選擇類別 {string}")
     public void chooseRepairCategory(String staffName, String task, String category) {
-        openRepairSheet(staffName, task);
+        context.openRepairSheet(staffName, task);
         world.tapTestId("repair.category." + categoryKey(category) + ".chip", SCREEN_TIMEOUT);
-    }
-
-    /**
-     * 房務報修的進法：登入 → 首頁該房的任務列（{@code home.task.{房號}.card}）→ 任務頁
-     * → 報修圖示（{@code task.repair-button}）→ 報修面板（{@code repair.sheet}）。
-     * 已經停在報修面板時不重複進入。
-     */
-    private void openRepairSheet(String staffName, String roomNo) {
-        world.ensureLoggedInAs(world.staff(staffName));
-        if (!world.driver().findElements(world.byTestId("repair.sheet")).isEmpty()) {
-            return;
-        }
-        world.tapTestId("home.task." + roomNo + ".card", SCREEN_TIMEOUT);
-        world.waitForTestId("task.screen", SCREEN_TIMEOUT);
-        world.tapTestId("task.repair-button", SCREEN_TIMEOUT);
-        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
     }
 
     /** 類別中文 → 契約 enum；查不到就噴錯帶原詞，不猜。 */
@@ -157,10 +159,18 @@ public class RepairWhenSteps {
         return (String) rows.get(0).get("room_no");
     }
 
-    /** 怎麼做：把裝置切回有網路，等待待送出佇列處理完。 */
+    /**
+     * 怎麼做：把裝置切回有網路（測試後門的 {@code /offline}），等待待送出佇列處理完。
+     *
+     * <p>「處理完」以畫面頂部的離線列（{@code system.offline-bar}）消失為準：那一列顯示的
+     * 就是佇列長度本身（{@code ConnectionStatus.pendingSyncCount}），它不見代表佇列已經
+     * 空了。不等它就往下走，後面的權威讀回會在請求還在路上時數到比較少的筆數。
+     */
     @當("{string} 的手機恢復連線")
     public void phoneBackOnline(String staffName) {
-        throw new PendingException();
+        world.staff(staffName);
+        world.postBackdoorJson("/offline", "{\"offline\":false}");
+        world.waitForTestIdGone("system.offline-bar", QUEUE_DRAIN_TIMEOUT);
     }
 
     // ──── 工務視角（T312–T314 落點） ────

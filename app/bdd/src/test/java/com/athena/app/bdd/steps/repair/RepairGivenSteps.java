@@ -3,9 +3,14 @@ package com.athena.app.bdd.steps.repair;
 import com.athena.app.bdd.AppiumWorld;
 import com.athena.app.bdd.BackendChannel;
 import io.cucumber.datatable.DataTable;
-import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.假設;
 
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,16 +42,35 @@ public class RepairGivenSteps {
             "房務報修", "staff",
             "櫃檯", "desk");
 
+    /** 報修面板上每一次點擊的等待上限；與 {@link RepairContext} 用同一個數字。 */
+    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(8);
+
     private final AppiumWorld world;
 
-    public RepairGivenSteps(AppiumWorld world) {
+    private final RepairContext context;
+
+    public RepairGivenSteps(AppiumWorld world, RepairContext context) {
         this.world = world;
+        this.context = context;
     }
 
-    /** 怎麼做：把裝置與相機的拍攝時間設為該時刻（{@code MM/DD HH:mm}）。 */
+    /**
+     * 怎麼做：把裝置與相機的拍攝時間設為該時刻（{@code MM/DD HH:mm}），注入測試後門的
+     * {@code POST /clock}（{@code TestHooks.injectedClockIso}）——照片浮水印上的拍攝時間
+     * 從這個注入值取。
+     *
+     * <p>句型只給月日時分，年份補成執行當下這一年：後端的 {@code Clock} 設不進去
+     * （理由見共通 Given「現在時間是」），裝置跨到另一個年份會讓兩個時鐘差一整年，
+     * 任何以「今天」分組的讀回都會落空。
+     */
     @假設("裝置時間是 {string}")
     public void deviceTimeIs(String monthDayHourMinute) {
-        throw new PendingException();
+        LocalDate sameYear = LocalDate.now();
+        LocalDateTime moment = LocalDateTime.parse(
+                sameYear.getYear() + "/" + monthDayHourMinute,
+                DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"));
+        world.postBackdoorJson("/clock", "{\"isoTime\":\""
+                + moment.atZone(ZoneId.systemDefault()).toOffsetDateTime() + "\"}");
     }
 
     /**
@@ -55,13 +79,23 @@ public class RepairGivenSteps {
      */
     @假設("{string} 在 {string} 的報修畫面選了類別 {string}，附了 {int} 張照片")
     public void repairScreenHasPhotosAttached(String staffName, String task, String category, int photoCount) {
-        throw new PendingException();
+        context.openRepairSheet(staffName, task);
+        world.tapTestId("repair.category." + lookup(REPAIR_CATEGORY, category, "工務單類別") + ".chip",
+                SCREEN_TIMEOUT);
+        for (int i = 0; i < photoCount; i++) {
+            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+        }
+        assertNoTicketInBackend("這句只準備報修面板，還沒按送出");
     }
 
-    /** 怎麼做：攔截網路，讓該張照片的上傳請求失敗，其他照片正常上傳。 */
+    /**
+     * 怎麼做：讓該張照片的上傳請求失敗，其他照片正常上傳。攔截點是測試後門的
+     * {@code POST /upload-fail}（{@code TestHooks.uploadFailAtIndex}），序號與句型一樣
+     * 從 1 算起。
+     */
     @假設("第 {int} 張照片的上傳會失敗")
     public void nthPhotoUploadFails(int photoIndex) {
-        throw new PendingException();
+        world.postBackdoorJson("/upload-fail", "{\"photoIndex\":" + photoIndex + "}");
     }
 
     /**
@@ -71,7 +105,17 @@ public class RepairGivenSteps {
      */
     @假設("^\"([^\"]+)\" 的手機有 (\\d+) 張待送出的 (\\S+) 冷氣工務單$")
     public void phoneHasPendingAcTickets(String staffName, int count, String roomNo) {
-        throw new PendingException();
+        // 開工是離線時被擋下來的動作，裝置一旦離線那一筆進行中就再也補不起來，
+        // 所以切離線之前先把測試資料欠的「在 App 按開始」補完（同共通 Given「手機目前離線」）。
+        world.settleDeferredStarts();
+        world.postBackdoorJson("/offline", "{\"offline\":true}");
+        for (int i = 0; i < count; i++) {
+            context.openRepairSheet(staffName, roomNo);
+            world.tapTestId("repair.category." + REPAIR_CATEGORY.get("冷氣") + ".chip", SCREEN_TIMEOUT);
+            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+            world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
+        }
+        assertNoTicketInBackend("離線送出的單只會留在手機的待送出佇列");
     }
 
     /**
@@ -80,19 +124,37 @@ public class RepairGivenSteps {
      */
     @假設("恢復連線後的前 {int} 次送出會因網路不穩而重送")
     public void firstRetriesAfterReconnectAreFlaky(int retryCount) {
-        throw new PendingException();
+        throw new IllegalStateException("測試後門沒有可以注入「前 " + retryCount
+                + " 次開單請求在後端已處理後才逾時」的開關：現有的 /flaky-connection 只把"
+                + "連線標成不穩定（改走降級輪詢），不會讓送出重跑，拿它頂替會讓這個情境在"
+                + "完全沒有重送的情況下綠燈，等於沒驗到同一把 Idempotency-Key。"
+                + "要讓這句可驗，測試後門需要一個能指定前幾次送出逾時的注入開關。");
     }
 
-    /** 怎麼做：透過後端測試資料建立該工務單。權威狀態落地：後端有該單。 */
+    /**
+     * 怎麼做：透過後端測試資料建立該工務單。權威狀態落地：後端有該單。
+     *
+     * <p>句型沒有帶處理人，但「維修中」這類狀態在後端一定要有負責人，所以由
+     * {@link AppiumWorld#onlyEngineer()} 取背景裡那位工務；pool／pending_review
+     * 這類還沒有人接的狀態不需要負責人，給了也用不到。
+     */
     @假設("後端已有 {string} 報的 {string} 冷氣工務單 {string}，狀態為 {string}")
     public void backendHasExistingAcTicket(String reporter, String roomNo, String ticketNo, String status) {
-        throw new PendingException();
+        String stateCode = lookup(TICKET_STATE, status, "工務單狀態");
+        boolean needsAssignee = !"pool".equals(stateCode) && !"pending_review".equals(stateCode);
+        world.backend().createRepairTicket(
+                ticketNo, roomNo, REPAIR_CATEGORY.get("冷氣"), stateCode,
+                world.staff(reporter), needsAssignee ? world.onlyEngineer() : null, null, false);
     }
 
-    /** 怎麼做：透過後端測試資料寫入該房今日入住的 VIP 訂單。 */
+    /**
+     * 怎麼做：透過後端測試資料寫入該房今日入住的 VIP 訂單（{@code reservations_cache}
+     * 的 {@code attrs.vip}＋今天的 {@code checkin_at}）。急件判定只看這張表，所以這句
+     * 落地之後，同一間房的開單前檢查就會判成急件、理由組成「VIP · {時刻} 入住」。
+     */
     @假設("{string} 今天是 VIP 房，住客 {string} 入住")
     public void isVipRoomWithCheckin(String roomNo, String checkinTime) {
-        throw new PendingException();
+        world.backend().insertTodayReservation(roomNo, checkinTime, true);
     }
 
     /**
@@ -101,7 +163,8 @@ public class RepairGivenSteps {
      * <p>表頭與語意逐欄對照後端同名 Given（tms {@code RepairGivenSteps.existingRepairTickets}）：
      * {@code 單號}／{@code 房號}／{@code 類別}／{@code 狀態}／{@code 報修人} 必填，
      * {@code 處理人}（pool 以外的狀態必要）、{@code 急件}（「是」才算急件）、
-     * {@code 來源}（省略視為房務報修）、{@code 驗收人}（有值代表主管已驗收）選填。
+     * {@code 來源}（省略視為房務報修）、{@code 驗收人}（有值代表主管已驗收）、
+     * {@code 退回原因}（狀態為主管未核准時必要，主管退回時附的原因）選填。
      * 中文對照一律走權威值對照表，不自己猜 enum。
      */
     @假設("已有以下工務單：")
@@ -117,6 +180,7 @@ public class RepairGivenSteps {
             world.seedStaff(reporterName, "房務");
             BackendChannel.CreatedStaff reporter = world.staff(reporterName);
 
+            String rejectReason = blankToNull(row.get("退回原因"));
             String assigneeName = blankToNull(row.get("處理人"));
             BackendChannel.CreatedStaff assignee =
                     assigneeName == null ? null : world.staff(assigneeName);
@@ -124,10 +188,15 @@ public class RepairGivenSteps {
             String sourceChinese = blankToNull(row.get("來源"));
             String verifierName = blankToNull(row.get("驗收人"));
 
+            String stateCode = lookup(TICKET_STATE, stateChinese, "工務單狀態");
+            // 退回是主管的動作，退回原因由他附上；劇本的背景已經建好一位主管，
+            // 就以那一位為準（沒有主管欄可指名，理由同 AppiumWorld.onlyManager）。
+            BackendChannel.CreatedStaff rejecter =
+                    "rejected".equals(stateCode) ? world.onlyManager() : null;
             UUID taskId = world.backend().createRepairTicket(
                     ticketNo, roomNo, lookup(REPAIR_CATEGORY, categoryChinese, "工務單類別"),
-                    lookup(TICKET_STATE, stateChinese, "工務單狀態"), reporter, assignee,
-                    blankToNull(row.get("說明")), urgent);
+                    stateCode, reporter, assignee,
+                    blankToNull(row.get("說明")), urgent, rejecter, rejectReason);
 
             if (sourceChinese != null) {
                 world.backend().setTaskSource(
@@ -150,7 +219,9 @@ public class RepairGivenSteps {
      */
     @假設("{string} 已將 {string} 降級為一般件，原因為 {string}")
     public void managerDowngradesTicket(String managerName, String ticketNo, String reason) {
-        throw new PendingException();
+        Map<String, Object> ticket = world.backend().repairTicketRow(ticketNo);
+        world.backend().downgradeRepairTicketUrgency(
+                (UUID) ticket.get("task_id"), world.staff(managerName), reason);
     }
 
     // ──── 工務視角（T312–T314 落點） ────
@@ -235,5 +306,19 @@ public class RepairGivenSteps {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    // ──── 房務端生命週期（T312–T314 落點） ────
+    /**
+     * 「這一步不該在後端留下工務單」的守門：報修面板上的準備動作與離線送出都只動手機，
+     * 真的建單的只有線上按送出那一步。少了這個檢查，上游要是哪天提前建單，情境會一路
+     * 綠到最後才在別的斷言上以看不懂的方式紅掉。
+     *
+     * @param why 寫進錯誤訊息，說明這一步為什麼不該建單
+     */
+    private void assertNoTicketInBackend(String why) {
+        List<Map<String, Object>> rows = world.backend().queryRows(
+                "SELECT ticket_no FROM repair_tickets WHERE tenant_id = ?",
+                world.backend().ensureTenant());
+        if (!rows.isEmpty()) {
+            throw new AssertionError("後端不該有工務單（" + why + "），實際查到 " + rows.size() + " 張");
+        }
+    }
 }

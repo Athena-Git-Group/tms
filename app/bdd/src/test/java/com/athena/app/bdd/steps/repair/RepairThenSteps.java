@@ -2,11 +2,13 @@ package com.athena.app.bdd.steps.repair;
 
 import com.athena.app.bdd.AppiumWorld;
 import io.appium.java_client.AppiumBy;
-import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.那麼;
 import org.openqa.selenium.WebElement;
 
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,10 +27,19 @@ public class RepairThenSteps {
             "房務報修", "staff",
             "櫃檯", "desk");
 
+    /** 急件判定理由裡的入住時刻格式，與後端組理由時用的格式同一套。 */
+    private static final DateTimeFormatter CHECKIN_TIME = DateTimeFormatter.ofPattern("HH:mm");
+
+    /** 等後端收到離線期間保存的開單的上限：每一筆都是一次 HTTP 來回，比畫面轉場久。 */
+    private static final Duration QUEUE_DRAIN_TIMEOUT = Duration.ofSeconds(20);
+
     private final AppiumWorld world;
 
-    public RepairThenSteps(AppiumWorld world) {
+    private final RepairContext context;
+
+    public RepairThenSteps(AppiumWorld world, RepairContext context) {
         this.world = world;
+        this.context = context;
     }
 
     /**
@@ -37,13 +48,21 @@ public class RepairThenSteps {
      */
     @那麼("這張照片的浮水印為 {string}")
     public void photoWatermarkIs(String watermark) {
-        throw new PendingException();
+        assertLabelContains("repair.photo.1.watermark-label", watermark, "照片浮水印");
     }
 
-    /** 必查：後端沒有新的修繕任務，也沒有對應的開單請求紀錄。 */
+    /**
+     * 必查：後端沒有新的修繕任務，也沒有對應的開單請求紀錄。
+     *
+     * <p>用到這句的情境都沒有事先鋪任何工務單，所以「沒收到」等於整個租戶一張都沒有。
+     * 以總筆數驗而不是只驗某一張，連「建成了另一張單」這種走偏也會被抓到。
+     */
     @那麼("後端沒有收到這張工務單")
     public void backendHasNoTicket() {
-        throw new PendingException();
+        List<Map<String, Object>> rows = ticketRows("1 = 1");
+        if (!rows.isEmpty()) {
+            throw new AssertionError("後端不該收到工務單，實際查到 " + rows.size() + " 張");
+        }
     }
 
     /**
@@ -52,7 +71,28 @@ public class RepairThenSteps {
      */
     @那麼("送出鈕為 {string}")
     public void submitButtonState(String enabledOrDisabled) {
-        throw new PendingException();
+        boolean expectedEnabled = switch (enabledOrDisabled) {
+            case "啟用" -> true;
+            case "禁用" -> false;
+            default -> throw new IllegalArgumentException(
+                    "認不得的按鈕狀態「" + enabledOrDisabled + "」（只支援 啟用｜禁用）");
+        };
+        WebElement submit = world.waitForTestId("repair.submit-button", SCREEN_TIMEOUT);
+        if (submit.isEnabled() != expectedEnabled) {
+            throw new AssertionError("送出鈕應為「" + enabledOrDisabled + "」，實際是「"
+                    + (submit.isEnabled() ? "啟用" : "禁用") + "」");
+        }
+        if (!expectedEnabled) {
+            // dsl 的「禁用時無法真的觸發送出動作，不是事後才報錯」：按下去要什麼都不發生。
+            // 只讀 enabled 屬性的話，一顆畫成灰色但照樣送得出去的按鈕也會過關。
+            try {
+                submit.click();
+            } catch (RuntimeException ignored) {
+                // 點不動本來就是這句要的結果。
+            }
+            world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+            backendHasNoTicket();
+        }
     }
 
     /**
@@ -61,13 +101,23 @@ public class RepairThenSteps {
      */
     @那麼("照片欄位提示 {string}")
     public void photoFieldHint(String hint) {
-        throw new PendingException();
+        assertLabelContains("repair.photo.count-label", hint, "照片欄位標題");
     }
 
-    /** 必查：報修畫面的照片縮圖數等於張數。 */
+    /**
+     * 必查：報修畫面的照片縮圖數等於張數。縮圖以它自己的浮水印標籤
+     * （{@code repair.photo.{index}.watermark-label}，每張照片各一個）計數——報修面板上
+     * 只有照片格帶這個 id，數它就是數縮圖。
+     */
     @那麼("報修畫面仍只有 {int} 張照片")
     public void repairScreenStillHasPhotos(int photoCount) {
-        throw new PendingException();
+        List<String> thumbnails = world.findTestIdsWithPrefix("repair.photo.").stream()
+                .filter(id -> id.endsWith(".watermark-label"))
+                .toList();
+        if (thumbnails.size() != photoCount) {
+            throw new AssertionError("報修畫面應有 " + photoCount + " 張照片，實際 "
+                    + thumbnails.size() + " 張：" + thumbnails);
+        }
     }
 
     /**
@@ -76,7 +126,11 @@ public class RepairThenSteps {
      */
     @那麼("加入照片的按鈕已消失")
     public void addPhotoButtonGone() {
-        throw new PendingException();
+        // 先等報修面板本身在畫面上，否則面板還沒畫出來時的「找不到」會誤判為通過。
+        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+        if (!world.driver().findElements(world.byTestId("repair.photo.add-button")).isEmpty()) {
+            throw new AssertionError("已附滿 3 張時不應再有加入照片的按鈕，但畫面上找得到");
+        }
     }
 
     /**
@@ -86,7 +140,24 @@ public class RepairThenSteps {
      */
     @那麼("報修畫面標示第 {int} 張照片上傳失敗，並提供只重試這一張")
     public void nthPhotoFailedWithRetryOption(int photoIndex) {
-        throw new PendingException();
+        assertLabelContains("repair.photo." + photoIndex + ".upload-status", "失敗", "照片上傳狀態");
+        WebElement retry = world.waitForTestId(
+                "repair.photo." + photoIndex + ".retry-button", SCREEN_TIMEOUT);
+        if (!retry.isEnabled()) {
+            throw new AssertionError("第 " + photoIndex + " 張照片的重試按鈕在畫面上，但不可點");
+        }
+
+        // 「只重試這一張」的另一半：其他照片不能跟著被標成失敗，否則員工會整批重傳。
+        for (String id : world.findTestIdsWithPrefix("repair.photo.")) {
+            if (!id.endsWith(".upload-status") || id.contains("." + photoIndex + ".")) {
+                continue;
+            }
+            String status = world.labelOf(id);
+            if (status != null && status.contains("失敗")) {
+                throw new AssertionError("只有第 " + photoIndex + " 張該失敗，但「" + id
+                        + "」也標示失敗：「" + status + "」");
+            }
+        }
     }
 
     /**
@@ -95,7 +166,11 @@ public class RepairThenSteps {
      */
     @那麼("工務單與照片保存在手機，畫面標示待送出")
     public void ticketAndPhotosSavedOffline() {
-        throw new PendingException();
+        world.waitForTestId("ticket.summary.offline-queued-label", SCREEN_TIMEOUT);
+        // 畫面上的待送出標示與離線列的筆數講的是同一條佇列；只看標示的話，一個
+        // 根本沒進佇列的標示也會過關，而那正是這條 Rule 最在意的失敗方式。
+        assertLabelContains("system.offline-bar.pending-count", "1", "離線列的待同步筆數");
+        backendHasNoTicket();
     }
 
     /**
@@ -104,19 +179,49 @@ public class RepairThenSteps {
      */
     @那麼("^後端只有 (\\d+) 張 (\\S+) 冷氣工務單$")
     public void backendHasOnlyNAcTickets(int count, String roomNo) {
-        throw new PendingException();
+        List<Map<String, Object>> rows = world.backend().queryRows("""
+                SELECT rt.ticket_no FROM repair_tickets rt
+                JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
+                JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
+                WHERE rt.tenant_id = ? AND r.room_no = ? AND rt.category = 'air_conditioning'
+                  AND t.state NOT IN ('done', 'inspected', 'cancelled')
+                """, world.backend().ensureTenant(), roomNo);
+        if (rows.size() != count) {
+            throw new AssertionError("「" + roomNo + "」未結案的冷氣工務單應為 " + count
+                    + " 張，實際 " + rows.size() + " 張——重送用的是同一把 Idempotency-Key 嗎？");
+        }
     }
 
-    /** 必查：待送出標示消失，App 本機佇列是空的。 */
+    /**
+     * 必查：待送出標示消失，App 本機佇列是空的。佇列空了的判準是離線列整列不見——
+     * 那一列顯示的就是佇列長度本身（{@code ConnectionStatus.pendingSyncCount}）。
+     */
     @那麼("畫面不再標示待送出")
     public void noLongerMarkedPendingSync() {
-        throw new PendingException();
+        world.waitForTestIdGone("ticket.summary.offline-queued-label", QUEUE_DRAIN_TIMEOUT);
+        world.waitForTestIdGone("system.offline-bar", QUEUE_DRAIN_TIMEOUT);
     }
 
-    /** 必查：重複提示上有補照片到該單的操作，點下去會進入補照片流程。accessibility id：TODO。 */
+    /**
+     * 必查：重複提示（{@code repair.duplicate-ticket.banner}）指的就是那張單，上面有可點的
+     * 補照片入口（{@code repair.duplicate-ticket.add-photo-button}）；後端那張單確實還沒
+     * 結案，才會被開單前檢查當成重複。
+     */
     @那麼("畫面提供補充照片到 {string} 的選項")
     public void offersAddPhotoOptionToTicket(String ticketNo) {
-        throw new PendingException();
+        assertLabelContains("repair.duplicate-ticket.banner", ticketNo, "重複提示");
+        WebElement addPhoto = world.waitForTestId(
+                "repair.duplicate-ticket.add-photo-button", SCREEN_TIMEOUT);
+        if (!addPhoto.isEnabled()) {
+            throw new AssertionError("補照片到「" + ticketNo + "」的按鈕在畫面上，但不可點");
+        }
+
+        Map<String, Object> row = singleTicketRow(
+                "rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
+        if (List.of("done", "inspected", "cancelled").contains(String.valueOf(row.get("state")))) {
+            throw new AssertionError("「" + ticketNo + "」在後端已結案（" + row.get("state")
+                    + "），不該被當成可以補照片的重複單");
+        }
     }
 
     /**
@@ -126,7 +231,19 @@ public class RepairThenSteps {
      */
     @那麼("畫面顯示系統判定為急件，理由 {string}")
     public void showsSystemUrgentJudgement(String reason) {
-        throw new PendingException();
+        assertLabelContains("repair.urgent-judgement.card", "系統判定：急件", "急件判定卡");
+        assertLabelContains("repair.urgent-judgement.reason", reason, "急件判定理由");
+
+        List<Map<String, Object>> reservations = todayReservationsForRepairRoom();
+        if (reservations.isEmpty()) {
+            throw new AssertionError("畫面判成急件，但後端「" + context.repairRoomNo()
+                    + "」今天沒有未作廢的訂單，判定沒有真相可依");
+        }
+        String rule = urgentRuleOf(reservations.get(0));
+        if (!rule.equals(reason)) {
+            throw new AssertionError("急件理由與後端判定不一致：後端依訂房算出「" + rule
+                    + "」，畫面上是「" + reason + "」");
+        }
     }
 
     /**
@@ -136,7 +253,13 @@ public class RepairThenSteps {
      */
     @那麼("畫面顯示系統判定為一般件")
     public void showsSystemNormalJudgement() {
-        throw new PendingException();
+        assertLabelContains("repair.urgent-judgement.card", "系統判定：一般件", "急件判定卡");
+
+        List<Map<String, Object>> reservations = todayReservationsForRepairRoom();
+        if (!reservations.isEmpty()) {
+            throw new AssertionError("畫面判成一般件，但後端「" + context.repairRoomNo()
+                    + "」今天有訂單（" + urgentRuleOf(reservations.get(0)) + "），該判成急件");
+        }
     }
 
     /**
@@ -145,34 +268,85 @@ public class RepairThenSteps {
      */
     @那麼("畫面顯示急件判定由系統依飯店設定規則決定，房務不能更改")
     public void showsUrgentJudgementNotEditableByStaff() {
-        throw new PendingException();
+        assertLabelContains("repair.urgent-judgement.card", "依飯店設定的規則判定", "急件判定卡");
+        assertLabelContains("repair.urgent-judgement.card", "房務不能更改", "急件判定卡");
+
+        // 說明文字只是寫給人看的；真正保證房務改不了的是判定卡上沒有任何可點的元件。
+        List<String> controls = world.findTestIdsWithPrefix("repair.urgent-judgement.").stream()
+                .filter(id -> id.endsWith("-button") || id.endsWith("-toggle") || id.endsWith(".chip"))
+                .toList();
+        if (!controls.isEmpty()) {
+            throw new AssertionError("急件判定卡上不該有可以改判定的元件，但找得到：" + controls);
+        }
     }
 
     /**
-     * 必查：工務單詳情的狀態摘要卡顯示該文案，與後端工務單狀態對照表一致。
-     * accessibility id：TODO（狀態摘要卡節點尚未在 ui-plan.md 逐一命名）。
+     * 必查：狀態摘要卡（{@code ticket.status-summary-card}）顯示該文案，而且與後端的
+     * 工務單狀態一致。對照表（dsl 的狀態用語）：等主管審核＝pending_review、
+     * 主管未核准＝rejected、待認領＝pool、已接單＝accepted、維修中＝doing、
+     * 已完修＝done。
+     *
+     * <p>工務端多看得到兩種文案，它們在後端是同一個狀態（done）、差別在驗收欄位：
+     * 「已完修 · 等主管驗收」要求 {@code verified_at} 還是 null，「已驗收 · {主管}」
+     * 要求驗收人就是文案上那一位——把驗收人一起比對，畫面才不會顯示別人的名字也算過。
      */
     @那麼("工務單詳情顯示狀態摘要卡 {string}")
     public void ticketDetailShowsStatusSummary(String summaryText) {
-        throw new PendingException();
+        assertLabelContains("ticket.status-summary-card", summaryText, "狀態摘要卡");
+
+        Map<String, Object> row = singleTicketRow("1 = 1", "本情境唯一的工務單");
+        String state = String.valueOf(row.get("state"));
+        boolean verified = row.get("verified_at") != null;
+
+        if ("已完修 · 等主管驗收".equals(summaryText)) {
+            requireState(summaryText, state, "done");
+            if (verified) {
+                throw new AssertionError("摘要卡說還在等主管驗收，但後端已經有驗收時間");
+            }
+            return;
+        }
+        if (summaryText.startsWith("已驗收 · ")) {
+            requireState(summaryText, state, "done");
+            String verifierName = summaryText.substring("已驗收 · ".length()).trim();
+            UUID expected = world.staff(verifierName).id();
+            if (!expected.toString().equalsIgnoreCase(String.valueOf(row.get("verified_by")))) {
+                throw new AssertionError("摘要卡說驗收人是「" + verifierName
+                        + "」，後端 verified_by = " + row.get("verified_by"));
+            }
+            return;
+        }
+        requireState(summaryText, state, STATE_BY_SUMMARY.get(summaryText));
     }
 
     /**
-     * 必查：工務單詳情沒有可點的撤回操作入口；{@code already_claimed} 語意直接表現為按鈕
-     * 不存在，不是先顯示再點擊才報 409。accessibility id：TODO。
+     * 必查：工務單詳情沒有可點的撤回操作入口（{@code ticket.withdraw-button} 不存在）；
+     * {@code already_claimed} 語意直接表現為按鈕不存在，不是先顯示再點擊才報 409。
+     * 先等詳情頁出現再查按鈕不存在，否則畫面還沒載入時的「找不到」會誤判為通過。
      */
     @那麼("工務單詳情沒有撤回按鈕")
     public void ticketDetailHasNoWithdrawButton() {
-        throw new PendingException();
+        world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
+        if (!world.driver().findElements(world.byTestId("ticket.withdraw-button")).isEmpty()) {
+            throw new AssertionError("已被工務認領的單不該出現撤回按鈕，但畫面上找得到");
+        }
     }
 
     /**
-     * 必查：工務單詳情顯示該降級原因文字，與後端 {@code repair_tickets.urgent_downgrade_reason}
-     * 一致。accessibility id：TODO。
+     * 必查：詳情顯示該降級原因文字（{@code ticket.urgent-downgrade-reason-label}，命名沿用
+     * 同一頁的 {@code ticket.reject-reason-label}）；後端
+     * {@code repair_tickets.urgent_downgrade_reason} 等於該原因，而且這張單已經不是急件
+     * ——只留下原因卻還掛著急件，代表降級只做了一半。
      */
     @那麼("工務單詳情顯示急件降級原因 {string}")
     public void ticketDetailShowsUrgentDowngradeReason(String reason) {
-        throw new PendingException();
+        assertLabelContains("ticket.urgent-downgrade-reason-label", reason, "急件降級原因");
+
+        Map<String, Object> row = singleTicketRow(
+                "rt.urgent_downgrade_reason = ?", "降級原因為「" + reason + "」的工務單", reason);
+        if (Boolean.TRUE.equals(row.get("is_urgent")) || Boolean.TRUE.equals(row.get("urgent"))) {
+            throw new AssertionError("已降級的工務單在後端仍是急件（is_urgent="
+                    + row.get("is_urgent") + "、tasks.urgent=" + row.get("urgent") + "）");
+        }
     }
 
     // ──── 工務視角 ────
@@ -475,6 +649,65 @@ public class RepairThenSteps {
     }
 
     // ──── 共用 helper ────
+
+    /**
+     * 狀態摘要卡文案 → 權威 {@code tasks.state}（對照 dsl 的狀態用語表）。工務端另外兩種
+     * 文案（已完修 · 等主管驗收、已驗收 · {主管}）在後端是同一個 done，由
+     * {@link #ticketDetailShowsStatusSummary} 另外比對驗收欄位，不放進這張表。
+     */
+    private static final Map<String, String> STATE_BY_SUMMARY = Map.of(
+            "等主管審核", "pending_review",
+            "主管未核准", "rejected",
+            "待認領", "pool",
+            "已接單", "accepted",
+            "維修中", "doing",
+            "已完修", "done");
+
+    /** 畫面上某個節點的文字必須包含期望值；{@code what} 用在錯誤訊息裡說明在看哪一段。 */
+    private void assertLabelContains(String testId, String expected, String what) {
+        String actual = world.waitForLabelOf(testId, expected, SCREEN_TIMEOUT);
+        if (actual == null || !actual.contains(expected)) {
+            throw new AssertionError(what + "應包含「" + expected + "」，畫面上是「" + actual + "」");
+        }
+    }
+
+    /** 畫面文案與後端狀態的對照；對不上就連文案一起報出來，不只報狀態碼。 */
+    private static void requireState(String summaryText, String actualState, String expectedState) {
+        if (expectedState == null) {
+            throw new IllegalArgumentException("認不得的狀態摘要卡文案「" + summaryText
+                    + "」（合法值：" + STATE_BY_SUMMARY.keySet() + "，另加 已完修 · 等主管驗收、已驗收 · {主管}）");
+        }
+        if (!expectedState.equals(actualState)) {
+            throw new AssertionError("摘要卡顯示「" + summaryText + "」，後端狀態應為 "
+                    + expectedState + "，實際是 " + actualState);
+        }
+    }
+
+    /**
+     * 本情境報修面板那一間房今天還有效的訂房列。急件判定的真相只有這張表
+     * （後端 {@code RepairService.judgeUrgent} 查的就是它），畫面判定對不對一律跟它比。
+     */
+    private List<Map<String, Object>> todayReservationsForRepairRoom() {
+        return world.backend().queryRows("""
+                SELECT rc.checkin_at, (rc.attrs ->> 'vip') = 'true' AS vip
+                  FROM reservations_cache rc
+                  JOIN rooms r ON r.tenant_id = rc.tenant_id AND r.id = rc.room_id
+                 WHERE rc.tenant_id = ? AND r.room_no = ? AND rc.superseded_at IS NULL
+                   AND rc.checkin_at >= CURRENT_DATE AND rc.checkin_at < CURRENT_DATE + 1
+                 ORDER BY rc.checkin_at
+                 LIMIT 1
+                """, world.backend().ensureTenant(), context.repairRoomNo());
+    }
+
+    /** 依訂房列組出後端會給的急件理由：{@code (VIP · )HH:mm 入住}。 */
+    private static String urgentRuleOf(Map<String, Object> reservation) {
+        Object checkinAt = reservation.get("checkin_at");
+        OffsetDateTime moment = checkinAt instanceof Timestamp timestamp
+                ? timestamp.toLocalDateTime().atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
+                : (OffsetDateTime) checkinAt;
+        return (Boolean.TRUE.equals(reservation.get("vip")) ? "VIP · " : "")
+                + moment.format(CHECKIN_TIME) + " 入住";
+    }
 
     /** 畫面上某個數字格（count 類 accessibility id）的文字必須剛好是這個數字。 */
     private void assertScreenNumber(String testId, int expected) {

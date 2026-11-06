@@ -728,15 +728,43 @@ public class BackendChannel {
      * repair_tickets 延伸列（INSERT 欄位對照 tms RepairGivenSteps.existingRepairTickets）。
      * 任務部分沿用 {@link #createTask}，支援的狀態同它；工務單特有的 pending_review
      * （等主管審核，開單起點）另外直接落地。
+     *
+     * <p>要 rejected（主管未核准）的單請改用
+     * {@link #createRepairTicket(String, String, String, String, CreatedStaff, CreatedStaff,
+     * String, boolean, CreatedStaff, String)}——退回一定附原因，而原因沒有地方放在這組參數裡。
      */
     public UUID createRepairTicket(
             String ticketNo, String roomNo, String categoryCode, String stateCode,
             CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent) {
+        return createRepairTicket(ticketNo, roomNo, categoryCode, stateCode, reporter, assignee,
+                description, urgent, null, null);
+    }
+
+    /**
+     * 同上，另外吃「誰退回、退回原因」。
+     *
+     * <p>rejected（主管未核准）為什麼不在 {@link #createTask} 的狀態對照裡：它不是任務
+     * 通用狀態，而是工務單審核流程的一站——後端只有
+     * {@code POST /repair-tickets/{id}/reject} 走得到它，而那條路要先有 repair_tickets 列
+     * 才認得出這張單（{@code requireTicket}），所以必須等工務單列落地之後才能退。這裡的
+     * 作法是：任務先落在 pending_review（等主管審核），工務單列寫好之後，再以主管身分
+     * 走正式的退回端點轉成 rejected，{@code reject_reason} 與 task_events 都由產品碼自己
+     * 寫，與主管真的在後台按退回同形狀。
+     */
+    public UUID createRepairTicket(
+            String ticketNo, String roomNo, String categoryCode, String stateCode,
+            CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent,
+            CreatedStaff rejecter, String rejectReason) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        boolean rejected = "rejected".equals(stateCode);
+        if (rejected && (rejecter == null || rejectReason == null || rejectReason.isBlank())) {
+            throw new IllegalArgumentException(
+                    "state=rejected（主管未核准）需要退回的主管與退回原因（後端 reject 端點兩者都必填）");
+        }
 
         UUID taskId;
-        if ("pending_review".equals(stateCode)) {
+        if (rejected || "pending_review".equals(stateCode)) {
             taskId = insertTaskAtCreatableState(
                     tenantId, roomId, categoryCode + " 工務單", "repair", "engineering", null, null,
                     "pending_review", "staff");
@@ -761,7 +789,66 @@ public class BackendChannel {
         if ("done".equals(stateCode)) {
             completeRepairTask(taskId, requireAssignee(stateCode, assignee));
         }
+        if (rejected) {
+            rejectRepairTicket(taskId, rejecter, rejectReason);
+        }
         return taskId;
+    }
+
+    /**
+     * 以主管身分走正式退回端點（contracts {@code rejectRepairTicket}）把等主管審核的
+     * 工務單退回：{@code tasks.state} 轉 rejected、{@code repair_tickets.reject_reason}
+     * 落原因。退回只有主管做得到（後端 {@code requireManager}）。
+     */
+    public void rejectRepairTicket(UUID ticketTaskId, CreatedStaff manager, String reason) {
+        postRepairTicketAction(ticketTaskId, "reject", manager, Map.of("reason", reason));
+    }
+
+    /**
+     * 以主管身分把急件降級為一般件（contracts {@code downgradeRepairTicketUrgency}）：
+     * {@code repair_tickets.is_urgent} 轉 false、{@code urgent_downgrade_reason} 落原因，
+     * {@code tasks.urgent} 同步。走正式端點而不是直接 UPDATE，降級事件才會跟著長出來。
+     */
+    public void downgradeRepairTicketUrgency(UUID ticketTaskId, CreatedStaff manager, String note) {
+        postRepairTicketAction(ticketTaskId, "downgrade-urgency", manager, Map.of("note", note));
+    }
+
+    /** 以某人身分對工務單執行一個 REST 動作（reject／downgrade-urgency／…），帶 JSON body。 */
+    private void postRepairTicketAction(
+            UUID ticketTaskId, String action, CreatedStaff actor, Map<String, Object> body) {
+        String path = "/repair-tickets/" + ticketTaskId + "/" + action;
+        HttpResponse<String> response = send(request("POST", path, jwt(actor))
+                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("fixture 工務單動作失敗：POST " + path + " -> HTTP "
+                    + response.statusCode() + "，body=" + response.body());
+        }
+    }
+
+    /**
+     * 寫一筆「今天入住」的訂房快取列（{@code reservations_cache}，欄位對照 tms
+     * {@code ReservationFixtures}）。急件判定只看這張表：後端
+     * {@code RepairService.judgeUrgent} 查同房今天的未作廢訂單，命中就判急件、
+     * 理由組成 {@code (VIP · )HH:mm 入住}。
+     *
+     * @param vip {@code attrs.vip}；判定理由的「VIP · 」前綴由它決定
+     */
+    public void insertTodayReservation(String roomNo, String checkinHhmm, boolean vip) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        LocalDate today = LocalDate.now();
+        OffsetDateTime checkinAt = OffsetDateTime.of(
+                today, LocalTime.parse(checkinHhmm), OffsetDateTime.now().getOffset());
+        execute("""
+                INSERT INTO reservations_cache
+                    (id, tenant_id, reservation_ref, room_id, guest_name, lang, attrs,
+                     checkin_at, checkout_at, source, synced_at, superseded_at)
+                VALUES (?, ?, ?, ?, NULL, NULL, ?::jsonb, ?, ?, 'excel', ?, NULL)
+                """, UUID.randomUUID(), tenantId, "excel:" + today + ":" + roomNo, roomId,
+                vip ? "{\"vip\": true}" : "{}", checkinAt, checkinAt.plusDays(1).withHour(11),
+                OffsetDateTime.now());
     }
 
     /**
