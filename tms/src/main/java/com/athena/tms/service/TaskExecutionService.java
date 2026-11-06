@@ -709,14 +709,17 @@ public class TaskExecutionService {
         detail.put("eventSeq", row.get("event_seq"));
         detail.put("assigneeId", row.get("assignee_id") == null ? null : String.valueOf(row.get("assignee_id")));
         detail.put("title", row.get("title"));
+        detail.put("estMin", row.get("est_min"));
         detail.put("redoCount", row.get("redo_count"));
         detail.put("inspection", row.get("inspection"));
+        detail.put("inspectionWaived", row.get("inspection_waived"));
         detail.put("roomNo", row.get("room_no"));
         detail.put("holdReason", row.get("hold_reason"));
         detail.put("deferredBySelf", row.get("deferred_by_self"));
         detail.put("elapsedMinutes", minutes);
         detail.put("accumulatedMinutes", minutes);
         detail.put("checkedSopItems", checkedSopItemIds(row));
+        detail.put("skippedSopItems", skippedSopItemIds(row));
         detail.put("handovers", handoverService.handoversOf(row));
         detail.put("returnInfo", handoverService.returnInfoOf(row));
         detail.put("handoverRead", handoverService.isRead(
@@ -738,6 +741,22 @@ public class TaskExecutionService {
                   FROM task_sop_checks c
                   JOIN sop_items s ON s.tenant_id = c.tenant_id AND s.item_key = c.item_key
                  WHERE c.tenant_id = ? AND c.task_id = ? AND c.checked
+                """,
+                UUID.class, row.get("tenant_id"), row.get("id"));
+    }
+
+    /**
+     * TaskDetail 的 skippedSopItems：被跳過的 SOP 項對應的 sop_items.id。形狀與
+     * checkedSopItems 相同，差別只在讀的是勾記列的 skipped 旗標；同樣要 join 回
+     * sop_items 把 item_key 快照還原成 id。
+     */
+    private List<UUID> skippedSopItemIds(Map<String, Object> row) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT s.id
+                  FROM task_sop_checks c
+                  JOIN sop_items s ON s.tenant_id = c.tenant_id AND s.item_key = c.item_key
+                 WHERE c.tenant_id = ? AND c.task_id = ? AND c.skipped
                 """,
                 UUID.class, row.get("tenant_id"), row.get("id"));
     }

@@ -1065,7 +1065,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 30 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
+以下 31 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1152,7 +1152,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 不做：**不動三個既有計數欄位**的計算；不收 `pool`／`pending_review`／`rejected`／`cancelled` 的單；非工務部門呼叫者 `engineeringSummary` 仍為 null，不因為這個陣列改變部門分流。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 工務單` 的 `工務視角.feature` 由 5/13 往 12/13 走（最後 1 個是缺口 #11，不在本輪）。缺口 #10 標示解除。
 
-- [ ] T343 `TaskDetail` 補 `estMin`／`skippedSopItems`／`inspectionWaived`（解除缺口 #17）
+- [X] T343 `TaskDetail` 補 `estMin`／`skippedSopItems`／`inspectionWaived`（解除缺口 #17）
   - 契約落點：`specs/truth/contracts/components/schemas/任務.yaml` -> `TaskDetail` 的 `skippedSopItems`（:328-332）與以 `allOf` 併入 `tasks` 的 `estMin`（:42）、`inspectionWaived`（:83）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列。
   - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `toDetail`（:584-607）逐欄組裝處，比照既有 `checkedSopItems`（:600，由 `checkedSopItemIds` 還原 `sop_items.id`）補一個 `skippedSopItemIds`——資料來源是 `task_sop_checks.skipped = true`（既有欄位，見 `kb/KbSuggestionService.java:44-50` 的同款查法）。
   - 只做：補這三欄，`estMin`／`inspectionWaived` 直接取自 `taskRowLookup` 回來的資料列（若查詢沒選到這兩欄就把欄位補進查詢），`skippedSopItems` 與 `checkedSopItems` 同形狀（`sop_items.id` 的陣列）。
@@ -1266,3 +1266,5 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 
 29. **`EngineeringTicket.ticketNo` 必填，但 repair 類任務不保證有 `repair_tickets` 列（T342 實作時發現，2026-11-06）**：契約把 `ticketNo` 列為必填，實作時發現 `AutomationRuleService` 的排程規則可以建出 `type='repair'` 卻沒有對應工務單的任務。T342 為了保住契約的「`tickets` 筆數＝`openCount`＋`completedToday`」不變量，改用 LEFT JOIN 收全部 repair 任務，該邊角情形 `ticketNo` 會是 null。兩條路擇一，請上游定：`/api-plan` 把 `ticketNo` 改 nullable，或 `/data-plan` 保證 repair 任務必有工務單。
 30. **`isUrgent` 的權威欄位沒寫明（T342 實作時發現，2026-11-06）**：`EngineeringTicket.isUrgent` 契約說口徑同 `RepairTicketSummary.isUrgent`（＝`repair_tickets.is_urgent`），但既有 `engineeringSummary.urgentCount` 用的是 `tasks.urgent`。目前兩欄由急件降級路徑同步寫入所以結果一致，但這是靠寫入端維持的隱含約定，契約沒寫明哪一欄是權威。回交 `/api-plan` 寫明，否則日後任一條寫入路徑漏寫就會讓清單與計數對不上。
+
+31. **`TaskDetail.estMin` 的 nullable 標註與資料庫不一致（T343 實作時發現，2026-11-06）**：`tasks.est_min` 在 `V1__schema.sql:215` 可為 null，但契約 `任務.yaml` 的 `estMin` 沒標 nullable。App 的「超時 N 分」與慶祝頁「預估 N 分」都要拿這個值算，若實際可能是 null，App 需要知道該怎麼呈現（不顯示？顯示 —？）。與缺口 #29 同一類（契約的必填／nullable 標註與資料側對不上），一併回交 `/api-plan` 校對。
