@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/connection_status.dart';
 import '../../core/navigation.dart';
-import '../../core/test_backdoor.dart';
 import '../../core/tms_semantics.dart';
 import '../login/login_screen.dart';
 
@@ -12,9 +12,8 @@ import '../login/login_screen.dart';
 ///
 /// 登出的兩個攔阻（dsl.md「App 顯示登出被攔住」）：
 ///
-/// 1. **離線**：離線狀態以 [TestHooks.forceOffline]（`/offline` 後門注入）
-///    為準，規格明訂不另做網路偵測。離線時登出會讓本機憑證被丟掉而後端
-///    無從得知，先攔住。
+/// 1. **離線**：離線狀態讀全 App 共用的 [ConnectionStatus]。離線時登出會讓
+///    本機憑證被丟掉而後端無從得知，先攔住。
 /// 2. **名下有進行中的任務**：以後端回應為準——用 `GET /me/today` 判斷
 ///    還有沒有未完成的打掃單（`cleaningDone < cleaningTotal`）或剩餘工時
 ///    （`remainingMinutes > 0`）。後端沒有「我的進行中任務清單」端點，
@@ -23,7 +22,7 @@ class MeScreen extends StatelessWidget {
   const MeScreen({super.key});
 
   Future<void> _attemptLogout(BuildContext context) async {
-    if (TestHooks.instance.forceOffline.value) {
+    if (ConnectionStatus.instance.isOffline) {
       _showBlockedAlert(context, '目前離線，連線後才能登出');
       return;
     }

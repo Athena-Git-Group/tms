@@ -3,8 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../core/api_client.dart';
-import '../../core/system_status.dart';
-import '../../core/test_backdoor.dart';
+import '../../core/connection_status.dart';
 
 /// 今日進度的共用取用路徑：房務首頁與工務首頁的數字都從這一份 `GET /me/today`
 /// 的回應來。
@@ -46,13 +45,13 @@ class _MyTodayScopeState extends State<MyTodayScope> {
   void initState() {
     super.initState();
     _load();
-    TestHooks.instance.flakyConnection.addListener(_syncPolling);
+    ConnectionStatus.instance.unstable.addListener(_syncPolling);
     _syncPolling();
   }
 
   @override
   void dispose() {
-    TestHooks.instance.flakyConnection.removeListener(_syncPolling);
+    ConnectionStatus.instance.unstable.removeListener(_syncPolling);
     _pollTimer?.cancel();
     super.dispose();
   }
@@ -63,7 +62,7 @@ class _MyTodayScopeState extends State<MyTodayScope> {
   /// 多耗電、後端多收一批沒有必要的查詢。
   void _syncPolling() {
     _pollTimer?.cancel();
-    if (!TestHooks.instance.flakyConnection.value) {
+    if (!ConnectionStatus.instance.isUnstable) {
       _pollTimer = null;
       return;
     }

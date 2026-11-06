@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
-import 'offline_queue.dart';
-import 'test_backdoor.dart';
+import 'connection_status.dart';
 import 'tms_semantics.dart';
 
 /// 離線時唯一還能做的事是把手上進行中的那間房做完，其餘動作被擋下來時都用
@@ -14,14 +13,10 @@ const String offlineOnlyCompleteMessage = '目前離線，只能完成進行中�
 /// 離線完成任務或離線開立工務單之後，畫面用這一句告訴員工東西還在手機上。
 const String pendingSyncMessage = '已離線暫存，連線後自動同步';
 
-/// 連線不穩定時畫面頂部那一列的文字。
-const String connectionIssueMessage = '資料可能延遲，每 5 秒自動更新';
-
-/// 即時推送不可靠時改用輪詢，這是兩次查詢之間相隔的時間。
-///
-/// 畫面上的那一列把這個秒數寫給員工看，所以兩邊要同一個值；各寫各的會讓
-/// 畫面承諾 5 秒、實際上卻是別的間隔。
-const Duration degradedPollInterval = Duration(seconds: 5);
+/// 連線不穩定時畫面頂部那一列的文字。秒數直接取自降級輪詢的間隔，畫面承諾
+/// 的時間就不會跟實際重查的時間各走各的。
+final String connectionIssueMessage =
+    '資料可能延遲，每 ${degradedPollInterval.inSeconds} 秒自動更新';
 
 /// 畫面頂部的連線狀態列，離線與連線不穩定兩種情況各顯示一列。
 ///
@@ -36,21 +31,21 @@ class SystemStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
-      valueListenable: TestHooks.instance.forceOffline,
+      valueListenable: ConnectionStatus.instance.offline,
       builder: (context, offline, _) {
         if (offline) {
           return const _OfflineBar();
         }
         return ValueListenableBuilder<bool>(
-          valueListenable: TestHooks.instance.flakyConnection,
-          builder: (context, flaky, _) {
-            if (!flaky) {
+          valueListenable: ConnectionStatus.instance.unstable,
+          builder: (context, unstable, _) {
+            if (!unstable) {
               return const SizedBox.shrink();
             }
-            return const _StatusStrip(
+            return _StatusStrip(
               id: 'system.connection-issue-bar',
               text: connectionIssueMessage,
-              tint: Color(0xFFFFF3CD),
+              tint: const Color(0xFFFFF3CD),
             );
           },
         );
@@ -69,7 +64,7 @@ class _OfflineBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
-      valueListenable: OfflineQueue.instance.pendingCount,
+      valueListenable: ConnectionStatus.instance.pendingSyncCount,
       builder: (context, pendingCount, _) {
         return Container(
           width: double.infinity,
@@ -121,7 +116,7 @@ class _StatusStrip extends StatelessWidget {
 
 /// 離線時員工點了不能做的動作，用這個提示告訴他為什麼沒有反應。
 ///
-/// 呼叫端必須在呼叫後端之前就先問 [OfflineQueue.isOffline] 並改走這裡，不要
+/// 呼叫端必須在呼叫後端之前就先問 [ConnectionStatus.isOffline] 並改走這裡，不要
 /// 讓請求送出去再靠失敗回應補救：離線時那個請求根本到不了後端，員工只會看到
 /// 轉圈到逾時。
 Future<void> showOfflineBlockedAlert(BuildContext context) {

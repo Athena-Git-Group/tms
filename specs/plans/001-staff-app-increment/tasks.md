@@ -1043,7 +1043,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature`
 
 - [X] T336 [BDD-GREEN] 讓 Test Scope 全綠（7 個場景）
-- [ ] T337 [BDD-REFACTOR] 在綠燈下把離線佇列、離線列、連線異常列收斂成單一連線狀態來源，供全部畫面共用
+- [X] T337 [BDD-REFACTOR] 在綠燈下把離線佇列、離線列、連線異常列收斂成單一連線狀態來源，供全部畫面共用
 
 ## Phase 4: 整合驗收（ios-app 全量）
 

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
-import 'offline_queue.dart';
+import 'connection_status.dart';
 
 /// App 跑在自動化測試底下時，讓測試腳本能從外部操控裝置狀態（例如把裝置時間
 /// 改到某個時間點、強迫斷網、讓某一次照片上傳失敗），好驗證離線、逾時、重試
@@ -20,9 +20,11 @@ import 'offline_queue.dart';
 /// 向真後端取——測試腳本要準備資料，走後端的測試資料端點，不再從這裡灌
 /// fixture 進畫面。
 ///
-/// 送進來的開關存在 [TestHooks] 這個 singleton 裡。有些開關 App 已經在讀
-/// （離線、連線不穩、記住帳號），有些還沒有畫面在用（裝置時間、上傳失敗），
-/// 等對應功能開發到需要被測試控制時再接上。
+/// 離線與連線不穩兩個開關不存在這裡：它們寫進 [ConnectionStatus]，也就是全
+/// App 唯一的連線狀態來源。注入端與讀取端分開，畫面才不必為了問「現在是不是
+/// 離線」而認識測試後門，將來換成真實的網路偵測也只是換掉寫入的那一端。
+/// 其餘開關存在 [TestHooks] 這個 singleton 裡；其中裝置時間與上傳失敗還沒有
+/// 畫面在讀，等對應功能開發到需要被測試控制時再接上。
 class TestHooks {
   TestHooks._();
 
@@ -30,14 +32,6 @@ class TestHooks {
 
   /// 測試腳本要求裝置採用的時間（ISO 格式字串）；App 尚未讀取這個值。
   String? injectedClockIso;
-
-  /// 測試腳本要求裝置視為離線。離線攔阻、離線列與離線佇列都讀這個值判斷
-  /// 離線（依規格，離線判定以這個注入開關為準，App 不另做網路偵測）。
-  ///
-  /// 寫成可監聽的值而不是單純的 bool：離線列要跟著它即時出現與消失，離線
-  /// 佇列也要在它由 true 轉回 false 的那一刻自動把待同步的動作送出去。用
-  /// 普通欄位的話，畫面只會在下一次自己重畫時才發現狀態變了。
-  final ValueNotifier<bool> forceOffline = ValueNotifier<bool>(false);
 
   /// 測試腳本要求第幾張照片（從 1 算起）上傳失敗；App 尚未讀取這個值。
   int? uploadFailAtIndex;
@@ -49,18 +43,12 @@ class TestHooks {
   final ValueNotifier<RememberedAccount?> rememberedAccount =
       ValueNotifier<RememberedAccount?>(null);
 
-  /// 測試腳本要求把即時連線切成異常態（裝置仍連網，但即時推送不可靠）。
-  /// 連線異常列與「每 5 秒重新查一次」的降級輪詢讀這個值；與
-  /// [forceOffline] 同樣寫成可監聽的值，理由相同。
-  final ValueNotifier<bool> flakyConnection = ValueNotifier<bool>(false);
-
   /// 測試之間重置狀態，避免前一個測試設定的開關漏到下一個測試。
   void reset() {
     injectedClockIso = null;
-    forceOffline.value = false;
     uploadFailAtIndex = null;
     rememberedAccount.value = null;
-    flakyConnection.value = false;
+    ConnectionStatus.instance.reset();
   }
 }
 
@@ -120,11 +108,11 @@ class TestBackdoor {
           request.response.write(jsonEncode({
             'processStartedAt': _processStartedAt.toIso8601String(),
             'injectedClockIso': TestHooks.instance.injectedClockIso,
-            'forceOffline': TestHooks.instance.forceOffline.value,
+            'forceOffline': ConnectionStatus.instance.isOffline,
             'uploadFailAtIndex': TestHooks.instance.uploadFailAtIndex,
             'rememberedAccount': TestHooks.instance.rememberedAccount.value?.loginId,
-            'flakyConnection': TestHooks.instance.flakyConnection.value,
-            'pendingSyncCount': OfflineQueue.instance.pendingCount.value,
+            'flakyConnection': ConnectionStatus.instance.isUnstable,
+            'pendingSyncCount': ConnectionStatus.instance.pendingSyncCount.value,
           }));
           await request.response.close();
           break;
@@ -133,7 +121,8 @@ class TestBackdoor {
           _respondOk(request);
           break;
         case 'POST /offline':
-          TestHooks.instance.forceOffline.value = payload['offline'] as bool? ?? false;
+          ConnectionStatus.instance
+              .setOffline(payload['offline'] as bool? ?? false);
           _respondOk(request);
           break;
         case 'POST /upload-fail':
@@ -170,7 +159,8 @@ class TestBackdoor {
           _respondOk(request);
           break;
         case 'POST /flaky-connection':
-          TestHooks.instance.flakyConnection.value = payload['flaky'] as bool? ?? false;
+          ConnectionStatus.instance
+              .setUnstable(payload['flaky'] as bool? ?? false);
           _respondOk(request);
           break;
         default:

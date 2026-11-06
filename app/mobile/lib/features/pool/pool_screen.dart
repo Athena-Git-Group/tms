@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
-import '../../core/offline_queue.dart';
+import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../task/task_screen.dart';
@@ -70,7 +70,7 @@ class _PoolScreenState extends State<PoolScreen> {
   /// 決定。離線時先讓畫面當作接到了，等連線恢復才發現單早被別人接走，員工
   /// 會白跑一趟。
   Future<void> _claim(PoolItem item) async {
-    if (OfflineQueue.instance.isOffline) {
+    if (ConnectionStatus.instance.isOffline) {
       await showOfflineBlockedAlert(context);
       return;
     }

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
-import '../../core/offline_queue.dart';
+import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 
@@ -136,7 +136,7 @@ class _HoldSheetState extends State<HoldSheet> {
     // 離線時延後與中斷都擋在這裡，不送請求。這兩個動作會把單子留在手機以外
     // 的地方等別人接手，後端不知情的話，主管與同仁看到的仍然是一筆沒人動過
     // 的任務。
-    if (OfflineQueue.instance.isOffline) {
+    if (ConnectionStatus.instance.isOffline) {
       await showOfflineBlockedAlert(context);
       return;
     }

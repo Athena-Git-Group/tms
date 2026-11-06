@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
-import '../../core/offline_queue.dart';
+import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../celebrate/celebrate_screen.dart';
@@ -136,7 +136,7 @@ class _TaskScreenState extends State<TaskScreen> {
   Future<void> _start(TaskDetail task) async {
     // 離線時開工一律擋在這裡，不送請求：開工要由後端判定「一次只做一間」，
     // 離線時沒有人能做這個判定，先放行會讓同一位員工手上出現兩筆進行中。
-    if (OfflineQueue.instance.isOffline) {
+    if (ConnectionStatus.instance.isOffline) {
       await showOfflineBlockedAlert(context);
       return;
     }
@@ -408,7 +408,7 @@ class _TaskScreenState extends State<TaskScreen> {
           TmsSemantics(
             id: 'task.repair-button',
             child: CupertinoButton(
-              onPressed: () => OfflineQueue.instance.isOffline
+              onPressed: () => ConnectionStatus.instance.isOffline
                   ? showOfflineBlockedAlert(context)
                   : RepairSheet.show(context),
               child: const Text('報修'),
