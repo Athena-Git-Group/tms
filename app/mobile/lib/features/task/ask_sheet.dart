@@ -244,7 +244,7 @@ class _SourceCard extends StatelessWidget {
     );
     return TaskCallout(
       id: 'ask.answer.source-card.$index',
-      tint: calloutQuoteTint,
+      tint: calloutSourceTint,
       explicitChildNodes: true,
       children: [
         Row(

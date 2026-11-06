@@ -1,19 +1,31 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 
-/// 要員工先讀一段交代、再往下做事的區塊用這個底色（淡黃）。
-const Color calloutNoticeTint = Color(0xFFFFF7E0);
+/// 要員工先讀一段交代、再往下做事的區塊用這個底色（注意語氣，橘淡底）。
+const Color calloutNoticeTint = TmsColors.brandAccentContainer;
 
-/// 有東西被判定不合格、得重做的區塊用這個底色（淡紅）。
-const Color calloutAlertTint = Color(0xFFFDECEC);
+/// 有東西被判定不合格、得重做的區塊用這個底色（錯誤語氣，紅淡底）。
+const Color calloutAlertTint = TmsColors.errorContainer;
 
-/// 擋路的事情已經排除、可以繼續做下去的區塊用這個底色（淡綠）。
-const Color calloutClearedTint = Color(0xFFE6F7EC);
+/// 擋路的事情已經排除、可以繼續做下去的區塊用這個底色（成功語氣，綠淡底）。
+const Color calloutClearedTint = TmsColors.successContainer;
 
-/// 原樣引用既有記錄、沒有要員工做任何事的區塊用這個底色（中性灰）。
-const Color calloutQuoteTint = Color(0xFFF2F2F7);
+/// 純粹說明一件事、沒有好壞之分的區塊用這個底色（資訊語氣，主色淡底）。
+const Color calloutInfoTint = TmsColors.brandContainer;
+
+/// 狀態本身不帶語氣、只是陳述目前情況的區塊用這個底色（中性灰）。
+const Color calloutNeutralTint = TmsColors.neutralContainer;
+
+/// 原樣引用既有記錄、要員工照著做的交辦引言用白底，靠左側色條而不是底色來
+/// 標示它是一塊獨立的東西。
+const Color calloutQuoteTint = TmsColors.cardBackground;
+
+/// 「查一下」回答下方的出處卡用這個底色：它不是在對員工說話，只是把答案的來
+/// 源原樣貼出來，所以用畫面背景色往後退一層，不跟上面的回答搶。
+const Color calloutSourceTint = TmsColors.groupedBackground;
 
 /// 任務頁與它開出來的面板共用的資訊方塊：整頁寬、有底色的圓角方塊，內容由上
 /// 而下靠左排。
@@ -21,7 +33,7 @@ const Color calloutQuoteTint = Color(0xFFF2F2F7);
 /// 任務相關畫面上要獨立框起來的幾件事——交辦、查房退回資訊、工務完修後可以
 /// 恢復原任務、查一下的出處卡——都用這個方塊呈現。呼叫端只決定底色、
 /// accessibility id 與裡面放哪些內容，寬度、圓角與內距由方塊自己統一，所以各
-/// 區塊看起來是同一種東西。底色是這塊要員工做什麼的唯一線索，意義見上面四個
+/// 區塊看起來是同一種東西。底色是這塊要員工做什麼的唯一線索，意義見上面幾個
 /// 底色常數。
 ///
 /// 方塊不管自己與頁面其他元素之間的上下間距，呼叫端要自己包一層 `Padding`。
@@ -54,10 +66,14 @@ class TaskCallout extends StatelessWidget {
       explicitChildNodes: explicitChildNodes,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(12),
+        constraints: const BoxConstraints(minHeight: TmsSize.rowMinHeight),
+        padding: const EdgeInsets.symmetric(
+          vertical: TmsSpacing.md,
+          horizontal: TmsSpacing.lg,
+        ),
         decoration: BoxDecoration(
           color: tint,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(TmsRadius.card),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,16 +143,16 @@ class HandoverCallout extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('交辦'),
+            const Text('交辦', style: TmsText.headline),
             if (!read) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: TmsSpacing.xs2),
               TmsSemantics(
                 id: 'task.handover.unread-dot',
                 child: Container(
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: Color(0xFFD9342B),
+                    color: TmsColors.systemRed,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -146,7 +162,9 @@ class HandoverCallout extends StatelessWidget {
         ),
         for (var i = 0; i < entries.length; i++)
           Padding(
-            padding: EdgeInsets.only(top: i == 0 ? 8 : 12),
+            padding: EdgeInsets.only(
+              top: i == 0 ? TmsSpacing.sm : TmsSpacing.md,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -154,13 +172,13 @@ class HandoverCallout extends StatelessWidget {
                   id: 'task.handover.$i.meta',
                   child: Text(
                     _metaLine(entries[i]),
-                    style: const TextStyle(fontSize: 13),
+                    style: TmsText.footnote,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: TmsSpacing.xxs),
                 TmsSemantics(
                   id: 'task.handover.$i.content',
-                  child: Text(entries[i].content),
+                  child: Text(entries[i].content, style: TmsText.body),
                 ),
               ],
             ),
@@ -192,18 +210,21 @@ class ReturnInfoCallout extends StatelessWidget {
           id: 'task.status-row.return-info.title',
           child: Text(
             info.title,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: TmsText.headline,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: TmsSpacing.xs),
         TmsSemantics(
           id: 'task.status-row.return-info.reason',
-          child: Text(info.reason),
+          child: Text(info.reason, style: TmsText.subheadline),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: TmsSpacing.xs),
         const TmsSemantics(
           id: 'task.status-row.return-info.body',
-          child: Text('計時與 SOP 勾記已歸零，請重做不合格的項目後再送出。'),
+          child: Text(
+            '計時與 SOP 勾記已歸零，請重做不合格的項目後再送出。',
+            style: TmsText.subheadline,
+          ),
         ),
       ],
     );
