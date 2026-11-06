@@ -928,7 +928,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 實跑打出兩個 App 側真缺陷：(1) `setState(() => _taskFuture = Future…)` 的箭頭函式把 Future 當回傳值交給 `setState`，Flutter 在 debug 版拒絕這個回呼，送出後畫面一次也不會更新（`_start` 也有同一個寫法，一併改成區塊寫法）；(2) 面板貼在畫面最下緣，鍵盤升起時整個蓋住說明欄與送出鈕，中文說明根本貼不進去。
 - [X] T329 [BDD-REFACTOR] 在綠燈下把延後與中斷兩個面板收斂成同一個元件（差異只在預設原因清單與送出端點）
   - 元件本身 T328 就已收斂成單一 `HoldSheet`＋`HoldSheetMode`，本輪只把散在三處的分支收到同一個地方：新增 `HoldSheetModeCopy` extension，標題、預設原因清單、送出端點各一個 `switch`（`app/mobile/lib/features/task/hold_sheet.dart:22-56`），面板本體不再逐處判斷 mode（`:116` 送出、`:147` 標題、`:121` 選項清單）。順手移除只有自己用的公開靜態 `HoldSheet.presetReasons`。行為零改動。
-  - 驗收：`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4；重構前後三個基準逐場景一致——`任務執行` 模組 `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`（延後與中斷原因面板 9/9 綠，T326 的 12 個場景 3 綠 9 紅，紅的身分與歸因不變）、`推播` 模組 `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`。
+  - 驗收：`flutter analyze` 無 error（既有 `use_null_aware_elements` info 不計，都在 `api_client.dart`）、`flutter test` 4/4；重構前後三個基準逐場景一致——`任務執行` 模組 `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`（延後與中斷原因面板 9/9 綠，T326 的 12 個場景 3 綠 9 紅，紅的身分與歸因不變）、`推播` 模組 `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`。
 
 ## Phase 3U: ADD Feature File - ios-app/今日進度/首頁今日進度.feature
 
@@ -1059,12 +1059,13 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - [X] T339 F3 推播金絲雀回歸
   - 驗收：`app/bdd/run-f3.sh` 回報 12/12 綠（冷啟動／背景／前景三種點開情境），與本輪起點一致。
   - 實跑結果（2026-11-06）：`Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 575.1 s -- in com.athena.app.bdd.RunF3PushFeatureTest`，exit=0。`RunF3PushFeatureTest` 現在選到 `推播/` 底下兩支 feature：金絲雀本身 `點開推播的去處.feature` **12/12 綠**（與本輪起點一致，沒有退化），加上本輪新增的 `通知中心.feature` 6/6 綠。第一次跑是 18 跑 1 紅（`通知中心.feature:59` 全部標為已讀），紅在 `@Given` 的 `ensureLoggedInAs` 等不到 `home.screen`，元素樹顯示 App 還停在登入頁——即 T338 已記錄的「登入等首頁逾時的偶發」，同一支腳本原樣重跑即轉綠，不是本輪改動造成的退化。兩次跑都沒有動到任何 harness 程式碼。
-- [ ] T340 subagent review (phase quality gate)
+- [X] T340 subagent review (phase quality gate)
   - 驗收：T299–T339 全部 `[X]`；`flutter analyze` 在 `app/mobile/` 無 error；本輪沒有改到 `tms/`、`specs/truth/**` 與 T204–T298 的任何內容。有 issues 就修正再 review，直到沒有任何問題。
+  - 結果（2026-11-06）：邊界 PASS（`git diff a5acd95..HEAD --stat -- tms/ specs/truth/` 為空，T204–T298 區段零改動）、`flutter analyze` 0 error、產品碼無 TODO／FIXME／死碼、`app/bdd/` 的 38 處 `PendingException` 全部可歸因（repair 29＝T322 的 18 個場景，taskexecution 9＝SOP／步驟條／缺口 #12／#17），無被遺忘的 pending。未打勾的 T316／T320–T324／T326／T327 皆有現況註記與歸因。首輪 review 提出 3 件文件層級 issue（缺口分類句沒蓋到 #25–#28、`steps/common/package-info.java` 與 `RunF3PushFeatureTest` 的註解寫的是已過時的 pending 現況），已全數修正並重跑 `test-compile` 通過。
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 28 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
+以下 28 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
