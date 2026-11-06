@@ -68,6 +68,17 @@ public class AppiumWorld {
     private static final int BACKDOOR_PORT = 9099;
     private static final Duration BACKDOOR_READY_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration NOTIFICATION_FIND_TIMEOUT = Duration.ofSeconds(4);
+    /**
+     * 掃清單或找元素時最多往下捲幾屏。劇本裡最長的清單（待認領池）也只有個位數筆，
+     * 捲這麼多屏之後還收不到新東西，就是畫面上真的沒有，再捲下去只是把失敗拖慢。
+     */
+    private static final int MAX_LIST_SCROLLS = 6;
+    /**
+     * 等登入後的首頁出現可以等多久。送出帳密到首頁之間隔著一次後端來回，整套 suite
+     * 一起跑時模擬器負載比單跑一個模組高，這段來回偶發會拖到十幾秒；等太短只會把
+     * 機器忙不過來誤報成登入壞掉。
+     */
+    private static final Duration LOGIN_TIMEOUT = Duration.ofSeconds(25);
 
     private final String platform;
     private final String androidAppPackage;
@@ -306,7 +317,7 @@ public class AppiumWorld {
             }
             return;
         }
-        Duration timeout = Duration.ofSeconds(10);
+        Duration timeout = LOGIN_TIMEOUT;
         postBackdoorJson("/remembered-account", "{\"employee\":null}");
         typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
         typeInto("login.password-field", timeout, staff.password());
@@ -510,12 +521,66 @@ public class AppiumWorld {
             throw new UnsupportedOperationException(
                     "findTestIdsWithPrefix()：Android 的 resource-id 前綴掃描本輪未實作。");
         }
+        java.util.LinkedHashSet<String> collected = new java.util.LinkedHashSet<>(visibleTestIdsWithPrefix(prefix));
+        int scrolled = 0;
+        while (scrolled < MAX_LIST_SCROLLS) {
+            if (!scrollList("down")) {
+                break;
+            }
+            scrolled++;
+            int before = collected.size();
+            collected.addAll(visibleTestIdsWithPrefix(prefix));
+            if (collected.size() == before) {
+                break;
+            }
+        }
+        for (int i = 0; i < scrolled; i++) {
+            scrollList("up");
+        }
+        return List.copyOf(collected);
+    }
+
+    /**
+     * 目前這一屏看得到的同前綴元素，由上而下。iOS 把捲出可視範圍的 cell 的矩形收成
+     * 0×0 全部堆在原點，照 y 排會讓它們插到最前面，所以這裡直接略過沒有高度的節點，
+     * 由 {@link #findTestIdsWithPrefix} 捲到它們真的露出來時再收。
+     */
+    private List<String> visibleTestIdsWithPrefix(String prefix) {
         By locator = AppiumBy.iOSNsPredicateString("name BEGINSWITH " + nsPredicateString(prefix));
-        return driver().findElements(locator).stream()
-                .sorted(java.util.Comparator.comparingInt(e -> e.getRect().getY()))
-                .map(e -> e.getAttribute("name"))
-                .filter(java.util.Objects::nonNull)
-                .toList();
+        List<WebElement> found = driver().findElements(locator);
+        List<Map.Entry<Integer, String>> rows = new ArrayList<>();
+        for (WebElement e : found) {
+            try {
+                org.openqa.selenium.Rectangle rect = e.getRect();
+                String name = e.getAttribute("name");
+                if (rect.getHeight() > 0 && name != null) {
+                    rows.add(Map.entry(rect.getY(), name));
+                }
+            } catch (RuntimeException ignored) {
+                // 元素在讀矩形之前就重畫掉了；捲動後的下一輪會再收一次。
+            }
+        }
+        rows.sort(java.util.Comparator.comparingInt(Map.Entry::getKey));
+        return rows.stream().map(Map.Entry::getValue).toList();
+    }
+
+    /**
+     * 把畫面上第一個捲動容器往指定方向捲一屏，回報有沒有真的捲動到。畫面沒有捲動容器、
+     * 或已經捲到底時回 false，呼叫端據此停止，不會空轉到次數上限。
+     */
+    private boolean scrollList(String direction) {
+        List<WebElement> scrollViews = driver().findElements(By.className("XCUIElementTypeScrollView"));
+        if (scrollViews.isEmpty()) {
+            return false;
+        }
+        try {
+            driver().executeScript("mobile: scroll", Map.of(
+                    "element", ((RemoteWebElement) scrollViews.get(0)).getId(),
+                    "direction", direction));
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**
@@ -878,13 +943,42 @@ public class AppiumWorld {
                     .pollingEvery(Duration.ofMillis(200))
                     .ignoring(NoSuchElementException.class);
             return wait.until(d -> d.findElement(byTestId(id)));
-        } catch (RuntimeException e) {
-            try {
-                Files.writeString(Path.of("/tmp/tms-f3-debug-source.xml"), driver().getPageSource(), StandardCharsets.UTF_8);
-            } catch (Exception ignored) {
+        } catch (RuntimeException notOnThisScreenful) {
+            WebElement afterScrolling = scrollUntilVisible(id);
+            if (afterScrolling != null) {
+                return afterScrolling;
             }
-            throw new AssertionError("等不到畫面元素 " + id + "（逾時 " + timeout.getSeconds() + "s）", e);
+            return failWithPageSource(id, timeout, notOnThisScreenful);
         }
+    }
+
+    /**
+     * 往下捲找元素，找到就停在那一屏讓呼叫端接著點它。清單比畫面長時，Flutter 根本
+     * 不會建出看不到的那幾筆，捲到它露出來是唯一能定位的方式——真人也是這樣用的。
+     * 捲到底還是沒有就回 null，由呼叫端當成「畫面上沒有這個元素」。
+     */
+    private WebElement scrollUntilVisible(String id) {
+        for (int i = 0; i < MAX_LIST_SCROLLS; i++) {
+            if (!scrollList("down")) {
+                return null;
+            }
+            List<WebElement> found = driver().findElements(byTestId(id));
+            if (!found.isEmpty()) {
+                return found.get(0);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 定位不到元素時丟出帶現場的斷言錯誤。訊息裡附上元素樹的檔案路徑，看 log 的人不必
+     * 重跑一次就能知道畫面當時停在哪一頁、有哪些元素。
+     */
+    private WebElement failWithPageSource(String id, Duration timeout, RuntimeException cause) {
+        String dump = dumpPageSourceTagged("missing-" + id);
+        throw new AssertionError(
+                "等不到畫面元素 " + id + "（逾時 " + timeout.getSeconds() + "s，含往下捲動尋找）；元素樹 " + dump,
+                cause);
     }
 
     /**
@@ -928,6 +1022,34 @@ public class AppiumWorld {
      *
      * <p>寫檔本身失敗就放著不管：這只是輔助資訊，為了它再丟一個例外會蓋掉真正的失敗原因。
      */
+    /**
+     * 給 stepdef 在組斷言訊息時留下當下的元素樹，檔名帶標籤與時間戳，整輪跑下來多個失敗
+     * 各留各的一份，不會互相覆蓋；回傳的路徑放進斷言訊息，看 log 的人才知道去哪裡翻現場。
+     */
+    public String dumpPageSourceTagged(String tag) {
+        String path = "/tmp/tms-app-bdd-" + tag + "-" + System.currentTimeMillis() + ".xml";
+        dumpPageSource(path);
+        return path;
+    }
+
+    /**
+     * 掃出某個前綴的元素，連同它們在畫面上的矩形一起回傳。列表類斷言只比對 id 的順序，
+     * 順序不符時分不出是 App 真的排錯、還是有元素被擠出可視範圍而讀不到正確位置；帶著
+     * 矩形才看得出是哪一種。
+     */
+    public List<String> describeTestIdsWithPrefix(String prefix) {
+        By locator = AppiumBy.iOSNsPredicateString("name BEGINSWITH " + nsPredicateString(prefix));
+        List<String> described = new ArrayList<>();
+        for (WebElement e : driver().findElements(locator)) {
+            try {
+                described.add(e.getAttribute("name") + "@" + e.getRect());
+            } catch (RuntimeException ignored) {
+                // 元素在讀矩形之前就消失了；診斷訊息少一列不影響真正的失敗原因。
+            }
+        }
+        return described;
+    }
+
     private void dumpPageSource(String path) {
         try {
             Files.writeString(Path.of(path), driver().getPageSource(), StandardCharsets.UTF_8);

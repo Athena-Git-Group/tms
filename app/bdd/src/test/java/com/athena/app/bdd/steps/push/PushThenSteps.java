@@ -21,7 +21,12 @@ import java.util.regex.Pattern;
 /** 推播模組的 Then。 */
 public class PushThenSteps {
 
-    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(6);
+    /**
+     * 點開推播之後等目的地畫面出現可以等多久。點推播到畫面定住中間有導頁轉場加一次
+     * 後端來回，整套 suite 一起跑時模擬器負載高，這段偶發會拖到十秒以上；等太短會把
+     * 機器忙不過來誤報成推播導錯地方。
+     */
+    private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(20);
 
     private static final Pattern POOL_HIGHLIGHTED = Pattern.compile("^待認領，(\\d+) 標亮$");
     private static final Pattern TASK_SCREEN = Pattern.compile("^(\\d+) 的任務頁$");

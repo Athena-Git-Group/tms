@@ -83,7 +83,9 @@ public class PoolThenSteps {
 
         List<String> screenOrder = cardKeysOnScreen();
         if (!expected.equals(screenOrder)) {
-            throw new AssertionError("畫面單卡順序不符：預期 " + expected + "，實際 " + screenOrder);
+            throw new AssertionError("畫面單卡順序不符：預期 " + expected + "，實際 " + screenOrder
+                    + "；單卡矩形 " + world.describeTestIdsWithPrefix(CARD_PREFIX)
+                    + "；元素樹 " + world.dumpPageSourceTagged("pool-order"));
         }
     }
 
