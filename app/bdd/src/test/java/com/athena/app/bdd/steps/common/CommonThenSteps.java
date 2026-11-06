@@ -61,12 +61,30 @@ public class CommonThenSteps {
     public void taskDisplayedAs(String task, String state) {
         assertBackendState(task, state);
 
+        returnToTaskDetailFromCelebration(task);
         world.waitForTestId("task.status-chip", SCREEN_TIMEOUT);
         String actual = world.waitForLabelOf("task.status-chip", state, SCREEN_TIMEOUT);
         if (!state.equals(actual)) {
             throw new AssertionError(
                     "「" + task + "」的狀態 chip 不符：預期「" + state + "」，實際「" + actual + "」");
         }
+    }
+
+    /**
+     * 打掃類任務完成之後，App 會把員工帶到完成慶祝頁，狀態 chip 不在那一頁上。
+     * 這時照員工自己的動線走回任務頁：按「回到首頁」，再從首頁點那一間的任務卡。
+     *
+     * <p>不在慶祝頁上時什麼都不做。改成在慶祝頁上也露出狀態 chip 是另一種解法，
+     * 但那會讓這個斷言在員工根本看不到 chip 的畫面上通過。
+     */
+    private void returnToTaskDetailFromCelebration(String task) {
+        if (world.driver().findElements(world.byTestId("celebrate.screen")).isEmpty()) {
+            return;
+        }
+        world.tapTestId("celebrate.back-home-button", SCREEN_TIMEOUT);
+        world.waitForTestId("home.screen", SCREEN_TIMEOUT);
+        world.tapTestId("home.task." + task + ".card", SCREEN_TIMEOUT);
+        world.waitForTestId("task.screen", SCREEN_TIMEOUT);
     }
 
     /** 權威半邊：{@code tasks.state}（必要時加上 inspection／type）符合狀態用語對照。 */

@@ -573,6 +573,42 @@ public class BackendChannel {
         }
     }
 
+    /**
+     * 確保這個租戶的打掃 SOP 項裡有這個名稱的項目，回傳它的 {@code sop_items.id}。
+     *
+     * <p>每個場景開場會 TRUNCATE 全部業務表（{@link #resetBusinessData}），
+     * {@code sop_items} 也在其中，所以場景點名的 SOP 項要在這裡現場補一筆。
+     * 權威來源仍然是 {@code sop_items}：App 的 SOP 清單與後端的勾記都認它。
+     */
+    public UUID ensureCleaningSopItemId(String label) {
+        long tenantId = ensureTenant();
+        ensureCleaningSopItem(tenantId, label);
+        return (UUID) queryScalar(
+                "SELECT id FROM sop_items WHERE tenant_id = ? AND applies_to = 'cleaning' AND label = ?",
+                tenantId, label)
+                .orElseThrow(() -> new IllegalStateException("補不出打掃 SOP 項：" + label));
+    }
+
+    /**
+     * 寫一筆租戶設定。值以 JSON 落地，讀的那一邊（產品碼）一律當文字比對。
+     *
+     * <p>設定沒有員工視角的端點可走，後台設定端點要先造一位主管帳號，那會讓
+     * 「這個租戶有誰」這件事跟著場景變動，所以這裡直接落地設定列。
+     */
+    public void setTenantConfig(long tenantId, String key, Object value) {
+        execute("""
+                INSERT INTO tenant_config (tenant_id, key, value, updated_at)
+                VALUES (?, ?, ?::jsonb, ?)
+                ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value,
+                                                           updated_at = EXCLUDED.updated_at
+                """, tenantId, key, toJson(value), OffsetDateTime.now());
+    }
+
+    /** 刪掉一筆租戶設定，讓這個鍵回到「沒有設定」的預設行為。 */
+    public void clearTenantConfig(long tenantId, String key) {
+        execute("DELETE FROM tenant_config WHERE tenant_id = ? AND key = ?", tenantId, key);
+    }
+
     private String ensureCleaningSopItem(long tenantId, String label) {
         Optional<Object> existing = queryScalar(
                 "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'cleaning' AND label = ?",
@@ -688,11 +724,18 @@ public class BackendChannel {
                 // 落成 inspected／waived，不需要也不可以補寫 inspection = 'passed'。
                 postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
                 if (inspectionWaived) {
-                    execute("UPDATE tasks SET inspection_waived = true WHERE tenant_id = ? AND id = ?",
-                            tenantId, taskId);
+                    // 免查房是租戶層的開關，產品碼在開工那一步讀它、把結果寫進這張單的
+                    // inspection_waived。先把開關打開再開工，完成那一步才會落成
+                    // inspected／waived。直接改這張單的欄位沒有用：開工會依開關覆寫它。
+                    setTenantConfig(tenantId, "inspection_waived_enabled", true);
                 }
                 postTaskAction(taskId, "start", assignee);
                 postTaskAction(taskId, "complete", assignee);
+                if (inspectionWaived) {
+                    // 開關只負責把這張單帶到免查房，之後同一個場景裡建的其他單不該跟著
+                    // 免查，所以用完就收回。
+                    clearTenantConfig(tenantId, "inspection_waived_enabled");
+                }
                 if (!inspectionWaived) {
                     execute("UPDATE tasks SET state = 'inspected', inspection = 'passed'"
                             + " WHERE tenant_id = ? AND id = ?", tenantId, taskId);

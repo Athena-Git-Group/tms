@@ -124,6 +124,12 @@ public class AppiumWorld {
      */
     private BackendChannel.CreatedStaff loggedInStaff;
 
+    /**
+     * App 目前打開的是哪一間房的任務頁；還沒打開過任何一張任務頁時為 null。
+     * 讀法與用途見 {@link #currentTaskRoomNo()}。
+     */
+    private String currentTaskRoomNo;
+
     private static volatile AppiumDriver driver;
     private static volatile boolean shutdownHookRegistered;
 
@@ -259,6 +265,7 @@ public class AppiumWorld {
         lastPushTitle = null;
         notificationViewer = null;
         loggedInStaff = null;
+        currentTaskRoomNo = null;
         // 真後端的資料在情境之間會留下來（不像以前的記憶體 fixture 隨 App process 消失），
         // 不清掉會讓上一個情境的任務繼續出現在待認領池；清法與 tms 的 ResetHooks 相同。
         backend.resetBusinessData();
@@ -379,6 +386,7 @@ public class AppiumWorld {
      */
     public void ensureOnTaskDetail(BackendChannel.CreatedStaff staff, String roomNo) {
         ensureLoggedInAs(staff);
+        currentTaskRoomNo = roomNo;
         Duration timeout = Duration.ofSeconds(10);
         if (driver().findElements(byTestId("task.screen")).isEmpty()
                 || driver().findElements(
@@ -414,30 +422,21 @@ public class AppiumWorld {
      * 把「進行中」這個起始狀態補齊：在任務頁按一次「開始」，讓後端自己把任務轉成
      * {@code doing}。
      *
-     * <p>情境要求的起始狀態是進行中，但首頁的任務清單只列得出待開始的單
-     * （上游缺口 #12：{@code GET /me/today} 的 {@code nextTasks} 只收 {@code accepted}），
-     * 直接把任務種成進行中的話，App 端連進任務頁的入口都沒有。所以 {@link #seedTasks}
-     * 改種成待開始，真正的開工交給這裡用 App 的主按鈕完成——按鈕打的是正式的開工
-     * 端點，後端落地的狀態與事件和員工自己操作完全一樣，不是繞過產品碼改資料庫。
+     * <p>{@link #seedTasks} 把這種任務先種成待開始，真正的開工交給這裡用 App 的主按鈕
+     * 完成。按鈕打的是正式的開工端點，後端落地的狀態與事件和員工自己操作完全一樣。
      *
      * <p>按完要等後端真的翻成 {@code doing} 才往下走。開工是一次 HTTP 來回，畫面先
      * 回應、後端稍後才落地的話，接著的中斷操作會打在還是待開始的任務上，被後端以
      * 狀態不符擋掉。
      */
     private void startInAppIfPending(String roomNo, Duration timeout) {
-        DeferredStart deferred = roomsToStartInApp.remove(roomNo);
-        if (deferred == null) {
+        if (roomsToStartInApp.remove(roomNo) == null) {
             return;
         }
-        int workedMinutes = deferred.workedMinutes();
         tapTestId("task.primary-button", timeout);
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             if ("doing".equals(String.valueOf(taskRowByRoomNo(roomNo).get("state")))) {
-                if (workedMinutes > 0) {
-                    backend.backdateWorkStart(
-                            (UUID) taskRowByRoomNo(roomNo).get("id"), workedMinutes);
-                }
                 return;
             }
             sleep(200);
@@ -459,8 +458,8 @@ public class AppiumWorld {
         }
     }
 
-    /** 欠一次「在 App 按開始」的那筆任務：掛在誰名下，以及要補多少已做分鐘。 */
-    private record DeferredStart(BackendChannel.CreatedStaff staff, int workedMinutes) {
+    /** 欠一次「在 App 按開始」的那筆任務掛在誰名下。 */
+    private record DeferredStart(BackendChannel.CreatedStaff staff) {
     }
 
     /**
@@ -485,6 +484,20 @@ public class AppiumWorld {
                     "房號「" + roomNo + "」在後端有 " + rows.size() + " 筆任務，無法以房號唯一指認");
         }
         return rows.get(0);
+    }
+
+    /**
+     * App 目前打開的是哪一間房的任務頁。
+     *
+     * <p>有些 Then 句只說「任務頁顯示…」，句子裡沒有房號，但斷言仍要跟後端那一筆
+     * 對照。這個值讓那些句子知道現在對照的是哪一間房。還沒有打開過任何任務頁時
+     * 直接噴錯：那代表劇本少了打開任務頁的那一句。
+     */
+    public String currentTaskRoomNo() {
+        if (currentTaskRoomNo == null) {
+            throw new IllegalStateException("這個情境還沒有打開過任何任務頁，無從判斷是哪一間房");
+        }
+        return currentTaskRoomNo;
     }
 
     /** 記下通知中心情境的當事員工（由通知的 Given 句呼叫）。 */
@@ -702,7 +715,7 @@ public class AppiumWorld {
         List<TaskFixture> endingInDoing = new ArrayList<>();
         for (TaskFixture task : tasks) {
             if ("doing".equals(BackendChannel.taskState(task.status()))
-                    && !startableInApp("doing", task, tasks.size())) {
+                    && !startableInApp("doing", task)) {
                 endingInDoing.add(task);
             } else {
                 ordered.add(task);
@@ -712,13 +725,10 @@ public class AppiumWorld {
 
         for (TaskFixture task : ordered) {
             String stateCode = BackendChannel.taskState(task.status());
-            // 改種成待開始的那一筆，已做分鐘要等 App 真的開工之後才落地：待開始的任務
-            // 還沒有計時段落可以往前推，這時候寫進去沒有意義。
             Integer workedMinutes = task.elapsedMinutes() > 0 ? task.elapsedMinutes() : null;
-            if (startableInApp(stateCode, task, tasks.size())) {
+            if (startableInApp(stateCode, task)) {
                 stateCode = "accepted";
-                roomsToStartInApp.put(task.roomNo(), new DeferredStart(assignee, task.elapsedMinutes()));
-                workedMinutes = null;
+                roomsToStartInApp.put(task.roomNo(), new DeferredStart(assignee));
             }
             UUID taskId = backend.createTask(
                     task.roomNo(),
@@ -744,24 +754,21 @@ public class AppiumWorld {
     /**
      * 判斷這筆任務的「進行中」能不能改用 App 的開始按鈕達成。
      *
-     * <p>進行中的任務在 App 首頁上沒有卡可點（上游缺口 #12），情境只好先種成待開始，
-     * 進任務頁後再按一次開始。已做分鐘不擋這條路：它只能直接落地（沒有人能等 35 分鐘），
-     * {@link #startInAppIfPending} 在開工成立之後把這一段的起算時刻往前推，落地的值與
-     * 直接種成進行中的那條路完全相同。
+     * <p>開工交給 App 的主按鈕，後端落地的狀態與事件就跟員工自己操作一模一樣，不必
+     * 在資料庫裡自己湊出一筆進行中。
      *
      * <p>停住原因擋這條路：它是任務停住時才有的欄位，而這條路走完任務是進行中的，兩者
      * 湊在一起不是後端生得出來的狀態，硬湊會讓情境驗在一個不存在的真相上。
      *
-     * <p>已做分鐘要跟表上還有沒有別的任務一起看。表上只有這一筆時，情境要做的就是操作
-     * 它，進任務頁按一次開始正是員工自己的動線。表上還有別的任務、而這一筆又指定了已做
-     * 分鐘時就不走：那種情境在驗的是一整份清單或首頁的進度數字，把它先種成待開始會讓
-     * 已經做掉的那段時間在數字裡消失。
+     * <p>已做分鐘也擋這條路。已做分鐘只能直接落地（沒有人能等 35 分鐘），而落地的時機
+     * 是在 App 按下開始之後，任務頁拿到的卻是開始那一刻的回應，上面的已做時間還是 0。
+     * 要讓畫面上的已做時間是對的，這種任務就得一開始就種成進行中。
      */
-    private static boolean startableInApp(String stateCode, TaskFixture task, int fixtureSize) {
+    private static boolean startableInApp(String stateCode, TaskFixture task) {
         if (!"doing".equals(stateCode) || task.pausedReason() != null) {
             return false;
         }
-        return task.elapsedMinutes() == 0 || fixtureSize == 1;
+        return task.elapsedMinutes() == 0;
     }
 
     /**

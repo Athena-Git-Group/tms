@@ -268,6 +268,10 @@
 | F2 | R3（已放棄升級徽章） | 未接標籤改走池內卡（見 F4） | 不建立 |
 | F2 | R4 到期標記（待 /dsl-refine 確認概念是否保留） | 任務卡／任務頁 | `task.card.due-badge`（保留命名，待補畫面後掛） |
 | F2 | R5 完成·免查房 | chip | `task.status-chip--inspected-waived` |
+| F2 | R6 步驟條（打掃四段／備品三段） | 任務頁步驟條 | `task.step-track`（整條容器，label 是目前停的步驟）、`task.step-track.{步驟}`（每一段，步驟是「已接」「進行中」「完成」「查房」「免查房」「送達」） |
+| F2 | R7 超時 N 分純提示 | 任務頁計時區 | `task.hero.overtime-chip` |
+| F2 | R8 SOP 勾選與跳過 | 清潔 SOP 清單 | `task.sop.progress`（`x / y · 跳過不擋流程`）、`task.sop.{項目名稱}.item`、`task.sop.{項目名稱}.skip-button` |
+| F2 | R9 完成慶祝的實際與預估時間 | 完成慶祝頁 | `celebrate.actual-minutes`、`celebrate.estimate-minutes`（頁面本身是 `celebrate.screen`、`celebrate.title`、`celebrate.back-home-button`） |
 | F3 | R1 推播去處 | 系統推播橫幅 | `system.push-banner`、`system.push-banner.title` |
 | F3 | R2 完修可恢復 | 狀態列按鈕 | `task.status-row.resume-button` |
 | F4 | R2 同樓層標示 | 單卡標籤 | `pool.card.{roomNo}.same-floor-tag` |

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../celebrate/celebrate_screen.dart';
 import '../ticket/repair_labels.dart';
@@ -57,6 +58,9 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 這一間房未撤回的工務單，順序照後端給的順序。
   List<RepairTicketSummary> _repairTickets = const <RepairTicketSummary>[];
 
+  /// 這個租戶的打掃 SOP 項，順序照後端給的 `sortOrder`。只有打掃類任務要用。
+  List<SopItem> _sopItems = const <SopItem>[];
+
   @override
   void initState() {
     super.initState();
@@ -70,7 +74,28 @@ class _TaskScreenState extends State<TaskScreen> {
     }
     final task = await ApiClient.instance.getTask(taskId);
     _repairTickets = await _loadRepairTickets(task);
+    _sopItems = await _loadSopItems(task);
     return task;
+  }
+
+  /// 打掃 SOP 項清單。任務詳情只給已勾／已跳過的 id，項目名稱與全集都在
+  /// `GET /sop-items`，所以兩邊都要拿到才畫得出清單與 `x / y` 進度。
+  ///
+  /// 只有打掃類任務有 SOP 清單；取不到時當成沒有清單（整區不畫），不讓一個
+  /// 附帶區塊把整張任務頁擋在載入失敗上。
+  Future<List<SopItem>> _loadSopItems(TaskDetail task) async {
+    if (task.type != 'cleaning') {
+      return const <SopItem>[];
+    }
+    try {
+      final items = await ApiClient.instance.listSopItems();
+      return items
+          .where((item) => item.appliesTo == 'cleaning' && item.active)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (_) {
+      return const <SopItem>[];
+    }
   }
 
   /// 這一間房未撤回的工務單（FR-021 的同房工務單區）。取不到時當成沒有：
@@ -233,7 +258,23 @@ class _TaskScreenState extends State<TaskScreen> {
       setState(() => _completionPendingSync = true);
       return;
     }
-    _showTask(await ApiClient.instance.getTask(task.id));
+    final completed = await ApiClient.instance.getTask(task.id);
+    if (!mounted) {
+      return;
+    }
+    _showTask(completed);
+    // 慶祝頁給的是「一間房做完了」的回饋，所以只有打掃類走這一段；備品類送達
+    // 之後留在任務頁。
+    if (completed.type == 'cleaning') {
+      await Navigator.of(context).push(
+        CupertinoPageRoute<void>(
+          builder: (_) => CelebrateScreen(
+            actualMinutes: completed.elapsedMinutes,
+            estimateMinutes: completed.estMin,
+          ),
+        ),
+      );
+    }
   }
 
   /// 任務停在哪個狀態、停住原因記成什麼，一律以後端送出後回傳的那一筆為準。
@@ -370,6 +411,8 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ),
         ),
+        _buildHero(task),
+        _buildStepTrack(task),
         if (_completionPendingSync)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -433,6 +476,7 @@ class _TaskScreenState extends State<TaskScreen> {
               ),
             ),
           ),
+        _buildSopChecklist(task),
         _buildSkeletonEntries(task),
         const Spacer(),
         // 置底主按鈕：一個狀態只露出一個，文字由 [_primaryActionLabel] 的
@@ -464,8 +508,252 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 骨架期的入口接線：三個 sheet 的落點與工務單詳情、完成慶祝的路由。
-  /// 各入口的實際觸發條件（報修圖示、主按鈕完成…）是後續功能，這裡先讓畫面
+  /// 計時區：停住的單顯示停住當下的已做時間，進行中的單超過預估工時時顯示
+  /// 超時提示。兩個數字都取後端回的已做分鐘與預估分鐘。
+  ///
+  /// 這裡刻意不在 App 端跑計時器。同一張單可能在別的裝置上被推進，畫面自己
+  /// 累加的秒數會和後端的已做時間對不起來。
+  Widget _buildHero(TaskDetail task) {
+    final paused = task.state == 'interrupted' || task.state == 'deferred';
+    final overtimeMinutes = _overtimeMinutes(task);
+    if (!paused && overtimeMinutes == null) {
+      return const SizedBox.shrink();
+    }
+    final pausedText = '已做 ${task.elapsedMinutes} 分';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          TmsSpacing.lg, TmsSpacing.md, TmsSpacing.lg, 0),
+      child: Row(
+        children: [
+          if (paused)
+            TmsSemantics(
+              id: 'task.hero.paused-elapsed',
+              label: pausedText,
+              child: ExcludeSemantics(
+                child: Text(pausedText, style: TmsText.displayTimer),
+              ),
+            ),
+          if (overtimeMinutes != null)
+            TmsSemantics(
+              id: 'task.hero.overtime-chip',
+              label: '超時 $overtimeMinutes 分',
+              child: ExcludeSemantics(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: TmsSpacing.sm2, vertical: TmsSpacing.xxs),
+                  decoration: BoxDecoration(
+                    color: TmsColors.overtimeCapsule,
+                    borderRadius: BorderRadius.circular(TmsRadius.pill),
+                  ),
+                  child: Text(
+                    '超時 $overtimeMinutes 分',
+                    style: TmsText.footnoteEmphasized
+                        .copyWith(color: TmsColors.onOvertimeCapsule),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 超時分鐘數是已做分鐘減去預估分鐘，只有進行中而且真的超過時才有值。
+  ///
+  /// 超時在這個畫面上只是提示。算出超時不會呼叫任何後端端點，也不會讓員工
+  /// 收到推播。
+  static int? _overtimeMinutes(TaskDetail task) {
+    final estMin = task.estMin;
+    if (task.state != 'doing' || estMin == null) {
+      return null;
+    }
+    final over = task.elapsedMinutes - estMin;
+    return over > 0 ? over : null;
+  }
+
+  /// 步驟條：打掃類有四段，依序是已接、進行中、完成、查房或免查房；其餘類別
+  /// 有三段，依序是已接、進行中、送達。
+  ///
+  /// 目前停在哪一步由後端回的 state 與 inspection 推導。畫面另外記一份進度的
+  /// 話，別的裝置把任務推進之後，這份進度就是舊的。
+  Widget _buildStepTrack(TaskDetail task) {
+    final steps = _stepsOf(task);
+    final current = _currentStep(task);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          TmsSpacing.lg, TmsSpacing.md, TmsSpacing.lg, 0),
+      child: TmsSemantics(
+        id: 'task.step-track',
+        label: current,
+        explicitChildNodes: true,
+        child: Row(
+          children: [
+            for (final step in steps)
+              Expanded(
+                child: TmsSemantics(
+                  id: 'task.step-track.$step',
+                  label: step,
+                  child: ExcludeSemantics(
+                    child: Column(
+                      children: [
+                        Container(
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: _stepReached(steps, current, step)
+                                ? TmsColors.brandPrimary
+                                : TmsColors.systemGray2,
+                            borderRadius:
+                                BorderRadius.circular(TmsRadius.pill),
+                          ),
+                        ),
+                        const SizedBox(height: TmsSpacing.xs),
+                        Text(
+                          step,
+                          style: step == current
+                              ? TmsText.footnoteEmphasized
+                              : TmsText.footnote
+                                  .copyWith(color: TmsColors.tertiaryLabel),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 這張任務的步驟條有哪幾段。
+  ///
+  /// 打掃類的最後一段依免查房旗標分成兩種寫法。鎖定免查的單完成後直接結案，
+  /// 不會經過查房這一站，所以最後一段寫「免查房」。
+  static List<String> _stepsOf(TaskDetail task) {
+    if (task.type != 'cleaning') {
+      return const <String>['已接', '進行中', '送達'];
+    }
+    final waived = task.inspectionWaived || task.inspection == 'waived';
+    return <String>['已接', '進行中', '完成', waived ? '免查房' : '查房'];
+  }
+
+  /// 目前停在哪一步。
+  ///
+  /// 待開始與已延後都還沒開工，算在「已接」。已中斷是開工之後停住的，仍然算
+  /// 在「進行中」這一段。
+  static String _currentStep(TaskDetail task) {
+    final steps = _stepsOf(task);
+    switch (task.state) {
+      case 'doing':
+      case 'interrupted':
+        return '進行中';
+      case 'done':
+        return task.type == 'cleaning' ? '完成' : '送達';
+      case 'inspected':
+        return steps.last;
+      default:
+        return '已接';
+    }
+  }
+
+  /// 這一步走到了沒有。目前這一步與排在它前面的每一步都算走到。
+  static bool _stepReached(List<String> steps, String current, String step) {
+    return steps.indexOf(step) <= steps.indexOf(current);
+  }
+
+  /// 清潔 SOP 清單：每一項可以勾選，也可以跳過，上方的進度文字寫成
+  /// 「x / y · 跳過不擋流程」。
+  ///
+  /// 跳過和勾選都算進分子 x。跳過的意思是這一項這次不做，不是還沒做，而且它
+  /// 不擋完成：後端在完成那一步會把沒勾也沒跳過的項目一律記成跳過。
+  ///
+  /// 租戶沒有設定任何打掃 SOP 項，或這不是打掃類任務時，整區不畫。
+  Widget _buildSopChecklist(TaskDetail task) {
+    if (_sopItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final checked = task.checkedSopItems.toSet();
+    final skipped = task.skippedSopItems.toSet();
+    final doneCount = _sopItems
+        .where((item) => checked.contains(item.id) || skipped.contains(item.id))
+        .length;
+    final progress = '$doneCount / ${_sopItems.length} · 跳過不擋流程';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          TmsSpacing.lg, TmsSpacing.md, TmsSpacing.lg, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('清潔 SOP', style: TmsText.title3),
+              const SizedBox(width: TmsSpacing.sm),
+              TmsSemantics(
+                id: 'task.sop.progress',
+                label: progress,
+                child: ExcludeSemantics(
+                  child: Text(
+                    progress,
+                    style: TmsText.caption1
+                        .copyWith(color: TmsColors.secondaryLabel),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          for (final item in _sopItems)
+            Row(
+              children: [
+                Expanded(
+                  child: TmsSemantics(
+                    id: 'task.sop.${item.label}.item',
+                    child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft,
+                      onPressed: () => _sopCheck(task, item, 'checked'),
+                      child: Text(
+                        checked.contains(item.id)
+                            ? '✓ ${item.label}'
+                            : item.label,
+                        style: TmsText.body,
+                      ),
+                    ),
+                  ),
+                ),
+                TmsSemantics(
+                  id: 'task.sop.${item.label}.skip-button',
+                  child: CupertinoButton(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: TmsSpacing.md),
+                    onPressed: () => _sopCheck(task, item, 'skipped'),
+                    child: Text(
+                      skipped.contains(item.id) ? '已跳過' : '跳過',
+                      style: TmsText.caption1
+                          .copyWith(color: TmsColors.brandPrimary),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 勾選或跳過一項 SOP，畫面換成後端回的那一筆任務。
+  ///
+  /// 畫面先改再送出的話，送失敗的那一下員工看到的勾記就不是後端記下的勾記。
+  Future<void> _sopCheck(TaskDetail task, SopItem item, String result) async {
+    final updated = await ApiClient.instance
+        .sopCheck(task.id, sopItemId: item.id, result: result);
+    if (!mounted) {
+      return;
+    }
+    _showTask(updated);
+  }
+
+  /// 骨架期的入口接線：三個 sheet 的落點與工務單詳情的路由。
+  /// 各入口的實際觸發條件（報修圖示…）是後續功能，這裡先讓畫面
   /// 可以被導到。找不到任務時 [task] 為 null，延後、中斷與查一下這幾個要有
   /// 任務才做得了的動作不露出——查一下的推薦問題是依任務情境排出來的，沒有
   /// 任務就沒有情境可查。
@@ -523,16 +811,6 @@ class _TaskScreenState extends State<TaskScreen> {
               );
             },
             child: const Text('工務單詳情'),
-          ),
-          CupertinoButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                CupertinoPageRoute<void>(
-                  builder: (_) => const CelebrateScreen(),
-                ),
-              );
-            },
-            child: const Text('完成慶祝'),
           ),
         ],
       ),

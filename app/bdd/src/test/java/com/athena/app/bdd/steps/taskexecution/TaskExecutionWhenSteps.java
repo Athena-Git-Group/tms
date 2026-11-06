@@ -1,10 +1,12 @@
 package com.athena.app.bdd.steps.taskexecution;
 
 import com.athena.app.bdd.AppiumWorld;
-import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.當;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /** 任務執行模組的 When。 */
 public class TaskExecutionWhenSteps {
@@ -29,7 +31,46 @@ public class TaskExecutionWhenSteps {
      */
     @當("{string} 在 App 跳過 {string} 的 SOP 項 {string}")
     public void skipSop(String staffName, String task, String sopItem) {
-        throw new PendingException();
+        // 補 SOP 項要排在打開任務頁之前：任務頁一進去就向後端要 SOP 清單，之後補的
+        // 項目不會出現在畫面上那一份。
+        UUID sopItemId = world.backend().ensureCleaningSopItemId(sopItem);
+        world.ensureOnTaskDetail(world.staff(staffName), task);
+        world.tapTestId("task.sop." + sopItem + ".skip-button", SCREEN_TIMEOUT);
+        waitUntilSkipped(task, sopItemId);
+    }
+
+    /**
+     * 等後端真的把這一項記成跳過。
+     *
+     * <p>點下去只是送出請求，後端回應之前畫面上的進度還是舊的。少了這一步，接著的
+     * 進度斷言會趕在 App 收到回應之前讀畫面。
+     */
+    private void waitUntilSkipped(String task, UUID sopItemId) {
+        UUID taskId = (UUID) world.taskRowByRoomNo(task).get("id");
+        long deadline = System.nanoTime() + SCREEN_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadline) {
+            List<Map<String, Object>> rows = world.backend().queryRows(
+                    """
+                    SELECT c.skipped FROM task_sop_checks c
+                      JOIN sop_items s ON s.tenant_id = c.tenant_id AND s.item_key = c.item_key
+                     WHERE c.tenant_id = ? AND c.task_id = ? AND s.id = ?
+                    """, world.backend().ensureTenant(), taskId, sopItemId);
+            if (!rows.isEmpty() && Boolean.TRUE.equals(rows.get(0).get("skipped"))) {
+                return;
+            }
+            sleepBriefly();
+        }
+        throw new AssertionError("後端沒有把這一項 SOP 記成跳過：task=" + taskId + "，sopItem=" + sopItemId);
+    }
+
+    /** 輪詢之間歇一下，不要把資料庫打滿。 */
+    private static void sleepBriefly() {
+        try {
+            Thread.sleep(200);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待後端落地時被中斷", e);
+        }
     }
 
     /**

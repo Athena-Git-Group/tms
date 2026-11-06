@@ -358,6 +358,34 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
+  /// `GET /sop-items`：租戶的 SOP 與查房項目全集（契約 `listSopItems`）。
+  /// 打掃 SOP 與查房項目同構共表，差別在 `appliesTo`（`cleaning`／`inspection`），
+  /// 端點不收參數，要哪一種由呼叫端自己挑。任務詳情的 `checkedSopItems`／
+  /// `skippedSopItems` 只給 id，項目名稱一律從這裡取。
+  Future<List<SopItem>> listSopItems() async {
+    final json = await _requestJson('GET', '/sop-items');
+    return (json as List<dynamic>? ?? <dynamic>[])
+        .map((entry) => SopItem.fromJson(entry as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `POST /tasks/{id}/sop-check`：勾選或跳過一項 SOP（契約 `tasksSopCheck`）。
+  /// [result] 只收 `checked` 或 `skipped`；跳過不擋完成，後端在完成那一步會把
+  /// 沒勾也沒跳過的項目一律補記成跳過。回應是更新後的任務詳情。
+  Future<TaskDetail> sopCheck(
+    String taskId, {
+    required String sopItemId,
+    required String result,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/tasks/$taskId/sop-check',
+      body: {'sopItemId': sopItemId, 'result': result},
+      idempotent: true,
+    );
+    return TaskDetail.fromJson(json as Map<String, dynamic>);
+  }
+
   /// `GET /room-memories/suggestions?taskId=`：查一下打開時的推薦問題。
   /// 順序由後端依任務情境排好（剛跳過的 SOP 項在前），App 照單列出，不自己排。
   Future<List<AskSuggestion>> listAskSuggestions(String taskId) async {
@@ -1238,7 +1266,11 @@ class TaskDetail {
     this.roomNo,
     this.title,
     this.note,
+    this.inspectionWaived = false,
+    this.estMin,
     this.elapsedMinutes = 0,
+    this.checkedSopItems = const <String>[],
+    this.skippedSopItems = const <String>[],
     this.holdReason,
     this.deferredBySelf = false,
     this.handovers = const <HandoverEntry>[],
@@ -1265,8 +1297,23 @@ class TaskDetail {
   final String? title;
   final String? note;
 
+  /// 開工那一刻鎖定的免查房旗標。打掃類鎖定免查時，完成就直接結案成
+  /// `inspected`／`waived`，不經「待查房」——步驟條最後一段因此是「免查房」
+  /// 而不是「查房」。
+  final bool inspectionWaived;
+
+  /// 預估工時（分鐘）；沒有估時的任務為 null。超時提示與完成慶祝頁的
+  /// 「預估 N 分」都讀它。
+  final int? estMin;
+
   /// 已做分鐘。
   final int elapsedMinutes;
+
+  /// 已勾選的 SOP 項（`sop_items.id`）。
+  final List<String> checkedSopItems;
+
+  /// 已跳過的 SOP 項（`sop_items.id`）。跳過一樣計入 SOP 進度的分子。
+  final List<String> skippedSopItems;
 
   /// 停住原因，例如「等工務：水電」或「工務已修好：水電」。
   final String? holdReason;
@@ -1290,11 +1337,15 @@ class TaskDetail {
       state: json['state'] as String,
       type: json['type'] as String? ?? 'cleaning',
       inspection: json['inspection'] as String?,
+      inspectionWaived: json['inspectionWaived'] as bool? ?? false,
       roomId: json['roomId'] as String?,
       roomNo: json['roomNo'] as String?,
       title: json['title'] as String?,
       note: json['note'] as String?,
+      estMin: json['estMin'] as int?,
       elapsedMinutes: json['elapsedMinutes'] as int? ?? 0,
+      checkedSopItems: _stringList(json['checkedSopItems']),
+      skippedSopItems: _stringList(json['skippedSopItems']),
       holdReason: json['holdReason'] as String?,
       deferredBySelf: json['deferredBySelf'] as bool? ?? false,
       handovers: (json['handovers'] as List<dynamic>? ?? <dynamic>[])
@@ -1305,4 +1356,45 @@ class TaskDetail {
       returnInfo: ReturnInfo.fromJson(json['returnInfo']),
     );
   }
+}
+
+/// 契約 `SopItem`：打掃 SOP 項與查房項目同構共表，差別在 [appliesTo]。
+class SopItem {
+  const SopItem({
+    required this.id,
+    required this.appliesTo,
+    required this.itemKey,
+    required this.label,
+    this.sortOrder = 0,
+    this.active = true,
+  });
+
+  final String id;
+
+  /// `cleaning`（打掃 SOP）或 `inspection`（查房項目）。
+  final String appliesTo;
+  final String itemKey;
+  final String label;
+  final int sortOrder;
+  final bool active;
+
+  factory SopItem.fromJson(Map<String, dynamic> json) {
+    return SopItem(
+      id: json['id'] as String,
+      appliesTo: json['appliesTo'] as String? ?? 'cleaning',
+      itemKey: json['itemKey'] as String? ?? '',
+      label: json['label'] as String? ?? '',
+      sortOrder: json['sortOrder'] as int? ?? 0,
+      active: json['active'] as bool? ?? true,
+    );
+  }
+}
+
+/// 契約裡的 id 陣列欄位（`checkedSopItems`／`skippedSopItems`）解析成字串清單。
+/// 欄位缺席或為 null 時當成空清單，不讓畫面因為後端少回一欄就整頁打不開。
+List<String> _stringList(Object? value) {
+  if (value is! List) {
+    return const <String>[];
+  }
+  return value.whereType<String>().toList(growable: false);
 }

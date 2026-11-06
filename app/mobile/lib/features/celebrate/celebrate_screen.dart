@@ -1,17 +1,31 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 
-/// 完成慶祝骨架畫面（ui-plan 畫面 4）：只放版面與 accessibility id，
-/// 不接資料、不實作互動。
+/// 完成慶祝畫面：員工把一間房做完之後看到的回饋，上面寫這次實際做了幾分鐘、
+/// 當初預估幾分鐘。
 ///
-/// 標題文字（`celebrate.title`）是 dsl 驗收點；離線完成時的「已離線暫存」
-/// 提示是狀態相關元素，等接上同步狀態後才掛。
+/// 兩個數字都由任務頁在完成成功之後傳進來，取自後端回的已做分鐘與預估分鐘。
+/// 任務沒有預估分鐘時只顯示實際時間。
 class CelebrateScreen extends StatelessWidget {
-  const CelebrateScreen({super.key});
+  const CelebrateScreen({
+    super.key,
+    required this.actualMinutes,
+    this.estimateMinutes,
+  });
+
+  /// 這一間實際做了幾分鐘。
+  final int actualMinutes;
+
+  /// 這一間預估幾分鐘；沒有估時的任務為 null。
+  final int? estimateMinutes;
 
   @override
   Widget build(BuildContext context) {
+    final actualText = '實際 $actualMinutes 分';
+    final estimateText =
+        estimateMinutes == null ? null : '預估 $estimateMinutes 分';
     return TmsSemantics(
       id: 'celebrate.screen',
       child: CupertinoPageScaffold(
@@ -22,15 +36,31 @@ class CelebrateScreen extends StatelessWidget {
               children: [
                 const TmsSemantics(
                   id: 'celebrate.title',
-                  child: Text(
-                    '這間做完了！',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Text('這間做完了！', style: TmsText.title1),
+                ),
+                const SizedBox(height: TmsSpacing.lg),
+                TmsSemantics(
+                  id: 'celebrate.actual-minutes',
+                  label: actualText,
+                  child: ExcludeSemantics(
+                    child: Text(actualText, style: TmsText.headline),
                   ),
                 ),
-                const SizedBox(height: 24),
+                if (estimateText != null) ...[
+                  const SizedBox(height: TmsSpacing.xs),
+                  TmsSemantics(
+                    id: 'celebrate.estimate-minutes',
+                    label: estimateText,
+                    child: ExcludeSemantics(
+                      child: Text(
+                        estimateText,
+                        style: TmsText.subheadline
+                            .copyWith(color: TmsColors.secondaryLabel),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: TmsSpacing.xl2),
                 TmsSemantics(
                   id: 'celebrate.back-home-button',
                   child: CupertinoButton.filled(
