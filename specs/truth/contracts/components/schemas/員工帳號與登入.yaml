@@ -100,6 +100,30 @@ LoginRequest:
     password:
       type: string
       description: 明文密碼，後端以 bcrypt/argon2 雜湊後比對 staff_accounts.passwordHash，絕不回傳或落地明文。
+ChangePasswordRequest:
+  type: object
+  description: >-
+    本人設定新密碼的請求形狀。明文密碼只用於這次比對與重新雜湊，不回傳也不落地存明文。
+    兩種情境共用這個形狀：①臨時密碼登入後被強制改密（mustChangePassword=true），
+    此時身分已由登入換得的 token 證明，不必再帶 currentPassword；
+    ②自願變更密碼（mustChangePassword=false），必須帶 currentPassword 再確認一次本人。
+  required:
+  - newPassword
+  properties:
+    currentPassword:
+      type: string
+      nullable: true
+      description: >-
+        目前使用中的明文密碼。強制改密情境（mustChangePassword=true）不需要帶，帶了也會被忽略；
+        自願變更情境必填，省略或空白回 422 current_password_required，
+        比對不符回 401 current_password_invalid，提示「目前密碼不正確」。
+    newPassword:
+      type: string
+      description: >-
+        新的明文密碼，後端以 bcrypt/argon2 重新雜湊寫入 staff_accounts.passwordHash。
+        與目前密碼相同回 422 new_password_invalid，message 為「新密碼不能和目前密碼相同」。
+        密碼強度規則（長度下限、字元組成）truth 目前沒有定義，後端實作前需由 `/dsl-refine`
+        補口徑；在那之前這條端點只擋「與目前密碼相同」這一種，不自行發明長度門檻。
 LoginResponse:
   type: object
   description: 登入成功的回應形狀，銜接 techstack 已拍板的 JWT（TTL 12h）。

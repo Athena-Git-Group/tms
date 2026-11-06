@@ -122,6 +122,8 @@ paths:
     $ref: './groups/營運管理/員工帳號與登入.yaml#/listStaffAccounts'
   /staff-accounts/login:
     $ref: './groups/營運管理/員工帳號與登入.yaml#/staffAccountsLogin'
+  /staff-accounts/change-password:
+    $ref: './groups/營運管理/員工帳號與登入.yaml#/changeOwnPassword'
   /task-events:
     $ref: './groups/知識與通知/任務事件流水帳.yaml#/listTaskEvents'
   /tasks:
@@ -397,10 +399,16 @@ components:
       $ref: './components/schemas/員工帳號與登入.yaml#/LoginRequest'
     LoginResponse:
       $ref: './components/schemas/員工帳號與登入.yaml#/LoginResponse'
+    ChangePasswordRequest:
+      $ref: './components/schemas/員工帳號與登入.yaml#/ChangePasswordRequest'
     notifications:
       $ref: './components/schemas/通知中心.yaml#/notifications'
     MyToday:
       $ref: './components/schemas/員工工作台.yaml#/MyToday'
+    TodayTask:
+      $ref: './components/schemas/員工工作台.yaml#/TodayTask'
+    EngineeringTicket:
+      $ref: './components/schemas/員工工作台.yaml#/EngineeringTicket'
     NextTask:
       $ref: './components/schemas/員工工作台.yaml#/NextTask'
     PoolCategory:

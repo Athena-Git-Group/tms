@@ -10,10 +10,16 @@ getMyToday:
       今日完成單數（completedCount）＝本人 done 或 inspected 的任務數，首頁四格不顯示，供完成慶祝頁「第 N 單」使用；
       臨時需求完成數＝本人非打掃類 done 的任務數；
       預估剩餘工時＝Σ（accepted、doing、deferred、interrupted 的本人任務）max(0, 預估分鐘 − 已做分鐘)。
-      下一間推薦只列 accepted，排序為：redo 次數多的先、非打掃類先於打掃類、最後依房號遞增。
+      今日任務列（todayTasks）＝負責人是本人、工作日是今天、狀態不是 cancelled 的全部任務，
+      涵蓋 accepted、doing、deferred、interrupted、done、inspected 六個狀態，每筆帶狀態、已做分鐘與停住原因，
+      供首頁任務列與「繼續處理」使用；排序由後端排好，App 依序呈現不再重排。
+      下一間推薦（nextTasks）是 todayTasks 中 accepted 那些單的推薦子集，只列 accepted，
+      排序為：redo 次數多的先、非打掃類先於打掃類、最後依房號遞增；兩份清單口徑不同，不可互相取代。
       連續零退回天數的計算定義待 clarify（FR-030）。
       呼叫者是工務（dept=engineering）時另外回傳 engineeringSummary：手上張數（accepted／doing 的工務單數）、
-      今天已完修（今天 done 的工務單數）、急件數（手上單中 isUrgent 的數量）；非工務呼叫者這個欄位為 null。
+      今天已完修（今天 done 的工務單數）、急件數（手上單中 isUrgent 的數量），
+      以及這些單的清單 tickets（accepted／doing 的工務單，加上今天 done 的工務單，讓工務能打開已完修的單看驗收狀態）；
+      非工務呼叫者這個欄位為 null。
     tags:
     - 員工工作台 API
     responses:
@@ -35,9 +41,27 @@ listDeptPool:
       回應包含分類筆數；帶 category 時只回傳該類別，但 counts 仍回傳全部類別。
       工務池另支援 urgent、source 兩個篩選維度：urgent=true 只回急件；source 只回該來源（staff_report＝
       房務報修、desk_forward＝櫃檯），可與 category 並用；三者都可省略（全部）。
+      要看的是哪個部門的池由 dept 參數決定：現場員工（房務、工務、櫃檯）省略它，看自己部門的池；
+      主管與老闆不屬於單一部門，必須帶 dept 才知道要看哪一池，省略時回 422；
+      現場員工帶了自己部門以外的 dept 回 403 forbidden_dept_pool。
+      回應另外帶 activeStaffCount＝該部門目前在職、今天沒請假、可以承接任務的員工數，
+      讓畫面分辨「池是空的」（activeStaffCount 大於 0 但 items 為空）與「這個部門沒有在職員工」
+      （activeStaffCount 等於 0，沒有人可以搶單）。
     tags:
     - 員工工作台 API
     parameters:
+    - name: dept
+      in: query
+      required: false
+      description: >-
+        要查看的部門池。只有不屬於單一部門的角色（主管 manager、老闆 owner）需要帶，省略時回 422；
+        現場員工（房務、工務、櫃檯）省略即看自己部門的池，帶了自己部門以外的值回 403 forbidden_dept_pool。
+      schema:
+        type: string
+        enum:
+        - housekeeping
+        - engineering
+        - frontdesk
     - name: category
       in: query
       required: false
@@ -62,3 +86,7 @@ listDeptPool:
           application/json:
             schema:
               $ref: '../../components/schemas/員工工作台.yaml#/DeptPool'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'

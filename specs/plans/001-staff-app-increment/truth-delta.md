@@ -97,6 +97,13 @@
 | ADD | `components/schemas/員工工作台.yaml` -> `MyToday.engineeringSummary`（nullable 物件：`openCount`、`completedToday`、`urgentCount`） | 工務部門（dept=engineering）呼叫者專屬的今日進度彙總；非工務呼叫者為 null。 | 回交缺口：工務首頁彙總（手上張數／今天已完修／急件數）。設計取捨：擴充既有 `getMyToday` 依登入者 dept 回傳不同形狀，不另開端點——沿用 `MyToday` 已有的「同端點不同部門不同欄位有意義」慣例（housekeeping 專屬欄位 cleaningDone 等），避免為單一部門多開一個端點。承接 `工務視角維修與開單.feature` Rule「工務視角今日進度顯示手上張數、今天已完修與急件數」。 |
 | MODIFY | `.../groups/現場作業/員工工作台.yaml` -> `getMyToday` description | 補充呼叫者為工務時回傳 `engineeringSummary` 及其三個欄位的計算口徑。 | 同上。 |
 
+| ADD | `components/schemas/員工工作台.yaml` -> `MyToday.todayTasks`（陣列，新 schema `TodayTask`） | 新增本人今日全部任務的清單，每筆帶 `state`／`estMin`／`workedMinutes`／`holdReason`／`inspection`／`inspectionWaived`；`nextTasks` 原樣保留，成為其中 accepted 的推薦子集。 | 回交缺口 #12：`nextTasks` 只收 accepted，App 列不出進行中／已中斷／今天已完成的單，任務頁與報修全部到不了，擋住 24 個場景。不放寬 `nextTasks` 是因為它的語意是「下一間推薦」且有自己的排序規則，混入會毀掉既有語意。 |
+| ADD | `components/schemas/員工工作台.yaml` -> `MyToday.engineeringSummary.tickets`（陣列，新 schema `EngineeringTicket`） | 在既有彙總物件內新增手上工務單清單：本人 accepted／doing 加上今天 done 的單，帶 `ticketNo`／`taskId`／`roomNo`（公共區域為 null）／`isPublicArea`／`state`／`isUrgent`／`source`；三個既有計數欄位不動。 | 回交缺口 #10：工務只拿得到三個數字、拿不到清單，進不了工務單詳情，擋住 7 個場景；今天已完修的單也要能打開看驗收狀態。 |
+| ADD | `.../groups/營運管理/員工帳號與登入.yaml` -> `changeOwnPassword`（`POST /api/v1/staff-accounts/change-password`，新 request schema `ChangePasswordRequest`） | 本人設定新密碼。`currentPassword` 可空：強制改密情境（`mustChangePassword=true`）不必帶，自願變更必填。回應沿用 `LoginResponse` 換發 token 並帶 `mustChangePassword=false`。此端點在 `mustChangePassword=true` 時必須可用。 | 回交缺口 #14：契約只有 `staffAccountsLogin`，後端在旗標清掉前對業務端點一律 403，App 無合法路徑完成改密，`登入與登出守衛.feature:59` 永遠紅。 |
+| MODIFY | `.../groups/現場作業/員工工作台.yaml` -> `listDeptPool` | 新增選用查詢參數 `dept`（`housekeeping`／`engineering`／`frontdesk`）：不屬於單一部門的角色（主管／老闆）需帶，現場員工省略時看自己部門；非授權角色帶了回 403 `forbidden_dept_pool`，主管省略回 422 `dept_required`。 | 回交缺口 #16：`listDeptPool` 只依登入者自己的 dept 分流，主管 dept 為 null 直接 422，看不到任何部門池。 |
+| ADD | `components/schemas/員工工作台.yaml` -> `DeptPool.activeStaffCount` | 新增該部門目前在職、可搶單的員工數；在職定義沿用 `features/backend/dsl.md` 的狀態對照（`active=true` 且已開通，待開通與停用不計），主管與老闆部門為 null 不計入。`items`／`counts` 不動。 | 回交缺口 #16 後半：後端沒有「這個部門沒有在職員工」的訊號，空 `items` 讓 App 分不出「單都被接走」與「沒有人可以搶單」，而 feature 要求兩種空狀態長得不一樣。 |
+| MODIFY | `components/schemas/shared.yaml` -> `Error` 錯誤碼清單 | 登記 `current_password_required`(422)、`current_password_invalid`(401)、`new_password_invalid`(422)、`dept_required`(422)、`forbidden_dept_pool`(403)。 | 上列兩個新增操作與參數所需；沿用既有 snake_case 命名風格。 |
+
 ## /data-plan
 
 | 動作 | Truth 規格 | 改動摘要 | 原因 |

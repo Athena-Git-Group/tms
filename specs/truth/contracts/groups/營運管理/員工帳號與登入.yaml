@@ -47,3 +47,40 @@ staffAccountsLogin:
         $ref: '../../components/responses.yaml#/Forbidden'
       '429':
         $ref: '../../components/responses.yaml#/TooManyRequests'
+changeOwnPassword:
+  post:
+    operationId: changeOwnPassword
+    summary: 設定新密碼
+    description: >-
+      本人變更自己的密碼：後端重新雜湊 newPassword 寫入 staff_accounts.passwordHash，
+      清掉 must_change_password 旗標，並換發一組新的 JWT（TTL 12h）回傳，
+      App 直接拿換發的 token 進首頁，不必再跑一次登入。
+      這條端點在 mustChangePassword=true 時一定要能用——臨時密碼登入後其他需要身分的業務端點一律被拒（403），
+      但這條是完成改密的唯一合法路徑，必須放行，否則員工會卡死在改密畫面。
+      強制改密情境（mustChangePassword=true）身分已由登入換得的 token 證明，不需要帶 currentPassword；
+      自願變更情境必須帶，省略或空白回 422 current_password_required，比對不符回 401 current_password_invalid。
+      新密碼長度不足 8 字或與目前密碼相同回 422 new_password_invalid。
+      改密成功後舊 token 立即失效，其他裝置上的既有登入要重新登入。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/ChangePasswordRequest'
+    responses:
+      '200':
+        description: 成功。形狀與登入相同，帶換發的 token，且 mustChangePassword 必為 false。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/LoginResponse'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
