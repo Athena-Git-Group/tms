@@ -44,7 +44,8 @@ listDeptPool:
       要看的是哪個部門的池由 dept 參數決定：現場員工（房務、工務、櫃檯）省略它，看自己部門的池；
       主管與老闆不屬於單一部門，必須帶 dept 才知道要看哪一池，省略時回 422；
       現場員工帶了自己部門以外的 dept 回 403 forbidden_dept_pool。
-      回應另外帶 activeStaffCount＝該部門目前在職、今天沒請假、可以承接任務的員工數，
+      回應另外帶 activeStaffCount＝該部門目前在職、可以搶單的員工數（在職定義見
+      `員工工作台.yaml` 的 DeptPool.activeStaffCount：帳號啟用且已開通，待開通與停用不計），
       讓畫面分辨「池是空的」（activeStaffCount 大於 0 但 items 為空）與「這個部門沒有在職員工」
       （activeStaffCount 等於 0，沒有人可以搶單）。
     tags:

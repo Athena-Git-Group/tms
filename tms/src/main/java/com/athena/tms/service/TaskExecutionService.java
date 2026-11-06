@@ -3,6 +3,7 @@ package com.athena.tms.service;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
+import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.error.NotFoundException;
 import com.athena.tms.common.error.StateConflictException;
 import com.athena.tms.common.error.UnprocessableEntityException;
@@ -38,6 +39,13 @@ import tools.jackson.databind.node.ObjectNode;
  */
 @Service
 public class TaskExecutionService {
+
+    /**
+     * 三個有自己待接池的部門。角色名稱與部門名稱共用同一組值，所以同一個集合既用來
+     * 判斷呼叫者是不是現場員工，也用來擋掉不存在的部門參數。主管與老闆不在其中，
+     * 他們不屬於單一部門，要查待接池得自己指定看哪一個。
+     */
+    private static final Set<String> FIELD_DEPTS = Set.of("housekeeping", "engineering", "frontdesk");
 
     private final TaskEngine taskEngine;
     private final JdbcTemplate jdbcTemplate;
@@ -351,13 +359,18 @@ public class TaskExecutionService {
      * 是房務各種「被動退池」情境（住客掃碼、主管附交代、請假、班末、查房退回）專用的
      * 標籤，工務單走的是完全不同的開單去向判定，改由 {@code tasks.source} 換算：
      * staff（房務報修或工務自開）→staff_report、desk（櫃檯交辦）→desk_forward。
+     *
+     * <p>要看哪一池由 deptFilter 決定（contracts listDeptPool 的 dept 參數）：現場員工
+     * （房務、工務、櫃檯）省略就是自己部門，帶了自己部門以外的值回 403
+     * forbidden_dept_pool；主管與老闆不屬於單一部門，省略時無從判斷要看哪一池，回 422
+     * dept_required。回應另外帶 activeStaffCount＝該部門在職員工數，讓畫面分辨
+     * 「單都被接走了」（大於 0 但 items 空）與「這個部門沒有人可以搶單」（等於 0）。
      */
-    public Map<String, Object> deptPool(String categoryFilter, Boolean urgentFilter, String sourceFilter) {
+    public Map<String, Object> deptPool(
+            String deptFilter, String categoryFilter, Boolean urgentFilter, String sourceFilter) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
-        if (actor.dept() == null) {
-            throw new UnprocessableEntityException("此帳號未設部門，沒有對應的部門待接池");
-        }
+        String targetDept = resolvePoolDept(actor, deptFilter);
         // 先在內層算好 unclaimed_overdue 與 same_floor 兩個旗標，外層 ORDER BY
         // 直接引用。SQL 不允許在 ORDER BY 的運算式裡引用同一層 SELECT 的別名，
         // 不包一層就得在排序鍵重抄整段未接超時判斷。
@@ -384,7 +397,7 @@ public class TaskExecutionService {
                          pool.urgent DESC, pool.priority_notify DESC, pool.same_floor DESC,
                          pool.room_no, pool.created_at
                 """,
-                actor.staffId(), tenantId, actor.dept());
+                actor.staffId(), tenantId, targetDept);
 
         List<Map<String, Object>> items = new ArrayList<>();
         Map<String, Integer> byCategory = new LinkedHashMap<>();
@@ -430,7 +443,52 @@ public class TaskExecutionService {
         counts.put("amenity", byCategory.getOrDefault("amenity", 0));
         counts.put("repair", byCategory.getOrDefault("repair", 0));
         counts.put("other", byCategory.getOrDefault("other", 0));
-        return Map.of("items", items, "counts", counts);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", items);
+        result.put("counts", counts);
+        result.put("activeStaffCount", activeStaffCount(tenantId, targetDept));
+        return result;
+    }
+
+    /**
+     * 回答「這次查詢要看哪一個部門的待接池」。房務、工務、櫃檯員工只能看自己帳號上的
+     * 部門，所以省略 dept 時用帳號上的部門，指定別的部門時以 403 拒絕。主管與老闆的
+     * 帳號沒有部門，要看哪一池只能由呼叫端指定，省略時無從推斷，以 422 要求補上。
+     *
+     * <p>現場角色而帳號沒設部門是員工資料本身不完整，既推斷不出部門也不是權限問題，
+     * 以 422 請管理者去補帳號設定。
+     */
+    private String resolvePoolDept(CurrentActor actor, String deptFilter) {
+        boolean fieldStaff = FIELD_DEPTS.contains(actor.role());
+        if (deptFilter != null) {
+            if (!FIELD_DEPTS.contains(deptFilter)) {
+                throw new UnprocessableEntityException("dept 只能是 housekeeping、engineering 或 frontdesk");
+            }
+            if (fieldStaff && !deptFilter.equals(actor.dept())) {
+                throw new ForbiddenException("forbidden_dept_pool", "只能查看自己部門的待認領");
+            }
+            return deptFilter;
+        }
+        if (!fieldStaff) {
+            throw new UnprocessableEntityException("dept_required", "主管與老闆不屬於單一部門，查待認領要指定 dept");
+        }
+        if (actor.dept() == null) {
+            throw new UnprocessableEntityException("此帳號未設部門，沒有對應的部門待接池");
+        }
+        return actor.dept();
+    }
+
+    /**
+     * 數出這個部門現在有幾個人能把池裡的單接走。畫面要靠這個數字分辨兩種都看不到單的
+     * 情況：有人在職而池是空的，代表單都被接走了；一個人都沒有，代表沒有人能搶單，
+     * 該提示管理者補人。待開通與停用的帳號都還不能接單，只有 status 是 active 的算數。
+     */
+    private int activeStaffCount(long tenantId, String dept) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND status = 'active'",
+                Integer.class, tenantId, dept);
+        return count == null ? 0 : count;
     }
 
     /**

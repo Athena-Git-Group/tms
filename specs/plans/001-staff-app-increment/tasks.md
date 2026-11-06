@@ -1166,7 +1166,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 不做：不改未接超時的排序規則（`unclaimed_overdue` 旗標與 ORDER BY 維持原樣）；不改 `UnclaimedReminderScanJob` 的寫入時機與兩段門檻。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 待認領` 的未接超時兩段標籤 2 個場景轉綠。缺口 #15 標示解除。
 
-- [ ] T345 `listDeptPool` 的 `dept` 參數 ＋ `DeptPool.activeStaffCount`（解除缺口 #16）
+- [X] T345 `listDeptPool` 的 `dept` 參數 ＋ `DeptPool.activeStaffCount`（解除缺口 #16）
   - 契約落點：`specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `listDeptPool` 的 `dept` 參數（:44-46 的三條分流說明、:53 參數定義）；`components/schemas/員工工作台.yaml` -> `DeptPool.activeStaffCount`（:317-335，含「`activeStaffCount` 大於 0 而 `items` 空＝單都被接走、等於 0＝沒有人可以搶單」的兩種空狀態判準）；`components/schemas/shared.yaml` -> `dept_required`(422)、`forbidden_dept_pool`(403)；`truth-delta.md` `/api-plan` MODIFY＋ADD 兩列。
   - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `deptPool`（:355，目前 `actor.dept() == null` 直接 422「此帳號未設部門」）與 `controller/TaskExecutionController.java:100-105`（`@GetMapping("/pool")` 的查詢參數）；在職員工數查 `staff_accounts`（`status='active'`，見 `V11__staff_account_status.sql` 的三態說明：`invited` 待開通與 `inactive` 停用都不計）。
   - 只做：新增選用參數 `dept`；現場員工（房務／工務／櫃檯）省略時看自己部門、帶了自己部門以外的值回 403 `forbidden_dept_pool`；主管與老闆必須帶，省略回 422 `dept_required`；回應補 `activeStaffCount`（主管與老闆的部門不計入在職數的定義見契約）。
