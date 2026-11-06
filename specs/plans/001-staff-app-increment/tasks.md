@@ -1115,9 +1115,15 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - dry-run 結果行（`mvn -f app/bdd/pom.xml test -Dtest=RunModuleFeatureTest -Dcucumber.features=../../specs/truth/features/ios-app/工務單 -Dcucumber.execution.dry-run=true -Dsurefire.excludeJUnit5Engines=cucumber`）：`Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.305 s -- in io.cucumber.junit.platform.engine.CucumberTestEngine` → 0 undefined、0 pending。
   - 對不上的一句（新缺口 #35）：`恢復連線後的前 N 次送出會因網路不穩而重送` 需要「前 N 次開單請求在後端已處理後才逾時」的注入開關，測試後門沒有；既有的 `/flaky-connection` 只把連線標成不穩定（改走降級輪詢），拿它頂替會讓情境在完全沒有重送的情況下綠燈，等於沒驗到同一把 `Idempotency-Key`。該句實作成帶這段說明的 `IllegalStateException`，不發明後門、也不假綠。
 
+- [ ] T359 App 用 `activeStaffCount` 分辨兩種空狀態（解除缺口 #36）
+  - 現況：T345 已讓 `GET /pool` 回 `activeStaffCount` 並支援 `dept` 參數，但 `grep activeStaffCount app/mobile/lib` 零命中——App 沒解析，也沒有主管視角帶 `dept` 的路徑，所以 `待認領列表.feature:88`「房務部全員停用，王主管看到空狀態」仍紅。與 #33 同一個模式（後端補了、App 沒接）。
+  - 只做：`api_client.dart` 的池回應模型補 `activeStaffCount`；`getPool` 支援選用 `dept`（主管／老闆身分登入時帶）；`pool_screen.dart` 的空狀態依契約判準分兩種——`activeStaffCount > 0` 且清單空＝單都被接走（既有空狀態），`activeStaffCount == 0`＝掛 `pool.empty-state--no-active-staff` 並顯示 feature 指定的文案。
+  - 不做：不改既有單卡、分類磚、篩選與排序；不改現場員工省略 `dept` 的既有行為；不碰 `tms/`、`specs/truth/**`、`app/bdd/` 的 stepdef 語意。
+  - 驗收：`app/bdd/run-module.sh 待認領` **9/9 綠**（未接超時兩段標籤 2 個由 T344 解開、本題解開第 3 個）；`flutter analyze` 無 error、`flutter test` 全過。
+
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 32 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
+以下 33 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1334,3 +1340,5 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 34. **房務端三支 feature 的 29 句 stepdef 從未實作，仍是 `PendingException` 樁（T351 實跑確認，2026-11-06）**：`app/bdd/src/test/java/com/athena/app/bdd/steps/repair/` 的 `RepairGivenSteps` 8 句（`裝置時間是`、`… 的報修畫面選了類別 …，附了 N 張照片`、`第 N 張照片的上傳會失敗`、`… 的手機有 N 張待送出的 {房號} 冷氣工務單`、`恢復連線後的前 N 次送出會因網路不穩而重送`、`後端已有 … 冷氣工務單 …，狀態為 …`、`… 今天是 VIP 房，住客 … 入住`、`… 已將 … 降級為一般件，原因為 …`）、`RepairWhenSteps` 4 句（`… 在 … 的報修畫面拍 N 張照片`、`… 送出工務單`、`… 以中斷模式送出工務單`、`… 的手機恢復連線`）、`RepairThenSteps` 17 句（浮水印、送出鈕狀態、照片欄位提示、張數上下限、單張重試、離線暫存與待送出標示、冪等重送後的後端筆數、補充照片、急件／一般件判定文案、狀態摘要卡、撤回按鈕、急件降級原因）。當初寫成樁是因為缺口 #12／#13 讓情境根本跑不到，現在後端已補、情境真的跑起來了，這 29 句就是 App 側 BDD 的未竟工作，**直接擋住 `報修照片與送出` 6 個、`開單提示` 3 個、生命週期 1 個，共 10 個場景**。另 `BackendChannel.createTask` 的狀態對照缺 `rejected`（生命週期行 49 丟 `IllegalArgumentException`），同屬這批未竟工作。要改 `app/bdd/` 的 stepdef 語意，Phase 6 Boundary 禁止在本輪大規模補，須另開 task。 ~~**本輪已補**（T358，2026-11-06）：29 句全部寫成可被跑到的實作，dry-run 三支 feature 0 undefined／0 pending；`rejected` 改由工務單層先落 `pending_review` 再走正式退回端點達成~~，**缺口解除**。剩一句 `恢復連線後的前 N 次送出會因網路不穩而重送` 轉為新缺口 #35（測試後門缺注入開關）。
 
 35. **測試後門沒有「前 N 次送出逾時後重送」的注入開關（T358 實作時發現，2026-11-06）**：`報修照片與送出.feature:69` 的「恢復連線後的前 3 次送出會因網路不穩而重送」要讓開單請求在後端已處理後才逾時，迫使 App 用同一把 `Idempotency-Key` 重送，才驗得到「重送 3 次後端仍只有 1 張單」。`app/mobile/lib/core/test_backdoor.dart` 現有的五個開關（`/clock`、`/offline`、`/upload-fail`、`/remembered-account`、`/flaky-connection`）都做不到這件事——`/flaky-connection` 只把 `ConnectionStatus` 標成不穩定（改走每 5 秒降級輪詢），不會讓任何一次送出重跑；拿它頂替會讓這個情境在完全沒有重送的情況下綠燈，等於沒驗到冪等。該句的 stepdef 已實作成帶這段說明的 `IllegalStateException`（不是 `PendingException`，句子跑得到），**擋住 `報修照片與送出.feature` 的 1 個場景**。回交 App 端：測試後門補一個可指定「前 N 次寫入請求在後端收下之後才逾時」的注入開關，屬 `app/mobile/` 產品碼（測試建置限定），須另開 task。
+
+36. **App 未接 `activeStaffCount`、也沒有主管視角帶 `dept` 的路徑（預檢發現，2026-11-06）**：T345 已讓後端回 `activeStaffCount` 並支援 `dept` 參數，但 `app/mobile/lib` 內零命中，`待認領列表.feature:88` 的主管空狀態場景仍無法轉綠。與 #33（App 未接 `todayTasks`／`tickets`）同一個模式。由 T359 承接。
