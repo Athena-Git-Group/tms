@@ -316,3 +316,7 @@
 
 | MODIFY | `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature` -> Rule 3 的待同步筆數場景 | 由「手機有 2 筆待同步 → 斷言 2 筆」改為「名下有一張進行中的單＋手機離線 → 在 App 完成該單 → 斷言 1 筆」。筆數改由 When 的離線完成動作自己產生。 | 回交缺口 #25 的使用者裁決：同一支 feature 的 Rule 2 已把離線時的開始／認領／延後／開新工務單全擋掉，後端又限制一次只做一間，**系統在離線下最多只生得出 1 筆**；原場景只能靠測試後門 `POST /offline-queue` 硬鋪起始狀態，驗的不是真實路徑。裁決為把驗收改成系統真正做得到的樣子，不加後門、不放寬 Rule 2。 |
 | DELETE | `specs/truth/features/ios-app/系統層/dsl.md` -> Given `"{員工}" 的手機有 {筆數} 筆待同步的項目` | 刪除該列。 | 同上：該句的「怎麼做」原寫「對任一支援離線暫存的動作各執行若干次累計到指定筆數」，在 Rule 2 之下無法產生任意筆數，改寫無解；MODIFY 後全專案零引用。連帶使 `POST /offline-queue` 測試後門失去 truth 使用者，`app/bdd` 的對應 stepdef 成為孤兒，待 `/implement` 清理。 |
+
+| ADD | `specs/truth/features/backend/今日進度/dsl.md` -> 「連續零退回天數的計算口徑」章節與 Given／Then 句型 | 新增全系統唯一的計算定義：以有出勤的工作日連續計，退回＝`tasks.inspection`=`failed`（含抽查退回），不含退回待認領與工務單退回；有出勤＝該日有本人名下非 cancelled 的任務；沒出勤的日子跳過不中斷；今天計入且當天一有退回即歸零。Then 由原本「不驗證數值」改為 `今日進度的連續零退回天數為 {天數}`。 | 使用者裁決缺口 #20「算工作日」。退回範圍依 `backend/查房/dsl.md:7` 的用語對照（退回重做→inspection failed）；有出勤的定義取最小且由現有 `tasks` 可判定者，因 truth 無歷史班表（`backend/dsl.md:57` 只建得出今日班次）。 |
+| ADD | `specs/truth/features/backend/今日進度/連續零退回天數.feature` | 新增 4 個場景／3 條 Rule：跨日連續且休假不中斷、全無出勤為 0、當天一通過一退回為 0、今天只開工未查房仍計一天。 | 原有場景驗不出跨日連續與歸零語意，口徑定了就要有承接。 |
+| MODIFY | `specs/truth/features/ios-app/今日進度/首頁今日進度.feature` 與 `今日進度/dsl.md` | 移除 `# [need clarification]`；DSL row 改寫成「與後端 `zeroReturnStreakDays` 一致、口徑由後端定義、本句型不驗算式」。 | 計算語意唯一歸屬在後端，App 只負責顯示，不得重複定義。 |
