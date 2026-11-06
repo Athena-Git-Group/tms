@@ -365,7 +365,8 @@ public class TaskExecutionService {
                 """
                 SELECT * FROM (
                     SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
-                           t.return_reason, t.requeue_note, t.created_at, r.room_no, r.floor,
+                           t.return_reason, t.requeue_note, t.created_at, t.reminder_stage,
+                           r.room_no, r.floor,
                            rt.ticket_no,
                            (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
                            EXISTS (SELECT 1
@@ -414,6 +415,10 @@ public class TaskExecutionService {
             item.put("ticketNo", row.get("ticket_no"));
             item.put("priorityNotify", row.get("priority_notify"));
             item.put("sameFloor", row.get("same_floor"));
+            // 未接提醒階段：原值回傳，還沒進提醒階段就是 null。這裡只是把
+            // tasks.reminder_stage 露給 App 標示單卡，排序仍走上面的
+            // unclaimed_overdue 旗標，兩者不互相影響。
+            item.put("reminderStage", row.get("reminder_stage"));
             item.put("returnReason", row.get("return_reason"));
             item.put("handoverNote", row.get("requeue_note"));
             item.put("createdAt", row.get("created_at"));

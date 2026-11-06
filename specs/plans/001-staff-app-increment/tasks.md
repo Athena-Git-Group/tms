@@ -1159,7 +1159,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 不做：不改 `elapsedMinutes`／`accumulatedMinutes` 的口徑；不在後端算「超時 N 分」或「預估 35 分」的文案（那是 App 依 `estMin` 與已做分鐘自己算）；不改 SOP 勾記的寫入路徑。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 任務執行` 的超時提示與慶祝頁 2 個場景轉綠（需 T341 已完成，App 才進得了任務頁）。缺口 #17 標示解除。
 
-- [ ] T344 `PoolItem.reminderStage` 補進 `GET /pool` 回應（解除缺口 #15）
+- [X] T344 `PoolItem.reminderStage` 補進 `GET /pool` 回應（解除缺口 #15）
   - 契約落點：`specs/truth/contracts/components/schemas/員工工作台.yaml` -> `PoolItem.reminderStage`（:297，`staff_reminded`／`manager_notified`）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列。
   - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `deptPool`——SQL 已經讀了 `t.reminder_stage`（:382 當 `unclaimed_overdue` 排序旗標用，但沒有選進 select 清單的輸出欄位），`PoolItem` 組裝處（:405-419）補一行 `item.put("reminderStage", …)`；需要時把 `t.reminder_stage` 本身加進內層 SELECT。
   - 只做：把 `tasks.reminder_stage`（V13 落地）原值放進回應，null 就是 null。
