@@ -777,6 +777,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 - [ ] T316 [BDD-GREEN] 讓 Test Scope 全綠（`app/bdd/run-module.sh 帳號與登入`，10 個場景全綠）
   - 現況 9/10 綠（2026-11-05）：唯一紅燈是行 59「設定新密碼後進入首頁」——契約無「設定新密碼」端點（`員工帳號與登入.yaml` 只有 `staffAccountsLogin`），且後端 `BearerTokenAuthFilter` 在 `must_change_password` 清掉前對 `/me/today` 一律 403，App 邊界內無合法路徑轉綠。見上游缺口 #14；端點補齊後用既有 stepdef 即可收綠，勿假綠。
+  - 現況 9/10 綠（2026-11-06，T350 重跑）：後端改密端點已補（T348，實跑以 curl 確認 `POST /api/v1/staff-accounts/login` 回 `mustChangePassword:true`、`POST /api/v1/staff-accounts/change-password` 回新權杖且 `mustChangePassword:false`），但行 59 仍紅，紅燈歸因換人：**App 的 `force_password_change_screen.dart:48-52` 是刻意留的樁**——`_submit()` 不呼叫任何 API，直接把 `_errorMessage` 設成「目前無法完成設定，請稍後再試。」（實跑元素樹 `/tmp/tms-app-bdd-missing-home.screen-1793949653542.xml` 逐字可見這句錯誤文案，兩個密碼欄都已填入 12 字新密碼）。該檔自 commit c7c528b 起沒改過，註解寫的「端點補齊後：呼叫改密 → 成功後 replaceAllRoutes 進首頁」就是待辦。這一步要改 `app/mobile/` 的產品行為，Phase 6 Boundary 明令不在本輪動它，故不打勾、不假綠。見新增的缺口 #30。
 - [X] T317 [BDD-REFACTOR] 在綠燈下整理登入／改密／登出三個流程共用的錯誤呈現與守衛判斷，清掉 `login_screen.dart` 的過時註解
 
 ## Phase 3O: ADD Feature File - ios-app/推播/通知中心.feature
@@ -1063,9 +1064,35 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 驗收：T299–T339 全部 `[X]`；`flutter analyze` 在 `app/mobile/` 無 error；本輪沒有改到 `tms/`、`specs/truth/**` 與 T204–T298 的任何內容。有 issues 就修正再 review，直到沒有任何問題。
   - 結果（2026-11-06）：邊界 PASS（`git diff a5acd95..HEAD --stat -- tms/ specs/truth/` 為空，T204–T298 區段零改動）、`flutter analyze` 0 error、產品碼無 TODO／FIXME／死碼、`app/bdd/` 的 38 處 `PendingException` 全部可歸因（repair 29＝T322 的 18 個場景，taskexecution 9＝SOP／步驟條／缺口 #12／#17），無被遺忘的 pending。未打勾的 T316／T320–T324／T326／T327 皆有現況註記與歸因。首輪 review 提出 3 件文件層級 issue（缺口分類句沒蓋到 #25–#28、`steps/common/package-info.java` 與 `RunF3PushFeatureTest` 的註解寫的是已過時的 pending 現況），已全數修正並重跑 `test-compile` 通過。
 
+## Phase 8: App 側補接新端點（Phase 5 解鎖後才做得了的 App 工作）
+
+**Goal**: Phase 5 補上的後端端點裡，有一項在 App 側只留了樁——當初端點不存在，畫面與守衛先做完、送出那步留白。端點既然已經落地，把這條線接起來，T350／T316 才收得了綠。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature` -> `:59` 的場景與其 Rule
+- `specs/truth/features/ios-app/帳號與登入/dsl.md` -> When `"{員工}" 設定新密碼 "{新密碼}" 並確認`、Then `"{員工}" 登入成功，進入首頁`
+- `specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `changeOwnPassword`（T348 已實作，`POST /api/v1/staff-accounts/change-password`）
+- `specs/truth/contracts/components/schemas/員工帳號與登入.yaml` -> `ChangePasswordRequest`、`LoginResponse`
+- `app/mobile/lib/features/login/force_password_change_screen.dart`、`app/mobile/lib/core/api_client.dart`、`core/error_banner.dart`、`core/navigation.dart`
+
+**Boundary**:
+- 只接這一條線：呼叫端點、成功換 token 後進首頁、失敗顯示後端回的錯誤。**不改**強制改密畫面既有的守衛行為（完成前離不開）、不改登入流程其他分支。
+- 錯誤呈現沿用既有 `ErrorBanner`，導頁沿用 `replaceAllRoutes`，不另寫第二套。
+- 不加密碼強度檢查（契約明寫 truth 未定義、不發明門檻——見缺口 #32 與 `ChangePasswordRequest` 的 description）。
+- 不碰 `tms/`、`specs/truth/**`、`app/bdd/` 的 stepdef 語意。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature`
+
+- [ ] T356 把強制改密畫面的送出接上 `changeOwnPassword`（解除缺口 #32）
+  - 現況：`force_password_change_screen.dart` 的 `_submit()` 是寫死錯誤文案的樁，不呼叫任何 API（T350 實跑的元素樹證據：畫面停在「目前無法完成設定，請稍後再試。」）。
+  - 只做：`api_client.dart` 加 `changePassword(currentPassword, newPassword)`（強制改密情境不帶 `currentPassword`），成功後以回應的新 token 換掉既有 token 並走 `replaceAllRoutes` 進首頁；失敗以 `ErrorBanner` 顯示後端訊息。
+  - 不做：不改守衛（完成前離不開）、不改登入其他分支、不加長度檢查。
+  - 驗收：`app/bdd/run-module.sh 帳號與登入` **10/10 綠**；`flutter analyze` 無 error、`flutter test` 全過。
+
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 31 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
+以下 32 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1080,7 +1107,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 11. **撞單場景的 Given 順序產生不出被測狀態（T320 實跑發現，2026-11-06）**：`工務視角.feature` 的「小李剛接走」場景，Given 先把單建成「已接單／小李」才打開待認領，該單此時已不在池中、依規格本就不該顯示，無法表達 Rule 要的「列表過期」語意。回交 `/dsl-refine`：Given 應改為先進池、開池後才被他人接走。
 12. **App 無端點可列舉「進行中（doing）」的任務（T322 實跑發現，2026-11-06）**：房務端三支 feature 的受測任務都是 doing，但 `MyToday.nextTasks` 只收 `accepted`（`tms/.../TaskExecutionService.java:498` 逐字確認），`/pool` 只回 `state=pool`，因此 App 進不了任務頁，報修面板與工務單詳情全部到不了——**擋住 Phase 3Q 全部 18 個場景**。ui-plan 畫面 1 的「繼續處理」本來就需要這份清單。回交 `/api-plan`：`MyToday` 補進行中的單。與缺口 #10 同一族（App 看不見自己手上的工作）。
 13. **`listRepairTickets` 後端未實作（T322 實跑發現，2026-11-06）**：`GET /api/v1/repair-tickets?roomId=` 回 501（`tms/.../repair/RepairController.java:118` 明寫佔位），且契約無「我報的工務單」清單端點；即使 #12 解除，房務端仍進不了工務單詳情。回交後端實作＋`/api-plan` 評估是否補本人視角清單。
-14. **「設定新密碼」端點缺席（T316 實跑發現，2026-11-05）**：`登入與登出守衛.feature:59` 要求設定新密碼後進入首頁，但 `員工帳號與登入.yaml` 只有 `staffAccountsLogin`，無改密端點；後端在 `must_change_password` 清掉前對業務端點一律 403。回交 `/api-plan` 補「設定新密碼」端點（重雜湊密碼＋清 `must_change_password`）→ 後端實作後，T316 的最後 1 個場景用既有 stepdef 即可轉綠。在此之前 T316 收 9/10，不假綠。
+14. **「設定新密碼」端點缺席（T316 實跑發現，2026-11-05）**：`登入與登出守衛.feature:59` 要求設定新密碼後進入首頁，但 `員工帳號與登入.yaml` 只有 `staffAccountsLogin`，無改密端點；後端在 `must_change_password` 清掉前對業務端點一律 403。回交 `/api-plan` 補「設定新密碼」端點（重雜湊密碼＋清 `must_change_password`）→ 後端實作後，T316 的最後 1 個場景用既有 stepdef 即可轉綠。在此之前 T316 收 9/10，不假綠。 ~~**後端半邊本輪已補**（T348，2026-11-06 以 curl 實測端點符合 `changeOwnPassword` 契約）~~；但 T350 重跑仍紅，剩下的是 App 側接線，見缺口 #30。
 15. **`GET /pool` 不回 `reminderStage`（T324 實跑發現，2026-11-06）**：契約 `員工工作台.yaml` 的 `PoolItem.reminderStage` 已定義（`staff_reminded`／`manager_notified`），`tasks.reminder_stage` 也確實落地（V13；實跑以 SQL 確認 fixture 寫入成功），但 `TaskExecutionService.deptPool`（`tms/.../TaskExecutionService.java:369`）只把它當 `unclaimed_overdue` 排序旗標用，組裝 `PoolItem` 時（:405-419）沒有放進回應，App 永遠讀到 null，未接超時兩段標籤畫不出來——**擋住 Phase 3R 的 2 個場景**。回交後端：`deptPool` 補 `item.put("reminderStage", …)`。與缺口 #10／#12 同一族（App 看不見後端已有的資料）。
 16. **主管看不到任何部門待認領池，後端也沒有「部門沒有在職員工」的訊號（T324 實跑發現，2026-11-06）**：`待認領列表.feature:88` 要王主管打開房務待認領看到空狀態，但 (a) `listDeptPool` 只依登入者自己的 `dept` 分流、沒有部門查詢參數，主管的 `dept` 是 NULL，`TaskExecutionService.deptPool:357` 直接回 422「此帳號未設部門」；(b) 整個後端沒有任何地方判斷「這個部門沒有在職員工」，`GET /pool` 對這個情況只會回一般的空 `items`，App 無從分辨「沒有單」與「沒有人可以搶單」。回交 `/api-plan`：補部門參數（或主管視角的部門池端點）＋在回應中帶出部門可搶單人力的狀態。
 17. **`readTasks` 回應缺 `estMin`／`skippedSopItems`／`inspectionWaived`（T326 實跑發現，2026-11-06）**：契約 `TaskDetail` 以 `allOf` 併入 `tasks`（含 `estMin`、`inspectionWaived`）並另外定義 `skippedSopItems`，但 `TaskExecutionService.toDetail`（`tms/.../TaskExecutionService.java:584-607`）逐欄組裝回應時這三欄都沒放。App 因此算不出「超時 N 分」（＝已做分鐘 − 預估分鐘）、慶祝頁印不出「預估 35 分」、SOP 進度的 `x / y` 也少了跳過的那一半——在缺口 #12 之後接著擋住 Phase 3S 的超時與慶祝頁 2 個場景。回交後端：`toDetail` 補這三欄。
@@ -1222,6 +1249,8 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 - [ ] T350 重跑 `帳號與登入`，收綠 T316
   - 解除：缺口 #14（T348）。
   - 驗收：`app/bdd/run-module.sh 帳號與登入` 回報 **10/10 綠**（原 9/10，唯一紅是 `登入與登出守衛.feature:59`）。把 T316 打勾，現況註記補上實跑數字與日期；缺口 #14 標示解除。
+  - 實跑結果（2026-11-06，未達標）：先停掉舊的 spring-boot（PID 58919／59084）重編重啟，啟動 log 逐字確認 `Migrating schema "public" to version "18 - notifications grant"` 與 `Successfully applied 1 migration`，再跑兩輪。第一輪 `Tests run: 10, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 374.3 s`——9 綠，紅的是行 59。第二輪 `Tests run: 10, Failures: 2, Errors: 1, Skipped: 0, Time elapsed: 455.2 s`——多出來的 2 紅是本機慢造成的 harness 雜訊（`共用手機輸入錯誤密碼` 等測試後門 9099 逾時；`阿美已經連錯 5 次` 的鎖定橫幅實際顯示「14 分鐘」，因為該情境本身跑了 103 秒、15 分鐘的鎖定時間已經走掉一分多鐘），不是後端或產品行為退化。行 59 兩輪都紅，第二輪推進到改密畫面並按下確認，卡在 App 樁寫死的錯誤文案上。
+  - 歸因：**不是 Phase 5 沒照契約做**（後端端點以 curl 直接驗過，行為符合 `changeOwnPassword` 契約），**也不是 harness 不穩**（元素樹顯示 App 自己畫了錯誤訊息），而是 App 側缺口 #30。缺口 #14 的後端半邊已解除，App 半邊未解除，所以 T316／T350 都不打勾。
 
 - [ ] T351 重跑 `工務單`，收綠 T320／T322 並解鎖 T321／T323
   - 解除：缺口 #10（T342）、#12（T341）、#13（T346）。
@@ -1265,6 +1294,8 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 回交清單：本輪實作過程中發現的契約／規格問題一次回交，至少含 T348 記到的「`changeOwnPassword` 的 description 寫密碼長度下限 8 字、`ChangePasswordRequest.newPassword` 的 description 寫 truth 沒有定義長度門檻且不得自行發明」這組自相矛盾（回交 `/api-plan` 與 `/dsl-refine`）。
 
 29. **`EngineeringTicket.ticketNo` 必填，但 repair 類任務不保證有 `repair_tickets` 列（T342 實作時發現，2026-11-06）**：契約把 `ticketNo` 列為必填，實作時發現 `AutomationRuleService` 的排程規則可以建出 `type='repair'` 卻沒有對應工務單的任務。T342 為了保住契約的「`tickets` 筆數＝`openCount`＋`completedToday`」不變量，改用 LEFT JOIN 收全部 repair 任務，該邊角情形 `ticketNo` 會是 null。兩條路擇一，請上游定：`/api-plan` 把 `ticketNo` 改 nullable，或 `/data-plan` 保證 repair 任務必有工務單。
+
 30. **`isUrgent` 的權威欄位沒寫明（T342 實作時發現，2026-11-06）**：`EngineeringTicket.isUrgent` 契約說口徑同 `RepairTicketSummary.isUrgent`（＝`repair_tickets.is_urgent`），但既有 `engineeringSummary.urgentCount` 用的是 `tasks.urgent`。目前兩欄由急件降級路徑同步寫入所以結果一致，但這是靠寫入端維持的隱含約定，契約沒寫明哪一欄是權威。回交 `/api-plan` 寫明，否則日後任一條寫入路徑漏寫就會讓清單與計數對不上。
 
 31. **`TaskDetail.estMin` 的 nullable 標註與資料庫不一致（T343 實作時發現，2026-11-06）**：`tasks.est_min` 在 `V1__schema.sql:215` 可為 null，但契約 `任務.yaml` 的 `estMin` 沒標 nullable。App 的「超時 N 分」與慶祝頁「預估 N 分」都要拿這個值算，若實際可能是 null，App 需要知道該怎麼呈現（不顯示？顯示 —？）。與缺口 #29 同一類（契約的必填／nullable 標註與資料側對不上），一併回交 `/api-plan` 校對。
+32. **App 的強制改密畫面沒有送出路徑，`_submit()` 是寫死錯誤文案的樁（T350 實跑發現，2026-11-06）**：`app/mobile/lib/features/login/force_password_change_screen.dart:40-53` 的 `_submit()` 在兩次新密碼一致時不呼叫任何 API，直接 `setState` 成「目前無法完成設定，請稍後再試。」；類別 Javadoc（:14-17）寫明這是等端點落地的樁。T348 已把 `POST /api/v1/staff-accounts/change-password` 做出來（curl 實測：臨時密碼登入回 `mustChangePassword:true`，改密回新權杖且 `mustChangePassword:false`，舊權杖同時失效），缺的只剩 App 這一段接線——呼叫改密端點、成功後存新權杖並 `replaceAllRoutes` 進首頁、失敗時依 `current_password_invalid`／`new_password_invalid` 顯示對應文案。**擋住 `登入與登出守衛.feature:59`，T316 因此停在 9/10、T350 未達標。** 這是 App 側產品行為，Phase 6 Boundary 禁止在本輪動 `app/mobile/`，須另開 task（或由 `/implement` 接手 App 輪）。
