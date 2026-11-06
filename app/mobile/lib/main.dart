@@ -47,10 +47,7 @@ class _TmsStaffAppState extends State<TmsStaffApp> {
     return CupertinoApp(
       title: 'TMS 員工 App',
       navigatorKey: rootNavigatorKey,
-      theme: CupertinoThemeData(
-        primaryColor: tmsBrandColor,
-        brightness: Brightness.light,
-      ),
+      theme: buildTmsCupertinoTheme(),
       builder: (context, child) {
         // CupertinoApp 本身不帶 Material 主題，部分共用元件仍可能依賴
         // Theme.of(context)，所以在這裡補一層 Material 主題當底。
