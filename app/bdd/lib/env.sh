@@ -59,7 +59,7 @@ check_backend_ready() {
     # ${} 不能省：系統 bash 3.2 會把全形「）」的位元組吞進變數名，set -u 下直接炸
     log "後端沒有回應（${BACKEND_URL}）。先起後端："
     log "  docker compose up -d"
-    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms ./mvnw -f tms/pom.xml spring-boot:run"
+    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
     return 1
   fi
 
