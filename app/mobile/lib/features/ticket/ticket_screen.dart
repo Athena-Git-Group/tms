@@ -95,6 +95,36 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
+  /// 撤回這張單。後端是唯一的狀態真相，撤回後的狀態直接用它回傳的那一筆。
+  Future<void> _withdraw() async {
+    await _mutate(() => ApiClient.instance.withdrawRepairTicket(widget.taskId!),
+        '撤回失敗，請稍後再試。');
+  }
+
+  /// 補資料後重新送審。
+  Future<void> _resubmit() async {
+    await _mutate(() => ApiClient.instance.resubmitRepairTicket(widget.taskId!),
+        '重新送出失敗，請稍後再試。');
+  }
+
+  /// 對這張單做一次會改狀態的操作，並以後端回傳的那一筆換掉畫面。
+  Future<void> _mutate(
+      Future<RepairTicketDetail> Function() action, String failureMessage) async {
+    if (widget.taskId == null) {
+      return;
+    }
+    try {
+      final ticket = await action();
+      if (mounted) {
+        setState(() => _ticket = ticket);
+      }
+    } on ApiException catch (e) {
+      _showError(e.errorMessage ?? failureMessage);
+    } catch (_) {
+      _showError(failureMessage);
+    }
+  }
+
   void _showError(String message) {
     if (!mounted) {
       return;
@@ -192,7 +222,49 @@ class _TicketScreenState extends State<TicketScreen> {
             Expanded(child: _stepTile(i, currentStep)),
         ],
       ),
+      if (ticket.rejectReason != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: TmsSemantics(
+            id: 'ticket.reject-reason-label',
+            label: '主管未核准：${ticket.rejectReason}',
+            child: ExcludeSemantics(
+              child: Text('主管未核准：${ticket.rejectReason}'),
+            ),
+          ),
+        ),
+      if (ticket.urgentDowngradeReason != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: TmsSemantics(
+            id: 'ticket.urgent-downgrade-reason-label',
+            label: '已降為一般件：${ticket.urgentDowngradeReason}',
+            child: ExcludeSemantics(
+              child: Text('已降為一般件：${ticket.urgentDowngradeReason}'),
+            ),
+          ),
+        ),
       const SizedBox(height: 24),
+      // 撤回只在工務還沒認領前成立（契約 withdrawRepairTicket：pool 與
+      // pending_review 才收）。已被認領的 `already_claimed` 直接表現為按鈕
+      // 不存在——先顯示再讓員工點了才報 409，是拿錯誤訊息當說明書。
+      if (ticket.state == 'pool' || ticket.state == 'pending_review')
+        TmsSemantics(
+          id: 'ticket.withdraw-button',
+          child: CupertinoButton(
+            onPressed: _withdraw,
+            child: const Text('撤回'),
+          ),
+        ),
+      // 補資料再送出只有主管未核准（rejected）時才有意義，其他狀態不顯示。
+      if (ticket.state == 'rejected')
+        TmsSemantics(
+          id: 'ticket.resubmit-button',
+          child: CupertinoButton.filled(
+            onPressed: _resubmit,
+            child: const Text('補資料再送出'),
+          ),
+        ),
       if (ticket.isPublicArea &&
           (ticket.state == 'accepted' || ticket.state == 'doing'))
         TmsSemantics(

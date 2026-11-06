@@ -82,10 +82,31 @@ build_and_install_app() {
     return 1
   fi
 
+  # 接上硬體鍵盤（下次 boot 生效）。不接的話 simulator 會彈出螢幕鍵盤，而中文
+  # 注音鍵盤高到會蓋住登入頁的密碼欄：點密碼欄的那一下會打在鍵盤上，焦點留在
+  # 員工編號欄，接著 sendKeys 的密碼就被接到員工編號後面（實測看到欄位值是
+  # 「fx-xxxxxxxxxxxxdemo1234」），登入失敗，表現成「等不到 home.screen」。
+  defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true
+
   log "boot simulator（${UDID}）＋安裝 App"
   xcrun simctl boot "$UDID" >/dev/null 2>&1 || true
   xcrun simctl bootstatus "$UDID" -b
   xcrun simctl install "$UDID" "$APP_PATH"
+
+  # boot 剛完成時 install 會靜默失敗（405／204 競態），要到下一步建 Appium
+  # session 才以「App with bundle identifier … unknown」爆出來，看起來像 Appium
+  # 壞掉。裝完先確認真的裝上去了，沒有就重裝。
+  local _try
+  for _try in 1 2 3; do
+    if xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" >/dev/null 2>&1; then
+      return 0
+    fi
+    log "App 沒有真的裝上去（第 ${_try} 次），重裝"
+    xcrun simctl bootstatus "$UDID" -b
+    xcrun simctl install "$UDID" "$APP_PATH"
+  done
+  log "App 重裝三次仍不在 simulator 上（${BUNDLE_ID}）"
+  return 1
 }
 
 start_appium() {

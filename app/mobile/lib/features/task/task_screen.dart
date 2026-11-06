@@ -5,6 +5,7 @@ import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../celebrate/celebrate_screen.dart';
+import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
 import 'ask_sheet.dart';
 import 'hold_sheet.dart';
@@ -46,6 +47,16 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 送出去」，否則他會以為單子已經結了，或以為剛才白做了。
   bool _completionPendingSync = false;
 
+  /// 報修面板是不是正貼在這一頁上。面板不另開路由（理由見 [RepairSheet]），
+  /// 所以開關它就是任務頁自己的一個狀態。
+  bool _repairSheetOpen = false;
+
+  /// 報修面板開啟時的原任務 id（契約的 sourceTaskId）。
+  String? _openRepairSheetTaskId;
+
+  /// 這一間房未撤回的工務單，順序照後端給的順序。
+  List<RepairTicketSummary> _repairTickets = const <RepairTicketSummary>[];
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +68,23 @@ class _TaskScreenState extends State<TaskScreen> {
     if (taskId == null) {
       return null;
     }
-    return ApiClient.instance.getTask(taskId);
+    final task = await ApiClient.instance.getTask(taskId);
+    _repairTickets = await _loadRepairTickets(task);
+    return task;
+  }
+
+  /// 這一間房未撤回的工務單（FR-021 的同房工務單區）。取不到時當成沒有：
+  /// 工務單區是任務頁的附帶資訊，不該因為它讀不到就讓整張任務頁打不開。
+  Future<List<RepairTicketSummary>> _loadRepairTickets(TaskDetail task) async {
+    final roomId = task.roomId;
+    if (roomId == null) {
+      return const <RepairTicketSummary>[];
+    }
+    try {
+      return await ApiClient.instance.listRepairTickets(roomId);
+    } catch (_) {
+      return const <RepairTicketSummary>[];
+    }
   }
 
   /// 用房號反查任務 id：先找待認領池，再找今天自己名下的單。
@@ -93,20 +120,46 @@ class _TaskScreenState extends State<TaskScreen> {
         navigationBar:
             CupertinoNavigationBar(middle: Text('${widget.roomNo} 的任務頁')),
         child: SafeArea(
-          child: FutureBuilder<TaskDetail?>(
-            future: _taskFuture,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('載入失敗，請稍後再試'),
-                );
-              }
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CupertinoActivityIndicator());
-              }
-              return _buildTask(snapshot.data);
-            },
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  // 連線狀態列固定在內容最上方：員工在任務頁上報修、送出、
+                  // 完成都要知道現在是不是離線、手機上還押著幾筆。
+                  const SystemStatusBar(),
+                  Expanded(
+                    child: FutureBuilder<TaskDetail?>(
+                      future: _taskFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('載入失敗，請稍後再試'),
+                          );
+                        }
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const Center(
+                              child: CupertinoActivityIndicator());
+                        }
+                        return _buildTask(snapshot.data);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              if (_repairSheetOpen)
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: RepairSheet(
+                    roomNo: widget.roomNo,
+                    sourceTaskId: _openRepairSheetTaskId,
+                    onClose: () => setState(() {
+                      _repairSheetOpen = false;
+                      _openRepairSheetTaskId = null;
+                    }),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -356,6 +409,30 @@ class _TaskScreenState extends State<TaskScreen> {
           padding: const EdgeInsets.all(16),
           child: Text('內容：${task.title ?? ''}'),
         ),
+        // 同房工務單區（FR-021）：報修人從這裡進到自己那張單的詳情。順序照
+        // 後端給的順序，App 不重排。
+        for (final ticket in _repairTickets)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TmsSemantics(
+                id: 'task.repair-ticket.${ticket.ticketNo}.card',
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => TicketScreen(taskId: ticket.taskId),
+                      ),
+                    );
+                  },
+                  child: Text('${ticket.ticketNo} '
+                      '${repairCategoryText(ticket.category)}'),
+                ),
+              ),
+            ),
+          ),
         _buildSkeletonEntries(task),
         const Spacer(),
         // 置底主按鈕：一個狀態只露出一個，文字由 [_primaryActionLabel] 的
@@ -416,9 +493,16 @@ class _TaskScreenState extends State<TaskScreen> {
           TmsSemantics(
             id: 'task.repair-button',
             child: CupertinoButton(
-              onPressed: () => ConnectionStatus.instance.isOffline
-                  ? showOfflineBlockedAlert(context)
-                  : RepairSheet.show(context),
+              onPressed: () {
+                if (ConnectionStatus.instance.isOffline) {
+                  showOfflineBlockedAlert(context);
+                  return;
+                }
+                setState(() {
+                  _repairSheetOpen = true;
+                  _openRepairSheetTaskId = task?.id;
+                });
+              },
               child: const Text('報修'),
             ),
           ),

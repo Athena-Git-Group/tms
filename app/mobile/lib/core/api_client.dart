@@ -173,10 +173,78 @@ class ApiClient {
     );
   }
 
+  /// `GET /repair-tickets?roomId=`：同房未撤回的工務單（契約
+  /// `listRepairTickets`）。任務頁的同房工務單區用它，報修人從那一列進到
+  /// 自己那張單的詳情。
+  Future<List<RepairTicketSummary>> listRepairTickets(String roomId) async {
+    final json = await _requestJson(
+      'GET',
+      '/repair-tickets',
+      query: {'roomId': roomId},
+    );
+    return (json as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .map(RepairTicketSummary.fromJson)
+        .toList();
+  }
+
+  /// `POST /repair-tickets/precheck`：開單前檢查（契約 `precheckRepairTicket`）。
+  /// 報修人選定類別時呼叫，不建立任何工務單，只回兩件事：同房同類別還沒結案
+  /// 的那張單（重複提示用），以及系統依飯店設定規則算出的急件判定。判定是後端
+  /// 的結論，App 只負責呈現。
+  Future<RepairTicketPrecheck> precheckRepairTicket({
+    required String sourceTaskId,
+    required String category,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-tickets/precheck',
+      body: {'sourceTaskId': sourceTaskId, 'category': category},
+    );
+    return RepairTicketPrecheck.fromJson(json as Map<String, dynamic>);
+  }
+
   /// `GET /repair-tickets/{ticketId}`：工務單詳情（路徑參數是工務單的任務
   /// id，不是 W- 單號）。
   Future<RepairTicketDetail> readRepairTicket(String taskId) async {
     final json = await _requestJson('GET', '/repair-tickets/$taskId');
+    return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /repair-tickets/{ticketId}/photos`：補照片到既有工務單（契約
+  /// `appendRepairTicketPhotos`）。重複提示的「補充照片到這張單」走這裡。
+  Future<void> appendRepairTicketPhotos(
+    String taskId, {
+    required List<String> photoIds,
+  }) async {
+    await _requestJson(
+      'POST',
+      '/repair-tickets/$taskId/photos',
+      idempotent: true,
+      body: {'photoIds': photoIds},
+    );
+  }
+
+  /// `POST /repair-tickets/{ticketId}/withdraw`：報修人在工務認領前撤回
+  /// （契約 `withdrawRepairTicket`）。已被認領時後端回 409 `already_claimed`
+  /// ——畫面要在那之前就不顯示這顆按鈕。
+  Future<RepairTicketDetail> withdrawRepairTicket(String taskId) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-tickets/$taskId/withdraw',
+      idempotent: true,
+    );
+    return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /repair-tickets/{ticketId}/resubmit`：報修人補完資料後把被退回的
+  /// 工務單重新送審（契約 `resubmitRepairTicket`）。
+  Future<RepairTicketDetail> resubmitRepairTicket(String taskId) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-tickets/$taskId/resubmit',
+      idempotent: true,
+    );
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
@@ -219,23 +287,31 @@ class ApiClient {
   }
 
   /// `POST /repair-tickets`：開立工務單（契約 `createRepairTicket`）。
-  /// 工務自開路徑：不帶 sourceTaskId，改帶 [roomId] 或 [isPublicArea]=true
-  /// （擇一）。急件由系統判定，請求不帶任何急件欄位。
+  /// 三條開單路徑擇一：房務從原任務報修帶 [sourceTaskId]，工務自開帶
+  /// [roomId] 或 [isPublicArea]=true。急件由系統判定，請求不帶任何急件欄位。
+  /// [idempotencyKey] 給離線佇列重送用：同一次送出重送幾遍都帶同一把鍵，
+  /// 後端才認得出是同一次動作、只建立一張單。
   Future<RepairTicketDetail> createRepairTicket({
+    String? sourceTaskId,
     String? roomId,
     bool isPublicArea = false,
     required String category,
     required List<String> photoIds,
+    bool interruptSourceTask = false,
+    String? idempotencyKey,
   }) async {
     final json = await _requestJson(
       'POST',
       '/repair-tickets',
       idempotent: true,
+      idempotencyKey: idempotencyKey,
       body: {
+        if (sourceTaskId != null) 'sourceTaskId': sourceTaskId,
         if (roomId != null) 'roomId': roomId,
         if (isPublicArea) 'isPublicArea': true,
         'category': category,
         'photoIds': photoIds,
+        if (interruptSourceTask) 'interruptSourceTask': true,
       },
     );
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
@@ -781,6 +857,70 @@ class RepairTicketDetail {
   }
 }
 
+/// 開單前檢查的結果（契約 RepairTicketPrecheckResponse）。
+class RepairTicketPrecheck {
+  const RepairTicketPrecheck({
+    required this.urgent,
+    this.urgentRule,
+    this.duplicate,
+  });
+
+  /// 系統判定這張單是不是急件。這是後端依飯店設定規則算出來的結論，
+  /// App 不自己判、也不讓房務改。
+  final bool urgent;
+
+  /// 命中的判定規則說明，例如「VIP · 15:00 入住」；判定為一般件時為 null。
+  final String? urgentRule;
+
+  /// 同房、同類別、還沒結案的工務單；沒有時為 null。
+  final RepairTicketSummary? duplicate;
+
+  factory RepairTicketPrecheck.fromJson(Map<String, dynamic> json) {
+    final judgement = json['urgentJudgement'] as Map<String, dynamic>?;
+    final duplicate = json['duplicate'] as Map<String, dynamic>?;
+    return RepairTicketPrecheck(
+      urgent: judgement?['suggested'] as bool? ?? false,
+      urgentRule: judgement?['rule'] as String?,
+      duplicate:
+          duplicate == null ? null : RepairTicketSummary.fromJson(duplicate),
+    );
+  }
+}
+
+/// 工務單摘要（契約 RepairTicketSummary）：任務詳情的同房工務單區與開單前
+/// 檢查的重複提示共用這一份。
+class RepairTicketSummary {
+  const RepairTicketSummary({
+    required this.taskId,
+    required this.ticketNo,
+    required this.roomNo,
+    required this.category,
+    required this.isUrgent,
+    required this.state,
+    required this.reporterName,
+  });
+
+  final String taskId;
+  final String ticketNo;
+  final String roomNo;
+  final String category;
+  final bool isUrgent;
+  final String state;
+  final String reporterName;
+
+  factory RepairTicketSummary.fromJson(Map<String, dynamic> json) {
+    return RepairTicketSummary(
+      taskId: json['taskId'] as String,
+      ticketNo: json['ticketNo'] as String,
+      roomNo: json['roomNo'] as String? ?? '',
+      category: json['category'] as String,
+      isUrgent: json['isUrgent'] as bool? ?? false,
+      state: json['state'] as String,
+      reporterName: json['reporterName'] as String? ?? '',
+    );
+  }
+}
+
 /// `NextTask`：下一間推薦清單的一筆（只列 accepted，後端已排好順序）。
 class NextTask {
   const NextTask({
@@ -1094,6 +1234,7 @@ class TaskDetail {
     required this.state,
     this.type = 'cleaning',
     this.inspection,
+    this.roomId,
     this.roomNo,
     this.title,
     this.note,
@@ -1117,6 +1258,9 @@ class TaskDetail {
 
   /// 打掃任務的查房結果：passed｜waived｜failed；還沒查房時為 null。
   final String? inspection;
+
+  /// 房間 id。同房工務單要靠它向 `GET /repair-tickets?roomId=` 取。
+  final String? roomId;
   final String? roomNo;
   final String? title;
   final String? note;
@@ -1146,6 +1290,7 @@ class TaskDetail {
       state: json['state'] as String,
       type: json['type'] as String? ?? 'cleaning',
       inspection: json['inspection'] as String?,
+      roomId: json['roomId'] as String?,
       roomNo: json['roomNo'] as String?,
       title: json['title'] as String?,
       note: json['note'] as String?,

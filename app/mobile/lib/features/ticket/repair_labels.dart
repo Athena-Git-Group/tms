@@ -13,6 +13,16 @@ const List<({String key, String label})> repairCategories = [
   (key: 'other', label: '其他'),
 ];
 
+/// 類別 enum → 畫面文字。認不得的值原樣回傳，不猜一個說法。
+String repairCategoryText(String category) {
+  for (final entry in repairCategories) {
+    if (entry.key == category) {
+      return entry.label;
+    }
+  }
+  return category;
+}
+
 /// 完修三選一（契約 CompleteTaskRequest.resolutionType）→ 畫面文字。
 const List<({String key, String label})> repairResolutions = [
   (key: 'fixed', label: '已修好'),

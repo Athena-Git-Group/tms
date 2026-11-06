@@ -99,20 +99,25 @@ public class RepairGivenSteps {
     }
 
     /**
-     * 怎麼做：在離線狀態下填好並送出指定張數的冷氣工務單，讓它留在手機的待送出佇列。
+     * 怎麼做：填好冷氣工務單後在離線狀態下送出，讓它留在手機的待送出佇列。
      * 權威狀態落地：後端還沒有這些單。房號為 feature 中的裸字（無引號），用 regex 形式的
      * step definition 擷取。
+     *
+     * <p>面板是在切離線「之前」打開並填好的：依 `系統層/離線模式與連線異常.feature`
+     * 的 Rule「離線時開始、認領、延後、開新工務單一律被擋」，離線時點報修只會收到
+     * 離線提示，根本進不了報修面板；能在離線時走完的只有「把已經填好的這張送出」
+     * （`報修照片與送出.feature` 的「阿美在電梯裡送出 310 冷氣單」就是這條動線）。
      */
     @假設("^\"([^\"]+)\" 的手機有 (\\d+) 張待送出的 (\\S+) 冷氣工務單$")
     public void phoneHasPendingAcTickets(String staffName, int count, String roomNo) {
         // 開工是離線時被擋下來的動作，裝置一旦離線那一筆進行中就再也補不起來，
         // 所以切離線之前先把測試資料欠的「在 App 按開始」補完（同共通 Given「手機目前離線」）。
         world.settleDeferredStarts();
-        world.postBackdoorJson("/offline", "{\"offline\":true}");
         for (int i = 0; i < count; i++) {
             context.openRepairSheet(staffName, roomNo);
             world.tapTestId("repair.category." + REPAIR_CATEGORY.get("冷氣") + ".chip", SCREEN_TIMEOUT);
             world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+            world.postBackdoorJson("/offline", "{\"offline\":true}");
             world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
         }
         assertNoTicketInBackend("離線送出的單只會留在手機的待送出佇列");
@@ -202,6 +207,15 @@ public class RepairGivenSteps {
                 world.backend().setTaskSource(
                         taskId, lookup(TICKET_SOURCE, sourceChinese, "工務單來源"));
             }
+            // 房務報修的單在產品上一定是從那位房務自己的任務開出來的
+            // （契約 CreateRepairTicketRequest 路徑①的 sourceTaskId），而報修人
+            // 追蹤這張單的 App 路徑也是走那張任務的任務頁（同房工務單區）。
+            // 測試資料只落工務單、不落來源任務的話，報修人在 App 上沒有任何
+            // 入口進得了自己的單——那是劇本湊不出來的狀態，不是待驗的行為。
+            if ("housekeeping".equals(reporter.dept())) {
+                seedSourceTaskFor(reporter, roomNo);
+            }
+
             if (verifierName != null) {
                 // 驗收人是主管端的人，背景的員工表只列現場員工（工務／房務），
                 // 不會有他；缺的時候就地補一位主管，不要求劇本為了一個顯示
@@ -280,6 +294,26 @@ public class RepairGivenSteps {
         String ticketNo = String.format("W-%04d", world.backend().allocateNextRepairTicketNo());
         world.backend().createRepairTicket(
                 ticketNo, "ENG-" + ticketNo, "other", stateCode, engineer, engineer, null, urgent);
+    }
+
+    /**
+     * 給報修人補一張同房的房務任務（待開始），當作這張工務單的來源任務。
+     * 同一間房只補一次：句型用房號指稱任務，同房兩筆房務任務會讓後續的
+     * 權威讀回無法唯一指認。
+     */
+    private void seedSourceTaskFor(BackendChannel.CreatedStaff reporter, String roomNo) {
+        List<Map<String, Object>> existing = world.backend().queryRows(
+                """
+                SELECT t.id FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? AND r.room_no = ? AND t.type <> 'repair'
+                """, world.backend().ensureTenant(), roomNo);
+        if (!existing.isEmpty()) {
+            return;
+        }
+        world.backend().createTask(
+                roomNo, "退房清潔", "cleaning", "housekeeping", null, "accepted",
+                reporter, null, null);
     }
 
     /** 中文 → 權威值；查不到就噴錯帶原詞，對齊 BackendChannel 的對照表行為。 */

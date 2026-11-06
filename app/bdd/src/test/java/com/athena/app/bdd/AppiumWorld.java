@@ -467,13 +467,18 @@ public class AppiumWorld {
      * 權威讀回：某房號在本情境中唯一那筆任務的 {@code tasks} 整列。句型用房號代表任務
      * （backend dsl.md「任務識別」：同一案例不得出現同房兩筆無法區分的任務），所以查到
      * 不是剛好一筆就是劇本或 fixture 有問題，直接噴錯而不是挑一筆用。
+     *
+     * <p>工務單（{@code type = 'repair'}）不算在內：它在後端也是一筆 tasks，但句型裡
+     * 用房號指稱的一律是房務那一筆，工務單一律用單號指稱（「已有以下工務單：」）。
+     * 同一間房同時有房務任務與它的工務單是正常劇本（報修就會造出這種狀態），不是
+     * 「同房兩筆無法區分」。
      */
     public Map<String, Object> taskRowByRoomNo(String roomNo) {
         List<Map<String, Object>> rows = backend.queryRows(
                 """
                 SELECT t.* FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
-                 WHERE t.tenant_id = ? AND r.room_no = ?
+                 WHERE t.tenant_id = ? AND r.room_no = ? AND t.type <> 'repair'
                 """, backend.ensureTenant(), roomNo);
         if (rows.size() != 1) {
             throw new IllegalStateException(

@@ -827,10 +827,13 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 現況 5/13 綠（2026-11-06，連兩輪結果一致非 flaky）：首頁彙總、急件／櫃檯分流、來源標示、待認領開單已綠；其餘 8 個場景被上游缺口 #10（7 個）與 #11（1 個）阻塞，端點／Given 補齊後以既有實作續推。
   - 現況仍 5/13 綠（2026-11-06，T351 重跑）：`Tests run: 31, Failures: 14, Errors: 12, Skipped: 0, Time elapsed: 1208 s`（`工務單` 整模組 31 個場景，本檔佔 13）。綠的仍是行 12／19／28／39／94 那 5 個。**後端半邊的缺口 #10 已解除**——以 curl 實測工務帳號打 `GET /api/v1/me/today`，`engineeringSummary.tickets` 逐欄符合 `EngineeringTicket` 契約（`ticketNo`／`taskId`／`roomNo`／`isPublicArea`／`title`／`state`／`isUrgent`／`source`），`openCount`／`urgentCount` 與陣列筆數一致。紅燈歸因換人：行 58／67／76／85／102／111／118 這 7 個全部掛在 `等不到畫面元素 engHome.in-hand.{單號}.card`，因為 **App 沒有接這個新欄位**——`app/mobile/lib/core/api_client.dart:509-` 的 `EngineeringSummary.fromJson` 只讀三個計數、不讀 `tickets`，`features/engineering/eng_home_screen.dart:172-176` 的 `_InHandTickets._load()` 仍從 `today.nextTasks` 篩 `type=='repair'`，而 `nextTasks` 依契約只收 accepted，維修中的單永遠不在裡面。見新增的缺口 #33。行 48 維持缺口 #11（撞單 Given 順序，`engPool.item.W-0501.claim-button` 本就不該在池中）。
   - 現況 10/13 綠（2026-11-06，T357 接上 `todayTasks`／`engineeringSummary.tickets` 後重跑）：`Tests run: 31, Failures: 8, Errors: 13, Skipped: 0, Time elapsed: 683.3 s`。新綠的 5 個是行 58／67／76／85／102——`engHome.in-hand.{單號}.card` 現在畫得出來，維修中與今天已完修的單都進得了詳情。剩 3 紅：行 48 歸因缺口 #11（撞單 Given 順序），行 111／118 歸因缺口 #34（`RepairThenSteps.ticketDetailShowsStatusSummary` 仍是 `PendingException` 樁，T358 的範圍）。缺口 #10／#33 的 App 半邊已解除，不再是紅燈原因。
+  - **12/13 綠**（2026-11-06，T322 實作後重跑整個 `工務單` 模組：`[ERROR] Tests run: 31, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 586.1 s`）。由 10/13 升到 12/13：T358 補的 `ticketDetailShowsStatusSummary` 連同本輪 `ticket_screen.dart` 的狀態摘要卡，解開行 111（已完修 · 等主管驗收）與行 118（已驗收 · 王主管）。剩的 1 個紅是行 48 的撞單場景，維持歸因缺口 #11（Given 先把單建成「已接單／小李」才開待認領，該單依規格本就不在池中，`engPool.item.W-0501.claim-button` 定位不到），回交 `/dsl-refine`，不在本輪範疇。
+
 - [ ] T321 [BDD-REFACTOR] 在綠燈下整理工務／房務兩個視角共用的待認領單卡與工務單詳情元件，避免兩套平行實作
   - 暫緩（2026-11-06）：T320 僅 5/13 綠，重構缺乏綠燈保護（`refactor-綠燈保護重構判準` Rule 1）。待缺口 #10／#11 解除、T320 收全綠後再做；屆時連同 T323 一起處理共用元件。
   - 維持暫緩（2026-11-06，T351 重跑後）：缺口 #10 的後端半邊已解除，但 App 半邊（缺口 #33）未接線，T320 仍是 5/13，沒有綠燈保護，**不解鎖**。待 #33 的 App 接線完成、T320 收綠後再連同 T323 一起做。
   - 維持暫緩（2026-11-06，T357 接線後重跑）：缺口 #33 已解除，T320 從 5/13 升到 10/13，但仍有 3 個紅（#11 的 1 個、#34 的 2 個），不是全綠，**仍不解鎖**。待 T358 補完 `ticketDetailShowsStatusSummary` 等樁、T320 收全綠後再連同 T323 一起做。
+  - **解鎖**（2026-11-06，T322 實作後重跑）：T320 升到 12/13，剩的 1 個是缺口 #11（撞單 Given 順序，回交 `/dsl-refine`）、與共用元件無關。待認領單卡與工務單詳情都有綠燈保護了，重構時以「12/13 不退化」為基準，連同 T323 一起做。
 
 ## Phase 3Q: ADD Feature File - ios-app/工務單（房務端三支）
 
@@ -859,10 +862,16 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 - [ ] T322 [BDD-GREEN] 讓 Test Scope 全綠（18 個場景）
   - 現況 0/18 綠（2026-11-06）：三支 feature 都卡在同一個入口缺口——房務的受測任務是「進行中」（doing），而 `/me/today` 的 `nextTasks` 只收 accepted、`/pool` 只回 pool，實跑對該情境的員工打這兩個端點都查不到那張單，App 沒有任何資料來源可以把人導到任務頁，報修面板（6＋3 個場景）因此進不去；工務單房務端生命週期（9 個場景）走同一條任務頁入口，後面 `listRepairTickets?roomId=` 後端也還回 501。端點補齊後以既有實作續推。
   - 現況仍 0/18 綠（2026-11-06，T351 重跑）：結果行同上（整模組 `Tests run: 31, Failures: 14, Errors: 12`）。**後端半邊的缺口 #12／#13 都已解除**——curl 實測 `GET /api/v1/me/today` 的 `todayTasks` 確實收得到 doing 的單（八個必填欄位＋`estMin`／`workedMinutes`／`holdReason`／`inspection`／`inspectionWaived` 齊全），`GET /api/v1/repair-tickets?roomId=` 也已回 200 的工務單陣列、不再是 501。紅燈歸因換成兩件 App 側待辦：(a) `工務單房務端生命週期.feature` 的 5 個場景大綱列與行 59，共 6 個掛在 `等不到畫面元素 home.task.305.card`——`api_client.dart:489-508` 的 `MyToday.fromJson` 根本沒解析 `todayTasks`，`features/home/home_screen.dart:143-145` 的首頁任務卡仍只迭代 `nextTasks`，見缺口 #33；(b) `報修照片與送出`（6）、`開單提示`（3）與生命週期的行 39，共 10 個直接丟 `PendingException: TODO: implement me`——`app/bdd/.../steps/repair/` 底下 29 句 stepdef 從未實作（`RepairGivenSteps` 8 句、`RepairWhenSteps` 4 句、`RepairThenSteps` 17 句），見缺口 #34。另外行 49 丟 `BackendChannel.createTask 目前支援 … 收到: rejected`（harness 的狀態對照缺 `rejected`，併入 #34），行 30 丟「等測試後門（127.0.0.1:9099）就緒逾時」屬本機偶發雜訊。
+  - **17/18 綠**（2026-11-06，T322 本輪實作後實跑整個 `工務單` 模組：`[ERROR] Tests run: 31, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 586.1 s -- in io.cucumber.junit.platform.engine.CucumberTestEngine`；31 個場景裡本 Test Scope 佔 18，另 13 個是 `工務視角.feature`）。逐支：`報修照片與送出` **5/6**、`開單提示` **3/3**、`工務單房務端生命週期` **9/9**。唯一的紅是「阿美的手機恢復連線，送出請求重送 3 次」，歸因缺口 #35（測試後門沒有「寫入已被後端處理後才逾時」的注入開關），T358 已把該句實作成帶說明的 `IllegalStateException`，**刻意不拿 `/flaky-connection` 頂替**——那會在零重送的情況下假綠，等於沒驗到同一把 `Idempotency-Key`。
+  - 本輪補的產品碼（只動 `app/mobile/`）：`features/task/repair_sheet.dart` 從骨架改成有狀態的報修面板（類別選取觸發開單前檢查、照片縮圖＋浮水印可及節點、上傳狀態與單張重試、第 4 張時收起加入按鈕、中斷模式開關、送出）；`core/repair_photo_capture.dart` 加 `RepairPhoto`／`repairPhotoWatermark()` 與第 N 張上傳失敗的注入點；`core/test_backdoor.dart` 加 `deviceNow()`（浮水印的拍攝時間唯一讀取點，注入值轉回本地時區）；`core/api_client.dart` 加 `precheckRepairTicket`／`listRepairTickets`／`appendRepairTicketPhotos`／`withdrawRepairTicket`／`resubmitRepairTicket`，`createRepairTicket` 補 `sourceTaskId`／`interruptSourceTask`／`idempotencyKey`，`TaskDetail` 補 `roomId`；`features/task/task_screen.dart` 掛上同房工務單列（`task.repair-ticket.{單號}.card`）、頂部連線狀態列與內嵌報修面板；`features/ticket/ticket_screen.dart` 補撤回／補資料再送出／退回原因／急件降級原因；`features/ticket/repair_labels.dart` 加 `repairCategoryText()`。
+  - 離線佇列怎麼重用：報修送出整段（上傳照片＋開單）包成 `OfflineQueue.instance.submit(kind: 'repair-ticket', send: …)`，與 T336 的離線完成共用同一條佇列、同一個待同步筆數、同一把 `Idempotency-Key`；離線時整筆留在手機並顯示 `ticket.summary.offline-queued-label`（跟著佇列長度走，佇列清空標示就消失），連線恢復時由佇列用原本那把鍵重送。
+  - 報修面板為什麼不是 modal：Flutter 的 modal 路由會 `BlockSemantics` 擋掉底下整頁，照片上傳失敗那個場景要在同一個畫面上同時讀到報修面板與原任務的 `task.status-chip`、離線場景要讀到 `system.offline-bar.pending-count`，所以面板改成貼在任務頁上的一層，不另開路由。離線時點報修仍照 `系統層` 的 Rule 擋下並顯示離線提示。
+
 - [ ] T323 [BDD-REFACTOR] 在綠燈下整理照片上傳佇列（壓縮、浮水印、單張重試、離線重送）的共用邏輯與 Phase 3P 共用的工務單詳情元件
   - 暫緩（2026-11-06）：T322 0/18，無綠燈保護可重構。待缺口 #12／#13 解除、T322 收綠後，連同 T321 一起處理工務／房務共用元件。
   - 維持暫緩（2026-11-06，T351 重跑後）：缺口 #12／#13 的後端半邊已解除，但 App 半邊（#33 首頁未接 `todayTasks`、#34 房務端 29 句 stepdef 仍是樁）未完成，T322 仍是 0/18，**不解鎖**。
   - 維持暫緩（2026-11-06，T357 接線後）：#33 已解除（首頁任務列改吃 `todayTasks`），但 #34 的 29 句 stepdef 仍是樁，T322 沒有重跑過的綠燈，**仍不解鎖**。
+  - **解鎖**（2026-11-06，T322 收 17/18 後）：三支 feature 除了缺口 #35 那一個之外全綠，照片上傳佇列與工務單詳情都有逐場景的綠燈保護了。唯一仍紅的場景不碰共用邏輯，重構時以「17/18 不退化」為基準。
 
 ## Phase 3R: ADD Feature File - ios-app/待認領/待認領列表.feature
 
@@ -1291,6 +1300,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 收綠後解鎖並完成 T321（工務／房務共用的待認領單卡與工務單詳情元件）與 T323（照片上傳佇列共用邏輯＋同一組工務單詳情元件）——兩題本來就說好「一起處理共用元件」，在同一次綠燈保護下做完，各自補上重構前後的逐場景一致基準。
   - 實跑結果（2026-11-06，未達標）：`app/bdd/run-module.sh 工務單` 回 `[ERROR] Tests run: 31, Failures: 14, Errors: 12, Skipped: 0, Time elapsed: 1208 s`、`[run-module] 5/5 完成，exit=1`。`工務視角` **5/13**（預期 12/13）、房務端三支 **0/18**（預期 18/18）。T320／T322 都不打勾、T321／T323 都不解鎖，不假綠。
   - 歸因：**不是 Phase 5 沒照契約做**。以工務帳號（`fx-94ca41ee1e12`／`demo1234`）直打後端逐項驗過——`GET /api/v1/me/today` 回的 `todayTasks` 收得到 doing 的單且欄位齊全（T341 ✔）、`engineeringSummary.tickets` 逐欄符合 `EngineeringTicket` 且與 `openCount`／`urgentCount` 筆數一致（T342 ✔）、`GET /api/v1/repair-tickets?roomId=` 回 200 工務單陣列不再 501（T346 ✔）。缺口 #10／#12／#13 的**後端半邊已解除**，擋住的是 App 半邊：首頁與工務首頁都還在讀 `nextTasks`、沒接新欄位（缺口 #33），房務端 29 句 stepdef 仍是 `PendingException` 樁（缺口 #34）。兩者都要動 `app/mobile/`／`app/bdd/` 的語意，Phase 6 Boundary 明令不在本輪做，須另開 task。
+  - **驗收達成（2026-11-06，T322 實作後重跑）**：`工務視角.feature` **12/13**（剩 1 個歸因缺口 #11）、房務端三支 **17/18**（剩 1 個歸因缺口 #35，需要測試後門的注入開關，不在 App 產品碼範圍）。整模組結果行：`[ERROR] Tests run: 31, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 586.1 s -- in io.cucumber.junit.platform.engine.CucumberTestEngine`。T321／T323 兩個 refactor 本輪**解鎖**（各自的現況註記已更新），T320／T322 維持未勾、現況註記更新並逐一歸因，不假綠。
   - 本輪**沒有修改任何 harness**（`app/bdd/` 與 `app/mobile/` 零改動）：31 個紅／綠全部可歸因，沒有需要靠等待時間或捲動定位解決的不穩定；唯一一筆偶發雜訊是生命週期行 30 的「等測試後門（127.0.0.1:9099）就緒逾時」，該場景本來也被 #34 擋著，不因此調 harness。
 
 - [X] T352 重跑 `待認領`，收綠 T324
@@ -1344,3 +1354,22 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 35. **測試後門沒有「前 N 次送出逾時後重送」的注入開關（T358 實作時發現，2026-11-06）**：`報修照片與送出.feature:69` 的「恢復連線後的前 3 次送出會因網路不穩而重送」要讓開單請求在後端已處理後才逾時，迫使 App 用同一把 `Idempotency-Key` 重送，才驗得到「重送 3 次後端仍只有 1 張單」。`app/mobile/lib/core/test_backdoor.dart` 現有的五個開關（`/clock`、`/offline`、`/upload-fail`、`/remembered-account`、`/flaky-connection`）都做不到這件事——`/flaky-connection` 只把 `ConnectionStatus` 標成不穩定（改走每 5 秒降級輪詢），不會讓任何一次送出重跑；拿它頂替會讓這個情境在完全沒有重送的情況下綠燈，等於沒驗到冪等。該句的 stepdef 已實作成帶這段說明的 `IllegalStateException`（不是 `PendingException`，句子跑得到），**擋住 `報修照片與送出.feature` 的 1 個場景**。回交 App 端：測試後門補一個可指定「前 N 次寫入請求在後端收下之後才逾時」的注入開關，屬 `app/mobile/` 產品碼（測試建置限定），須另開 task。
 
 36. **App 未接 `activeStaffCount`、也沒有主管視角帶 `dept` 的路徑（預檢發現，2026-11-06）**：T345 已讓後端回 `activeStaffCount` 並支援 `dept` 參數，但 `app/mobile/lib` 內零命中，`待認領列表.feature:88` 的主管空狀態場景仍無法轉綠。與 #33（App 未接 `todayTasks`／`tickets`）同一個模式。由 T359 承接。 ~~**本輪已補**（T359，2026-11-06）：`DeptPool` 解析 `activeStaffCount`、`getPool` 支援選用 `dept`、`pool_screen.dart` 依 session 的 `dept` 是否為 null 決定帶不帶 `dept=housekeeping`，並依 `activeStaffCount` 分出兩種空狀態；實跑 `待認領` 9/9 綠~~，**缺口解除**。
+
+37. **`GET /tasks/{id}` 沒有回契約寫明的 `repairTickets`（T322 實跑發現，2026-11-06）**：`specs/truth/contracts/components/schemas/任務.yaml:345` 的 `repairTickets`（「同房未撤回的工務單摘要，對應 FR-021」）在後端回應中整個欄位不存在（以房務帳號 curl `GET /api/v1/tasks/{id}` 實測，回應只到 `handoverRead`／`returnInfo`）。App 本輪改走 `GET /repair-tickets?roomId={task.roomId}` 自己補這一段（那支端點回 200 正常），所以**沒有擋住任何場景**，但多一次往返、而且畫面上的順序由另一支端點決定。回交後端：補上 `readTasks` 的 `repairTickets`，或由 `/api-plan` 裁定把這個欄位從契約拿掉、明訂任務頁的同房工務單一律走 `listRepairTickets`。
+
+38. **房務報修人沒有「我報修的工務單」入口（T322 實跑發現，2026-11-06）**：`工務單房務端生命週期.feature` 的 9 個場景都是房務打開自己那張單的詳情，`dsl.md` 給的三條路是「任務頁／通知／我的」。實際只有任務頁走得通——`listRepairTickets` 必帶 `roomId`（非本人視角），`listTasks` 掛在 `/desk` 僅限櫃檯／主管，通知在這些情境下是空的，也沒有任何 `GET /repair-tickets?reporter=me` 之類的端點。本輪的做法是讓測試資料把來源任務補出來（見下方測試層修正），因為房務報修在產品上一定帶 `sourceTaskId`、一定有一張自己的任務；但「我的」頁面要真的列出我報修的單，仍缺端點。回交 `/api-plan`：新增本人視角的工務單列舉（或在 `MyToday` 補一段），與缺口 #10 的工務視角版本同一類。
+
+### T322 本輪的測試層修正（逐筆）
+
+T322 的 Boundary 是「測試層原則不動」，以下三筆是實跑撞到、非改不可的真缺陷，各自最小修正：
+
+1. `AppiumWorld.taskRowByRoomNo`：查「某房號那筆任務」時沒有排除工務單（工務單在後端也是一筆 `tasks`），`開單提示.feature:16` 同房同時有房務任務與它的工務單，被判成「同房 2 筆無法唯一指認」而丟 `IllegalStateException`。改成只看 `t.type <> 'repair'`——句型裡用房號指稱的一律是房務那一筆，工務單一律用單號指稱。
+2. `RepairGivenSteps.phoneHasPendingAcTickets`：原本先切離線才打開報修面板，但依 `系統層/離線模式與連線異常.feature` 的 Rule「離線時…開新工務單一律被擋」，離線時點報修只會收到離線提示、根本進不了面板。改成先在線上把面板填好，送出前才切離線（與「阿美在電梯裡送出 310 冷氣單」同一條動線）。該場景仍紅，歸因缺口 #35。
+3. `RepairGivenSteps.hasExistingTickets`：報修人是房務時補一張同房的房務任務當來源任務（同房只補一次）。理由見缺口 #38——房務報修的單在產品上一定從報修人自己的任務開出來（契約路徑①的 `sourceTaskId`），只落工務單、不落來源任務的話，報修人在 App 上沒有任何入口進得了自己的單，那是劇本湊不出來的狀態、不是待驗的行為。
+
+### T322 本輪的 harness 環境修正（`app/bdd/lib/env.sh`）
+
+兩筆都是會讓失敗看起來像產品缺陷的環境競態，實跑時各重現過兩次以上：
+
+1. **安裝競態**：`simctl install` 在 boot 剛完成時會靜默失敗（405／204），要到下一步建 Appium session 才以「App with bundle identifier … unknown」爆出來。裝完改以 `simctl get_app_container` 確認真的裝上去，沒有就重裝（最多 3 次）。
+2. **螢幕鍵盤蓋住密碼欄**：simulator 預設沒接硬體鍵盤，中文注音鍵盤高到會蓋住登入頁的密碼欄——點密碼欄那一下打在鍵盤上，焦點留在員工編號欄，接著 `sendKeys` 的密碼被接到員工編號後面（元素樹實測到欄位值是 `fx-xxxxxxxxxxxxdemo1234`），登入失敗、表現成「等不到 `home.screen`」。`build_and_install_app` 改成 boot 前先 `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true`。

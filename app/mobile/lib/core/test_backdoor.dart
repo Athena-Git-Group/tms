@@ -30,7 +30,8 @@ class TestHooks {
 
   static final TestHooks instance = TestHooks._();
 
-  /// 測試腳本要求裝置採用的時間（ISO 格式字串）；App 尚未讀取這個值。
+  /// 測試腳本要求裝置採用的時間（ISO 格式字串）。照片浮水印的拍攝時間
+  /// 經 [deviceNow] 讀這個值。
   String? injectedClockIso;
 
   /// 測試腳本要求第幾張照片（從 1 算起）上傳失敗；App 尚未讀取這個值。
@@ -50,6 +51,18 @@ class TestHooks {
     rememberedAccount.value = null;
     ConnectionStatus.instance.reset();
   }
+}
+
+/// 裝置現在的時間。全 App 要「現在幾點」一律問這裡，不直接叫
+/// `DateTime.now()`：自動化測試要能把裝置時間移到劇本指定的那一刻
+/// （照片浮水印的拍攝時間就是這樣驗的），而注入點只有一個才不會出現
+/// 「這個畫面聽注入、那個畫面還看真實時鐘」的分裂。
+/// 注入值帶時區位移（例如 `2026-10-22T14:32+08:00`），`DateTime.parse` 會
+/// 解成 UTC 的那一刻；一律轉回裝置本地時間再回傳，否則浮水印上的時刻會
+/// 跟劇本指定的差一個時區。
+DateTime deviceNow() {
+  final injected = TestHooks.instance.injectedClockIso;
+  return injected == null ? DateTime.now() : DateTime.parse(injected).toLocal();
 }
 
 /// 「這支手機記住的帳號」：員工編號供登入請求使用，姓名供身分卡顯示。
