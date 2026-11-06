@@ -138,22 +138,24 @@ class _TodayProgress extends StatelessWidget {
           caption: '連續零退回天數',
           value: '${today.zeroReturnStreakDays}',
         ),
-        // 待開始的任務卡：點一列進那間房的任務頁。清單的順序照後端給的
-        // nextTasks，App 不重排。
-        for (final next in today.nextTasks)
+        // 今日任務卡：點一列進那間房的任務頁。清單的順序照後端給的
+        // todayTasks，App 不重排。用 todayTasks 而不是 nextTasks，是因為
+        // nextTasks 只收待開始（accepted）的單，進行中、延後、中斷與今天已
+        // 完成的單都不在裡面，員工就回不到自己手上那張。
+        for (final task in today.todayTasks)
           TmsSemantics(
-            id: 'home.task.${next.roomNo}.card',
-            label: '${next.roomNo} ${next.title}',
+            id: 'home.task.${task.roomNo}.card',
+            label: '${task.roomNo} ${task.title}',
             child: CupertinoButton(
               onPressed: () {
                 Navigator.of(context).push(
                   CupertinoPageRoute<void>(
                     builder: (_) =>
-                        TaskScreen(roomNo: next.roomNo, taskId: next.taskId),
+                        TaskScreen(roomNo: task.roomNo, taskId: task.taskId),
                   ),
                 );
               },
-              child: Text('${next.roomNo} ${next.title}'),
+              child: Text('${task.roomNo} ${task.title}'),
             ),
           ),
       ],

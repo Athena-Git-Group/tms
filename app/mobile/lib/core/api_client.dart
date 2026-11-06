@@ -468,6 +468,7 @@ class MyToday {
     required this.completedCount,
     required this.adHocCompleted,
     required this.remainingMinutes,
+    required this.todayTasks,
     required this.nextTasks,
     required this.zeroReturnStreakDays,
     this.engineeringSummary,
@@ -479,6 +480,13 @@ class MyToday {
   final int completedCount;
   final int adHocCompleted;
   final int remainingMinutes;
+
+  /// 本人今日的全部任務，已由後端排好（未結束的在前、同組內 doing 最前）。
+  /// 首頁任務列要列出或進入今天任何一張單一律用這份，不是只收 accepted 的
+  /// [nextTasks]——進行中、延後、中斷、今天已完成的單只有這裡看得到。
+  final List<TodayTask> todayTasks;
+
+  /// 待開始的單的推薦子集，只用於首頁「下一間」卡，不是今日任務的全部。
   final List<NextTask> nextTasks;
   final int zeroReturnStreakDays;
 
@@ -486,6 +494,7 @@ class MyToday {
   final EngineeringSummary? engineeringSummary;
 
   factory MyToday.fromJson(Map<String, dynamic> json) {
+    final todayTasksJson = json['todayTasks'] as List<dynamic>? ?? <dynamic>[];
     final nextTasksJson = json['nextTasks'] as List<dynamic>? ?? <dynamic>[];
     final engineeringJson = json['engineeringSummary'] as Map<String, dynamic>?;
     return MyToday(
@@ -495,6 +504,9 @@ class MyToday {
       completedCount: json['completedCount'] as int,
       adHocCompleted: json['adHocCompleted'] as int,
       remainingMinutes: json['remainingMinutes'] as int,
+      todayTasks: todayTasksJson
+          .map((entry) => TodayTask.fromJson(entry as Map<String, dynamic>))
+          .toList(),
       nextTasks: nextTasksJson
           .map((entry) => NextTask.fromJson(entry as Map<String, dynamic>))
           .toList(),
@@ -512,11 +524,16 @@ class EngineeringSummary {
     required this.openCount,
     required this.completedToday,
     required this.urgentCount,
+    required this.tickets,
   });
 
-  /// 三格都是 0 的彙總，給「回應裡沒有工務彙總」的呼叫端當顯示值用。
-  static const EngineeringSummary none =
-      EngineeringSummary(openCount: 0, completedToday: 0, urgentCount: 0);
+  /// 三格都是 0、沒有任何單的彙總，給「回應裡沒有工務彙總」的呼叫端當顯示值用。
+  static const EngineeringSummary none = EngineeringSummary(
+    openCount: 0,
+    completedToday: 0,
+    urgentCount: 0,
+    tickets: <EngineeringTicket>[],
+  );
 
   /// 手上張數：本人目前 accepted／doing 的工務單筆數。
   final int openCount;
@@ -527,11 +544,132 @@ class EngineeringSummary {
   /// 急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
   final int urgentCount;
 
+  /// 本人手上（accepted／doing）與今天完修（done）的工務單，已由後端排好
+  /// （急件在前、未結案在已完修之前），工務首頁的單列直接依序呈現。
+  final List<EngineeringTicket> tickets;
+
   factory EngineeringSummary.fromJson(Map<String, dynamic> json) {
+    final ticketsJson = json['tickets'] as List<dynamic>? ?? <dynamic>[];
     return EngineeringSummary(
       openCount: json['openCount'] as int,
       completedToday: json['completedToday'] as int,
       urgentCount: json['urgentCount'] as int,
+      tickets: ticketsJson
+          .map((entry) => EngineeringTicket.fromJson(entry as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+/// `EngineeringTicket`：工務首頁單列的一張工務單。
+///
+/// 欄位名與 `RepairTicketSummary` 一致，[taskId] 可以直接拿去打工務單詳情。
+class EngineeringTicket {
+  const EngineeringTicket({
+    required this.ticketNo,
+    required this.taskId,
+    required this.roomNo,
+    required this.isPublicArea,
+    required this.title,
+    required this.state,
+    required this.isUrgent,
+    required this.source,
+  });
+
+  /// 單號（W-0412 這種）。契約列為必填，但後端目前可能給 null，所以收得下
+  /// null，不在解析時就把整份回應打掉。
+  final String? ticketNo;
+  final String taskId;
+
+  /// 客房單的房號；開給公共區域的單沒有房號，為 null。
+  final String? roomNo;
+
+  /// true 表示這張單開給公共區域，此時 [roomNo] 為 null。
+  final bool isPublicArea;
+  final String title;
+
+  /// accepted｜doing｜done，照契約 enum，不縮寫。
+  final String state;
+  final bool isUrgent;
+
+  /// 單的來源（housekeeping_report｜front_desk｜…），照契約 PoolSource enum。
+  final String? source;
+
+  factory EngineeringTicket.fromJson(Map<String, dynamic> json) {
+    return EngineeringTicket(
+      ticketNo: json['ticketNo'] as String?,
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String?,
+      isPublicArea: json['isPublicArea'] as bool? ?? false,
+      title: json['title'] as String? ?? '',
+      state: json['state'] as String,
+      isUrgent: json['isUrgent'] as bool? ?? false,
+      source: json['source'] as String?,
+    );
+  }
+}
+
+/// `TodayTask`：首頁任務列的一張單。
+///
+/// 欄位與任務詳情（`TaskDetail`）共用同一組名稱與值，[taskId] 可以直接拿去
+/// 打任務頁。
+class TodayTask {
+  const TodayTask({
+    required this.taskId,
+    required this.roomNo,
+    required this.title,
+    required this.type,
+    required this.state,
+    required this.redoCount,
+    required this.estMin,
+    required this.workedMinutes,
+    required this.holdReason,
+    required this.inspection,
+    required this.inspectionWaived,
+  });
+
+  final String taskId;
+  final String roomNo;
+  final String title;
+
+  /// cleaning｜amenity｜repair｜other，照契約 enum，不縮寫。
+  final String type;
+
+  /// accepted｜doing｜deferred｜interrupted｜done｜inspected，與 tasks.state
+  /// 同一套值。
+  final String state;
+
+  /// 被查房退回重做的次數；大於 0 時單卡標示「重做第 N 次」。
+  final int redoCount;
+
+  /// 預估分鐘，由排房計畫帶入；沒有預估值時為 null。
+  final int? estMin;
+
+  /// 已做分鐘，口徑同 `TaskDetail.elapsedMinutes`。
+  final int workedMinutes;
+
+  /// 停住原因，延後或中斷時才有值，其他狀態為 null。
+  final String? holdReason;
+
+  /// passed｜waived｜failed，還沒有查房結果為 null。
+  final String? inspection;
+
+  /// 開工當下鎖定的是否免查房。
+  final bool inspectionWaived;
+
+  factory TodayTask.fromJson(Map<String, dynamic> json) {
+    return TodayTask(
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String,
+      title: json['title'] as String? ?? '',
+      type: json['type'] as String,
+      state: json['state'] as String,
+      redoCount: json['redoCount'] as int? ?? 0,
+      estMin: json['estMin'] as int?,
+      workedMinutes: json['workedMinutes'] as int? ?? 0,
+      holdReason: json['holdReason'] as String?,
+      inspection: json['inspection'] as String?,
+      inspectionWaived: json['inspectionWaived'] as bool? ?? false,
     );
   }
 }

@@ -13,10 +13,9 @@ import 'eng_pool_screen.dart';
 /// 三格的值直接取自 `GET /me/today` 的 engineeringSummary（由 [MyTodayScope]
 /// 取一次、整個畫面共用，與房務首頁同一條取用路徑），App 不自己數。
 ///
-/// 手上的單目前只列得出待開始的那些：契約沒有「我的工務單」查詢，能讀到
-/// 自己名下單子的只有 `GET /me/today` 的 nextTasks，而它只收 accepted。
-/// 維修中與已完修的單因此進不了這個列表——缺的是後端的清單端點，不是這個
-/// 畫面的呈現邏輯。
+/// 手上的單同樣來自 engineeringSummary：後端的 tickets 已經收齊本人手上
+/// （已接單／維修中）與今天完修的單，也已經排好（急件在前、未結案在已完修
+/// 之前），所以這個畫面依序呈現就好，不自己查、不自己排。
 class EngHomeScreen extends StatelessWidget {
   const EngHomeScreen({super.key});
 
@@ -144,89 +143,71 @@ class _ProgressTile extends StatelessWidget {
 
 /// 我手上的工務單清單。
 ///
-/// 單卡的內容要逐張打工務單詳情才拿得到，所以這塊自己載自己的：清單載不出來
-/// 時上面的三格進度仍然要在。進度是這個畫面的主要內容，不該被清單的失敗拖下水。
-class _InHandTickets extends StatefulWidget {
+/// 內容全部來自今日進度的 engineeringSummary.tickets，與上面三格同一份回應，
+/// 不必逐張再打工務單詳情：清單與三格因此一定講同一件事，也不會有一半的單
+/// 載得出來、一半載不出來。
+class _InHandTickets extends StatelessWidget {
   const _InHandTickets();
 
   @override
-  State<_InHandTickets> createState() => _InHandTicketsState();
+  Widget build(BuildContext context) {
+    final today = MyTodayScope.todayOf(context);
+    if (today == null) {
+      return const SizedBox.shrink();
+    }
+    final tickets =
+        (today.engineeringSummary ?? EngineeringSummary.none).tickets;
+    return Column(
+      children: [
+        for (final ticket in tickets) _InHandTicketCard(ticket: ticket),
+      ],
+    );
+  }
 }
 
-class _InHandTicketsState extends State<_InHandTickets> {
-  /// 已經依哪一份今日進度載過單卡；同一份不重載。
-  MyToday? _loadedFrom;
-  List<RepairTicketDetail>? _tickets;
+/// 手上的一張單：單號、房號（公共區域的單沒有房號）與狀態，點一下進詳情。
+class _InHandTicketCard extends StatelessWidget {
+  const _InHandTicketCard({required this.ticket});
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final today = MyTodayScope.todayOf(context);
-    if (today == null || identical(today, _loadedFrom)) {
-      return;
-    }
-    _loadedFrom = today;
-    _load(today);
-  }
-
-  Future<void> _load(MyToday today) async {
-    final tickets = <RepairTicketDetail>[];
-    for (final task in today.nextTasks.where((task) => task.type == 'repair')) {
-      try {
-        tickets.add(await ApiClient.instance.readRepairTicket(task.taskId));
-      } catch (_) {
-        continue;
-      }
-    }
-    if (mounted) {
-      setState(() {
-        _tickets = tickets;
-      });
-    }
-  }
+  final EngineeringTicket ticket;
 
   @override
   Widget build(BuildContext context) {
-    final tickets = _tickets;
-    if (tickets == null) {
-      return const SizedBox.shrink();
-    }
-    return Column(
-      children: [
-        for (final ticket in tickets)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TmsSemantics(
-              id: 'engHome.in-hand.${ticket.ticketNo}.card',
-              label:
-                  '${ticket.ticketNo} ${ticket.roomNo} ${repairStatusSummaryText(ticket)}',
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    CupertinoPageRoute<void>(
-                      builder: (_) => TicketScreen(taskId: ticket.taskId),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.white,
-                    border: Border.all(color: CupertinoColors.systemGrey4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${ticket.ticketNo} · ${ticket.roomNo}'),
-                      Text(repairStatusSummaryText(ticket)),
-                    ],
-                  ),
-                ),
+    // 契約把 ticketNo 列為必填，但實際回應可能是 null；id 退回用 taskId，
+    // 讓單卡至少還是個可指認的節點，而不是整串變成同一個 null。
+    final ticketNo = ticket.ticketNo ?? ticket.taskId;
+    final place = ticket.roomNo ?? '公共區域';
+    final state = repairStateText(ticket.state);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: TmsSemantics(
+        id: 'engHome.in-hand.$ticketNo.card',
+        label: '$ticketNo $place $state',
+        child: GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              CupertinoPageRoute<void>(
+                builder: (_) => TicketScreen(taskId: ticket.taskId),
               ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: CupertinoColors.white,
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$ticketNo · $place'),
+                Text(state),
+              ],
             ),
           ),
-      ],
+        ),
+      ),
     );
   }
 }

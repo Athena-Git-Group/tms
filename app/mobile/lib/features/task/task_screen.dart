@@ -60,7 +60,10 @@ class _TaskScreenState extends State<TaskScreen> {
     return ApiClient.instance.getTask(taskId);
   }
 
-  /// 用房號反查任務 id：先找待認領池，再找我的下一間推薦。
+  /// 用房號反查任務 id：先找待認領池，再找今天自己名下的單。
+  ///
+  /// 今天自己的單走 todayTasks（今日全部，含進行中與已延後的），不是只收
+  /// 待開始的 nextTasks——否則被推播叫回一張進行中的單時會反查不到。
   Future<String?> _resolveTaskIdByRoomNo() async {
     final pool = await ApiClient.instance.getPool();
     for (final item in pool.items) {
@@ -69,6 +72,11 @@ class _TaskScreenState extends State<TaskScreen> {
       }
     }
     final today = await ApiClient.instance.getMyToday();
+    for (final task in today.todayTasks) {
+      if (task.roomNo == widget.roomNo) {
+        return task.taskId;
+      }
+    }
     for (final next in today.nextTasks) {
       if (next.roomNo == widget.roomNo) {
         return next.taskId;
