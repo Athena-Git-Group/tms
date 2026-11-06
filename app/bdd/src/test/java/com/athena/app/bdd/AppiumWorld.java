@@ -90,7 +90,7 @@ public class AppiumWorld {
      * 還沒在 App 裡按過「開始」的房號。情境要求起始狀態是進行中、而任務被改種成
      * 待開始時記在這裡，進任務頁時補按一次開始（見 {@link #startInAppIfPending}）。
      */
-    private final java.util.Set<String> roomsToStartInApp = new java.util.LinkedHashSet<>();
+    private final java.util.Map<String, DeferredStart> roomsToStartInApp = new java.util.LinkedHashMap<>();
 
     /**
      * 上一次送出的推播 payload 檔案與標題。banner 自動收起的時間很短，{@link #tapPushNotification()}
@@ -414,19 +414,42 @@ public class AppiumWorld {
      * 狀態不符擋掉。
      */
     private void startInAppIfPending(String roomNo, Duration timeout) {
-        if (!roomsToStartInApp.remove(roomNo)) {
+        DeferredStart deferred = roomsToStartInApp.remove(roomNo);
+        if (deferred == null) {
             return;
         }
+        int workedMinutes = deferred.workedMinutes();
         tapTestId("task.primary-button", timeout);
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             if ("doing".equals(String.valueOf(taskRowByRoomNo(roomNo).get("state")))) {
+                if (workedMinutes > 0) {
+                    backend.backdateWorkStart(
+                            (UUID) taskRowByRoomNo(roomNo).get("id"), workedMinutes);
+                }
                 return;
             }
             sleep(200);
         }
         throw new AssertionError("在 App 按下「開始」後，後端沒有把「" + roomNo
                 + "」轉成進行中（逾時 " + timeout.getSeconds() + "s）");
+    }
+
+    /**
+     * 把還欠的那幾次「在 App 按開始」現在就補完。
+     *
+     * <p>情境把裝置切到離線之前要先呼叫這裡。開工是離線時被擋下來的動作之一，裝置一旦
+     * 離線，那一筆進行中就再也補不起來，情境會停在待開始上驗一個它沒有要驗的狀態。
+     */
+    public void settleDeferredStarts() {
+        for (Map.Entry<String, DeferredStart> entry :
+                new java.util.LinkedHashMap<>(roomsToStartInApp).entrySet()) {
+            ensureOnTaskDetail(entry.getValue().staff(), entry.getKey());
+        }
+    }
+
+    /** 欠一次「在 App 按開始」的那筆任務：掛在誰名下，以及要補多少已做分鐘。 */
+    private record DeferredStart(BackendChannel.CreatedStaff staff, int workedMinutes) {
     }
 
     /**
@@ -591,7 +614,8 @@ public class AppiumWorld {
         List<TaskFixture> ordered = new ArrayList<>(tasks.size());
         List<TaskFixture> endingInDoing = new ArrayList<>();
         for (TaskFixture task : tasks) {
-            if ("doing".equals(BackendChannel.taskState(task.status())) && !startableInApp("doing", task)) {
+            if ("doing".equals(BackendChannel.taskState(task.status()))
+                    && !startableInApp("doing", task, tasks.size())) {
                 endingInDoing.add(task);
             } else {
                 ordered.add(task);
@@ -601,9 +625,13 @@ public class AppiumWorld {
 
         for (TaskFixture task : ordered) {
             String stateCode = BackendChannel.taskState(task.status());
-            if (startableInApp(stateCode, task)) {
+            // 改種成待開始的那一筆，已做分鐘要等 App 真的開工之後才落地：待開始的任務
+            // 還沒有計時段落可以往前推，這時候寫進去沒有意義。
+            Integer workedMinutes = task.elapsedMinutes() > 0 ? task.elapsedMinutes() : null;
+            if (startableInApp(stateCode, task, tasks.size())) {
                 stateCode = "accepted";
-                roomsToStartInApp.add(task.roomNo());
+                roomsToStartInApp.put(task.roomNo(), new DeferredStart(assignee, task.elapsedMinutes()));
+                workedMinutes = null;
             }
             UUID taskId = backend.createTask(
                     task.roomNo(),
@@ -617,7 +645,7 @@ public class AppiumWorld {
                     task.estMinutes(),
                     stateCode,
                     assignee,
-                    task.elapsedMinutes() > 0 ? task.elapsedMinutes() : null,
+                    workedMinutes,
                     task.pausedReason(),
                     "完成 · 免查房".equals(task.status()));
             if (task.redoCount() != null) {
@@ -630,14 +658,23 @@ public class AppiumWorld {
      * 判斷這筆任務的「進行中」能不能改用 App 的開始按鈕達成。
      *
      * <p>進行中的任務在 App 首頁上沒有卡可點（上游缺口 #12），情境只好先種成待開始，
-     * 進任務頁後再按一次開始。但這條路會把已做時間從零開始算，也不會留下停住原因，
-     * 所以情境指定了已做分鐘或停住原因時不能走——那些值必須由測試資料直接落地，
-     * 讓情境在缺口 #12 上誠實地紅。
+     * 進任務頁後再按一次開始。已做分鐘不擋這條路：它只能直接落地（沒有人能等 35 分鐘），
+     * {@link #startInAppIfPending} 在開工成立之後把這一段的起算時刻往前推，落地的值與
+     * 直接種成進行中的那條路完全相同。
+     *
+     * <p>停住原因擋這條路：它是任務停住時才有的欄位，而這條路走完任務是進行中的，兩者
+     * 湊在一起不是後端生得出來的狀態，硬湊會讓情境驗在一個不存在的真相上。
+     *
+     * <p>已做分鐘要跟表上還有沒有別的任務一起看。表上只有這一筆時，情境要做的就是操作
+     * 它，進任務頁按一次開始正是員工自己的動線。表上還有別的任務、而這一筆又指定了已做
+     * 分鐘時就不走：那種情境在驗的是一整份清單或首頁的進度數字，把它先種成待開始會讓
+     * 已經做掉的那段時間在數字裡消失。
      */
-    private static boolean startableInApp(String stateCode, TaskFixture task) {
-        return "doing".equals(stateCode)
-                && task.elapsedMinutes() == 0
-                && task.pausedReason() == null;
+    private static boolean startableInApp(String stateCode, TaskFixture task, int fixtureSize) {
+        if (!"doing".equals(stateCode) || task.pausedReason() != null) {
+            return false;
+        }
+        return task.elapsedMinutes() == 0 || fixtureSize == 1;
     }
 
     /**

@@ -2,7 +2,6 @@ package com.athena.app.bdd.steps.common;
 
 import com.athena.app.bdd.AppiumWorld;
 import io.cucumber.datatable.DataTable;
-import io.cucumber.java.PendingException;
 import io.cucumber.java.zh_tw.假設;
 
 import java.time.LocalDate;
@@ -107,9 +106,15 @@ public class CommonGivenSteps {
         world.postBackdoorJson("/clock", "{\"isoTime\":\"" + moment + "\"}");
     }
 
-    /** 怎麼做：把裝置切到無網路。 */
+    /**
+     * 怎麼做：把裝置切到無網路（測試後門的 {@code /offline}）。離線判定以這個注入開關
+     * 為準，App 不另做網路偵測。
+     */
     @假設("手機目前離線")
     public void phoneOffline() {
-        throw new PendingException();
+        // 切離線之前先把測試資料欠的「在 App 按開始」補完：開工是離線時被擋下來的
+        // 動作，裝置離線後那一筆進行中就再也補不起來了。
+        world.settleDeferredStarts();
+        world.postBackdoorJson("/offline", "{\"offline\":true}");
     }
 }

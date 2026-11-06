@@ -23,7 +23,7 @@ class MeScreen extends StatelessWidget {
   const MeScreen({super.key});
 
   Future<void> _attemptLogout(BuildContext context) async {
-    if (TestHooks.instance.forceOffline) {
+    if (TestHooks.instance.forceOffline.value) {
       _showBlockedAlert(context, '目前離線，連線後才能登出');
       return;
     }

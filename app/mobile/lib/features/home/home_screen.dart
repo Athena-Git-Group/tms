@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../engineering/eng_home_screen.dart';
 import '../me/me_screen.dart';
@@ -25,55 +26,65 @@ class HomeScreen extends StatelessWidget {
         child: CupertinoPageScaffold(
           navigationBar: const CupertinoNavigationBar(middle: Text('首頁')),
           child: SafeArea(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const _TodayProgress(),
-                  CupertinoButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute<void>(
-                          builder: (_) => const PoolScreen(),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 連線狀態列固定在內容最上方，員工在首頁一眼就知道現在是離線
+                // 還是連線不穩定，不必等某個操作失敗才發現。
+                const SystemStatusBar(),
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const _TodayProgress(),
+                        CupertinoButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute<void>(
+                                builder: (_) => const PoolScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text('待認領'),
                         ),
-                      );
-                    },
-                    child: const Text('待認領'),
-                  ),
-                  // 以下三個入口是骨架期的路由接線：正式的 Tab bar 與部門
-                  // 切換是後續 feature，先讓新畫面可以被導到。
-                  CupertinoButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute<void>(
-                          builder: (_) => const NotificationScreen(),
+                        // 以下三個入口是骨架期的路由接線：正式的 Tab bar 與部門
+                        // 切換是後續 feature，先讓新畫面可以被導到。
+                        CupertinoButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute<void>(
+                                builder: (_) => const NotificationScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text('通知'),
                         ),
-                      );
-                    },
-                    child: const Text('通知'),
-                  ),
-                  CupertinoButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute<void>(
-                          builder: (_) => const MeScreen(),
+                        CupertinoButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute<void>(
+                                builder: (_) => const MeScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text('我的'),
                         ),
-                      );
-                    },
-                    child: const Text('我的'),
-                  ),
-                  CupertinoButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute<void>(
-                          builder: (_) => const EngHomeScreen(),
+                        CupertinoButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute<void>(
+                                builder: (_) => const EngHomeScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text('工務首頁'),
                         ),
-                      );
-                    },
-                    child: const Text('工務首頁'),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -137,10 +148,8 @@ class _TodayProgress extends StatelessWidget {
               onPressed: () {
                 Navigator.of(context).push(
                   CupertinoPageRoute<void>(
-                    builder: (_) => TaskScreen(
-                      roomNo: next.roomNo,
-                      taskId: next.taskId,
-                    ),
+                    builder: (_) =>
+                        TaskScreen(roomNo: next.roomNo, taskId: next.taskId),
                   ),
                 );
               },

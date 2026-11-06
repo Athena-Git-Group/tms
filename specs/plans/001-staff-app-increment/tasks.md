@@ -1042,7 +1042,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature`
 
-- [ ] T336 [BDD-GREEN] 讓 Test Scope 全綠（7 個場景）
+- [X] T336 [BDD-GREEN] 讓 Test Scope 全綠（7 個場景）
 - [ ] T337 [BDD-REFACTOR] 在綠燈下把離線佇列、離線列、連線異常列收斂成單一連線狀態來源，供全部畫面共用
 
 ## Phase 4: 整合驗收（ios-app 全量）
@@ -1060,7 +1060,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 24 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
+以下 27 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1086,3 +1086,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 22. **交辦區與退回資訊的分欄 accessibility id 不在 ui-plan 的約定表（T332 實跑發現，2026-11-06）**：`ui-plan.md:263-266` 只列了 `task.handover.{index}.meta`（來源／作者／時間）與 `task.status-row.return-info`（整塊），但 truth 的驗法是逐欄——交辦要分別驗「來源／作者／時間」與「內容」，退回資訊要分別驗標題、原因、操作提示內文，整塊只有一個 id 時三段會被讀成一串、驗不出是哪一段不對。本次自行命名 `task.handover.{index}.content`、`task.handover.callout`、`task.status-row.return-info.title`、`task.status-row.return-info.reason`、`task.status-row.return-info.body`。回交 `/ui-plan` 補進約定表。同一類問題見缺口 #19。
 23. **`room_memory` 沒有任何寫入來源，查一下的房間記錄永遠是空的（T334 實跑發現，2026-11-06）**：`room_memory` 是查一下回答的兩個資料來源之一（`KbAskService.findLatestMemory`），schema 註解（`V4__baseline_missing_tables.sql:54`）也明寫「工務單完修以 kind=repair 寫入」，但 `tms/` 全專案只有 `KbAskService` **讀**這張表，沒有任何一處寫入（grep `room_memory` 在 `src/main/java` 只命中 `KbAskService`／`KbController`）。工務單完修（`RepairService`）不回寫、住客需求（kind=preference）更沒有來源，所以正式流程跑再久，「305 最近修過什麼？」也永遠查不到。App 的 fixture 因此只能直接落地這筆記錄（`BackendChannel.insertRoomMemory`）。回交後端：工務單完修時回寫一筆 `room_memory`（kind=repair，summary 照「{標題}：{原文}」慣例），並確認住客需求這一類的來源由誰寫。
 24. **查一下的分欄 accessibility id 不在 ui-plan 的約定表（T334 實跑發現，2026-11-06）**：`ui-plan.md:260-262` 只列了 `ask.suggestion.{index}`、`ask.answer.source-card`／`.type`／`.date`、`ask.not-found-message`、`ask.ask-manager-button`，但 truth 的驗法是逐欄——推薦問題要分別驗「問題」與「範圍」兩欄、出處卡要分別驗類型／標題／內容／日期四欄，整則或整張卡只有一個 id 時各段會被併成同一個 label，驗不出是哪一欄不對；回答全文的節點則根本沒有命名（原 step definition 的 Javadoc 自己寫著「TODO（回答區節點尚未命名）」）。本次自行命名 `ask.suggestion.{index}.question`、`ask.suggestion.{index}.scope`、`ask.answer.text`、`ask.answer.source-card.{index}`（出處卡是列表，依約定在 id 後帶執行期索引）與其 `.type`／`.title`／`.excerpt`／`.date`。回交 `/ui-plan` 補進約定表。同一類問題見缺口 #19、#22。
+
+25. **「手機有 2 筆待同步」的起始狀態在 App 自己的規則內產生不出來（T336 實跑發現，2026-11-06）**：`離線模式與連線異常.feature:40` 要阿美的手機帶著 2 筆待同步開場，但同一支 feature 的 Rule 2 把離線時的開始、認領、延後、開立新工務單全部擋掉，離線時唯一還能做的動作是「完成進行中的單」，而後端保證同一位員工最多只有一筆進行中（開工時已有 `doing` 回 409 `doing_task_exists`），所以靠真實操作最多只累積得到 1 筆。本輪由測試後門新增的 `POST /offline-queue` 把指定筆數直接放進同一條離線佇列（`OfflineQueue.enqueue`），離線列顯示的仍然是佇列長度本身。回交 `/dsl-refine`：這條 Rule 要嘛改成 1 筆，要嘛明確說明第 2 筆的來源是哪個動作（例如工務單離線暫存，但那又與 Rule 2 衝突）。
+26. **ui-plan 的 accessibility id 約定表沒有系統層跨畫面元件與房務認領按鈕（T336 實跑發現，2026-11-06）**：`ui/ui-plan.md:270` 只列了工務單摘要的 `ticket.summary.offline-queued-label`，離線列、連線異常列、離線攔阻提示與離線完成的待同步標示一個都沒有。本次自行命名 `system.offline-bar`、`system.offline-bar.pending-count`、`system.connection-issue-bar`、`system.offline-blocked-alert`、`system.offline-blocked-alert.dismiss-button`、`task.pending-sync-label`。另外房務待認領整個畫面沒有認領入口（`待認領/dsl.md` 只有「空狀態時搶單動作不可用」，沒有認領句型，產品碼也只有工務池有 `engPool.item.{單號}.claim-button`），Rule 2 要驗「離線時認領被擋」就得先有這顆按鈕，本次命名 `pool.card.{roomNo}.claim-button`。回交 `/ui-plan` 補進約定表、`/dsl-refine` 評估是否補房務端的認領句型。同一類問題見缺口 #19、#22、#24。
+27. **離線時「開立新工務單」的攔阻點與 dsl 寫的不一致（T336 實跑發現，2026-11-06）**：`系統層/dsl.md:16` 寫「點開工單送出」，但表單必須先有至少一張照片才送得出去，而照片要先上傳到後端換 id（`createRepairPhoto` → `uploadRepairPhotoContent`），離線時連第一張都加不進去，所以「點送出」這一步在離線時根本到不了。本輪改成攔在入口（點報修／開工單時就出提示），員工一點就知道現在做不了這件事，不會拍完三張才發現送不出去。回交 `/dsl-refine` 修正句型的實作語意。

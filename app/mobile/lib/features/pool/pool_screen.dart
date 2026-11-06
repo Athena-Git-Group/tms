@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/offline_queue.dart';
+import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
@@ -62,6 +64,20 @@ class _PoolScreenState extends State<PoolScreen> {
     }
   }
 
+  /// 把池裡的這張單接到自己名下。
+  ///
+  /// 離線時擋在這裡、不送請求：待認領是全部門在搶的同一批單，誰接到由後端
+  /// 決定。離線時先讓畫面當作接到了，等連線恢復才發現單早被別人接走，員工
+  /// 會白跑一趟。
+  Future<void> _claim(PoolItem item) async {
+    if (OfflineQueue.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
+      return;
+    }
+    await ApiClient.instance.claimTask(item.taskId);
+    await _fetch();
+  }
+
   void _openTask(PoolItem item) {
     Navigator.of(context).push(
       CupertinoPageRoute<void>(
@@ -106,6 +122,7 @@ class _PoolScreenState extends State<PoolScreen> {
                           item: item,
                           isHighlighted: item.roomNo == widget.highlightRoomNo,
                           onTap: () => _openTask(item),
+                          onClaim: () => _claim(item),
                         ),
                     ],
                   ),
@@ -152,6 +169,7 @@ class _HousekeepingPoolCard extends StatelessWidget {
     required this.item,
     required this.isHighlighted,
     required this.onTap,
+    required this.onClaim,
   });
 
   /// 無房號的單在後端掛在公共區域佔位房上，房號字串就是「公共區域」
@@ -174,6 +192,7 @@ class _HousekeepingPoolCard extends StatelessWidget {
   final PoolItem item;
   final bool isHighlighted;
   final VoidCallback onTap;
+  final VoidCallback onClaim;
 
   @override
   Widget build(BuildContext context) {
@@ -237,6 +256,13 @@ class _HousekeepingPoolCard extends StatelessWidget {
             id: '$cardId.status-tag--${reminderTag.idSuffix}',
             text: reminderTag.text,
           ),
+        TmsSemantics(
+          id: '$cardId.claim-button',
+          child: CupertinoButton(
+            onPressed: onClaim,
+            child: const Text('認領這單'),
+          ),
+        ),
       ],
     );
   }

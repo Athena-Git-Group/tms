@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/offline_queue.dart';
+import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 
 /// 員工暫時做不下去時，用這個面板說明原因，交接的人與主管才看得到任務為什麼停住。
@@ -129,6 +131,13 @@ class _HoldSheetState extends State<HoldSheet> {
   Future<void> _submit() async {
     final reason = _reasonToSubmit;
     if (reason == null) {
+      return;
+    }
+    // 離線時延後與中斷都擋在這裡，不送請求。這兩個動作會把單子留在手機以外
+    // 的地方等別人接手，後端不知情的話，主管與同仁看到的仍然是一筆沒人動過
+    // 的任務。
+    if (OfflineQueue.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
       return;
     }
     final updated = await widget.mode.submit(widget.taskId, reason);

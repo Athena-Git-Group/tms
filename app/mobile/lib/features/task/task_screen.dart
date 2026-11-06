@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/offline_queue.dart';
+import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../celebrate/celebrate_screen.dart';
 import '../ticket/ticket_screen.dart';
@@ -37,6 +39,12 @@ class TaskScreen extends StatefulWidget {
 
 class _TaskScreenState extends State<TaskScreen> {
   late Future<TaskDetail?> _taskFuture;
+
+  /// 這一間的完成已經留在手機上、還沒送到後端。
+  ///
+  /// 離線完成在畫面上既不是成功也不是失敗，員工需要知道「做完了，但還沒
+  /// 送出去」，否則他會以為單子已經結了，或以為剛才白做了。
+  bool _completionPendingSync = false;
 
   @override
   void initState() {
@@ -126,6 +134,12 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 開工：成功就把畫面換成後端回的新狀態；後端用 409 擋下「一次一間」時
   /// 跳提示，任務狀態一個字都不動（被擋下的那一間仍然是待開始）。
   Future<void> _start(TaskDetail task) async {
+    // 離線時開工一律擋在這裡，不送請求：開工要由後端判定「一次只做一間」，
+    // 離線時沒有人能做這個判定，先放行會讓同一位員工手上出現兩筆進行中。
+    if (OfflineQueue.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
+      return;
+    }
     try {
       final started = await ApiClient.instance.startTask(task.id);
       if (!mounted) {
@@ -138,6 +152,27 @@ class _TaskScreenState extends State<TaskScreen> {
       }
       await _showBusyAlert(e.errorMessage ?? '還有另一間在進行中');
     }
+  }
+
+  /// 完成這一間：連線正常時直接送給後端，離線時留在手機上等連線恢復。
+  ///
+  /// 離線時唯一還能做的事就是把手上進行中的這間做完，所以這裡不擋，改交給
+  /// [OfflineQueue]。它會在連線恢復時用同一把 `Idempotency-Key` 送出去，員工
+  /// 不必記得回頭再按一次完成。
+  Future<void> _complete(TaskDetail task) async {
+    final sent = await OfflineQueue.instance.submit(
+      kind: 'complete',
+      send: (idempotencyKey) => ApiClient.instance
+          .completeTask(task.id, idempotencyKey: idempotencyKey),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (!sent) {
+      setState(() => _completionPendingSync = true);
+      return;
+    }
+    _showTask(await ApiClient.instance.getTask(task.id));
   }
 
   /// 任務停在哪個狀態、停住原因記成什麼，一律以後端送出後回傳的那一筆為準。
@@ -274,6 +309,15 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ),
         ),
+        if (_completionPendingSync)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: TmsSemantics(
+              id: 'task.pending-sync-label',
+              label: pendingSyncMessage,
+              child: const ExcludeSemantics(child: Text(pendingSyncMessage)),
+            ),
+          ),
         if (task.returnInfo != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -319,10 +363,13 @@ class _TaskScreenState extends State<TaskScreen> {
               child: TmsSemantics(
                 id: 'task.primary-button',
                 child: CupertinoButton.filled(
-                  // 目前只接「開始」；完成與恢復處理的動作等對應情境進場
-                  // 再接（接了也沒有情境在驗，會變成沒人讀的分支）。
-                  onPressed:
-                      primaryActionLabel == '開始' ? () => _start(task) : () {},
+                  // 目前只接「開始」與「完成」；恢復處理等對應情境進場再接
+                  // （接了也沒有情境在驗，會變成沒人讀的分支）。
+                  onPressed: switch (primaryActionLabel) {
+                    '開始' => () => _start(task),
+                    '完成' => () => _complete(task),
+                    _ => () {},
+                  },
                   child: Text(primaryActionLabel),
                 ),
               ),
@@ -361,7 +408,9 @@ class _TaskScreenState extends State<TaskScreen> {
           TmsSemantics(
             id: 'task.repair-button',
             child: CupertinoButton(
-              onPressed: () => RepairSheet.show(context),
+              onPressed: () => OfflineQueue.instance.isOffline
+                  ? showOfflineBlockedAlert(context)
+                  : RepairSheet.show(context),
               child: const Text('報修'),
             ),
           ),

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../../core/api_client.dart';
+import '../../core/system_status.dart';
+import '../../core/test_backdoor.dart';
 
 /// 今日進度的共用取用路徑：房務首頁與工務首頁的數字都從這一份 `GET /me/today`
 /// 的回應來。
@@ -36,11 +40,34 @@ class MyTodayScope extends StatefulWidget {
 class _MyTodayScopeState extends State<MyTodayScope> {
   MyToday? _today;
   Object? _error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    TestHooks.instance.flakyConnection.addListener(_syncPolling);
+    _syncPolling();
+  }
+
+  @override
+  void dispose() {
+    TestHooks.instance.flakyConnection.removeListener(_syncPolling);
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  /// 即時推送不可靠時，畫面改成每隔固定時間自己重查一次。
+  ///
+  /// 連線正常時不開這個計時器：多數時間推送是可靠的，固定輪詢只是讓手機
+  /// 多耗電、後端多收一批沒有必要的查詢。
+  void _syncPolling() {
+    _pollTimer?.cancel();
+    if (!TestHooks.instance.flakyConnection.value) {
+      _pollTimer = null;
+      return;
+    }
+    _pollTimer = Timer.periodic(degradedPollInterval, (_) => _load());
   }
 
   Future<void> _load() async {

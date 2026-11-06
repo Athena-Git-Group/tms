@@ -453,6 +453,18 @@ public class BackendChannel {
     }
 
     /**
+     * Given 表的「已做分鐘」套在一筆剛從 App 開工的任務上：把這一段的起算時刻往前推。
+     *
+     * <p>「已經做了 35 分鐘」沒有辦法用等的——測試不可能真的等 35 分鐘，所以已做時間
+     * 一律是直接落地的。{@code tasks.segment_started_at} 就是後端計算已做時間的起點，
+     * 把它往前推 N 分鐘，後端算出來的已做時間就是 N 分鐘。
+     */
+    public void backdateWorkStart(UUID taskId, int workedMinutes) {
+        execute("UPDATE tasks SET worked_sec = 0, segment_started_at = ? WHERE tenant_id = ? AND id = ?",
+                OffsetDateTime.now().minusMinutes(workedMinutes), ensureTenant(), taskId);
+    }
+
+    /**
      * 凍結一張交班單，裡面只有一則指定對象的項目（欄位對照 tms {@code HandoverFixtures}：
      * {@code snapshot} 是 {@code [{target, content, authorName}, …]}，{@code generated_by}
      * 固定 {@code system}）。交班單沒有建立端點——它是班末掃描凍結出來的快照，所以直接落地。

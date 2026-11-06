@@ -103,20 +103,31 @@ class ApiClient {
     await _requestJson('POST', '/tasks/$taskId/claim', idempotent: true);
   }
 
-  /// `POST /tasks/{id}/complete`：完修回報（契約 `tasksComplete`）。
+  /// `POST /tasks/{id}/complete`：完成任務（契約 `tasksComplete`）。
   /// 修繕任務必附完修照片；[resolutionType] 是完修三選一（fixed／temporary／
   /// cannot_fix）。追蹤單自動建立與房況轉停用待確認都是後端行為，App 只送
   /// 這個欄位、呈現結果。
+  ///
+  /// 打掃類任務兩個欄位都不帶：後端對非修繕任務不收也不看這兩個值，硬塞空
+  /// 清單反而會讓請求看起來像一張沒有照片的工務單。
+  ///
+  /// [idempotencyKey] 給離線佇列再送一次時指定同一把鍵用；不帶時每次都配一把
+  /// 新的，一次動作只保護它自己的重送。
   Future<void> completeTask(
     String taskId, {
-    required List<String> photoIds,
-    required String resolutionType,
+    List<String>? photoIds,
+    String? resolutionType,
+    String? idempotencyKey,
   }) async {
     await _requestJson(
       'POST',
       '/tasks/$taskId/complete',
       idempotent: true,
-      body: {'photoIds': photoIds, 'resolutionType': resolutionType},
+      idempotencyKey: idempotencyKey,
+      body: {
+        if (photoIds != null) 'photoIds': photoIds,
+        if (resolutionType != null) 'resolutionType': resolutionType,
+      },
     );
   }
 
@@ -289,6 +300,7 @@ class ApiClient {
     Map<String, String>? query,
     List<int>? binaryBody,
     bool idempotent = false,
+    String? idempotencyKey,
   }) async {
     final client = HttpClient();
     try {
@@ -302,9 +314,11 @@ class ApiClient {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
       }
       if (idempotent) {
-        // 每次操作配一把新鍵：同一鍵只保護「同一次使用者動作的重送」，
-        // 跨動作重用會讓第二次動作拿到第一次的回放結果。
-        request.headers.set('Idempotency-Key', _randomUuid());
+        // 沒有指定鍵時每次操作配一把新的：同一把鍵只保護「同一次使用者動作
+        // 的重送」，跨動作重用會讓第二次動作拿到第一次的回放結果。離線佇列
+        // 再送一次時會把那筆動作自己的鍵傳進來，後端才認得出是同一次動作。
+        request.headers.set(
+            'Idempotency-Key', idempotencyKey ?? newIdempotencyKey());
       }
       if (binaryBody != null) {
         request.headers.contentType = ContentType('image', 'jpeg');
@@ -326,7 +340,7 @@ class ApiClient {
 
   /// 產生 UUID v4 字串（Idempotency-Key 用）。App 沒有引入 uuid 套件，
   /// 這把鍵只要求「夠隨機、不重複」，用 [Random.secure] 自組即可。
-  static String _randomUuid() {
+  static String newIdempotencyKey() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;

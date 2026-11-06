@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'api_client.dart';
+import 'offline_queue.dart';
+
 /// App 跑在自動化測試底下時，讓測試腳本能從外部操控裝置狀態（例如把裝置時間
 /// 改到某個時間點、強迫斷網、讓某一次照片上傳失敗），好驗證離線、逾時、重試
 /// 這類難以用真實環境重現的情境。
@@ -13,13 +16,13 @@ import 'package:flutter/foundation.dart';
 /// 一個 port。
 ///
 /// 這個後門只負責「裝置側注入」：時間、離線、上傳失敗、記住帳號、連線不穩
-/// 五個開關。畫面資料
-/// 一律走 `core/api_client.dart` 向真後端取——測試腳本要準備資料，走後端
-/// 的測試資料端點，不再從這裡灌 fixture 進畫面。
+/// 五個開關，以及離線佇列的起始筆數。畫面資料一律走 `core/api_client.dart`
+/// 向真後端取——測試腳本要準備資料，走後端的測試資料端點，不再從這裡灌
+/// fixture 進畫面。
 ///
-/// 目前測試腳本送進來的指令只會被存進 [TestHooks] 這個 singleton、回應
-/// 200，App 自己的業務邏輯還沒去讀這些值來改變行為——也就是這些開關目前
-/// 只是收得到、還沒真的生效，等對應功能開發到需要被測試控制時再接上。
+/// 送進來的開關存在 [TestHooks] 這個 singleton 裡。有些開關 App 已經在讀
+/// （離線、連線不穩、記住帳號），有些還沒有畫面在用（裝置時間、上傳失敗），
+/// 等對應功能開發到需要被測試控制時再接上。
 class TestHooks {
   TestHooks._();
 
@@ -28,9 +31,13 @@ class TestHooks {
   /// 測試腳本要求裝置採用的時間（ISO 格式字串）；App 尚未讀取這個值。
   String? injectedClockIso;
 
-  /// 測試腳本要求裝置視為離線。「我的」頁登出前的離線攔阻讀這個值判斷
-  /// 離線（依規格，離線攔阻以這個注入開關為準，App 不另做網路偵測）。
-  bool forceOffline = false;
+  /// 測試腳本要求裝置視為離線。離線攔阻、離線列與離線佇列都讀這個值判斷
+  /// 離線（依規格，離線判定以這個注入開關為準，App 不另做網路偵測）。
+  ///
+  /// 寫成可監聽的值而不是單純的 bool：離線列要跟著它即時出現與消失，離線
+  /// 佇列也要在它由 true 轉回 false 的那一刻自動把待同步的動作送出去。用
+  /// 普通欄位的話，畫面只會在下一次自己重畫時才發現狀態變了。
+  final ValueNotifier<bool> forceOffline = ValueNotifier<bool>(false);
 
   /// 測試腳本要求第幾張照片（從 1 算起）上傳失敗；App 尚未讀取這個值。
   int? uploadFailAtIndex;
@@ -42,17 +49,18 @@ class TestHooks {
   final ValueNotifier<RememberedAccount?> rememberedAccount =
       ValueNotifier<RememberedAccount?>(null);
 
-  /// 測試腳本要求把即時連線切成異常態（裝置仍連網，但即時查詢逾時或間歇
-  /// 失敗）；App 尚未讀取這個值。
-  bool flakyConnection = false;
+  /// 測試腳本要求把即時連線切成異常態（裝置仍連網，但即時推送不可靠）。
+  /// 連線異常列與「每 5 秒重新查一次」的降級輪詢讀這個值；與
+  /// [forceOffline] 同樣寫成可監聽的值，理由相同。
+  final ValueNotifier<bool> flakyConnection = ValueNotifier<bool>(false);
 
   /// 測試之間重置狀態，避免前一個測試設定的開關漏到下一個測試。
   void reset() {
     injectedClockIso = null;
-    forceOffline = false;
+    forceOffline.value = false;
     uploadFailAtIndex = null;
     rememberedAccount.value = null;
-    flakyConnection = false;
+    flakyConnection.value = false;
   }
 }
 
@@ -112,10 +120,11 @@ class TestBackdoor {
           request.response.write(jsonEncode({
             'processStartedAt': _processStartedAt.toIso8601String(),
             'injectedClockIso': TestHooks.instance.injectedClockIso,
-            'forceOffline': TestHooks.instance.forceOffline,
+            'forceOffline': TestHooks.instance.forceOffline.value,
             'uploadFailAtIndex': TestHooks.instance.uploadFailAtIndex,
             'rememberedAccount': TestHooks.instance.rememberedAccount.value?.loginId,
-            'flakyConnection': TestHooks.instance.flakyConnection,
+            'flakyConnection': TestHooks.instance.flakyConnection.value,
+            'pendingSyncCount': OfflineQueue.instance.pendingCount.value,
           }));
           await request.response.close();
           break;
@@ -124,7 +133,7 @@ class TestBackdoor {
           _respondOk(request);
           break;
         case 'POST /offline':
-          TestHooks.instance.forceOffline = payload['offline'] as bool? ?? false;
+          TestHooks.instance.forceOffline.value = payload['offline'] as bool? ?? false;
           _respondOk(request);
           break;
         case 'POST /upload-fail':
@@ -144,8 +153,24 @@ class TestBackdoor {
                 );
           _respondOk(request);
           break;
+        case 'POST /offline-queue':
+          // 「手機上已經累積了 N 筆待同步」這個起始狀態，在 App 自己的規則下
+          // 走不出來：離線時唯一還能做的動作是完成進行中的單，而後端保證同一
+          // 位員工最多只有一筆進行中，所以靠真實操作最多只累積得到一筆。這裡
+          // 放進去的是沒有送出內容的佔位動作，驗收看的是離線列顯示的筆數就是
+          // 佇列長度本身。
+          final queued = payload['count'] as int? ?? 0;
+          for (var i = 0; i < queued; i++) {
+            OfflineQueue.instance.enqueue(PendingOperation(
+              kind: 'test-placeholder',
+              idempotencyKey: ApiClient.newIdempotencyKey(),
+              send: (_) async {},
+            ));
+          }
+          _respondOk(request);
+          break;
         case 'POST /flaky-connection':
-          TestHooks.instance.flakyConnection = payload['flaky'] as bool? ?? false;
+          TestHooks.instance.flakyConnection.value = payload['flaky'] as bool? ?? false;
           _respondOk(request);
           break;
         default:
