@@ -59,7 +59,8 @@ changeOwnPassword:
       但這條是完成改密的唯一合法路徑，必須放行，否則員工會卡死在改密畫面。
       強制改密情境（mustChangePassword=true）身分已由登入換得的 token 證明，不需要帶 currentPassword；
       自願變更情境必須帶，省略或空白回 422 current_password_required，比對不符回 401 current_password_invalid。
-      新密碼長度不足 8 字或與目前密碼相同回 422 new_password_invalid。
+      新密碼與目前密碼相同回 422 new_password_invalid；密碼強度規則（長度下限、字元組成）
+      truth 目前沒有定義，待 `/dsl-refine` 補口徑後再加，不在此處發明門檻。
       改密成功後舊 token 立即失效，其他裝置上的既有登入要重新登入。
     tags:
     - 員工帳號與登入 API

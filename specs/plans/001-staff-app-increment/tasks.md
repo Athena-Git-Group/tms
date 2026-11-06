@@ -1100,3 +1100,166 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
     逐項以 `ui/prototype/Main.dc.html` 實證，那 7 項原型**全部都有**：工務視角 `853-2104`（含四步步驟條 `1909`、完修三選一 `2090`、放回待認領 `3759`、主管驗收 `4032`）、通知中心 `339-409`（分組／未讀藍點／空狀態／全部標已讀 `4661`）、帳號與登入 `2305-2394`（含鎖定 `2332`、強制改密 `697-770`、登出守衛 `4669`）、我的 `410-595`、遺失物 `596-852`、交班單 `309-338`、即時動態 `2441-2530`。另 `home.streak-badge`（缺口 #1）原型也有資料與文案（`4072` 的 `streakText`、`5099` 的房務 streak、通知文案 `3049`「連續 6 天零退回」），`ui-plan.md:245` 標「待補畫面後才掛」同屬誤標。
     真正原型沒有的只有兩項，`ui-plan.md:61-62` 標註正確：房務待認領的「公共區域」無房號單＋「規則引擎命中」標籤（`公共區域` 只出現在工務側 `3710`／`3759-3800`），以及「部門沒有在職員工」空狀態（全檔無）——即缺口 #2、#3。
     **影響**：本輪 T316／T318／T320 等實作是照 `ui-plan` 的 id 約定表與 feature 的 Rule 做的，視覺細節沒有回頭對原型既有設計；行為驗收（BDD）不受影響，但畫面可能與原型不一致。回交 `/ui-plan`：更正這段敘述、把 §4 那幾項的原型位置補進畫面↔feature 矩陣，並決定本輪已實作的畫面要不要照原型回頭校正視覺。
+
+## Scope Note（本輪新增範圍：後端補齊 App 阻塞缺口，全部 `tms/` 側）
+
+本輪承接 `.athena/handoff/2026-11-06-app-blocking-gaps-to-api-plan.md`：T338 全量實跑 108 個場景 69 綠 39 紅，39 個紅裡有 38 個卡在 App 邊界外——後端有資料但不回、有路由但沒實作、有欄位但沒組進回應。`/api-plan` 已於 2026-11-06 把其中四項寫進契約（`truth-delta.md` 的 `## /api-plan` 段最後 6 列）；另外三項契約早就寫好、只是後端沒做到。本輪只做後端實作。
+
+truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-plan` 的契約列，所以本輪沒有 `[BDD-RED]`／`[BDD-ALIGN]`／`[BDD-REMOVE]`，也不為 ios-app feature 另開 `[BDD-GREEN]`：T316／T320／T322／T324／T326 這五個 GREEN 任務已經存在且已被擋住，本輪的價值是把它們解鎖。四項是剛新增的契約（#10／#12／#14／#16），三項是契約早就寫好、後端沒做到（#13／#15／#17／#18），另加一項執行期環境缺陷（#9）。
+
+驗收真相有兩層：①**後端既有測試套件不得退化**——`specs/truth/features/backend/**` 的 BDD 144/144（commit 23910cd 的基準），跑 `JAVA_HOME=$(/usr/libexec/java_home -v 25) mvn -f tms/pom.xml test`（含 `RunTruthFeaturesTest` 與舊整合套件 `RunCucumberTest`）；②**App 側被擋的場景實際轉綠**——`app/bdd/run-module.sh <模組>`。依 T338 的逐項歸因，七項補齊後預期解除 37 個紅（#10 七個、#12／#13 二十二個、#14 一個、#15 兩個、#16 一個、#17 兩個、#18 兩個），剩下 2 個不在本輪範圍：#11（撞單 Given 順序，回交 `/dsl-refine`）與 App 側已知待辦（任務頁步驟條）。
+
+**邊界（整輪）**：只動 `tms/`。不動 `specs/truth/**`（契約已由 `/api-plan` 定稿，**實作照契約，不得自行改設計**）、不動 `app/mobile/` 與 `app/bdd/`（App 側實作與 49 句 stepdef 都已就位，端點補齊即可轉綠）。T204–T340 的既有內容不改，只在 Phase 6 更新 T316／T320／T322／T324／T326／T338 本來就留的「現況註記」欄位與勾選狀態。
+
+## Phase 5: 後端契約實作（解除上游缺口 #9–#18）
+
+**Goal**: 把 App 實跑打出來的七項後端缺口逐項補完——四項依本輪新增的契約實作（`MyToday.todayTasks`、`MyToday.engineeringSummary.tickets`、`changeOwnPassword`、`listDeptPool` 的 `dept` 參數＋`DeptPool.activeStaffCount`），三項把早已寫好的契約補上實作（`TaskDetail` 三欄、`PoolItem.reminderStage`、`listRepairTickets`／`listSopItems`），外加一支補 GRANT 的 migration。每一項都以「後端 144 不退化 ＋ 對應 App 模組場景轉綠」兩段驗收。
+
+**Shared Must Read**:
+- `truth-delta.md` -> `## /api-plan` 段最後 6 列（2026-11-06 寫入：`MyToday.todayTasks`／`TodayTask`、`engineeringSummary.tickets`／`EngineeringTicket`、`changeOwnPassword`、`listDeptPool` 的 `dept`、`DeptPool.activeStaffCount`、`shared.yaml` 五個新錯誤碼）
+- `tasks.md` -> 下方「上游缺口」#9、#10、#12–#18（每項的證據、落點行號與擋住的場景數）
+- `specs/truth/contracts/components/schemas/員工工作台.yaml` -> `MyToday`（:1-93）、`TodayTask`（:94-167）、`EngineeringTicket`（:168-258）、`PoolItem.reminderStage`（:297）、`DeptPool.activeStaffCount`（:317-335）
+- `specs/truth/contracts/components/schemas/shared.yaml` -> `Error` 錯誤碼清單新增的 `current_password_required`(422)／`current_password_invalid`(401)／`new_password_invalid`(422)／`dept_required`(422)／`forbidden_dept_pool`(403)
+- `tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` -> `deptPool`（:355-427）、`myToday`（:438-540）、`toDetail`（:584-607）、`elapsedMinutes`（:632-641）
+- `tms/src/test/java/com/athena/tms/bdd/` -> 後端 BDD 既有結構（`RunTruthFeaturesTest` 選 `../specs/truth/features/backend`、glue `com.athena.tms.bdd`、`support/` 的 `BddApiClient`／`DbProbe`／`TaskFixtures`／`StaffFixtures`）
+
+**Boundary**:
+- 照契約實作，不得自行改設計：欄位名、enum 值、排序口徑、錯誤碼與 HTTP 狀態一律以 `specs/truth/contracts/**` 為準；覺得契約有問題就停下來回交 `/api-plan`，不在實作裡繞過。
+- 不改 `specs/truth/**` 的任何檔案（含 feature 與 dsl）。
+- 不改 `app/mobile/`、`app/bdd/`：本輪若發現 App 側也要改，記成缺口回交，不在這一輪動它。
+- 後端既有 BDD 144 個場景是硬性不退化門檻；任一項補完後跑出紅燈，先修回來再往下。
+- 不順手實作其他未解缺口（#20 連續零退回天數、#21 班末換人與 `pool_source`、#23 `room_memory` 回寫）——那三項需要先定口徑或另做設計，不在本輪。
+
+**Test Scope**:
+- `specs/truth/features/backend/**`（144 個場景，不退化）
+- `specs/truth/features/ios-app/{帳號與登入,工務單,待認領,任務執行}`（被擋場景轉綠，逐項在各 task 的驗收列出）
+
+**Parallel Hint**:
+- T341–T345 **必須序列**（依編號順序做）：`todayTasks`、`engineeringSummary.tickets`、`toDetail` 三欄、`deptPool` 的 `reminderStage`、`listDeptPool` 的 `dept`＋`activeStaffCount` **全部落在同一個檔 `TaskExecutionService.java`**，其中 T341／T342 還共用 `myToday` 的同一次 rows 查詢（要加欄位）、T344／T345 共用 `deptPool` 的同一段組裝碼，平行會互相覆蓋。
+- T346–T349 各自獨立檔案（`repair/RepairController.java`＋`RepairService.java`／新的 SOP controller／`StaffAccountController.java`＋`BearerTokenAuthFilter.java`／`db/migration/`），標 `[P]`，可同時派四個 subagent；它們與 T341–T345 之間也沒有檔案衝突，可與序列組同時進行。
+
+- [ ] T341 `MyToday.todayTasks`：回傳本人今日全部任務（解除缺口 #12）
+  - 契約落點：`specs/truth/contracts/components/schemas/員工工作台.yaml` -> `MyToday.todayTasks`（:37-53，含收錄口徑與排序口徑）、新 schema `TodayTask`（:94-167，八個必填欄位＋`estMin`／`workedMinutes`／`holdReason`／`inspection`）；`truth-delta.md` `/api-plan` ADD 列。
+  - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `myToday`——rows 查詢（:449-457）要補 `t.hold_reason`、`t.inspection_waived`，統計迴圈（:471-520）內順手組 `todayTasks`，結果組裝（:522-540）在 `nextTasks` 之前 `result.put("todayTasks", …)`。
+  - 只做：依契約收錄口徑（負責人是本人、`work_date` 是今天、狀態不是 `cancelled`，六個狀態值全收）與排序口徑（未結束的四個狀態在前、同組內 `doing` 最前其餘依房號遞增；已結束的 `done`／`inspected` 依完成時間新到舊）組這個陣列；`workedMinutes` 沿用 `elapsedMinutes`（:632-641）的口徑，不另寫第二套折算。
+  - 不做：**不動 `nextTasks`** 的收錄範圍與推薦排序（契約明寫它是 `todayTasks` 中 accepted 的推薦子集，混入會毀掉既有語意）；不新開端點；不改 `TaskDetail`（那是 T343）。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 工務單` 的房務端三支由 0/18 開始往上走（完整轉綠要等 T346，本題只驗 App 進得了任務頁）、`app/bdd/run-module.sh 任務執行` 紅燈數下降。缺口 #12 標示解除。
+
+- [ ] T342 `MyToday.engineeringSummary.tickets`：回傳工務手上與今日結案的工務單清單（解除缺口 #10）
+  - 契約落點：`specs/truth/contracts/components/schemas/員工工作台.yaml` -> `engineeringSummary.tickets`（:87-93，收錄口徑／排序／與三個計數欄位的筆數關係）、新 schema `EngineeringTicket`（:168-258）；`truth-delta.md` `/api-plan` ADD 列。
+  - 後端落點：同檔 `myToday`——`engineeringSummary` 的既有組裝（:530-538，目前只有 `openCount`／`completedToday`／`urgentCount`），在同一次 rows 迴圈內收集 `repair` 類型的單；`ticketNo` 需要 `repair_tickets` 的 join（比照 `deptPool` 的 `LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id`，:384），`isPublicArea` 依房間是否為公共區域佔位房判定。
+  - 只做：在既有 `engineeringSummary` 物件內新增 `tickets` 陣列（本人 `accepted`／`doing` 加上今天 `done` 的工務單），依契約排序（急件在前、未結案在已完修之前、同組內開單時間舊到新）；維持 `openCount` 等於陣列中 accepted＋doing 筆數、`completedToday` 等於其中 done 筆數的一致性。
+  - 不做：**不動三個既有計數欄位**的計算；不收 `pool`／`pending_review`／`rejected`／`cancelled` 的單；非工務部門呼叫者 `engineeringSummary` 仍為 null，不因為這個陣列改變部門分流。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 工務單` 的 `工務視角.feature` 由 5/13 往 12/13 走（最後 1 個是缺口 #11，不在本輪）。缺口 #10 標示解除。
+
+- [ ] T343 `TaskDetail` 補 `estMin`／`skippedSopItems`／`inspectionWaived`（解除缺口 #17）
+  - 契約落點：`specs/truth/contracts/components/schemas/任務.yaml` -> `TaskDetail` 的 `skippedSopItems`（:328-332）與以 `allOf` 併入 `tasks` 的 `estMin`（:42）、`inspectionWaived`（:83）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列。
+  - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `toDetail`（:584-607）逐欄組裝處，比照既有 `checkedSopItems`（:600，由 `checkedSopItemIds` 還原 `sop_items.id`）補一個 `skippedSopItemIds`——資料來源是 `task_sop_checks.skipped = true`（既有欄位，見 `kb/KbSuggestionService.java:44-50` 的同款查法）。
+  - 只做：補這三欄，`estMin`／`inspectionWaived` 直接取自 `taskRowLookup` 回來的資料列（若查詢沒選到這兩欄就把欄位補進查詢），`skippedSopItems` 與 `checkedSopItems` 同形狀（`sop_items.id` 的陣列）。
+  - 不做：不改 `elapsedMinutes`／`accumulatedMinutes` 的口徑；不在後端算「超時 N 分」或「預估 35 分」的文案（那是 App 依 `estMin` 與已做分鐘自己算）；不改 SOP 勾記的寫入路徑。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 任務執行` 的超時提示與慶祝頁 2 個場景轉綠（需 T341 已完成，App 才進得了任務頁）。缺口 #17 標示解除。
+
+- [ ] T344 `PoolItem.reminderStage` 補進 `GET /pool` 回應（解除缺口 #15）
+  - 契約落點：`specs/truth/contracts/components/schemas/員工工作台.yaml` -> `PoolItem.reminderStage`（:297，`staff_reminded`／`manager_notified`）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列。
+  - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `deptPool`——SQL 已經讀了 `t.reminder_stage`（:382 當 `unclaimed_overdue` 排序旗標用，但沒有選進 select 清單的輸出欄位），`PoolItem` 組裝處（:405-419）補一行 `item.put("reminderStage", …)`；需要時把 `t.reminder_stage` 本身加進內層 SELECT。
+  - 只做：把 `tasks.reminder_stage`（V13 落地）原值放進回應，null 就是 null。
+  - 不做：不改未接超時的排序規則（`unclaimed_overdue` 旗標與 ORDER BY 維持原樣）；不改 `UnclaimedReminderScanJob` 的寫入時機與兩段門檻。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 待認領` 的未接超時兩段標籤 2 個場景轉綠。缺口 #15 標示解除。
+
+- [ ] T345 `listDeptPool` 的 `dept` 參數 ＋ `DeptPool.activeStaffCount`（解除缺口 #16）
+  - 契約落點：`specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `listDeptPool` 的 `dept` 參數（:44-46 的三條分流說明、:53 參數定義）；`components/schemas/員工工作台.yaml` -> `DeptPool.activeStaffCount`（:317-335，含「`activeStaffCount` 大於 0 而 `items` 空＝單都被接走、等於 0＝沒有人可以搶單」的兩種空狀態判準）；`components/schemas/shared.yaml` -> `dept_required`(422)、`forbidden_dept_pool`(403)；`truth-delta.md` `/api-plan` MODIFY＋ADD 兩列。
+  - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `deptPool`（:355，目前 `actor.dept() == null` 直接 422「此帳號未設部門」）與 `controller/TaskExecutionController.java:100-105`（`@GetMapping("/pool")` 的查詢參數）；在職員工數查 `staff_accounts`（`status='active'`，見 `V11__staff_account_status.sql` 的三態說明：`invited` 待開通與 `inactive` 停用都不計）。
+  - 只做：新增選用參數 `dept`；現場員工（房務／工務／櫃檯）省略時看自己部門、帶了自己部門以外的值回 403 `forbidden_dept_pool`；主管與老闆必須帶，省略回 422 `dept_required`；回應補 `activeStaffCount`（主管與老闆的部門不計入在職數的定義見契約）。
+  - 不做：不另開「主管視角部門池」端點（契約選的是擴充既有端點）；不動 `items`／`counts` 的既有內容與 `category`／`urgent`／`source` 三個篩選維度；不改既有「此帳號未設部門」在**沒帶 dept 且不是主管／老闆**時的行為以外的分支。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 待認領` 的主管空狀態 1 個場景轉綠，`待認領列表.feature` 收 9/9。缺口 #16 標示解除。
+
+- [ ] T346 [P] 實作 `listRepairTickets`（解除缺口 #13）
+  - 契約落點：`specs/truth/contracts/groups/現場作業/工務單.yaml` -> `listRepairTickets`（:81-104，`GET /repair-tickets?roomId=`，必帶 `roomId`，回 `RepairTicketSummary` 陣列，「依房間列出未撤回的工務單」）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列。
+  - 後端落點：`tms/src/main/java/com/athena/tms/repair/RepairController.java:117-120`（目前 `@GetMapping("/repair-tickets")` 明寫 `throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED)` 佔位）＋`RepairService.java`（比照既有 `read(ticketId)` 的查法新增一個依房間列出的方法）。
+  - 只做：把 501 佔位換成真實作；回應形狀逐欄對齊 `components/schemas/shared.yaml#/RepairTicketSummary`；排除已撤回（`cancelled`）的單。
+  - 不做：**不新增契約沒有的「我報的工務單」本人視角參數**（handoff 把那列為待 `/api-plan` 評估，不在本輪自行發明）；不改 `createRepairTicket`／`readRepairTicket`／審核四端點的任何行為。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 工務單` 的房務端三支（18 個場景）在 T341 已完成的前提下轉綠。缺口 #13 標示解除。
+
+- [ ] T347 [P] 實作 `listSopItems`（解除缺口 #18）
+  - 契約落點：`specs/truth/contracts/openapi.yaml:119` -> `/sop-items` 指向 `groups/知識與通知/SOP與查房項目.yaml#/listSopItems`，回 `components/schemas/SOP與查房項目.yaml#/sop_items` 陣列（`id`／`tenantId`／`appliesTo`／`itemKey`／`label`／`sortOrder`／`active`／`createdAt` 全部必填）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列；全專案 grep `sop-items` 目前無任何 controller 命中。
+  - 後端落點：`tms/src/main/java/com/athena/tms/controller/` 新增一支 controller（比照同目錄 `StaffSopCheckApiController.java` 的 `@RequestMapping("/api/v1")` 慣例）；資料來源是既有 `dao/SopItemRepository.java` 的 `findByTenantIdAndAppliesToAndActiveTrueOrderBySortOrderAsc`（必要時補一個不分 `appliesTo` 的查法）與 `entity/SopItem.java`。
+  - 只做：掛上 `GET /api/v1/sop-items`，回該租戶的 SOP／查房項目清單，欄位名與契約 `sop_items` 逐欄一致（`itemKey`／`sortOrder`／`appliesTo` 用 camelCase）。
+  - 不做：不加契約沒有的查詢參數；不改 SOP 勾記（`task_sop_checks`）的任何寫入／讀取路徑；不改 `TaskDetail.checkedSopItems`／`skippedSopItems`（那是 T343）。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 任務執行` 的 SOP 清單 2 個場景（在 T341／T343 已完成的前提下）轉綠。缺口 #18 標示解除。
+
+- [ ] T348 [P] 實作 `changeOwnPassword`（解除缺口 #14）
+  - 契約落點：`specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `changeOwnPassword`（:50-88，`POST /api/v1/staff-accounts/change-password`，回應沿用 `LoginResponse` 換發 token 且 `mustChangePassword` 必為 false，**在 `mustChangePassword=true` 時必須放行**）；`components/schemas/員工帳號與登入.yaml` -> `ChangePasswordRequest`（:103-130）；`shared.yaml` -> `current_password_required`(422)／`current_password_invalid`(401)／`new_password_invalid`(422)；`truth-delta.md` `/api-plan` ADD 列。
+  - 後端落點：`tms/src/main/java/com/athena/tms/controller/StaffAccountController.java`（:49 既有 `POST /staff-accounts/login` 旁邊新增）＋`service/StaffAccountLoginService.java`／`AuthService.java`／`JwtService.java`（重雜湊與換發 token）＋`filter/BearerTokenAuthFilter.java:136`（目前 `must_change_password` 時對業務端點一律回 403，必須把這條端點放進放行清單，否則員工卡死在改密畫面）。
+  - 只做：重雜湊 `newPassword` 寫入 `staff_accounts.password_hash`、清 `must_change_password` 旗標、換發 JWT（TTL 12h）回 `LoginResponse`；強制改密情境不要求 `currentPassword`，自願變更情境必填並比對；改密成功後舊 token 失效。
+  - 不做：**不自行發明密碼強度門檻**——`ChangePasswordRequest.newPassword` 的 description 明寫「密碼強度規則 truth 目前沒有定義……在那之前這條端點只擋『與目前密碼相同』這一種，不自行發明長度門檻」，而同份契約 `changeOwnPassword` 的 description 又寫「新密碼長度不足 8 字……回 422」，兩處打架：**以 schema 的指示為準只擋「與目前密碼相同」**，並把這個衝突記進 Phase 7 的回交清單，不在實作裡二選一後當作定案。不改登入本身的鎖定／停用／429 行為。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 帳號與登入` 收 10/10（`登入與登出守衛.feature:59`「設定新密碼後進入首頁」轉綠）。缺口 #14 標示解除。
+
+- [ ] T349 [P] 補 `notifications` 的 GRANT migration（解除缺口 #9）
+  - 證據：`tms/src/main/resources/db/migration/V16__notifications.sql` 建了 `notifications` 表但**整檔沒有任何 `GRANT`**，執行期 `GET /notifications` 回 500 permission denied（後端 BDD 以超級使用者跑，抓不到；T318 當時是對跑著的 DB 手動 GRANT 才解鎖）。見下方上游缺口 #9。
+  - 後端落點：`tms/src/main/resources/db/migration/` 現有最新版本號是 `V17__repair_ticket_review_and_verification.sql`，**新增 `V18__notifications_grant.sql`**（不得改 V16，已套用的 migration 改了會壞 checksum）。格式比照 `V5__staff_app_increment.sql:223-227` 的 `GRANT SELECT, INSERT, UPDATE, DELETE ON … TO tms_app;`。
+  - 只做：補 `notifications` 的 GRANT；順手確認 V16 的 RLS 設定（若 V5 的慣例是 GRANT 後接 `ENABLE ROW LEVEL SECURITY` 與對應 policy，而 `notifications` 也缺，一併補齊——這張表帶 `tenant_id`，漏了就是跨租戶可見）。
+  - 不做：不改 V16 既有的表結構、索引與註解；不改 `NotificationService`／`NotificationController` 的任何邏輯；不順手替其他表補 GRANT（有缺的另記缺口）。
+  - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化（Testcontainers 會從零跑完整 migration 鏈，V18 語法錯會直接炸）；**以非超級使用者 `tms_app` 連線**實打 `GET /api/v1/notifications` 回 200 而非 500，或在一個乾淨的 DB 上重建後由 `app/bdd/run-module.sh 推播` 的 18 個場景維持全綠。缺口 #9 標示解除。
+
+## Phase 6: 回頭收綠（被擋的 App 模組逐一重跑）
+
+**Goal**: Phase 5 的七項補完後，把被擋住的 App 模組逐一重跑，實際確認場景轉綠，並更新 T316／T320／T322／T324／T326／T338 的現況註記或打勾。T321／T323／T327 三個因為「沒有綠燈保護不能重構」而暫緩的 refactor，在對應 GREEN 收綠後解鎖並完成（打勾在它們原本的編號上）。
+
+**Shared Must Read**:
+- `tasks.md` -> T316（現況 9/10）、T320（5/13）、T321（暫緩）、T322（0/18）、T323（暫緩）、T324（6/9）、T326（2–3/12）、T327（暫緩）、T338（69/108 與三條放寬判準）的現況註記全文
+- `app/bdd/run-module.sh` -> 用法與五段流程（後端就緒檢查 → build＋安裝 App → 起 Appium → 跑 Cucumber → 清理）
+- `.athena/handoff/2026-11-06-app-blocking-gaps-to-api-plan.md` -> 「補完後的收益」表（哪幾項補完解鎖哪些場景）
+
+**Boundary**:
+- **不改 `app/mobile/` 的產品行為、不改 `app/bdd/` 的 stepdef 語意**：App 側實作與 stepdef 都已就位，本輪補的是端點。真跑之後若仍紅，先確認是不是 Phase 5 哪一項沒照契約做；只有 harness 層（等待時間、捲動定位、session 重置）的不穩定才允許修在 `app/bdd/` 的 support，並在該 task 註記清楚。
+- 不新增 feature、不改 `specs/truth/**`。
+- 不假綠：剩下的紅燈必須逐一歸因到已記錄的缺口編號或 App 側已知待辦，沒有無法歸因的紅。
+- 這四個模組 task **必須序列**：都要獨占同一台 iOS simulator 與同一個 Appium port（`app/bdd/lib/env.sh`），平行跑會互相搶 session。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/{帳號與登入,工務單,待認領,任務執行}` 四個模組，以及 T354 的全量 108 個場景
+
+- [ ] T350 重跑 `帳號與登入`，收綠 T316
+  - 解除：缺口 #14（T348）。
+  - 驗收：`app/bdd/run-module.sh 帳號與登入` 回報 **10/10 綠**（原 9/10，唯一紅是 `登入與登出守衛.feature:59`）。把 T316 打勾，現況註記補上實跑數字與日期；缺口 #14 標示解除。
+
+- [ ] T351 重跑 `工務單`，收綠 T320／T322 並解鎖 T321／T323
+  - 解除：缺口 #10（T342）、#12（T341）、#13（T346）。
+  - 驗收：`app/bdd/run-module.sh 工務單` 回報 `工務視角.feature` **12/13**（剩下 1 個是缺口 #11 的撞單 Given 順序，回交 `/dsl-refine`，不在本輪）＋房務端三支 **18/18**（原 0/18）。T322 打勾、T320 維持未勾但現況註記更新為 12/13 並歸因到 #11。
+  - 收綠後解鎖並完成 T321（工務／房務共用的待認領單卡與工務單詳情元件）與 T323（照片上傳佇列共用邏輯＋同一組工務單詳情元件）——兩題本來就說好「一起處理共用元件」，在同一次綠燈保護下做完，各自補上重構前後的逐場景一致基準。
+
+- [ ] T352 重跑 `待認領`，收綠 T324
+  - 解除：缺口 #15（T344）、#16（T345）。
+  - 驗收：`app/bdd/run-module.sh 待認領` 回報 **9/9 綠**（原 6/9：未接超時兩段標籤 2 個＋主管空狀態 1 個）。T324 打勾，現況註記補上實跑數字與日期；缺口 #15／#16 標示解除。
+
+- [ ] T353 重跑 `任務執行`，收綠 T326 並解鎖 T327
+  - 解除：缺口 #12（T341）、#17（T343）、#18（T347）。
+  - 驗收：`app/bdd/run-module.sh 任務執行` 回報 **19 個場景中 18 綠**——`延後與中斷原因面板.feature` 維持 9/9，T326 的 12 個場景收 **11/12**，剩下 1 個是 App 側已知待辦（任務頁步驟條，`任務頁核心互動.feature:11`）。T326 維持未勾但現況註記更新並歸因；該待辦若在本輪順手做完就一併打勾，做不完就留註記，不假綠。
+  - 收綠後解鎖並完成 T327（步驟條、主按鈕與狀態 chip 的狀態映射收斂成單一對照表）——它暫緩的理由正是「進行中／已中斷／免查房分支從沒被綠燈覆蓋過」，現在有了。
+
+- [ ] T354 全量 ios-app 回歸，把 T338 收回原判準
+  - 驗收：`RunTruthFeaturesTest` 非 dry-run 全量跑（走 `app/bdd/run-module.sh` 抽出的環境準備）回報 **108 scenarios、0 undefined**，綠數 ≥ 四個模組單跑綠數總和（沒有跨模組干擾），且紅燈只剩已歸因的 2 個：缺口 #11（撞單 Given 順序）與 App 側步驟條（若 T353 已做完則為 1 個）。預期 **106/108**。
+  - 同時跑 `app/bdd/run-f3.sh` 確認 F3 推播金絲雀維持 12/12（T349 動了 DB 權限，`通知中心.feature` 的 6 個場景一併回歸）。
+  - 把 T338 的現況註記更新為新的實跑數字，並寫清它已從「整合不劣於各模組單跑」的放寬判準回到原判準的哪個程度；仍未達 108/108 的差額逐項歸因。
+
+## Phase 7: 後端補齊輪 quality gate
+
+**Goal**: 確認本輪七項實作逐項對齊契約、後端 144 沒有退化、App 側解鎖如實發生，並把已解除的缺口在清單上標示出來。`Test Scope` 全綠不能代替逐項對照。
+
+**Read**:
+- `specs/truth/contracts/components/schemas/員工工作台.yaml`、`components/schemas/任務.yaml`、`components/schemas/員工帳號與登入.yaml`、`components/schemas/SOP與查房項目.yaml`、`components/schemas/shared.yaml`
+- `specs/truth/contracts/groups/現場作業/{員工工作台,工務單,任務}.yaml`、`groups/營運管理/員工帳號與登入.yaml`、`groups/知識與通知/SOP與查房項目.yaml`、`openapi.yaml`
+- `tms/src/main/java/com/athena/tms/service/TaskExecutionService.java`、`repair/RepairController.java`、`repair/RepairService.java`、`controller/StaffAccountController.java`、新增的 SOP controller、`filter/BearerTokenAuthFilter.java`、`src/main/resources/db/migration/V18__notifications_grant.sql`
+- `tasks.md` -> 下方「上游缺口」#9–#18
+
+**Boundary**:
+- 不改 truth、不加 feature、不重跑 GREEN 當通過條件。
+- 有 issues 就修正再 review，直到沒有任何問題。
+
+- [ ] T355 subagent review（後端補齊輪 quality gate）
+  - 驗收一（不退化）：`JAVA_HOME=$(/usr/libexec/java_home -v 25) mvn -f tms/pom.xml test` 回報後端 BDD **144/144**，舊整合套件（`RunCucumberTest`）同樣全綠。
+  - 驗收二（App 側）：`flutter analyze` 在 `app/mobile/` 無 error；T354 的全量數字與各模組單跑一致。
+  - 驗收三（逐項對照）：七項實作逐欄對照契約——欄位名、enum 值、排序口徑、必填性、錯誤碼與 HTTP 狀態；特別查 `TodayTask` 的六個狀態值與排序、`EngineeringTicket` 與三個計數欄位的筆數一致性、`DeptPool.activeStaffCount` 的在職定義（`status='active'`，不含 `invited`／`inactive`）、`listDeptPool` 的 403／422 分流、`changeOwnPassword` 在 `mustChangePassword=true` 時確實被 `BearerTokenAuthFilter` 放行。
+  - 驗收四（邊界）：`git diff --stat -- specs/truth/ app/mobile/` 只能有 Phase 6 允許的 harness 修正（若有，逐筆列出理由）；`specs/truth/**` 零改動；T204–T340 只有現況註記與勾選狀態的變動。
+  - 驗收五（缺口清單）：下方「上游缺口」的 #9、#10、#12、#13、#14、#15、#16、#17、#18 九項標示**已解除**（比照既有 `~~刪節線~~ **本輪已補**` 的寫法）；#11、#20、#21、#23 與 App 側步驟條維持未解除並說明理由。
+  - 回交清單：本輪實作過程中發現的契約／規格問題一次回交，至少含 T348 記到的「`changeOwnPassword` 的 description 寫密碼長度下限 8 字、`ChangePasswordRequest.newPassword` 的 description 寫 truth 沒有定義長度門檻且不得自行發明」這組自相矛盾（回交 `/api-plan` 與 `/dsl-refine`）。
