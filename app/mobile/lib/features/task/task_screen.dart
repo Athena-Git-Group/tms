@@ -7,6 +7,10 @@ import '../ticket/ticket_screen.dart';
 import 'ask_sheet.dart';
 import 'hold_sheet.dart';
 import 'repair_sheet.dart';
+import 'task_callouts.dart';
+
+/// 狀態 chip 的灰底。
+const Color _statusChipTint = Color(0xFFEFEFF4);
 
 /// 任務頁骨架畫面：顯示單一房號的任務內容。
 ///
@@ -127,11 +131,7 @@ class _TaskScreenState extends State<TaskScreen> {
       if (!mounted) {
         return;
       }
-      // 這裡不能寫成 setState(() => ...)：箭頭函式會把 Future 當成回傳值交給
-      // setState，Flutter 在 debug 版會直接拒絕這個回呼，畫面一次也不會更新。
-      setState(() {
-        _taskFuture = Future<TaskDetail?>.value(started);
-      });
+      _showTask(started);
     } on ApiException catch (e) {
       if (!mounted) {
         return;
@@ -148,8 +148,18 @@ class _TaskScreenState extends State<TaskScreen> {
     if (updated == null || !mounted) {
       return;
     }
+    _showTask(updated);
+  }
+
+  /// 把畫面換成指定的那一筆任務。
+  ///
+  /// 畫面讀的是一個 `Future`，所以換內容等於換掉那個 `Future`。這個指派不能
+  /// 寫成 `setState(() => _taskFuture = ...)`：箭頭函式會把指派的結果（也就是
+  /// 那個 `Future`）當成回傳值交給 `setState`，Flutter 在 debug 版會直接拒絕
+  /// 這種回呼，畫面一次也不會更新。
+  void _showTask(TaskDetail task) {
     setState(() {
-      _taskFuture = Future<TaskDetail?>.value(updated);
+      _taskFuture = Future<TaskDetail?>.value(task);
     });
   }
 
@@ -196,295 +206,105 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 交辦來源的畫面用詞。對照表出自 `房間交辦/dsl.md` 的「來源」欄，與後端
-  /// `HandoverEntry.kind` 的 enum 一對一。
-  static String _handoverSourceText(String kind) {
-    switch (kind) {
-      case 'shift_handover':
-        return '交班單';
-      case 'desk_note':
-        return '櫃檯備註';
-      case 'requeue_progress':
-        return '接手進度';
-      case 'manager_note':
-        return '主管交代';
-      default:
-        return kind;
-    }
-  }
-
-  static String _hhmm(DateTime at) {
-    return '${at.hour.toString().padLeft(2, '0')}:'
-        '${at.minute.toString().padLeft(2, '0')}';
-  }
-
-  /// 查房退回資訊：標題與原因分兩行顯示，底下再加一行操作提示。
-  ///
-  /// 標題與原因的文字都來自後端的 `returnInfo.summary`，App 只負責把它切成兩段
-  /// 排版——不合格項是哪一項、第幾次重做、為什麼換人，都是後端說了算。第三行的
-  /// 操作提示則是畫面自己的話：退回重做時計時與 SOP 勾記都歸零了，員工需要在
-  /// 這裡被告知接下來要做什麼。
-  Widget _buildReturnInfo(ReturnInfo info) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: TmsSemantics(
-        id: 'task.status-row.return-info',
-        explicitChildNodes: true,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFDECEC),
-            borderRadius: BorderRadius.circular(12),
+  Widget _buildTask(TaskDetail? task) {
+    if (task == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('找不到這個房號的任務'),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TmsSemantics(
-                id: 'task.status-row.return-info.title',
-                child: Text(
-                  info.title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 4),
-              TmsSemantics(
-                id: 'task.status-row.return-info.reason',
-                child: Text(info.reason),
-              ),
-              const SizedBox(height: 4),
-              const TmsSemantics(
-                id: 'task.status-row.return-info.body',
-                child: Text('計時與 SOP 勾記已歸零，請重做不合格的項目後再送出。'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 交辦區：後端已經把交班單、櫃檯備註、接手進度併成一份清單，這裡照順序逐則
-  /// 顯示「來源 · 作者 · 時間」與內容。
-  ///
-  /// 沒看過的交辦在區塊標頭掛一個未讀圓點（`task.handover.unread-dot`）——未讀
-  /// 在畫面上只有這個視覺記號，不寫「未讀」兩個字。已讀與否以後端的
-  /// `handoverRead` 為準：開工那一刻後端自己記下已讀，所以按完「開始」拿回來的
-  /// 任務就不再帶圓點。
-  Widget _buildHandovers(TaskDetail task) {
-    final rows = <Widget>[];
-    for (var i = 0; i < task.handovers.length; i++) {
-      final entry = task.handovers[i];
-      final meta = <String>[
-        _handoverSourceText(entry.kind),
-        entry.author,
-        if (entry.at != null) _hhmm(entry.at!),
-      ].join(' · ');
-      rows.add(
-        Padding(
-          padding: EdgeInsets.only(top: i == 0 ? 8 : 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TmsSemantics(
-                id: 'task.handover.$i.meta',
-                child: Text(meta, style: const TextStyle(fontSize: 13)),
-              ),
-              const SizedBox(height: 2),
-              TmsSemantics(
-                id: 'task.handover.$i.content',
-                child: Text(entry.content),
-              ),
-            ],
-          ),
-        ),
+          _buildSkeletonEntries(null),
+          const Spacer(),
+        ],
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: TmsSemantics(
-        id: 'task.handover.callout',
-        explicitChildNodes: true,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF7E0),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Text('交辦'),
-                  if (!task.handoverRead) ...[
-                    const SizedBox(width: 6),
-                    TmsSemantics(
-                      id: 'task.handover.unread-dot',
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFD9342B),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              ...rows,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTask(TaskDetail? task) {
-    final showResumeBanner = task != null &&
-        task.state == 'interrupted' &&
+    final showResumeBanner = task.state == 'interrupted' &&
         (task.holdReason?.contains('工務已修好') ?? false);
-    final primaryActionLabel =
-        task == null ? null : _primaryActionLabel(task);
+    final primaryActionLabel = _primaryActionLabel(task);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showResumeBanner)
-          TmsSemantics(
-            id: 'task.resume-banner',
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE6F7EC),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${widget.roomNo} 號房的工務已修好，您可以恢復原任務了',
-                    ),
-                  ),
-                  TmsSemantics(
-                    id: 'task.status-row.resume-button',
-                    child: CupertinoButton(
-                      // 骨架畫面先只露出可點的按鈕；呼叫後端把任務從
-                      // 「已中斷」轉回「進行中」是後續功能。
-                      onPressed: () {},
-                      child: const Text('恢復任務'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (task != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TmsSemantics(
-                id: 'task.status-chip',
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFEFF4),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(_statusChipText(task)),
+            padding: const EdgeInsets.all(16),
+            child: TaskCallout(
+              id: 'task.resume-banner',
+              tint: calloutClearedTint,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${widget.roomNo} 號房的工務已修好，您可以恢復原任務了',
+                      ),
+                    ),
+                    TmsSemantics(
+                      id: 'task.status-row.resume-button',
+                      child: CupertinoButton(
+                        // 骨架畫面先只露出可點的按鈕；呼叫後端把任務從
+                        // 「已中斷」轉回「進行中」是後續功能。
+                        onPressed: () {},
+                        child: const Text('恢復任務'),
+                      ),
+                    ),
+                  ],
                 ),
+              ],
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TmsSemantics(
+              id: 'task.status-chip',
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _statusChipTint,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(_statusChipText(task)),
               ),
             ),
           ),
-        if (task?.returnInfo != null) _buildReturnInfo(task!.returnInfo!),
-        if (task != null && task.handovers.isNotEmpty) _buildHandovers(task),
+        ),
+        if (task.returnInfo != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: ReturnInfoCallout(info: task.returnInfo!),
+          ),
+        if (task.handovers.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: HandoverCallout(
+              entries: task.handovers,
+              read: task.handoverRead,
+            ),
+          ),
         // 停住原因只在任務真的停住時有值，所以沒有原因就整列不畫。不另外指定
         // label：文字本身就是子節點的 label，顯式再給一次會被接成兩份。
-        if (task?.holdReason != null)
+        if (task.holdReason != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: TmsSemantics(
                 id: 'task.status-row.hold-reason',
-                child: Text(task!.holdReason!),
+                child: Text(task.holdReason!),
               ),
             ),
           ),
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Text(
-            task == null ? '找不到這個房號的任務' : '內容：${task.title ?? ''}',
-          ),
+          child: Text('內容：${task.title ?? ''}'),
         ),
-        // 以下是骨架期的開啟入口接線：三個 sheet 的落點與工務單詳情、
-        // 完成慶祝的路由。各入口的實際觸發條件（報修圖示、主按鈕完成…）
-        // 是後續 feature，這裡先讓畫面可以被導到。
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(
-            children: [
-              if (task != null)
-                TmsSemantics(
-                  id: 'task.defer-button',
-                  child: CupertinoButton(
-                    onPressed: () => _openHoldSheet(task, HoldSheetMode.defer),
-                    child: const Text('延後'),
-                  ),
-                ),
-              if (task != null)
-                TmsSemantics(
-                  id: 'task.interrupt-button',
-                  child: CupertinoButton(
-                    onPressed: () =>
-                        _openHoldSheet(task, HoldSheetMode.interrupt),
-                    child: const Text('中斷'),
-                  ),
-                ),
-              TmsSemantics(
-                id: 'task.repair-button',
-                child: CupertinoButton(
-                  onPressed: () => RepairSheet.show(context),
-                  child: const Text('報修'),
-                ),
-              ),
-              TmsSemantics(
-                id: 'task.ask-button',
-                child: CupertinoButton(
-                  onPressed: () => AskSheet.show(context),
-                  child: const Text('查一下'),
-                ),
-              ),
-              CupertinoButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    CupertinoPageRoute<void>(
-                      builder: (_) => const TicketScreen(),
-                    ),
-                  );
-                },
-                child: const Text('工務單詳情'),
-              ),
-              CupertinoButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    CupertinoPageRoute<void>(
-                      builder: (_) => const CelebrateScreen(),
-                    ),
-                  );
-                },
-                child: const Text('完成慶祝'),
-              ),
-            ],
-          ),
-        ),
+        _buildSkeletonEntries(task),
         const Spacer(),
         // 置底主按鈕：一個狀態只露出一個，文字由 [_primaryActionLabel] 的
         // 狀態對照表決定。沒有主要動作的狀態（待查房、已送達、完成…）
@@ -501,15 +321,78 @@ class _TaskScreenState extends State<TaskScreen> {
                 child: CupertinoButton.filled(
                   // 目前只接「開始」；完成與恢復處理的動作等對應情境進場
                   // 再接（接了也沒有情境在驗，會變成沒人讀的分支）。
-                  onPressed: primaryActionLabel == '開始'
-                      ? () => _start(task!)
-                      : () {},
+                  onPressed:
+                      primaryActionLabel == '開始' ? () => _start(task) : () {},
                   child: Text(primaryActionLabel),
                 ),
               ),
             ),
           ),
       ],
+    );
+  }
+
+  /// 骨架期的入口接線：三個 sheet 的落點與工務單詳情、完成慶祝的路由。
+  /// 各入口的實際觸發條件（報修圖示、主按鈕完成…）是後續功能，這裡先讓畫面
+  /// 可以被導到。找不到任務時 [task] 為 null，延後與中斷這兩個要有任務才做
+  /// 得了的動作不露出。
+  Widget _buildSkeletonEntries(TaskDetail? task) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Wrap(
+        children: [
+          if (task != null)
+            TmsSemantics(
+              id: 'task.defer-button',
+              child: CupertinoButton(
+                onPressed: () => _openHoldSheet(task, HoldSheetMode.defer),
+                child: const Text('延後'),
+              ),
+            ),
+          if (task != null)
+            TmsSemantics(
+              id: 'task.interrupt-button',
+              child: CupertinoButton(
+                onPressed: () => _openHoldSheet(task, HoldSheetMode.interrupt),
+                child: const Text('中斷'),
+              ),
+            ),
+          TmsSemantics(
+            id: 'task.repair-button',
+            child: CupertinoButton(
+              onPressed: () => RepairSheet.show(context),
+              child: const Text('報修'),
+            ),
+          ),
+          TmsSemantics(
+            id: 'task.ask-button',
+            child: CupertinoButton(
+              onPressed: () => AskSheet.show(context),
+              child: const Text('查一下'),
+            ),
+          ),
+          CupertinoButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                CupertinoPageRoute<void>(
+                  builder: (_) => const TicketScreen(),
+                ),
+              );
+            },
+            child: const Text('工務單詳情'),
+          ),
+          CupertinoButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                CupertinoPageRoute<void>(
+                  builder: (_) => const CelebrateScreen(),
+                ),
+              );
+            },
+            child: const Text('完成慶祝'),
+          ),
+        ],
+      ),
     );
   }
 }

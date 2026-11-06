@@ -986,7 +986,12 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - 未讀只有一顆圓點（`task.handover.unread-dot`），畫面上沒有「未讀」兩個字；已讀與否一律以 `handoverRead` 為準，按下「開始」後後端在同一個交易裡記下已讀並在回應帶回 `handoverRead=true`，畫面換成那一筆就自然不再有圓點，App 不自己猜。換人原因不另列一條主管交代——後端早就把它併進退回資訊了，交辦清單裡本來就沒有 `manager_note`。
   - 測試層新增三筆 fixture，都是背景狀態在既有入口表達不出來的：(1) `freezeHandoverItem` 直接落地 `handovers` 一列（交班單是班末凍結出來的快照，沒有建立端點，欄位對照 tms `HandoverFixtures`）；(2) `failInspection` 走正式的 `POST /inspections`，判定前先確認情境點名的查房項目存在——每個情境開場 TRUNCATE 全部業務表，`sop_items` 也在其中，所以「換床單鋪床」要現場補一筆，權威來源仍是 `sop_items`；(3) `reassignAfterShiftEnd` 落地班末換人的結果，理由見上游缺口 #21。另外 `AppiumWorld` 補了 `onlyManager()`（查房者在 DSL 句型裡沒有參數，取背景唯一那位主管）與 `labelOf()`（列表類斷言要先掃出有哪些項目才知道該讀誰，`waitForLabelOf` 得先給期待值）。
   - 回歸：`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`；`run-module.sh 今日進度`（`首頁今日進度.feature`）`Tests run: 3, Failures: 0, Errors: 0, Skipped: 0`。`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）。
-- [ ] T333 [BDD-REFACTOR] 在綠燈下整理交辦 callout 與狀態列退回資訊兩個區塊的共用版面元件
+- [X] T333 [BDD-REFACTOR] 在綠燈下整理交辦 callout 與狀態列退回資訊兩個區塊的共用版面元件
+  - 兩個區塊的外層版面是同一塊東西，所以這次真的合併：`TaskCallout`（`app/mobile/lib/features/task/task_callouts.dart`）就是「整頁寬、有底色的圓角方塊，內容由上而下靠左排」，呼叫端只決定底色、accessibility id 與放什麼。這和 T331 的進度格子不同——那邊是「名稱　值」一行對上「大字在上、名稱在下」，兩種版型沒有共同的視覺語意；這邊兩個區塊的 `Container`／`BoxDecoration`／`Column` 一字不差，差的只有顏色和內容。工務完修的恢復提示列是同一塊卡片的第三個用法（原本用 `margin` 而不是外層 `Padding`，效果相同），一併接上去。
+  - 區塊本身連同只有它們在用的對照表一起搬出任務頁：`HandoverCallout` 帶著交辦來源的畫面用詞與時間格式，`ReturnInfoCallout` 帶著標題／原因／操作提示三段。`task_screen.dart` 因此從 515 行縮到 398 行，剩下的是取資料、狀態文字對照與主按鈕這些頁面自己的職責。
+  - 三個散在畫面裡的底色收成有名字的值：要先讀一段交代再往下做的用 `calloutNoticeTint`、有東西不合格要重做的用 `calloutAlertTint`、擋路的事已排除可以繼續的用 `calloutClearedTint`；狀態 chip 的灰底也給了名字。
+  - 另外兩處是多輪急改留下的重複：`_buildTask` 原本在同一串 children 裡重複四次 `if (task != null)`，改成一開頭就分「找不到任務」與「有任務」兩條路，骨架期的入口按鈕抽成 `_buildSkeletonEntries`，`_start(task!)` 的驚嘆號也跟著消失；開工與延後／中斷兩處各寫一份的 `setState` 換畫面收成 `_showTask`，「不能寫成箭頭函式」那條理由也只剩一個地方講。
+  - 驗收：`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4（含恢復提示列那條）。三個基準重構前後逐項一致——`run-module.sh 房間交辦` `Tests run: 5, Failures: 0, Errors: 0, Skipped: 0`、`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`、`run-module.sh 任務執行` `Tests run: 19, Failures: 6, Errors: 3, Skipped: 0`（紅的 9 個場景身分與失敗訊息不變，6 個是等不到 `home.task.{房號}.card`、3 個是 `TODO: implement me`）。
 
 ## Phase 3W: ADD Feature File - ios-app/查一下/查一下畫面.feature
 
