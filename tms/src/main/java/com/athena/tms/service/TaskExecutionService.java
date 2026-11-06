@@ -443,6 +443,10 @@ public class TaskExecutionService {
      * deferred、interrupted、done、inspected 六個狀態），已做分鐘沿用
      * {@link #elapsedMinutes} 的口徑。它和 nextTasks 是兩個不同用途的陣列：
      * nextTasks 只是其中 accepted 的推薦子集，排序規則也不同，兩邊各自組。
+     *
+     * <p>工務部門（dept=engineering）的呼叫者另外帶 engineeringSummary：三個計數欄位
+     * 加上單列 tickets（手上與今天完修的工務單，組裝見 {@link #engineeringTickets}）；
+     * 其他部門這個物件為 null。
      */
     public Map<String, Object> myToday() {
         long tenantId = TenantContext.require();
@@ -456,9 +460,13 @@ public class TaskExecutionService {
                 """
                 SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
                        t.work_date, t.done_at, t.redo_count, t.inspection, t.inspection_waived,
-                       t.hold_reason, t.urgent, r.room_no
+                       t.hold_reason, t.urgent, t.source, r.room_no,
+                       rt.ticket_no,
+                       COALESCE(rt.is_urgent, t.urgent) AS ticket_is_urgent,
+                       COALESCE(rt.created_at, t.created_at) AS ticket_created_at
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                  LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
                  WHERE t.tenant_id = ? AND t.assignee_id = ?
                 """,
                 tenantId, actor.staffId());
@@ -475,6 +483,11 @@ public class TaskExecutionService {
         int engineeringOpenCount = 0;
         int engineeringCompletedToday = 0;
         int engineeringUrgentCount = 0;
+        // 工務首頁單列（engineeringSummary.tickets）：與上面三個計數欄位用同一組判定——
+        // 手上單（accepted／doing）加上今天 done 的工務單——所以陣列筆數與 openCount／
+        // completedToday 不會各算各的。排序鍵用到開單時間，不是回應欄位，比照
+        // todayTasks 的做法排資料列、排完再組回應。
+        List<Map<String, Object>> engineeringTicketRows = new ArrayList<>();
         List<Map<String, Object>> nextTasks = new ArrayList<>();
         // 首頁任務列（todayTasks）：先把符合收錄口徑的資料列挑出來，排序完再組回應。
         // 排序鍵用到 done_at，但它不是 TodayTask 的欄位，所以排資料列而不是排組好的 Map。
@@ -525,8 +538,12 @@ public class TaskExecutionService {
                         engineeringUrgentCount++;
                     }
                 }
-                if ("done".equals(state) && doneToday) {
+                boolean completedToday = "done".equals(state) && doneToday;
+                if (completedToday) {
                     engineeringCompletedToday++;
+                }
+                if (open || completedToday) {
+                    engineeringTicketRows.add(row);
                 }
             }
         }
@@ -580,6 +597,7 @@ public class TaskExecutionService {
             engineeringSummary.put("openCount", engineeringOpenCount);
             engineeringSummary.put("completedToday", engineeringCompletedToday);
             engineeringSummary.put("urgentCount", engineeringUrgentCount);
+            engineeringSummary.put("tickets", engineeringTickets(engineeringTicketRows));
             result.put("engineeringSummary", engineeringSummary);
         } else {
             result.put("engineeringSummary", null);
@@ -594,6 +612,48 @@ public class TaskExecutionService {
      */
     private static final Set<String> TODAY_TASK_STATES =
             Set.of("accepted", "doing", "deferred", "interrupted", "done", "inspected");
+
+    /**
+     * 組 contracts 的 engineeringSummary.tickets：本人手上（accepted／doing）與今天完修
+     * （done）的工務單。收錄判定在 {@link #myToday} 的統計迴圈內就做完，這裡只負責排序
+     * 與逐欄組裝，所以陣列筆數與 openCount／completedToday 必然對得上。
+     *
+     * <p>排序（contracts）：急件在前，其次未結案（accepted、doing）在已完修（done）之前，
+     * 同組內依開單時間由舊到新。
+     *
+     * <p>公共區域的判定沿用既有的公共區域佔位房口徑（房號等於
+     * {@link AutomationRuleService#PUBLIC_AREA_ROOM_NO}，與
+     * {@code RepairService.releaseToPool} 判斷「只有公共區域的單能放回池」同一把尺）：
+     * 資料側 {@code tasks.room_id} 不可為空，公共區域的單一律掛在這間佔位房，所以契約要的
+     * 「公共區域單沒有房號」在回應這層把 roomNo 換成 null。
+     *
+     * <p>{@code source} 與待認領池的修繕單同一套換算（{@link #deptPool}）：櫃檯交辦
+     * （tasks.source=desk）→desk_forward，其餘→staff_report。
+     */
+    private List<Map<String, Object>> engineeringTickets(List<Map<String, Object>> ticketRows) {
+        ticketRows.sort(Comparator
+                .comparingInt((Map<String, Object> r) -> Boolean.TRUE.equals(r.get("ticket_is_urgent")) ? 0 : 1)
+                .thenComparingInt(r -> "done".equals(String.valueOf(r.get("state"))) ? 1 : 0)
+                .thenComparing(
+                        r -> SqlTimestamps.toOffsetDateTime(r.get("ticket_created_at")),
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        List<Map<String, Object>> tickets = new ArrayList<>(ticketRows.size());
+        for (Map<String, Object> row : ticketRows) {
+            boolean publicArea =
+                    AutomationRuleService.PUBLIC_AREA_ROOM_NO.equals(String.valueOf(row.get("room_no")));
+            Map<String, Object> ticket = new LinkedHashMap<>();
+            ticket.put("ticketNo", row.get("ticket_no"));
+            ticket.put("taskId", String.valueOf(row.get("id")));
+            ticket.put("roomNo", publicArea ? null : row.get("room_no"));
+            ticket.put("isPublicArea", publicArea);
+            ticket.put("title", row.get("title"));
+            ticket.put("state", row.get("state"));
+            ticket.put("isUrgent", Boolean.TRUE.equals(row.get("ticket_is_urgent")));
+            ticket.put("source", "desk".equals(row.get("source")) ? "desk_forward" : "staff_report");
+            tickets.add(ticket);
+        }
+        return tickets;
+    }
 
     /** todayTasks 排序用的組別判定：done／inspected 算已結束，排在未結束的單之後。 */
     private static boolean isFinishedState(String state) {

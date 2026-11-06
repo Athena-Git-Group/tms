@@ -1065,7 +1065,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 28 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
+以下 30 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口，#25–#27 是 Phase 3X（系統層）實跑追加，#28 是與原型逐項比對後追加（回交對象與證據逐條列在各項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1145,7 +1145,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 不做：**不動 `nextTasks`** 的收錄範圍與推薦排序（契約明寫它是 `todayTasks` 中 accepted 的推薦子集，混入會毀掉既有語意）；不新開端點；不改 `TaskDetail`（那是 T343）。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 工務單` 的房務端三支由 0/18 開始往上走（完整轉綠要等 T346，本題只驗 App 進得了任務頁）、`app/bdd/run-module.sh 任務執行` 紅燈數下降。缺口 #12 標示解除。
 
-- [ ] T342 `MyToday.engineeringSummary.tickets`：回傳工務手上與今日結案的工務單清單（解除缺口 #10）
+- [X] T342 `MyToday.engineeringSummary.tickets`：回傳工務手上與今日結案的工務單清單（解除缺口 #10）
   - 契約落點：`specs/truth/contracts/components/schemas/員工工作台.yaml` -> `engineeringSummary.tickets`（:87-93，收錄口徑／排序／與三個計數欄位的筆數關係）、新 schema `EngineeringTicket`（:168-258）；`truth-delta.md` `/api-plan` ADD 列。
   - 後端落點：同檔 `myToday`——`engineeringSummary` 的既有組裝（:530-538，目前只有 `openCount`／`completedToday`／`urgentCount`），在同一次 rows 迴圈內收集 `repair` 類型的單；`ticketNo` 需要 `repair_tickets` 的 join（比照 `deptPool` 的 `LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id`，:384），`isPublicArea` 依房間是否為公共區域佔位房判定。
   - 只做：在既有 `engineeringSummary` 物件內新增 `tickets` 陣列（本人 `accepted`／`doing` 加上今天 `done` 的工務單），依契約排序（急件在前、未結案在已完修之前、同組內開單時間舊到新）；維持 `openCount` 等於陣列中 accepted＋doing 筆數、`completedToday` 等於其中 done 筆數的一致性。
@@ -1263,3 +1263,6 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 驗收四（邊界）：`git diff --stat -- specs/truth/ app/mobile/` 只能有 Phase 6 允許的 harness 修正（若有，逐筆列出理由）；`specs/truth/**` 零改動；T204–T340 只有現況註記與勾選狀態的變動。
   - 驗收五（缺口清單）：下方「上游缺口」的 #9、#10、#12、#13、#14、#15、#16、#17、#18 九項標示**已解除**（比照既有 `~~刪節線~~ **本輪已補**` 的寫法）；#11、#20、#21、#23 與 App 側步驟條維持未解除並說明理由。
   - 回交清單：本輪實作過程中發現的契約／規格問題一次回交，至少含 T348 記到的「`changeOwnPassword` 的 description 寫密碼長度下限 8 字、`ChangePasswordRequest.newPassword` 的 description 寫 truth 沒有定義長度門檻且不得自行發明」這組自相矛盾（回交 `/api-plan` 與 `/dsl-refine`）。
+
+29. **`EngineeringTicket.ticketNo` 必填，但 repair 類任務不保證有 `repair_tickets` 列（T342 實作時發現，2026-11-06）**：契約把 `ticketNo` 列為必填，實作時發現 `AutomationRuleService` 的排程規則可以建出 `type='repair'` 卻沒有對應工務單的任務。T342 為了保住契約的「`tickets` 筆數＝`openCount`＋`completedToday`」不變量，改用 LEFT JOIN 收全部 repair 任務，該邊角情形 `ticketNo` 會是 null。兩條路擇一，請上游定：`/api-plan` 把 `ticketNo` 改 nullable，或 `/data-plan` 保證 repair 任務必有工務單。
+30. **`isUrgent` 的權威欄位沒寫明（T342 實作時發現，2026-11-06）**：`EngineeringTicket.isUrgent` 契約說口徑同 `RepairTicketSummary.isUrgent`（＝`repair_tickets.is_urgent`），但既有 `engineeringSummary.urgentCount` 用的是 `tasks.urgent`。目前兩欄由急件降級路徑同步寫入所以結果一致，但這是靠寫入端維持的隱含約定，契約沒寫明哪一欄是權威。回交 `/api-plan` 寫明，否則日後任一條寫入路徑漏寫就會讓清單與計數對不上。
