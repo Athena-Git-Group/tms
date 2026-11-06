@@ -1,5 +1,6 @@
 package com.athena.tms.filter;
 
+import com.athena.tms.common.CredentialFingerprint;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.ApiErrorResponses;
@@ -54,7 +55,7 @@ extends OncePerRequestFilter {
                 boolean authenticated;
                 String token = header.substring(BEARER_PREFIX.length()).trim();
                 Long guestTenantId = GuestSessionTokens.parseTenantId(token);
-                boolean bl = authenticated = guestTenantId != null ? this.authenticateGuest(token, guestTenantId, response) : this.authenticateStaff(token, response);
+                boolean bl = authenticated = guestTenantId != null ? this.authenticateGuest(token, guestTenantId, response) : this.authenticateStaff(token, response, this.isChangeOwnPassword(request));
                 if (!authenticated) {
                     return;
                 }
@@ -75,7 +76,18 @@ extends OncePerRequestFilter {
         }
     }
 
-    private boolean authenticateStaff(String token, HttpServletResponse response) throws IOException {
+    /**
+     * 本人設定新密碼的端點（contracts changeOwnPassword）。被強制改密的員工只有這條路可以走，
+     * 下面的 must_change_password 檢查要對它放行，否則員工在改密畫面出不來。
+     */
+    private static final String CHANGE_OWN_PASSWORD_PATH = "/api/v1/staff-accounts/change-password";
+
+    private boolean isChangeOwnPassword(HttpServletRequest request) {
+        return "POST".equalsIgnoreCase(request.getMethod())
+                && CHANGE_OWN_PASSWORD_PATH.equals(request.getRequestURI());
+    }
+
+    private boolean authenticateStaff(String token, HttpServletResponse response, boolean changeOwnPassword) throws IOException {
         JwtService.StaffClaims claims = this.jwtService.verify(token);
         if (claims == null) {
             return this.unauthorized(response, "憑證無效或已過期");
@@ -86,9 +98,18 @@ extends OncePerRequestFilter {
             TenantContext.clear();
             return this.unauthorized(response, "帳號不存在或已停用");
         }
+        // contracts changeOwnPassword「改密成功後舊 token 立即失效」：權杖簽發時帶的指紋對不上
+        // 帳號現在的密碼雜湊，代表密碼已經換過，這張是改密前簽出去的，不放行。
+        // 沒帶指紋的權杖（例如測試直接用 JwtService 簽的）不受這條約束。
+        String fingerprint = claims.credentialFingerprint();
+        if (fingerprint != null && !fingerprint.equals(CredentialFingerprint.of(account.getPasswordHash()))) {
+            TenantContext.clear();
+            return this.unauthorized(response, "密碼已變更，請重新登入");
+        }
         // dsl.md 帳號與登入「必須先設定新密碼才能繼續」：臨時密碼登入成功後憑證仍會發出，
-        // 但完成改密前這組憑證呼叫其他需要身分的 API 一律被拒（改密 API 本身不在本輪範圍）。
-        if (account.isMustChangePassword()) {
+        // 但完成改密前這組憑證呼叫其他需要身分的 API 一律被拒；改密端點本身是完成改密的
+        // 唯一合法路徑，必須放行。
+        if (account.isMustChangePassword() && !changeOwnPassword) {
             TenantContext.clear();
             return this.forbidden(response, "必須先設定新密碼才能繼續使用");
         }

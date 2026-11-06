@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -437,6 +438,11 @@ public class TaskExecutionService {
      * 已做分鐘），進行中的段落以現在時刻折算。下一間只列 accepted，排序為 redo
      * 次數多的先、非打掃類先於打掃類、最後依房號遞增，讓員工先清掉臨時需求再回
      * 打掃動線。連續零退回天數的計算定義尚未拍板，先固定回 0。
+     *
+     * <p>首頁任務列（todayTasks）收錄本人今日未取消的全部任務（accepted、doing、
+     * deferred、interrupted、done、inspected 六個狀態），已做分鐘沿用
+     * {@link #elapsedMinutes} 的口徑。它和 nextTasks 是兩個不同用途的陣列：
+     * nextTasks 只是其中 accepted 的推薦子集，排序規則也不同，兩邊各自組。
      */
     public Map<String, Object> myToday() {
         long tenantId = TenantContext.require();
@@ -449,7 +455,8 @@ public class TaskExecutionService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
-                       t.work_date, t.done_at, t.redo_count, t.inspection, t.urgent, r.room_no
+                       t.work_date, t.done_at, t.redo_count, t.inspection, t.inspection_waived,
+                       t.hold_reason, t.urgent, r.room_no
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
                  WHERE t.tenant_id = ? AND t.assignee_id = ?
@@ -469,6 +476,9 @@ public class TaskExecutionService {
         int engineeringCompletedToday = 0;
         int engineeringUrgentCount = 0;
         List<Map<String, Object>> nextTasks = new ArrayList<>();
+        // 首頁任務列（todayTasks）：先把符合收錄口徑的資料列挑出來，排序完再組回應。
+        // 排序鍵用到 done_at，但它不是 TodayTask 的欄位，所以排資料列而不是排組好的 Map。
+        List<Map<String, Object>> todayTaskRows = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             String type = String.valueOf(row.get("type"));
             String state = String.valueOf(row.get("state"));
@@ -495,6 +505,9 @@ public class TaskExecutionService {
                     || "deferred".equals(state) || "interrupted".equals(state)) {
                 remainingMinutes += remainingMinutesOf(row, now);
             }
+            if (today.equals(toLocalDate(row.get("work_date"))) && TODAY_TASK_STATES.contains(state)) {
+                todayTaskRows.add(row);
+            }
             if ("accepted".equals(state)) {
                 Map<String, Object> next = new LinkedHashMap<>();
                 next.put("taskId", String.valueOf(row.get("id")));
@@ -517,6 +530,36 @@ public class TaskExecutionService {
                 }
             }
         }
+        // 排序口徑（contracts MyToday.todayTasks）：未結束的四個狀態排在已結束的
+        // done／inspected 之前；未結束組內 doing 最前、其餘依房號遞增；已結束組
+        // 依完成時間由新到舊。兩組的次級排序鍵不同，所以先比組別再各自比。
+        todayTaskRows.sort(Comparator
+                .comparingInt((Map<String, Object> r) -> isFinishedState(String.valueOf(r.get("state"))) ? 1 : 0)
+                .thenComparingInt(r -> "doing".equals(String.valueOf(r.get("state"))) ? 0 : 1)
+                .thenComparing(r -> isFinishedState(String.valueOf(r.get("state")))
+                        ? "" : String.valueOf(r.get("room_no")))
+                .thenComparing(
+                        r -> isFinishedState(String.valueOf(r.get("state")))
+                                ? SqlTimestamps.toOffsetDateTime(r.get("done_at")) : null,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(r -> String.valueOf(r.get("room_no"))));
+        List<Map<String, Object>> todayTasks = new ArrayList<>();
+        for (Map<String, Object> row : todayTaskRows) {
+            Map<String, Object> task = new LinkedHashMap<>();
+            task.put("taskId", String.valueOf(row.get("id")));
+            task.put("roomNo", row.get("room_no"));
+            task.put("title", row.get("title"));
+            task.put("type", row.get("type"));
+            task.put("state", row.get("state"));
+            task.put("redoCount", row.get("redo_count"));
+            task.put("estMin", row.get("est_min"));
+            task.put("workedMinutes", elapsedMinutes(row));
+            task.put("holdReason", row.get("hold_reason"));
+            task.put("inspection", row.get("inspection"));
+            task.put("inspectionWaived", row.get("inspection_waived"));
+            todayTasks.add(task);
+        }
+
         nextTasks.sort(Comparator
                 .comparingInt((Map<String, Object> n) -> ((Number) n.get("redoCount")).intValue()).reversed()
                 .thenComparing(n -> "cleaning".equals(n.get("type")) ? 1 : 0)
@@ -529,6 +572,7 @@ public class TaskExecutionService {
         result.put("completedCount", completedCount);
         result.put("adHocCompleted", adHocCompleted);
         result.put("remainingMinutes", (int) Math.max(0, remainingMinutes));
+        result.put("todayTasks", todayTasks);
         result.put("nextTasks", nextTasks);
         result.put("zeroReturnStreakDays", 0);
         if ("engineering".equals(actor.dept())) {
@@ -541,6 +585,19 @@ public class TaskExecutionService {
             result.put("engineeringSummary", null);
         }
         return result;
+    }
+
+    /**
+     * todayTasks 的收錄狀態（contracts TodayTask.state）：有負責人且今日有效的六個值。
+     * cancelled 不收錄，還在池中（pool）、等審核（pending_review）、被退回（rejected）
+     * 的單也不在首頁任務列。
+     */
+    private static final Set<String> TODAY_TASK_STATES =
+            Set.of("accepted", "doing", "deferred", "interrupted", "done", "inspected");
+
+    /** todayTasks 排序用的組別判定：done／inspected 算已結束，排在未結束的單之後。 */
+    private static boolean isFinishedState(String state) {
+        return "done".equals(state) || "inspected".equals(state);
     }
 
     /** 單一任務的剩餘分鐘：預估分鐘減已做分鐘，進行中的段落折算到現在，最低 0。 */

@@ -1138,7 +1138,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 - T341–T345 **必須序列**（依編號順序做）：`todayTasks`、`engineeringSummary.tickets`、`toDetail` 三欄、`deptPool` 的 `reminderStage`、`listDeptPool` 的 `dept`＋`activeStaffCount` **全部落在同一個檔 `TaskExecutionService.java`**，其中 T341／T342 還共用 `myToday` 的同一次 rows 查詢（要加欄位）、T344／T345 共用 `deptPool` 的同一段組裝碼，平行會互相覆蓋。
 - T346–T349 各自獨立檔案（`repair/RepairController.java`＋`RepairService.java`／新的 SOP controller／`StaffAccountController.java`＋`BearerTokenAuthFilter.java`／`db/migration/`），標 `[P]`，可同時派四個 subagent；它們與 T341–T345 之間也沒有檔案衝突，可與序列組同時進行。
 
-- [ ] T341 `MyToday.todayTasks`：回傳本人今日全部任務（解除缺口 #12）
+- [X] T341 `MyToday.todayTasks`：回傳本人今日全部任務（解除缺口 #12）
   - 契約落點：`specs/truth/contracts/components/schemas/員工工作台.yaml` -> `MyToday.todayTasks`（:37-53，含收錄口徑與排序口徑）、新 schema `TodayTask`（:94-167，八個必填欄位＋`estMin`／`workedMinutes`／`holdReason`／`inspection`）；`truth-delta.md` `/api-plan` ADD 列。
   - 後端落點：`tms/src/main/java/com/athena/tms/service/TaskExecutionService.java` 的 `myToday`——rows 查詢（:449-457）要補 `t.hold_reason`、`t.inspection_waived`，統計迴圈（:471-520）內順手組 `todayTasks`，結果組裝（:522-540）在 `nextTasks` 之前 `result.put("todayTasks", …)`。
   - 只做：依契約收錄口徑（負責人是本人、`work_date` 是今天、狀態不是 `cancelled`，六個狀態值全收）與排序口徑（未結束的四個狀態在前、同組內 `doing` 最前其餘依房號遞增；已結束的 `done`／`inspected` 依完成時間新到舊）組這個陣列；`workedMinutes` 沿用 `elapsedMinutes`（:632-641）的口徑，不另寫第二套折算。
@@ -1173,28 +1173,28 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 不做：不另開「主管視角部門池」端點（契約選的是擴充既有端點）；不動 `items`／`counts` 的既有內容與 `category`／`urgent`／`source` 三個篩選維度；不改既有「此帳號未設部門」在**沒帶 dept 且不是主管／老闆**時的行為以外的分支。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 待認領` 的主管空狀態 1 個場景轉綠，`待認領列表.feature` 收 9/9。缺口 #16 標示解除。
 
-- [ ] T346 [P] 實作 `listRepairTickets`（解除缺口 #13）
+- [X] T346 [P] 實作 `listRepairTickets`（解除缺口 #13）
   - 契約落點：`specs/truth/contracts/groups/現場作業/工務單.yaml` -> `listRepairTickets`（:81-104，`GET /repair-tickets?roomId=`，必帶 `roomId`，回 `RepairTicketSummary` 陣列，「依房間列出未撤回的工務單」）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列。
   - 後端落點：`tms/src/main/java/com/athena/tms/repair/RepairController.java:117-120`（目前 `@GetMapping("/repair-tickets")` 明寫 `throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED)` 佔位）＋`RepairService.java`（比照既有 `read(ticketId)` 的查法新增一個依房間列出的方法）。
   - 只做：把 501 佔位換成真實作；回應形狀逐欄對齊 `components/schemas/shared.yaml#/RepairTicketSummary`；排除已撤回（`cancelled`）的單。
   - 不做：**不新增契約沒有的「我報的工務單」本人視角參數**（handoff 把那列為待 `/api-plan` 評估，不在本輪自行發明）；不改 `createRepairTicket`／`readRepairTicket`／審核四端點的任何行為。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 工務單` 的房務端三支（18 個場景）在 T341 已完成的前提下轉綠。缺口 #13 標示解除。
 
-- [ ] T347 [P] 實作 `listSopItems`（解除缺口 #18）
+- [X] T347 [P] 實作 `listSopItems`（解除缺口 #18）
   - 契約落點：`specs/truth/contracts/openapi.yaml:119` -> `/sop-items` 指向 `groups/知識與通知/SOP與查房項目.yaml#/listSopItems`，回 `components/schemas/SOP與查房項目.yaml#/sop_items` 陣列（`id`／`tenantId`／`appliesTo`／`itemKey`／`label`／`sortOrder`／`active`／`createdAt` 全部必填）。本項**契約早就寫好**，`truth-delta.md` 沒有對應新列；全專案 grep `sop-items` 目前無任何 controller 命中。
   - 後端落點：`tms/src/main/java/com/athena/tms/controller/` 新增一支 controller（比照同目錄 `StaffSopCheckApiController.java` 的 `@RequestMapping("/api/v1")` 慣例）；資料來源是既有 `dao/SopItemRepository.java` 的 `findByTenantIdAndAppliesToAndActiveTrueOrderBySortOrderAsc`（必要時補一個不分 `appliesTo` 的查法）與 `entity/SopItem.java`。
   - 只做：掛上 `GET /api/v1/sop-items`，回該租戶的 SOP／查房項目清單，欄位名與契約 `sop_items` 逐欄一致（`itemKey`／`sortOrder`／`appliesTo` 用 camelCase）。
   - 不做：不加契約沒有的查詢參數；不改 SOP 勾記（`task_sop_checks`）的任何寫入／讀取路徑；不改 `TaskDetail.checkedSopItems`／`skippedSopItems`（那是 T343）。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 任務執行` 的 SOP 清單 2 個場景（在 T341／T343 已完成的前提下）轉綠。缺口 #18 標示解除。
 
-- [ ] T348 [P] 實作 `changeOwnPassword`（解除缺口 #14）
+- [X] T348 [P] 實作 `changeOwnPassword`（解除缺口 #14）
   - 契約落點：`specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `changeOwnPassword`（:50-88，`POST /api/v1/staff-accounts/change-password`，回應沿用 `LoginResponse` 換發 token 且 `mustChangePassword` 必為 false，**在 `mustChangePassword=true` 時必須放行**）；`components/schemas/員工帳號與登入.yaml` -> `ChangePasswordRequest`（:103-130）；`shared.yaml` -> `current_password_required`(422)／`current_password_invalid`(401)／`new_password_invalid`(422)；`truth-delta.md` `/api-plan` ADD 列。
   - 後端落點：`tms/src/main/java/com/athena/tms/controller/StaffAccountController.java`（:49 既有 `POST /staff-accounts/login` 旁邊新增）＋`service/StaffAccountLoginService.java`／`AuthService.java`／`JwtService.java`（重雜湊與換發 token）＋`filter/BearerTokenAuthFilter.java:136`（目前 `must_change_password` 時對業務端點一律回 403，必須把這條端點放進放行清單，否則員工卡死在改密畫面）。
   - 只做：重雜湊 `newPassword` 寫入 `staff_accounts.password_hash`、清 `must_change_password` 旗標、換發 JWT（TTL 12h）回 `LoginResponse`；強制改密情境不要求 `currentPassword`，自願變更情境必填並比對；改密成功後舊 token 失效。
   - 不做：**不自行發明密碼強度門檻**——`ChangePasswordRequest.newPassword` 的 description 明寫「密碼強度規則 truth 目前沒有定義……在那之前這條端點只擋『與目前密碼相同』這一種，不自行發明長度門檻」，而同份契約 `changeOwnPassword` 的 description 又寫「新密碼長度不足 8 字……回 422」，兩處打架：**以 schema 的指示為準只擋「與目前密碼相同」**，並把這個衝突記進 Phase 7 的回交清單，不在實作裡二選一後當作定案。不改登入本身的鎖定／停用／429 行為。
   - 驗收：`mvn -f tms/pom.xml test` 144/144 不退化；`app/bdd/run-module.sh 帳號與登入` 收 10/10（`登入與登出守衛.feature:59`「設定新密碼後進入首頁」轉綠）。缺口 #14 標示解除。
 
-- [ ] T349 [P] 補 `notifications` 的 GRANT migration（解除缺口 #9）
+- [X] T349 [P] 補 `notifications` 的 GRANT migration（解除缺口 #9）
   - 證據：`tms/src/main/resources/db/migration/V16__notifications.sql` 建了 `notifications` 表但**整檔沒有任何 `GRANT`**，執行期 `GET /notifications` 回 500 permission denied（後端 BDD 以超級使用者跑，抓不到；T318 當時是對跑著的 DB 手動 GRANT 才解鎖）。見下方上游缺口 #9。
   - 後端落點：`tms/src/main/resources/db/migration/` 現有最新版本號是 `V17__repair_ticket_review_and_verification.sql`，**新增 `V18__notifications_grant.sql`**（不得改 V16，已套用的 migration 改了會壞 checksum）。格式比照 `V5__staff_app_increment.sql:223-227` 的 `GRANT SELECT, INSERT, UPDATE, DELETE ON … TO tms_app;`。
   - 只做：補 `notifications` 的 GRANT；順手確認 V16 的 RLS 設定（若 V5 的慣例是 GRANT 後接 `ENABLE ROW LEVEL SECURITY` 與對應 policy，而 `notifications` 也缺，一併補齊——這張表帶 `tenant_id`，漏了就是跨租戶可見）。

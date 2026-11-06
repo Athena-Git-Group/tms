@@ -1,16 +1,20 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.CredentialFingerprint;
 import com.athena.tms.common.error.AccountDisabledException;
 import com.athena.tms.common.error.AccountLockedException;
 import com.athena.tms.common.error.CredentialsInvalidException;
+import com.athena.tms.common.error.CurrentPasswordInvalidException;
 import com.athena.tms.common.error.UnprocessableEntityException;
 import com.athena.tms.dao.StaffAccountRepository;
+import com.athena.tms.dto.StaffChangePasswordRequest;
 import com.athena.tms.dto.StaffLoginRequest;
 import com.athena.tms.dto.StaffLoginResponse;
 import com.athena.tms.entity.StaffAccount;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -68,6 +72,61 @@ public class StaffAccountLoginService {
         return outcome.response();
     }
 
+    /**
+     * contracts changeOwnPassword（{@code POST /staff-accounts/change-password}）：本人把自己的
+     * 密碼換成新的一組，後端重新雜湊落地、清掉強制改密旗標，並換發一組新的權杖回去，App 直接
+     * 拿它進首頁，不必再登入一次。
+     *
+     * <p>臨時密碼登入後的強制改密情境不要求帶目前密碼，身分已由登入換得的權杖證明；自願變更
+     * 密碼時必須帶，省略回 422 current_password_required，比對不符回 401
+     * current_password_invalid。新密碼與目前密碼相同回 422 new_password_invalid。
+     *
+     * <p>密碼強度（長度下限、字元組成）在 truth 還沒有定義，這裡不自行發明門檻。
+     */
+    public StaffLoginResponse changePassword(long tenantId, UUID staffId, StaffChangePasswordRequest request) {
+        StaffAccount account = staffAccountRepository
+                .findByTenantIdAndId(tenantId, staffId)
+                .orElseThrow(() -> new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
+        if (!account.isActive()) {
+            throw new AccountDisabledException("帳號已停用，登入被拒");
+        }
+        if (request == null || request.newPassword() == null || request.newPassword().isBlank()) {
+            throw new UnprocessableEntityException("newPassword 必填");
+        }
+        if (!account.isMustChangePassword()) {
+            String currentPassword = request.currentPassword();
+            if (currentPassword == null || currentPassword.isBlank()) {
+                throw new UnprocessableEntityException("current_password_required", "請輸入目前密碼");
+            }
+            if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
+                throw new CurrentPasswordInvalidException("目前密碼不正確");
+            }
+        }
+        if (passwordEncoder.matches(request.newPassword(), account.getPasswordHash())) {
+            throw new UnprocessableEntityException("new_password_invalid", "新密碼不能和目前密碼相同");
+        }
+
+        account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        account.setMustChangePassword(false);
+        account.setUpdatedAt(OffsetDateTime.now());
+        staffAccountRepository.save(account);
+
+        JwtService.IssuedToken issued = jwtService.issue(
+                tenantId,
+                account.getId(),
+                account.getRole(),
+                account.getDept(),
+                CredentialFingerprint.of(account.getPasswordHash()));
+        return new StaffLoginResponse(
+                issued.token(),
+                issued.expiresAt(),
+                account.getId(),
+                account.getName(),
+                account.getDept(),
+                account.getRole(),
+                false);
+    }
+
     /** 找不到任何租戶有這個 loginId 時，跟密碼錯誤回同一個例外，不洩漏員工編號是否存在。 */
     private long resolveTenantId(String loginId) {
         for (long tenantId : tenantScopedExecutor.tenantIds()) {
@@ -110,7 +169,12 @@ public class StaffAccountLoginService {
         staffAccountRepository.save(account);
 
         JwtService.IssuedToken issued =
-                jwtService.issue(tenantId, account.getId(), account.getRole(), account.getDept());
+                jwtService.issue(
+                        tenantId,
+                        account.getId(),
+                        account.getRole(),
+                        account.getDept(),
+                        CredentialFingerprint.of(account.getPasswordHash()));
         return Outcome.success(new StaffLoginResponse(
                 issued.token(),
                 issued.expiresAt(),

@@ -57,6 +57,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").permitAll()
                         // 登入本身還沒有任何憑證（contracts staffAccountsLogin）
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/login").permitAll()
+                        // 本人設定新密碼（contracts changeOwnPassword）：每個角色都要能換自己的密碼，
+                        // 所以不套下面「/api/v1 寫入限現場執行部門」的通則，否則櫃檯與老闆一律 403。
+                        .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/change-password")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner")
                         // 住客需求操作走 X-Guest-Session 憑證（contracts createGuestRequest 等）
                         .requestMatchers("/api/v1/guest-requests/**").hasRole("guest")
                         // 櫃檯備註由櫃檯建立（contracts createDeskNote），不套下面

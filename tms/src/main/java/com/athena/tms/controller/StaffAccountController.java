@@ -1,7 +1,9 @@
 package com.athena.tms.controller;
 
+import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.dao.StaffAccountRepository;
+import com.athena.tms.dto.StaffChangePasswordRequest;
 import com.athena.tms.dto.StaffLoginRequest;
 import com.athena.tms.dto.StaffLoginResponse;
 import com.athena.tms.service.StaffAccountLoginService;
@@ -49,5 +51,18 @@ public class StaffAccountController {
     @PostMapping("/staff-accounts/login")
     public StaffLoginResponse login(@RequestBody StaffLoginRequest request) {
         return staffAccountLoginService.login(request);
+    }
+
+    /**
+     * 本人設定自己的新密碼（contracts changeOwnPassword）。回應形狀與登入相同，帶換發的
+     * 權杖，App 直接拿它進首頁。
+     *
+     * <p>臨時密碼登入後被強制改密的員工，其他需要身分的 API 一律被拒，只有這條放行
+     * （見 {@code BearerTokenAuthFilter}）——擋住這條，員工就卡死在改密畫面出不來。
+     */
+    @PostMapping("/staff-accounts/change-password")
+    public StaffLoginResponse changePassword(@RequestBody StaffChangePasswordRequest request) {
+        CurrentActor actor = CurrentActor.require();
+        return staffAccountLoginService.changePassword(TenantContext.require(), actor.staffId(), request);
     }
 }

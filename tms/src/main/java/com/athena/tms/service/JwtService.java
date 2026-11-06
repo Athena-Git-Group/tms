@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class JwtService {
+    private static final String CREDENTIAL_FINGERPRINT_CLAIM = "credential_fp";
     private final MACSigner signer;
     private final MACVerifier verifier;
     private final Duration ttl;
@@ -55,11 +56,28 @@ public class JwtService {
     }
 
     public IssuedToken issue(long tenantId, UUID staffId, String role, String dept) {
+        return this.issue(tenantId, staffId, role, dept, null);
+    }
+
+    /**
+     * 給「密碼換掉之後，其他裝置上還拿著舊權杖的人要立刻被擋下來」的呼叫端用：
+     * 簽入 credentialFingerprint，{@code BearerTokenAuthFilter} 每次請求都拿它跟帳號
+     * 當下的密碼雜湊比對，對不上就判憑證失效。
+     *
+     * <p>credentialFingerprint 傳 null 時不簽這個 claim，權杖只受簽章與到期時間約束。
+     *
+     * <p>JWT 內容任何持有者都讀得出來，所以呼叫端要傳密碼雜湊的指紋（見
+     * {@code StaffAccountLoginService.credentialFingerprint}），不要傳雜湊本身。
+     */
+    public IssuedToken issue(long tenantId, UUID staffId, String role, String dept, String credentialFingerprint) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(this.ttl);
         JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder().subject(staffId.toString()).claim("tenant_id", (Object)tenantId).claim("staff_id", (Object)staffId.toString()).claim("role", (Object)role).issueTime(Date.from(now)).expirationTime(Date.from(expiresAt));
         if (dept != null) {
             claims.claim("dept", (Object)dept);
+        }
+        if (credentialFingerprint != null) {
+            claims.claim(CREDENTIAL_FINGERPRINT_CLAIM, (Object)credentialFingerprint);
         }
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims.build());
         try {
@@ -87,7 +105,7 @@ public class JwtService {
             if (tenantId == null || staffId == null) {
                 return null;
             }
-            return new StaffClaims(tenantId, UUID.fromString(staffId), claims.getStringClaim("role"), claims.getStringClaim("dept"));
+            return new StaffClaims(tenantId, UUID.fromString(staffId), claims.getStringClaim("role"), claims.getStringClaim("dept"), claims.getStringClaim(CREDENTIAL_FINGERPRINT_CLAIM));
         }
         catch (JOSEException | IllegalArgumentException | ParseException e) {
             return null;
@@ -97,6 +115,7 @@ public class JwtService {
     public record IssuedToken(String token, OffsetDateTime expiresAt) {
     }
 
-    public record StaffClaims(long tenantId, UUID staffId, String role, String dept) {
+    /** credentialFingerprint 為 null 代表這張權杖沒簽指紋，持有者不受密碼變更影響。 */
+    public record StaffClaims(long tenantId, UUID staffId, String role, String dept, String credentialFingerprint) {
     }
 }

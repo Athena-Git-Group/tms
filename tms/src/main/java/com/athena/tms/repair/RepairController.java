@@ -12,16 +12,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 工務單與照片 API，路由對應 contracts 的 createRepairPhoto、
  * uploadRepairPhotoContent、precheckRepairTicket、createRepairTicket、
  * readRepairTicket、appendRepairTicketPhotos、withdrawRepairTicket、
  * downgradeRepairTicketUrgency、approveRepairTicket、rejectRepairTicket、
- * resubmitRepairTicket、verifyRepairTicket。
- * listRepairTickets 屬於後續 phase，先維持 501 佔位／尚未路由。
+ * resubmitRepairTicket、verifyRepairTicket、listRepairTickets。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -115,9 +114,17 @@ public class RepairController {
                         interrupt));
     }
 
+    /**
+     * 列出同房未撤回的工務單（contracts listRepairTickets）。{@code roomId} 是契約
+     * 唯一的查詢參數而且必填——缺了就沒有「哪一間房」可問，回 422 而不是回整個
+     * 租戶的單。契約沒有「我報的工務單」這種本人視角參數，這裡也不自己加。
+     */
     @GetMapping("/repair-tickets")
-    public ResponseEntity<Void> listRepairTickets() {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
+    public List<Map<String, Object>> listRepairTickets(@RequestParam(required = false) UUID roomId) {
+        if (roomId == null) {
+            throw new UnprocessableEntityException("roomId 必填");
+        }
+        return repairService.listByRoom(roomId);
     }
 
     public record AppendPhotosRequest(List<UUID> photoIds) {

@@ -238,6 +238,38 @@ public class RepairService {
     }
 
     /**
+     * 列出同房的工務單（contracts listRepairTickets）：給原任務頁的工務單區使用。
+     * 收錄該房間所有未撤回的單——撤回是 tasks.state=cancelled，報修人撤回後那張
+     * 單就不該再出現在任務頁，所以這裡是唯一被排除的狀態；其餘六個狀態
+     * （pending_review／rejected／pool／accepted／doing／done）全收，房務才看得到
+     * 自己報的單現在走到哪一關。
+     *
+     * <p>欄位與 {@link #ticketView} 共用 {@link #summaryFromRow}，查詢的欄位別名
+     * 刻意跟詳情那段一致，同一張單在列表與詳情不會出現兩套命名。契約沒有規定
+     * 排序，取開單時間新到舊——任務頁要先看到最近報的那張。
+     */
+    public List<Map<String, Object>> listByRoom(UUID roomId) {
+        long tenantId = TenantContext.require();
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                """
+                SELECT rt.task_id, rt.ticket_no, rt.category, rt.created_at, rt.is_urgent,
+                       t.state, r.room_no, s.name AS reporter_name
+                  FROM repair_tickets rt
+                  JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
+                  JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
+                  JOIN staff_accounts s ON s.tenant_id = rt.tenant_id AND s.id = rt.reporter_id
+                 WHERE rt.tenant_id = ? AND rt.room_id = ? AND t.state <> 'cancelled'
+                 ORDER BY rt.created_at DESC
+                """,
+                tenantId, roomId);
+        List<Map<String, Object>> body = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            body.add(summaryFromRow(UUID.fromString(String.valueOf(row.get("task_id"))), row));
+        }
+        return body;
+    }
+
+    /**
      * 主管將急件降級為一般件（contracts downgradeRepairTicketUrgency）：急件判定
      * 本身是系統算出的，房務開單時不能更改，只有主管可以事後用這個操作降級；
      * 不能反向把一般件升為急件，所以目前不是急件時回 409。只改 is_urgent／
