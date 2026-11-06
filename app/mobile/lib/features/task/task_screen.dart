@@ -334,8 +334,9 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// 骨架期的入口接線：三個 sheet 的落點與工務單詳情、完成慶祝的路由。
   /// 各入口的實際觸發條件（報修圖示、主按鈕完成…）是後續功能，這裡先讓畫面
-  /// 可以被導到。找不到任務時 [task] 為 null，延後與中斷這兩個要有任務才做
-  /// 得了的動作不露出。
+  /// 可以被導到。找不到任務時 [task] 為 null，延後、中斷與查一下這幾個要有
+  /// 任務才做得了的動作不露出——查一下的推薦問題是依任務情境排出來的，沒有
+  /// 任務就沒有情境可查。
   Widget _buildSkeletonEntries(TaskDetail? task) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -364,13 +365,14 @@ class _TaskScreenState extends State<TaskScreen> {
               child: const Text('報修'),
             ),
           ),
-          TmsSemantics(
-            id: 'task.ask-button',
-            child: CupertinoButton(
-              onPressed: () => AskSheet.show(context),
-              child: const Text('查一下'),
+          if (task != null)
+            TmsSemantics(
+              id: 'task.ask-button',
+              child: CupertinoButton(
+                onPressed: () => AskSheet.show(context, taskId: task.id),
+                child: const Text('查一下'),
+              ),
             ),
-          ),
           CupertinoButton(
             onPressed: () {
               Navigator.of(context).push(

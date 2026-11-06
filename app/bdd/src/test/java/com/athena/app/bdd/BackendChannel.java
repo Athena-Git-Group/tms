@@ -522,6 +522,61 @@ public class BackendChannel {
     }
 
     /**
+     * 落地一筆房間往事（{@code room_memory}）。這張表是投影：產品上只有工務單完修回寫
+     * 會長出一筆（{@code kind=repair}），沒有任何建立端點，所以直接落地——情境要的是
+     * 「這間房過去修過什麼」這個既成事實，不是重演一次完修流程。
+     *
+     * <p>{@code summary} 的落地慣例是「{標題}：{原文}」合併成一欄（查一下的出處卡再由
+     * 後端從第一個「：」切回標題與原文兩段），所以呼叫端給的標題與原文在這裡合起來寫。
+     */
+    public void insertRoomMemory(
+            String roomNo, String kind, String title, String excerpt, OffsetDateTime occurredAt) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        execute("""
+                INSERT INTO room_memory (id, tenant_id, room_id, kind, summary, occurred_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, UUID.randomUUID(), tenantId, roomId, kind, title + "：" + excerpt, occurredAt);
+    }
+
+    /**
+     * 以員工本人身分把某個 SOP 項標成跳過，走正式端點
+     * {@code POST /staff/tasks/{taskId}/sop/{itemKey}}（body {@code {"skipped": true}}）。
+     *
+     * <p>情境點名的項目不一定在租戶的打掃 SOP 項裡——每個情境開場會 TRUNCATE 全部業務表
+     * （{@link #resetBusinessData}），{@code sop_items} 也在其中，所以這裡現場補一筆再跳過；
+     * 權威來源仍然是 {@code sop_items}，查一下的推薦問題也是從那裡還原項目全名的
+     * （作法與 {@link #failInspection} 的查房項目同一套）。
+     */
+    public void skipSopItem(UUID taskId, CreatedStaff staff, String label) {
+        String itemKey = ensureCleaningSopItem(ensureTenant(), label);
+        HttpResponse<String> response = send(
+                request("POST", "/staff/tasks/" + taskId + "/sop/" + itemKey, jwt(staff))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                toJson(Map.of("skipped", true)), StandardCharsets.UTF_8)));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("fixture 跳過 SOP 項失敗：POST /staff/tasks/" + taskId
+                    + "/sop/" + itemKey + " -> HTTP " + response.statusCode() + "，body=" + response.body());
+        }
+    }
+
+    private String ensureCleaningSopItem(long tenantId, String label) {
+        Optional<Object> existing = queryScalar(
+                "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'cleaning' AND label = ?",
+                tenantId, label);
+        if (existing.isPresent()) {
+            return String.valueOf(existing.get());
+        }
+        String itemKey = "adhoc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        execute("""
+                INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at)
+                VALUES (?, ?, 'cleaning', ?, ?, 999, true, ?)
+                """, UUID.randomUUID(), tenantId, itemKey, label, OffsetDateTime.now());
+        return itemKey;
+    }
+
+    /**
      * 班末換人的落地結果：把查房退回重做的單改掛給接手人，並把退池來源記成班末退池
      * （{@code tasks.pool_source = shift_end_return}）——退回資訊裡那句「原清房者 X 已下班，
      * 改由您接手」就是後端從這個欄位推導出來的（{@code HandoverService.returnInfoOf}）。

@@ -382,6 +382,24 @@ public class AppiumWorld {
     }
 
     /**
+     * 進該房的任務頁、點「查一下」，等推薦問題載入完成（查一下 dsl.md 的
+     * 「打開查一下」，Given 與 When 兩句同一條路）。
+     *
+     * <p>推薦問題是打開面板後才向後端要的，載入前畫面上一則也沒有；不等第一則出現
+     * 就往下走，接著的順序斷言會掃到空清單，紅在「還沒載完」而不是真的內容不符。
+     * 已經打開著就不重複點——Given 鋪好面板、When 再點一次推薦問題是常見的接法。
+     */
+    public void openAskPanel(BackendChannel.CreatedStaff staff, String roomNo) {
+        Duration timeout = Duration.ofSeconds(10);
+        if (!driver().findElements(byTestId("ask.sheet")).isEmpty()) {
+            return;
+        }
+        ensureOnTaskDetail(staff, roomNo);
+        tapTestId("task.ask-button", timeout);
+        waitForTestId("ask.suggestion.0", timeout);
+    }
+
+    /**
      * 把「進行中」這個起始狀態補齊：在任務頁按一次「開始」，讓後端自己把任務轉成
      * {@code doing}。
      *

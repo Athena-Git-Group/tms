@@ -1011,7 +1011,12 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/ios-app/查一下/查一下畫面.feature`
 
-- [ ] T334 [BDD-GREEN] 讓 Test Scope 全綠（4 個場景）
+- [X] T334 [BDD-GREEN] 讓 Test Scope 全綠（4 個場景）
+  - 4/4 綠（2026-11-06，`Tests run: 4, Failures: 0, Errors: 0, Skipped: 0`）。查一下面板接上兩個端點：打開時 `GET /room-memories/suggestions?taskId=` 拿推薦問題，點其中一則就把那一句原文送 `POST /room-memories/ask`。問題的順序、範圍標籤、回答全文與出處卡四欄全部由後端給定，面板只負責排版——連「剛跳過的那一項排最前面」也是後端排好的，App 沒有任何排序或組字邏輯。
+  - 查不到與查得到是兩條互斥的畫法，不是同一塊區域填不同的字：`found=true` 才畫回答區與出處卡，`found=false` 只畫後端那句查不到訊息。空的回答區會讓員工以為「有查到但系統沒話說」，而事實是這件事沒有記錄可查、該去問主管。出處卡只畫契約 `KbSource` 的四欄（種類、標題、原文、日期），畫面上連「要不要顯示住客欄位」這個選擇都不留。日期只顯示月日（`2026-10-02` → `10/02`），房務現場用不到年份。
+  - 查一下按鈕改成有任務才露出：推薦問題是依任務情境排出來的，沒有任務就沒有情境可查。
+  - 測試層新增兩筆 fixture：`insertRoomMemory` 直接落地 `room_memory` 一列（理由見上游缺口 #23），`skipSopItem` 走正式端點 `POST /staff/tasks/{taskId}/sop/{itemKey}`，跳過前先確認情境點名的打掃 SOP 項存在（每個情境開場 TRUNCATE 全部業務表，`sop_items` 也在其中，作法同 `failInspection`）。`AppiumWorld` 補 `openAskPanel()`（Given 與 When 的「打開查一下」同一條路，要等第一則推薦問題載入才算打開）；推薦問題與出處卡的掃描收在 `AskPanel`，給 When（要按第幾則）與 Then（順序對不對）共用。回答的斷言除了比畫面，另外讀回 `kb_audit_logs.answer`——那是後端記下的、它回給 App 的那段文字，比對它才證明得了畫面上的字不是 App 自己生的。
+  - 回歸：`run-module.sh 推播` `Tests run: 18, Failures: 0, Errors: 0, Skipped: 0`；`run-module.sh 房間交辦` `Tests run: 5, Failures: 0, Errors: 0, Skipped: 0`。`flutter analyze` 無 error（3 則既有 `use_null_aware_elements` info，都在 `api_client.dart`）、`flutter test` 4/4。
 - [ ] T335 [BDD-REFACTOR] 在綠燈下整理推薦問題列與出處卡的清單渲染（NOOP 可接受，但要寫明判斷依據）
 
 ## Phase 3X: ADD Feature File - ios-app/系統層/離線模式與連線異常.feature
@@ -1051,7 +1056,7 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
-以下 22 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#22 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
+以下 24 項是本輪**不產生** `[BDD-GREEN]` 任務、或實跑後確認無法在 App 邊界內轉綠的部分。#1–#4 是原型／規格缺件（`ui/prototype-feature-coverage.md:188` 的「feature 全缺的 Rule」與 `ui/ui-plan.md:308-317` 的剩餘風險），#5–#8 是環境與硬體未到位的 blocked 項，#9–#24 是 Phase 3 實跑逐一打出來的上游缺口（回交對象與證據逐條列在該項內）：
 
 1. **`home.streak-badge`（F1-R3 連續零退回天數）的視覺規格**：feature 有 Rule、dsl 有句型，但原型沒有這個元素，`ui-plan.md:245` 標「待補畫面後才掛」。T330 依 feature 掛上這個 id 做最薄呈現即可過綠，版面與文案細節回交 `/ui-plan`。
 2. **`pool.card.common-area-label`／`pool.card.{roomNo}.rule-hit-tag`（F4-R6 公共區域與規則命中）**：`coverage:188`／`:229` 判定原型未實作（房務池全有房號、「規則命中」字樣只出現在工務單歷程），`ui-plan.md:257` 標「待原型補畫面」。T324 以 dsl 指定的 id 做最薄呈現過綠，呈現規格回交 `/ui-plan`。
@@ -1075,3 +1080,5 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 20. **`MyToday.zeroReturnStreakDays` 後端寫死 0（T330 實跑發現，2026-11-06）**：契約要求這個欄位，`TaskExecutionService.myToday` 的 Javadoc 也明寫「連續零退回天數的計算定義尚未拍板，先固定回 0」，回應裡永遠是 0。`首頁今日進度.feature` 自己帶著 `[need clarification]`（以有出勤的工作日連續計還是日曆日？當天有一筆退回就歸零嗎？），場景只驗「首頁顯示得出這個數值且與後端一致」，所以本輪綠燈成立，但畫面上的數字目前沒有業務意義。回交 `/dsl-refine` 定義口徑 → 後端實作計算。與缺口 #1（這塊的視覺規格待補）同一處畫面。
 21. **班末換人沒有任何可走的路徑，自動退池也不記 `pool_source`（T332 實跑發現，2026-11-06）**：退回資訊的換人原因（`原清房者 X 已下班，改由您接手`）是 `HandoverService.returnInfoOf`（`tms/.../handover/HandoverService.java:222`）從 `tasks.pool_source = 'shift_end_return'` 推導的，但後端生不出這個值——(a) 班末掃描 job 不存在（後端自己的同義 Given 走 `JobTrigger`，固定丟 `UnsupportedOperationException`），也沒有任何「把單改派給誰」的員工端或主管端端點；(b) 查房退回時原清房者不在班上的那條自動退池（`InspectionService:104` → `TaskEngine.returnToPool:265`）只改 `state` 與 `assignee_id`，整句 UPDATE 沒碰 `pool_source`，所以就算真的讓原清房者下班，換人原因一樣是 null。App 的 fixture 因此只能直接落地這個結果（`BackendChannel.reassignAfterShiftEnd`）。回交後端：`returnToPool` 補寫 `pool_source`，並補上班末掃描換人的 job（或端點）。
 22. **交辦區與退回資訊的分欄 accessibility id 不在 ui-plan 的約定表（T332 實跑發現，2026-11-06）**：`ui-plan.md:263-266` 只列了 `task.handover.{index}.meta`（來源／作者／時間）與 `task.status-row.return-info`（整塊），但 truth 的驗法是逐欄——交辦要分別驗「來源／作者／時間」與「內容」，退回資訊要分別驗標題、原因、操作提示內文，整塊只有一個 id 時三段會被讀成一串、驗不出是哪一段不對。本次自行命名 `task.handover.{index}.content`、`task.handover.callout`、`task.status-row.return-info.title`、`task.status-row.return-info.reason`、`task.status-row.return-info.body`。回交 `/ui-plan` 補進約定表。同一類問題見缺口 #19。
+23. **`room_memory` 沒有任何寫入來源，查一下的房間記錄永遠是空的（T334 實跑發現，2026-11-06）**：`room_memory` 是查一下回答的兩個資料來源之一（`KbAskService.findLatestMemory`），schema 註解（`V4__baseline_missing_tables.sql:54`）也明寫「工務單完修以 kind=repair 寫入」，但 `tms/` 全專案只有 `KbAskService` **讀**這張表，沒有任何一處寫入（grep `room_memory` 在 `src/main/java` 只命中 `KbAskService`／`KbController`）。工務單完修（`RepairService`）不回寫、住客需求（kind=preference）更沒有來源，所以正式流程跑再久，「305 最近修過什麼？」也永遠查不到。App 的 fixture 因此只能直接落地這筆記錄（`BackendChannel.insertRoomMemory`）。回交後端：工務單完修時回寫一筆 `room_memory`（kind=repair，summary 照「{標題}：{原文}」慣例），並確認住客需求這一類的來源由誰寫。
+24. **查一下的分欄 accessibility id 不在 ui-plan 的約定表（T334 實跑發現，2026-11-06）**：`ui-plan.md:260-262` 只列了 `ask.suggestion.{index}`、`ask.answer.source-card`／`.type`／`.date`、`ask.not-found-message`、`ask.ask-manager-button`，但 truth 的驗法是逐欄——推薦問題要分別驗「問題」與「範圍」兩欄、出處卡要分別驗類型／標題／內容／日期四欄，整則或整張卡只有一個 id 時各段會被併成同一個 label，驗不出是哪一欄不對；回答全文的節點則根本沒有命名（原 step definition 的 Javadoc 自己寫著「TODO（回答區節點尚未命名）」）。本次自行命名 `ask.suggestion.{index}.question`、`ask.suggestion.{index}.scope`、`ask.answer.text`、`ask.answer.source-card.{index}`（出處卡是列表，依約定在 id 後帶執行期索引）與其 `.type`／`.title`／`.excerpt`／`.date`。回交 `/ui-plan` 補進約定表。同一類問題見缺口 #19、#22。

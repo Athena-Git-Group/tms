@@ -229,6 +229,34 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
+  /// `GET /room-memories/suggestions?taskId=`：查一下打開時的推薦問題。
+  /// 順序由後端依任務情境排好（剛跳過的 SOP 項在前），App 照單列出，不自己排。
+  Future<List<AskSuggestion>> listAskSuggestions(String taskId) async {
+    final json = await _requestJson(
+      'GET',
+      '/room-memories/suggestions',
+      query: {'taskId': taskId},
+    );
+    return (json as List<dynamic>? ?? <dynamic>[])
+        .map((entry) => AskSuggestion.fromJson(entry as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// `POST /room-memories/ask`：拿一則問題去查這張任務的房間記錄或 SOP。
+  /// 回答與出處全部由後端組好，查不到時 `found=false`、`answer` 是 null。
+  Future<AskAnswer> askRoomMemory({
+    required String taskId,
+    required String question,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/room-memories/ask',
+      body: {'taskId': taskId, 'question': question},
+      idempotent: true,
+    );
+    return AskAnswer.fromJson(json as Map<String, dynamic>);
+  }
+
   /// `GET /notifications`：我的通知清單，後端已依 createdAt 新到舊排好；
   /// 「今天／更早」分組是 App 端的呈現邏輯（契約明訂本端點不分組）。
   Future<List<NotificationItem>> listNotifications() async {
@@ -741,6 +769,82 @@ class HandoverEntry {
       author: json['author'] as String? ?? '',
       content: json['content'] as String? ?? '',
       at: at == null ? null : DateTime.parse(at).toLocal(),
+    );
+  }
+}
+
+/// `KbSuggestion`：查一下的一則推薦問題。[scope] 是這個問題會查到哪一類資料
+/// （例如「房間記錄」「SOP · 您剛剛跳過這項」），和問題本身一樣由後端給定。
+class AskSuggestion {
+  const AskSuggestion({required this.question, required this.scope});
+
+  final String question;
+  final String scope;
+
+  factory AskSuggestion.fromJson(Map<String, dynamic> json) {
+    return AskSuggestion(
+      question: json['question'] as String? ?? '',
+      scope: json['scope'] as String? ?? '',
+    );
+  }
+}
+
+/// `KbSource`：查一下回答的一筆出處。[excerpt] 是被引用資料的原文，
+/// [updatedOn] 是 ISO 日期字串（`yyyy-MM-dd`）。
+class AskSource {
+  const AskSource({
+    required this.kind,
+    required this.title,
+    required this.excerpt,
+    required this.updatedOn,
+  });
+
+  /// 出處種類，照契約 enum：sop｜room_memory。
+  final String kind;
+
+  final String title;
+  final String excerpt;
+  final String updatedOn;
+
+  factory AskSource.fromJson(Map<String, dynamic> json) {
+    return AskSource(
+      kind: json['kind'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      excerpt: json['excerpt'] as String? ?? '',
+      updatedOn: json['updatedOn'] as String? ?? '',
+    );
+  }
+}
+
+/// `KbAnswer`：查一下的一次回答。查不到時 [found] 是 false、[answer] 是 null、
+/// [sources] 是空的，只有 [notFoundMessage] 有文字——畫面要照這個分野決定
+/// 「有沒有東西可顯示」，不能把 null 當成空字串畫一個空的回答區。
+class AskAnswer {
+  const AskAnswer({
+    required this.answerId,
+    required this.found,
+    required this.sources,
+    this.answer,
+    this.notFoundMessage,
+  });
+
+  /// 稽核紀錄 id，之後的回饋與轉問主管都拿它當位址。
+  final String answerId;
+
+  final bool found;
+  final String? answer;
+  final String? notFoundMessage;
+  final List<AskSource> sources;
+
+  factory AskAnswer.fromJson(Map<String, dynamic> json) {
+    return AskAnswer(
+      answerId: json['answerId'] as String? ?? '',
+      found: json['found'] as bool? ?? false,
+      answer: json['answer'] as String?,
+      notFoundMessage: json['notFoundMessage'] as String?,
+      sources: (json['sources'] as List<dynamic>? ?? <dynamic>[])
+          .map((entry) => AskSource.fromJson(entry as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
