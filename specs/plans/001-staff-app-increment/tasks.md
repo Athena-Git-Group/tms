@@ -883,8 +883,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 **Test Scope**:
 - `specs/truth/features/ios-app/待認領/待認領列表.feature`
 
-- [ ] T324 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
-  - 現況 6/9 綠（2026-11-06）：後端排序、同樓層標示、退回單卡（來源／原因／接手進度）、分類筆數、分類篩選、公共區域規則單都已綠。其餘 3 個場景被上游缺口阻塞：未接超時兩段標籤（2 個）卡在缺口 #15（`GET /pool` 不回 `reminderStage`），部門全員停用空狀態（1 個）卡在缺口 #16（主管無部門池可看、後端也沒有「沒有在職員工」的訊號）。端點補齊後以既有實作與既有 stepdef 續推。
+- [X] T324 [BDD-GREEN] 讓 Test Scope 全綠（9 個場景）
+  - **9/9 綠**（2026-11-06 實跑 `app/bdd/run-module.sh 待認領`：`Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 343.7 s -- in io.cucumber.junit.platform.engine.CucumberTestEngine`，`BUILD SUCCESS`、`exit=0`）。先前 6/9 的現況：後端排序、同樓層標示、退回單卡（來源／原因／接手進度）、分類筆數、分類篩選、公共區域規則單都已綠。其餘 3 個場景被上游缺口阻塞：未接超時兩段標籤（2 個）卡在缺口 #15（`GET /pool` 不回 `reminderStage`），部門全員停用空狀態（1 個）卡在缺口 #16（主管無部門池可看、後端也沒有「沒有在職員工」的訊號）。缺口 #15 由 T344（`deptPool` 補 `reminderStage`）解除，缺口 #16 由 T345（`dept` 參數＋`activeStaffCount`）加 T359（App 側接線）解除，兩段標籤與主管空狀態三個場景全部轉綠。
 - [X] T325 [BDD-REFACTOR] 在綠燈下整理池內單卡與分類磚元件，與 Phase 3P 的工務待認領共用同一組元件
 
 ## Phase 3S: ADD Feature File - ios-app/任務執行（任務頁核心互動＋任務卡狀態與提示）
@@ -1115,11 +1115,12 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
   - dry-run 結果行（`mvn -f app/bdd/pom.xml test -Dtest=RunModuleFeatureTest -Dcucumber.features=../../specs/truth/features/ios-app/工務單 -Dcucumber.execution.dry-run=true -Dsurefire.excludeJUnit5Engines=cucumber`）：`Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.305 s -- in io.cucumber.junit.platform.engine.CucumberTestEngine` → 0 undefined、0 pending。
   - 對不上的一句（新缺口 #35）：`恢復連線後的前 N 次送出會因網路不穩而重送` 需要「前 N 次開單請求在後端已處理後才逾時」的注入開關，測試後門沒有；既有的 `/flaky-connection` 只把連線標成不穩定（改走降級輪詢），拿它頂替會讓情境在完全沒有重送的情況下綠燈，等於沒驗到同一把 `Idempotency-Key`。該句實作成帶這段說明的 `IllegalStateException`，不發明後門、也不假綠。
 
-- [ ] T359 App 用 `activeStaffCount` 分辨兩種空狀態（解除缺口 #36）
+- [X] T359 App 用 `activeStaffCount` 分辨兩種空狀態（解除缺口 #36）
   - 現況：T345 已讓 `GET /pool` 回 `activeStaffCount` 並支援 `dept` 參數，但 `grep activeStaffCount app/mobile/lib` 零命中——App 沒解析，也沒有主管視角帶 `dept` 的路徑，所以 `待認領列表.feature:88`「房務部全員停用，王主管看到空狀態」仍紅。與 #33 同一個模式（後端補了、App 沒接）。
   - 只做：`api_client.dart` 的池回應模型補 `activeStaffCount`；`getPool` 支援選用 `dept`（主管／老闆身分登入時帶）；`pool_screen.dart` 的空狀態依契約判準分兩種——`activeStaffCount > 0` 且清單空＝單都被接走（既有空狀態），`activeStaffCount == 0`＝掛 `pool.empty-state--no-active-staff` 並顯示 feature 指定的文案。
   - 不做：不改既有單卡、分類磚、篩選與排序；不改現場員工省略 `dept` 的既有行為；不碰 `tms/`、`specs/truth/**`、`app/bdd/` 的 stepdef 語意。
   - 驗收：`app/bdd/run-module.sh 待認領` **9/9 綠**（未接超時兩段標籤 2 個由 T344 解開、本題解開第 3 個）；`flutter analyze` 無 error、`flutter test` 全過。
+  - 結果（2026-11-06）：`flutter analyze` 0 error（7 則 `use_null_aware_elements` info，既有風格提示）、`flutter test` 4/4 全過、`app/bdd/run-module.sh 待認領` **9/9 綠**（`Tests run: 9, Failures: 0, Errors: 0, Skipped: 0`、`BUILD SUCCESS`）。落地處：`api_client.dart` 的 `DeptPool.activeStaffCount` 與 `getPool` 的選用 `dept`；`pool_screen.dart` 依 session 的 `dept` 是否為 null 決定要不要帶 `dept=housekeeping`（主管與老闆帶、現場員工省略），`activeStaffCount == 0` 時掛 `pool.empty-state--no-active-staff` 並不列單卡（搶單動作不可用）。
 
 ## 上游缺口（本輪不排實作任務，回交對象列在各項）
 
@@ -1139,8 +1140,8 @@ T204–T239（全數 [X]）已完成上述四項裁決的 backend 部分。T240 
 12. **App 無端點可列舉「進行中（doing）」的任務（T322 實跑發現，2026-11-06）**：房務端三支 feature 的受測任務都是 doing，但 `MyToday.nextTasks` 只收 `accepted`（`tms/.../TaskExecutionService.java:498` 逐字確認），`/pool` 只回 `state=pool`，因此 App 進不了任務頁，報修面板與工務單詳情全部到不了——**擋住 Phase 3Q 全部 18 個場景**。ui-plan 畫面 1 的「繼續處理」本來就需要這份清單。回交 `/api-plan`：`MyToday` 補進行中的單。與缺口 #10 同一族（App 看不見自己手上的工作）。 ~~**後端半邊本輪已補**（T341，2026-11-06 以 curl 實測 `todayTasks` 收得到 doing 的單）~~；~~App 半邊本輪也已補（T357，2026-11-06：`MyToday.fromJson` 解析 `todayTasks`，房務首頁任務列與任務頁的房號反查都改吃它）~~。**本缺口已解除**；房務端三支 feature 仍紅的理由只剩缺口 #34。
 13. **`listRepairTickets` 後端未實作（T322 實跑發現，2026-11-06）**：`GET /api/v1/repair-tickets?roomId=` 回 501（`tms/.../repair/RepairController.java:118` 明寫佔位），且契約無「我報的工務單」清單端點；即使 #12 解除，房務端仍進不了工務單詳情。回交後端實作＋`/api-plan` 評估是否補本人視角清單。 ~~**本輪已補**（T346，2026-11-06 以 curl 實測 `GET /api/v1/repair-tickets?roomId=` 回 200 工務單陣列）~~，缺口解除；房務端仍進不了詳情的理由改為缺口 #33／#34。
 14. **「設定新密碼」端點缺席（T316 實跑發現，2026-11-05）**：`登入與登出守衛.feature:59` 要求設定新密碼後進入首頁，但 `員工帳號與登入.yaml` 只有 `staffAccountsLogin`，無改密端點；後端在 `must_change_password` 清掉前對業務端點一律 403。回交 `/api-plan` 補「設定新密碼」端點（重雜湊密碼＋清 `must_change_password`）→ 後端實作後，T316 的最後 1 個場景用既有 stepdef 即可轉綠。在此之前 T316 收 9/10，不假綠。 ~~**後端半邊本輪已補**（T348，2026-11-06 以 curl 實測端點符合 `changeOwnPassword` 契約）~~；~~App 側接線本輪也已補（T356，2026-11-06 實跑 `帳號與登入` 10/10 綠）~~。**本輪已補**，缺口解除。
-15. **`GET /pool` 不回 `reminderStage`（T324 實跑發現，2026-11-06）**：契約 `員工工作台.yaml` 的 `PoolItem.reminderStage` 已定義（`staff_reminded`／`manager_notified`），`tasks.reminder_stage` 也確實落地（V13；實跑以 SQL 確認 fixture 寫入成功），但 `TaskExecutionService.deptPool`（`tms/.../TaskExecutionService.java:369`）只把它當 `unclaimed_overdue` 排序旗標用，組裝 `PoolItem` 時（:405-419）沒有放進回應，App 永遠讀到 null，未接超時兩段標籤畫不出來——**擋住 Phase 3R 的 2 個場景**。回交後端：`deptPool` 補 `item.put("reminderStage", …)`。與缺口 #10／#12 同一族（App 看不見後端已有的資料）。
-16. **主管看不到任何部門待認領池，後端也沒有「部門沒有在職員工」的訊號（T324 實跑發現，2026-11-06）**：`待認領列表.feature:88` 要王主管打開房務待認領看到空狀態，但 (a) `listDeptPool` 只依登入者自己的 `dept` 分流、沒有部門查詢參數，主管的 `dept` 是 NULL，`TaskExecutionService.deptPool:357` 直接回 422「此帳號未設部門」；(b) 整個後端沒有任何地方判斷「這個部門沒有在職員工」，`GET /pool` 對這個情況只會回一般的空 `items`，App 無從分辨「沒有單」與「沒有人可以搶單」。回交 `/api-plan`：補部門參數（或主管視角的部門池端點）＋在回應中帶出部門可搶單人力的狀態。
+15. **`GET /pool` 不回 `reminderStage`（T324 實跑發現，2026-11-06）**：契約 `員工工作台.yaml` 的 `PoolItem.reminderStage` 已定義（`staff_reminded`／`manager_notified`），`tasks.reminder_stage` 也確實落地（V13；實跑以 SQL 確認 fixture 寫入成功），但 `TaskExecutionService.deptPool`（`tms/.../TaskExecutionService.java:369`）只把它當 `unclaimed_overdue` 排序旗標用，組裝 `PoolItem` 時（:405-419）沒有放進回應，App 永遠讀到 null，未接超時兩段標籤畫不出來——**擋住 Phase 3R 的 2 個場景**。回交後端：`deptPool` 補 `item.put("reminderStage", …)`。與缺口 #10／#12 同一族（App 看不見後端已有的資料）。 ~~**本輪已補**（T344，2026-11-06）：`deptPool` 組裝 `PoolItem` 時帶出 `reminderStage`；實跑 `app/bdd/run-module.sh 待認領` 9/9 綠，`待認領列表.feature:72`／`:79` 兩段標籤場景轉綠~~，**缺口解除**。
+16. **主管看不到任何部門待認領池，後端也沒有「部門沒有在職員工」的訊號（T324 實跑發現，2026-11-06）**：`待認領列表.feature:88` 要王主管打開房務待認領看到空狀態，但 (a) `listDeptPool` 只依登入者自己的 `dept` 分流、沒有部門查詢參數，主管的 `dept` 是 NULL，`TaskExecutionService.deptPool:357` 直接回 422「此帳號未設部門」；(b) 整個後端沒有任何地方判斷「這個部門沒有在職員工」，`GET /pool` 對這個情況只會回一般的空 `items`，App 無從分辨「沒有單」與「沒有人可以搶單」。回交 `/api-plan`：補部門參數（或主管視角的部門池端點）＋在回應中帶出部門可搶單人力的狀態。 ~~**本輪已補**（T345＋T359，2026-11-06）：後端 `listDeptPool` 加選用 `dept` 參數並回 `activeStaffCount`，App 側主管與老闆（帳號無部門）查房務池時帶 `dept=housekeeping`、`activeStaffCount == 0` 時顯示專屬空狀態；實跑 `待認領` 9/9 綠，`待認領列表.feature:88` 轉綠~~，**缺口解除**。
 17. **`readTasks` 回應缺 `estMin`／`skippedSopItems`／`inspectionWaived`（T326 實跑發現，2026-11-06）**：契約 `TaskDetail` 以 `allOf` 併入 `tasks`（含 `estMin`、`inspectionWaived`）並另外定義 `skippedSopItems`，但 `TaskExecutionService.toDetail`（`tms/.../TaskExecutionService.java:584-607`）逐欄組裝回應時這三欄都沒放。App 因此算不出「超時 N 分」（＝已做分鐘 − 預估分鐘）、慶祝頁印不出「預估 35 分」、SOP 進度的 `x / y` 也少了跳過的那一半——在缺口 #12 之後接著擋住 Phase 3S 的超時與慶祝頁 2 個場景。回交後端：`toDetail` 補這三欄。
 18. **`GET /sop-items` 後端未實作（T326 實跑發現，2026-11-06）**：契約 `openapi.yaml:119` 有 `/sop-items`（`listSopItems`），但 `tms/` 沒有任何 controller 掛這條路由（全專案 grep `sop-items` 無結果），而 `TaskDetail.checkedSopItems` 只給 id、不給名稱，App 沒有任何方式取得「擦拭桌面與鏡面」這類 SOP 項名稱來畫清單與勾／跳過——在缺口 #12 之後接著擋住 Phase 3S 的 2 個 SOP 場景。回交後端實作 `listSopItems`。
 19. **延後／中斷面板的預設原因文字兩份規格不一致，面板元素也沒有命名 accessibility id（T328 實跑發現，2026-11-06）**：`ui-plan.md:110` 寫「缺備品去拿」與「其他」，`任務執行/dsl.md` 與 `延後與中斷原因面板.feature` 寫「缺備品，去拿」與「其他原因」；原因文字同時是送到後端的 `hold_reason` 內容與測試指認選項的依據，兩份不同會讓實作與驗收各挑一份。本次以 truth feature 的寫法為準落地。另外 `ui-plan.md` 的 accessibility id 表沒有延後／中斷面板任何一列，本次自行命名 `hold.reason.{原因}`、`hold.other-reason-field`、`hold.char-count`、`hold.confirm-button`、`task.defer-button`、`task.interrupt-button`、`task.status-row.hold-reason`。回交 `/ui-plan`：統一原因文字，並把這七個 id 補進約定表。
@@ -1292,9 +1293,10 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 歸因：**不是 Phase 5 沒照契約做**。以工務帳號（`fx-94ca41ee1e12`／`demo1234`）直打後端逐項驗過——`GET /api/v1/me/today` 回的 `todayTasks` 收得到 doing 的單且欄位齊全（T341 ✔）、`engineeringSummary.tickets` 逐欄符合 `EngineeringTicket` 且與 `openCount`／`urgentCount` 筆數一致（T342 ✔）、`GET /api/v1/repair-tickets?roomId=` 回 200 工務單陣列不再 501（T346 ✔）。缺口 #10／#12／#13 的**後端半邊已解除**，擋住的是 App 半邊：首頁與工務首頁都還在讀 `nextTasks`、沒接新欄位（缺口 #33），房務端 29 句 stepdef 仍是 `PendingException` 樁（缺口 #34）。兩者都要動 `app/mobile/`／`app/bdd/` 的語意，Phase 6 Boundary 明令不在本輪做，須另開 task。
   - 本輪**沒有修改任何 harness**（`app/bdd/` 與 `app/mobile/` 零改動）：31 個紅／綠全部可歸因，沒有需要靠等待時間或捲動定位解決的不穩定；唯一一筆偶發雜訊是生命週期行 30 的「等測試後門（127.0.0.1:9099）就緒逾時」，該場景本來也被 #34 擋著，不因此調 harness。
 
-- [ ] T352 重跑 `待認領`，收綠 T324
+- [X] T352 重跑 `待認領`，收綠 T324
   - 解除：缺口 #15（T344）、#16（T345）。
   - 驗收：`app/bdd/run-module.sh 待認領` 回報 **9/9 綠**（原 6/9：未接超時兩段標籤 2 個＋主管空狀態 1 個）。T324 打勾，現況註記補上實跑數字與日期；缺口 #15／#16 標示解除。
+  - 結果（2026-11-06）：**9/9 綠**，結果行 `Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 343.7 s -- in io.cucumber.junit.platform.engine.CucumberTestEngine`，`BUILD SUCCESS`、`exit=0`。三個原本的紅（`待認領列表.feature:72` 已提醒同仁、`:79` 已通知主管、`:88` 房務部全員停用主管空狀態）全部轉綠，本輪零 harness 改動。
 
 - [ ] T353 重跑 `任務執行`，收綠 T326 並解鎖 T327
   - 解除：缺口 #12（T341）、#17（T343）、#18（T347）。
@@ -1341,4 +1343,4 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 
 35. **測試後門沒有「前 N 次送出逾時後重送」的注入開關（T358 實作時發現，2026-11-06）**：`報修照片與送出.feature:69` 的「恢復連線後的前 3 次送出會因網路不穩而重送」要讓開單請求在後端已處理後才逾時，迫使 App 用同一把 `Idempotency-Key` 重送，才驗得到「重送 3 次後端仍只有 1 張單」。`app/mobile/lib/core/test_backdoor.dart` 現有的五個開關（`/clock`、`/offline`、`/upload-fail`、`/remembered-account`、`/flaky-connection`）都做不到這件事——`/flaky-connection` 只把 `ConnectionStatus` 標成不穩定（改走每 5 秒降級輪詢），不會讓任何一次送出重跑；拿它頂替會讓這個情境在完全沒有重送的情況下綠燈，等於沒驗到冪等。該句的 stepdef 已實作成帶這段說明的 `IllegalStateException`（不是 `PendingException`，句子跑得到），**擋住 `報修照片與送出.feature` 的 1 個場景**。回交 App 端：測試後門補一個可指定「前 N 次寫入請求在後端收下之後才逾時」的注入開關，屬 `app/mobile/` 產品碼（測試建置限定），須另開 task。
 
-36. **App 未接 `activeStaffCount`、也沒有主管視角帶 `dept` 的路徑（預檢發現，2026-11-06）**：T345 已讓後端回 `activeStaffCount` 並支援 `dept` 參數，但 `app/mobile/lib` 內零命中，`待認領列表.feature:88` 的主管空狀態場景仍無法轉綠。與 #33（App 未接 `todayTasks`／`tickets`）同一個模式。由 T359 承接。
+36. **App 未接 `activeStaffCount`、也沒有主管視角帶 `dept` 的路徑（預檢發現，2026-11-06）**：T345 已讓後端回 `activeStaffCount` 並支援 `dept` 參數，但 `app/mobile/lib` 內零命中，`待認領列表.feature:88` 的主管空狀態場景仍無法轉綠。與 #33（App 未接 `todayTasks`／`tickets`）同一個模式。由 T359 承接。 ~~**本輪已補**（T359，2026-11-06）：`DeptPool` 解析 `activeStaffCount`、`getPool` 支援選用 `dept`、`pool_screen.dart` 依 session 的 `dept` 是否為 null 決定帶不帶 `dept=housekeeping`，並依 `activeStaffCount` 分出兩種空狀態；實跑 `待認領` 9/9 綠~~，**缺口解除**。

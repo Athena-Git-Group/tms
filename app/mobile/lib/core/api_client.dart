@@ -100,14 +100,26 @@ class ApiClient {
     return MyToday.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /pool`：本部門待認領池（含分類筆數）。三個篩選維度都來自契約
-  /// `listDeptPool`：[category] 只回該類別（`cleaning`／`amenity`／`repair`／
-  /// `other`，房務待認領的分類磚用它）；[urgent]=true 只回急件；[source] 只回
-  /// 該來源（`staff_report`＝房務報修、`desk_forward`＝櫃檯）。帶 [category]
-  /// 時 `counts` 仍是整個池的筆數，分類磚的數字不會跟著縮水。分流與排序一律
-  /// 交給後端——App 只把磚的選擇換成查詢參數，不在本機重排或過濾。
-  Future<DeptPool> getPool({String? category, bool? urgent, String? source}) async {
+  /// `GET /pool`：部門待認領池（含分類筆數）。四個查詢維度都來自契約
+  /// `listDeptPool`：[dept] 指定要看哪一個部門的池；[category] 只回該類別
+  /// （`cleaning`／`amenity`／`repair`／`other`，房務待認領的分類磚用它）；
+  /// [urgent]=true 只回急件；[source] 只回該來源（`staff_report`＝房務報修、
+  /// `desk_forward`＝櫃檯）。帶 [category] 時 `counts` 仍是整個池的筆數，
+  /// 分類磚的數字不會跟著縮水。分流與排序一律交給後端——App 只把磚的選擇
+  /// 換成查詢參數，不在本機重排或過濾。
+  ///
+  /// [dept] 省略就是「看自己帳號上的部門」，現場員工（房務／工務／櫃檯）一律
+  /// 這樣打。主管與老闆的帳號沒有部門，後端無從推斷要看哪一池，省略時回 422
+  /// `dept_required`，所以這兩種身分必須指定；現場員工帶了自己部門以外的值
+  /// 會被後端以 403 `forbidden_dept_pool` 擋下。
+  Future<DeptPool> getPool({
+    String? dept,
+    String? category,
+    bool? urgent,
+    String? source,
+  }) async {
     final query = <String, String>{
+      if (dept != null) 'dept': dept,
       if (category != null) 'category': category,
       if (urgent != null) 'urgent': '$urgent',
       if (source != null) 'source': source,
@@ -800,12 +812,21 @@ class NextTask {
 
 /// `DeptPool`：待認領池回應，items 已依後端定義的優先序排好。
 class DeptPool {
-  const DeptPool({required this.items, required this.counts});
+  const DeptPool({
+    required this.items,
+    required this.counts,
+    required this.activeStaffCount,
+  });
 
   final List<PoolItem> items;
 
   /// 分類筆數，key 是 all／cleaning／amenity／repair／other。
   final Map<String, int> counts;
+
+  /// 這個部門目前在職、可以搶單的員工數（待開通與停用的不算）。畫面靠它
+  /// 分辨兩種都看不到單的情況：大於 0 而 [items] 是空的＝單都被接走了；
+  /// 等於 0＝這個部門沒有人可以搶單。
+  final int activeStaffCount;
 
   factory DeptPool.fromJson(Map<String, dynamic> json) {
     final itemsJson = json['items'] as List<dynamic>? ?? <dynamic>[];
@@ -815,6 +836,7 @@ class DeptPool {
           .map((entry) => PoolItem.fromJson(entry as Map<String, dynamic>))
           .toList(),
       counts: countsJson.map((key, value) => MapEntry(key, value as int)),
+      activeStaffCount: json['activeStaffCount'] as int? ?? 0,
     );
   }
 }

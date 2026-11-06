@@ -137,8 +137,17 @@ class _FakeApiClient extends ApiClient {
   final Map<String, TaskDetail> tasksById;
 
   @override
-  Future<DeptPool> getPool({String? category, bool? urgent, String? source}) async {
-    return DeptPool(items: pool, counts: {'all': pool.length});
+  Future<DeptPool> getPool({
+    String? dept,
+    String? category,
+    bool? urgent,
+    String? source,
+  }) async {
+    return DeptPool(
+      items: pool,
+      counts: {'all': pool.length},
+      activeStaffCount: 1,
+    );
   }
 
   @override

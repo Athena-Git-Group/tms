@@ -37,6 +37,16 @@ class _PoolScreenState extends State<PoolScreen> {
   DeptPool? _pool;
   String? _error;
 
+  /// 這個畫面是房務部門的待認領池（工務有自己的 `engPool`），所以查哪一池
+  /// 的答案只有一個：房務。
+  static const String _dept = 'housekeeping';
+
+  /// 要不要在查詢裡帶 `dept`。房務員工的帳號上就有部門，照既有作法省略，
+  /// 讓後端用帳號上的部門分流；主管與老闆的帳號沒有部門（契約 listDeptPool
+  /// 省略 dept 時回 422 `dept_required`），要看房務池就得把部門指明。
+  String? get _deptQuery =>
+      ApiClient.instance.session?.dept == null ? _dept : null;
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +62,7 @@ class _PoolScreenState extends State<PoolScreen> {
     });
     try {
       final pool = await ApiClient.instance.getPool(
+        dept: _deptQuery,
         category: _selected == 'all' ? null : _selected,
       );
       if (mounted) {
@@ -108,31 +119,49 @@ class _PoolScreenState extends State<PoolScreen> {
                   padding: EdgeInsets.all(16),
                   child: CupertinoActivityIndicator(),
                 ),
-              if (pool != null && pool.items.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('目前沒有待認領的工單'),
-                ),
-              if (pool != null)
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final item in pool.items)
-                        _HousekeepingPoolCard(
-                          item: item,
-                          isHighlighted: item.roomNo == widget.highlightRoomNo,
-                          onTap: () => _openTask(item),
-                          onClaim: () => _claim(item),
-                        ),
-                    ],
+              // 兩種「接不到單」要分開講。一個人都不在職時，池裡就算還躺著單也
+              // 沒有人搶得走，畫面要提示補人、而不是說「都接完了」；這時也不把
+              // 單卡列出來——卡上的「認領這單」對主管沒有意義，對停用的員工更
+              // 按不得（dsl「待認領顯示空狀態」要求搶單動作不可用）。
+              if (pool != null && pool.activeStaffCount == 0)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: TmsSemantics(
+                    id: 'pool.empty-state--no-active-staff',
+                    label: _noActiveStaffMessage,
+                    child: const Text(_noActiveStaffMessage),
                   ),
-                ),
+                )
+              else ...[
+                if (pool != null && pool.items.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('目前沒有待認領的工單'),
+                  ),
+                if (pool != null)
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        for (final item in pool.items)
+                          _HousekeepingPoolCard(
+                            item: item,
+                            isHighlighted: item.roomNo == widget.highlightRoomNo,
+                            onTap: () => _openTask(item),
+                            onClaim: () => _claim(item),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+
+  /// 這個部門沒有在職員工時的空狀態全文。
+  static const String _noActiveStaffMessage = '這個部門目前沒有在職員工可以搶單';
 
   /// 分類磚列。筆數一律讀後端回的 `counts`，帶 category 查詢時 counts 仍是整池
   /// 的數字，所以切換分類不會讓別的磚數字跟著變。
