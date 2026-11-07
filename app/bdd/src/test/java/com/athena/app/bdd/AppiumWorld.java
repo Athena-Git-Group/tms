@@ -73,6 +73,12 @@ public class AppiumWorld {
      * 捲這麼多屏之後還收不到新東西，就是畫面上真的沒有，再捲下去只是把失敗拖慢。
      */
     private static final int MAX_LIST_SCROLLS = 6;
+
+    /** 從推進去的畫面退回首頁時，最多按幾次導覽列的「返回」。 */
+    private static final int MAX_BACK_TAPS = 3;
+
+    /** 登入送出最多試幾次（第一次落空時原樣重送）。 */
+    private static final int MAX_LOGIN_ATTEMPTS = 2;
     /**
      * 等登入後的首頁出現可以等多久。送出帳密到首頁之間隔著一次後端來回，整套 suite
      * 一起跑時模擬器負載比單跑一個模組高，這段來回偶發會拖到十幾秒；等太短只會把
@@ -315,6 +321,10 @@ public class AppiumWorld {
      *
      * <p>同一情境要求換成另一位員工時直接噴錯：推播／通知中心的場景都只有一位
      * 當事員工，換人代表劇本或 stepdef 寫錯，默默重登會把錯誤藏起來。
+     *
+     * <p>送出後等不到首頁、而畫面還停在登入頁的那一次，原樣再送一次：這是連跑整個套件時
+     * 的偶發（送出的那一下落在重繪之間，欄位有值但請求沒發出去），不是帳密錯。重送之後
+     * 仍停在登入頁才讓它紅，訊息裡附現場元素樹。
      */
     public void ensureLoggedInAs(BackendChannel.CreatedStaff staff) {
         if (loggedInStaff != null) {
@@ -325,11 +335,27 @@ public class AppiumWorld {
             return;
         }
         Duration timeout = LOGIN_TIMEOUT;
+        String landing = landingScreenId(staff);
         postBackdoorJson("/remembered-account", "{\"employee\":null}");
-        typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
-        typeInto("login.password-field", timeout, staff.password());
-        tapTestId("login.submit-button", timeout);
-        waitForTestId(landingScreenId(staff), timeout);
+        for (int attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
+            if (attempt > 1) {
+                // typeInto 是 sendKeys（不清空），重送前要先把上一次留在欄位裡的值清掉，
+                // 否則員工編號會變成接起來的兩份。
+                clearField("login.shared-device.staff-id-field", timeout);
+                clearField("login.password-field", timeout);
+            }
+            typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
+            typeInto("login.password-field", timeout, staff.password());
+            tapTestId("login.submit-button", timeout);
+            if (waitForTestIdQuietly(landing, timeout) != null) {
+                loggedInStaff = staff;
+                return;
+            }
+            if (driver().findElements(byTestId("login.submit-button")).isEmpty()) {
+                break;
+            }
+        }
+        waitForTestId(landing, timeout);
         loggedInStaff = staff;
     }
 
@@ -384,6 +410,51 @@ public class AppiumWorld {
      * 「等不到 {@code home.task.{roomNo}.card}」失敗——那是上游缺口 #12
      * （App 無端點可列舉進行中的任務），不是這一層可以繞過的。
      */
+    /**
+     * 點一個會換頁／開面板的元素，並確認目標畫面真的出現；沒出現就再點一次。
+     *
+     * <p>有些入口（待認領的「開工單」FAB）在列表還在重排時點下去會整個落空：Appium 回報
+     * 點擊成功，畫面卻留在原地，接著等表單元素就逾時。這種落空重點一次就好，所以這裡只在
+     * 目標畫面沒出現時補一次，仍然沒有才讓 {@link #waitForTestId} 以現場元素樹失敗。
+     */
+    public void tapUntilVisible(String tapId, String expectedId, Duration timeout) {
+        tapTestId(tapId, timeout);
+        long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        while (System.nanoTime() < deadline) {
+            if (!driver().findElements(byTestId(expectedId)).isEmpty()) {
+                return;
+            }
+            sleep(200);
+        }
+        if (!driver().findElements(byTestId(tapId)).isEmpty()) {
+            tapTestId(tapId, timeout);
+        }
+        waitForTestId(expectedId, timeout);
+    }
+
+    /**
+     * 確保 App 停在房務首頁。已經在首頁就不動；停在推進去的畫面（任務頁、工務單詳情……）
+     * 時，照員工自己的動線按導覽列的「返回」一路退回來。
+     *
+     * <p>只等 {@code home.screen} 是不夠的：等待不會把畫面帶回去。離線完成任務之後 App
+     * 留在任務頁（沒有網路就沒有慶祝頁），接著那句「在 App 打開首頁」就會在任務頁上空等到
+     * 逾時，紅在「等不到 home.screen」而不是劇本真的要驗的事。
+     */
+    public void ensureOnHome(Duration timeout) {
+        for (int i = 0; i < MAX_BACK_TAPS; i++) {
+            if (!driver().findElements(byTestId("home.screen")).isEmpty()) {
+                return;
+            }
+            List<WebElement> back = driver().findElements(AppiumBy.accessibilityId("Back"));
+            if (back.isEmpty()) {
+                break;
+            }
+            back.get(0).click();
+            sleep(300);
+        }
+        waitForTestId("home.screen", timeout);
+    }
+
     public void ensureOnTaskDetail(BackendChannel.CreatedStaff staff, String roomNo) {
         ensureLoggedInAs(staff);
         currentTaskRoomNo = roomNo;
@@ -393,7 +464,7 @@ public class AppiumWorld {
                         AppiumBy.iOSNsPredicateString(
                                 "label CONTAINS " + nsPredicateString(roomNo + " 的任務頁")))
                         .isEmpty()) {
-            waitForTestId("home.screen", timeout);
+            ensureOnHome(timeout);
             tapTestId("home.task." + roomNo + ".card", timeout);
             waitForTestId("task.screen", timeout);
         }
@@ -982,6 +1053,22 @@ public class AppiumWorld {
     }
 
     /**
+     * 跟 {@link #waitForTestId} 一樣等元素出現，但等不到時回 {@code null} 而不是丟錯，
+     * 也不傾印元素樹——給「等不到就換個做法再試一次」的呼叫端用。
+     */
+    private WebElement waitForTestIdQuietly(String id, Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            List<WebElement> found = driver().findElements(byTestId(id));
+            if (!found.isEmpty()) {
+                return found.get(0);
+            }
+            sleep(200);
+        }
+        return null;
+    }
+
+    /**
      * 往下捲找元素，找到就停在那一屏讓呼叫端接著點它。清單比畫面長時，Flutter 根本
      * 不會建出看不到的那幾筆，捲到它露出來是唯一能定位的方式——真人也是這樣用的。
      * 捲到底還是沒有就回 null，由呼叫端當成「畫面上沒有這個元素」。
@@ -1008,6 +1095,14 @@ public class AppiumWorld {
         throw new AssertionError(
                 "等不到畫面元素 " + id + "（逾時 " + timeout.getSeconds() + "s，含往下捲動尋找）；元素樹 " + dump,
                 cause);
+    }
+
+    /** 清空文字欄位（先點一下取得焦點，再清掉現有內容）。 */
+    private void clearField(String testId, Duration timeout) {
+        withStaleRetry(testId, timeout, field -> {
+            field.click();
+            field.clear();
+        });
     }
 
     /**

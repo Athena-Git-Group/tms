@@ -22,11 +22,14 @@ public class CommonWhenSteps {
      * <p>「載入完成」以進度第一格（{@code home.progress.cleaned-ratio}）出現為準：首頁一進去
      * 先是空的，{@code GET /me/today} 回來才渲染，等畫面殼（{@code home.screen}）出現就往下
      * 斷言會讀到還沒填值的畫面。
+     *
+     * <p>「打開首頁」是真的把畫面帶回首頁（{@link AppiumWorld#ensureOnHome}），不是原地等：
+     * 員工可能正停在任務頁上，那時要先按返回退回來。
      */
     @當("{string} 在 App 打開首頁")
     public void openHome(String staffName) {
         world.ensureLoggedInAs(world.staff(staffName));
-        world.waitForTestId("home.screen", SCREEN_TIMEOUT);
+        world.ensureOnHome(SCREEN_TIMEOUT);
         world.waitForTestId("home.progress.cleaned-ratio", SCREEN_TIMEOUT);
     }
 

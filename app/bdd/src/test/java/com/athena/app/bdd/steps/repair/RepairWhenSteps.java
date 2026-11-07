@@ -291,9 +291,11 @@ public class RepairWhenSteps {
         Map<String, String> row = rows.get(0);
         world.ensureOnEngineeringPool(world.staff(staffName));
 
-        // 用 tapTestId 而不是 waitForTestId().click()：前者會等元素位置定格再點，
-        // 列表還在載入時導覽列會重排，點到移動中的座標等於沒點。
-        world.tapTestId("engPool.create-ticket-fab", SCREEN_TIMEOUT);
+        // 用 tapUntilVisible 而不是單純 tapTestId：前者會等元素位置定格再點，而且列表還在
+        // 重排時那一下會整個落空（Appium 回報點擊成功、畫面留在待認領），補點一次就進得去。
+        // 等的是 repair.public-area-toggle——FAB 開的是獨立的開工單頁
+        // （repair_ticket_form_screen），不是任務頁那張 repair.sheet，後者的 id 這裡沒有。
+        world.tapUntilVisible("engPool.create-ticket-fab", "repair.public-area-toggle", SCREEN_TIMEOUT);
 
         String location = row.get("房間或公共區域");
         if (location == null || location.isBlank() || "公共區域".equals(location)) {
