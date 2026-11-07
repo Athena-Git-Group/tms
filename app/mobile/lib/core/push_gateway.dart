@@ -2,8 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
-import '../features/home/home_screen.dart';
 import '../features/pool/pool_screen.dart';
+import '../features/shell/main_shell.dart';
 import '../features/task/task_screen.dart';
 
 /// 推播點開後導頁的唯一入口。
@@ -130,7 +130,7 @@ class PushGateway {
         break;
       case 'home':
         navigator.pushAndRemoveUntil(
-          CupertinoPageRoute<void>(builder: (_) => const HomeScreen()),
+          CupertinoPageRoute<void>(builder: (_) => const HousekeepingShell()),
           (route) => false,
         );
         break;

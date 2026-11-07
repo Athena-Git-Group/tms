@@ -2,7 +2,10 @@ import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
 import '../../core/repair_photo_capture.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_selection_chip.dart';
 import 'repair_labels.dart';
 
 /// 工務單詳情（ui-plan 畫面 7，工務視角）。
@@ -186,22 +189,16 @@ class _TicketScreenState extends State<TicketScreen> {
       TmsSemantics(
         id: 'ticket.status-summary-card',
         label: summaryText,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: CupertinoColors.white,
-            border: Border.all(color: CupertinoColors.systemGrey4),
-            borderRadius: BorderRadius.circular(12),
-          ),
+        child: TmsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 '工務單 ${ticket.ticketNo} · ${ticket.roomNo}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: TmsText.headline,
               ),
-              const SizedBox(height: 8),
-              Text(summaryText),
+              const SizedBox(height: TmsSpacing.sm),
+              Text(summaryText, style: TmsText.body),
             ],
           ),
         ),
@@ -427,30 +424,14 @@ class _CompleteSheetState extends State<_CompleteSheet> {
                 for (final resolution in repairResolutions)
                   TmsSemantics(
                     id: 'completeSheet.result.${resolution.key}',
-                    child: GestureDetector(
+                    child: TmsSelectionChip(
+                      label: resolution.label,
+                      selected: _selectedResolution == resolution.key,
                       onTap: () {
                         setState(() {
                           _selectedResolution = resolution.key;
                         });
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _selectedResolution == resolution.key
-                              ? CupertinoColors.activeBlue
-                              : CupertinoColors.systemGrey5,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          resolution.label,
-                          style: TextStyle(
-                            color: _selectedResolution == resolution.key
-                                ? CupertinoColors.white
-                                : CupertinoColors.black,
-                          ),
-                        ),
-                      ),
                     ),
                   ),
               ],

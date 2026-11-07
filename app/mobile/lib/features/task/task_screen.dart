@@ -5,6 +5,7 @@ import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_status_chip.dart';
 import '../celebrate/celebrate_screen.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
@@ -12,9 +13,6 @@ import 'ask_sheet.dart';
 import 'hold_sheet.dart';
 import 'repair_sheet.dart';
 import 'task_callouts.dart';
-
-/// 狀態 chip 的灰底。
-const Color _statusChipTint = Color(0xFFEFEFF4);
 
 /// 任務頁骨架畫面：顯示單一房號的任務內容。
 ///
@@ -189,32 +187,6 @@ class _TaskScreenState extends State<TaskScreen> {
         ),
       ),
     );
-  }
-
-  /// 狀態 chip 的文字。對照表出自 `features/backend/dsl.md` 的「狀態用語對照」，
-  /// 全 App 共用同一套用詞：`done` 在打掃類是「待查房」、其他類是「已送達」；
-  /// `inspected` 依查房結果分「查房通過」與「完成 · 免查房」。
-  static String _statusChipText(TaskDetail task) {
-    switch (task.state) {
-      case 'pool':
-        return '待認領';
-      case 'accepted':
-        return '待開始';
-      case 'doing':
-        return '進行中';
-      case 'deferred':
-        return '已延後';
-      case 'interrupted':
-        return '已中斷';
-      case 'done':
-        return task.type == 'cleaning' ? '待查房' : '已送達';
-      case 'inspected':
-        return task.inspection == 'waived' ? '完成 · 免查房' : '查房通過';
-      case 'cancelled':
-        return '已取消';
-      default:
-        return task.state;
-    }
   }
 
   /// 開工：成功就把畫面換成後端回的新狀態；後端用 409 擋下「一次一間」時
@@ -399,14 +371,10 @@ class _TaskScreenState extends State<TaskScreen> {
             alignment: Alignment.centerLeft,
             child: TmsSemantics(
               id: 'task.status-chip',
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _statusChipTint,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(_statusChipText(task)),
+              child: TmsStatusChip(
+                state: task.state,
+                type: task.type,
+                inspection: task.inspection,
               ),
             ),
           ),

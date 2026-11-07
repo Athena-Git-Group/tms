@@ -4,7 +4,10 @@ import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/repair_photo_capture.dart';
 import '../../core/test_backdoor.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_selection_chip.dart';
 import '../ticket/repair_labels.dart';
 
 /// 報修面板（ui-plan 畫面 6 的 `repairSheet`，即工務單表單）：房務在任務頁
@@ -321,26 +324,10 @@ class _RepairSheetState extends State<RepairSheet> {
         for (final category in repairCategories)
           TmsSemantics(
             id: 'repair.category.${category.key}.chip',
-            child: GestureDetector(
+            child: TmsSelectionChip(
+              label: category.label,
+              selected: _category == category.key,
               onTap: () => _pickCategory(category.key),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: _category == category.key
-                      ? CupertinoColors.activeBlue
-                      : CupertinoColors.systemGrey5,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  category.label,
-                  style: TextStyle(
-                    color: _category == category.key
-                        ? CupertinoColors.white
-                        : CupertinoColors.black,
-                  ),
-                ),
-              ),
             ),
           ),
       ],
@@ -409,17 +396,13 @@ class _RepairSheetState extends State<RepairSheet> {
         id: 'repair.urgent-judgement.card',
         label: rule == null ? '$headline\n$note' : '$headline · $rule\n$note',
         explicitChildNodes: true,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: CupertinoColors.systemGrey6,
-            borderRadius: BorderRadius.circular(8),
-          ),
+        child: TmsCard(
+          style: TmsCardStyle.inSheet,
+          padding: const EdgeInsets.all(TmsSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ExcludeSemantics(child: Text(headline)),
+              ExcludeSemantics(child: Text(headline, style: TmsText.headline)),
               if (rule != null)
                 TmsSemantics(
                   id: 'repair.urgent-judgement.reason',
@@ -427,7 +410,11 @@ class _RepairSheetState extends State<RepairSheet> {
                   child: ExcludeSemantics(child: Text(rule)),
                 ),
               ExcludeSemantics(
-                child: Text(note, style: const TextStyle(fontSize: 12)),
+                child: Text(
+                  note,
+                  style: TmsText.footnote
+                      .copyWith(color: TmsColors.secondaryLabel),
+                ),
               ),
             ],
           ),

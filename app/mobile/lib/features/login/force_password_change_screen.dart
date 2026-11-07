@@ -4,8 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/error_banner.dart';
 import '../../core/navigation.dart';
 import '../../core/tms_semantics.dart';
-import '../engineering/eng_home_screen.dart';
-import '../home/home_screen.dart';
+import '../shell/main_shell.dart';
 
 /// 臨時密碼登入後的強制改密畫面。
 ///
@@ -68,8 +67,8 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
       replaceAllRoutes(
         context,
         result.dept == 'engineering'
-            ? const EngHomeScreen()
-            : const HomeScreen(),
+            ? const EngineeringShell()
+            : const HousekeepingShell(),
       );
       return;
     } on ApiException catch (e) {
