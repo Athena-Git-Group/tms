@@ -1,13 +1,17 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_selection_chip.dart';
 
 /// 房務待認領與工務待認領共用的單卡、欄位列與篩選磚。
 ///
 /// 兩個待認領畫面的資料來源是同一支 `GET /pool`，畫面骨架也一樣：上方一排
 /// 篩選磚、下方一列單卡，排序與筆數全由後端決定。差別只有三處，都用參數
 /// 表達：單卡識別段（房務用房號、工務用工務單號）、卡內要顯示哪些欄位、
-/// 以及工務多一顆認領按鈕。視覺尺寸與顏色集中在本檔的常數，兩邊不各寫一套。
+/// 以及工務多一顆認領按鈕。卡與篩選磚的外觀來自 `core/widgets/` 的共用元件，
+/// 兩邊不各寫一套。
 
 /// 待認領池的來源標示：契約 `PoolSource` → 房務單卡上的來源文字。
 ///
@@ -33,19 +37,11 @@ const Map<String, String> engineeringPoolSourceLabels = {
   'desk_forward': '櫃檯',
 };
 
-/// 單卡與篩選磚的圓角半徑。
-const double _cardCornerRadius = 12;
-const double _chipCornerRadius = 16;
-
-/// 標亮單卡的底色與框線色（推播帶 `highlight` 房號時用）。
-const Color _highlightFillColor = Color(0xFFFFF3CD);
-const Color _highlightBorderColor = Color(0xFFE6A700);
-
 /// 一張待認領單卡的外框。
 ///
 /// [id] 是卡本身的 accessibility id；卡內各列另外用 [PoolCardField] 掛
-/// `{卡 id}.{欄位}`。[highlighted] 只有房務用得到：推播指定房號時整張卡換成
-/// 標亮配色，卡的 id 也由呼叫端換成 `--highlighted` 後綴。
+/// `{卡 id}.{欄位}`。[highlighted] 只有房務用得到：推播指定房號時整張卡加上
+/// 品牌色外環，卡的 id 也由呼叫端換成 `--highlighted` 後綴。
 class PoolCard extends StatelessWidget {
   const PoolCard({
     super.key,
@@ -64,29 +60,22 @@ class PoolCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final card = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: highlighted ? _highlightFillColor : CupertinoColors.white,
-        border: Border.all(
-          color: highlighted
-              ? _highlightBorderColor
-              : CupertinoColors.systemGrey4,
-          width: highlighted ? 2 : 1,
-        ),
-        borderRadius: BorderRadius.circular(_cardCornerRadius),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
-      ),
-    );
-
     return TmsSemantics(
       id: id,
       label: semanticsLabel,
-      child: onTap == null ? card : GestureDetector(onTap: onTap, child: card),
+      child: TmsCard(
+        style: TmsCardStyle.hero,
+        margin: const EdgeInsets.symmetric(
+          horizontal: TmsSpacing.screenEdge,
+          vertical: TmsSpacing.xs2,
+        ),
+        highlighted: highlighted,
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ),
     );
   }
 }
@@ -133,40 +122,26 @@ class PoolFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? CupertinoColors.white : CupertinoColors.black;
     return TmsSemantics(
       id: id,
-      child: GestureDetector(
+      child: TmsSelectionChip(
+        label: label,
+        selected: selected,
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: selected ? CupertinoColors.activeBlue : CupertinoColors.white,
-            border: Border.all(color: CupertinoColors.systemGrey4),
-            borderRadius: BorderRadius.circular(_chipCornerRadius),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: TextStyle(color: foreground)),
-              if (countId != null) ...[
-                const SizedBox(width: 4),
-                TmsSemantics(
-                  id: countId!,
-                  label: '${count ?? 0}',
-                  child: Text(
-                    '${count ?? 0}',
-                    style: TextStyle(
-                      color: selected
-                          ? CupertinoColors.white
-                          : CupertinoColors.systemGrey,
-                    ),
+        trailing: countId == null
+            ? null
+            : TmsSemantics(
+                id: countId!,
+                label: '${count ?? 0}',
+                child: Text(
+                  '${count ?? 0}',
+                  style: TmsText.caption1.copyWith(
+                    color: selected
+                        ? TmsColors.brandOnPrimary
+                        : TmsColors.secondaryLabel,
                   ),
                 ),
-              ],
-            ],
-          ),
-        ),
+              ),
       ),
     );
   }

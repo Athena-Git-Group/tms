@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/repair_photo_capture.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_selection_chip.dart';
 import 'repair_labels.dart';
 import 'ticket_screen.dart';
 
@@ -105,31 +106,15 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
           children: [
             TmsSemantics(
               id: 'repair.public-area-toggle',
-              child: GestureDetector(
+              child: TmsSelectionChip(
+                label: '公共區域',
+                selected: _isPublicArea,
                 onTap: () {
                   setState(() {
                     _isPublicArea = true;
                     _roomController.clear();
                   });
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _isPublicArea
-                        ? CupertinoColors.activeBlue
-                        : CupertinoColors.systemGrey5,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    '公共區域',
-                    style: TextStyle(
-                      color: _isPublicArea
-                          ? CupertinoColors.white
-                          : CupertinoColors.black,
-                    ),
-                  ),
-                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -153,30 +138,14 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
                 for (final category in repairCategories)
                   TmsSemantics(
                     id: 'repair.category.${category.key}.chip',
-                    child: GestureDetector(
+                    child: TmsSelectionChip(
+                      label: category.label,
+                      selected: _category == category.key,
                       onTap: () {
                         setState(() {
                           _category = category.key;
                         });
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _category == category.key
-                              ? CupertinoColors.activeBlue
-                              : CupertinoColors.systemGrey5,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          category.label,
-                          style: TextStyle(
-                            color: _category == category.key
-                                ? CupertinoColors.white
-                                : CupertinoColors.black,
-                          ),
-                        ),
-                      ),
                     ),
                   ),
               ],

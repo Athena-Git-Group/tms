@@ -1,12 +1,13 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
 import '../today/my_today_scope.dart';
 import '../today/progress_value.dart';
-import 'eng_pool_screen.dart';
 
 /// 工務首頁：今日進度三格（手上／今天已完修／急件），以及我手上的工務單。
 ///
@@ -32,18 +33,6 @@ class EngHomeScreen extends StatelessWidget {
               children: [
                 const _LoadFailureNotice(),
                 const _EngineeringProgress(),
-                Center(
-                  child: CupertinoButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        CupertinoPageRoute<void>(
-                          builder: (_) => const EngPoolScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text('待認領'),
-                  ),
-                ),
                 const _InHandTickets(),
               ],
             ),
@@ -183,7 +172,8 @@ class _InHandTicketCard extends StatelessWidget {
       child: TmsSemantics(
         id: 'engHome.in-hand.$ticketNo.card',
         label: '$ticketNo $place $state',
-        child: GestureDetector(
+        child: TmsCard(
+          padding: const EdgeInsets.all(TmsSpacing.md),
           onTap: () {
             Navigator.of(context).push(
               CupertinoPageRoute<void>(
@@ -191,20 +181,16 @@ class _InHandTicketCard extends StatelessWidget {
               ),
             );
           },
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: CupertinoColors.white,
-              border: Border.all(color: CupertinoColors.systemGrey4),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('$ticketNo · $place'),
-                Text(state),
-              ],
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$ticketNo · $place', style: TmsText.headline),
+              Text(
+                state,
+                style: TmsText.subheadline
+                    .copyWith(color: TmsColors.secondaryLabel),
+              ),
+            ],
           ),
         ),
       ),

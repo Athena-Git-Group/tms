@@ -5,8 +5,7 @@ import '../../core/error_banner.dart';
 import '../../core/navigation.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/tms_semantics.dart';
-import '../engineering/eng_home_screen.dart';
-import '../home/home_screen.dart';
+import '../shell/main_shell.dart';
 import 'force_password_change_screen.dart';
 
 /// 員工登入畫面（ui-plan 畫面 11），兩種情境：
@@ -76,9 +75,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (result.mustChangePassword) {
         landing = const ForcePasswordChangeScreen();
       } else if (result.dept == 'engineering') {
-        landing = const EngHomeScreen();
+        landing = const EngineeringShell();
       } else {
-        landing = const HomeScreen();
+        landing = const HousekeepingShell();
       }
       replaceAllRoutes(context, landing);
       return;
