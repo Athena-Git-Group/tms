@@ -1321,7 +1321,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - (c) 的取捨寫在這裡備查：`任務頁核心互動.feature:53` 完成後要驗任務頁的 `task.status-chip`，`:70` 完成後要驗慶祝頁，同一個 When 兩個畫面。另一種解法是讓慶祝頁也露出狀態 chip，但那會讓 `:53` 在員工根本看不到 chip 的畫面上通過，所以改用「走回任務頁再驗」——那正是員工自己的動線，兩個場景都驗到各自該驗的畫面。
   - T326 維持未勾（11/12，不是全綠）；T327 本輪**解鎖**：步驟條、主按鈕與狀態 chip 的三條分支現在都有綠燈覆蓋。
 
-- [ ] T354 全量 ios-app 回歸，把 T338 收回原判準
+- [X] T354 全量 ios-app 回歸，把 T338 收回原判準
   - 驗收：`RunTruthFeaturesTest` 非 dry-run 全量跑（走 `app/bdd/run-module.sh` 抽出的環境準備）回報 **108 scenarios、0 undefined**，綠數 ≥ 四個模組單跑綠數總和（沒有跨模組干擾），且紅燈只剩已歸因的 2 個：缺口 #11（撞單 Given 順序）與 App 側步驟條（若 T353 已做完則為 1 個）。預期 **106/108**。
   - 同時跑 `app/bdd/run-f3.sh` 確認 F3 推播金絲雀維持 12/12（T349 動了 DB 權限，`通知中心.feature` 的 6 個場景一併回歸）。
   - 把 T338 的現況註記更新為新的實跑數字，並寫清它已從「整合不劣於各模組單跑」的放寬判準回到原判準的哪個程度；仍未達 108/108 的差額逐項歸因。
@@ -1336,6 +1336,9 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
     1. `AppiumWorld.ensureOnHome`（新增）＋`CommonWhenSteps.openHome`／`AppiumWorld.ensureOnTaskDetail` 改用它：原本「在 App 打開首頁」只 `waitForTestId("home.screen")`，等待不會把畫面帶回去。`系統層/離線模式與連線異常.feature:38` 離線完成任務後 App 留在任務頁（沒網路就沒有慶祝頁），該句就在任務頁上空等到逾時。改成照員工自己的動線按導覽列「返回」退回首頁（最多 3 次），已經在首頁就不動。修完 `系統層` 由 6/7 回到 **7/7**。
     2. `AppiumWorld.tapUntilVisible`（新增）＋`RepairWhenSteps.createTicketFromPool` 改用它：待認領的「開工單」FAB 在列表還在重排時點下去會整個落空（Appium 回報點擊成功、畫面留在 `engPool.screen`），`工務視角.feature:94` 因此偶發紅。改成點完確認目標畫面真的出現，沒出現就補點一次。等的是 `repair.public-area-toggle`——FAB 開的是獨立的開工單頁 `repair_ticket_form_screen.dart`，**不是**任務頁那張 `repair.sheet`，後者的 id 在這個畫面上根本不存在（第一版用錯 id，實跑才抓到）。
     3. `AppiumWorld.ensureLoggedInAs` 加一次原樣重送（`MAX_LOGIN_ATTEMPTS = 2`，搭配新增的 `waitForTestIdQuietly` 與 `clearField`）：送出後等不到首頁、畫面卻還停在登入頁的那一次，是連跑整個套件時的偶發（送出的那一下落在重繪之間，欄位有值但請求沒發出去），T338 就記過這個現象。重送前先 `clearField` 清空兩個欄位——`typeInto` 是 sendKeys 不清空，不清會把員工編號接成兩份。重送之後仍停在登入頁才讓它紅。修完 `工務單房務端生命週期.feature:59` 由紅轉綠。
+  - **達標並打勾（2026-11-08，#39／#40 收掉之後重跑）**：`Tests run: 108, Failures: 1, Errors: 1, Skipped: 0` —— **106/108**，正中驗收預期的數字。紅燈只剩兩個，都是沒有 App 側解法的上游缺口：缺口 #35（`報修照片與送出.feature:69`，測試後門缺「前 N 次送出在後端已處理後才逾時」的注入開關，刻意不拿 `/flaky-connection` 頂替）與缺口 #11（`工務視角.feature:48` 撞單 Given 順序，該單依規格本就不在池中，回交 `/dsl-refine` 的 D2）。108 scenarios、0 undefined、綠數不低於各模組單跑總和三條全部成立。
+  - **T338 已收回原判準**：原判準三條（108 scenarios／0 undefined 0 failure／紅燈逐一歸因）只差「0 failure」那半條，差額 2 個全部有編號、都不在 harness 與 App 產品碼的可修範圍。2026-11-06 的 69 綠 39 紅到今天的 106 綠 2 紅，中間解除的缺口是 #9／#10／#12／#13／#14／#15／#16／#17／#18／#32／#33／#34／#36／#39／#40。
+  - 前一輪（104/108）未達標的紀錄保留於下：
   - **維持未勾**：驗收要的是「紅燈只剩已歸因的那 2–3 個、預期 106/108」，實跑是 104/108 多出缺口 #40 這個真退化。108 scenarios、0 undefined、綠數不低於各模組單跑總和這三條都對上了，harness 層該修的三筆也修完；剩的 4 個紅全在 App／後端產品側與 truth 的裁決上，不是本 task 的 Boundary。#39／#40 收掉之後再回來打勾。
   - F3 推播金絲雀（2026-11-08）：`[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 405.2 s -- in com.athena.app.bdd.RunF3PushFeatureTest`，exit=0。金絲雀本身 `點開推播的去處.feature` **12/12**，`通知中心.feature` 6/6，T349 動過的 DB 權限沒有造成退化。
 
