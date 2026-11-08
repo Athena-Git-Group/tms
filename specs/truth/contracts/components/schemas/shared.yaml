@@ -20,7 +20,7 @@ Error:
     room_ticket_not_requeueable（409，客房工務單不能放回工務待認領，只能暫停）；
     current_password_required（422，自願變更密碼時沒有帶目前密碼）；
     current_password_invalid（401，「目前密碼不正確」）；
-    new_password_invalid（422，新密碼長度不足 8 字或與目前密碼相同）；
+    new_password_invalid（422，新密碼與目前密碼相同）；
     dept_required（422，主管或老闆呼叫 listDeptPool 沒有帶 dept，無法判斷要看哪一池）；
     forbidden_dept_pool（403，現場員工帶了自己部門以外的 dept 查待認領）。
     違反狀態機守衛時沿用 state_conflict（409）。

@@ -42,7 +42,11 @@ tasks:
     estMin:
       type: integer
       format: int32
-      description: 排房帶入；credit 換算屬 Q1 未決
+      nullable: true
+      description: >-
+        預估工時（分鐘）。排房帶入；credit 換算屬 Q1 未決。
+        不是每一種建單路徑都會填——排房建出來的打掃類有值，臨時需求與自建單可能沒有，
+        所以為 null 是合法的。畫面遇到 null 時不顯示預估，也不要拿它算超時。
     startedAt:
       type: string
       format: date-time
@@ -162,7 +166,11 @@ tasksRequest:
     estMin:
       type: integer
       format: int32
-      description: 排房帶入；credit 換算屬 Q1 未決
+      nullable: true
+      description: >-
+        預估工時（分鐘）。排房帶入；credit 換算屬 Q1 未決。
+        不是每一種建單路徑都會填——排房建出來的打掃類有值，臨時需求與自建單可能沒有，
+        所以為 null 是合法的。畫面遇到 null 時不顯示預估，也不要拿它算超時。
     startedAt:
       type: string
       format: date-time
@@ -342,8 +350,3 @@ TaskDetail:
         allOf:
         - $ref: '#/ReturnInfo'
         nullable: true
-      repairTickets:
-        type: array
-        description: 同房未撤回的工務單摘要，對應 FR-021。
-        items:
-          $ref: './shared.yaml#/RepairTicketSummary'

@@ -7,6 +7,7 @@ notifications:
   - id
   - tenantId
   - recipientStaffId
+  - event
   - title
   - target
   - createdAt
@@ -20,6 +21,13 @@ notifications:
     recipientStaffId:
       type: string
       format: uuid
+    event:
+      allOf:
+      - $ref: './shared.yaml#/PushPayload/properties/event'
+      description: >-
+        這筆通知是從哪一個推播事件落地的，值域與寫法完全比照 PushPayload.event，不另立一套。
+        通知中心用它決定每一列的分類圖示與顏色；沒有這個欄位時所有通知只能畫成同一種樣子。
+        寫入端在把 outbox 的 kind=push 展開成一人一封時，把當時的 PushPayload.event 一併落地。
     title:
       type: string
       description: 推播標題全文，與 PushPayload.title 相同文案，例如「305 水電已修好」。

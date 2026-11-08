@@ -38,7 +38,14 @@ MyToday:
       type: array
       description: >-
         本人今日的全部任務，供首頁任務列與「繼續處理」使用。
-        收錄口徑：負責人是本人、工作日是今天、狀態不是 cancelled 的任務，
+        收錄口徑：負責人是本人、屬於今天、狀態不是 cancelled 的任務。
+        「屬於今天」依 work_date 有無分兩種算法：有 work_date 的（排房建出來的打掃類）比
+        work_date 等於今天；work_date 為 null 的（備品、其他、修繕這幾類建單時不填工作日）
+        改看狀態——未結束（accepted、doing、deferred、interrupted）就算今天手上的單，
+        已結束（done、inspected）看 done_at 是否落在今天。
+        這兩把尺與同一支端點的其他欄位一致：未結束的那把與 nextTasks、remainingMinutes 相同，
+        已結束的那把與今日完成單數相同。只比 work_date 會讓不填工作日的三類任務永遠不在清單裡，
+        與「nextTasks 是 todayTasks 的子集」這條契約自相矛盾。
         因此 accepted（已接單）、doing（進行中）、deferred（已延後）、interrupted（已中斷）、
         done（今天已完成）、inspected（今天已查房通過）全部都在裡面；池中還沒人接的單不在這裡（見 listDeptPool）。
         排序口徑與首頁任務列呈現順序一致，由後端排好後直接依序呈現，App 不再重排：
@@ -57,6 +64,11 @@ MyToday:
       type: integer
       format: int32
       minimum: 0
+      description: >-
+        連續零退回天數。計算口徑由後端唯一定義，見
+        `specs/truth/features/backend/今日進度/dsl.md` 的「連續零退回天數的計算口徑」章節：
+        以有出勤的工作日連續計，退回＝tasks.inspection=failed（含抽查退回），
+        沒出勤的日子跳過不中斷，今天計入且當天一有退回即歸零。App 只呈現、不重算。
     engineeringSummary:
       type: object
       nullable: true
@@ -78,7 +90,11 @@ MyToday:
         urgentCount:
           type: integer
           format: int32
-          description: 急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
+          description: >-
+            急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
+            急不急的權威欄位是 repair_tickets.is_urgent；沒有對應工務單列的 repair 任務
+            （見 EngineeringTicket.ticketNo 的 null 情形）退回讀 tasks.urgent。
+            本欄與 tickets[].isUrgent 必須同源，不得各讀各的欄位。
         tickets:
           type: array
           description: >-
@@ -171,7 +187,6 @@ EngineeringTicket:
     工務首頁單列的一張工務單。欄位名與 RepairTicketSummary 一致，
     App 可以直接拿 taskId 呼叫 readRepairTicket 進入工務單詳情，或呼叫 tasksStart／tasksComplete。
   required:
-  - ticketNo
   - taskId
   - isPublicArea
   - title
@@ -181,8 +196,14 @@ EngineeringTicket:
   properties:
     ticketNo:
       type: string
+      nullable: true
       pattern: ^W-\d{4}$
       example: W-0412
+      description: >-
+        工務單號。為 null 的情況：type=repair 的任務不保證有對應的 repair_tickets 列
+        （排程規則可以建出沒有工務單的 repair 任務），而 tickets 的筆數必須與
+        openCount＋今天完修數一致，所以這種邊角任務仍然收進清單、單號留空。
+        App 遇到 null 時以房號或標題指認該列，不要據此把它從清單裡濾掉。
     taskId:
       type: string
       format: uuid

@@ -82,7 +82,10 @@ listRepairTicketsAndcreateRepairTicket:
   get:
     operationId: listRepairTickets
     summary: 列出同房的工務單
-    description: 依房間列出未撤回的工務單，給原任務頁的工務單區使用（FR-021）。
+    description: >-
+      依房間列出未撤回的工務單，給原任務頁的工務單區使用（FR-021）。
+      這是同房工務單清單的唯一來源——readTasks 的任務詳情**不**另外帶一份，
+      任務頁要列同房工務單就打這一支，避免同一筆資料有兩個權威來源。
     tags:
     - 工務單 API
     parameters:
