@@ -588,6 +588,10 @@ class MyToday {
     required this.nextTasks,
     required this.zeroReturnStreakDays,
     this.engineeringSummary,
+    this.shift,
+    this.floors,
+    this.poolBadgeCount = 0,
+    this.unreadNotificationBadgeCount = 0,
   });
 
   final int cleaningDone;
@@ -609,10 +613,28 @@ class MyToday {
   /// 工務視角今日進度；只有工務部門（dept=engineering）的呼叫者有值。
   final EngineeringSummary? engineeringSummary;
 
+  /// 今天的班別顯示名稱（例如「早班」）。沒有排班或後端還沒給這個欄位時為
+  /// null，首頁的問候列就只顯示日期。
+  final String? shift;
+
+  /// 今天負責的樓層（例如 `[3, 4]`）。沒有指定樓層或後端還沒給這個欄位時
+  /// 為 null，問候列略過樓層那一段。
+  final List<int>? floors;
+
+  /// 分頁列「待認領」那一格的紅色數量徽章；0 表示不顯示徽章。
+  final int poolBadgeCount;
+
+  /// 分頁列「通知」那一格的紅色數量徽章；0 表示不顯示徽章。
+  final int unreadNotificationBadgeCount;
+
   factory MyToday.fromJson(Map<String, dynamic> json) {
     final todayTasksJson = json['todayTasks'] as List<dynamic>? ?? <dynamic>[];
     final nextTasksJson = json['nextTasks'] as List<dynamic>? ?? <dynamic>[];
     final engineeringJson = json['engineeringSummary'] as Map<String, dynamic>?;
+    // 班別、樓層與兩個徽章計數是後端分批落地的欄位：還沒落地時整個鍵不會
+    // 出現在回應裡，解析必須把缺席當成「沒有這件事」而不是當成錯誤——否則
+    // 後端一天沒補完，首頁就一天打不開。
+    final floorsJson = json['floors'] as List<dynamic>?;
     return MyToday(
       cleaningDone: json['cleaningDone'] as int,
       cleaningTotal: json['cleaningTotal'] as int,
@@ -630,6 +652,11 @@ class MyToday {
       engineeringSummary: engineeringJson == null
           ? null
           : EngineeringSummary.fromJson(engineeringJson),
+      shift: json['shift'] as String?,
+      floors: floorsJson?.map((entry) => entry as int).toList(),
+      poolBadgeCount: json['poolBadgeCount'] as int? ?? 0,
+      unreadNotificationBadgeCount:
+          json['unreadNotificationBadgeCount'] as int? ?? 0,
     );
   }
 }

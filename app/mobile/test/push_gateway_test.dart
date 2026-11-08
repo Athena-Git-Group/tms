@@ -6,6 +6,7 @@ import 'package:tms_staff_app/core/push_gateway.dart';
 import 'package:tms_staff_app/features/home/home_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
+import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
 /// 對應「F3 點開推播的去處」：這三條各驗一個骨架環節——
 /// 待認領畫面能標亮指定房號、推播 payload 能把 App 導到正確畫面、
@@ -61,7 +62,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      CupertinoApp(navigatorKey: navigatorKey, home: const HomeScreen()),
+      CupertinoApp(
+        navigatorKey: navigatorKey,
+        // 今日進度取在外殼那一層，首頁自己不再建 scope；這個測試單獨渲染
+        // 首頁，所以要自己補上外殼平常提供的那一層。
+        home: const MyTodayScope(child: HomeScreen()),
+      ),
     );
     await tester.pump();
 
