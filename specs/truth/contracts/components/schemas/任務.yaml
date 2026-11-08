@@ -334,9 +334,21 @@ TaskDetail:
         nullable: true
         description: >-
           目前這一段計時的起算時刻（對應 tasks.segment_started_at）。只有 doing 有值，
-          其餘狀態為 null。給任務頁的計時走秒用：畫面以「elapsedMinutes 進入本段之前的累計」
-          加上「現在時間減 segmentStartedAt」逐秒重算，不必為了跳動的秒數反覆打端點。
-          elapsedMinutes 仍然是分鐘層級的權威值，兩者不一致時以它為準。
+          其餘狀態為 null。與 accumulatedSeconds 搭配給任務頁的計時走秒用，公式是
+          `accumulatedSeconds + (現在時間 − segmentStartedAt)`，畫面依此逐秒重算，
+          不必為了跳動的秒數反覆打端點。
+          **不要拿 elapsedMinutes 當這個公式的基準**——它在 doing 時已經含了本段，
+          再加一次本段就會重複計算。elapsedMinutes 仍然是分鐘層級的權威值，
+          畫面算出來的秒數換成分鐘後與它不一致時以它為準。
+      accumulatedSeconds:
+        type: integer
+        format: int32
+        minimum: 0
+        description: >-
+          **進入目前這一段之前**的累計秒數（對應 tasks.worked_sec），不含中斷期間、
+          也不含目前這一段。這是 segmentStartedAt 那條走秒公式的基準值。
+          doing 以外的狀態就是全部的累計秒數（因為沒有進行中的段落）。
+          與 accumulatedMinutes 的差別：後者是**含本段**的分鐘數，兩者不能互換。
       checkedSopItems:
         type: array
         items:

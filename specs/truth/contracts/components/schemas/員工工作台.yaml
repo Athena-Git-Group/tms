@@ -64,8 +64,11 @@ MyToday:
       type: string
       nullable: true
       description: >-
-        呼叫者今天的班別顯示名稱，例如「早班」。首頁問候列接在日期後面。
-        沒有排班或飯店不分班時為 null，畫面就只顯示日期。
+        呼叫者今天的班別值，與排房計畫的 shift 同一套——值域從租戶設定 shift_times 的鍵來
+        （dev seed 是 morning／afternoon）。**不是中文顯示名稱**：系統裡沒有任何地方存班別的
+        中文說法，後端不自行發明對照，翻成白話由畫面處理（與任務來源、工務單類別同一套做法）。
+        來源是今天那份已發佈（status=published）的排房計畫；查不到時為 null，畫面就只顯示日期。
+        排班資料目前只存在於房務的排房計畫裡，所以工務與櫃檯帳號必然為 null。
     floors:
       type: array
       nullable: true
