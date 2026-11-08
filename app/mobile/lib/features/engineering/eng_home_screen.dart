@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_category_square.dart';
@@ -45,6 +46,11 @@ class EngHomeScreen extends StatelessWidget {
                 TmsSpacing.xxl,
               ),
               children: const [
+                // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
+                // 連線不穩定，不必等某個操作失敗才發現。
+                SystemStatusBar(
+                  padding: EdgeInsets.only(bottom: TmsSpacing.md),
+                ),
                 _LoadFailureNotice(),
                 _EngineeringProgress(),
                 SizedBox(height: TmsSpacing.lg),

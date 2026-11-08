@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/navigation.dart';
+import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
@@ -125,6 +126,11 @@ class MeScreen extends StatelessWidget {
               TmsSpacing.xxl,
             ),
             children: [
+              // 連線狀態列固定在內容最上方：登出與各項設定都要連得上後端，
+              // 員工要先知道現在的連線狀況。
+              const SystemStatusBar(
+                padding: EdgeInsets.only(bottom: TmsSpacing.md),
+              ),
               const _IdentityCard(),
               const SizedBox(height: TmsSpacing.xl),
               TmsGroupedSection(

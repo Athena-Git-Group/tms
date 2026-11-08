@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_category_square.dart';
@@ -144,6 +145,16 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
+        // 員工要先知道現在連不上，而不是按了認領才發現。
+        const SystemStatusBar(
+          padding: EdgeInsets.fromLTRB(
+            TmsSpacing.screenEdge,
+            TmsSpacing.md,
+            TmsSpacing.screenEdge,
+            0,
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
           // 分流磚不掛數量徽章：後端回的 counts 是房務的任務類別

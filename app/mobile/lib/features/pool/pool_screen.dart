@@ -138,6 +138,16 @@ class _PoolScreenState extends State<PoolScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不
+              // 到單，員工要先知道現在連不上，而不是按了認領才發現。
+              const SystemStatusBar(
+                padding: EdgeInsets.fromLTRB(
+                  TmsSpacing.screenEdge,
+                  TmsSpacing.md,
+                  TmsSpacing.screenEdge,
+                  0,
+                ),
+              ),
               _categoryRow(pool?.counts ?? const <String, int>{}),
               if (_error != null)
                 Padding(
