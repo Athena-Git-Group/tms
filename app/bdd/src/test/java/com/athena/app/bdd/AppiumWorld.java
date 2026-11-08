@@ -7,6 +7,7 @@ import io.appium.java_client.ios.options.XCUITestOptions;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Keys;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.remote.RemoteWebElement;
@@ -76,6 +77,12 @@ public class AppiumWorld {
 
     /** 從推進去的畫面退回首頁時，最多按幾次導覽列的「返回」。 */
     private static final int MAX_BACK_TAPS = 3;
+
+    /**
+     * 清一個文字欄位最多讀回確認幾輪。欄位裡最長的值是員工編號與密碼（十餘個字元），
+     * 倒退刪一輪就該清完；多留兩輪是給 WDA 偶發吃掉一次按鍵的餘裕。
+     */
+    private static final int CLEAR_FIELD_ROUNDS = 3;
 
     /** 登入送出最多試幾次（第一次落空時原樣重送）。 */
     private static final int MAX_LOGIN_ATTEMPTS = 2;
@@ -1097,12 +1104,38 @@ public class AppiumWorld {
                 cause);
     }
 
-    /** 清空文字欄位（先點一下取得焦點，再清掉現有內容）。 */
+    /**
+     * 清空文字欄位（先點一下取得焦點，再清掉現有內容）。
+     *
+     * <p>不能只呼叫 {@code clear()} 就當它清掉了：XCUITest 對 Flutter 的文字欄位下
+     * {@code clear()} 會回成功、欄位裡的字卻一個都沒少（實測重現）。{@link #ensureLoggedInAs}
+     * 的第二次送出正是靠這一支清場，清不掉時 {@link #typeInto} 的 sendKeys 會把帳密接在
+     * 舊值後面變成兩份，後端當然回「員工編號或密碼不正確」——登入明明只是第一次送出落空，
+     * 現場卻留下一個看起來像帳密錯的錯誤橫幅，把真正的原因蓋掉。所以這裡清完要讀回欄位值
+     * 確認真的空了，沒空就逐字倒退刪。
+     */
     private void clearField(String testId, Duration timeout) {
         withStaleRetry(testId, timeout, field -> {
             field.click();
             field.clear();
+            int previousLength = Integer.MAX_VALUE;
+            for (int round = 0; round < CLEAR_FIELD_ROUNDS; round++) {
+                String remaining = fieldValue(field);
+                // 清乾淨了就停。這一輪一個字也沒少也停——讀回來的多半是欄位的提示文字
+                // 而不是真的內容，再敲下去只是把時間花在一個刪不動的東西上。
+                if (remaining.isEmpty() || remaining.length() >= previousLength) {
+                    return;
+                }
+                previousLength = remaining.length();
+                field.sendKeys(String.valueOf(Keys.BACK_SPACE).repeat(remaining.length()));
+            }
         });
+    }
+
+    /** 文字欄位目前的內容；讀不到值時當成空字串。 */
+    private static String fieldValue(WebElement field) {
+        String value = field.getAttribute("value");
+        return value == null ? "" : value;
     }
 
     /**

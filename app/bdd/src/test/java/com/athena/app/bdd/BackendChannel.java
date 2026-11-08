@@ -157,6 +157,13 @@ public class BackendChannel {
      */
     public static final String PUBLIC_AREA_ROOM_NO = "公共區域";
 
+    /**
+     * 「負責樓層」那一筆佔位排房計畫的班次欄位值（{@link #assignPlanRoom}）。刻意不是
+     * 一個可以解析的 {@code HH:mm}、也不是租戶 shift_times 設定裡的任何一個鍵，班末
+     * 掃描因此解析不出班次結束時刻、整個跳過這位員工——理由寫在 assignPlanRoom。
+     */
+    private static final String PLAN_SHIFT_PLACEHOLDER = "default";
+
     private final String baseUrl;
     private final String dbUrl;
     private final String dbUser;
@@ -315,6 +322,17 @@ public class BackendChannel {
      * {@code plan_rooms} 所屬房間樓層去比對（TaskExecutionService.deptPool 的
      * EXISTS 子查詢），員工身上沒有任何 plan_rooms 列時，所有單的同樓層標示都會是
      * false——「負責樓層」這一欄不落地，同樓層的場景就沒有真相可驗。
+     *
+     * <p>{@code shift} 存的是不可解析成時刻的佔位字串（{@link #PLAN_SHIFT_PLACEHOLDER}），
+     * 不是某個具體的 {@code HH:mm}。班末掃描（tms ShiftEndScanJob）就是拿
+     * {@code cleaning_plans.shift} 當這位員工的班次結束時刻：填一個真的時刻，等於替
+     * 每一位有「負責樓層」的員工宣告了一個班末，牆上的時鐘一過那個點，掃描就會把她
+     * 名下待開始與本人延後的單整批退回待接池（{@code pool_source=shift_end_return}）
+     * 並推播通知她。劇本從沒要求過班末退池，卻會在跑測試的時間落在那個時刻之後時
+     * 隨機吃到它——首頁的任務卡不見、後端狀態讀回變成 pool、延後面板送不出去。
+     * 解析不出時刻的值會讓掃描整個跳過這位員工（寧可漏掃也不猜），所以佔位字串是
+     * 唯一不會讓測試資料替劇本多宣告一件事的寫法；tms StaffFixtures 不指定班末時刻
+     * 時走的也是同一個佔位值。真的要驗班末行為的劇本，應該明寫班次而不是靠這一支。
      */
     public void assignPlanRoom(UUID staffId, int floor) {
         long tenantId = ensureTenant();
@@ -325,7 +343,7 @@ public class BackendChannel {
                 INSERT INTO cleaning_plans
                     (id, tenant_id, work_date, shift, status, version, generated_by, algo_version, generated_at)
                 VALUES (?, ?, ?, ?, 'draft', 0, 'system', 'v1', ?)
-                """, planId, tenantId, now.toLocalDate(), "17:00", now);
+                """, planId, tenantId, now.toLocalDate(), PLAN_SHIFT_PLACEHOLDER, now);
         execute("""
                 INSERT INTO plan_rooms (id, tenant_id, plan_id, room_id, staff_id, est_min, route_seq)
                 VALUES (?, ?, ?, ?, ?, 30, 1)
