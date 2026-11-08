@@ -92,7 +92,18 @@ class OfflineQueue {
 
   static final OfflineQueue instance = OfflineQueue._();
 
+  /// 同一筆動作最多送幾次。試這麼多次還不成，多半不是一下子的連線不穩，
+  /// 再試下去只是讓員工多等；留在佇列裡等下一次恢復連線反而比較快。
+  static const int _maxAttempts = 5;
+
+  /// 兩次之間隔多久。訂在幾百毫秒這個量級：短到員工不會覺得畫面卡著，長到
+  /// 不會在連線真的斷了的時候連打後端五次。
+  static const Duration _retryDelay = Duration(milliseconds: 300);
+
   final List<PendingOperation> _pending = <PendingOperation>[];
+
+  /// 是否正在送佇列裡的動作。
+  bool _flushing = false;
 
   /// 待同步的筆數，一律由佇列長度推出來。另外記一個計數器的話，只要有一條
   /// 路徑漏了加減，畫面上的數字就會跟實際還沒送出的動作對不起來。
@@ -132,19 +143,47 @@ class OfflineQueue {
   /// 把還沒送出的動作交給後端，直到佇列清空或再次離線。
   ///
   /// 每一筆都用它自己那把鍵，所以就算其中某筆其實已經送到過，後端也只認列
-  /// 一次。某一筆送失敗就停在那裡等下一次，不跳過它繼續送後面的：失敗多半是
-  /// 連線又斷了，而跳過會讓員工的操作順序在後端變成另一個順序。
+  /// 一次。送失敗的那一筆會原地再試，最多 [_maxAttempts] 次，每次之間隔
+  /// [_retryDelay]：剛恢復連線時的失敗多半是連線還不穩，隔一下再送就成了，
+  /// 而放著不管的話員工會一直看到待同步，只能靠他自己再斷線重連一次才會
+  /// 重試。試滿還是不成就停在那裡等下一次恢復連線，不跳過它繼續送後面的
+  /// ——跳過會讓員工的操作順序在後端變成另一個順序。
+  ///
+  /// 同一時間只跑一輪。恢復連線可能連著觸發兩次（例如員工在網路斷續時來回
+  /// 切換），兩輪同時跑會對同一筆動作併發送出。
   Future<void> flush() async {
-    while (_pending.isNotEmpty && !ConnectionStatus.instance.isOffline) {
-      final operation = _pending.first;
+    if (_flushing) {
+      return;
+    }
+    _flushing = true;
+    try {
+      while (_pending.isNotEmpty && !ConnectionStatus.instance.isOffline) {
+        final operation = _pending.first;
+        if (!await _sendWithRetry(operation)) {
+          return;
+        }
+        _pending.remove(operation);
+        pendingCount.value = _pending.length;
+      }
+    } finally {
+      _flushing = false;
+    }
+  }
+
+  /// 送出一筆動作，失敗就再試，回傳後端是否終於收下。
+  Future<bool> _sendWithRetry(PendingOperation operation) async {
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
       try {
         await operation.send(operation.idempotencyKey);
+        return true;
       } catch (_) {
-        return;
+        if (attempt == _maxAttempts || ConnectionStatus.instance.isOffline) {
+          return false;
+        }
+        await Future<void>.delayed(_retryDelay);
       }
-      _pending.remove(operation);
-      pendingCount.value = _pending.length;
     }
+    return false;
   }
 
   void _add(PendingOperation operation) {

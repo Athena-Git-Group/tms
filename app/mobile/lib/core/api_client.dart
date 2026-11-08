@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -33,6 +34,18 @@ class ApiClient {
   /// 全 App 共用的 client。宣告成可覆寫的靜態欄位，widget 測試可以換成
   /// fake 實作，不用真的起後端。
   static ApiClient instance = ApiClient();
+
+  /// 自動化測試拿這個欄位重現網路不穩：接下來幾次送出，後端會收下並處理
+  /// 完，但 App 這一側收不到回應，於是同一個動作得再送一次。真實網路底下
+  /// 這種情況難以按劇本重現，又正是「後端只能認列一次」要防的那一種。
+  ///
+  /// 一般建置沒有任何人寫這個欄位，它永遠是 0，每一次請求都照常拿到回應。
+  ///
+  /// 只對帶 `Idempotency-Key` 的請求生效，而且要等後端回了 2xx、回應內容也
+  /// 讀完才算數：要讓後端真的做過這件事，App 才有東西可以重送。在送出前就
+  /// 攔下來的話後端什麼都沒收到，重送幾次都只會建立一張單，驗不到後端認列
+  /// 一次的能力。
+  static int dropWriteResponseCount = 0;
 
   final String baseUrl;
 
@@ -477,6 +490,10 @@ class ApiClient {
       final text = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(statusCode: response.statusCode, body: text);
+      }
+      if (idempotent && dropWriteResponseCount > 0) {
+        dropWriteResponseCount--;
+        throw TimeoutException('送出後沒有收到回應：$method $path');
       }
       return text.isEmpty ? null : jsonDecode(text);
     } finally {
