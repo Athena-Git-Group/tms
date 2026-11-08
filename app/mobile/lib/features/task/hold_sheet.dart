@@ -3,7 +3,12 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_option_row.dart';
+import '../../core/widgets/tms_sheet.dart';
 
 /// 員工暫時做不下去時，用這個面板說明原因，交接的人與主管才看得到任務為什麼停住。
 ///
@@ -154,77 +159,74 @@ class _HoldSheetState extends State<HoldSheet> {
     return TmsSemantics(
       id: 'hold.sheet',
       explicitChildNodes: true,
-      child: Container(
-        width: double.infinity,
-        // 底部要把鍵盤佔掉的高度讓出來。面板貼在畫面最下緣，鍵盤升起時會整個
-        // 蓋住說明欄與送出鈕，員工既看不到自己打了什麼，也按不到確認。
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          16 + MediaQuery.viewInsetsOf(context).bottom,
+      child: TmsSheet(
+        title: '${widget.mode.title}原因',
+        leadingLabel: '關閉',
+        onLeadingTap: () => Navigator.of(context).pop(),
+        bottomAction: TmsSemantics(
+          id: 'hold.confirm-button',
+          enabled: _canSubmit,
+          child: TmsSheetButton(
+            label: '確認',
+            onPressed: _canSubmit ? _submit : null,
+          ),
         ),
-        color: CupertinoColors.white,
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TmsGroupedSection(
+            style: TmsCardStyle.inSheet,
             children: [
-              Text(
-                '${widget.mode.title}原因',
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
               for (final option in options)
                 TmsSemantics(
                   id: 'hold.reason.$option',
-                  child: CupertinoButton(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    onPressed: () => setState(() => _selectedOption = option),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        option,
-                        style: TextStyle(
-                          fontWeight: _selectedOption == option
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
+                  child: TmsOptionRow(
+                    title: Text(option),
+                    selected: _selectedOption == option,
+                    onTap: () => setState(() => _selectedOption = option),
+                  ),
+                ),
+            ],
+          ),
+          if (_isOtherSelected)
+            TmsCard(
+              style: TmsCardStyle.inSheet,
+              padding: const EdgeInsets.fromLTRB(
+                TmsSpacing.md2,
+                TmsSpacing.md,
+                TmsSpacing.md2,
+                TmsSpacing.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TmsSemantics(
+                    id: 'hold.other-reason-field',
+                    child: CupertinoTextField(
+                      controller: _noteController,
+                      placeholder: '請簡單說明',
+                      maxLines: 2,
+                      padding: EdgeInsets.zero,
+                      decoration: const BoxDecoration(),
+                      style: TmsText.callout,
+                    ),
+                  ),
+                  const SizedBox(height: TmsSpacing.sm),
+                  // 不另外指定 label：文字本身就是子節點的 label，顯式再給一次
+                  // 會被接成兩份，讀值變成同一段文字出現兩遍。
+                  TmsSemantics(
+                    id: 'hold.char-count',
+                    child: Text(
+                      _charCountText,
+                      textAlign: TextAlign.right,
+                      style: TmsText.caption1.copyWith(
+                        color: TmsColors.secondaryLabel,
                       ),
                     ),
                   ),
-                ),
-              if (_isOtherSelected) ...[
-                TmsSemantics(
-                  id: 'hold.other-reason-field',
-                  child: CupertinoTextField(
-                    controller: _noteController,
-                    placeholder: '請簡單說明',
-                    maxLines: 2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // 不另外指定 label：文字本身就是子節點的 label，顯式再給一次
-                // 會被接成兩份，讀值變成同一段文字出現兩遍。
-                TmsSemantics(
-                  id: 'hold.char-count',
-                  child: Text(_charCountText),
-                ),
-              ],
-              const SizedBox(height: 16),
-              TmsSemantics(
-                id: 'hold.confirm-button',
-                enabled: _canSubmit,
-                child: CupertinoButton.filled(
-                  onPressed: _canSubmit ? _submit : null,
-                  child: const Text('確認'),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }

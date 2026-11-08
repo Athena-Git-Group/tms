@@ -2,8 +2,14 @@ import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
 import '../../core/repair_photo_capture.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_option_row.dart';
+import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_selection_chip.dart';
+import '../../core/widgets/tms_sheet.dart';
 import 'repair_labels.dart';
 import 'ticket_screen.dart';
 
@@ -99,31 +105,35 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
     final canSubmit =
         _category != null && _photoIds.isNotEmpty && !_submitting;
     return CupertinoPageScaffold(
+      backgroundColor: TmsColors.groupedBackground,
       navigationBar: const CupertinoNavigationBar(middle: Text('開工單')),
       child: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(TmsSpacing.screenEdge),
           children: [
-            TmsSemantics(
-              id: 'repair.public-area-toggle',
-              child: TmsSelectionChip(
-                label: '公共區域',
-                selected: _isPublicArea,
-                onTap: () {
-                  setState(() {
-                    _isPublicArea = true;
-                    _roomController.clear();
-                  });
-                },
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TmsSemantics(
+                id: 'repair.public-area-toggle',
+                child: TmsSelectionChip(
+                  label: '公共區域',
+                  selected: _isPublicArea,
+                  onTap: () {
+                    setState(() {
+                      _isPublicArea = true;
+                      _roomController.clear();
+                    });
+                  },
+                ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: TmsSpacing.md),
             TmsSemantics(
               id: 'repair.room-field',
               child: CupertinoTextField(
                 controller: _roomController,
                 placeholder: '房號',
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(TmsSpacing.md),
                 onTap: () {
                   setState(() {
                     _isPublicArea = false;
@@ -131,15 +141,15 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
+            const SizedBox(height: TmsSpacing.lg),
+            TmsGroupedSection(
+              header: '問題類別',
               children: [
                 for (final category in repairCategories)
                   TmsSemantics(
                     id: 'repair.category.${category.key}.chip',
-                    child: TmsSelectionChip(
-                      label: category.label,
+                    child: TmsOptionRow(
+                      title: Text(category.label),
                       selected: _category == category.key,
                       onTap: () {
                         setState(() {
@@ -150,44 +160,78 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                TmsSemantics(
-                  id: 'repair.photo.add-button',
-                  child: CupertinoButton(
-                    onPressed: _addPhoto,
-                    child: const Text('拍照片'),
-                  ),
-                ),
-                TmsSemantics(
-                  id: 'repair.photo.count-label',
-                  label: '已拍 ${_photoIds.length} 張 · 至少 1 張、最多 3 張',
-                  child: Text('已拍 ${_photoIds.length} 張'),
-                ),
-              ],
-            ),
+            const SizedBox(height: TmsSpacing.lg),
+            _photoCard(),
             if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: TmsSpacing.sm),
                 child: Text(
                   _error!,
-                  style: const TextStyle(color: CupertinoColors.destructiveRed),
+                  style: TmsText.subheadline
+                      .copyWith(color: TmsColors.systemRed),
                 ),
               ),
-            const SizedBox(height: 16),
+            const SizedBox(height: TmsSpacing.lg),
             TmsSemantics(
               id: 'repair.submit-button',
               enabled: canSubmit,
-              child: CupertinoButton.filled(
+              child: TmsSheetButton(
+                label: '送出',
                 onPressed: canSubmit ? _submit : null,
                 child: _submitting
-                    ? const CupertinoActivityIndicator()
-                    : const Text('送出'),
+                    ? const CupertinoActivityIndicator(
+                        color: TmsColors.brandOnPrimary,
+                      )
+                    : null,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 照片區：與報修面板同一張白卡、同一種照片格。工務自己開單時照片是直接上傳
+  /// 的（沒有待上傳這一段），所以每一格都是已完成態。
+  Widget _photoCard() {
+    return TmsCard(
+      padding: const EdgeInsets.fromLTRB(
+        TmsSpacing.md2,
+        TmsSpacing.md,
+        TmsSpacing.md2,
+        TmsSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TmsSemantics(
+            id: 'repair.photo.count-label',
+            label: '已拍 ${_photoIds.length} 張 · 至少 1 張、最多 3 張',
+            child: ExcludeSemantics(
+              child: Text(
+                '已拍 ${_photoIds.length} 張',
+                style: TmsText.footnoteEmphasized,
+              ),
+            ),
+          ),
+          const SizedBox(height: TmsSpacing.sm2),
+          Wrap(
+            spacing: TmsSpacing.sm,
+            runSpacing: TmsSpacing.sm,
+            children: [
+              for (var i = 0; i < _photoIds.length; i++)
+                const TmsPhotoCell(state: TmsPhotoState.done),
+              TmsSemantics(
+                id: 'repair.photo.add-button',
+                child: TmsAddPhotoButton(
+                  label: '拍照片',
+                  onTap: _addPhoto,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
