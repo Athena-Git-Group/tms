@@ -505,7 +505,9 @@ public class TaskExecutionService {
      * <p>首頁任務列（todayTasks）收錄本人今日未取消的全部任務（accepted、doing、
      * deferred、interrupted、done、inspected 六個狀態），已做分鐘沿用
      * {@link #elapsedMinutes} 的口徑。它和 nextTasks 是兩個不同用途的陣列：
-     * nextTasks 只是其中 accepted 的推薦子集，排序規則也不同，兩邊各自組。
+     * nextTasks 只是其中 accepted 的推薦子集，排序規則也不同，兩邊各自組——
+     * 「子集」是契約寫明的關係，所以兩邊判定「這張單算不算今天的」必須同一套，
+     * 判定寫在 {@link #belongsToToday}。
      *
      * <p>工務部門（dept=engineering）的呼叫者另外帶 engineeringSummary：三個計數欄位
      * 加上單列 tickets（手上與今天完修的工務單，組裝見 {@link #engineeringTickets}）；
@@ -581,7 +583,8 @@ public class TaskExecutionService {
                     || "deferred".equals(state) || "interrupted".equals(state)) {
                 remainingMinutes += remainingMinutesOf(row, now);
             }
-            if (today.equals(toLocalDate(row.get("work_date"))) && TODAY_TASK_STATES.contains(state)) {
+            if (TODAY_TASK_STATES.contains(state)
+                    && belongsToToday(toLocalDate(row.get("work_date")), state, today, doneToday)) {
                 todayTaskRows.add(row);
             }
             if ("accepted".equals(state)) {
@@ -680,6 +683,26 @@ public class TaskExecutionService {
      */
     private static final Set<String> TODAY_TASK_STATES =
             Set.of("accepted", "doing", "deferred", "interrupted", "done", "inspected");
+
+    /**
+     * 這張單算不算「今天的」。只有打掃類會排工作日（{@code TaskEngine.create} 只對
+     * cleaning 要求 work_date，產品自己開單的 {@code GuestRequestService} 也只在
+     * cleaning 時給值），備品、其他、修繕三類的 work_date 永遠是 null。若照字面只比
+     * work_date，這三類就永遠進不了首頁任務列，但 nextTasks 收 accepted 時根本不看
+     * 日期，同一份回應裡「今天的單」會有兩套口徑，契約寫的「nextTasks 是 todayTasks
+     * 中 accepted 的子集」也就不成立。
+     *
+     * <p>所以沒有工作日的單改看狀態：還沒結束（accepted、doing、deferred、
+     * interrupted）就是手上今天要處理的——這與 nextTasks、remainingMinutes 的口徑
+     * 一致；已結束的（done、inspected）則看完成時間是否落在今天，與今日完成單數同一
+     * 把尺。有工作日的單維持比對工作日，打掃類的行為不變。
+     */
+    private static boolean belongsToToday(LocalDate workDate, String state, LocalDate today, boolean doneToday) {
+        if (workDate != null) {
+            return today.equals(workDate);
+        }
+        return isFinishedState(state) ? doneToday : true;
+    }
 
     /**
      * 組 contracts 的 engineeringSummary.tickets：本人手上（accepted／doing）與今天完修

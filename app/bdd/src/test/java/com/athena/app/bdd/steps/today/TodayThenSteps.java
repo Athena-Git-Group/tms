@@ -79,14 +79,16 @@ public class TodayThenSteps {
     }
 
     /**
-     * 必查：首頁待開始區的任務卡順序剛好等於清單，並與後端推薦順序一致。
+     * 必查：後端推薦順序剛好等於清單，且清單上這幾間在首頁任務列由上而下的相對順序與清單一致。
      * accessibility id：{@code home.task.{房號}.card}。房號清單以「、」分隔，純文字（非 quoted
      * string），故用 regex 形式的 step definition 擷取。
      *
-     * <p>同樣分兩段比：後端 {@code nextTasks} 的順序，以及畫面由上而下的卡片順序。排序規則
-     * 的真相在後端（重做多的先、非打掃先、再依房號），App 只負責照收到的順序畫。
+     * <p>分兩段比。後端那一段比 {@code nextTasks} 的房號順序——推薦順序的真相在後端（重做多的
+     * 先、非打掃先、再依房號），App 只負責照收到的順序畫。畫面那一段比的是**子序列**：任務列
+     * 收的是今天名下未取消的全部單（含進行中、已延後、已中斷、已完成），所以把畫面上不在清單
+     * 裡的房號濾掉之後，剩下的順序要與清單一致——不驗「任務列只有這幾張」。
      */
-    @那麼("^首頁待開始的單依序為 (.+)$")
+    @那麼("^首頁任務列中待開始的單依序為 (.+)$")
     public void homeNextTasksOrder(String roomListText) {
         List<String> expected = Arrays.stream(roomListText.split("、"))
                 .map(String::trim)
@@ -101,13 +103,15 @@ public class TodayThenSteps {
         }
 
         List<String> onScreen = roomNosOnScreen();
-        if (!expected.equals(onScreen)) {
-            throw new AssertionError("首頁待開始的任務卡順序不符：預期 " + expected + "，實際 " + onScreen);
+        List<String> subsequence = onScreen.stream().filter(expected::contains).toList();
+        if (!expected.equals(subsequence)) {
+            throw new AssertionError("首頁任務列上這幾間的相對順序不符：預期 " + expected
+                    + "，實際 " + subsequence + "（任務列完整順序 " + onScreen + "）");
         }
     }
 
     /**
-     * 畫面上待開始的任務卡房號，依由上而下排序（{@link AppiumWorld#findTestIdsWithPrefix}
+     * 畫面上任務卡的房號，依由上而下排序（{@link AppiumWorld#findTestIdsWithPrefix}
      * 已照 Y 座標排好）。卡內若有子節點，id 會比 {@code home.task.{房號}.card} 更長，
      * 所以只收剛好以 {@code .card} 收尾的那一層。
      */

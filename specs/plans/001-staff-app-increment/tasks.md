@@ -1351,19 +1351,28 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 | 工務單 | `工務單房務端生命週期.feature` | 9/9 | 9/9 | — |
 | 工務單 | `開單提示.feature` | 3/3 | 3/3 | — |
 | 待認領 | `待認領列表.feature` | 9/9 | 9/9 | — |
-| 任務執行 | `任務頁核心互動.feature` | 8/9 | 8/9 | #39 備品無 `work_date`（:20） |
+| 任務執行 | `任務頁核心互動.feature` | 8/9 | 9/9 | — |
 | 任務執行 | `任務卡狀態與提示.feature` | 3/3 | 3/3 | — |
 | 任務執行 | `延後與中斷原因面板.feature` | 9/9 | 9/9 | — |
 | 推播 | `點開推播的去處.feature` | 12/12 | 12/12 | — |
 | 推播 | `通知中心.feature` | 6/6 | 6/6 | — |
-| 今日進度 | `首頁今日進度.feature` | 3/3（2026-11-06，T357 之前） | 2/3 | #40 首頁任務列改吃 `todayTasks`（:35） |
+| 今日進度 | `首頁今日進度.feature` | 3/3（2026-11-06，T357 之前） | 2/3 | #40 任務列排序口徑≠推薦順序（:35） |
 | 房間交辦 | `任務頁交辦區.feature` | 3/3 | 3/3 | — |
 | 房間交辦 | `查房退回資訊.feature` | 2/2 | 2/2 | — |
 | 查一下 | `查一下畫面.feature` | 4/4 | 4/4 | — |
 | 系統層 | `離線模式與連線異常.feature` | 7/7 | 7/7 | — |
-| **合計** | 16 支 | — | **104/108** | 4 紅：#11／#35／#39／#40 |
+| **合計** | 16 支 | — | **105/108** | 3 紅：#11／#35／#40 |
 
 四個模組（帳號與登入、工務單、待認領、任務執行）的單跑綠數合計 68，在全量裡也是 68——沒有跨模組干擾。
+
+**缺口 #39／#40 落地後的重跑（2026-11-08）**：`任務執行` 單跑
+`Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 330.1 s`——**21/21 綠**，
+`任務頁核心互動.feature:20` 的備品步驟條隨 #39 解除轉綠。`今日進度` 單跑
+`Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 101.8 s`——**仍 2/3**：
+`首頁今日進度.feature:35` 的後端那一段通過（`nextTasks` 就是 302、316、308），316 也已經因為 #39
+出現在任務列上（實際任務列 `[305, 302, 306, 308, 310, 316, 311, 303, 301]`），但畫面那一段的
+相對順序是 `[302, 308, 316]` 而不是 `[302, 316, 308]`。歸因見缺口 #40 的新內容——不是 harness
+放不放寬的問題，是任務列的排序口徑與推薦順序本來就不同。合計因此由 104/108 變成 **105/108**。
 
 **視覺第二段合併後的回歸（2026-11-08，commit `ff3a663`）**：`app/bdd/run-all.sh` 回報
 `Tests run: 108, Failures: 3, Errors: 1, Skipped: 0` —— **104/108，紅燈與上表逐一相同**
@@ -1509,6 +1518,9 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 - **A6（中）`GET /tasks/{id}` 沒有回契約寫明的 `repairTickets`**——缺口 #37 原文。
 - **A7（中）房務報修人缺「我報修的工務單」端點**——缺口 #38 原文。
 - **A8（中）`todayTasks` 的「工作日是今天」對 `work_date` 為 null 的任務怎麼算**——缺口 #39 原文。
+  ~~2026-11-08 已在後端定案並落地（`TaskExecutionService.belongsToToday`）：沒有工作日的單，未結束就算今天的、
+  已結束看 `done_at` 是否落在今天~~，**本項已解除**；契約文字維持原樣（這一輪不動契約），
+  要不要把這段口徑補進 `員工工作台.yaml` 的 description 留給 `/api-plan`。
 - **A9（低）`MyToday.zeroReturnStreakDays` 沒有 description。** `95feebc` 已在
   `backend/今日進度/dsl.md` 定下算式，契約這一欄仍是裸欄位，沒有指向那份口徑。
 
@@ -1547,9 +1559,11 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 
 38. **房務報修人沒有「我報修的工務單」入口（T322 實跑發現，2026-11-06）**：`工務單房務端生命週期.feature` 的 9 個場景都是房務打開自己那張單的詳情，`dsl.md` 給的三條路是「任務頁／通知／我的」。實際只有任務頁走得通——`listRepairTickets` 必帶 `roomId`（非本人視角），`listTasks` 掛在 `/desk` 僅限櫃檯／主管，通知在這些情境下是空的，也沒有任何 `GET /repair-tickets?reporter=me` 之類的端點。本輪的做法是讓測試資料把來源任務補出來（見下方測試層修正），因為房務報修在產品上一定帶 `sourceTaskId`、一定有一張自己的任務；但「我的」頁面要真的列出我報修的單，仍缺端點。回交 `/api-plan`：新增本人視角的工務單列舉（或在 `MyToday` 補一段），與缺口 #10 的工務視角版本同一類。
 
-39. **`GET /me/today` 的 `todayTasks` 篩掉所有非打掃類任務，備品單在首頁沒有卡可點（T353 實跑發現，2026-11-07）**：契約 `員工工作台.yaml:37-48` 寫 `todayTasks` 收「負責人是本人、工作日是今天、狀態不是 cancelled」的任務，而後端是照字面以 `work_date = 今天` 過濾（`tms/.../TaskExecutionService.java:584`）。`work_date` 只有打掃類會填：`TaskEngine.create` 只對 `cleaning` 強制要求它（`TaskEngine.java:67`），產品自己開單的路徑也只在 `cleaning` 時給值（`GuestRequestService.workDateFor`，`GuestRequestService.java:146-148`），所以備品、其他、修繕三類的 `work_date` 一律是 null，永遠進不了 `todayTasks`。App 進任務頁的唯一一條路是首頁任務卡（`home.task.{房號}.card`），備品單因此打不開。**擋住 `任務頁核心互動.feature:20` 的備品步驟條場景。** 回交後端與 `/api-plan`：釐清「工作日是今天」對沒有 `work_date` 的任務該怎麼算（例如非打掃類改看 `created_at`／`done_at` 落在今天），讓本人今天的備品與其他類任務也進得了首頁任務列。
+39. **`GET /me/today` 的 `todayTasks` 篩掉所有非打掃類任務，備品單在首頁沒有卡可點（T353 實跑發現，2026-11-07）**：契約 `員工工作台.yaml:37-48` 寫 `todayTasks` 收「負責人是本人、工作日是今天、狀態不是 cancelled」的任務，而後端是照字面以 `work_date = 今天` 過濾（`tms/.../TaskExecutionService.java:584`）。`work_date` 只有打掃類會填：`TaskEngine.create` 只對 `cleaning` 強制要求它（`TaskEngine.java:67`），產品自己開單的路徑也只在 `cleaning` 時給值（`GuestRequestService.workDateFor`，`GuestRequestService.java:146-148`），所以備品、其他、修繕三類的 `work_date` 一律是 null，永遠進不了 `todayTasks`。App 進任務頁的唯一一條路是首頁任務卡（`home.task.{房號}.card`），備品單因此打不開。**擋住 `任務頁核心互動.feature:20` 的備品步驟條場景。** 回交後端與 `/api-plan`：釐清「工作日是今天」對沒有 `work_date` 的任務該怎麼算（例如非打掃類改看 `created_at`／`done_at` 落在今天），讓本人今天的備品與其他類任務也進得了首頁任務列。 ~~**本輪已補**（2026-11-08）：裁決是改 `todayTasks` 的篩選口徑，不動寫入端、不動契約。`TaskExecutionService.belongsToToday` 取代原本單比 `work_date` 的條件——有工作日的照舊比工作日（打掃類行為不變），沒有工作日的改看狀態：未結束（accepted／doing／deferred／interrupted）就算今天手上的單，與 `nextTasks`、`remainingMinutes` 同一把尺；已結束（done／inspected）看 `done_at` 是否落在今天，與今日完成單數同一把尺。理由是契約自己寫明「`nextTasks` 是 `todayTasks` 中 accepted 的子集」，而 `nextTasks` 收 accepted 時根本不看日期，同一份回應裡兩個陣列對「今天的單」用了兩套口徑。實跑 `任務執行` 21/21 綠，`首頁今日進度.feature:35` 的任務列也列得出 316 與 311~~，**缺口已解除**。
 
 40. **首頁的任務列在 T357 之後列出「今天所有未取消的任務」，不再是「待開始的推薦順序」（T354 全量實跑發現，2026-11-08）**：`首頁今日進度.feature` 的 Rule 寫明「首頁依推薦順序列出待開始的單」，:35 要看到 302、316、308 三張卡。後端那一段是對的——`GET /me/today` 的 `nextTasks` 回的就是 302、316、308，斷言的前半通過；紅在畫面：實際畫出 `[305, 302, 306, 308, 310, 303, 301]`，也就是本 feature 背景裡所有未取消的打掃任務，不是只有待開始的三張。成因是 T357（commit `68830cc`）為了解缺口 #33 把 `app/mobile/lib/features/home/home_screen.dart` 的任務列從 `today.nextTasks` 改成 `today.todayTasks`——進行中、延後、中斷與今天已完成的單因此也畫上首頁，員工回得去手上那張單（那是 #33 要的），但「待開始的推薦順序」這條 Rule 就沒有畫面可驗了。316 缺席是另一回事，同缺口 #39（備品無 `work_date`，連 `todayTasks` 都進不去）。兩支 truth feature 對首頁任務列的要求互相牴觸，**不是 harness 能調和的**，要由 `/dsl-refine` 或 `/api-plan` 裁決：首頁是放兩段清單（「待開始（推薦順序）」＋「今天其他的單」），還是把 `首頁今日進度.feature:35` 的斷言改成在待開始那一段內驗順序。在裁決下來之前這個場景維持紅。屬 `app/mobile/` 產品行為與 truth 之間的衝突，不在 T354 的 Boundary 內。
+
+    **（2026-11-08 更新）裁決已下、落地後仍紅，缺口內容換人。** `/dsl-refine` 的裁決（commit `95de6e4`）選的是第二條路：句型改成 `首頁任務列中待開始的單依序為 {房號清單}`，驗法放寬成「後端 `nextTasks` 順序相符 ＋ 任務列上這幾間的相對順序相符」，明訂不驗「任務列只有這幾張」。harness 已照辦（`TodayThenSteps.homeNextTasksOrder` 改成子序列比對），`todayTasks` 也隨 #39 收得到 316 了，但場景仍紅：實際任務列是 `[305, 302, 306, 308, 310, 316, 311, 303, 301]`，清單那三間的相對順序是 `[302, 308, 316]`，不是 `[302, 316, 308]`。**剩下的是排序口徑衝突，不是收錄口徑衝突**——任務列的順序由契約 `MyToday.todayTasks` 定死（未結束的排前面、同組內 doing 最前、其餘依房號遞增，且「App 不再重排」），而推薦順序由 `nextTasks` 定（redo 多的先、非打掃先、再依房號）。302 兩邊都第一（有 redo），但 316 是備品、推薦順序把它排在 308 前面，房號遞增卻把它排在 308 後面。只要任務列照契約排，「清單中這幾間的相對順序＝推薦順序」就不可能成立。要再裁一次：把畫面那一段改成只驗「清單上的每一間都在任務列上」（放掉順序，順序交給後端 `nextTasks` 那一段把關），或是讓首頁把待開始的單另成一段依推薦順序排（那要同時改契約與 `home_screen.dart`）。在裁決下來之前這個場景維持紅。
 
 ### T322 本輪的測試層修正（逐筆）
 
