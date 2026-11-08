@@ -83,10 +83,11 @@ public class TodayThenSteps {
      * accessibility id：{@code home.task.{房號}.card}。房號清單以「、」分隔，純文字（非 quoted
      * string），故用 regex 形式的 step definition 擷取。
      *
-     * <p>分兩段比。後端那一段比 {@code nextTasks} 的房號順序——推薦順序的真相在後端（重做多的
-     * 先、非打掃先、再依房號），App 只負責照收到的順序畫。畫面那一段比的是**子序列**：任務列
-     * 收的是今天名下未取消的全部單（含進行中、已延後、已中斷、已完成），所以把畫面上不在清單
-     * 裡的房號濾掉之後，剩下的順序要與清單一致——不驗「任務列只有這幾張」。
+     * <p>分兩段比，但只有後端那一段驗順序。推薦順序的真相在後端 {@code nextTasks}（重做多的
+     * 先、非打掃先、再依房號）。畫面那一段只驗「清單中的每一間都在任務列上」：任務列的排序由
+     * {@code MyToday.todayTasks} 定（未結束優先、進行中最前、其餘依房號遞增，App 不重排），
+     * 與推薦順序本就是兩套——備品單在推薦順序裡靠前、在房號遞增裡靠後，畫面上強求相對順序
+     * 相符會與契約打架。任務列也收已延後、已中斷、已完成的單，所以不驗「只有這幾張」。
      */
     @那麼("^首頁任務列中待開始的單依序為 (.+)$")
     public void homeNextTasksOrder(String roomListText) {
@@ -103,10 +104,10 @@ public class TodayThenSteps {
         }
 
         List<String> onScreen = roomNosOnScreen();
-        List<String> subsequence = onScreen.stream().filter(expected::contains).toList();
-        if (!expected.equals(subsequence)) {
-            throw new AssertionError("首頁任務列上這幾間的相對順序不符：預期 " + expected
-                    + "，實際 " + subsequence + "（任務列完整順序 " + onScreen + "）");
+        List<String> missing = expected.stream().filter(roomNo -> !onScreen.contains(roomNo)).toList();
+        if (!missing.isEmpty()) {
+            throw new AssertionError("首頁任務列上少了待開始的單：缺 " + missing
+                    + "（任務列實際為 " + onScreen + "）");
         }
     }
 
