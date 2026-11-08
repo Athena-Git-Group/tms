@@ -1407,7 +1407,7 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 - 不改 truth、不加 feature、不重跑 GREEN 當通過條件。
 - 有 issues 就修正再 review，直到沒有任何問題。
 
-- [ ] T355 subagent review（後端補齊輪 quality gate）
+- [X] T355 subagent review（後端補齊輪 quality gate）
   - 驗收一（不退化）：`JAVA_HOME=$(/usr/libexec/java_home -v 25) mvn -f tms/pom.xml test` 回報後端 BDD **144/144**，舊整合套件（`RunCucumberTest`）同樣全綠。
   - 驗收二（App 側）：`flutter analyze` 在 `app/mobile/` 無 error；T354 的全量數字與各模組單跑一致。
   - 驗收三（逐項對照）：七項實作逐欄對照契約——欄位名、enum 值、排序口徑、必填性、錯誤碼與 HTTP 狀態；特別查 `TodayTask` 的六個狀態值與排序、`EngineeringTicket` 與三個計數欄位的筆數一致性、`DeptPool.activeStaffCount` 的在職定義（`status='active'`，不含 `invited`／`inactive`）、`listDeptPool` 的 403／422 分流、`changeOwnPassword` 在 `mustChangePassword=true` 時確實被 `BearerTokenAuthFilter` 放行。
@@ -1415,6 +1415,16 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
   - 驗收五（缺口清單）：下方「上游缺口」的 #9、#10、#12、#13、#14、#15、#16、#17、#18 九項標示**已解除**（比照既有 `~~刪節線~~ **本輪已補**` 的寫法）；#11、#20、#21、#23 與 App 側步驟條維持未解除並說明理由。
   - 回交清單：本輪實作過程中發現的契約／規格問題一次回交，至少含 T348 記到的「`changeOwnPassword` 的 description 寫密碼長度下限 8 字、`ChangePasswordRequest.newPassword` 的 description 寫 truth 沒有定義長度門檻且不得自行發明」這組自相矛盾（回交 `/api-plan` 與 `/dsl-refine`）。
 
+  - **關閉並打勾（2026-11-08，`/api-plan` 裁決之後）**：驗收四的阻塞已解除。`/api-plan` 這一輪
+    （commit `7be1b03`）對 A1、A2 做出裁決——A1 認定「不自行發明長度門檻」那一邊為準，並把
+    `shared.yaml` 殘留的 8 字一併刪掉，三處寫法終於一致；A2 追認 `activeStaffCount` 就是
+    「在職且已開通」，不扣今天請假的人（truth 根本沒有員工請假狀態，要扣得新增整套資料面）。
+    也就是說，實作者當初自行改的那兩處契約描述，**方向被 truth owner 追認為對的**，不需要復原。
+    **但流程違規本身成立、不因結果正確而抵銷**：Phase 5 Boundary 明令「覺得契約有問題就停下來
+    回交 `/api-plan`，不在實作裡繞過」，正確的做法是停下來回交，而不是自己裁一邊再往下做。
+    這一條留在此處當紀錄，`/api-plan` 同一輪另外收掉 A3／A4／A5／A6／A8／A9 與一項新發現
+    （通知缺 `event` 欄位、七色分類圖示因此畫不出來），A7 裁定本輪不加。
+  - 前一輪未達標的結論保留於下：
   - **結論（2026-11-08 實跑）：驗收一、二、三、五通過，驗收四不通過，故不打勾。** 關閉條件是
     `/api-plan` 對下方回交清單 A1／A2 兩筆做出裁決——那兩處 `specs/truth/contracts/**` 的改動是
     本輪實作者自己動的，review 不能自行復原（復原等於要麼發明密碼長度門檻、要麼新增請假狀態，
