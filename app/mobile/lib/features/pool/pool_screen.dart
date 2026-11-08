@@ -283,6 +283,10 @@ class _HousekeepingPoolCard extends StatelessWidget {
         ? '$cardId.rule-hit-tag'
         : '$cardId.return-reason';
     final reminderTag = _reminderTags[item.reminderStage];
+    final waitedTag = poolWaitedTag(
+      waitedMinutes: item.waitedMinutes,
+      reminderStage: item.reminderStage,
+    );
 
     final roomSquare = TmsRoomSquare(
       type: item.category,
@@ -349,6 +353,9 @@ class _HousekeepingPoolCard extends StatelessWidget {
                           text: reminderTag.text,
                           tone: reminderTag.tone,
                         ),
+                      // 等待時間排在整列最後：前面幾顆講的是「這張單是什麼
+                      // 單」，它講的是「它擱了多久」，員工先認單再看久不久。
+                      ?waitedTag,
                     ],
                   ),
                 ],

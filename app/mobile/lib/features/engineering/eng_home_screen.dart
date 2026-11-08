@@ -91,10 +91,18 @@ class _EngineeringProgress extends StatelessWidget {
     // 房務身分拿到的回應沒有 engineeringSummary，三格當成 0 張畫出來，
     // 而不是整塊消失：這個畫面的主要內容就是這三格，沒有它們等於空白一片。
     final summary = today.engineeringSummary ?? EngineeringSummary.none;
-    // 環的分母是今天經手的張數：已完修的加上手上還沒結的。後端沒有「今天該
-    // 修幾張」這個欄位，兩個數字相加是這份回應能支撐的最大範圍。
-    final handled = summary.completedToday + summary.openCount;
-    final ratio = handled == 0 ? 0.0 : summary.completedToday / handled;
+    // 環的分母優先用後端排出來的「今天預計要修幾張」（plannedToday）：那是
+    // 排程說了算的目標量，一整天不會因為新單進來就變動，環的進度才有意義。
+    //
+    // 排不出預計量時後端給 null，這時退回「今天已完修＋手上還沒結」相加。
+    // 這條退路是畫面自己湊的數字、會隨著新單進來往上跳（完修一張、又進一張
+    // 時環甚至會倒退），但它是這份回應唯一還能支撐的分母——分母拿不到就不畫
+    // 環的話，這張卡的主要內容會整塊消失，比一個會動的分母更糟。使用者已經
+    // 裁決接受這個現況，所以保留退路、而不是等後端補齊才畫。
+    final denominator =
+        summary.plannedToday ?? (summary.completedToday + summary.openCount);
+    final ratio =
+        denominator == 0 ? 0.0 : summary.completedToday / denominator;
     return TmsProgressRingCard(
       progress: ratio,
       ringCenter: Column(
@@ -111,7 +119,7 @@ class _EngineeringProgress extends StatelessWidget {
                 style: TmsText.displayMetric,
               ),
               Text(
-                ' / $handled',
+                ' / $denominator',
                 style: TmsText.callout.copyWith(
                   fontWeight: FontWeight.w600,
                   color: TmsColors.tertiaryLabel,
@@ -141,22 +149,60 @@ class _EngineeringProgress extends StatelessWidget {
             caption: '手上',
           ),
           const SizedBox(height: TmsSpacing.md),
-          TmsStatBlock(
-            value: ProgressValue(
-              id: 'engHome.progress.urgent-count',
-              value: '${summary.urgentCount}',
-              style: TmsText.title3.copyWith(
-                // 急件是唯一要把人拉過去的數字，所以只有它會變色；是 0 的時候
-                // 沒有人要被拉過去，跟著其餘數字用一般文字色。
-                color: summary.urgentCount > 0
-                    ? TmsColors.onErrorContainer
-                    : TmsColors.label,
-              ),
-            ),
-            caption: '急件',
-          ),
+          _UrgentAndMaintenance(summary: summary),
         ],
       ),
+    );
+  }
+}
+
+/// 今日進度卡右欄下半：急件，以及有保養資料時並排的今日保養。
+///
+/// 兩格並排而不是上下堆，是照原型：急件與今日保養都是「今天還剩什麼」的同一
+/// 層資訊，上面的「手上」才是主數字。
+class _UrgentAndMaintenance extends StatelessWidget {
+  const _UrgentAndMaintenance({required this.summary});
+
+  final EngineeringSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final urgent = TmsStatBlock(
+      value: ProgressValue(
+        id: 'engHome.progress.urgent-count',
+        value: '${summary.urgentCount}',
+        style: TmsText.title3.copyWith(
+          // 急件是唯一要把人拉過去的數字，所以只有它會變色；是 0 的時候
+          // 沒有人要被拉過去，跟著其餘數字用一般文字色。
+          color: summary.urgentCount > 0
+              ? TmsColors.onErrorContainer
+              : TmsColors.label,
+        ),
+      ),
+      caption: '急件',
+    );
+    final done = summary.maintenanceDone;
+    final total = summary.maintenanceTotal;
+    // 兩個欄位同時有值才畫這一格。只有一邊有值的「3 / —」看不出今天保養排了
+    // 幾張，不如整格不畫；後端沒有保養維度時兩邊都是 null，也走這條路。
+    if (done == null || total == null) {
+      return urgent;
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        urgent,
+        const SizedBox(width: TmsSpacing.lg),
+        TmsStatBlock(
+          // 這一格刻意不掛 accessibility id：沒有斷言在讀保養張數，而新增 id
+          // 會動到驗收基準。要驗收時再由 ui-plan 統一編號。
+          value: Text(
+            '$done / $total',
+            style: TmsText.title3.copyWith(color: TmsColors.brandAccent),
+          ),
+          caption: '今日保養',
+        ),
+      ],
     );
   }
 }
@@ -205,18 +251,39 @@ class _TicketHeroCard extends StatelessWidget {
     final subtitleColor = doing
         ? TmsColors.brandContainer
         : TmsColors.secondaryLabel;
+    final placeText = Text(
+      place,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TmsText.displayRoomNo.copyWith(color: foreground),
+    );
+    // 卡右側的計時告訴工務「這張單你已經做了多久」，所以只有維修中那張卡
+    // 掛得上：待開始的單還沒開始計時。後端取不到這個數字時給 null，畫面就
+    // 不畫這一段——把 null 畫成「0 分」，工務會讀成這張單剛剛才開工。
+    final workedMinutes = doing ? ticket.workedMinutes : null;
     return TmsHeroCard(
       onDark: doing,
       eyebrow: doing ? '維修中' : '下一張',
       onTap: () => _openTicket(context, ticket.taskId),
       children: [
         const SizedBox(height: TmsSpacing.md2),
-        Text(
-          place,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TmsText.displayRoomNo.copyWith(color: foreground),
-        ),
+        if (workedMinutes == null)
+          placeText
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(child: placeText),
+              const SizedBox(width: TmsSpacing.md),
+              Padding(
+                padding: const EdgeInsets.only(bottom: TmsSpacing.xs),
+                child: Text(
+                  '$workedMinutes 分',
+                  style: TmsText.displayTimer.copyWith(color: foreground),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: TmsSpacing.xs),
         Text(
           ticket.title,
