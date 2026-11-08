@@ -6,6 +6,7 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_selection_chip.dart';
+import '../../core/widgets/tms_step_track.dart';
 import 'repair_labels.dart';
 
 /// 工務單詳情（ui-plan 畫面 7，工務視角）。
@@ -212,11 +213,10 @@ class _TicketScreenState extends State<TicketScreen> {
             child: Text('處理結果：$resolutionLabel'),
           ),
         ),
-      const SizedBox(height: 16),
-      Row(
-        children: [
-          for (var i = 0; i < _steps.length; i++)
-            Expanded(child: _stepTile(i, currentStep)),
+      const SizedBox(height: TmsSpacing.md2),
+      TmsStepTrack(
+        steps: [
+          for (var i = 0; i < _steps.length; i++) _step(i, currentStep),
         ],
       ),
       if (ticket.rejectReason != null)
@@ -284,33 +284,35 @@ class _TicketScreenState extends State<TicketScreen> {
 
   /// 一步的畫面：外層節點只在「這一步是目前步驟」時掛 `--current` id，
   /// 內層節點（固定 id＋步驟名）給步驟順序的斷言用。
-  Widget _stepTile(int index, int currentIndex) {
-    final Widget step = TmsSemantics(
-      id: 'ticket.stepper.${index + 1}',
-      label: _steps[index],
-      child: Column(
-        children: [
-          Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: index <= currentIndex
-                  ? CupertinoColors.activeBlue
-                  : CupertinoColors.systemGrey4,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(_steps[index], style: const TextStyle(fontSize: 12)),
-        ],
-      ),
-    );
-    if (index != currentIndex) {
-      return step;
+  ///
+  /// 還沒有人接單時 [currentIndex] 是 -1，四步就全部是未到——這時步驟條上沒有
+  /// 任何一步是目前步驟，`--current` 也不會出現在畫面上。
+  TmsStepTrackStep _step(int index, int currentIndex) {
+    final TmsStepStatus status;
+    if (index < currentIndex) {
+      status = TmsStepStatus.done;
+    } else if (index == currentIndex) {
+      status = TmsStepStatus.current;
+    } else {
+      status = TmsStepStatus.pending;
     }
-    return TmsSemantics(
-      id: 'ticket.stepper.${index + 1}--current',
-      child: step,
+    return TmsStepTrackStep(
+      label: _steps[index],
+      status: status,
+      wrap: (node) {
+        final Widget step = TmsSemantics(
+          id: 'ticket.stepper.${index + 1}',
+          label: _steps[index],
+          child: node,
+        );
+        if (status != TmsStepStatus.current) {
+          return step;
+        }
+        return TmsSemantics(
+          id: 'ticket.stepper.${index + 1}--current',
+          child: step,
+        );
+      },
     );
   }
 }
