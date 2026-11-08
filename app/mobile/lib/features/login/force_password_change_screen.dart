@@ -1,10 +1,12 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
-import '../../core/error_banner.dart';
 import '../../core/navigation.dart';
+import '../../core/theme.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/tms_semantics.dart';
 import '../shell/main_shell.dart';
+import 'login_widgets.dart';
 
 /// 臨時密碼登入後的強制改密畫面。
 ///
@@ -88,59 +90,88 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     }
   }
 
+  /// 兩格新密碼欄：新密碼與再輸入一次。
+  Widget _buildPasswordFields() {
+    return LoginFormCard(
+      children: [
+        LoginFieldRow(
+          label: '新密碼',
+          field: TmsSemantics(
+            id: 'login.force-password-change.new-password-field',
+            child: LoginTextField(
+              controller: _newPasswordController,
+              obscureText: true,
+            ),
+          ),
+        ),
+        LoginFieldRow(
+          label: '再次輸入新密碼',
+          field: TmsSemantics(
+            id: 'login.force-password-change.confirm-password-field',
+            child: LoginTextField(
+              controller: _confirmPasswordController,
+              obscureText: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
+      backgroundColor: TmsColors.groupedBackground,
       navigationBar: const CupertinoNavigationBar(
         middle: Text('設定新密碼'),
         automaticallyImplyLeading: false,
       ),
       child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              const Text(
-                '您目前使用的是臨時密碼，請先設定新密碼才能繼續使用。',
-                style: TextStyle(fontSize: 15),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              TmsSemantics(
-                id: 'login.force-password-change.new-password-field',
-                child: CupertinoTextField(
-                  controller: _newPasswordController,
-                  placeholder: '新密碼',
-                  obscureText: true,
-                  padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  TmsSpacing.screenEdge,
+                  TmsSpacing.md,
+                  TmsSpacing.screenEdge,
+                  TmsSpacing.xl2,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const LoginBrandHeader(
+                      title: '設定新密碼',
+                      subtitle: '您目前使用的是臨時密碼，請先設定新密碼才能繼續使用。',
+                    ),
+                    const SizedBox(height: TmsSpacing.lg),
+                    _buildPasswordFields(),
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: TmsSpacing.sm),
+                      LoginErrorText(message: _errorMessage!),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              TmsSemantics(
-                id: 'login.force-password-change.confirm-password-field',
-                child: CupertinoTextField(
-                  controller: _confirmPasswordController,
-                  placeholder: '再次輸入新密碼',
-                  obscureText: true,
-                  padding: const EdgeInsets.all(12),
+            ),
+            LoginActionBar(
+              children: [
+                TmsSemantics(
+                  id: 'login.force-password-change.submit-button',
+                  enabled: !_submitting,
+                  child: TmsPillButton(
+                    label: '確認',
+                    onPressed: _submitting ? null : _submit,
+                    child: _submitting
+                        ? const CupertinoActivityIndicator(
+                            color: TmsColors.brandOnPrimary,
+                          )
+                        : null,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              if (_errorMessage != null) ErrorBanner(message: _errorMessage!),
-              TmsSemantics(
-                id: 'login.force-password-change.submit-button',
-                enabled: !_submitting,
-                child: CupertinoButton.filled(
-                  onPressed: _submitting ? null : _submit,
-                  child: _submitting
-                      ? const CupertinoActivityIndicator()
-                      : const Text('確認'),
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );

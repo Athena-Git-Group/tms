@@ -3,7 +3,11 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
-import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_category_square.dart';
+import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_home_cards.dart';
+import '../../core/widgets/tms_pill_button.dart';
+import '../../core/widgets/tms_tag.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
 import '../today/my_today_scope.dart';
@@ -17,6 +21,10 @@ import '../today/progress_value.dart';
 /// 手上的單同樣來自 engineeringSummary：後端的 tickets 已經收齊本人手上
 /// （已接單／維修中）與今天完修的單，也已經排好（急件在前、未結案在已完修
 /// 之前），所以這個畫面依序呈現就好，不自己查、不自己排。
+///
+/// 版型與房務首頁同一套：進度環卡、主卡、白底群組清單三段，共用
+/// [TmsProgressRingCard] 與 [TmsHeroCard]。兩個首頁長得一樣，是因為同一位主管
+/// 要同時看懂兩邊，而工務與房務的員工也可能互相代班。
 class EngHomeScreen extends StatelessWidget {
   const EngHomeScreen({super.key});
 
@@ -26,14 +34,23 @@ class EngHomeScreen extends StatelessWidget {
       id: 'engHome.screen',
       child: MyTodayScope(
         child: CupertinoPageScaffold(
-          navigationBar:
-              const CupertinoNavigationBar(middle: Text('工務首頁')),
+          backgroundColor: TmsColors.groupedBackground,
+          navigationBar: const CupertinoNavigationBar(middle: Text('工務首頁')),
           child: SafeArea(
             child: ListView(
-              children: [
-                const _LoadFailureNotice(),
-                const _EngineeringProgress(),
-                const _InHandTickets(),
+              padding: const EdgeInsets.fromLTRB(
+                TmsSpacing.screenEdge,
+                TmsSpacing.md,
+                TmsSpacing.screenEdge,
+                TmsSpacing.xxl,
+              ),
+              children: const [
+                _LoadFailureNotice(),
+                _EngineeringProgress(),
+                SizedBox(height: TmsSpacing.lg),
+                _FocusCard(),
+                SizedBox(height: TmsSpacing.lg),
+                _InHandTickets(),
               ],
             ),
           ),
@@ -53,13 +70,13 @@ class _LoadFailureNotice extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return const Padding(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.only(bottom: TmsSpacing.lg),
       child: Text('載入今日進度失敗，請稍後再試。'),
     );
   }
 }
 
-/// 今日進度三格。
+/// 今日進度卡：左邊一個完修完成度的環，右邊手上張數與急件數。
 class _EngineeringProgress extends StatelessWidget {
   const _EngineeringProgress();
 
@@ -72,25 +89,69 @@ class _EngineeringProgress extends StatelessWidget {
     // 房務身分拿到的回應沒有 engineeringSummary，三格當成 0 張畫出來，
     // 而不是整塊消失：這個畫面的主要內容就是這三格，沒有它們等於空白一片。
     final summary = today.engineeringSummary ?? EngineeringSummary.none;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // 環的分母是今天經手的張數：已完修的加上手上還沒結的。後端沒有「今天該
+    // 修幾張」這個欄位，兩個數字相加是這份回應能支撐的最大範圍。
+    final handled = summary.completedToday + summary.openCount;
+    final ratio = handled == 0 ? 0.0 : summary.completedToday / handled;
+    return TmsProgressRingCard(
+      progress: ratio,
+      ringCenter: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _ProgressTile(
-            id: 'engHome.progress.in-hand-count',
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              ProgressValue(
+                id: 'engHome.progress.repaired-count',
+                value: '${summary.completedToday}',
+                style: TmsText.displayMetric,
+              ),
+              Text(
+                ' / $handled',
+                style: TmsText.callout.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: TmsColors.tertiaryLabel,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: TmsSpacing.xxs),
+          Text(
+            '今天已完修',
+            style: TmsText.caption1.copyWith(
+              fontWeight: FontWeight.w400,
+              color: TmsColors.tertiaryLabel,
+            ),
+          ),
+        ],
+      ),
+      details: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TmsStatBlock(
+            value: ProgressValue(
+              id: 'engHome.progress.in-hand-count',
+              value: '${summary.openCount}',
+              style: TmsText.title3,
+            ),
             caption: '手上',
-            value: '${summary.openCount}',
           ),
-          _ProgressTile(
-            id: 'engHome.progress.repaired-count',
-            caption: '今天已完修',
-            value: '${summary.completedToday}',
-          ),
-          _ProgressTile(
-            id: 'engHome.progress.urgent-count',
+          const SizedBox(height: TmsSpacing.md),
+          TmsStatBlock(
+            value: ProgressValue(
+              id: 'engHome.progress.urgent-count',
+              value: '${summary.urgentCount}',
+              style: TmsText.title3.copyWith(
+                // 急件是唯一要把人拉過去的數字，所以只有它會變色；是 0 的時候
+                // 沒有人要被拉過去，跟著其餘數字用一般文字色。
+                color: summary.urgentCount > 0
+                    ? TmsColors.onErrorContainer
+                    : TmsColors.label,
+              ),
+            ),
             caption: '急件',
-            value: '${summary.urgentCount}',
           ),
         ],
       ),
@@ -98,33 +159,80 @@ class _EngineeringProgress extends StatelessWidget {
   }
 }
 
-/// 今日進度的一格：數字在上、名稱在下，名稱在掛 id 的節點外面
-/// （理由見 [ProgressValue]）。
-class _ProgressTile extends StatelessWidget {
-  static const TextStyle _valueStyle =
-      TextStyle(fontSize: 22, fontWeight: FontWeight.bold);
-
-  const _ProgressTile({
-    required this.id,
-    required this.caption,
-    required this.value,
-  });
-
-  final String id;
-  final String caption;
-  final String value;
+/// 工務首頁的主卡：手上有維修中的單就顯示那一張，否則顯示待開始的第一張。
+///
+/// 兩張都沒有時整張卡不出現，下方的清單自己會說明手上還有什麼。這張卡刻意不
+/// 掛 accessibility id：同一張單在下方清單裡已經有一個掛 id 的節點，這裡再掛
+/// 一次會讓同一個 id 在畫面上出現兩個節點。
+class _FocusCard extends StatelessWidget {
+  const _FocusCard();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final today = MyTodayScope.todayOf(context);
+    if (today == null) {
+      return const SizedBox.shrink();
+    }
+    final tickets =
+        (today.engineeringSummary ?? EngineeringSummary.none).tickets;
+    for (final ticket in tickets) {
+      if (ticket.state == 'doing') {
+        return _TicketHeroCard(ticket: ticket, doing: true);
+      }
+    }
+    for (final ticket in tickets) {
+      if (ticket.state == 'accepted') {
+        return _TicketHeroCard(ticket: ticket, doing: false);
+      }
+    }
+    return const SizedBox.shrink();
+  }
+}
+
+/// 主卡本體：維修中那一張是品牌色底白字，待開始那一張是白底。
+class _TicketHeroCard extends StatelessWidget {
+  const _TicketHeroCard({required this.ticket, required this.doing});
+
+  final EngineeringTicket ticket;
+  final bool doing;
+
+  @override
+  Widget build(BuildContext context) {
+    final place = ticket.roomNo ?? '公共區域';
+    final foreground = doing ? TmsColors.brandOnPrimary : TmsColors.label;
+    final subtitleColor = doing
+        ? TmsColors.brandContainer
+        : TmsColors.secondaryLabel;
+    return TmsHeroCard(
+      onDark: doing,
+      eyebrow: doing ? '維修中' : '下一張',
+      onTap: () => _openTicket(context, ticket.taskId),
       children: [
-        ProgressValue(
-          id: id,
-          value: value,
-          style: _valueStyle,
+        const SizedBox(height: TmsSpacing.md2),
+        Text(
+          place,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TmsText.displayRoomNo.copyWith(color: foreground),
         ),
-        const SizedBox(height: 4),
-        Text(caption),
+        const SizedBox(height: TmsSpacing.xs),
+        Text(
+          ticket.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TmsText.subheadline.copyWith(color: subtitleColor),
+        ),
+        if (ticket.isUrgent && !doing) ...[
+          const SizedBox(height: TmsSpacing.sm),
+          const TmsTag(label: '急件', tone: TmsTagTone.danger),
+        ],
+        const SizedBox(height: TmsSpacing.md2),
+        TmsPillButton(
+          label: doing ? '繼續處理' : '開始維修',
+          style: doing ? TmsPillButtonStyle.inverse : TmsPillButtonStyle.filled,
+          height: doing ? 48 : 50,
+          onPressed: () => _openTicket(context, ticket.taskId),
+        ),
       ],
     );
   }
@@ -146,17 +254,29 @@ class _InHandTickets extends StatelessWidget {
     }
     final tickets =
         (today.engineeringSummary ?? EngineeringSummary.none).tickets;
+    if (tickets.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final ticket in tickets) _InHandTicketCard(ticket: ticket),
+        Padding(
+          padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
+          child: Text('我的任務', style: TmsText.title3),
+        ),
+        TmsGroupedSection(
+          children: [
+            for (final ticket in tickets) _InHandTicketRow(ticket: ticket),
+          ],
+        ),
       ],
     );
   }
 }
 
-/// 手上的一張單：單號、房號（公共區域的單沒有房號）與狀態，點一下進詳情。
-class _InHandTicketCard extends StatelessWidget {
-  const _InHandTicketCard({required this.ticket});
+/// 手上的一張單：房號方塊、單號與標題、狀態標籤，點一列進詳情。
+class _InHandTicketRow extends StatelessWidget {
+  const _InHandTicketRow({required this.ticket});
 
   final EngineeringTicket ticket;
 
@@ -167,33 +287,63 @@ class _InHandTicketCard extends StatelessWidget {
     final ticketNo = ticket.ticketNo ?? ticket.taskId;
     final place = ticket.roomNo ?? '公共區域';
     final state = repairStateText(ticket.state);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: TmsSemantics(
-        id: 'engHome.in-hand.$ticketNo.card',
-        label: '$ticketNo $place $state',
-        child: TmsCard(
-          padding: const EdgeInsets.all(TmsSpacing.md),
-          onTap: () {
-            Navigator.of(context).push(
-              CupertinoPageRoute<void>(
-                builder: (_) => TicketScreen(taskId: ticket.taskId),
-              ),
-            );
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('$ticketNo · $place', style: TmsText.headline),
-              Text(
-                state,
-                style: TmsText.subheadline
-                    .copyWith(color: TmsColors.secondaryLabel),
-              ),
-            ],
+    return TmsSemantics(
+      id: 'engHome.in-hand.$ticketNo.card',
+      label: '$ticketNo $place $state',
+      child: GestureDetector(
+        onTap: () => _openTicket(context, ticket.taskId),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 64),
+          padding: const EdgeInsets.symmetric(
+            horizontal: TmsSpacing.md2,
+            vertical: TmsSpacing.md,
+          ),
+          color: TmsColors.cardBackground,
+          child: ExcludeSemantics(
+            child: Row(
+              children: [
+                TmsRoomSquare(type: 'repair', where: place, size: 48),
+                const SizedBox(width: TmsSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$ticketNo · $place',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TmsText.headline,
+                      ),
+                      const SizedBox(height: TmsSpacing.xxs),
+                      Text(
+                        ticket.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TmsText.subheadline.copyWith(
+                          color: TmsColors.secondaryLabel,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: TmsSpacing.sm),
+                if (ticket.isUrgent) ...[
+                  const TmsTag(label: '急件', tone: TmsTagTone.danger),
+                  const SizedBox(width: TmsSpacing.xs2),
+                ],
+                TmsTag(label: state, tone: TmsTagTone.neutralStrong),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+void _openTicket(BuildContext context, String taskId) {
+  Navigator.of(context).push(
+    CupertinoPageRoute<void>(builder: (_) => TicketScreen(taskId: taskId)),
+  );
 }

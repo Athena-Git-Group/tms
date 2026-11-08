@@ -5,6 +5,9 @@ import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
 import '../celebrate/celebrate_screen.dart';
@@ -60,6 +63,12 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 這個租戶的打掃 SOP 項，順序照後端給的 `sortOrder`。只有打掃類任務要用。
   List<SopItem> _sopItems = const <SopItem>[];
 
+  /// 目前畫面上這一筆任務。
+  ///
+  /// 導覽列的報修鍵在 `FutureBuilder` 外面，拿不到 builder 參數裡的那一筆，
+  /// 但報修要帶原任務 id 才接得回這張單，所以載到之後在這裡留一份。
+  TaskDetail? _loadedTask;
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +83,7 @@ class _TaskScreenState extends State<TaskScreen> {
     final task = await ApiClient.instance.getTask(taskId);
     _repairTickets = await _loadRepairTickets(task);
     _sopItems = await _loadSopItems(task);
+    _loadedTask = task;
     return task;
   }
 
@@ -141,8 +151,30 @@ class _TaskScreenState extends State<TaskScreen> {
     return TmsSemantics(
       id: 'task.screen',
       child: CupertinoPageScaffold(
-        navigationBar:
-            CupertinoNavigationBar(middle: Text('${widget.roomNo} 的任務頁')),
+        backgroundColor: TmsColors.groupedBackground,
+        navigationBar: CupertinoNavigationBar(
+          middle: Text('${widget.roomNo} 的任務頁'),
+          // 報修在導覽列右側，不在底部動作列：底部一次只留一主一次兩顆，
+          // 報修是「做到一半發現房間壞了」的旁支，擺進那一列會讓員工每次都要
+          // 先讀完三顆才找得到往下走的那一顆。
+          trailing: TmsSemantics(
+            id: 'task.repair-button',
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(
+                TmsSize.minTouchTarget,
+                TmsSize.minTouchTarget,
+              ),
+              onPressed: _openRepairSheet,
+              child: Text(
+                '報修',
+                style: TmsText.subheadlineEmphasized.copyWith(
+                  color: TmsColors.brandPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
         child: SafeArea(
           child: Stack(
             children: [
@@ -163,7 +195,8 @@ class _TaskScreenState extends State<TaskScreen> {
                         }
                         if (snapshot.connectionState != ConnectionState.done) {
                           return const Center(
-                              child: CupertinoActivityIndicator());
+                            child: CupertinoActivityIndicator(),
+                          );
                         }
                         return _buildTask(snapshot.data);
                       },
@@ -188,6 +221,19 @@ class _TaskScreenState extends State<TaskScreen> {
         ),
       ),
     );
+  }
+
+  /// 打開報修面板。離線時擋在入口：表單要先有照片才送得出去，而照片得上傳到
+  /// 後端才有 id，離線時連第一張都加不進去。
+  void _openRepairSheet() {
+    if (ConnectionStatus.instance.isOffline) {
+      showOfflineBlockedAlert(context);
+      return;
+    }
+    setState(() {
+      _repairSheetOpen = true;
+      _openRepairSheetTaskId = _loadedTask?.id;
+    });
   }
 
   /// 開工：成功就把畫面換成後端回的新狀態；後端用 409 擋下「一次一間」時
@@ -221,8 +267,10 @@ class _TaskScreenState extends State<TaskScreen> {
   Future<void> _complete(TaskDetail task) async {
     final sent = await OfflineQueue.instance.submit(
       kind: 'complete',
-      send: (idempotencyKey) => ApiClient.instance
-          .completeTask(task.id, idempotencyKey: idempotencyKey),
+      send: (idempotencyKey) => ApiClient.instance.completeTask(
+        task.id,
+        idempotencyKey: idempotencyKey,
+      ),
     );
     if (!mounted) {
       return;
@@ -269,6 +317,7 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 這種回呼，畫面一次也不會更新。
   void _showTask(TaskDetail task) {
     setState(() {
+      _loadedTask = task;
       _taskFuture = Future<TaskDetail?>.value(task);
     });
   }
@@ -318,57 +367,344 @@ class _TaskScreenState extends State<TaskScreen> {
 
   Widget _buildTask(TaskDetail? task) {
     if (task == null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('找不到這個房號的任務'),
-          ),
-          _buildSkeletonEntries(null),
-          const Spacer(),
-        ],
+      return const Padding(
+        padding: EdgeInsets.all(TmsSpacing.screenEdge),
+        child: Align(alignment: Alignment.topLeft, child: Text('找不到這個房號的任務')),
       );
     }
 
-    final showResumeBanner = task.state == 'interrupted' &&
-        (task.holdReason?.contains('工務已修好') ?? false);
-    final primaryActionLabel = _primaryActionLabel(task);
-
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showResumeBanner)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TaskCallout(
-              id: 'task.resume-banner',
-              tint: calloutClearedTint,
-              children: [
-                Row(
+        Expanded(
+          child: Stack(
+            children: [
+              // 整頁可捲動。任務頁上從標題區、提示、同房工務單到 SOP 清單，
+              // 一屏放不下是常態；捲不動的版面會讓最下面那幾項永遠點不到。
+              // 用 SingleChildScrollView 而不是 ListView：ListView 只建視窗內
+              // 的那幾列，捲到之前它們不在畫面上，驗收也定位不到。
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Text(
-                        '${widget.roomNo} 號房的工務已修好，您可以恢復原任務了',
+                    _buildHeader(task),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        TmsSpacing.screenEdge,
+                        TmsSpacing.md2,
+                        TmsSpacing.screenEdge,
+                        TmsSpacing.xxl,
                       ),
-                    ),
-                    TmsSemantics(
-                      id: 'task.status-row.resume-button',
-                      child: CupertinoButton(
-                        // 骨架畫面先只露出可點的按鈕；呼叫後端把任務從
-                        // 「已中斷」轉回「進行中」是後續功能。
-                        onPressed: () {},
-                        child: const Text('恢復任務'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _spaced(_buildSections(task)),
                       ),
                     ),
                   ],
                 ),
+              ),
+              Positioned(
+                right: TmsSpacing.screenEdge,
+                bottom: TmsSpacing.screenEdge,
+                child: _buildAskButton(task),
+              ),
+            ],
+          ),
+        ),
+        _buildActionBar(task),
+      ],
+    );
+  }
+
+  /// 把各區塊之間插上固定間距。區塊本身只管自己的內容，誰在誰上面、中間空多
+  /// 少由這裡決定，各區塊自己帶 margin 的話間距會隨著區塊出現與否忽大忽小。
+  static List<Widget> _spaced(List<Widget> sections) {
+    final spaced = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      if (i > 0) {
+        spaced.add(const SizedBox(height: TmsSpacing.md2));
+      }
+      spaced.add(sections[i]);
+    }
+    return spaced;
+  }
+
+  /// 標題區底下的各個區塊，由上到下。沒有內容的區塊整塊不出現。
+  List<Widget> _buildSections(TaskDetail task) {
+    final sections = <Widget>[];
+    if (task.state == 'interrupted' &&
+        (task.holdReason?.contains('工務已修好') ?? false)) {
+      sections.add(
+        TaskCallout(
+          id: 'task.resume-banner',
+          tint: calloutClearedTint,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('${widget.roomNo} 號房的工務已修好，您可以恢復原任務了')),
+                TmsSemantics(
+                  id: 'task.status-row.resume-button',
+                  child: CupertinoButton(
+                    // 骨架畫面先只露出可點的按鈕；呼叫後端把任務從
+                    // 「已中斷」轉回「進行中」是後續功能。
+                    onPressed: () {},
+                    child: const Text('恢復任務'),
+                  ),
+                ),
               ],
             ),
+          ],
+        ),
+      );
+    }
+    if (_completionPendingSync) {
+      sections.add(
+        TmsSemantics(
+          id: 'task.pending-sync-label',
+          label: pendingSyncMessage,
+          child: const ExcludeSemantics(child: Text(pendingSyncMessage)),
+        ),
+      );
+    }
+    if (task.returnInfo != null) {
+      sections.add(ReturnInfoCallout(info: task.returnInfo!));
+    }
+    if (task.handovers.isNotEmpty) {
+      sections.add(
+        HandoverCallout(entries: task.handovers, read: task.handoverRead),
+      );
+    }
+    // 停住原因只在任務真的停住時有值，所以沒有原因就整列不畫。不另外指定
+    // label：文字本身就是子節點的 label，顯式再給一次會被接成兩份。
+    final holdReason = task.holdReason;
+    if (holdReason != null) {
+      sections.add(
+        TmsCard(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TmsSpacing.screenEdge,
+            vertical: TmsSpacing.md,
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: Align(
+            alignment: Alignment.centerLeft,
+            child: TmsSemantics(
+              id: 'task.status-row.hold-reason',
+              child: Text(holdReason, style: TmsText.body),
+            ),
+          ),
+        ),
+      );
+    }
+    sections.add(_buildInfoSection(task));
+    final sop = _buildSopChecklist(task);
+    if (sop != null) {
+      sections.add(sop);
+    }
+    return sections;
+  }
+
+  /// 「這間房的資訊」：同房工務單與工務單詳情入口排成一組白底清單。
+  ///
+  /// 這些是任務頁的旁支，不是員工要往下走的那一步，所以收進一組可點的列，
+  /// 而不是散在底部當一排長得一樣的按鈕。
+  Widget _buildInfoSection(TaskDetail task) {
+    final rows = <Widget>[
+      // 同房工務單區（FR-021）：報修人從這裡進到自己那張單的詳情。順序照
+      // 後端給的順序，App 不重排。
+      for (final ticket in _repairTickets)
+        TmsSemantics(
+          id: 'task.repair-ticket.${ticket.ticketNo}.card',
+          child: TmsGroupedRow(
+            label:
+                '${ticket.ticketNo} '
+                '${repairCategoryText(ticket.category)}',
+            onTap: () {
+              Navigator.of(context).push(
+                CupertinoPageRoute<void>(
+                  builder: (_) => TicketScreen(taskId: ticket.taskId),
+                ),
+              );
+            },
+          ),
+        ),
+      TmsGroupedRow(
+        label: '工務單詳情',
+        onTap: () {
+          Navigator.of(context).push(
+            CupertinoPageRoute<void>(builder: (_) => const TicketScreen()),
+          );
+        },
+      ),
+    ];
+    return TmsGroupedSection(header: '這間房的資訊', children: rows);
+  }
+
+  /// 浮在內容右下角的「查一下」。
+  ///
+  /// 它不在底部動作列裡：查 SOP 或查這間房的記錄是員工做到一半隨時會想做的
+  /// 事，壓在動作列裡會跟「往下走」的那一顆混在一起。
+  Widget _buildAskButton(TaskDetail task) {
+    return TmsSemantics(
+      id: 'task.ask-button',
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        borderRadius: BorderRadius.circular(TmsRadius.pill),
+        color: TmsColors.brandContainer,
+        minimumSize: const Size(56, 56),
+        onPressed: () => AskSheet.show(context, taskId: task.id),
+        child: Text(
+          '查一下',
+          style: TmsText.footnoteEmphasized.copyWith(
+            color: TmsColors.brandPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 置底動作列：左邊次要、右邊主要，寬度 1 比 2。
+  ///
+  /// 一個狀態最多只露出這兩顆。主按鈕的文字由 [_primaryActionLabel] 的狀態
+  /// 對照表決定，次要按鈕是待開始的「延後」與進行中的「中斷」；兩顆都沒有的
+  /// 狀態（待查房、已送達、完成…）整列不畫。
+  Widget _buildActionBar(TaskDetail task) {
+    final primaryLabel = _primaryActionLabel(task);
+    final secondary = _buildSecondaryButton(task);
+    if (primaryLabel == null && secondary == null) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: TmsSpacing.screenEdge,
+        vertical: TmsSpacing.md,
+      ),
+      decoration: const BoxDecoration(
+        color: TmsColors.cardBackground,
+        border: Border(
+          top: BorderSide(
+            color: TmsColors.opaqueSeparator,
+            width: TmsSize.hairline,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (secondary != null) Expanded(flex: 1, child: secondary),
+          if (secondary != null && primaryLabel != null)
+            const SizedBox(width: TmsSpacing.md),
+          if (primaryLabel != null)
+            Expanded(
+              flex: 2,
+              // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
+              // 會被 Flutter 接成「開始\n開始」。
+              child: TmsSemantics(
+                id: 'task.primary-button',
+                child: TmsPillButton(
+                  label: primaryLabel,
+                  // 目前只接「開始」與「完成」；恢復處理等對應情境進場再接
+                  // （接了也沒有情境在驗，會變成沒人讀的分支）。
+                  onPressed: switch (primaryLabel) {
+                    '開始' => () => _start(task),
+                    '完成' => () => _complete(task),
+                    _ => () {},
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 這個狀態的次要按鈕；沒有次要動作時回 null。
+  ///
+  /// 待開始的單能延後（還沒開工，整張單往後挪），進行中的單能中斷（已經開
+  /// 工，停在一半）。其餘狀態兩者都做不了：已經停住的單沒有東西可以再停。
+  Widget? _buildSecondaryButton(TaskDetail task) {
+    switch (task.state) {
+      case 'accepted':
+        return TmsSemantics(
+          id: 'task.defer-button',
+          child: TmsPillButton(
+            label: '延後',
+            style: TmsPillButtonStyle.outlined,
+            onPressed: () => _openHoldSheet(task, HoldSheetMode.defer),
+          ),
+        );
+      case 'doing':
+        return TmsSemantics(
+          id: 'task.interrupt-button',
+          child: TmsPillButton(
+            label: '中斷',
+            style: TmsPillButtonStyle.outlined,
+            onPressed: () => _openHoldSheet(task, HoldSheetMode.interrupt),
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
+  /// 任務頁最上面的標題區：進行中是品牌色深底，其餘狀態是白底，下緣兩個角
+  /// 切成大圓角把它和底下的內容分開。
+  ///
+  /// 誰當主角依狀態換：進行中時最大的字是計時，房號退到任務名稱前面——這時
+  /// 員工早就站在房間裡，要看的是「做多久了」；開始前與停住後換回房號當主
+  /// 角，因為那時要確認的是「這是哪一間」。
+  ///
+  /// 這裡刻意不在 App 端跑計時器。同一張單可能在別的裝置上被推進，畫面自己
+  /// 累加的秒數會和後端的已做時間對不起來。
+  Widget _buildHeader(TaskDetail task) {
+    final doing = task.state == 'doing';
+    final paused = task.state == 'interrupted' || task.state == 'deferred';
+    final foreground = doing ? TmsColors.brandOnPrimary : TmsColors.label;
+    final secondary = doing
+        ? TmsColors.brandContainer
+        : TmsColors.secondaryLabel;
+    final title = task.title ?? '';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        TmsSpacing.xl,
+        TmsSpacing.sm,
+        TmsSpacing.xl,
+        TmsSpacing.xl,
+      ),
+      decoration: BoxDecoration(
+        color: doing ? TmsColors.brandPrimary : TmsColors.cardBackground,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(TmsRadius.xl),
+          bottomRight: Radius.circular(TmsRadius.xl),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (doing) ...[
+            _buildTimerHero(task),
+            const SizedBox(height: TmsSpacing.xs2),
+            Text(
+              '${widget.roomNo} · 內容：$title',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TmsText.headline.copyWith(color: foreground),
+            ),
+          ] else ...[
+            _buildRoomHero(task, paused: paused),
+            const SizedBox(height: TmsSpacing.xs2),
+            Text(
+              '內容：$title',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TmsText.headline.copyWith(color: foreground),
+            ),
+          ],
+          if (task.estMin != null && !doing && !paused) ...[
+            const SizedBox(height: TmsSpacing.xxs),
+            Text(
+              '預估 ${task.estMin} 分',
+              style: TmsText.subheadline.copyWith(color: secondary),
+            ),
+          ],
+          const SizedBox(height: TmsSpacing.sm),
+          Align(
             alignment: Alignment.centerLeft,
             child: TmsSemantics(
               id: 'task.status-chip',
@@ -376,153 +712,123 @@ class _TaskScreenState extends State<TaskScreen> {
                 state: task.state,
                 type: task.type,
                 inspection: task.inspection,
+                onDark: doing,
               ),
             ),
+          ),
+          _buildStepTrack(task, onDark: doing),
+        ],
+      ),
+    );
+  }
+
+  /// 進行中時的主角：56pt 的計時，右邊接超時膠囊或預估工時。
+  Widget _buildTimerHero(TaskDetail task) {
+    final overtimeMinutes = _overtimeMinutes(task);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '${task.elapsedMinutes} 分',
+          style: TmsText.displayHero.copyWith(
+            color: overtimeMinutes != null
+                ? TmsColors.overtimeTimerOnDark
+                : TmsColors.brandOnPrimary,
           ),
         ),
-        _buildHero(task),
-        _buildStepTrack(task),
-        if (_completionPendingSync)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: TmsSemantics(
-              id: 'task.pending-sync-label',
-              label: pendingSyncMessage,
-              child: const ExcludeSemantics(child: Text(pendingSyncMessage)),
-            ),
-          ),
-        if (task.returnInfo != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: ReturnInfoCallout(info: task.returnInfo!),
-          ),
-        if (task.handovers.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: HandoverCallout(
-              entries: task.handovers,
-              read: task.handoverRead,
-            ),
-          ),
-        // 停住原因只在任務真的停住時有值，所以沒有原因就整列不畫。不另外指定
-        // label：文字本身就是子節點的 label，顯式再給一次會被接成兩份。
-        if (task.holdReason != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TmsSemantics(
-                id: 'task.status-row.hold-reason',
-                child: Text(task.holdReason!),
-              ),
-            ),
-          ),
+        const SizedBox(width: TmsSpacing.sm2),
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('內容：${task.title ?? ''}'),
+          padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
+          child: overtimeMinutes != null
+              ? _buildOvertimeChip(overtimeMinutes, onDark: true)
+              : Text(
+                  task.estMin == null ? '' : '/ 預估 ${task.estMin} 分',
+                  style: TmsText.subheadline.copyWith(
+                    color: TmsColors.brandContainer,
+                  ),
+                ),
         ),
-        // 同房工務單區（FR-021）：報修人從這裡進到自己那張單的詳情。順序照
-        // 後端給的順序，App 不重排。
-        for (final ticket in _repairTickets)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TmsSemantics(
-                id: 'task.repair-ticket.${ticket.ticketNo}.card',
-                child: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      CupertinoPageRoute<void>(
-                        builder: (_) => TicketScreen(taskId: ticket.taskId),
-                      ),
-                    );
-                  },
-                  child: Text('${ticket.ticketNo} '
-                      '${repairCategoryText(ticket.category)}'),
-                ),
-              ),
-            ),
+      ],
+    );
+  }
+
+  /// 開始前與停住後的主角：56pt 的房號，停住的單在右邊接已做時間。
+  Widget _buildRoomHero(TaskDetail task, {required bool paused}) {
+    final overtimeMinutes = _overtimeMinutes(task);
+    final pausedText = '已做 ${task.elapsedMinutes} 分';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Text(
+            widget.roomNo,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TmsText.displayHero,
           ),
-        _buildSopChecklist(task),
-        _buildSkeletonEntries(task),
-        const Spacer(),
-        // 置底主按鈕：一個狀態只露出一個，文字由 [_primaryActionLabel] 的
-        // 狀態對照表決定。沒有主要動作的狀態（待查房、已送達、完成…）
-        // 整顆不顯示。
-        if (primaryActionLabel != null)
+        ),
+        if (paused)
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
-              // 會被 Flutter 接成「開始\n開始」。
-              child: TmsSemantics(
-                id: 'task.primary-button',
-                child: CupertinoButton.filled(
-                  // 目前只接「開始」與「完成」；恢復處理等對應情境進場再接
-                  // （接了也沒有情境在驗，會變成沒人讀的分支）。
-                  onPressed: switch (primaryActionLabel) {
-                    '開始' => () => _start(task),
-                    '完成' => () => _complete(task),
-                    _ => () {},
-                  },
-                  child: Text(primaryActionLabel),
+            padding: const EdgeInsets.only(bottom: TmsSpacing.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TmsSemantics(
+                  id: 'task.hero.paused-elapsed',
+                  label: pausedText,
+                  child: ExcludeSemantics(
+                    child: Text(
+                      pausedText,
+                      style: TmsText.displayTimer.copyWith(
+                        color: overtimeMinutes != null
+                            ? TmsColors.overtimeTimerOnLight
+                            : TmsColors.label,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                if (overtimeMinutes != null) ...[
+                  const SizedBox(height: TmsSpacing.xs),
+                  _buildOvertimeChip(overtimeMinutes, onDark: false),
+                ],
+              ],
             ),
           ),
       ],
     );
   }
 
-  /// 計時區：停住的單顯示停住當下的已做時間，進行中的單超過預估工時時顯示
-  /// 超時提示。兩個數字都取後端回的已做分鐘與預估分鐘。
+  /// 超時膠囊：深底上是深橘底深褐字，白底上是橘淡底棕字。
   ///
-  /// 這裡刻意不在 App 端跑計時器。同一張單可能在別的裝置上被推進，畫面自己
-  /// 累加的秒數會和後端的已做時間對不起來。
-  Widget _buildHero(TaskDetail task) {
-    final paused = task.state == 'interrupted' || task.state == 'deferred';
-    final overtimeMinutes = _overtimeMinutes(task);
-    if (!paused && overtimeMinutes == null) {
-      return const SizedBox.shrink();
-    }
-    final pausedText = '已做 ${task.elapsedMinutes} 分';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          TmsSpacing.lg, TmsSpacing.md, TmsSpacing.lg, 0),
-      child: Row(
-        children: [
-          if (paused)
-            TmsSemantics(
-              id: 'task.hero.paused-elapsed',
-              label: pausedText,
-              child: ExcludeSemantics(
-                child: Text(pausedText, style: TmsText.displayTimer),
-              ),
+  /// 超時只是提醒，不擋任何操作，所以不用錯誤紅——紅色會讓員工以為這張單出
+  /// 了什麼事。
+  Widget _buildOvertimeChip(int overtimeMinutes, {required bool onDark}) {
+    final text = '超時 $overtimeMinutes 分';
+    return TmsSemantics(
+      id: 'task.hero.overtime-chip',
+      label: text,
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TmsSpacing.sm2,
+            vertical: TmsSpacing.xxs,
+          ),
+          decoration: BoxDecoration(
+            color: onDark
+                ? TmsColors.overtimeCapsule
+                : TmsColors.brandAccentContainer,
+            borderRadius: BorderRadius.circular(TmsRadius.pill),
+          ),
+          child: Text(
+            text,
+            style: TmsText.footnoteEmphasized.copyWith(
+              color: onDark
+                  ? TmsColors.onOvertimeCapsule
+                  : TmsColors.brandOnAccentContainer,
             ),
-          if (overtimeMinutes != null)
-            TmsSemantics(
-              id: 'task.hero.overtime-chip',
-              label: '超時 $overtimeMinutes 分',
-              child: ExcludeSemantics(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: TmsSpacing.sm2, vertical: TmsSpacing.xxs),
-                  decoration: BoxDecoration(
-                    color: TmsColors.overtimeCapsule,
-                    borderRadius: BorderRadius.circular(TmsRadius.pill),
-                  ),
-                  child: Text(
-                    '超時 $overtimeMinutes 分',
-                    style: TmsText.footnoteEmphasized
-                        .copyWith(color: TmsColors.onOvertimeCapsule),
-                  ),
-                ),
-              ),
-            ),
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -545,7 +851,7 @@ class _TaskScreenState extends State<TaskScreen> {
   ///
   /// 目前停在哪一步由後端回的 state 與 inspection 推導。畫面另外記一份進度的
   /// 話，別的裝置把任務推進之後，這份進度就是舊的。
-  Widget _buildStepTrack(TaskDetail task) {
+  Widget _buildStepTrack(TaskDetail task, {required bool onDark}) {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
     final currentIndex = steps.indexOf(current);
@@ -556,6 +862,7 @@ class _TaskScreenState extends State<TaskScreen> {
         label: current,
         explicitChildNodes: true,
         child: TmsStepTrack(
+          onDark: onDark,
           steps: [
             for (final step in steps)
               _trackStep(steps.indexOf(step), currentIndex, step),
@@ -624,9 +931,9 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 不擋完成：後端在完成那一步會把沒勾也沒跳過的項目一律記成跳過。
   ///
   /// 租戶沒有設定任何打掃 SOP 項，或這不是打掃類任務時，整區不畫。
-  Widget _buildSopChecklist(TaskDetail task) {
+  Widget? _buildSopChecklist(TaskDetail task) {
     if (_sopItems.isEmpty) {
-      return const SizedBox.shrink();
+      return null;
     }
     final checked = task.checkedSopItems.toSet();
     final skipped = task.skippedSopItems.toSet();
@@ -634,63 +941,120 @@ class _TaskScreenState extends State<TaskScreen> {
         .where((item) => checked.contains(item.id) || skipped.contains(item.id))
         .length;
     final progress = '$doneCount / ${_sopItems.length} · 跳過不擋流程';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          TmsSpacing.lg, TmsSpacing.md, TmsSpacing.lg, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final ratio = doneCount / _sopItems.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               const Text('清潔 SOP', style: TmsText.title3),
               const SizedBox(width: TmsSpacing.sm),
-              TmsSemantics(
-                id: 'task.sop.progress',
-                label: progress,
-                child: ExcludeSemantics(
-                  child: Text(
-                    progress,
-                    style: TmsText.caption1
-                        .copyWith(color: TmsColors.secondaryLabel),
+              Expanded(
+                child: TmsSemantics(
+                  id: 'task.sop.progress',
+                  label: progress,
+                  child: ExcludeSemantics(
+                    child: Text(
+                      progress,
+                      textAlign: TextAlign.right,
+                      style: TmsText.footnote.copyWith(
+                        color: TmsColors.secondaryLabel,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          for (final item in _sopItems)
-            Row(
-              children: [
-                Expanded(
-                  child: TmsSemantics(
-                    id: 'task.sop.${item.label}.item',
-                    child: CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      alignment: Alignment.centerLeft,
-                      onPressed: () => _sopCheck(task, item, 'checked'),
-                      child: Text(
-                        checked.contains(item.id)
-                            ? '✓ ${item.label}'
-                            : item.label,
-                        style: TmsText.body,
-                      ),
-                    ),
-                  ),
-                ),
-                TmsSemantics(
-                  id: 'task.sop.${item.label}.skip-button',
-                  child: CupertinoButton(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: TmsSpacing.md),
-                    onPressed: () => _sopCheck(task, item, 'skipped'),
-                    child: Text(
-                      skipped.contains(item.id) ? '已跳過' : '跳過',
-                      style: TmsText.caption1
-                          .copyWith(color: TmsColors.brandPrimary),
-                    ),
-                  ),
-                ),
-              ],
+        ),
+        const SizedBox(height: TmsSpacing.sm),
+        // 進度條是給員工掃一眼用的：同一個進度在上面已經有「3 / 8」這個精確
+        // 的說法，條狀只負責讓他不必讀數字就知道還剩多少。
+        ClipRRect(
+          borderRadius: BorderRadius.circular(TmsRadius.pill),
+          child: SizedBox(
+            height: TmsSpacing.sm,
+            child: ColoredBox(
+              color: TmsColors.neutralContainer,
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: ratio,
+                child: const ColoredBox(color: TmsColors.brandPrimary),
+              ),
             ),
+          ),
+        ),
+        const SizedBox(height: TmsSpacing.sm),
+        TmsGroupedSection(
+          children: [
+            for (final item in _sopItems)
+              _buildSopRow(
+                task: task,
+                item: item,
+                checked: checked.contains(item.id),
+                skipped: skipped.contains(item.id),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// SOP 清單的一列：左邊是可點的項目，右邊是跳過鈕。
+  Widget _buildSopRow({
+    required TaskDetail task,
+    required SopItem item,
+    required bool checked,
+    required bool skipped,
+  }) {
+    return Container(
+      color: TmsColors.cardBackground,
+      padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.md),
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Row(
+        children: [
+          Expanded(
+            child: TmsSemantics(
+              id: 'task.sop.${item.label}.item',
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                alignment: Alignment.centerLeft,
+                minimumSize: const Size(0, 48),
+                onPressed: () => _sopCheck(task, item, 'checked'),
+                child: Text(
+                  checked ? '✓ ${item.label}' : item.label,
+                  style: TmsText.body.copyWith(
+                    color: skipped ? TmsColors.tertiaryLabel : TmsColors.label,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: TmsSpacing.sm),
+          TmsSemantics(
+            id: 'task.sop.${item.label}.skip-button',
+            child: CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.md),
+              borderRadius: BorderRadius.circular(TmsRadius.pill),
+              minimumSize: const Size(0, 36),
+              color: skipped
+                  ? TmsColors.neutralContainer
+                  : TmsColors.cardBackground,
+              onPressed: () => _sopCheck(task, item, 'skipped'),
+              child: Text(
+                skipped ? '已跳過' : '跳過',
+                style: TmsText.footnoteEmphasized.copyWith(
+                  color: skipped
+                      ? TmsColors.onNeutralContainer
+                      : TmsColors.brandPrimary,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -700,76 +1064,14 @@ class _TaskScreenState extends State<TaskScreen> {
   ///
   /// 畫面先改再送出的話，送失敗的那一下員工看到的勾記就不是後端記下的勾記。
   Future<void> _sopCheck(TaskDetail task, SopItem item, String result) async {
-    final updated = await ApiClient.instance
-        .sopCheck(task.id, sopItemId: item.id, result: result);
+    final updated = await ApiClient.instance.sopCheck(
+      task.id,
+      sopItemId: item.id,
+      result: result,
+    );
     if (!mounted) {
       return;
     }
     _showTask(updated);
-  }
-
-  /// 骨架期的入口接線：三個 sheet 的落點與工務單詳情的路由。
-  /// 各入口的實際觸發條件（報修圖示…）是後續功能，這裡先讓畫面
-  /// 可以被導到。找不到任務時 [task] 為 null，延後、中斷與查一下這幾個要有
-  /// 任務才做得了的動作不露出——查一下的推薦問題是依任務情境排出來的，沒有
-  /// 任務就沒有情境可查。
-  Widget _buildSkeletonEntries(TaskDetail? task) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Wrap(
-        children: [
-          if (task != null)
-            TmsSemantics(
-              id: 'task.defer-button',
-              child: CupertinoButton(
-                onPressed: () => _openHoldSheet(task, HoldSheetMode.defer),
-                child: const Text('延後'),
-              ),
-            ),
-          if (task != null)
-            TmsSemantics(
-              id: 'task.interrupt-button',
-              child: CupertinoButton(
-                onPressed: () => _openHoldSheet(task, HoldSheetMode.interrupt),
-                child: const Text('中斷'),
-              ),
-            ),
-          TmsSemantics(
-            id: 'task.repair-button',
-            child: CupertinoButton(
-              onPressed: () {
-                if (ConnectionStatus.instance.isOffline) {
-                  showOfflineBlockedAlert(context);
-                  return;
-                }
-                setState(() {
-                  _repairSheetOpen = true;
-                  _openRepairSheetTaskId = task?.id;
-                });
-              },
-              child: const Text('報修'),
-            ),
-          ),
-          if (task != null)
-            TmsSemantics(
-              id: 'task.ask-button',
-              child: CupertinoButton(
-                onPressed: () => AskSheet.show(context, taskId: task.id),
-                child: const Text('查一下'),
-              ),
-            ),
-          CupertinoButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                CupertinoPageRoute<void>(
-                  builder: (_) => const TicketScreen(),
-                ),
-              );
-            },
-            child: const Text('工務單詳情'),
-          ),
-        ],
-      ),
-    );
   }
 }

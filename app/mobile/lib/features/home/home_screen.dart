@@ -6,7 +6,8 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_category_square.dart';
-import '../../core/widgets/tms_progress_ring.dart';
+import '../../core/widgets/tms_home_cards.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../task/task_screen.dart';
 import '../today/my_today_scope.dart';
@@ -78,8 +79,9 @@ class _GreetingRow extends StatelessWidget {
               const SizedBox(height: TmsSpacing.xs),
               Text(
                 '${now.month} 月 ${now.day} 日',
-                style: TmsText.subheadline
-                    .copyWith(color: TmsColors.secondaryLabel),
+                style: TmsText.subheadline.copyWith(
+                  color: TmsColors.secondaryLabel,
+                ),
               ),
             ],
           ),
@@ -125,69 +127,52 @@ class _TodayProgressCard extends StatelessWidget {
     final ratio = today.cleaningTotal == 0
         ? 0.0
         : today.cleaningDone / today.cleaningTotal;
-    return TmsCard(
-      style: TmsCardStyle.hero,
-      padding: const EdgeInsets.all(TmsSpacing.lg2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return TmsProgressRingCard(
+      progress: ratio,
+      ringCenter: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              TmsProgressRing(
-                progress: ratio,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ProgressValue(
-                      id: 'home.progress.cleaned-ratio',
-                      value: '${today.cleaningDone} / ${today.cleaningTotal}',
-                      style: TmsText.displayMetric,
-                    ),
-                    const SizedBox(height: TmsSpacing.xxs),
-                    Text(
-                      '間房已清完',
-                      style: TmsText.caption1.copyWith(
-                        fontWeight: FontWeight.w400,
-                        color: TmsColors.tertiaryLabel,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: TmsSpacing.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _ProgressStat(
-                      id: 'home.progress.inspected-count',
-                      caption: '查房通過',
-                      value: '${today.inspectedCount}',
-                      valueColor: TmsColors.onSuccessContainer,
-                    ),
-                    const SizedBox(height: TmsSpacing.md),
-                    _ProgressStat(
-                      id: 'home.progress.ad-hoc-count',
-                      caption: '臨時需求完成',
-                      value: '${today.adHocCompleted}',
-                      valueColor: TmsColors.brandAccent,
-                    ),
-                    const SizedBox(height: TmsSpacing.md),
-                    _ProgressStat(
-                      id: 'home.progress.remaining-minutes',
-                      caption: '預估剩餘工時',
-                      value: '${today.remainingMinutes} 分',
-                      valueColor: TmsColors.label,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          ProgressValue(
+            id: 'home.progress.cleaned-ratio',
+            value: '${today.cleaningDone} / ${today.cleaningTotal}',
+            style: TmsText.displayMetric,
           ),
-          const SizedBox(height: TmsSpacing.lg),
-          _StreakRow(days: today.zeroReturnStreakDays),
+          const SizedBox(height: TmsSpacing.xxs),
+          Text(
+            '間房已清完',
+            style: TmsText.caption1.copyWith(
+              fontWeight: FontWeight.w400,
+              color: TmsColors.tertiaryLabel,
+            ),
+          ),
         ],
       ),
+      details: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ProgressStat(
+            id: 'home.progress.inspected-count',
+            caption: '查房通過',
+            value: '${today.inspectedCount}',
+            valueColor: TmsColors.onSuccessContainer,
+          ),
+          const SizedBox(height: TmsSpacing.md),
+          _ProgressStat(
+            id: 'home.progress.ad-hoc-count',
+            caption: '臨時需求完成',
+            value: '${today.adHocCompleted}',
+            valueColor: TmsColors.brandAccent,
+          ),
+          const SizedBox(height: TmsSpacing.md),
+          _ProgressStat(
+            id: 'home.progress.remaining-minutes',
+            caption: '預估剩餘工時',
+            value: '${today.remainingMinutes} 分',
+            valueColor: TmsColors.label,
+          ),
+        ],
+      ),
+      footer: _StreakRow(days: today.zeroReturnStreakDays),
     );
   }
 }
@@ -210,20 +195,13 @@ class _ProgressStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ProgressValue(
-          id: id,
-          value: value,
-          style: TmsText.title3.copyWith(color: valueColor),
-        ),
-        const SizedBox(height: TmsSpacing.xxs),
-        Text(
-          caption,
-          style: TmsText.footnote.copyWith(color: TmsColors.secondaryLabel),
-        ),
-      ],
+    return TmsStatBlock(
+      value: ProgressValue(
+        id: id,
+        value: value,
+        style: TmsText.title3.copyWith(color: valueColor),
+      ),
+      caption: caption,
     );
   }
 }
@@ -250,15 +228,17 @@ class _StreakRow extends StatelessWidget {
           Expanded(
             child: Text(
               '連續零退回天數',
-              style: TmsText.footnote
-                  .copyWith(color: TmsColors.onSuccessContainer),
+              style: TmsText.footnote.copyWith(
+                color: TmsColors.onSuccessContainer,
+              ),
             ),
           ),
           ProgressValue(
             id: 'home.streak-badge',
             value: '$days',
-            style: TmsText.subheadlineEmphasized
-                .copyWith(color: TmsColors.onSuccessContainer),
+            style: TmsText.subheadlineEmphasized.copyWith(
+              color: TmsColors.onSuccessContainer,
+            ),
           ),
         ],
       ),
@@ -300,70 +280,48 @@ class _DoingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TmsCard(
-      style: TmsCardStyle.hero,
-      backgroundColor: TmsColors.brandPrimary,
-      padding: const EdgeInsets.all(TmsSpacing.lg2),
+    return TmsHeroCard(
+      onDark: true,
+      eyebrow: '進行中',
       onTap: () => _openTask(context, task.taskId, task.roomNo),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: TmsSpacing.sm,
-                height: TmsSpacing.sm,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFB783),
-                  shape: BoxShape.circle,
+      children: [
+        const SizedBox(height: TmsSpacing.md2),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              task.roomNo,
+              style: TmsText.displayRoomNo.copyWith(
+                color: TmsColors.brandOnPrimary,
+              ),
+            ),
+            const SizedBox(width: TmsSpacing.md),
+            Padding(
+              padding: const EdgeInsets.only(bottom: TmsSpacing.xs),
+              child: Text(
+                '${task.workedMinutes} 分',
+                style: TmsText.displayTimer.copyWith(
+                  color: TmsColors.brandOnPrimary,
                 ),
               ),
-              const SizedBox(width: TmsSpacing.xs2),
-              Text(
-                '進行中',
-                style: TmsText.footnoteEmphasized
-                    .copyWith(color: TmsColors.brandOnPrimary),
-              ),
-            ],
-          ),
-          const SizedBox(height: TmsSpacing.md2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                task.roomNo,
-                style: TmsText.displayRoomNo
-                    .copyWith(color: TmsColors.brandOnPrimary),
-              ),
-              const SizedBox(width: TmsSpacing.md),
-              Padding(
-                padding: const EdgeInsets.only(bottom: TmsSpacing.xs),
-                child: Text(
-                  '${task.workedMinutes} 分',
-                  style: TmsText.displayTimer
-                      .copyWith(color: TmsColors.brandOnPrimary),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: TmsSpacing.xs),
-          Text(
-            task.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TmsText.subheadline
-                .copyWith(color: TmsColors.brandContainer),
-          ),
-          const SizedBox(height: TmsSpacing.md2),
-          _CardButton(
-            text: '繼續處理',
-            background: TmsColors.brandOnPrimary,
-            foreground: TmsColors.brandPrimary,
-            height: 48,
-            onPressed: () => _openTask(context, task.taskId, task.roomNo),
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: TmsSpacing.xs),
+        Text(
+          task.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TmsText.subheadline.copyWith(color: TmsColors.brandContainer),
+        ),
+        const SizedBox(height: TmsSpacing.md2),
+        TmsPillButton(
+          label: '繼續處理',
+          style: TmsPillButtonStyle.inverse,
+          height: 48,
+          onPressed: () => _openTask(context, task.taskId, task.roomNo),
+        ),
+      ],
     );
   }
 }
@@ -376,67 +334,26 @@ class _NextRoomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TmsCard(
-      style: TmsCardStyle.hero,
-      padding: const EdgeInsets.all(TmsSpacing.lg2),
+    return TmsHeroCard(
+      eyebrow: '下一間',
       onTap: () => _openTask(context, task.taskId, task.roomNo),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '下一間',
-            style: TmsText.footnoteEmphasized
-                .copyWith(color: TmsColors.brandPrimary),
-          ),
-          const SizedBox(height: TmsSpacing.md2),
-          Text(task.roomNo, style: TmsText.displayRoomNo),
-          const SizedBox(height: TmsSpacing.xs),
-          Text(
-            task.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TmsText.subheadline
-                .copyWith(color: TmsColors.secondaryLabel),
-          ),
-          const SizedBox(height: TmsSpacing.md2),
-          _CardButton(
-            text: '開始這一間',
-            background: TmsColors.brandPrimary,
-            foreground: TmsColors.brandOnPrimary,
-            height: 50,
-            onPressed: () => _openTask(context, task.taskId, task.roomNo),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 主卡底部的滿寬膠囊按鈕。
-class _CardButton extends StatelessWidget {
-  const _CardButton({
-    required this.text,
-    required this.background,
-    required this.foreground,
-    required this.height,
-    required this.onPressed,
-  });
-
-  final String text;
-  final Color background;
-  final Color foreground;
-  final double height;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      borderRadius: BorderRadius.circular(TmsRadius.pill),
-      color: background,
-      minimumSize: Size(double.infinity, height),
-      onPressed: onPressed,
-      child: Text(text, style: TmsText.headline.copyWith(color: foreground)),
+      children: [
+        const SizedBox(height: TmsSpacing.md2),
+        Text(task.roomNo, style: TmsText.displayRoomNo),
+        const SizedBox(height: TmsSpacing.xs),
+        Text(
+          task.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TmsText.subheadline.copyWith(color: TmsColors.secondaryLabel),
+        ),
+        const SizedBox(height: TmsSpacing.md2),
+        TmsPillButton(
+          label: '開始這一間',
+          height: 50,
+          onPressed: () => _openTask(context, task.taskId, task.roomNo),
+        ),
+      ],
     );
   }
 }
@@ -470,10 +387,7 @@ class _TodayTaskList extends StatelessWidget {
             child: Column(
               children: [
                 for (var i = 0; i < tasks.length; i++)
-                  _TaskRow(
-                    task: tasks[i],
-                    showSeparator: i < tasks.length - 1,
-                  ),
+                  _TaskRow(task: tasks[i], showSeparator: i < tasks.length - 1),
               ],
             ),
           ),
@@ -540,8 +454,9 @@ class _TaskRow extends StatelessWidget {
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TmsText.subheadline
-                              .copyWith(color: TmsColors.secondaryLabel),
+                          style: TmsText.subheadline.copyWith(
+                            color: TmsColors.secondaryLabel,
+                          ),
                         ),
                       ],
                     ],
