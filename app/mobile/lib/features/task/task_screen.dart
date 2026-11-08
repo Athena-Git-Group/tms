@@ -430,7 +430,22 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// 標題區底下的各個區塊，由上到下。沒有內容的區塊整塊不出現。
   List<Widget> _buildSections(TaskDetail task) {
-    final sections = <Widget>[];
+    final sections = <Widget>[
+      // 狀態標籤排在提示區最上面：它講的是「這張單現在是什麼狀態」，底下每
+      // 一則提示講的是「所以現在要注意什麼」，順序顛倒的話員工得先讀完提示
+      // 才知道提示在講哪一種狀態。
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TmsSemantics(
+          id: 'task.status-chip',
+          child: TmsStatusChip(
+            state: task.state,
+            type: task.type,
+            inspection: task.inspection,
+          ),
+        ),
+      ),
+    ];
     if (task.state == 'interrupted' &&
         (task.holdReason?.contains('工務已修好') ?? false)) {
       sections.add(
@@ -652,6 +667,10 @@ class _TaskScreenState extends State<TaskScreen> {
   ///
   /// 這裡刻意不在 App 端跑計時器。同一張單可能在別的裝置上被推進，畫面自己
   /// 累加的秒數會和後端的已做時間對不起來。
+  ///
+  /// 標題區只放計時或房號、任務名與預估工時，狀態標籤不放這裡：這張單走到
+  /// 哪一步由底下的步驟條表達，同一件事在同一屏講兩次，員工會先讀標籤再讀
+  /// 步驟條，反而慢。狀態標籤改放在標題區底下的提示區。
   Widget _buildHeader(TaskDetail task) {
     final doing = task.state == 'doing';
     final paused = task.state == 'interrupted' || task.state == 'deferred';
@@ -681,7 +700,7 @@ class _TaskScreenState extends State<TaskScreen> {
             _buildTimerHero(task),
             const SizedBox(height: TmsSpacing.xs2),
             Text(
-              '${widget.roomNo} · 內容：$title',
+              '${widget.roomNo} · $title',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TmsText.headline.copyWith(color: foreground),
@@ -690,7 +709,7 @@ class _TaskScreenState extends State<TaskScreen> {
             _buildRoomHero(task, paused: paused),
             const SizedBox(height: TmsSpacing.xs2),
             Text(
-              '內容：$title',
+              title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TmsText.headline.copyWith(color: foreground),
@@ -704,18 +723,6 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ],
           const SizedBox(height: TmsSpacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TmsSemantics(
-              id: 'task.status-chip',
-              child: TmsStatusChip(
-                state: task.state,
-                type: task.type,
-                inspection: task.inspection,
-                onDark: doing,
-              ),
-            ),
-          ),
           _buildStepTrack(task, onDark: doing),
         ],
       ),

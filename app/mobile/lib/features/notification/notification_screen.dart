@@ -2,9 +2,11 @@ import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
 import '../../core/push_gateway.dart';
+import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_notification_kind_icon.dart';
 
 /// 通知中心畫面（ui-plan 畫面 9）。
 ///
@@ -117,9 +119,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   List<Widget> _buildContent() {
+    // 連線狀態列固定在內容最上方：離線時通知清單停在最後一次抓到的那一份，
+    // 員工得先知道這一屏可能不是最新的，才不會以為「沒有新通知」。
+    const statusBar = SystemStatusBar(
+      padding: EdgeInsets.only(bottom: TmsSpacing.md),
+    );
     final header = _Header(onMarkAllRead: _markAllRead);
     if (_loadFailed) {
       return [
+        statusBar,
         header,
         const SizedBox(height: TmsSpacing.lg),
         const Text('載入失敗，請稍後再試', style: TmsText.subheadline),
@@ -128,6 +136,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final items = _items;
     if (items == null) {
       return [
+        statusBar,
         header,
         const SizedBox(height: TmsSpacing.xxl),
         const Center(child: CupertinoActivityIndicator()),
@@ -135,6 +144,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
     if (items.isEmpty) {
       return [
+        statusBar,
         header,
         const SizedBox(height: TmsSpacing.lg),
         const _EmptyState(),
@@ -156,6 +166,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
 
     return [
+      statusBar,
       header,
       const SizedBox(height: TmsSpacing.lg),
       if (today.isNotEmpty) ...[
@@ -379,7 +390,7 @@ class _NotificationRow extends StatelessWidget {
                     : null,
               ),
               const SizedBox(width: TmsSpacing.md),
-              const _KindIcon(),
+              TmsNotificationKindIcon(kind: _kindOf(item)),
               const SizedBox(width: TmsSpacing.md),
               Expanded(
                 child: Column(
@@ -437,36 +448,20 @@ class _NotificationRow extends StatelessWidget {
   }
 }
 
-/// 通知的圓形分類圖示。
+/// 一則通知屬於哪一類，決定左側圓形圖示的顏色與符號。
 ///
-/// 原型把通知分七類，各有自己的底色與符號（急件紅、超時橘、完成綠、交辦與
-/// 新單品牌色、保養紫、一般灰）。後端的通知契約
-/// （`specs/truth/contracts/components/schemas/通知中心.yaml`）目前沒有
-/// `kind` 欄位，App 無從分辨是哪一類，所以一律畫原型自己的 fallback：灰底
-/// 鈴鐺。等契約補上 kind，這裡換成七色對照表即可，版面尺寸不用動。
-class _KindIcon extends StatelessWidget {
-  const _KindIcon();
-
-  /// 圓形底上的符號邊長。
-  static const double _glyphSize = 18;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: TmsSize.notificationKindIcon,
-      height: TmsSize.notificationKindIcon,
-      decoration: const BoxDecoration(
-        color: TmsColors.quaternaryLabel,
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: const Icon(
-        CupertinoIcons.bell_fill,
-        size: _glyphSize,
-        color: TmsColors.brandOnPrimary,
-      ),
-    );
-  }
+/// 目前一律回 [TmsNotificationKind.info]（灰底鈴鐺）。通知清單的回應
+/// （`specs/truth/contracts/components/schemas/通知中心.yaml` 的
+/// `notifications`）只有標題、內文、去處與時間四樣資訊，沒有任何欄位說得出
+/// 這則通知是急件、超時、完修還是交辦；從標題的字面去猜會在標題文案改一個字
+/// 的時候整批通知換錯顏色，比全部畫成一般通知更糟。
+///
+/// 推播事件本身是分得出來的：`shared.yaml` 的 `PushPayload.event` 有十七種
+/// 事件值，通知就是從那個事件落地的一筆紀錄。後端把事件值一起存進通知、並在
+/// 清單回應裡帶出來之後，這裡改成讀那個欄位並對應到 [TmsNotificationKind]
+/// 的七類即可，圖示的版面尺寸一行都不用動。
+TmsNotificationKind _kindOf(NotificationItem item) {
+  return TmsNotificationKind.info;
 }
 
 /// 把通知時間寫成員工看得懂的相對說法：一分鐘內「剛剛」，一小時內數分鐘，

@@ -37,7 +37,15 @@ const String offlineDescription = '只能完成進行中的單';
 ///
 /// 連線正常時這個元件不佔任何高度。
 class SystemStatusBar extends StatelessWidget {
-  const SystemStatusBar({super.key});
+  const SystemStatusBar({super.key, this.padding = EdgeInsets.zero});
+
+  /// 狀態列四周的留白，只在真的有一列要顯示時才生效。
+  ///
+  /// 擺進沒有左右內距的版面時（分頁的 `Column` 直接貼著螢幕邊），狀態列得自
+  /// 己補上畫面邊距，否則它會比底下每一塊內容都寬一圈。留白寫在這裡而不是讓
+  /// 呼叫端包一層 `Padding`：包在外面的那層在連線正常時仍然佔著高度，畫面頂
+  /// 端會空出一條沒有東西的縫。
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +53,7 @@ class SystemStatusBar extends StatelessWidget {
       valueListenable: ConnectionStatus.instance.offline,
       builder: (context, offline, _) {
         if (offline) {
-          return const _OfflineBar();
+          return Padding(padding: padding, child: const _OfflineBar());
         }
         return ValueListenableBuilder<bool>(
           valueListenable: ConnectionStatus.instance.unstable,
@@ -53,15 +61,18 @@ class SystemStatusBar extends StatelessWidget {
             if (!unstable) {
               return const SizedBox.shrink();
             }
-            return _StatusStrip(
-              id: 'system.connection-issue-bar',
-              icon: CupertinoIcons.exclamationmark_triangle,
-              iconColor: TmsColors.systemOrange,
-              title: connectionIssueTitle,
-              description: connectionIssueMessage,
-              tint: TmsColors.cardBackground,
-              titleColor: TmsColors.label,
-              descriptionColor: TmsColors.secondaryLabel,
+            return Padding(
+              padding: padding,
+              child: _StatusStrip(
+                id: 'system.connection-issue-bar',
+                icon: CupertinoIcons.exclamationmark_triangle,
+                iconColor: TmsColors.systemOrange,
+                title: connectionIssueTitle,
+                description: connectionIssueMessage,
+                tint: TmsColors.cardBackground,
+                titleColor: TmsColors.label,
+                descriptionColor: TmsColors.secondaryLabel,
+              ),
             );
           },
         );
