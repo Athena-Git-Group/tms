@@ -551,6 +551,7 @@ Table repair_tickets {
   verified_by     uuid        [note: '本輪新增，nullable。主管驗收通過的 staff_accounts.id；尚未驗收為 NULL。對應 contracts RepairTicket.verifiedBy（顯示名稱由 JOIN staff_accounts 取得）']
   verified_at     timestamptz [note: '本輪新增，nullable。主管驗收通過的時間；尚未驗收為 NULL。對應 contracts RepairTicket.verifiedAt']
   origin_ticket_task_id uuid  [note: '本輪新增，nullable，自我參照 repair_tickets.task_id。完修時 resolutionType=temporary 系統自動建立追蹤單時，追蹤單這欄指回原單；原單（非追蹤單）為 NULL。對應 contracts RepairTicket.originTicketNo（顯示時 JOIN 取原單 ticket_no）']
+  origin          text        [not null, default: 'reported', note: '本輪新增。CHECK: reported|scheduled。reported＝有人報修（房務報修、工務自開、櫃檯交辦三條路徑都算）；scheduled＝每日排程規則建出的定期保養。工務首頁的「今日保養 {已完成}/{總數}」只數 scheduled 的那一群，報修的三個計數只數 reported，兩邊不重疊。對應 contracts engineeringSummary.maintenanceDone／maintenanceTotal']
   created_at      timestamptz [not null]
   Indexes {
     (tenant_id, ticket_no) [unique]
@@ -566,6 +567,9 @@ Table repair_tickets {
   原報修人補資料重新送出：rejected→pending_review＋清空 reject_reason＋task_events.type=repair_resubmitted。
   主管驗收：tasks.state 維持 done，寫入 verified_by／verified_at＋task_events.type=repair_verified（不開新狀態值，原型未描繪「驗收退回」分支，本輪不建）。
   完修三選一（CompleteTaskRequest.resolutionType）：fixed（預設，無額外動作）；temporary（暫時處理）——同一交易自動建立一張房號、類別都相同的新 repair_tickets 列（origin_ticket_task_id 指回本單），走一般開單去向判定；cannot_fix（無法修復）——tasks.room_id 對應的 rooms.hk_state 轉 out_of_order（值已在 CHECK 內，見 rooms 表）。
+  定期保養（本輪新增 origin=scheduled）：由 automation_rules 的 schedule 規則建出，不經主管審核直接進工務待認領；
+  與報修單共用同一張表、同一套單號與生命週期，差別只在 origin 這一欄與「不走審核」這一條。
+  工務首頁的報修三個計數（手上／今天已完修／急件）只數 origin=reported，「今日保養」只數 origin=scheduled，兩群互斥不重疊。
   工務直開欄位對應（CreateRepairTicketRequest）：roomId／isPublicArea 決定 tasks.room_id（isPublicArea 時用既有公共區域佔位房，見 tasks 表待認領 NOOP 慣例，不新增欄位）；assigneeId 直接寫 tasks.assignee_id；呼叫者部門決定 tasks.source（房務報修與工務自開皆為 staff，櫃檮交辦為 desk，兩值已在既有 CHECK 內）。
   '''
 }
@@ -719,7 +723,7 @@ Table automation_rules {
   name              text        [not null, note: 'UNIQUE (tenant_id, name)；出廠內建四條訂房屬性規則（VIP、親子、寵物、紀念日）']
   trigger_source    text        [not null, note: 'CHECK: reservation|schedule（訂房屬性｜每日排程）']
   condition         text        [not null, note: '訂房屬性值（如 VIP）或每日時點 HH:mm']
-  category          text        [not null, note: 'CHECK: cleaning|amenity|other']
+  category          text        [not null, note: 'CHECK: cleaning|amenity|repair|other（本輪新增 repair：每日排程規則建出的定期保養工單，寫進 repair_tickets 且 origin=scheduled）']
   room_no           text        [note: '排程規則可空＝公共區域']
   due_after_minutes int         [note: '建單後 N 分鐘到期，寫入 tasks.due_at']
   enabled           boolean     [not null, default: true]
@@ -728,5 +732,13 @@ Table automation_rules {
   Indexes {
     (tenant_id, name) [unique]
   }
-  Note: 'SLA/自動化規則增補。規則命中建準備工單：source=system、pool_source=system、rule_hit=name；冪等鍵＝房號｜規則｜當地日期。刪除/停用不回收已建任務。'
+  Note: '''
+  SLA/自動化規則增補。規則命中建準備工單：source=system、pool_source=system、rule_hit=name；冪等鍵＝房號｜規則｜當地日期。刪除/停用不回收已建任務。
+  本輪新增 category=repair（定期保養）：trigger_source=schedule 的規則命中時，除了建 tasks（type=repair、dept=engineering）之外，
+  同一交易也要建對應的 repair_tickets 列並寫 origin=scheduled、取號照既有的 repair_ticket_counters。
+  保養單不經主管審核（審核只適用房務報修一般件），直接進工務待認領。
+  **目前的排程粒度限制**：condition 是每日時點 HH:mm，所以一條規則＝每天建一次。
+  「每 N 天／每月一次」這種週期還表達不出來，要支援得另立保養排程的資料面（週期、上次執行、設備台帳），
+  本輪刻意不發明——先用既有機制讓「今日保養」這個概念能真的產生資料，週期化等有需求再談。
+  '''
 }
