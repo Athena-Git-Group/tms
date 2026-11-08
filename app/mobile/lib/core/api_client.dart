@@ -708,7 +708,8 @@ class EngineeringTicket {
   final String state;
   final bool isUrgent;
 
-  /// 單的來源（housekeeping_report｜front_desk｜…），照契約 PoolSource enum。
+  /// 單的來源，照契約 PoolSource enum：工務單只會是 staff_report（房務報修或
+  /// 工務自開）或 desk_forward（櫃檯交辦）。
   final String? source;
 
   factory EngineeringTicket.fromJson(Map<String, dynamic> json) {

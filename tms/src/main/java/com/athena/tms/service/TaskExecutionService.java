@@ -597,7 +597,12 @@ public class TaskExecutionService {
                 boolean open = "accepted".equals(state) || "doing".equals(state);
                 if (open) {
                     engineeringOpenCount++;
-                    if (Boolean.TRUE.equals(row.get("urgent"))) {
+                    // 急件數與單列的 isUrgent 取同一個值（repair_tickets.is_urgent，沒有
+                    // 工務單列時退回 tasks.urgent）。contracts 把 urgentCount 定義成
+                    // 「手上單中 isUrgent=true 的筆數」，而 EngineeringTicket.isUrgent 的
+                    // 口徑又是 RepairTicketSummary.isUrgent，兩邊若各讀各的欄位，同一份
+                    // 回應裡的數字就可能和清單對不上。
+                    if (Boolean.TRUE.equals(row.get("ticket_is_urgent"))) {
                         engineeringUrgentCount++;
                     }
                 }
