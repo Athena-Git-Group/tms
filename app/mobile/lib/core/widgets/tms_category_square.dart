@@ -77,3 +77,68 @@ class TmsCategorySquare extends StatelessWidget {
     );
   }
 }
+
+/// 待認領單卡最左邊那個 56pt 的方塊：上面是房號或區域、下面是類別兩個字。
+///
+/// 這是單卡上唯一的彩色區塊，員工在列表上是先看顏色分類、再看房號找位置，所
+/// 以兩件事疊在同一個方塊上：顏色回答「這是哪一類」，數字回答「在哪裡」。
+///
+/// [where] 是房號或區域名。字級跟著長度縮：房號通常兩三碼，用 18；「公共區
+/// 域」這種四個字的區域名用 18 會爆出方塊，所以往下降一級。
+class TmsRoomSquare extends StatelessWidget {
+  const TmsRoomSquare({
+    super.key,
+    required this.type,
+    required this.where,
+    this.size = 56,
+  });
+
+  final String type;
+  final String where;
+  final double size;
+
+  double get _whereFontSize {
+    if (where.length <= 3) {
+      return 18;
+    }
+    return where.length <= 4 ? 13 : 11;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = tmsCategoryAppearance(type);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: appearance.background,
+        borderRadius: BorderRadius.circular(TmsRadius.card),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            where,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              fontSize: _whereFontSize,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+              fontFeatures: TmsText.tabularNumbers,
+              color: appearance.foreground,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            appearance.label,
+            maxLines: 1,
+            softWrap: false,
+            style: TmsText.caption2.copyWith(color: appearance.foreground),
+          ),
+        ],
+      ),
+    );
+  }
+}

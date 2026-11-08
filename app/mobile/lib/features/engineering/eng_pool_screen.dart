@@ -1,7 +1,10 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_category_square.dart';
+import '../../core/widgets/tms_tag.dart';
 import '../pool/pool_widgets.dart';
 import '../ticket/repair_ticket_form_screen.dart';
 
@@ -22,11 +25,41 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
   /// 分流磚：畫面文字與 accessibility id 的 {source} 段；urgent 是急件
   /// 維度、staff／desk 是來源維度（契約 listDeptPool 的兩個篩選參數）。
   /// `sourceParam` 是該磚要送給後端的 `source` 值，沒有值代表不帶這個參數。
+  /// 圖示方塊的配色照原型的工務分流磚逐格指定：急件紅、房務報修橘、櫃檯黃，
+  /// 員工在同一排磚上靠顏色而不是讀字找到要的那一格。
   static const _categories = [
-    (key: 'all', label: '全部', sourceParam: null),
-    (key: 'urgent', label: '急件', sourceParam: null),
-    (key: 'staff', label: '房務報修', sourceParam: 'staff_report'),
-    (key: 'desk', label: '櫃檯', sourceParam: 'desk_forward'),
+    (
+      key: 'all',
+      label: '全部',
+      sourceParam: null,
+      icon: CupertinoIcons.square_grid_2x2_fill,
+      iconBackground: TmsColors.brandContainer,
+      iconForeground: TmsColors.brandPrimary,
+    ),
+    (
+      key: 'urgent',
+      label: '急件',
+      sourceParam: null,
+      icon: CupertinoIcons.exclamationmark_triangle_fill,
+      iconBackground: TmsColors.errorContainer,
+      iconForeground: TmsColors.onErrorContainer,
+    ),
+    (
+      key: 'staff',
+      label: '房務報修',
+      sourceParam: 'staff_report',
+      icon: CupertinoIcons.wrench_fill,
+      iconBackground: TmsColors.brandAccentContainer,
+      iconForeground: TmsColors.brandOnAccentContainer,
+    ),
+    (
+      key: 'desk',
+      label: '櫃檯',
+      sourceParam: 'desk_forward',
+      icon: CupertinoIcons.person_2_fill,
+      iconBackground: TmsColors.otherContainer,
+      iconForeground: TmsColors.onOtherContainer,
+    ),
   ];
 
   String _selected = 'all';
@@ -112,14 +145,20 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: Wrap(
-            spacing: 8,
-            children: [
+          padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
+          // 分流磚不掛數量徽章：後端回的 counts 是房務的任務類別
+          // （all／cleaning／amenity／repair／other），沒有急件與來源這兩個
+          // 維度的筆數可讀。在本機數目前列表的張數會是「這一頁有幾張」而不是
+          // 「這個分流有幾張」，比空白更誤導。
+          child: PoolFilterRow(
+            tiles: [
               for (final category in _categories)
                 PoolFilterChip(
                   id: 'engPool.category.${category.key}.chip',
                   label: category.label,
+                  icon: category.icon,
+                  iconBackground: category.iconBackground,
+                  iconForeground: category.iconForeground,
                   selected: _selected == category.key,
                   onTap: () {
                     _selected = category.key;
@@ -158,6 +197,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     return TmsSemantics(
       id: 'engPool.screen',
       child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
         navigationBar: CupertinoNavigationBar(
           middle: const Text('待認領'),
           trailing: TmsSemantics(
@@ -197,21 +237,48 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       semanticsLabel: '$ticketNo ${item.roomNo} ${item.title}',
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$ticketNo · ${item.roomNo}'),
-            if (item.urgent) const Text('急件'),
+            TmsRoomSquare(type: item.category, where: item.roomNo),
+            const SizedBox(width: TmsSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$ticketNo · ${item.roomNo}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TmsText.headline,
+                  ),
+                  const SizedBox(height: TmsSpacing.xxs),
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TmsText.subheadline
+                        .copyWith(color: TmsColors.secondaryLabel),
+                  ),
+                  const SizedBox(height: TmsSpacing.xs),
+                  PoolTagRow(
+                    tags: [
+                      if (item.urgent)
+                        const TmsTag(label: '急件', tone: TmsTagTone.danger),
+                      if (sourceLabel != null)
+                        PoolCardField(
+                          id: '$itemId.source-label',
+                          text: sourceLabel,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-        Text(item.title),
-        if (sourceLabel != null)
-          PoolCardField(id: '$itemId.source-label', text: sourceLabel),
-        TmsSemantics(
+        PoolClaimButton(
           id: '$itemId.claim-button',
-          child: CupertinoButton(
-            onPressed: () => _claim(item),
-            child: const Text('認領這單'),
-          ),
+          onPressed: () => _claim(item),
         ),
       ],
     );

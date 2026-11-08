@@ -6,6 +6,7 @@ import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_status_chip.dart';
+import '../../core/widgets/tms_step_track.dart';
 import '../celebrate/celebrate_screen.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
@@ -547,48 +548,40 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget _buildStepTrack(TaskDetail task) {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
+    final currentIndex = steps.indexOf(current);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          TmsSpacing.lg, TmsSpacing.md, TmsSpacing.lg, 0),
+      padding: const EdgeInsets.only(top: TmsSpacing.md2),
       child: TmsSemantics(
         id: 'task.step-track',
         label: current,
         explicitChildNodes: true,
-        child: Row(
-          children: [
+        child: TmsStepTrack(
+          steps: [
             for (final step in steps)
-              Expanded(
-                child: TmsSemantics(
-                  id: 'task.step-track.$step',
-                  label: step,
-                  child: ExcludeSemantics(
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: _stepReached(steps, current, step)
-                                ? TmsColors.brandPrimary
-                                : TmsColors.systemGray2,
-                            borderRadius:
-                                BorderRadius.circular(TmsRadius.pill),
-                          ),
-                        ),
-                        const SizedBox(height: TmsSpacing.xs),
-                        Text(
-                          step,
-                          style: step == current
-                              ? TmsText.footnoteEmphasized
-                              : TmsText.footnote
-                                  .copyWith(color: TmsColors.tertiaryLabel),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              _trackStep(steps.indexOf(step), currentIndex, step),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 步驟條上的一步：走到哪一步決定圖示形態，id 與讀值用步驟名當識別段。
+  static TmsStepTrackStep _trackStep(int index, int currentIndex, String step) {
+    final TmsStepStatus status;
+    if (index < currentIndex) {
+      status = TmsStepStatus.done;
+    } else if (index == currentIndex) {
+      status = TmsStepStatus.current;
+    } else {
+      status = TmsStepStatus.pending;
+    }
+    return TmsStepTrackStep(
+      label: step,
+      status: status,
+      wrap: (node) => TmsSemantics(
+        id: 'task.step-track.$step',
+        label: step,
+        child: ExcludeSemantics(child: node),
       ),
     );
   }
@@ -622,11 +615,6 @@ class _TaskScreenState extends State<TaskScreen> {
       default:
         return '已接';
     }
-  }
-
-  /// 這一步走到了沒有。目前這一步與排在它前面的每一步都算走到。
-  static bool _stepReached(List<String> steps, String current, String step) {
-    return steps.indexOf(step) <= steps.indexOf(current);
   }
 
   /// 清潔 SOP 清單：每一項可以勾選，也可以跳過，上方的進度文字寫成

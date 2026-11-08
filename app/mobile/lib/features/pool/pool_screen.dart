@@ -3,7 +3,10 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_category_square.dart';
+import '../../core/widgets/tms_tag.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
 
@@ -26,11 +29,37 @@ class PoolScreen extends StatefulWidget {
 class _PoolScreenState extends State<PoolScreen> {
   /// 分類磚：`key` 同時是契約 `PoolCategory` 的值與 accessibility id 的
   /// `{category}` 段；`all` 是「不帶 category 參數」的彙總磚，不是任務類別。
+  /// 圖示方塊的底色與圖示色照原型逐格指定，不從類別色推算：「全部」不是一個
+  /// 任務類別，推不出顏色，而備品磚用的是比任務列更亮的橘，兩者刻意不同。
   static const _categories = [
-    (key: 'all', label: '全部'),
-    (key: 'amenity', label: '備品'),
-    (key: 'cleaning', label: '打掃'),
-    (key: 'other', label: '其他'),
+    (
+      key: 'all',
+      label: '全部',
+      icon: CupertinoIcons.square_grid_2x2_fill,
+      iconBackground: TmsColors.brandPrimary,
+      iconForeground: TmsColors.brandOnPrimary,
+    ),
+    (
+      key: 'amenity',
+      label: '備品',
+      icon: CupertinoIcons.cube_box_fill,
+      iconBackground: TmsColors.brandAccentVivid,
+      iconForeground: TmsColors.brandOnPrimary,
+    ),
+    (
+      key: 'cleaning',
+      label: '打掃',
+      icon: CupertinoIcons.sparkles,
+      iconBackground: TmsColors.brandContainer,
+      iconForeground: TmsColors.brandPrimary,
+    ),
+    (
+      key: 'other',
+      label: '其他',
+      icon: CupertinoIcons.bubble_left_fill,
+      iconBackground: TmsColors.otherContainer,
+      iconForeground: TmsColors.onOtherContainer,
+    ),
   ];
 
   String _selected = 'all';
@@ -103,6 +132,7 @@ class _PoolScreenState extends State<PoolScreen> {
     return TmsSemantics(
       id: 'pool.screen',
       child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
         navigationBar: const CupertinoNavigationBar(middle: Text('待認領')),
         child: SafeArea(
           child: Column(
@@ -167,23 +197,23 @@ class _PoolScreenState extends State<PoolScreen> {
   /// 的數字，所以切換分類不會讓別的磚數字跟著變。
   Widget _categoryRow(Map<String, int> counts) {
     return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
+      padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
+      child: PoolFilterRow(
+        tiles: [
           for (final category in _categories)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: PoolFilterChip(
-                id: 'pool.category.${category.key}.chip',
-                label: category.label,
-                selected: _selected == category.key,
-                countId: 'pool.category.${category.key}.count',
-                count: counts[category.key] ?? 0,
-                onTap: () {
-                  _selected = category.key;
-                  _fetch();
-                },
-              ),
+            PoolFilterChip(
+              id: 'pool.category.${category.key}.chip',
+              label: category.label,
+              icon: category.icon,
+              iconBackground: category.iconBackground,
+              iconForeground: category.iconForeground,
+              selected: _selected == category.key,
+              countId: 'pool.category.${category.key}.count',
+              count: counts[category.key] ?? 0,
+              onTap: () {
+                _selected = category.key;
+                _fetch();
+              },
             ),
         ],
       ),
@@ -205,16 +235,22 @@ class _HousekeepingPoolCard extends StatelessWidget {
   /// （`AutomationRuleService.PUBLIC_AREA_ROOM_NO`）。
   static const String publicAreaRoomNo = '公共區域';
 
-  /// 未接提醒階段（契約 `PoolItem.reminderStage`）→ 單卡標籤 id 後綴與文字。
-  /// 只有這兩段，沒有第三段，也不另外做橫幅或徽章。
-  static const Map<String, ({String idSuffix, String text})> _reminderTags = {
+  /// 未接提醒階段（契約 `PoolItem.reminderStage`）→ 單卡標籤 id 後綴、文字與
+  /// 語氣。只有這兩段，沒有第三段，也不另外做橫幅或徽章。
+  ///
+  /// 兩段的語氣刻意不同：第一段只是提醒同仁，第二段已經驚動主管，紅色讓它在
+  /// 一列標籤裡先被看到。
+  static const Map<String,
+      ({String idSuffix, String text, TmsTagTone tone})> _reminderTags = {
     'staff_reminded': (
       idSuffix: 'unaccepted-notified-peer',
       text: '未接 · 已提醒同仁',
+      tone: TmsTagTone.warn,
     ),
     'manager_notified': (
       idSuffix: 'unaccepted-notified-manager',
       text: '未接 · 已通知主管',
+      tone: TmsTagTone.danger,
     ),
   };
 
@@ -238,60 +274,79 @@ class _HousekeepingPoolCard extends StatelessWidget {
         : '$cardId.return-reason';
     final reminderTag = _reminderTags[item.reminderStage];
 
+    final roomSquare = TmsRoomSquare(
+      type: item.category,
+      where: isPublicArea ? publicAreaRoomNo : item.roomNo,
+    );
+
     return PoolCard(
       id: isHighlighted ? '$cardId--highlighted' : cardId,
       highlighted: isHighlighted,
       onTap: onTap,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 公共區域的單沒有房號，方塊上寫的就是「公共區域」四個字；驗收
+            // 要讀的是方塊上這段文字，所以 id 掛在方塊本身。
             if (isPublicArea)
               TmsSemantics(
                 id: 'pool.card.common-area-label',
                 label: publicAreaRoomNo,
-                child: const Text(
-                  publicAreaRoomNo,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                child: roomSquare,
               )
             else
-              Text(
-                '${item.roomNo} 號房',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              roomSquare,
+            const SizedBox(width: TmsSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TmsText.headline,
+                  ),
+                  const SizedBox(height: TmsSpacing.xs),
+                  PoolTagRow(
+                    tags: [
+                      if (item.sameFloor)
+                        PoolCardField(
+                          id: '$cardId.same-floor-tag',
+                          text: '同樓層',
+                          tone: TmsTagTone.info,
+                        ),
+                      if (sourceLabel != null)
+                        PoolCardField(
+                          id: '$cardId.source-tag',
+                          text: sourceLabel,
+                        ),
+                      if (item.returnReason != null)
+                        PoolCardField(
+                          id: reasonFieldId,
+                          text: item.returnReason!,
+                        ),
+                      if (item.handoverNote != null)
+                        PoolCardField(
+                          id: '$cardId.handoff-progress',
+                          text: item.handoverNote!,
+                          tone: TmsTagTone.warn,
+                        ),
+                      if (reminderTag != null)
+                        PoolCardField(
+                          id: '$cardId.status-tag--${reminderTag.idSuffix}',
+                          text: reminderTag.text,
+                          tone: reminderTag.tone,
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            if (item.sameFloor)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: PoolCardField(
-                  id: '$cardId.same-floor-tag',
-                  text: '同樓層',
-                ),
-              ),
+            ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(item.title),
-        if (sourceLabel != null)
-          PoolCardField(id: '$cardId.source-tag', text: sourceLabel),
-        if (item.returnReason != null)
-          PoolCardField(id: reasonFieldId, text: item.returnReason!),
-        if (item.handoverNote != null)
-          PoolCardField(
-            id: '$cardId.handoff-progress',
-            text: item.handoverNote!,
-          ),
-        if (reminderTag != null)
-          PoolCardField(
-            id: '$cardId.status-tag--${reminderTag.idSuffix}',
-            text: reminderTag.text,
-          ),
-        TmsSemantics(
-          id: '$cardId.claim-button',
-          child: CupertinoButton(
-            onPressed: onClaim,
-            child: const Text('認領這單'),
-          ),
-        ),
+        PoolClaimButton(id: '$cardId.claim-button', onPressed: onClaim),
       ],
     );
   }
