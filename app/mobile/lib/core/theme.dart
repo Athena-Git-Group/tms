@@ -372,6 +372,9 @@ abstract final class TmsSpacing {
   /// 畫面左右邊距。值跟 [lg] 一樣，獨立命名是因為它是一條規則、不是巧合：
   /// 改版面時這個值要一起動，其他 16 不一定。
   static const double screenEdge = 16;
+
+  /// 分組清單一般列的上下內距。配上 17pt 的列文字剛好湊到 44 的最小觸控高度。
+  static const double groupedRowVertical = 11;
 }
 
 /// 圓角 token。
@@ -424,6 +427,22 @@ abstract final class TmsSize {
 
   /// 主按鈕高度（任務頁、登入頁）。
   static const double primaryButtonHeight = 54;
+
+  /// 列尾 chevron 的邊長。原型是 8 × 13 的描邊箭頭，這裡用字框是正方形的
+  /// 系統圖示，取它的高度。
+  static const double chevron = 14;
+
+  /// 「我的」身分卡上的大頭像。首頁問候列那顆小的是 [minTouchTarget]。
+  static const double avatarLarge = 60;
+
+  /// 通知中心每一列的圓形分類圖示。
+  static const double notificationKindIcon = 36;
+
+  /// 未讀點的直徑。
+  static const double unreadDot = 8;
+
+  /// 空狀態的描邊圖示邊長。
+  static const double emptyStateIcon = 56;
 }
 
 /// Cupertino 側的主題。App 殼是 `CupertinoApp`，可點文字、游標與選取色都吃這裡
