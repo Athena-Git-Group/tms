@@ -678,6 +678,7 @@ Table notifications {
   id                 uuid        [pk]
   tenant_id          bigint      [not null, ref: > tenants.id]
   recipient_staff_id uuid        [not null, note: '收件人']
+  event              text        [not null, note: '本輪新增。CHECK: 與 contracts PushPayload.event 同一套十七值（pool_new_request｜inspection_passed｜inspection_failed｜spot_check_failed｜task_cancelled｜reassigned_away｜reassigned_to_me｜shift_end_returned｜guest_withdrew｜leave_takeover｜repair_completed｜repair_urgent｜kb_reply｜kb_unhelpful｜shift_end_still_interrupted｜unclaimed_reminder_staff｜unclaimed_reminder_manager）。outbox 的 kind=push 展開成一人一封時，把當時 payload 的 event 一併落地。通知中心靠它決定每一列的分類圖示與顏色——沒有這一欄，整頁的通知只能畫成同一種樣子。對應 contracts notifications.event']
   title              text        [not null, note: '推播標題全文，與 PushPayload.title 相同文案']
   body               text        [note: '選填']
   target             jsonb       [not null, note: '導頁去處，形狀＝contracts PushTarget（kind=task|pool|home，task 帶 taskId，pool 帶 dept）；App 依 kind 決定點開後去向']
@@ -691,6 +692,8 @@ Table notifications {
   （outbox kind=push 展開一人一封後，於同一交易一併寫入一筆本表，供 GET /notifications 等端點查詢；
   outbox 本身仍是一次性 relay，不保留可查詢歷史）。
   保留政策：依 tenant_config.notification_retention_days（預設 30 天）排程清除逾期列。
+  event 與 title／body／target 一樣來自同一份 PushPayload，必須在展開那一筆交易裡一起寫；
+  漏寫會讓該列的分類圖示掉回「一般」，而本表是 30 天就會被清掉的短期紀錄、沒有回填的權威來源。
   '''
 }
 
