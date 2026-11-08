@@ -1,7 +1,12 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_option_row.dart';
+import '../../core/widgets/tms_sheet.dart';
 import 'task_callouts.dart';
 
 /// 查一下面板（ui-plan 畫面 8 的 `askSheet`）：列出這張任務的推薦問題，
@@ -58,59 +63,47 @@ class _AskSheetState extends State<AskSheet> {
     return TmsSemantics(
       id: 'ask.sheet',
       explicitChildNodes: true,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        color: CupertinoColors.white,
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '查一下',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text('先查房間記錄或工務記錄，查不到再問主管'),
-              const SizedBox(height: 12),
-              FutureBuilder<List<AskSuggestion>>(
-                future: _suggestions,
-                builder: (context, snapshot) {
-                  final suggestions = snapshot.data;
-                  if (suggestions == null) {
-                    return const SizedBox.shrink();
-                  }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < suggestions.length; i++)
-                        _SuggestionRow(
-                          index: i,
-                          suggestion: suggestions[i],
-                          onTap: () => _ask(suggestions[i].question),
-                        ),
-                    ],
-                  );
-                },
-              ),
-              if (_answer != null)
-                _answer!.found
-                    ? _buildAnswer(_answer!)
-                    : _buildNotFound(_answer!),
-              const SizedBox(height: 12),
-              TmsSemantics(
-                id: 'ask.ask-manager-button',
-                child: CupertinoButton(
-                  // 問主管的送出是後續 slice；這裡先露出可點的入口。
-                  onPressed: () {},
-                  child: const Text('問主管'),
-                ),
-              ),
-            ],
+      child: TmsSheet(
+        title: '查一下',
+        leadingLabel: '關閉',
+        onLeadingTap: () => Navigator.of(context).pop(),
+        bottomAction: TmsSemantics(
+          id: 'ask.ask-manager-button',
+          child: TmsSheetButton(
+            label: '問主管',
+            filled: false,
+            // 問主管的送出是後續 slice；這裡先露出可點的入口。
+            onPressed: () {},
           ),
         ),
+        children: [
+          FutureBuilder<List<AskSuggestion>>(
+            future: _suggestions,
+            builder: (context, snapshot) {
+              final suggestions = snapshot.data;
+              if (suggestions == null) {
+                return const SizedBox.shrink();
+              }
+              return TmsGroupedSection(
+                style: TmsCardStyle.inSheet,
+                children: [
+                  for (var i = 0; i < suggestions.length; i++)
+                    _SuggestionRow(
+                      index: i,
+                      suggestion: suggestions[i],
+                      onTap: () => _ask(suggestions[i].question),
+                    ),
+                ],
+              );
+            },
+          ),
+          const Text(
+            '先查房間記錄或工務記錄，查不到再問主管',
+            style: TmsText.footnote,
+          ),
+          if (_answer != null)
+            _answer!.found ? _buildAnswer(_answer!) : _buildNotFound(_answer!),
+        ],
       ),
     );
   }
@@ -119,31 +112,31 @@ class _AskSheetState extends State<AskSheet> {
   /// 不是畫一個空的回答區。空的回答區會讓員工以為「有查到，但系統沒話說」，
   /// 而事實是這件事沒有記錄可查，該去問主管。訊息全文由後端給。
   Widget _buildNotFound(AskAnswer answer) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
+    return TmsCard(
       child: TmsSemantics(
         id: 'ask.not-found-message',
-        child: Text(answer.notFoundMessage ?? ''),
+        child: Text(answer.notFoundMessage ?? '', style: TmsText.headline),
       ),
     );
   }
 
   /// 回答區：回答全文在上，出處卡逐張排在下面。
   Widget _buildAnswer(AskAnswer answer) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        TmsSemantics(
-          id: 'ask.answer.text',
-          child: Text(answer.answer ?? ''),
-        ),
-        for (var i = 0; i < answer.sources.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: _SourceCard(index: i, source: answer.sources[i]),
+    return TmsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TmsSemantics(
+            id: 'ask.answer.text',
+            child: Text(answer.answer ?? '', style: TmsText.headline),
           ),
-      ],
+          for (var i = 0; i < answer.sources.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(top: TmsSpacing.md),
+              child: _SourceCard(index: i, source: answer.sources[i]),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -171,34 +164,16 @@ class _SuggestionRow extends StatelessWidget {
     return TmsSemantics(
       id: 'ask.suggestion.$index',
       explicitChildNodes: true,
-      child: CupertinoButton(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        onPressed: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TmsSemantics(
-              id: 'ask.suggestion.$index.question',
-              child: Text(
-                suggestion.question,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: CupertinoColors.label,
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            TmsSemantics(
-              id: 'ask.suggestion.$index.scope',
-              child: Text(
-                suggestion.scope,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.secondaryLabel,
-                ),
-              ),
-            ),
-          ],
+      child: TmsOptionRow(
+        accessory: TmsOptionAccessory.chevron,
+        onTap: onTap,
+        title: TmsSemantics(
+          id: 'ask.suggestion.$index.question',
+          child: Text(suggestion.question),
+        ),
+        subtitle: TmsSemantics(
+          id: 'ask.suggestion.$index.scope',
+          child: Text(suggestion.scope),
         ),
       ),
     );
@@ -238,10 +213,7 @@ class _SourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const metaStyle = TextStyle(
-      fontSize: 13,
-      color: CupertinoColors.secondaryLabel,
-    );
+    const metaStyle = TmsText.footnote;
     return TaskCallout(
       id: 'ask.answer.source-card.$index',
       tint: calloutSourceTint,
@@ -260,18 +232,15 @@ class _SourceCard extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: TmsSpacing.xs),
         TmsSemantics(
           id: 'ask.answer.source-card.$index.title',
-          child: Text(
-            source.title,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
+          child: Text(source.title, style: TmsText.subheadlineEmphasized),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: TmsSpacing.xxs),
         TmsSemantics(
           id: 'ask.answer.source-card.$index.excerpt',
-          child: Text(source.excerpt),
+          child: Text(source.excerpt, style: TmsText.footnote),
         ),
       ],
     );

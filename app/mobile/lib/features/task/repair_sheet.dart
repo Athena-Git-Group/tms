@@ -7,7 +7,11 @@ import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_option_row.dart';
+import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_selection_chip.dart';
+import '../../core/widgets/tms_sheet.dart';
 import '../ticket/repair_labels.dart';
 
 /// 報修面板（ui-plan 畫面 6 的 `repairSheet`，即工務單表單）：房務在任務頁
@@ -221,111 +225,103 @@ class _RepairSheetState extends State<RepairSheet> {
         _category != null && _photos.isNotEmpty && !_submitting;
     return TmsSemantics(
       id: 'repair.sheet',
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          color: CupertinoColors.white,
-          border: Border(
-            top: BorderSide(color: CupertinoColors.systemGrey4),
+      child: TmsSheet(
+        title: '報修',
+        leadingLabel: '關閉',
+        onLeadingTap: widget.onClose,
+        bottomAction: TmsSemantics(
+          id: 'repair.submit-button',
+          // 可否送出要顯式標出來：CupertinoButton 的 onPressed 為
+          // null 時，框架不會把 disabled 曝露到 accessibility tree。
+          enabled: canSubmit,
+          child: TmsSheetButton(
+            label: '送出',
+            onPressed: canSubmit ? _submit : null,
           ),
         ),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '報修',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        children: [
+          _categoryList(),
+          if (_precheck?.duplicate != null)
+            _duplicateCallout(_precheck!.duplicate!),
+          if (_precheck != null) _urgentJudgementCard(_precheck!),
+          _photoCard(),
+          TmsSemantics(
+            id: 'repair.interrupt-source-task-toggle',
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TmsSelectionChip(
+                label: '中斷 · 需要工務協助',
+                selected: _interruptSourceTask,
+                onTap: () => setState(
+                  () => _interruptSourceTask = !_interruptSourceTask,
                 ),
-                const SizedBox(height: 8),
-                const Text('問題類別'),
-                const SizedBox(height: 8),
-                _categoryChips(),
-                if (_precheck?.duplicate != null)
-                  _duplicateBanner(_precheck!.duplicate!),
-                if (_precheck != null) _urgentJudgementCard(_precheck!),
-                const SizedBox(height: 16),
-                const TmsSemantics(
-                  id: 'repair.photo.count-label',
-                  label: '照片（至少 1 張、最多 3 張）',
-                  child: ExcludeSemantics(
-                    child: Text('照片（至少 1 張、最多 3 張）'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (var i = 0; i < _photos.length; i++) _thumbnail(i),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (!_photoLimitHit)
-                  TmsSemantics(
-                    id: 'repair.photo.add-button',
-                    child: CupertinoButton(
-                      onPressed: _addPhoto,
-                      child: const Text('加入照片'),
-                    ),
-                  ),
-                TmsSemantics(
-                  id: 'repair.interrupt-source-task-toggle',
-                  child: GestureDetector(
-                    onTap: () => setState(
-                        () => _interruptSourceTask = !_interruptSourceTask),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _interruptSourceTask
-                            ? CupertinoColors.activeBlue
-                            : CupertinoColors.systemGrey5,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        '中斷 · 需要工務協助',
-                        style: TextStyle(
-                          color: _interruptSourceTask
-                              ? CupertinoColors.white
-                              : CupertinoColors.black,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                if (_queuedOffline) _offlineQueuedLabel(),
-                const SizedBox(height: 16),
-                TmsSemantics(
-                  id: 'repair.submit-button',
-                  // 可否送出要顯式標出來：CupertinoButton 的 onPressed 為
-                  // null 時，框架不會把 disabled 曝露到 accessibility tree。
-                  enabled: canSubmit,
-                  child: CupertinoButton.filled(
-                    onPressed: canSubmit ? _submit : null,
-                    child: const Text('送出'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+          if (_queuedOffline) _offlineQueuedLabel(),
+        ],
       ),
     );
   }
 
-  Widget _categoryChips() {
-    return Wrap(
-      spacing: 8,
+  /// 照片區：一張白卡，上面一行標題與張數，底下是照片格與「加入照片」格。
+  Widget _photoCard() {
+    return TmsCard(
+      style: TmsCardStyle.inSheet,
+      padding: const EdgeInsets.fromLTRB(
+        TmsSpacing.md2,
+        TmsSpacing.md,
+        TmsSpacing.md2,
+        TmsSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const TmsSemantics(
+            id: 'repair.photo.count-label',
+            label: '照片（至少 1 張、最多 3 張）',
+            child: ExcludeSemantics(
+              child: Text(
+                '照片（至少 1 張、最多 3 張）',
+                style: TmsText.footnoteEmphasized,
+              ),
+            ),
+          ),
+          const SizedBox(height: TmsSpacing.sm2),
+          Wrap(
+            spacing: TmsSpacing.sm,
+            runSpacing: TmsSpacing.sm,
+            children: [
+              for (var i = 0; i < _photos.length; i++) _thumbnail(i),
+              if (!_photoLimitHit)
+                TmsSemantics(
+                  id: 'repair.photo.add-button',
+                  child: TmsAddPhotoButton(
+                    label: '加入照片',
+                    onTap: _addPhoto,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 問題類別：一組分組列表，選中的那一列尾端打勾。原型在這裡用的是清單不是
+  /// 膠囊——類別有五種，膠囊排成兩行之後，哪一顆被選起來要靠顏色分辨；清單一列
+  /// 一個，選中的那一列右邊直接有勾。
+  Widget _categoryList() {
+    return TmsGroupedSection(
+      header: '問題類別',
+      style: TmsCardStyle.inSheet,
       children: [
         for (final category in repairCategories)
           TmsSemantics(
             id: 'repair.category.${category.key}.chip',
-            child: TmsSelectionChip(
-              label: category.label,
+            child: TmsOptionRow(
+              title: Text(category.label),
               selected: _category == category.key,
               onTap: () => _pickCategory(category.key),
             ),
@@ -336,26 +332,61 @@ class _RepairSheetState extends State<RepairSheet> {
 
   /// 重複提示：同房同類別已經有一張沒結案的單時，先告訴員工那張單的單號與
   /// 目前狀態，並給他一條「把照片補到那張單」的路，而不是再開一張重複的。
-  Widget _duplicateBanner(RepairTicketSummary duplicate) {
+  ///
+  /// 用白卡加一顆資訊圓圖示，不用紅底——這不是錯誤，是一個「其實有更省事的
+  /// 做法」的提醒；紅底會讓員工以為自己做錯了什麼。
+  Widget _duplicateCallout(RepairTicketSummary duplicate) {
     final text = '已有 ${duplicate.ticketNo} '
         '${repairCategoryText(duplicate.category)}'
         '（${repairStateText(duplicate.state)}）';
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
+    return TmsCard(
+      style: TmsCardStyle.inSheet,
+      padding: const EdgeInsets.symmetric(
+        vertical: TmsSpacing.md,
+        horizontal: TmsSpacing.lg,
+      ),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TmsSemantics(
-            id: 'repair.duplicate-ticket.banner',
-            label: text,
-            child: ExcludeSemantics(child: Text(text)),
+          const Icon(
+            CupertinoIcons.info_circle_fill,
+            size: 26,
+            color: TmsColors.brandPrimary,
           ),
-          TmsSemantics(
-            id: 'repair.duplicate-ticket.add-photo-button',
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () => _appendPhotosToDuplicate(duplicate),
-              child: Text('補充照片到 ${duplicate.ticketNo}'),
+          const SizedBox(width: TmsSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TmsSemantics(
+                  id: 'repair.duplicate-ticket.banner',
+                  label: text,
+                  child: ExcludeSemantics(
+                    child: Text(text, style: TmsText.subheadlineEmphasized),
+                  ),
+                ),
+                const SizedBox(height: TmsSpacing.xxs),
+                const Text(
+                  '同一個問題不用再開新單，補照片到原本的單，主管與工務都看得到。',
+                  style: TmsText.footnote,
+                ),
+                TmsSemantics(
+                  id: 'repair.duplicate-ticket.add-photo-button',
+                  child: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, TmsSize.minTouchTarget),
+                    alignment: Alignment.centerLeft,
+                    onPressed: () => _appendPhotosToDuplicate(duplicate),
+                    child: Text(
+                      '補充照片到 ${duplicate.ticketNo}',
+                      style: TmsText.subheadlineEmphasized.copyWith(
+                        color: TmsColors.brandPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -438,7 +469,10 @@ class _RepairSheetState extends State<RepairSheet> {
             id: 'ticket.summary.offline-queued-label',
             label: '待送出：工務單與照片已保存在手機',
             child: const ExcludeSemantics(
-              child: Text('待送出：工務單與照片已保存在手機'),
+              child: Text(
+                '待送出：工務單與照片已保存在手機',
+                style: TmsText.footnote,
+              ),
             ),
           ),
         );
@@ -453,38 +487,57 @@ class _RepairSheetState extends State<RepairSheet> {
     final statusText = photo.uploadFailed
         ? '上傳失敗'
         : (photo.photoId == null ? '待上傳' : '已上傳');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 72,
-          height: 72,
-          color: CupertinoColors.systemGrey4,
-        ),
-        TmsSemantics(
-          id: 'repair.photo.${index + 1}.watermark-label',
-          label: photo.watermark,
-          child: ExcludeSemantics(
-            child: Text(photo.watermark, style: const TextStyle(fontSize: 10)),
-          ),
-        ),
-        TmsSemantics(
-          id: 'repair.photo.${index + 1}.upload-status',
-          label: statusText,
-          child: ExcludeSemantics(
-            child: Text(statusText, style: const TextStyle(fontSize: 10)),
-          ),
-        ),
-        if (photo.uploadFailed)
-          TmsSemantics(
-            id: 'repair.photo.${index + 1}.retry-button',
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () => _retryPhoto(index),
-              child: const Text('重試', style: TextStyle(fontSize: 12)),
+    final TmsPhotoState state;
+    if (photo.uploadFailed) {
+      state = TmsPhotoState.failed;
+    } else if (photo.photoId != null) {
+      state = TmsPhotoState.done;
+    } else if (_submitting) {
+      state = TmsPhotoState.uploading;
+    } else {
+      state = TmsPhotoState.pending;
+    }
+    return SizedBox(
+      width: TmsPhotoCell.size,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TmsPhotoCell(
+            state: state,
+            watermark: TmsSemantics(
+              id: 'repair.photo.${index + 1}.watermark-label',
+              label: photo.watermark,
+              child: ExcludeSemantics(child: Text(photo.watermark)),
+            ),
+            failureAction: TmsSemantics(
+              id: 'repair.photo.${index + 1}.retry-button',
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(
+                  TmsPhotoCell.size,
+                  TmsPhotoCell.size,
+                ),
+                onPressed: () => _retryPhoto(index),
+                child: Text(
+                  '重試',
+                  style: TmsText.caption1.copyWith(
+                    color: TmsColors.brandOnPrimary,
+                  ),
+                ),
+              ),
             ),
           ),
-      ],
+          const SizedBox(height: TmsSpacing.xs),
+          TmsSemantics(
+            id: 'repair.photo.${index + 1}.upload-status',
+            label: statusText,
+            child: ExcludeSemantics(
+              child: Text(statusText, style: TmsText.footnote),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

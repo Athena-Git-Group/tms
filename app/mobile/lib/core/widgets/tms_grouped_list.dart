@@ -13,10 +13,20 @@ import 'tms_card.dart';
 /// 列不必是 [TmsGroupedRow]：通知中心的列有未讀點、分類圖示與兩段文字，和設定
 /// 列長得完全不一樣，但它們共用同一個群組容器。
 class TmsGroupedSection extends StatelessWidget {
-  const TmsGroupedSection({super.key, this.header, required this.children});
+  const TmsGroupedSection({
+    super.key,
+    this.header,
+    this.style = TmsCardStyle.grouped,
+    required this.children,
+  });
 
   /// 群組上方的小標題（「通知與顯示」「今天」）。不給就不畫這一行。
   final String? header;
+
+  /// 群組白卡的圓角級別。一般畫面用預設的分組級；底部面板裡的群組用
+  /// [TmsCardStyle.inSheet]，面板本身的圓角比畫面小，群組跟著收一級才不會比
+  /// 裝它的面板還圓。
+  final TmsCardStyle style;
 
   /// 群組裡的列，由上到下。分隔線由這裡插，呼叫端不用自己畫。
   final List<Widget> children;
@@ -35,10 +45,14 @@ class TmsGroupedSection extends StatelessWidget {
       }
       rows.add(children[i]);
     }
+    final radius = style == TmsCardStyle.inSheet
+        ? TmsRadius.cardInSheet
+        : TmsRadius.card;
     final group = TmsCard(
+      style: style,
       padding: EdgeInsets.zero,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(TmsRadius.card),
+        borderRadius: BorderRadius.circular(radius),
         child: Column(mainAxisSize: MainAxisSize.min, children: rows),
       ),
     );
