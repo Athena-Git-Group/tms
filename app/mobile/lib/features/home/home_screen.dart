@@ -15,8 +15,8 @@ import '../today/progress_value.dart';
 
 /// 房務首頁：今日進度、手上或下一間要做的房，以及今天的任務清單。
 ///
-/// 畫面上的每一個數字與任務卡的順序都直接取自 `GET /me/today`（由
-/// [MyTodayScope] 取一次、整個畫面共用），App 不自己算也不自己排。
+/// 畫面上的每一個數字與任務卡的順序都直接取自 `GET /me/today`（由外殼上的
+/// [MyTodayScope] 取一次、整個外殼共用），App 不自己算也不自己排。
 /// 算法的真相在後端，兩邊各算一次就會有兩種答案。
 ///
 /// 整頁可捲動。員工手上的任務多到一屏放不下是常態，不能捲的版面會讓後面
@@ -28,30 +28,28 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return TmsSemantics(
       id: 'home.screen',
-      child: MyTodayScope(
-        child: CupertinoPageScaffold(
-          backgroundColor: TmsColors.groupedBackground,
-          child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                TmsSpacing.screenEdge,
-                TmsSpacing.md,
-                TmsSpacing.screenEdge,
-                TmsSpacing.xxl,
-              ),
-              children: const [
-                // 連線狀態列固定在內容最上方，員工在首頁一眼就知道現在是離線
-                // 還是連線不穩定，不必等某個操作失敗才發現。
-                SystemStatusBar(),
-                _GreetingRow(),
-                SizedBox(height: TmsSpacing.lg),
-                _TodayProgressCard(),
-                SizedBox(height: TmsSpacing.lg),
-                _FocusCard(),
-                SizedBox(height: TmsSpacing.lg),
-                _TodayTaskList(),
-              ],
+      child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              TmsSpacing.screenEdge,
+              TmsSpacing.md,
+              TmsSpacing.screenEdge,
+              TmsSpacing.xxl,
             ),
+            children: const [
+              // 連線狀態列固定在內容最上方，員工在首頁一眼就知道現在是離線
+              // 還是連線不穩定，不必等某個操作失敗才發現。
+              SystemStatusBar(),
+              _GreetingRow(),
+              SizedBox(height: TmsSpacing.lg),
+              _TodayProgressCard(),
+              SizedBox(height: TmsSpacing.lg),
+              _FocusCard(),
+              SizedBox(height: TmsSpacing.lg),
+              _TodayTaskList(),
+            ],
           ),
         ),
       ),
@@ -59,16 +57,22 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// 問候語與今天的日期，右邊一顆圓形頭像。
+/// 問候語與今天的日期、班別與負責樓層，右邊一顆圓形頭像。
 ///
-/// 問候語依現在的時間分早上、下午與晚上三段。頭像目前沒有照片來源，先用
-/// 品牌淡底的圓形佔住位置，讓這一列的左右配重跟設計一致。
+/// 問候語依現在的時間分早上、下午與晚上三段。日期後面接的班別與樓層來自
+/// `GET /me/today`：員工一早開 App 第一眼就要確認「今天是哪一班、顧哪幾層」，
+/// 這兩件事錯了後面整天的任務都對不上。後端還沒給這兩個欄位、或今天根本沒
+/// 排班時它們是 null，該段就整段不出現，這一列退回只有日期的樣子。
+///
+/// 頭像目前沒有照片來源，先用品牌淡底的圓形佔住位置，讓這一列的左右配重跟
+/// 設計一致。
 class _GreetingRow extends StatelessWidget {
   const _GreetingRow();
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+    final today = MyTodayScope.todayOf(context);
     return Row(
       children: [
         Expanded(
@@ -78,7 +82,9 @@ class _GreetingRow extends StatelessWidget {
               Text(_greeting(now.hour), style: TmsText.title1),
               const SizedBox(height: TmsSpacing.xs),
               Text(
-                '${now.month} 月 ${now.day} 日',
+                '${now.month} 月 ${now.day} 日'
+                '${_shiftSuffix(today?.shift)}'
+                '${_floorsSuffix(today?.floors)}',
                 style: TmsText.subheadline.copyWith(
                   color: TmsColors.secondaryLabel,
                 ),
@@ -97,6 +103,22 @@ class _GreetingRow extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// 班別那一段；沒有班別就回空字串，日期後面不會多出一個孤零零的分隔點。
+  static String _shiftSuffix(String? shift) {
+    if (shift == null || shift.isEmpty) {
+      return '';
+    }
+    return ' · $shift';
+  }
+
+  /// 負責樓層那一段。多層時用頓號並排（`3、4 樓`），沒有樓層就整段不出現。
+  static String _floorsSuffix(List<int>? floors) {
+    if (floors == null || floors.isEmpty) {
+      return '';
+    }
+    return ' · ${floors.join('、')} 樓';
   }
 
   static String _greeting(int hour) {

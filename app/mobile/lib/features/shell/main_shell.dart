@@ -5,8 +5,10 @@ import '../engineering/eng_home_screen.dart';
 import '../engineering/eng_pool_screen.dart';
 import '../home/home_screen.dart';
 import '../me/me_screen.dart';
+import '../../core/widgets/tms_category_tile.dart';
 import '../notification/notification_screen.dart';
 import '../pool/pool_screen.dart';
+import '../today/my_today_scope.dart';
 
 /// 登入後的主畫面外殼：底部四個分頁，首頁／待認領／通知／我的。
 ///
@@ -31,6 +33,28 @@ class _MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 今日進度取在外殼這一層，不是取在首頁裡。分頁列的兩顆徽章與首頁的每一
+    // 個數字都出自同一支 `GET /me/today`，誰先要用都讀同一份：擺在首頁裡的
+    // 話外殼讀不到（InheritedWidget 只往下傳），外殼只好自己再打一次，一次
+    // 進場就變成兩個請求、兩份可能對不起來的數字。
+    return MyTodayScope(
+      child: _MainShellBody(homeTab: homeTab, poolTab: poolTab),
+    );
+  }
+}
+
+/// 外殼的分頁骨架。獨立成一個元件，是為了讓它的 `context` 落在
+/// [MyTodayScope] 底下——分頁列的徽章要靠這一點才讀得到今日進度。
+class _MainShellBody extends StatelessWidget {
+  const _MainShellBody({required this.homeTab, required this.poolTab});
+
+  final Widget homeTab;
+
+  final Widget poolTab;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = MyTodayScope.todayOf(context);
     return CupertinoTabScaffold(
       tabBar: CupertinoTabBar(
         backgroundColor: _tabBarBackground,
@@ -43,20 +67,26 @@ class _MainShell extends StatelessWidget {
             width: TmsSize.hairline,
           ),
         ),
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.house_fill),
             label: '首頁',
           ),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.tray_full),
+            icon: _TabIcon(
+              icon: CupertinoIcons.tray_full,
+              badgeCount: today?.poolBadgeCount ?? 0,
+            ),
             label: '待認領',
           ),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.bell),
+            icon: _TabIcon(
+              icon: CupertinoIcons.bell,
+              badgeCount: today?.unreadNotificationBadgeCount ?? 0,
+            ),
             label: '通知',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.person),
             label: '我的',
           ),
@@ -78,12 +108,49 @@ class _MainShell extends StatelessWidget {
   }
 }
 
+/// 分頁列上的一格圖示，右上角可以掛一顆紅色數量徽章。
+///
+/// 計數是 0 時整顆徽章不畫。分類磚上的徽章 0 也照顯示，那是因為那幾顆數字
+/// 本身就是驗收要讀的值；分頁列這兩顆沒有人讀，留一顆「0」在圖示旁邊只會
+/// 讓員工以為有東西等著處理。
+class _TabIcon extends StatelessWidget {
+  const _TabIcon({required this.icon, required this.badgeCount});
+
+  final IconData icon;
+
+  final int badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    if (badgeCount <= 0) {
+      return Icon(icon);
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          top: -_tabBadgeInset,
+          left: _tabIconSize * _tabBadgeLeftRatio,
+          child: TmsCountBadge(count: badgeCount),
+        ),
+      ],
+    );
+  }
+}
+
 /// 分頁列的底色。它帶一點透明度，捲到底的內容會在分頁列底下透出來一點，
 /// 員工因此看得出清單還沒到底。
 const Color _tabBarBackground = Color(0xF0F9F9F9);
 
 /// 分頁圖示的邊長。
 const double _tabIconSize = 26;
+
+/// 徽章相對圖示上緣往外探出的距離。
+const double _tabBadgeInset = TmsSpacing.xs;
+
+/// 徽章左緣落在圖示寬度的哪一個比例上（原型是 54%）。
+const double _tabBadgeLeftRatio = 0.54;
 
 /// 房務員工登入後的主畫面。
 class HousekeepingShell extends StatelessWidget {

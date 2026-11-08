@@ -16,7 +16,7 @@ import '../today/progress_value.dart';
 
 /// 工務首頁：今日進度三格（手上／今天已完修／急件），以及我手上的工務單。
 ///
-/// 三格的值直接取自 `GET /me/today` 的 engineeringSummary（由 [MyTodayScope]
+/// 三格的值直接取自 `GET /me/today` 的 engineeringSummary（由外殼上的 [MyTodayScope]
 /// 取一次、整個畫面共用，與房務首頁同一條取用路徑），App 不自己數。
 ///
 /// 手上的單同樣來自 engineeringSummary：後端的 tickets 已經收齊本人手上
@@ -33,32 +33,28 @@ class EngHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return TmsSemantics(
       id: 'engHome.screen',
-      child: MyTodayScope(
-        child: CupertinoPageScaffold(
-          backgroundColor: TmsColors.groupedBackground,
-          navigationBar: const CupertinoNavigationBar(middle: Text('工務首頁')),
-          child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                TmsSpacing.screenEdge,
-                TmsSpacing.md,
-                TmsSpacing.screenEdge,
-                TmsSpacing.xxl,
-              ),
-              children: const [
-                // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
-                // 連線不穩定，不必等某個操作失敗才發現。
-                SystemStatusBar(
-                  padding: EdgeInsets.only(bottom: TmsSpacing.md),
-                ),
-                _LoadFailureNotice(),
-                _EngineeringProgress(),
-                SizedBox(height: TmsSpacing.lg),
-                _FocusCard(),
-                SizedBox(height: TmsSpacing.lg),
-                _InHandTickets(),
-              ],
+      child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
+        navigationBar: const CupertinoNavigationBar(middle: Text('工務首頁')),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              TmsSpacing.screenEdge,
+              TmsSpacing.md,
+              TmsSpacing.screenEdge,
+              TmsSpacing.xxl,
             ),
+            children: const [
+              // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
+              // 連線不穩定，不必等某個操作失敗才發現。
+              SystemStatusBar(padding: EdgeInsets.only(bottom: TmsSpacing.md)),
+              _LoadFailureNotice(),
+              _EngineeringProgress(),
+              SizedBox(height: TmsSpacing.lg),
+              _FocusCard(),
+              SizedBox(height: TmsSpacing.lg),
+              _InHandTickets(),
+            ],
           ),
         ),
       ),
