@@ -1270,6 +1270,8 @@ class TaskDetail {
     this.inspectionWaived = false,
     this.estMin,
     this.elapsedMinutes = 0,
+    this.segmentStartedAt,
+    this.source,
     this.checkedSopItems = const <String>[],
     this.skippedSopItems = const <String>[],
     this.holdReason,
@@ -1307,8 +1309,22 @@ class TaskDetail {
   /// 「預估 N 分」都讀它。
   final int? estMin;
 
-  /// 已做分鐘。
+  /// 已做分鐘。分鐘層級的權威值：超時判定一律讀它，不讀 [segmentStartedAt]
+  /// 推出來的秒數，免得秒數跨過整分的那一瞬間讓超時膠囊忽隱忽現。
   final int elapsedMinutes;
+
+  /// 目前這一段計時的起算時刻（契約 `segmentStartedAt`）。只有進行中的任務
+  /// 有值，其餘狀態為 null。任務頁拿它把計時算到秒：以 [elapsedMinutes] 當
+  /// 進入本段之前的累計，加上「現在時間減這個時刻」，每秒重算一次，不必為
+  /// 了跳動的秒數反覆打端點。
+  ///
+  /// 後端還沒回這一欄時這裡是 null，計時就退回只顯示分鐘——少一欄不該讓整
+  /// 頁打不開。
+  final DateTime? segmentStartedAt;
+
+  /// 任務來源，照契約 `tasks.source` enum：guest｜desk｜system｜staff。
+  /// 畫面上一律換成白話（見 task 畫面的來源用語），enum 值不露出去。
+  final String? source;
 
   /// 已勾選的 SOP 項（`sop_items.id`）。
   final List<String> checkedSopItems;
@@ -1345,6 +1361,8 @@ class TaskDetail {
       note: json['note'] as String?,
       estMin: json['estMin'] as int?,
       elapsedMinutes: json['elapsedMinutes'] as int? ?? 0,
+      segmentStartedAt: _dateTime(json['segmentStartedAt']),
+      source: json['source'] as String?,
       checkedSopItems: _stringList(json['checkedSopItems']),
       skippedSopItems: _stringList(json['skippedSopItems']),
       holdReason: json['holdReason'] as String?,
@@ -1389,6 +1407,16 @@ class SopItem {
       active: json['active'] as bool? ?? true,
     );
   }
+}
+
+/// 契約裡的時刻欄位（`date-time`）解析成 [DateTime]。欄位缺席、為 null 或
+/// 格式不是合法時刻時都回 null，由畫面自己決定沒有時刻要怎麼顯示——後端少
+/// 回一欄或回了怪字串，不該讓整頁打不開。
+DateTime? _dateTime(Object? value) {
+  if (value is! String) {
+    return null;
+  }
+  return DateTime.tryParse(value);
 }
 
 /// 契約裡的 id 陣列欄位（`checkedSopItems`／`skippedSopItems`）解析成字串清單。

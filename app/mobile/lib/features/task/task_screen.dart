@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
@@ -665,12 +667,14 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 員工早就站在房間裡，要看的是「做多久了」；開始前與停住後換回房號當主
   /// 角，因為那時要確認的是「這是哪一間」。
   ///
-  /// 這裡刻意不在 App 端跑計時器。同一張單可能在別的裝置上被推進，畫面自己
-  /// 累加的秒數會和後端的已做時間對不起來。
+  /// 進行中的計時在 App 端逐秒跳動，但起算點一律由後端給（契約的
+  /// `segmentStartedAt`），App 只負責把「現在時間減起算點」加上去。畫面不自
+  /// 己累加秒數：同一張單可能在別的裝置上被推進，自己累加會和後端的已做時
+  /// 間愈走愈遠。後端還沒回起算點時退回只顯示分鐘。
   ///
-  /// 標題區只放計時或房號、任務名與預估工時，狀態標籤不放這裡：這張單走到
-  /// 哪一步由底下的步驟條表達，同一件事在同一屏講兩次，員工會先讀標籤再讀
-  /// 步驟條，反而慢。狀態標籤改放在標題區底下的提示區。
+  /// 標題區放計時或房號、任務名，再一行來源與預估工時，狀態標籤不放這裡：
+  /// 這張單走到哪一步由底下的步驟條表達，同一件事在同一屏講兩次，員工會先
+  /// 讀標籤再讀步驟條，反而慢。狀態標籤改放在標題區底下的提示區。
   Widget _buildHeader(TaskDetail task) {
     final doing = task.state == 'doing';
     final paused = task.state == 'interrupted' || task.state == 'deferred';
@@ -679,6 +683,12 @@ class _TaskScreenState extends State<TaskScreen> {
         ? TmsColors.brandContainer
         : TmsColors.secondaryLabel;
     final title = task.title ?? '';
+    // 標題底下那一行的 meta：先講這張單是誰開的，再講預估工時。進行中與停
+    // 住時計時那一側已經寫了預估，所以那兩種狀態這裡不再寫一次。
+    final metaParts = <String>[
+      if (task.source != null) taskSourceText(task.source!),
+      if (task.estMin != null && !doing && !paused) '預估 ${task.estMin} 分',
+    ];
     return Container(
       padding: const EdgeInsets.fromLTRB(
         TmsSpacing.xl,
@@ -697,7 +707,7 @@ class _TaskScreenState extends State<TaskScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (doing) ...[
-            _buildTimerHero(task),
+            TaskTimerHero(task: task),
             const SizedBox(height: TmsSpacing.xs2),
             Text(
               '${widget.roomNo} · $title',
@@ -715,10 +725,10 @@ class _TaskScreenState extends State<TaskScreen> {
               style: TmsText.headline.copyWith(color: foreground),
             ),
           ],
-          if (task.estMin != null && !doing && !paused) ...[
+          if (metaParts.isNotEmpty) ...[
             const SizedBox(height: TmsSpacing.xxs),
             Text(
-              '預估 ${task.estMin} 分',
+              metaParts.join(' · '),
               style: TmsText.subheadline.copyWith(color: secondary),
             ),
           ],
@@ -726,36 +736,6 @@ class _TaskScreenState extends State<TaskScreen> {
           _buildStepTrack(task, onDark: doing),
         ],
       ),
-    );
-  }
-
-  /// 進行中時的主角：56pt 的計時，右邊接超時膠囊或預估工時。
-  Widget _buildTimerHero(TaskDetail task) {
-    final overtimeMinutes = _overtimeMinutes(task);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          '${task.elapsedMinutes} 分',
-          style: TmsText.displayHero.copyWith(
-            color: overtimeMinutes != null
-                ? TmsColors.overtimeTimerOnDark
-                : TmsColors.brandOnPrimary,
-          ),
-        ),
-        const SizedBox(width: TmsSpacing.sm2),
-        Padding(
-          padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
-          child: overtimeMinutes != null
-              ? _buildOvertimeChip(overtimeMinutes, onDark: true)
-              : Text(
-                  task.estMin == null ? '' : '/ 預估 ${task.estMin} 分',
-                  style: TmsText.subheadline.copyWith(
-                    color: TmsColors.brandContainer,
-                  ),
-                ),
-        ),
-      ],
     );
   }
 
@@ -804,53 +784,6 @@ class _TaskScreenState extends State<TaskScreen> {
           ),
       ],
     );
-  }
-
-  /// 超時膠囊：深底上是深橘底深褐字，白底上是橘淡底棕字。
-  ///
-  /// 超時只是提醒，不擋任何操作，所以不用錯誤紅——紅色會讓員工以為這張單出
-  /// 了什麼事。
-  Widget _buildOvertimeChip(int overtimeMinutes, {required bool onDark}) {
-    final text = '超時 $overtimeMinutes 分';
-    return TmsSemantics(
-      id: 'task.hero.overtime-chip',
-      label: text,
-      child: ExcludeSemantics(
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: TmsSpacing.sm2,
-            vertical: TmsSpacing.xxs,
-          ),
-          decoration: BoxDecoration(
-            color: onDark
-                ? TmsColors.overtimeCapsule
-                : TmsColors.brandAccentContainer,
-            borderRadius: BorderRadius.circular(TmsRadius.pill),
-          ),
-          child: Text(
-            text,
-            style: TmsText.footnoteEmphasized.copyWith(
-              color: onDark
-                  ? TmsColors.onOvertimeCapsule
-                  : TmsColors.brandOnAccentContainer,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 超時分鐘數是已做分鐘減去預估分鐘，只有進行中而且真的超過時才有值。
-  ///
-  /// 超時在這個畫面上只是提示。算出超時不會呼叫任何後端端點，也不會讓員工
-  /// 收到推播。
-  static int? _overtimeMinutes(TaskDetail task) {
-    final estMin = task.estMin;
-    if (task.state != 'doing' || estMin == null) {
-      return null;
-    }
-    final over = task.elapsedMinutes - estMin;
-    return over > 0 ? over : null;
   }
 
   /// 步驟條：打掃類有四段，依序是已接、進行中、完成、查房或免查房；其餘類別
@@ -1080,5 +1013,189 @@ class _TaskScreenState extends State<TaskScreen> {
       return;
     }
     _showTask(updated);
+  }
+}
+
+/// 超時膠囊：深底上是深橘底深褐字，白底上是橘淡底棕字。
+///
+/// 超時只是提醒，不擋任何操作，所以不用錯誤紅——紅色會讓員工以為這張單出
+/// 了什麼事。
+Widget _buildOvertimeChip(int overtimeMinutes, {required bool onDark}) {
+  final text = '超時 $overtimeMinutes 分';
+  return TmsSemantics(
+    id: 'task.hero.overtime-chip',
+    label: text,
+    child: ExcludeSemantics(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: TmsSpacing.sm2,
+          vertical: TmsSpacing.xxs,
+        ),
+        decoration: BoxDecoration(
+          color: onDark
+              ? TmsColors.overtimeCapsule
+              : TmsColors.brandAccentContainer,
+          borderRadius: BorderRadius.circular(TmsRadius.pill),
+        ),
+        child: Text(
+          text,
+          style: TmsText.footnoteEmphasized.copyWith(
+            color: onDark
+                ? TmsColors.onOvertimeCapsule
+                : TmsColors.brandOnAccentContainer,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// 超時分鐘數是已做分鐘減去預估分鐘，只有進行中而且真的超過時才有值。
+///
+/// 超時在這個畫面上只是提示。算出超時不會呼叫任何後端端點，也不會讓員工
+/// 收到推播。
+int? _overtimeMinutes(TaskDetail task) {
+  final estMin = task.estMin;
+  if (task.state != 'doing' || estMin == null) {
+    return null;
+  }
+  final over = task.elapsedMinutes - estMin;
+  return over > 0 ? over : null;
+}
+
+/// 進行中那張單的計時主角：56pt 的計時，右邊接超時膠囊或預估工時。
+///
+/// 進行中的單只要後端給了本段的起算時刻（契約的 `segmentStartedAt`），計時
+/// 就走到秒並每秒重畫一次，員工看得出時間正在走；起算時刻沒有值時——其餘
+/// 狀態一律沒有，後端還沒補上這一欄時也沒有——退回只顯示已做分鐘。
+///
+/// 畫面不自己累加秒數，每次都拿現在時間減後端給的起算點重算。自己累加的
+/// 話，手機睡著或同一張單在別的裝置上被推進之後，秒數會和後端的已做時間
+/// 愈走愈遠。
+///
+/// 超時與否一律看已做分鐘（[TaskDetail.elapsedMinutes]），不看這裡算出來的
+/// 秒數：秒數跨過整分的那一瞬間若也拿去判超時，超時膠囊會在那一秒忽隱忽
+/// 現。
+class TaskTimerHero extends StatefulWidget {
+  const TaskTimerHero({super.key, required this.task, this.clock});
+
+  final TaskDetail task;
+
+  /// 讀「現在幾點」的方法。平常不給，計時就讀手機的時鐘；widget 測試給一個
+  /// 自己說了算的時鐘，才能在不真的等一秒的情況下驗計時有往前跳。
+  final DateTime Function()? clock;
+
+  @override
+  State<TaskTimerHero> createState() => _TaskTimerHeroState();
+}
+
+class _TaskTimerHeroState extends State<TaskTimerHero> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(TaskTimerHero oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTicker();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _ticker = null;
+    super.dispose();
+  }
+
+  /// 只有真的要逐秒重畫時才留著計時器。沒有起算時刻的單上留一支每秒醒來的
+  /// 計時器，會白白把畫面重畫一次又一次，電池也跟著耗。
+  void _syncTicker() {
+    final wanted = widget.task.segmentStartedAt != null;
+    if (wanted && _ticker == null) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    } else if (!wanted) {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final task = widget.task;
+    final overtimeMinutes = _overtimeMinutes(task);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          taskTimerText(task, now: widget.clock?.call()),
+          style: TmsText.displayHero.copyWith(
+            color: overtimeMinutes != null
+                ? TmsColors.overtimeTimerOnDark
+                : TmsColors.brandOnPrimary,
+          ),
+        ),
+        const SizedBox(width: TmsSpacing.sm2),
+        Padding(
+          padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
+          child: overtimeMinutes != null
+              ? _buildOvertimeChip(overtimeMinutes, onDark: true)
+              : Text(
+                  task.estMin == null ? '' : '/ 預估 ${task.estMin} 分',
+                  style: TmsText.subheadline.copyWith(
+                    color: TmsColors.brandContainer,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 計時主角上的那串字。
+///
+/// 後端給了本段起算時刻時走到秒，寫成「分:秒」，超過一小時才補上小時那一
+/// 段；沒有起算時刻時只講已做分鐘。秒數是已做分鐘換算成秒，加上現在時間減
+/// 起算時刻。手機時間比起算時刻早（時鐘沒對準）時當這一段還沒開始算，不讓
+/// 計時倒退。
+String taskTimerText(TaskDetail task, {DateTime? now}) {
+  final startedAt = task.segmentStartedAt;
+  if (startedAt == null) {
+    return '${task.elapsedMinutes} 分';
+  }
+  final segment = (now ?? DateTime.now()).difference(startedAt).inSeconds;
+  final total = task.elapsedMinutes * 60 + (segment > 0 ? segment : 0);
+  final hours = total ~/ 3600;
+  final minutes = (total % 3600) ~/ 60;
+  final seconds = total % 60;
+  final paddedSeconds = seconds.toString().padLeft(2, '0');
+  if (hours > 0) {
+    return '$hours:${minutes.toString().padLeft(2, '0')}:$paddedSeconds';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:$paddedSeconds';
+}
+
+/// 任務來源（契約 `tasks.source`）在畫面上的說法。用語跟待認領池的來源標籤
+/// 同一套，讓同一張單在兩個畫面上被講成同一件事。認不得的值原樣回傳，不猜
+/// 一個說法。
+String taskSourceText(String source) {
+  switch (source) {
+    case 'guest':
+      return '住客掃碼';
+    case 'desk':
+      return '櫃檯轉單';
+    case 'system':
+      return '自動化規則';
+    case 'staff':
+      return '房務報修';
+    default:
+      return source;
   }
 }
