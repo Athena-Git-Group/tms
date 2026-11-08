@@ -29,6 +29,7 @@ void main() {
     ApiClient.instance = _FakeApiClient([
       NotificationItem(
         id: 'n-1',
+        event: 'reassigned_to_me',
         title: '305 指派給你',
         body: '退房清潔，預估 30 分鐘。',
         target: const {'kind': 'home'},
@@ -36,6 +37,7 @@ void main() {
       ),
       NotificationItem(
         id: 'n-2',
+        event: 'inspection_failed',
         title: '306 查房退回',
         body: null,
         target: const {'kind': 'home'},

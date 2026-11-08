@@ -56,21 +56,29 @@ public class PushOutboxWriter {
 
     /**
      * payload 的形狀固定由 {@link #payload} 與 {@code targetXxx} 系列組出來，
-     * 收件人、標題、去處三個欄位保證都在，所以這裡直接原樣轉成 notifications
+     * 收件人、事件、標題、去處四個欄位保證都在，所以這裡直接原樣轉成 notifications
      * 的對應欄位，不用另外驗證欄位存在。body 是各通知自選的欄位，沒有就落 NULL，
      * 對應 contracts notifications schema 的 nullable body。
+     *
+     * <p>事件值一起落地，通知中心才分得出這一則是急件、超時、完修還是交辦——
+     * 它是唯一說得出通知類別的資訊，標題只是給人看的文案，改一個字就不該讓
+     * 整批通知換錯顏色。值域照 contracts PushPayload.event，資料層另有
+     * chk_notifications_event 把關。
      */
     private void writeNotification(long tenantId, ObjectNode payload) {
         UUID recipientStaffId = UUID.fromString(payload.get("recipientStaffId").asText());
+        String event = payload.get("event").asText();
         String title = payload.get("title").asText();
         String body = payload.hasNonNull("body") ? payload.get("body").asText() : null;
         String targetJson = payload.get("target").toString();
         jdbcTemplate.update(
                 """
-                INSERT INTO notifications (id, tenant_id, recipient_staff_id, title, body, target, created_at)
-                VALUES (?, ?, ?, ?, ?, ?::jsonb, ?)
+                INSERT INTO notifications
+                    (id, tenant_id, recipient_staff_id, event, title, body, target, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?)
                 """,
-                UuidV7.generate(), tenantId, recipientStaffId, title, body, targetJson, OffsetDateTime.now(clock));
+                UuidV7.generate(), tenantId, recipientStaffId, event, title, body, targetJson,
+                OffsetDateTime.now(clock));
     }
 
     /**

@@ -33,7 +33,7 @@ public class NotificationService {
      * 維護一份欄位清單、改了一邊漏改另一邊。
      */
     private static final String SELECT_NOTIFICATION_COLUMNS =
-            "SELECT id, title, body, target, created_at, read_at FROM notifications";
+            "SELECT id, event, title, body, target, created_at, read_at FROM notifications";
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
@@ -110,12 +110,13 @@ public class NotificationService {
      */
     private static NotificationResponse mapRow(ResultSet rs, ObjectMapper objectMapper) throws SQLException {
         UUID id = (UUID) rs.getObject("id");
+        String event = rs.getString("event");
         String title = rs.getString("title");
         String body = rs.getString("body");
         JsonNode target = parseTarget(rs.getString("target"), objectMapper);
         OffsetDateTime createdAt = rs.getObject("created_at", OffsetDateTime.class);
         OffsetDateTime readAt = rs.getObject("read_at", OffsetDateTime.class);
-        return new NotificationResponse(id, title, body, target, createdAt, readAt);
+        return new NotificationResponse(id, event, title, body, target, createdAt, readAt);
     }
 
     private static JsonNode parseTarget(String json, ObjectMapper objectMapper) {

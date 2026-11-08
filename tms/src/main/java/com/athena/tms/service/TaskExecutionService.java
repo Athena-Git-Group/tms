@@ -251,6 +251,10 @@ public class TaskExecutionService {
      * 附交代退池後推播該樓層的在職房務員（樓層以 plan_rooms 的負責樓層為準），
      * 去處標亮這張單；收件人以「任務＋事件序號＋收件人」組冪等鍵，同一次退池
      * 不會對同一個人推兩次。
+     *
+     * <p>事件值用 pool_new_request：對收件人而言這就是「待接池多了一張可以接的
+     * 單」，和住客新需求進池是同一件事，差別只在單的來路。退池本身的來龍去脈
+     * 記在任務事件（returned_to_pool）裡，不是推播要告訴收件人的事。
      */
     private void notifySameFloorHousekeepers(long tenantId, UUID taskId, int seq, Map<String, Object> taskRow) {
         List<UUID> recipients = jdbcTemplate.queryForList(
@@ -267,7 +271,7 @@ public class TaskExecutionService {
         String roomNo = String.valueOf(taskRow.get("room_no"));
         for (UUID recipient : recipients) {
             ObjectNode payload = PushOutboxWriter.payload(
-                    objectMapper, recipient, "returned_to_pool", roomNo + " 已附交代退回待接池");
+                    objectMapper, recipient, "pool_new_request", roomNo + " 已附交代退回待接池");
             PushOutboxWriter.targetPool(payload, "housekeeping", taskId);
             pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                     "requeue:" + taskId + ":seq:" + seq + ":" + recipient);

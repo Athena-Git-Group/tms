@@ -400,7 +400,7 @@ public class RepairService {
                 "SELECT room_no FROM rooms WHERE tenant_id = ? AND id = ?", tenantId, ticket.get("room_id"));
         UUID reporterId = UUID.fromString(String.valueOf(ticket.get("reporter_id")));
         ObjectNode payload = PushOutboxWriter.payload(
-                objectMapper, reporterId, "repair_resolved", roomNo + " " + categoryLabel + "已修好");
+                objectMapper, reporterId, "repair_completed", roomNo + " " + categoryLabel + "已修好");
         PushOutboxWriter.targetTask(payload, ticketTaskId);
         pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
                 "repair_resolved:" + ticketTaskId + ":" + reporterId);

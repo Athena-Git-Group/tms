@@ -54,8 +54,15 @@ public class PushGivenSteps {
      *
      * <p>{@code target} 不是本句型要落地的語意（dsl.md 的 Data Table 參數沒有列
      * target），一律落 {@code kind=home} 佔位，滿足資料表 NOT NULL 與 contracts
-     * PushTarget 的最小合法形狀。
+     * PushTarget 的最小合法形狀。{@code event} 同理：這句型描述的是「通知在清單裡
+     * 怎麼排、怎麼標已讀」，不是哪一種事件落下來的，所以一律落 pool_new_request
+     * 佔位，滿足 NOT NULL 與資料層的事件值 CHECK。事件值真正有意義的地方在 App
+     * 的通知中心（它決定每一列的分類圖示與顏色），那邊的 Given 會依標題反推真正
+     * 的事件值。
      */
+    /** 見 {@link #staffReceivedNotifications}：事件值在這句型裡沒有語意，用合法值佔位。 */
+    private static final String PLACEHOLDER_EVENT = "pool_new_request";
+
     @假設("{string} 在 {string} 收到以下通知：")
     public void staffReceivedNotifications(String staffName, String momentExpr, DataTable table) {
         long tenantId = tenantFixtures.testTenantId();
@@ -72,10 +79,11 @@ public class PushGivenSteps {
                     .sql(
                             """
                             INSERT INTO notifications
-                                (id, tenant_id, recipient_staff_id, title, target, created_at, read_at)
-                            VALUES (?, ?, ?, ?, ?::jsonb, ?, ?)
+                                (id, tenant_id, recipient_staff_id, event, title, target, created_at, read_at)
+                            VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?)
                             """)
-                    .params(UuidV7.generate(), tenantId, staffId, title, targetJson, createdAt, readAt)
+                    .params(UuidV7.generate(), tenantId, staffId, PLACEHOLDER_EVENT, title, targetJson,
+                            createdAt, readAt)
                     .update();
         }
     }

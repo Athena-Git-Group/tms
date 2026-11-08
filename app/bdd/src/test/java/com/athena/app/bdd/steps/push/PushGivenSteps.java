@@ -94,6 +94,9 @@ public class PushGivenSteps {
      * 這句型只保證「這則通知已讀」這個旗標成立，不描述已讀動作發生在何時，
      * 另外編一個時間反而是在測試資料裡製造沒有規格依據的事實。
      *
+     * <p>事件值（{@code event}，NOT NULL）：句型也沒有這個參數，照標題的文案格式
+     * 反推——推導規則見 {@link #eventForTitle}。
+     *
      * <p>去處（{@code target}，NOT NULL）：句型沒有這個參數，照後端產生通知的
      * 慣例由標題推導——標題開頭的房號若對得上後端已存在的任務（「名下有以下
      * 任務」先鋪的），就當作屬於本人的任務通知（{@code kind=task} 帶 taskId，
@@ -109,8 +112,73 @@ public class PushGivenSteps {
             OffsetDateTime createdAt = parseMoment(requireCell(row, "時刻"));
             boolean read = "是".equals(row.get("已讀"));
             world.backend().createNotification(
-                    staff.id(), title, createdAt, read, targetForTitle(title));
+                    staff.id(), eventForTitle(title), title, createdAt, read, targetForTitle(title));
         }
+    }
+
+    /**
+     * 標題 → 推播事件值的對照（{@code notifications.event}，NOT NULL）。句型沒有這個
+     * 參數，但通知的標題文案不是隨便寫的——每一種推播事件在後端都有固定的標題格式
+     * （「{房號} 查房通過」「新需求 · {房號} {內容}」「{房號} {類別}已修好」……），
+     * 所以照那些格式反推事件值，推出來的就是這則通知真正的來源，不是猜的。
+     *
+     * <p>對不上任何格式的標題直接讓這一步失敗，而不是隨便塞一個合法值：事件值決定
+     * 通知中心那一列的分類圖示與顏色，塞錯的值會讓測試資料在畫面上呈現出一個產品
+     * 不會產生的樣子，比測試掛掉更難發現。新增句型用到新的標題格式時，把格式補進
+     * 這張對照表。
+     */
+    private String eventForTitle(String title) {
+        if (title.startsWith("新需求 · ") || title.endsWith("已附交代退回待接池")) {
+            return "pool_new_request";
+        }
+        if (title.contains("查房通過")) {
+            return "inspection_passed";
+        }
+        if (title.contains("查房退回")) {
+            return "inspection_failed";
+        }
+        if (title.endsWith("已修好")) {
+            return "repair_completed";
+        }
+        if (title.contains("急件報修")) {
+            return "repair_urgent";
+        }
+        if (title.contains("還沒人接")) {
+            return "unclaimed_reminder_staff";
+        }
+        if (title.endsWith("已通知主管")) {
+            return "unclaimed_reminder_manager";
+        }
+        if (title.contains("已由住客撤回")) {
+            return "guest_withdrew";
+        }
+        if (title.contains("已被主管作廢")) {
+            return "task_cancelled";
+        }
+        if (title.contains("已改派給")) {
+            return "reassigned_away";
+        }
+        if (title.contains("主管改派一單給您")) {
+            return "reassigned_to_me";
+        }
+        if (title.contains("需要接手")) {
+            return "leave_takeover";
+        }
+        if (title.contains("退回待認領交給下一班")) {
+            return "shift_end_returned";
+        }
+        if (title.contains("班末仍中斷")) {
+            return "shift_end_still_interrupted";
+        }
+        if (title.contains("主管回覆了您的提問")) {
+            return "kb_reply";
+        }
+        if (title.startsWith("回答被評為沒幫助")) {
+            return "kb_unhelpful";
+        }
+        throw new IllegalArgumentException(
+                "通知標題 \"" + title + "\" 對不上任何一種推播事件的標題格式，無法推導 "
+                        + "notifications.event；請確認標題文案，或把新的標題格式補進 PushGivenSteps 的對照表");
     }
 
     /** 標題開頭房號 → 既有任務的對照；推導規則見 {@link #notificationCenterHasNotifications}。 */

@@ -973,6 +973,9 @@ public class BackendChannel {
      * 建一筆通知中心的通知紀錄（INSERT 欄位對照 tms 後端 PushGivenSteps 對
      * notifications 表的既有建法；該表沒有 REST 造數入口，走 JDBC 直接落地）。
      *
+     * @param event  這筆通知從哪一個推播事件落地（contracts PushPayload.event 的值域；
+     *               NOT NULL 欄位，資料層另有 CHECK 把關）。Given 句型沒有這個參數，
+     *               由呼叫端依標題的文案格式反推（推導規則見 steps/push 的 PushGivenSteps）
      * @param target 去處（contracts PushTarget 形狀，key→value；NOT NULL 欄位）。
      *               通知的 Given 句型沒有去處參數，由呼叫端依標題對應的任務推導
      *               （推導邏輯見 steps/push 的 PushGivenSteps），對不上任務時用
@@ -982,15 +985,15 @@ public class BackendChannel {
      *               時間是在測試資料裡製造沒有規格依據的事實
      */
     public UUID createNotification(
-            UUID recipientStaffId, String title, OffsetDateTime createdAt, boolean read,
+            UUID recipientStaffId, String event, String title, OffsetDateTime createdAt, boolean read,
             Map<String, Object> target) {
         long tenantId = ensureTenant();
         UUID id = UUID.randomUUID();
         execute("""
                 INSERT INTO notifications
-                    (id, tenant_id, recipient_staff_id, title, target, created_at, read_at)
-                VALUES (?, ?, ?, ?, CAST(? AS jsonb), ?, ?)
-                """, id, tenantId, recipientStaffId, title, toJson(target),
+                    (id, tenant_id, recipient_staff_id, event, title, target, created_at, read_at)
+                VALUES (?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?)
+                """, id, tenantId, recipientStaffId, event, title, toJson(target),
                 createdAt, read ? createdAt : null);
         return id;
     }

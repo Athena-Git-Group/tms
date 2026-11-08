@@ -150,7 +150,7 @@ public class ShiftEndScanJob {
                     : String.valueOf(row.get("title"));
             for (UUID manager : managers) {
                 ObjectNode payload = PushOutboxWriter.payload(
-                        objectMapper, manager, "shift_end_interrupted", label + " 班末仍中斷，需要附交代退池");
+                        objectMapper, manager, "shift_end_still_interrupted", label + " 班末仍中斷，需要附交代退池");
                 ObjectNode target = payload.putObject("target");
                 target.put("kind", "task");
                 target.put("taskId", taskId.toString());

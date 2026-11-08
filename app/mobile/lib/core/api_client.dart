@@ -1078,6 +1078,7 @@ class PoolItem {
 class NotificationItem {
   const NotificationItem({
     required this.id,
+    required this.event,
     required this.title,
     required this.target,
     required this.createdAt,
@@ -1086,6 +1087,12 @@ class NotificationItem {
   });
 
   final String id;
+
+  /// 這則通知是從哪一個推播事件落地的（shared.yaml 的 `PushPayload.event`，
+  /// 十七種事件值）。通知中心靠它決定每一列的分類圖示與顏色——標題只是文案，
+  /// 改一個字不該讓整批通知換顏色。沒見過的值照樣帶進來，由畫面決定怎麼畫。
+  final String event;
+
   final String title;
   final String? body;
 
@@ -1104,6 +1111,9 @@ class NotificationItem {
     final readAt = json['readAt'] as String?;
     return NotificationItem(
       id: json['id'] as String,
+      // 契約把 event 列為必填，但舊版後端還沒帶這個欄位時，整份清單因為少一個
+      // 欄位就載入失敗太過頭——缺值落空字串，畫面把它當成分不出類別的一般通知。
+      event: json['event'] as String? ?? '',
       title: json['title'] as String,
       body: json['body'] as String?,
       target: json['target'] as Map<String, dynamic>? ?? <String, dynamic>{},

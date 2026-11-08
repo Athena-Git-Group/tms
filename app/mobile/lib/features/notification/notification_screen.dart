@@ -450,18 +450,49 @@ class _NotificationRow extends StatelessWidget {
 
 /// 一則通知屬於哪一類，決定左側圓形圖示的顏色與符號。
 ///
-/// 目前一律回 [TmsNotificationKind.info]（灰底鈴鐺）。通知清單的回應
-/// （`specs/truth/contracts/components/schemas/通知中心.yaml` 的
-/// `notifications`）只有標題、內文、去處與時間四樣資訊，沒有任何欄位說得出
-/// 這則通知是急件、超時、完修還是交辦；從標題的字面去猜會在標題文案改一個字
-/// 的時候整批通知換錯顏色，比全部畫成一般通知更糟。
+/// 判斷只看通知的 `event`（`shared.yaml` 的 `PushPayload.event`，十七種事件
+/// 值），不看標題：標題是給人讀的文案，改一個字就讓整批通知換顏色太脆弱。
 ///
-/// 推播事件本身是分得出來的：`shared.yaml` 的 `PushPayload.event` 有十七種
-/// 事件值，通知就是從那個事件落地的一筆紀錄。後端把事件值一起存進通知、並在
-/// 清單回應裡帶出來之後，這裡改成讀那個欄位並對應到 [TmsNotificationKind]
-/// 的七類即可，圖示的版面尺寸一行都不用動。
+/// 十七種事件收斂成七類的規則是「收件人看到這一則要做什麼」：
+///
+/// - 急件（紅）：`repair_urgent`——要立刻有人去。
+/// - 超時（橘）：`unclaimed_reminder_staff`、`unclaimed_reminder_manager`、
+///   `shift_end_still_interrupted`——單卡著沒人處理，再不動就拖下去。
+/// - 完成（綠）：`inspection_passed`、`repair_completed`——事情做完了。
+/// - 新單（藍・收件匣）：`pool_new_request`、`reassigned_to_me`、
+///   `leave_takeover`、`inspection_failed`、`spot_check_failed`——一張單進到
+///   你手上或你的池子裡，接下來要做它。查房退回與抽查未過也在這裡：房間退回
+///   重做，對收件人就是「這張單又回來了」。
+/// - 交辦（藍・對話框）：`kb_reply`、`kb_unhelpful`——有人在問答裡留了話，
+///   要讀不要做。
+/// - 保養（紫）：目前十七種事件沒有保養派單專屬的事件值，保養單進池走的是
+///   `pool_new_request`；後端補上保養事件之前，這一類不會出現在通知中心。
+/// - 一般（灰）：`task_cancelled`、`reassigned_away`、`shift_end_returned`、
+///   `guest_withdrew`——單已經不在你手上，純告知；以及沒見過的事件值。分不出
+///   類別時畫成一般通知，比硬塞進一個看起來很急的分類好。
 TmsNotificationKind _kindOf(NotificationItem item) {
-  return TmsNotificationKind.info;
+  switch (item.event) {
+    case 'repair_urgent':
+      return TmsNotificationKind.urgent;
+    case 'unclaimed_reminder_staff':
+    case 'unclaimed_reminder_manager':
+    case 'shift_end_still_interrupted':
+      return TmsNotificationKind.timeout;
+    case 'inspection_passed':
+    case 'repair_completed':
+      return TmsNotificationKind.done;
+    case 'pool_new_request':
+    case 'reassigned_to_me':
+    case 'leave_takeover':
+    case 'inspection_failed':
+    case 'spot_check_failed':
+      return TmsNotificationKind.newRequest;
+    case 'kb_reply':
+    case 'kb_unhelpful':
+      return TmsNotificationKind.memo;
+    default:
+      return TmsNotificationKind.info;
+  }
 }
 
 /// 把通知時間寫成員工看得懂的相對說法：一分鐘內「剛剛」，一小時內數分鐘，
