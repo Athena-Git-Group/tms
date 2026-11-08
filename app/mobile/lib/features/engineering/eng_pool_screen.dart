@@ -33,6 +33,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       key: 'all',
       label: '全部',
       sourceParam: null,
+      countKey: null,
       icon: CupertinoIcons.square_grid_2x2_fill,
       iconBackground: TmsColors.brandContainer,
       iconForeground: TmsColors.brandPrimary,
@@ -41,6 +42,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       key: 'urgent',
       label: '急件',
       sourceParam: null,
+      countKey: 'urgent',
       icon: CupertinoIcons.exclamationmark_triangle_fill,
       iconBackground: TmsColors.errorContainer,
       iconForeground: TmsColors.onErrorContainer,
@@ -49,6 +51,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       key: 'staff',
       label: '房務報修',
       sourceParam: 'staff_report',
+      countKey: 'staffReport',
       icon: CupertinoIcons.wrench_fill,
       iconBackground: TmsColors.brandAccentContainer,
       iconForeground: TmsColors.brandOnAccentContainer,
@@ -57,6 +60,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       key: 'desk',
       label: '櫃檯',
       sourceParam: 'desk_forward',
+      countKey: 'deskForward',
       icon: CupertinoIcons.person_2_fill,
       iconBackground: TmsColors.otherContainer,
       iconForeground: TmsColors.onOtherContainer,
@@ -157,10 +161,15 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
-          // 分流磚不掛數量徽章：後端回的 counts 是房務的任務類別
-          // （all／cleaning／amenity／repair／other），沒有急件與來源這兩個
-          // 維度的筆數可讀。在本機數目前列表的張數會是「這一頁有幾張」而不是
-          // 「這個分流有幾張」，比空白更誤導。
+          // 徽章只掛在急件、房務報修、櫃檯三格，數字一律讀後端回的 counts，
+          // 不在本機數列表：帶篩選查詢時列表只有該分流的單，本機數出來的是
+          // 「這一頁有幾張」而不是「這個分流有幾張」。「全部」那格沒有徽章，
+          // 因為下面整排單卡就是它的數字。
+          //
+          // 這三格是 0 的時候整顆徽章不畫，照原型。房務的分類磚相反，0 也照
+          // 畫——那個數字是 `待認領分類標籤顯示如下` 那句斷言要讀的節點，藏
+          // 起來就讀不到。兩邊不同是各自的理由造成的，不要為了看起來一致把
+          // 其中一邊改掉。
           child: PoolFilterRow(
             tiles: [
               for (final category in _categories)
@@ -171,6 +180,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
                   iconBackground: category.iconBackground,
                   iconForeground: category.iconForeground,
                   selected: _selected == category.key,
+                  count: _badgeCount(category.countKey),
                   onTap: () {
                     _selected = category.key;
                     _fetch();
@@ -231,6 +241,23 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     );
   }
 
+  /// 替一格分流磚算出徽章上的數字；回 null 時那一格不畫徽章。
+  ///
+  /// 徽章的用途是把工務叫去還有單可接的那一格，所以沒有單可接就不該有紅
+  /// 點：筆數是 0 的格子不畫。「全部」那格沒有對應的筆數（[countKey] 為
+  /// null），下面整排單卡就是它的數字。後端還沒給這個維度的筆數時欄位缺
+  /// 席，這一格同樣留白——畫成 0 會讓工務以為那個分流真的空了。
+  int? _badgeCount(String? countKey) {
+    if (countKey == null) {
+      return null;
+    }
+    final count = _pool?.counts[countKey];
+    if (count == null || count == 0) {
+      return null;
+    }
+    return count;
+  }
+
   /// 一張工務待認領單卡，id 以工務單號當識別段：
   /// `engPool.item.{單號}.card`，卡內各列是 `engPool.item.{單號}.{欄位}`。
   Widget _engPoolCard(PoolItem item) {
@@ -242,6 +269,10 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     }
     final itemId = 'engPool.item.$ticketNo';
     final sourceLabel = engineeringPoolSourceLabels[item.source];
+    final waitedTag = poolWaitedTag(
+      waitedMinutes: item.waitedMinutes,
+      reminderStage: item.reminderStage,
+    );
 
     return PoolCard(
       id: '$itemId.card',
@@ -280,6 +311,9 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
                           id: '$itemId.source-label',
                           text: sourceLabel,
                         ),
+                      // 等待時間排在整列最後：前面幾顆講的是「這張單是什麼
+                      // 單」，它講的是「它擱了多久」，工務先認單再看久不久。
+                      ?waitedTag,
                     ],
                   ),
                 ],

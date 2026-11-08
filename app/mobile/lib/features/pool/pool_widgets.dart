@@ -38,6 +38,38 @@ const Map<String, String> engineeringPoolSourceLabels = {
   'desk_forward': '櫃檯',
 };
 
+/// 等多久才算「等太久」：到這個分鐘數，等待標籤就從中性轉成紅的。
+///
+/// 門檻放在這裡而不是各畫面各寫一個數字，是因為房務與工務的員工對「這單擱
+/// 著了」的感覺要一致；主管兩邊都看，兩邊的紅標準不同會讓他誤判哪一池比較
+/// 擠。
+const int poolWaitedMinutesAlarmThreshold = 20;
+
+/// 單卡上的等待時間標籤：這張單在池裡等了多久。
+///
+/// 給房務與工務兩個待認領畫面共用，回傳 null 表示這張卡不畫這顆標籤。
+/// 不畫的情況有兩種：後端沒給等待分鐘（[waitedMinutes] 為 null），或這張單
+/// 已經進了未接提醒階段（[reminderStage] 有值）——那時卡上改掛「未接 · 已提
+/// 醒同仁／已通知主管」，那顆標籤講的是同一件事而且更嚴重，兩顆並排只會讓
+/// 員工多讀一行。
+///
+/// 標籤本身不掛 accessibility id：等待分鐘每分鐘都在變，不是驗收讀得出定值
+/// 的欄位。
+Widget? poolWaitedTag({int? waitedMinutes, String? reminderStage}) {
+  if (waitedMinutes == null || reminderStage != null) {
+    return null;
+  }
+  // 不滿一分鐘寫「剛進來」而不是「等 0 分」：員工要的是「這單還熱著、可以
+  // 接」，而 0 這個數字會被讀成計時還沒開始。
+  final label = waitedMinutes < 1 ? '剛進來' : '等 $waitedMinutes 分';
+  return TmsTag(
+    label: label,
+    tone: waitedMinutes >= poolWaitedMinutesAlarmThreshold
+        ? TmsTagTone.danger
+        : TmsTagTone.neutral,
+  );
+}
+
 /// 一張待認領單卡的外框。
 ///
 /// [id] 是卡本身的 accessibility id；卡內各列另外用 [PoolCardField] 掛
@@ -166,9 +198,10 @@ class PoolClaimButton extends StatelessWidget {
 
 /// 一格待認領分類磚。
 ///
-/// [countId] 有值時磚上多一顆數量徽章，徽章本身也要能被單獨定位（房務的分類
-/// 磚要逐類別驗筆數，工務的分流磚後端沒有對應的筆數可讀）。點磚一律是重打一
-/// 次查詢，不在本機過濾，所以這個元件只負責外觀與回呼。
+/// [count] 有值時磚上多一顆數量徽章；再給 [countId]，徽章就是一個能被單獨
+/// 定位、讀得出數字的節點。房務的分類磚要逐類別驗筆數，所以兩個都給；工務
+/// 的分流磚沒有斷言在讀，只給 [count]。點磚一律是重打一次查詢，不在本機過
+/// 濾，所以這個元件只負責外觀與回呼。
 class PoolFilterChip extends StatelessWidget {
   const PoolFilterChip({
     super.key,
@@ -195,6 +228,17 @@ class PoolFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final countValue = count;
+    Widget? badge;
+    if (countId != null) {
+      badge = TmsSemantics(
+        id: countId!,
+        label: '${countValue ?? 0}',
+        child: TmsCountBadge(count: countValue ?? 0),
+      );
+    } else if (countValue != null) {
+      badge = TmsCountBadge(count: countValue);
+    }
     return TmsSemantics(
       id: id,
       child: TmsCategoryTile(
@@ -204,13 +248,7 @@ class PoolFilterChip extends StatelessWidget {
         iconForeground: iconForeground,
         selected: selected,
         onTap: onTap,
-        badge: countId == null
-            ? null
-            : TmsSemantics(
-                id: countId!,
-                label: '${count ?? 0}',
-                child: TmsCountBadge(count: count ?? 0),
-              ),
+        badge: badge,
       ),
     );
   }

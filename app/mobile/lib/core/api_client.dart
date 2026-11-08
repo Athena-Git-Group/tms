@@ -641,6 +641,9 @@ class EngineeringSummary {
     required this.completedToday,
     required this.urgentCount,
     required this.tickets,
+    this.plannedToday,
+    this.maintenanceDone,
+    this.maintenanceTotal,
   });
 
   /// 三格都是 0、沒有任何單的彙總，給「回應裡沒有工務彙總」的呼叫端當顯示值用。
@@ -664,6 +667,17 @@ class EngineeringSummary {
   /// （急件在前、未結案在已完修之前），工務首頁的單列直接依序呈現。
   final List<EngineeringTicket> tickets;
 
+  /// 今天預計要修的工務單總數，工務首頁進度環拿它當分母。排不出預計量時
+  /// 為 null，畫面退回用「已完修＋手上」相加當分母。
+  final int? plannedToday;
+
+  /// 今日保養已完成張數。沒有保養維度時為 null。
+  final int? maintenanceDone;
+
+  /// 今日保養總張數。與 [maintenanceDone] 同時有值或同時為 null，畫面也因此
+  /// 只在兩個都有值時才畫那一格。
+  final int? maintenanceTotal;
+
   factory EngineeringSummary.fromJson(Map<String, dynamic> json) {
     final ticketsJson = json['tickets'] as List<dynamic>? ?? <dynamic>[];
     return EngineeringSummary(
@@ -673,6 +687,11 @@ class EngineeringSummary {
       tickets: ticketsJson
           .map((entry) => EngineeringTicket.fromJson(entry as Map<String, dynamic>))
           .toList(),
+      // 這三個欄位是後來才補進契約的，後端還沒落地；缺席與 null 都收成
+      // null，由畫面各自決定退路，解析這一層不替它們編造數字。
+      plannedToday: json['plannedToday'] as int?,
+      maintenanceDone: json['maintenanceDone'] as int?,
+      maintenanceTotal: json['maintenanceTotal'] as int?,
     );
   }
 }
@@ -690,6 +709,7 @@ class EngineeringTicket {
     required this.state,
     required this.isUrgent,
     required this.source,
+    this.workedMinutes,
   });
 
   /// 單號（W-0412 這種）。契約列為必填，但後端目前可能給 null，所以收得下
@@ -712,6 +732,11 @@ class EngineeringTicket {
   /// 工務自開）或 desk_forward（櫃檯交辦）。
   final String? source;
 
+  /// 這張單已做幾分鐘，口徑同 `TaskDetail.elapsedMinutes`。還沒開工的單是
+  /// 0；取不到時為 null，畫面不顯示計時——不是顯示 0 分，那會讓人以為單剛
+  /// 開工，而不是「這個數字現在沒有」。
+  final int? workedMinutes;
+
   factory EngineeringTicket.fromJson(Map<String, dynamic> json) {
     return EngineeringTicket(
       ticketNo: json['ticketNo'] as String?,
@@ -722,6 +747,8 @@ class EngineeringTicket {
       state: json['state'] as String,
       isUrgent: json['isUrgent'] as bool? ?? false,
       source: json['source'] as String?,
+      // 後來才補進契約、後端尚未落地；缺席與 null 一律收成 null。
+      workedMinutes: json['workedMinutes'] as int?,
     );
   }
 }
@@ -989,7 +1016,11 @@ class DeptPool {
 
   final List<PoolItem> items;
 
-  /// 分類筆數，key 是 all／cleaning／amenity／repair／other。
+  /// 分類筆數。房務池的 key 是 all／cleaning／amenity／repair／other，工務池
+  /// 另外有 urgent／staffReport／deskForward——兩個部門的待認領不是依同一組
+  /// 維度分格的（房務依任務類別、工務依急件與來源），所以 key 也不同一套。
+  /// 一邊有的 key 在另一邊是缺席或 null，取用端一律用 `counts[key]` 取不到
+  /// 就當沒有，不假設某個 key 一定在。
   final Map<String, int> counts;
 
   /// 這個部門目前在職、可以搶單的員工數（待開通與停用的不算）。畫面靠它
@@ -1004,7 +1035,13 @@ class DeptPool {
       items: itemsJson
           .map((entry) => PoolItem.fromJson(entry as Map<String, dynamic>))
           .toList(),
-      counts: countsJson.map((key, value) => MapEntry(key, value as int)),
+      // 值是 null 的 key 直接不收進 map：工務獨有的那幾個 key 在房務池可能
+      // 以 null 的形式出現，收成 0 會讓畫面把「這個維度不適用」畫成「這個
+      // 維度有 0 張」。
+      counts: <String, int>{
+        for (final entry in countsJson.entries)
+          if (entry.value is int) entry.key: entry.value as int,
+      },
       activeStaffCount: json['activeStaffCount'] as int? ?? 0,
     );
   }
@@ -1027,6 +1064,7 @@ class PoolItem {
     this.reminderStage,
     this.returnReason,
     this.handoverNote,
+    this.waitedMinutes,
   });
 
   final String taskId;
@@ -1053,6 +1091,11 @@ class PoolItem {
   final String? handoverNote;
   final String createdAt;
 
+  /// 這張單進池之後已經等了幾分鐘，由後端依回應當下的時間算好；單卡顯示成
+  /// 「等 N 分」。刻意不讓 App 拿 [createdAt] 自己減——等待時間要有單一權威
+  /// 口徑，也不該跟著裝置時鐘跳動。取不到時為 null，單卡不畫這顆標籤。
+  final int? waitedMinutes;
+
   factory PoolItem.fromJson(Map<String, dynamic> json) {
     return PoolItem(
       taskId: json['taskId'] as String,
@@ -1069,6 +1112,8 @@ class PoolItem {
       returnReason: json['returnReason'] as String?,
       handoverNote: json['handoverNote'] as String?,
       createdAt: json['createdAt'] as String,
+      // 後來才補進契約、後端尚未落地；缺席與 null 一律收成 null。
+      waitedMinutes: json['waitedMinutes'] as int?,
     );
   }
 }
