@@ -124,16 +124,15 @@ public class RepairGivenSteps {
     }
 
     /**
-     * 怎麼做：攔截網路，讓前幾次開單請求在後端已處理後才逾時，迫使 App 用同一個
-     * {@code Idempotency-Key} 重送。
+     * 怎麼做：測試後門的 {@code /drop-write-response} 讓前幾次開單請求在後端已處理後才
+     * 逾時，迫使 App 用同一個 {@code Idempotency-Key} 重送。
+     *
+     * <p>不用在送出前攔下請求的做法：那樣後端一張單都沒有，重送幾次都只會建立一張，
+     * 驗不到「後端只認列一次」。
      */
     @假設("恢復連線後的前 {int} 次送出會因網路不穩而重送")
     public void firstRetriesAfterReconnectAreFlaky(int retryCount) {
-        throw new IllegalStateException("測試後門沒有可以注入「前 " + retryCount
-                + " 次開單請求在後端已處理後才逾時」的開關：現有的 /flaky-connection 只把"
-                + "連線標成不穩定（改走降級輪詢），不會讓送出重跑，拿它頂替會讓這個情境在"
-                + "完全沒有重送的情況下綠燈，等於沒驗到同一把 Idempotency-Key。"
-                + "要讓這句可驗，測試後門需要一個能指定前幾次送出逾時的注入開關。");
+        world.postBackdoorJson("/drop-write-response", "{\"count\":" + retryCount + "}");
     }
 
     /**
