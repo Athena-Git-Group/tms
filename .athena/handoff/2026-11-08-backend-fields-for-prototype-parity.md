@@ -80,3 +80,59 @@
 1. 第 1 項（通知 `event`）契約已經就緒，可以直接進後端實作
 2. 第 2–5 項與第三優先那張表都要先經 `/api-plan` 把欄位寫進契約，才有東西可實作
 3. 契約補完之後走既有流程：`/tasks` 排 task → `/implement` 或 `/bdd` 推進
+
+---
+
+## 實作批次表（2026-11-08 排定）
+
+契約已於 `7be1b03`（通知 `event`）與 `1e559c8`（其餘九個 ADD）備齊。以下批次依
+**檔案爭用**與**驗收模組**切，不是依畫面切。
+
+### 批次 1 — 通知 `event` 落地〔進行中〕
+
+後端加欄位＋migration＋outbox 展開時落地；App `_kindOf` 改讀它。
+驗收：後端 144/148、`推播` 18/18、實際截圖確認七色出現。
+
+### 批次 2 — 後端欄位〔**必須序列，一個 agent**〕
+
+九個 ADD 裡有八個落在**同一支檔案** `tms/.../service/TaskExecutionService.java`：
+
+| 端點 | 欄位 |
+| --- | --- |
+| `myToday` | `shift`、`floors`、`poolBadgeCount`、`unreadNotificationBadgeCount` |
+| `myToday` → `engineeringSummary` | `plannedToday`、`maintenanceDone`、`maintenanceTotal` |
+| `myToday` → `engineeringTickets` | `workedMinutes` |
+| `deptPool` | `PoolItem.waitedMinutes`、`counts.urgent`／`staffReport`／`deskForward` |
+| 任務詳情 | `TaskDetail.segmentStartedAt` |
+
+`myToday` 的四組共用同一次 rows 查詢、`deptPool` 的兩組共用同一段組裝碼——
+**平行會互相覆蓋**（T341–T345 已經踩過這個坑，見 `tasks.md` 的序列註記）。
+
+其中兩項要跨出 `TaskExecutionService`：`unreadNotificationBadgeCount` 要查通知表、
+`poolBadgeCount` 要與 `deptPool` 的 items 筆數同口徑。
+
+驗收：後端 `bdd.RunTruthFeaturesTest` 144/148 不退化；以 curl 逐欄實測九個新欄位
+（比照 T341–T345 的做法，不是只看綠燈）。
+
+### 批次 3 — App 接線〔可平行三個 worktree，驗收排隊〕
+
+三組檔案互不重疊，可同時派；但 simulator 與 4723 port 全機唯一，**BDD 驗收必須排隊**。
+
+| 子批 | 畫面 | 欄位 | 驗收模組 |
+| --- | --- | --- | --- |
+| 3A | 房務首頁問候列、分頁列 | `shift`／`floors`／兩個徽章計數 | `今日進度` 3/3 |
+| 3B | 工務首頁、房務與工務待認領 | `plannedToday`／`maintenance*`／`workedMinutes`／`waitedMinutes`／`counts` 三個 | `待認領` 9/9、`工務單` 29/31 |
+| 3C | 任務頁 | `segmentStartedAt` 走秒、`source` meta（契約本來就有，App 沒解析） | `任務執行` 21/21 |
+
+3A 的徽章元件 `TmsCountBadge`、3B 的 `TmsTag`／`TmsCategoryTile`、3C 的標題區版面
+**都已經做好在等資料**，這一批主要是接線不是做版面。
+
+### 批次 4 — 收尾
+
+全量 `app/bdd/run-all.sh` 回歸（基準 **106/108**，紅的只能是 #11、#35），
+加上實機截圖逐頁對照原型。
+
+### 不在批次內
+
+「我的」工作磚（交班單／遺失物）、身分卡職稱員編、任務頁住客要求——
+三項都沒有 feature 承接也沒有端點，要做得先立需求，不在這一輪。
