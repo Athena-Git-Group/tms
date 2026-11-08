@@ -328,6 +328,15 @@ TaskDetail:
         type: integer
         format: int32
         description: 已做分鐘。accepted 與 deferred 為 0，doing 為目前累計，interrupted 為中斷前累計。
+      segmentStartedAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: >-
+          目前這一段計時的起算時刻（對應 tasks.segment_started_at）。只有 doing 有值，
+          其餘狀態為 null。給任務頁的計時走秒用：畫面以「elapsedMinutes 進入本段之前的累計」
+          加上「現在時間減 segmentStartedAt」逐秒重算，不必為了跳動的秒數反覆打端點。
+          elapsedMinutes 仍然是分鐘層級的權威值，兩者不一致時以它為準。
       checkedSopItems:
         type: array
         items:
