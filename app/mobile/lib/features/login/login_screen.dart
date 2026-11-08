@@ -1,12 +1,14 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
-import '../../core/error_banner.dart';
 import '../../core/navigation.dart';
+import '../../core/theme.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/tms_semantics.dart';
 import '../shell/main_shell.dart';
 import 'force_password_change_screen.dart';
+import 'login_widgets.dart';
 
 /// 員工登入畫面（ui-plan 畫面 11），兩種情境：
 ///
@@ -52,8 +54,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit(RememberedAccount? remembered) async {
-    final loginId =
-        remembered != null ? remembered.loginId : _staffIdController.text;
+    final loginId = remembered != null
+        ? remembered.loginId
+        : _staffIdController.text;
     setState(() {
       _submitting = true;
       _errorMessage = null;
@@ -106,97 +109,150 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('登入'),
-      ),
+      backgroundColor: TmsColors.groupedBackground,
+      navigationBar: const CupertinoNavigationBar(middle: Text('登入')),
       child: SafeArea(
         child: ValueListenableBuilder<RememberedAccount?>(
           valueListenable: TestHooks.instance.rememberedAccount,
           builder: (context, remembered, _) {
             final lockedOut = _lockoutRemainingMinutes != null;
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 32),
-                  if (remembered != null)
-                    TmsSemantics(
-                      id: 'login.remembered-identity.card',
-                      label: '${remembered.name}，請輸入您的密碼登入',
-                      child: Column(
-                        children: [
-                          Text(
-                            remembered.name,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            textAlign: TextAlign.center,
+            return Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                      TmsSpacing.screenEdge,
+                      TmsSpacing.md,
+                      TmsSpacing.screenEdge,
+                      TmsSpacing.xl2,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildHeader(remembered),
+                        const SizedBox(height: TmsSpacing.lg),
+                        if (lockedOut) ...[
+                          LoginLockoutCard(
+                            semanticsId: 'login.lockout-banner',
+                            title: '暫時無法登入',
+                            body: _lockoutMessage,
                           ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            '請輸入您的密碼登入',
-                            style: TextStyle(fontSize: 15),
-                            textAlign: TextAlign.center,
+                          const SizedBox(height: TmsSpacing.lg),
+                        ],
+                        LoginFormCard(
+                          children: [
+                            if (remembered == null)
+                              LoginFieldRow(
+                                // 兩個欄位各帶一把 key：共用手機模式有兩列、
+                                // 記住帳號模式只有一列，沒有 key 時 Flutter 會
+                                // 把舊的第一列（員工編號）重用成新的第一列
+                                // （密碼），accessibility id 跟著留在舊的那個，
+                                // 驗收就定位不到密碼欄。
+                                key: const ValueKey('login.staff-id-row'),
+                                label: '員工編號',
+                                field: TmsSemantics(
+                                  id: 'login.shared-device.staff-id-field',
+                                  child: LoginTextField(
+                                    controller: _staffIdController,
+                                  ),
+                                ),
+                              ),
+                            LoginFieldRow(
+                              key: const ValueKey('login.password-row'),
+                              label: '密碼',
+                              field: TmsSemantics(
+                                id: 'login.password-field',
+                                child: LoginTextField(
+                                  controller: _passwordController,
+                                  obscureText: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: TmsSpacing.sm),
+                          LoginErrorText(
+                            semanticsId: 'login.error-banner',
+                            message: _errorMessage!,
                           ),
                         ],
-                      ),
-                    )
-                  else ...[
-                    const Text(
-                      '請輸入您的員工編號與密碼登入',
-                      style: TextStyle(fontSize: 16),
-                      textAlign: TextAlign.center,
+                      ],
                     ),
-                    const SizedBox(height: 24),
+                  ),
+                ),
+                LoginActionBar(
+                  children: [
                     TmsSemantics(
-                      id: 'login.shared-device.staff-id-field',
-                      child: CupertinoTextField(
-                        controller: _staffIdController,
-                        placeholder: '員工編號',
-                        padding: const EdgeInsets.all(12),
+                      id: 'login.submit-button',
+                      enabled: !_submitting && !lockedOut,
+                      child: TmsPillButton(
+                        label: '登入',
+                        onPressed: _submitting || lockedOut
+                            ? null
+                            : () => _submit(remembered),
+                        child: _submitting
+                            ? const CupertinoActivityIndicator(
+                                color: TmsColors.brandOnPrimary,
+                              )
+                            : null,
+                      ),
+                    ),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(
+                        double.infinity,
+                        TmsSize.minTouchTarget,
+                      ),
+                      onPressed: () => _showForgotPassword(context),
+                      child: Text(
+                        '忘記密碼？',
+                        style: TmsText.subheadline.copyWith(
+                          color: TmsColors.brandPrimary,
+                        ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  TmsSemantics(
-                    id: 'login.password-field',
-                    child: CupertinoTextField(
-                      controller: _passwordController,
-                      placeholder: '密碼',
-                      obscureText: true,
-                      padding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (_errorMessage != null)
-                    ErrorBanner(
-                      semanticsId: 'login.error-banner',
-                      message: _errorMessage!,
-                    ),
-                  if (lockedOut)
-                    ErrorBanner(
-                      semanticsId: 'login.lockout-banner',
-                      message: '帳號已鎖定，請於 $_lockoutRemainingMinutes 分鐘後再試',
-                    ),
-                  TmsSemantics(
-                    id: 'login.submit-button',
-                    enabled: !_submitting && !lockedOut,
-                    child: CupertinoButton.filled(
-                      onPressed: _submitting || lockedOut
-                          ? null
-                          : () => _submit(remembered),
-                      child: _submitting
-                          ? const CupertinoActivityIndicator()
-                          : const Text('登入'),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             );
           },
         ),
+      ),
+    );
+  }
+
+  /// 鎖定橫幅上那一句話。剩餘分鐘數直接用後端回的值，App 不自己算鎖到幾點。
+  String get _lockoutMessage => '帳號已鎖定，請於 $_lockoutRemainingMinutes 分鐘後再試';
+
+  /// 招牌區：記住帳號時直接叫員工的名字，共用手機時只講這支手機要輸入什麼。
+  Widget _buildHeader(RememberedAccount? remembered) {
+    if (remembered == null) {
+      return const LoginBrandHeader(title: '登入', subtitle: '請輸入您的員工編號與密碼登入');
+    }
+    return TmsSemantics(
+      id: 'login.remembered-identity.card',
+      label: '${remembered.name}，請輸入您的密碼登入',
+      child: ExcludeSemantics(
+        child: LoginBrandHeader(title: remembered.name, subtitle: '請輸入您的密碼登入'),
+      ),
+    );
+  }
+
+  /// 忘記密碼目前沒有自助流程：重設密碼是主管在後台做的事，App 這邊沒有對應
+  /// 的端點，所以告訴員工該找誰，而不是導到一個做不了事的畫面。
+  void _showForgotPassword(BuildContext context) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('忘記密碼？'),
+        content: const Text('請找主管在後台重設密碼。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }

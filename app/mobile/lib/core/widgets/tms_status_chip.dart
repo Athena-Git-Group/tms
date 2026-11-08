@@ -116,30 +116,45 @@ class TmsStatusChip extends StatelessWidget {
     required this.state,
     this.type,
     this.inspection,
+    this.onDark = false,
   });
 
   final String state;
   final String? type;
   final String? inspection;
 
+  /// 給放在品牌色深底上的標籤用：設成 true 時這顆標籤一律畫成白底品牌色字，
+  /// 不取狀態色表的底色與字色。預設 false，也就是照狀態色表上色。
+  ///
+  /// 狀態色表的底色都是淺色，疊在品牌色深底上辨識不出來，所以深底上改由文字
+  /// 說明狀態，顏色只負責讓標籤本身浮出來。
+  final bool onDark;
+
   @override
   Widget build(BuildContext context) {
-    final appearance =
-        tmsStatusAppearance(state: state, type: type, inspection: inspection);
+    final appearance = tmsStatusAppearance(
+      state: state,
+      type: type,
+      inspection: inspection,
+    );
+    final background = onDark
+        ? TmsColors.cardBackground
+        : appearance.background;
+    final foreground = onDark ? TmsColors.brandPrimary : appearance.foreground;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: TmsSpacing.sm2,
         vertical: TmsSpacing.xs,
       ),
       decoration: BoxDecoration(
-        color: appearance.background,
+        color: background,
         borderRadius: BorderRadius.circular(TmsRadius.pill),
       ),
       child: Text(
         appearance.text,
         maxLines: 1,
         softWrap: false,
-        style: TmsText.caption1.copyWith(color: appearance.foreground),
+        style: TmsText.caption1.copyWith(color: foreground),
       ),
     );
   }

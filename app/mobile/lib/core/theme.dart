@@ -122,6 +122,15 @@ abstract final class TmsColors {
   /// [overtimeCapsule] 上的文字色。
   static const Color onOvertimeCapsule = Color(0xFF3A1C00);
 
+  /// 品牌色深底上超時的計時數字色（任務頁進行中的標題區）。
+  ///
+  /// 深底上用黃色，是因為超時要被看見但不該被當成錯誤：紅色在青綠底上會讀成
+  /// 「這張單出事了」，而超時只是提醒，不擋任何操作。
+  static const Color overtimeTimerOnDark = Color(0xFFFFD60A);
+
+  /// 白底上超時的計時數字色（任務頁暫停時的標題區）。
+  static const Color overtimeTimerOnLight = Color(0xFFC93400);
+
   /// 成功的圖示色、照片上傳完成角標、「全部做完」空狀態圖示。
   static const Color systemGreen = Color(0xFF34C759);
 
