@@ -1365,6 +1365,14 @@ truth feature 本輪**沒有改動**——`truth-delta.md` 這輪只有 `/api-pl
 
 四個模組（帳號與登入、工務單、待認領、任務執行）的單跑綠數合計 68，在全量裡也是 68——沒有跨模組干擾。
 
+**視覺第二段合併後的回歸（2026-11-08，commit `ff3a663`）**：`app/bdd/run-all.sh` 回報
+`Tests run: 108, Failures: 3, Errors: 1, Skipped: 0` —— **104/108，紅燈與上表逐一相同**
+（`首頁今日進度.feature:35` #40、`任務頁核心互動.feature:20` #39、`報修照片與送出.feature:69` #35、
+`工務視角.feature:48` #11），沒有新的紅、沒有換人。共用元件抽換（四套卡片／四套 chip 收斂成
+`core/widgets/`）、Tab bar（`features/shell/main_shell.dart`）、房務首頁整頁重寫、完成慶祝頁重做
+都在這一輪之內，**零退化**。合併前後 `app/mobile/lib` 的 accessibility id 各 135 筆、`diff` 無輸出；
+`flutter analyze` 0 error（8 則既有 info）、`flutter test` 13/13。
+
 ## Phase 7: 後端補齊輪 quality gate
 
 **Goal**: 確認本輪七項實作逐項對齊契約、後端 144 沒有退化、App 側解鎖如實發生，並把已解除的缺口在清單上標示出來。`Test Scope` 全綠不能代替逐項對照。
