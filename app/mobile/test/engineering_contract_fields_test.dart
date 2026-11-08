@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/engineering/eng_home_screen.dart';
+import 'package:tms_staff_app/features/today/my_today_scope.dart';
 import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 
@@ -21,7 +22,11 @@ void main() {
 
   Future<void> pumpEngHome(WidgetTester tester, MyToday today) async {
     ApiClient.instance = _FakeApiClient(today: today);
-    await tester.pumpWidget(const CupertinoApp(home: EngHomeScreen()));
+    // 今日進度取在外殼那一層（main_shell），工務首頁自己不再建 scope；
+    // 這個測試單獨渲染工務首頁，所以要補上外殼平常提供的那一層。
+    await tester.pumpWidget(
+      const CupertinoApp(home: MyTodayScope(child: EngHomeScreen())),
+    );
     await tester.pumpAndSettle();
   }
 

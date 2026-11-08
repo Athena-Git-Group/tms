@@ -106,11 +106,27 @@ class _GreetingRow extends StatelessWidget {
   }
 
   /// 班別那一段；沒有班別就回空字串，日期後面不會多出一個孤零零的分隔點。
+  ///
+  /// 後端回的是租戶設定 `shift_times` 的鍵（`morning`／`afternoon`），不是中文
+  /// 名稱——系統裡沒有任何地方存班別的中文說法。翻成白話在這裡做，跟來源
+  /// （`住客掃碼`）、工務單類別（`冷氣`）走同一套做法：enum 值不露在畫面上。
+  /// 認不得的鍵原樣顯示，不猜一個說法。
   static String _shiftSuffix(String? shift) {
     if (shift == null || shift.isEmpty) {
       return '';
     }
-    return ' · $shift';
+    return ' · ${_shiftText(shift)}';
+  }
+
+  static String _shiftText(String shift) {
+    switch (shift) {
+      case 'morning':
+        return '早班';
+      case 'afternoon':
+        return '晚班';
+      default:
+        return shift;
+    }
   }
 
   /// 負責樓層那一段。多層時用頓號並排（`3、4 樓`），沒有樓層就整段不出現。
