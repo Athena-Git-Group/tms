@@ -55,6 +55,23 @@ public class NotificationService {
     }
 
     /**
+     * 呼叫者還沒讀的通知有幾筆。分頁列「通知」那一格的紅色徽章要這個數字
+     * （contracts MyToday.unreadNotificationBadgeCount），口徑與 {@link #list} 回來的
+     * 清單裡 readAt 為 null 的列數一致——「未讀」在這個系統裡就只有 read_at IS NULL
+     * 一種判定，徽章與清單共用它，不另立一套。數字由這裡算而不是讓呼叫端把整份清單
+     * 抓回去數，是因為工作台只需要一個數字。
+     */
+    public int unreadCount(long tenantId, UUID staffId) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT count(*) FROM notifications
+                 WHERE tenant_id = ? AND recipient_staff_id = ? AND read_at IS NULL
+                """,
+                Integer.class, tenantId, staffId);
+        return count == null ? 0 : count;
+    }
+
+    /**
      * 誰能標成已讀只認通知本人：這則通知的收件人若不是目前呼叫者，代表呼叫者
      * 想去動別人的已讀狀態，所以用 403 擋下，不是單純查無資料的 404。前端斷線
      * 重送同一個標記已讀請求是常見情況，所以這個動作要能安全重複呼叫，不報錯。

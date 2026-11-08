@@ -53,6 +53,7 @@ public class TaskExecutionService {
     private final TaskRowLookup taskRowLookup;
     private final RepairService repairService;
     private final HandoverService handoverService;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -63,6 +64,7 @@ public class TaskExecutionService {
             TaskRowLookup taskRowLookup,
             RepairService repairService,
             HandoverService handoverService,
+            NotificationService notificationService,
             ObjectMapper objectMapper,
             Clock clock) {
         this.taskEngine = taskEngine;
@@ -71,6 +73,7 @@ public class TaskExecutionService {
         this.taskRowLookup = taskRowLookup;
         this.repairService = repairService;
         this.handoverService = handoverService;
+        this.notificationService = notificationService;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -375,49 +378,39 @@ public class TaskExecutionService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         String targetDept = resolvePoolDept(actor, deptFilter);
-        // 先在內層算好 unclaimed_overdue 與 same_floor 兩個旗標，外層 ORDER BY
-        // 直接引用。SQL 不允許在 ORDER BY 的運算式裡引用同一層 SELECT 的別名，
-        // 不包一層就得在排序鍵重抄整段未接超時判斷。
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                """
-                SELECT * FROM (
-                    SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
-                           t.return_reason, t.requeue_note, t.created_at, t.reminder_stage,
-                           r.room_no, r.floor,
-                           rt.ticket_no,
-                           (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
-                           EXISTS (SELECT 1
-                                     FROM plan_rooms pr
-                                     JOIN rooms pl ON pl.tenant_id = pr.tenant_id AND pl.id = pr.room_id
-                                    WHERE pr.tenant_id = t.tenant_id AND pr.staff_id = ?
-                                      AND pl.floor = r.floor) AS same_floor
-                      FROM tasks t
-                      JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
-                      LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
-                     WHERE t.tenant_id = ? AND t.dept = ? AND t.state = 'pool'
-                ) pool
-                ORDER BY pool.unclaimed_overdue DESC,
-                         CASE WHEN pool.unclaimed_overdue THEN pool.room_no END,
-                         pool.urgent DESC, pool.priority_notify DESC, pool.same_floor DESC,
-                         pool.room_no, pool.created_at
-                """,
-                actor.staffId(), tenantId, targetDept);
+        List<Map<String, Object>> rows = poolRows(tenantId, targetDept, actor.staffId());
+        OffsetDateTime now = OffsetDateTime.now(clock);
 
         List<Map<String, Object>> items = new ArrayList<>();
         Map<String, Integer> byCategory = new LinkedHashMap<>();
+        // 工務池分流磚的三個數字（contracts DeptPool.counts 的 urgent／staffReport／
+        // deskForward）。與 byCategory 一樣在過濾之前累計，counts 才會維持「統計全部、
+        // 篩選只影響 items」這條既有規則；來源值也直接用下面算好的 poolItemSource，
+        // 不另寫一套換算，分流磚的數字與單卡上的來源標籤才不會各說各話。
+        int urgentCount = 0;
+        int staffReportCount = 0;
+        int deskForwardCount = 0;
         for (Map<String, Object> row : rows) {
             String category = String.valueOf(row.get("type"));
-            byCategory.merge(category, 1, Integer::sum);
-            if (categoryFilter != null && !categoryFilter.equals(category)) {
-                continue;
-            }
             boolean urgent = Boolean.TRUE.equals(row.get("urgent"));
-            if (urgentFilter != null && urgentFilter != urgent) {
-                continue;
-            }
             String poolItemSource = "repair".equals(category)
                     ? ("desk".equals(row.get("source")) ? "desk_forward" : "staff_report")
                     : (row.get("pool_source") != null ? String.valueOf(row.get("pool_source")) : "desk_forward");
+            byCategory.merge(category, 1, Integer::sum);
+            if (urgent) {
+                urgentCount++;
+            }
+            if ("staff_report".equals(poolItemSource)) {
+                staffReportCount++;
+            } else if ("desk_forward".equals(poolItemSource)) {
+                deskForwardCount++;
+            }
+            if (categoryFilter != null && !categoryFilter.equals(category)) {
+                continue;
+            }
+            if (urgentFilter != null && urgentFilter != urgent) {
+                continue;
+            }
             if (sourceFilter != null && !sourceFilter.equals(poolItemSource)) {
                 continue;
             }
@@ -432,6 +425,7 @@ public class TaskExecutionService {
             item.put("ticketNo", row.get("ticket_no"));
             item.put("priorityNotify", row.get("priority_notify"));
             item.put("sameFloor", row.get("same_floor"));
+            item.put("waitedMinutes", waitedMinutes(row, now));
             // 未接提醒階段：原值回傳，還沒進提醒階段就是 null。這裡只是把
             // tasks.reminder_stage 露給 App 標示單卡，排序仍走上面的
             // unclaimed_overdue 旗標，兩者不互相影響。
@@ -447,12 +441,82 @@ public class TaskExecutionService {
         counts.put("amenity", byCategory.getOrDefault("amenity", 0));
         counts.put("repair", byCategory.getOrDefault("repair", 0));
         counts.put("other", byCategory.getOrDefault("other", 0));
+        // 急件與來源三格只有工務池有意義（contracts DeptPool.counts）：房務的待認領
+        // 分流磚依任務類別分格，工務依急件與來源分格。房務池不給這三個鍵，讓畫面一看
+        // 就知道這個維度在這一池不存在，而不是拿到一排 0 誤以為「這一池沒有急件」。
+        if ("engineering".equals(targetDept)) {
+            counts.put("urgent", urgentCount);
+            counts.put("staffReport", staffReportCount);
+            counts.put("deskForward", deskForwardCount);
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("items", items);
         result.put("counts", counts);
         result.put("activeStaffCount", activeStaffCount(tenantId, targetDept));
         return result;
+    }
+
+    /**
+     * 撈出一個部門待認領池的全部任務，排序就是 {@link #deptPool} 回應裡 items 的順序。
+     * 抽成獨立方法是因為 {@code MyToday.poolBadgeCount} 的口徑契約寫明「與 listDeptPool
+     * 不帶篩選時回的 items 筆數一致」——兩邊共用這一支，徽章上的數字與使用者點進去
+     * 看到的張數就不可能各算各的。
+     *
+     * <p>先在內層算好 unclaimed_overdue 與 same_floor 兩個旗標，外層 ORDER BY 直接引用。
+     * SQL 不允許在 ORDER BY 的運算式裡引用同一層 SELECT 的別名，不包一層就得在排序鍵
+     * 重抄整段未接超時判斷。
+     *
+     * <p>{@code pool_entered_at} 是這張單最近一次進池的時刻，供
+     * {@code PoolItem.waitedMinutes} 算等待時間。取最近一次 created 或 returned_to_pool
+     * 事件、查不到事件時退回 {@code tasks.created_at}——與未接提醒掃描
+     * （{@link UnclaimedReminderScanJob}）判斷「等多久了」同一把尺。不直接用
+     * {@code created_at} 是因為被退回待認領的單會再進池一次，開單時刻早就不是它開始等的
+     * 時刻了。
+     */
+    private List<Map<String, Object>> poolRows(long tenantId, String dept, UUID staffId) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT * FROM (
+                    SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
+                           t.return_reason, t.requeue_note, t.created_at, t.reminder_stage,
+                           r.room_no, r.floor,
+                           rt.ticket_no,
+                           (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
+                           COALESCE((SELECT MAX(te.created_at) FROM task_events te
+                                      WHERE te.tenant_id = t.tenant_id AND te.task_id = t.id
+                                        AND te.type IN ('created', 'returned_to_pool')),
+                                    t.created_at) AS pool_entered_at,
+                           EXISTS (SELECT 1
+                                     FROM plan_rooms pr
+                                     JOIN rooms pl ON pl.tenant_id = pr.tenant_id AND pl.id = pr.room_id
+                                    WHERE pr.tenant_id = t.tenant_id AND pr.staff_id = ?
+                                      AND pl.floor = r.floor) AS same_floor
+                      FROM tasks t
+                      JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                      LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
+                     WHERE t.tenant_id = ? AND t.dept = ? AND t.state = 'pool'
+                ) pool
+                ORDER BY pool.unclaimed_overdue DESC,
+                         CASE WHEN pool.unclaimed_overdue THEN pool.room_no END,
+                         pool.urgent DESC, pool.priority_notify DESC, pool.same_floor DESC,
+                         pool.room_no, pool.created_at
+                """,
+                staffId, tenantId, dept);
+    }
+
+    /**
+     * 一張待認領單已經等了幾分鐘：回應當下的時間減去進池時刻（{@code pool_entered_at}，
+     * 口徑見 {@link #poolRows}），不足一分鐘算 0。由後端算而不是 App 依 createdAt 自己算，
+     * 等待時間才有單一權威口徑，畫面也不必跟著裝置時鐘跳動。
+     */
+    private static int waitedMinutes(Map<String, Object> row, OffsetDateTime now) {
+        OffsetDateTime enteredAt = SqlTimestamps.toOffsetDateTime(row.get("pool_entered_at"));
+        if (enteredAt == null) {
+            return 0;
+        }
+        long minutes = Duration.between(enteredAt.toInstant(), now.toInstant()).toMinutes();
+        return (int) Math.max(0, minutes);
     }
 
     /**
@@ -667,17 +731,93 @@ public class TaskExecutionService {
         result.put("todayTasks", todayTasks);
         result.put("nextTasks", nextTasks);
         result.put("zeroReturnStreakDays", 0);
+        Map<String, Object> duty = todayDuty(tenantId, actor.staffId(), today);
+        result.put("shift", duty.get("shift"));
+        result.put("floors", duty.get("floors"));
+        result.put("poolBadgeCount", poolBadgeCount(tenantId, actor));
+        result.put("unreadNotificationBadgeCount",
+                notificationService.unreadCount(tenantId, actor.staffId()));
         if ("engineering".equals(actor.dept())) {
             Map<String, Object> engineeringSummary = new LinkedHashMap<>();
             engineeringSummary.put("openCount", engineeringOpenCount);
             engineeringSummary.put("completedToday", engineeringCompletedToday);
             engineeringSummary.put("urgentCount", engineeringUrgentCount);
+            // 今天預計要修幾張、今日保養做了幾張：兩者都沒有資料來源可算。排房計畫
+            // （cleaning_plans）只排房務的打掃，工務沒有任何「今天預計處理哪些單」的
+            // 排程；repair_tickets 也分不出報修與定期保養——category 分的是冷氣、水電、
+            // 家具設備、門鎖、其他，沒有保養這一維。契約把三個欄位都訂成 nullable 就是
+            // 為了這種情況：寧可回 null 讓畫面退回「完成數＋在手數」的分母、保養那一格
+            // 整個不畫，也不要湊一個會讓人誤以為真有排程的數字。
+            engineeringSummary.put("plannedToday", null);
+            engineeringSummary.put("maintenanceDone", null);
+            engineeringSummary.put("maintenanceTotal", null);
             engineeringSummary.put("tickets", engineeringTickets(engineeringTicketRows));
             result.put("engineeringSummary", engineeringSummary);
         } else {
             result.put("engineeringSummary", null);
         }
         return result;
+    }
+
+    /**
+     * 首頁問候列要接在日期後面的兩段：今天的班別與今天負責的樓層
+     * （contracts MyToday.shift、MyToday.floors）。唯一記載「誰今天上哪一班、顧哪些房」
+     * 的地方是已發佈的排房計畫——{@code cleaning_plans} 一份計畫對應一天一班，
+     * {@code plan_rooms} 記這份計畫把哪些房分給誰，樓層由房間本身的 floor 來。草稿不算數，
+     * 只認 published 的那一份（一天一班同時只會有一份已發佈）。
+     *
+     * <p>查不到就兩個都回 null，契約把兩欄都訂成 nullable 正是為此：排房計畫目前只排
+     * 房務的打掃，工務與櫃檯同仁沒有任何排班資料可讀；房務同仁在計畫發佈之前也一樣。
+     * 這種時候畫面就只顯示日期。
+     *
+     * <p>班別回的是排房計畫裡的那個值（{@code cleaning_plans.shift}，值域來自租戶設定
+     * 的 shift_times），與排房計畫 API 回的 shift 同一套值。系統裡沒有任何地方存班別的
+     * 中文顯示名稱，所以這裡不編一個出來。
+     */
+    private Map<String, Object> todayDuty(long tenantId, UUID staffId, LocalDate today) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                """
+                SELECT p.shift, r.floor
+                  FROM plan_rooms pr
+                  JOIN cleaning_plans p ON p.tenant_id = pr.tenant_id AND p.id = pr.plan_id
+                  JOIN rooms r ON r.tenant_id = pr.tenant_id AND r.id = pr.room_id
+                 WHERE pr.tenant_id = ? AND pr.staff_id = ?
+                   AND p.work_date = ? AND p.status = 'published'
+                 ORDER BY r.floor
+                """,
+                tenantId, staffId, today);
+        Map<String, Object> duty = new LinkedHashMap<>();
+        if (rows.isEmpty()) {
+            duty.put("shift", null);
+            duty.put("floors", null);
+            return duty;
+        }
+        List<Integer> floors = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Number floor = (Number) row.get("floor");
+            if (floor != null && !floors.contains(floor.intValue())) {
+                floors.add(floor.intValue());
+            }
+        }
+        duty.put("shift", rows.get(0).get("shift"));
+        duty.put("floors", floors);
+        return duty;
+    }
+
+    /**
+     * 分頁列「待認領」徽章上的數字（contracts MyToday.poolBadgeCount）：呼叫者現在搶得到
+     * 的待認領單數。口徑契約寫明與 listDeptPool 不帶篩選時回的 items 筆數一致，所以這裡
+     * 直接數 {@link #poolRows} 的列數——不帶篩選時 {@link #deptPool} 的 items 就是這些列
+     * 一列一筆，兩邊走同一支查詢就不會出現「徽章說 3 張、點進去只有 2 張」。
+     *
+     * <p>主管與老闆不屬於單一部門，沒有「自己搶得到」的那一池（查待認領得自己指定看哪一
+     * 池，見 {@link #resolvePoolDept}），所以回 0，畫面不顯示徽章。
+     */
+    private int poolBadgeCount(long tenantId, CurrentActor actor) {
+        if (!FIELD_DEPTS.contains(actor.role()) || actor.dept() == null) {
+            return 0;
+        }
+        return poolRows(tenantId, actor.dept(), actor.staffId()).size();
     }
 
     /**
@@ -745,6 +885,9 @@ public class TaskExecutionService {
             ticket.put("state", row.get("state"));
             ticket.put("isUrgent", Boolean.TRUE.equals(row.get("ticket_is_urgent")));
             ticket.put("source", "desk".equals(row.get("source")) ? "desk_forward" : "staff_report");
+            // 已做分鐘走 TaskDetail.elapsedMinutes 同一支算法（契約要求兩邊同口徑）：
+            // 已結束段落的累計秒數加上還在進行中的這一段。還沒開工的單兩者都沒有，自然是 0。
+            ticket.put("workedMinutes", elapsedMinutes(row));
             tickets.add(ticket);
         }
         return tickets;
@@ -813,6 +956,10 @@ public class TaskExecutionService {
         detail.put("deferredBySelf", row.get("deferred_by_self"));
         detail.put("elapsedMinutes", minutes);
         detail.put("accumulatedMinutes", minutes);
+        // 目前這一段計時的起算時刻（contracts TaskDetail.segmentStartedAt）。任務頁拿它
+        // 逐秒重算碼表，不必為了跳動的秒數反覆打端點。欄位本身只在 doing 時有值——
+        // 開工寫入、中斷與完工清空——所以其餘狀態自然是 null，這裡不另外判狀態。
+        detail.put("segmentStartedAt", SqlTimestamps.toOffsetDateTime(row.get("segment_started_at")));
         detail.put("checkedSopItems", checkedSopItemIds(row));
         detail.put("skippedSopItems", skippedSopItemIds(row));
         detail.put("handovers", handoverService.handoversOf(row));
