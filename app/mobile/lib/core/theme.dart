@@ -485,6 +485,18 @@ abstract final class TmsText {
     color: TmsColors.label,
   );
 
+  /// 主卡上以區域名代替房號時的地點（`Main.dc.html:921` 的 `en.next.size`）。
+  ///
+  /// 比 [displayRoomNo] 小 14pt：房號最多四個字，區域名（「3F 管道間」）會長
+  /// 到七八個字，同字級會換行或被截掉，而地點是這張卡最先要被讀到的東西。
+  static const TextStyle displayAreaName = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 30,
+    height: 1,
+    fontWeight: FontWeight.w800,
+    color: TmsColors.label,
+  );
+
   /// 進度環中央的數字。
   static const TextStyle displayMetric = TextStyle(
     fontFamilyFallback: fontFamilyStack,
@@ -512,6 +524,19 @@ abstract final class TmsText {
     fontFamilyFallback: fontFamilyStack,
     fontSize: 26,
     height: 1,
+    fontWeight: FontWeight.w700,
+    fontFeatures: tabularNumbers,
+    color: TmsColors.label,
+  );
+
+  /// 工務維修中那張主卡的計時（`Main.dc.html:908`）。
+  ///
+  /// 比房務的 [displayTimer] 小 4pt。工務那張卡的計時和地點、標題擠在同一列，
+  /// 而地點可能是七八個字的區域名；房務那一列的房號固定四個字以內，計時放得
+  /// 下更大的字級。
+  static const TextStyle displayTimerCompact = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 22,
     fontWeight: FontWeight.w700,
     fontFeatures: tabularNumbers,
     color: TmsColors.label,
