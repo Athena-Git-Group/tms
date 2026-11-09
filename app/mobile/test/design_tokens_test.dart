@@ -56,6 +56,7 @@ void main() {
         TmsText.displayHero,
         TmsText.displayRoomNo,
         TmsText.displayMetric,
+        TmsText.displayStat,
         TmsText.displayTimer,
       ];
       for (final style in styles) {

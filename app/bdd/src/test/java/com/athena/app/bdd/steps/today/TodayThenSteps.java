@@ -11,7 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/** 今日進度模組的 Then（Rule：首頁顯示後端算出的今日進度／依推薦順序列出待開始的單／顯示連續零退回天數）。 */
+/** 今日進度模組的 Then（Rule：首頁顯示後端算出的今日進度／依推薦順序列出待開始的單／手上沒有可以開始的單時顯示空狀態）。 */
 public class TodayThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -72,8 +72,8 @@ public class TodayThenSteps {
             case "打掃完成／總數" ->
                     today.path("cleaningDone").asInt() + " / " + today.path("cleaningTotal").asInt();
             case "查房通過" -> String.valueOf(today.path("inspectedCount").asInt());
-            case "臨時需求完成" -> String.valueOf(today.path("adHocCompleted").asInt());
-            case "預估剩餘工時" -> today.path("remainingMinutes").asInt() + " 分";
+            case "臨時需求完成" -> today.path("adHocCompleted").asInt() + " 單";
+            case "預估剩餘工時" -> today.path("remainingMinutes").asInt() + " 分鐘";
             default -> throw new IllegalArgumentException("今日進度沒有「" + item + "」這一格");
         };
     }
@@ -125,16 +125,23 @@ public class TodayThenSteps {
     }
 
     /**
-     * 必查：首頁有連續零退回天數，數值與後端回應一致。計算定義待 clarify（見 feature 內
-     * 「[need clarification]」註記：連續 N 天零退回怎麼算）。
-     * accessibility id：{@code home.streak-badge}（ui-plan.md 標記「待補畫面後才掛」）。
+     * 必查：首頁主卡的位置是空狀態，標題與說明剛好是這兩句，而且後端確實沒有可以開始的單。
+     * accessibility id：{@code home.empty-state}，它的可見文字是「標題。說明」。
+     *
+     * <p>兩段都比：空狀態有三種說法（手上沒有任務、今天的任務都完成了、目前沒有可以開始的
+     * 單），只比標題的話，挑錯分支時說明會跟著錯而測試仍然通過——員工看到的下一步就指錯地方。
+     * 後端那一段確認的是「畫面該進空狀態」：進行中與推薦清單都空，主卡本來就沒有東西可畫。
      */
-    @那麼("首頁顯示連續零退回天數")
-    public void homeShowsZeroReturnStreak() {
-        String expected = String.valueOf(todayResponse().path("zeroReturnStreakDays").asInt());
-        String onScreen = world.waitForLabelOf("home.streak-badge", expected, SCREEN_TIMEOUT);
+    @那麼("首頁空狀態顯示標題 {string}、說明 {string}")
+    public void homeShowsEmptyState(String title, String description) {
+        JsonNode today = todayResponse();
+        if (!today.path("nextTasks").isEmpty()) {
+            throw new AssertionError("後端 GET /me/today 還有推薦的下一間，首頁不該是空狀態");
+        }
+        String expected = title + "。" + description;
+        String onScreen = world.waitForLabelOf("home.empty-state", expected, SCREEN_TIMEOUT);
         if (!expected.equals(onScreen)) {
-            throw new AssertionError("首頁連續零退回天數（home.streak-badge）不符：預期 "
+            throw new AssertionError("首頁空狀態（home.empty-state）不符：預期 "
                     + expected + "，實際 " + onScreen);
         }
     }

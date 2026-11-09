@@ -247,6 +247,30 @@ class TmsHeroCard extends StatelessWidget {
   }
 }
 
+/// 超時幾分鐘；沒超時回 null。
+///
+/// 原型 `Main.dc.html:3153-3156`：秒數超過預估就算超時，分鐘數無條件進位並且
+/// 至少是 1，所以剛跨過預估的那一秒顯示的是「超時 1 分」而不是 0。走不了秒時
+/// 拿已做分鐘代入同一條式子，結果就是分鐘相減。
+///
+/// 主卡的計時欄與首頁任務列的副標講的是同一件事，兩邊各算一次就會在進位那一
+/// 步分岔，同一張單在卡上寫「超時 6 分」、在列上寫「超時 5 分」。
+int? tmsOvertimeMinutes({
+  required int? estMin,
+  required int workedMinutes,
+  int? workedSeconds,
+}) {
+  if (estMin == null || estMin <= 0) {
+    return null;
+  }
+  final seconds = workedSeconds ?? workedMinutes * 60;
+  final over = seconds - estMin * 60;
+  if (over <= 0) {
+    return null;
+  }
+  return math.max(1, (over / 60).ceil());
+}
+
 /// 進行中那張主卡右側的計時欄：計時數字，超時時底下再掛一顆膠囊。
 ///
 /// 房務與工務共用。原型 `Main.dc.html:174-182` 把它寫成一個靠右對齊、間距 4
@@ -278,24 +302,6 @@ class TmsHeroTimer extends StatelessWidget {
     vertical: TmsSpacing.xxs,
   );
 
-  /// 超時幾分鐘；沒超時回 null。
-  ///
-  /// 原型 `Main.dc.html:3153-3156`：秒數超過預估就算超時，分鐘數無條件進位並
-  /// 且至少是 1，所以剛跨過預估的那一秒顯示的是「超時 1 分」而不是 0。走不了
-  /// 秒時拿已做分鐘代入同一條式子，結果就是分鐘相減。
-  int? get _overtimeMinutes {
-    final est = estMin;
-    if (est == null || est <= 0) {
-      return null;
-    }
-    final seconds = workedSeconds ?? workedMinutes * 60;
-    final over = seconds - est * 60;
-    if (over <= 0) {
-      return null;
-    }
-    return math.max(1, (over / 60).ceil());
-  }
-
   /// 計時那一串字。
   ///
   /// 走得了秒時寫成「分:秒」，超過一小時才補上小時那一段，與原型
@@ -316,7 +322,11 @@ class TmsHeroTimer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final overtime = _overtimeMinutes;
+    final overtime = tmsOvertimeMinutes(
+      estMin: estMin,
+      workedMinutes: workedMinutes,
+      workedSeconds: workedSeconds,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,

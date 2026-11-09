@@ -18,6 +18,8 @@ class ProgressValue extends StatelessWidget {
     required this.id,
     required this.value,
     this.style,
+    this.unit,
+    this.unitStyle,
   });
 
   /// accessibility id，例如 `home.progress.cleaned-ratio`。
@@ -28,12 +30,32 @@ class ProgressValue extends StatelessWidget {
 
   final TextStyle? style;
 
+  /// 數字後面那個字級較小的單位字，例如「分鐘」「張工單」；null 代表這一格
+  /// 只有數字。
+  ///
+  /// 單位跟著數字一起進 label，讀值的一方拿到的是員工看到的那一整串。單位
+  /// 自己抽一個節點的話，驗收得把兩個節點讀回來再拼，拼法又只有測試知道。
+  final String? unit;
+
+  final TextStyle? unitStyle;
+
   @override
   Widget build(BuildContext context) {
+    final unit = this.unit;
     return TmsSemantics(
       id: id,
-      label: value,
-      child: ExcludeSemantics(child: Text(value, style: style)),
+      label: unit == null ? value : '$value $unit',
+      child: ExcludeSemantics(
+        child: unit == null
+            ? Text(value, style: style)
+            : Text.rich(
+                TextSpan(
+                  text: '$value ',
+                  style: style,
+                  children: [TextSpan(text: unit, style: unitStyle)],
+                ),
+              ),
+      ),
     );
   }
 }

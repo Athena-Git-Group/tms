@@ -474,6 +474,18 @@ abstract final class TmsText {
     color: TmsColors.label,
   );
 
+  /// 進度卡右欄下排那兩格的統計數字（`Main.dc.html:155`、`159`）。
+  ///
+  /// 比同一欄上排的「預估剩餘工時」小 3pt：上排那一格是員工最常看的數字，
+  /// 兩排同字級就分不出誰先讀。行高不宣告，原型那兩個 span 也沒有宣告。
+  static const TextStyle displayStat = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 17,
+    fontWeight: FontWeight.w700,
+    fontFeatures: tabularNumbers,
+    color: TmsColors.label,
+  );
+
   /// 房號當主角時退居副位的計時。
   static const TextStyle displayTimer = TextStyle(
     fontFamilyFallback: fontFamilyStack,

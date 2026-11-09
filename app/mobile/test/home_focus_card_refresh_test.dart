@@ -37,14 +37,9 @@ void main() {
     await tester.pumpWidget(const CupertinoApp(home: HousekeepingShell()));
     await tester.pumpAndSettle();
 
-    // 主卡與列表的狀態標籤都寫「進行中」，所以要指名主卡那一個：
-    // 主卡的標籤是 13pt，列表的狀態標籤是 12pt。
-    expect(
-      find.byWidgetPredicate(
-        (w) => w is Text && w.data == '進行中' && w.style?.fontSize == 13,
-      ),
-      findsOneWidget,
-    );
+    // 主卡的小標帶類別（Main.dc.html:171-172），列表的狀態標籤只有「進行中」，
+    // 兩者不會互相誤認。
+    expect(find.text('進行中 · 打掃'), findsOneWidget);
     expect(find.text('繼續處理'), findsOneWidget);
 
     // 任務頁送出完成之後打的就是這一支。
@@ -52,9 +47,9 @@ void main() {
     TodayRefresh.instance.request();
     await tester.pumpAndSettle();
 
-    expect(find.text('進行中'), findsNothing);
+    expect(find.text('進行中 · 打掃'), findsNothing);
     expect(find.text('下一間'), findsOneWidget);
-    expect(find.text('開始這一間'), findsOneWidget);
+    expect(find.text('開始打掃 303'), findsWidgets);
     expect(client.myTodayCalls, 2);
   });
 }
