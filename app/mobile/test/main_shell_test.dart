@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/theme.dart';
+import 'package:tms_staff_app/core/widgets/tms_tab_bar.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
 /// 驗分頁外殼把四個畫面接對了，而且首頁上每一個要被讀值的節點都還在。
@@ -70,6 +72,59 @@ void main() {
     expect(find.bySemanticsIdentifier('me.screen'), findsOneWidget);
 
     handle.dispose();
+  });
+
+  testWidgets('分頁列浮在內容上：左右各內縮 20，下緣離安全區 21', (tester) async {
+    // Main.dc.html:1126,4441-4442 — left/right: tabSide 20、
+    // bottom: Math.max(safeBottom - 13, 10)，安全區 34 時是 21
+    ApiClient.instance = _FakeApiClient();
+    await tester.pumpWidget(
+      const CupertinoApp(
+        home: MediaQuery(
+          data: MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          child: HousekeepingShell(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final screen = tester.getRect(find.byType(HousekeepingShell));
+    final bar = tester.getRect(find.byType(TmsTabBar));
+
+    expect(bar.left - screen.left, 20);
+    expect(screen.right - bar.right, 20);
+    expect(screen.bottom - bar.bottom, 21);
+    expect(bar.height, 62);
+
+    // soft scroll edge 蓋住分頁列佔到的那一整段。
+    final edge = tester.getRect(find.byType(TmsBottomScrollEdge));
+    expect(edge.bottom, screen.bottom);
+    expect(edge.height, 62 + 21);
+  });
+
+  testWidgets('首頁清單的底部留白讓開整條分頁列', (tester) async {
+    // Main.dc.html:4449 — scrollPadBottom: 62 + tab26Bottom + 20
+    ApiClient.instance = _FakeApiClient();
+    await tester.pumpWidget(
+      const CupertinoApp(
+        home: MediaQuery(
+          data: MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          child: HousekeepingShell(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final list = tester.widget<ListView>(find.byType(ListView));
+    expect(
+      list.padding,
+      EdgeInsets.fromLTRB(
+        TmsSpacing.screenEdge,
+        TmsSpacing.md,
+        TmsSpacing.screenEdge,
+        TmsSpacing.scrollPadBottom(34),
+      ),
+    );
   });
 }
 

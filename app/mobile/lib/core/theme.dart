@@ -164,6 +164,31 @@ abstract final class TmsColors {
   /// 離線列上的次要文字（說明與待同步筆數）。
   static const Color offlineBarSecondaryLabel = Color(0xBFEBEBF5);
 
+  // ── 毛玻璃 ──────────────────────────────────────────────────────────
+  //
+  // 這幾個值都帶 alpha，疊在 [TmsGlass] 模糊過的背景上才是最後看到的顏色，
+  // 單獨拿去當實心底色會太淡。
+
+  /// 浮動分頁列的玻璃底色。Main.dc.html:1126 — rgba(255,255,255,.55)
+  static const Color glassSurface = Color(0x8CFFFFFF);
+
+  /// 玻璃底板的外框。Main.dc.html:1126 — rgba(255,255,255,.7)
+  static const Color glassBorder = Color(0xB3FFFFFF);
+
+  /// 玻璃底板上緣那條高光。Main.dc.html:1126 —
+  /// inset 0 1px 0 rgba(255,255,255,.8)
+  static const Color glassHighlight = Color(0xCCFFFFFF);
+
+  /// 玻璃底板的外陰影。Main.dc.html:1126 — 0 4px 16px rgba(0,0,0,.12)
+  static const Color glassShadow = Color(0x1F000000);
+
+  /// 分頁列選中那一格的膠囊底。Main.dc.html:1128 — rgba(118,118,128,.16)
+  static const Color tabBarSelectedPill = Color(0x29767680);
+
+  /// 分頁列底下那層 soft scroll edge 的底色。
+  /// Main.dc.html:1122 — rgba(242,242,247,.72)
+  static const Color bottomScrollEdge = Color(0xB8F2F2F7);
+
   // ── 疊層 ────────────────────────────────────────────────────────────
 
   /// 慶祝頁遮罩。
@@ -500,6 +525,15 @@ abstract final class TmsSpacing {
         floatingTabBarBottom(bottomSafeAreaInset) +
         20;
   }
+
+  /// 分頁列底下那層 soft scroll edge 的高度，依裝置底部安全區算出。
+  ///
+  /// 它蓋住的正好是浮動分頁列佔到的那一段，所以是分頁列的高度加上它的下緣
+  /// 距離。捲到底的最後一列從這一層底下透出來，員工看得出清單還沒走完。
+  static double bottomScrollEdgeHeight(double bottomSafeAreaInset) {
+    return TmsSize.floatingTabBarHeight +
+        floatingTabBarBottom(bottomSafeAreaInset);
+  }
 }
 
 /// 圓角 token。
@@ -584,6 +618,19 @@ abstract final class TmsSize {
 
   /// 浮動分頁列的圓角，剛好是高度的一半，所以兩端是半圓。
   static const double floatingTabBarRadius = 31;
+
+  /// 浮動分頁列玻璃底板與四格之間的內距。Main.dc.html:1126 — padding: 4
+  static const double floatingTabBarPadding = 4;
+
+  /// 浮動分頁列相鄰兩格之間。Main.dc.html:1126 — gap: 2
+  static const double floatingTabBarGap = 2;
+
+  /// 選中那一格的膠囊底圓角。Main.dc.html:1128 — border-radius: 27
+  static const double floatingTabBarPillRadius = 27;
+
+  /// 浮動分頁列的圖示邊長。貼底不透明那版是 26，浮動這版小一號。
+  /// Main.dc.html:1129
+  static const double floatingTabBarIcon = 24;
 }
 
 /// Cupertino 側的主題。App 殼是 `CupertinoApp`，可點文字、游標與選取色都吃這裡
