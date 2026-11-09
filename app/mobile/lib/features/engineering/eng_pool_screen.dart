@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../pool/pool_widgets.dart';
@@ -120,18 +121,16 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       }
       await showCupertinoDialog<void>(
         context: context,
-        builder: (dialogContext) => TmsSemantics(
-          id: 'engPool.claim-conflict-alert',
-          label: message,
-          child: CupertinoAlertDialog(
-            content: Text(message),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('知道了'),
-              ),
-            ],
-          ),
+        builder: (dialogContext) => TmsAlert(
+          message: message,
+          messageId: 'engPool.claim-conflict-alert',
+          actions: [
+            TmsAlertAction(
+              label: '知道了',
+              style: TmsAlertActionStyle.primary,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+            ),
+          ],
         ),
       );
     } catch (_) {

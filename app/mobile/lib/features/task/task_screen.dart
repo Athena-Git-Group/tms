@@ -9,6 +9,7 @@ import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_pill_button.dart';
@@ -346,22 +347,17 @@ class _TaskScreenState extends State<TaskScreen> {
     final message = e.errorMessage ?? fallback;
     return showCupertinoDialog<void>(
       context: context,
-      // `task.busy-alert` 掛在內容文字上、不掛在整個對話框上：提示的驗收要
-      // 讀這個節點本身的文字，而對話框層的 accessibility 讀值會被 alert 語意
-      // 多併進一段「Alert」，拒絕原因就驗不到一字不差了。
-      builder: (dialogContext) => CupertinoAlertDialog(
-        content: TmsSemantics(
-          id: 'task.busy-alert',
-          label: message,
-          child: ExcludeSemantics(child: Text(message)),
-        ),
+      // `task.busy-alert` 掛在內文那一行上：驗收要一字不差讀到後端回的拒絕
+      // 原因，而對話框層的節點除了內文還含標題與按鈕的文字，讀出來會多出東西。
+      builder: (dialogContext) => TmsAlert(
+        message: message,
+        messageId: 'task.busy-alert',
         actions: [
-          TmsSemantics(
+          TmsAlertAction(
+            label: '知道了',
             id: 'task.busy-alert.dismiss-button',
-            child: CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
-            ),
+            style: TmsAlertActionStyle.primary,
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
         ],
       ),

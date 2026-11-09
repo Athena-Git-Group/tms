@@ -4,10 +4,13 @@ import '../theme.dart';
 
 /// 卡片在版面裡的角色，決定圓角大小。
 ///
-/// 設計上只有三級：主視覺卡最圓，分組列表次之，底部面板裡的白卡最小。
-/// 讓呼叫端選角色而不是直接填圓角，是為了避免同一個畫面上出現兩張看起來
-/// 一樣、圓角卻差幾個 pixel 的卡。
+/// 設計上只有四級：蓋住整個畫面的對話卡最圓，主視覺卡次之，再來是分組列表，
+/// 底部面板裡的白卡最小。讓呼叫端選角色而不是直接填圓角，是為了避免同一個
+/// 畫面上出現兩張看起來一樣、圓角卻差幾個 pixel 的卡。
 enum TmsCardStyle {
+  /// 蓋住整個畫面的對話卡，目前只有完成慶祝那一張。
+  dialog,
+
   /// 首頁與待認領的主視覺卡。
   hero,
 
@@ -59,6 +62,8 @@ class TmsCard extends StatelessWidget {
 
   double get _radius {
     switch (style) {
+      case TmsCardStyle.dialog:
+        return TmsRadius.dialog;
       case TmsCardStyle.hero:
         return TmsRadius.cardHero;
       case TmsCardStyle.grouped:
