@@ -93,8 +93,9 @@ void main() {
     await tester.pump();
     expect(submit().onPressed, isNotNull);
 
-    // 員工編號一律轉大寫（Main.dc.html:2353）。
-    expect(find.text('H-0532'), findsOneWidget);
+    // 不轉大寫：原型的員工編號是 H-0532 這種格式，這套系統的是 hk1、mt1，
+    // 而後端是精確比對。轉大寫會讓現有帳號一律登不進去（實機確認過）。
+    expect(find.text('h-0532'), findsOneWidget);
 
     handle.dispose();
   });

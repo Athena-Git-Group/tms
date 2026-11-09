@@ -249,7 +249,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: LoginTextField(
                     controller: _staffIdController,
                     maxLength: 12,
-                    uppercase: true,
+                    // 不強制大寫：原型的員工編號是 H-0532 這種格式，這套
+                    // 系統的是 hk1、mt1，而後端 findByTenantIdAndLoginId 是
+                    // 精確比對。轉大寫會讓現有帳號一律登不進去。
+                    uppercase: false,
                     autofillHints: const <String>[AutofillHints.username],
                   ),
                 ),
