@@ -308,7 +308,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
           children: [
             TmsRoomSquare(
               where: item.roomNo,
-              label: _categoryShortText(item.category),
+              label: repairCategoryShortText(item.category),
               // 待認領裡的單都還沒人接，不會是已完修。
               palette: tmsRepairSquarePalette(
                 isUrgent: item.urgent,
@@ -362,15 +362,4 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       ],
     );
   }
-}
-
-/// 給單卡的 56pt 方塊第二行用的類別短名。
-///
-/// 方塊只有 56pt 寬，「家具／設備」五個字會超出去，所以這一類縮成「設備」。
-/// 其餘類別兩個字就放得下，直接沿用 [repairCategoryText] 的說法，讓方塊上的
-/// 用語和詳情頁一致。設計稿的對應處在 `Main.dc.html:3825`。
-String _categoryShortText(String category) {
-  return category == 'furniture_equipment'
-      ? '設備'
-      : repairCategoryText(category);
 }
