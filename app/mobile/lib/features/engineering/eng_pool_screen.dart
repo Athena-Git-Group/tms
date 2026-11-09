@@ -7,6 +7,7 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_category_tile.dart';
+import '../../core/widgets/tms_content_unavailable.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../pool/pool_widgets.dart';
 import '../ticket/repair_labels.dart';
@@ -202,11 +203,27 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
             child: CupertinoActivityIndicator(),
           ),
         if (pool != null && pool.items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('目前沒有待認領的工務單'),
-          ),
-        if (pool != null)
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: TmsSpacing.scrollPadBottom(
+                  MediaQuery.paddingOf(context).bottom,
+                ),
+              ),
+              child: TmsContentUnavailable(
+                id: 'engPool.empty-state',
+                copy: TmsEmptyStates.engineeringPool(
+                  filterApplied: _selected != 'all',
+                  poolHasItems: pool.counts.values.any((count) => count > 0),
+                ),
+                onAction: () {
+                  _selected = 'all';
+                  _fetch();
+                },
+              ),
+            ),
+          )
+        else if (pool != null)
           Expanded(
             child: ListView(
               padding: EdgeInsets.only(
