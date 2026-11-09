@@ -168,6 +168,10 @@ public class AccountThenSteps {
      * 必查：{@code me.logout-blocked-alert} 顯示該原因文字；App 仍停在已登入狀態，
      * 沒有真的登出（登出項目還在、沒有被踢回登入畫面）。
      *
+     * <p>{@code me.logout-blocked-alert.confirm-button} 是「把這個 Alert 關掉」那一顆：
+     * 離線時它是唯一的「好」，名下有進行中的單時它是「取消」（旁邊還有一顆「前往 房號」
+     * 會換頁）。兩種情況要驗的都是關掉之後人還在登入狀態，所以共用同一個 id。
+     *
      * <p>「登出項目還在」要先把 Alert 關掉才驗得到：Flutter 的 modal 會把被蓋住的
      * 畫面整個移出 accessibility tree（原生 iOS Alert 則不會），Alert 開著的同時
      * 去找 {@code me.logout-button} 永遠找不到，驗的其實是 Flutter 的遮罩行為而
