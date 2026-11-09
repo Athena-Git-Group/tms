@@ -317,7 +317,10 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       // 看，接錯了還要放回去。
       onTap: () => Navigator.of(context).push(
         CupertinoPageRoute<void>(
-          builder: (_) => TicketScreen(taskId: item.taskId),
+          builder: (_) => TicketScreen(
+            view: TicketView.engineering,
+            taskId: item.taskId,
+          ),
         ),
       ),
       children: [
