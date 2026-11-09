@@ -112,6 +112,80 @@ void main() {
     expect(find.bySemanticsIdentifier('celebrate.screen'), findsOneWidget);
     expect(find.bySemanticsIdentifier('celebrate.today-progress'), findsNothing);
   });
+
+  // 去向是完成那一刻算出來的，而員工看著完成畫面時主管可能已經把下一間改派走。
+  // `GET /tasks` 對同租戶的任何一筆都回 200，所以不問負責人就會開出別人的單。
+  testWidgets('接力的那一間已經改派給別人時，誠實說它不在名下，不開那一頁', (tester) async {
+    final client = _ReassignedNextApiClient(_task(state: 'doing', type: 'cleaning'));
+    ApiClient.instance = client;
+    await tester.pumpWidget(
+      const CupertinoApp(home: TaskScreen(roomNo: '302', taskId: 't-302')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier('task.primary-button'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier('celebrate.next-button'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('這一間已經不在你名下了'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('task.nav.308'), findsNothing);
+  });
+}
+
+/// 完成 302 之後後端說下一間是 308，但 308 已經掛在別人名下。
+class _ReassignedNextApiClient extends _FakeApiClient {
+  _ReassignedNextApiClient(super.task);
+
+  @override
+  LoginResult? get session => const LoginResult(
+    token: 't',
+    expiresAt: '2026-12-31T00:00:00Z',
+    staffId: 'me',
+    name: '阿美',
+    role: 'housekeeping',
+    mustChangePassword: false,
+    dept: 'housekeeping',
+  );
+
+  @override
+  Future<TaskDetail> getTask(String taskId) async {
+    if (taskId == 't-308') {
+      return TaskDetail(
+        id: 't-308',
+        state: 'accepted',
+        type: 'cleaning',
+        roomNo: '308',
+        title: '308 退房清潔',
+        assigneeId: 'someone-else',
+      );
+    }
+    return super.getTask(taskId);
+  }
+
+  @override
+  Future<TaskCompletion?> completeTask(
+    String taskId, {
+    List<String>? photoIds,
+    String? resolutionType,
+    String? idempotencyKey,
+  }) async {
+    final completion = await super.completeTask(
+      taskId,
+      photoIds: photoIds,
+      resolutionType: resolutionType,
+      idempotencyKey: idempotencyKey,
+    );
+    return TaskCompletion(
+      task: completion!.task,
+      nextStep: const TaskNextStep(
+        kind: TaskNextStepKind.nextTask,
+        taskId: 't-308',
+        roomNo: '308',
+      ),
+    );
+  }
 }
 
 TaskDetail _task({required String state, String type = 'amenity'}) {

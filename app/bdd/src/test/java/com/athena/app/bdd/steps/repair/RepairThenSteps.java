@@ -396,14 +396,15 @@ public class RepairThenSteps {
     }
 
     /**
-     * 必查：詳情顯示該降級原因文字（{@code ticket.urgent-downgrade-reason-label}，命名沿用
-     * 同一頁的 {@code ticket.reject-reason-label}）；後端
+     * 必查：詳情顯示該降級原因文字；後端
      * {@code repair_tickets.urgent_downgrade_reason} 等於該原因，而且這張單已經不是急件
      * ——只留下原因卻還掛著急件，代表降級只做了一半。
      */
     @那麼("工務單詳情顯示急件降級原因 {string}")
     public void ticketDetailShowsUrgentDowngradeReason(String reason) {
-        assertLabelContains("ticket.urgent-downgrade-reason-label", reason, "急件降級原因");
+        // 降級原因寫在審核進度時間軸那一步的註腳（`Main.dc.html:4782` 的
+        // `'主管改為一般件：' + w.downgrade`），畫面上沒有獨立的降級原因節點。
+        assertLabelContains("ticket.timeline", reason, "急件降級原因");
 
         Map<String, Object> row = singleTicketRow(
                 "rt.urgent_downgrade_reason = ?", "降級原因為「" + reason + "」的工務單", reason);
@@ -764,16 +765,17 @@ public class RepairThenSteps {
     // ──── 房務端生命週期 ────
 
     /**
-     * 必查：詳情顯示退回原因文字（{@code ticket.reject-reason-label}）；後端
+     * 必查：詳情顯示退回原因文字；後端
      * {@code repair_tickets.reject_reason} 等於該原因、狀態為 rejected（主管未核准）。
+     *
+     * <p>原因讀審核進度時間軸那一步的註腳（`Main.dc.html:4781` 的
+     * {@code bad('主管未核准', w.note)}），與急件降級原因同一個節點。狀態摘要卡上也帶
+     * 著這句話，但那張卡負責的是狀態文案（{@code dsl.md:67} 的必查只比對狀態那一段），
+     * 原因文字不由它負責。
      */
     @那麼("工務單詳情顯示退回原因 {string}")
     public void ticketDetailShowsRejectReason(String reason) {
-        WebElement label = world.waitForTestId("ticket.reject-reason-label", SCREEN_TIMEOUT);
-        String text = label.getText();
-        if (text == null || !text.contains(reason)) {
-            throw new AssertionError("退回原因應顯示「" + reason + "」，畫面上是「" + text + "」");
-        }
+        assertLabelContains("ticket.timeline", reason, "退回原因");
 
         Map<String, Object> row = singleTicketRow(
                 "rt.reject_reason = ?", "退回原因為「" + reason + "」的工務單", reason);

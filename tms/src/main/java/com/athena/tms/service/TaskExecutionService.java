@@ -122,8 +122,33 @@ public class TaskExecutionService {
     public Map<String, Object> claim(UUID taskId) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
-        return transition(tenantId, taskId, actor,
-                (actorRef) -> taskEngine.claim(tenantId, taskId, actor.dept(), actorRef));
+        try {
+            return transition(tenantId, taskId, actor,
+                    (actorRef) -> taskEngine.claim(tenantId, taskId, actor.dept(), actorRef));
+        } catch (StateConflictException conflict) {
+            throw claimConflictWithClaimerName(tenantId, taskId, conflict);
+        }
+    }
+
+    /**
+     * 被別人搶先認領時，回應要說得出是誰認領的，讓員工知道去找誰而不是以為系統出錯。
+     *
+     * <p>查不到認領人姓名時照原樣往上拋：狀態不符還有別的原因（不同部門、這張單已經
+     * 結案），那些情形講不出姓名。
+     */
+    private StateConflictException claimConflictWithClaimerName(
+            long tenantId, UUID taskId, StateConflictException conflict) {
+        List<String> names = jdbcTemplate.queryForList(
+                """
+                SELECT s.name FROM tasks t
+                  JOIN staff_accounts s ON s.tenant_id = t.tenant_id AND s.id = t.assignee_id
+                 WHERE t.tenant_id = ? AND t.id = ? AND t.state <> 'pool'
+                """,
+                String.class, tenantId, taskId);
+        if (names.isEmpty() || names.get(0) == null) {
+            return conflict;
+        }
+        return new StateConflictException("這單已被" + names.get(0) + "認領");
     }
 
     /**

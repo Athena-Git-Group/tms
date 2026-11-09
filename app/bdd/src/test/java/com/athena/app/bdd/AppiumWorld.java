@@ -483,13 +483,22 @@ public class AppiumWorld {
      * 系統預設的返回鈕（accessibility id {@code Back}），所以兩個都找。
      *
      * <p>只等 {@code home.screen} 是不夠的：等待不會把畫面帶回去。離線完成任務之後 App
-     * 留在任務頁（沒有網路就沒有慶祝頁），接著那句「在 App 打開首頁」就會在任務頁上空等到
-     * 逾時，紅在「等不到 home.screen」而不是劇本真的要驗的事。
+     * 留在任務頁，接著那句「在 App 打開首頁」就會在任務頁上空等到逾時，紅在
+     * 「等不到 home.screen」而不是劇本真的要驗的事。
+     *
+     * <p>完成慶祝那張卡蓋著時先按卡上的「回到首頁」。那張卡是疊在任務頁上的覆蓋層，
+     * 它的遮罩會收下落在卡外面的每一下點擊，所以底下那顆返回鈕按不到；員工自己的動線
+     * 也是按卡上的鍵離開，不是去按被蓋住的返回鈕。
      */
     public void ensureOnHome(Duration timeout) {
         for (int i = 0; i < MAX_BACK_TAPS; i++) {
             if (!driver().findElements(byTestId("home.screen")).isEmpty()) {
                 return;
+            }
+            if (!driver().findElements(byTestId("celebrate.screen")).isEmpty()) {
+                tapTestId("celebrate.back-home-button", timeout);
+                sleep(300);
+                continue;
             }
             List<WebElement> back = driver().findElements(byTestId("nav.back-button"));
             if (back.isEmpty()) {

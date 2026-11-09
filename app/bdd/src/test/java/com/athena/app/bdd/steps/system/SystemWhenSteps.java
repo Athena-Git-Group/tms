@@ -28,7 +28,7 @@ public class SystemWhenSteps {
      * 怎麼做：在離線狀態下觸發對應的畫面操作。權威狀態落地：操作一律被 App 擋下，
      * 不會呼叫後端對應 API；後端任務與工務單資料不變。回寫：畫面提示。
      *
-     * <p>四個動作各自的入口：開始與延後在任務頁（延後要先選一個原因才按得下確認），
+     * <p>四個動作各自的入口：開始與延後在任務頁（延後點一列預設原因就是送出），
      * 認領在房務待認領的單卡上，開立新工務單走任務頁的報修。
      *
      * <p>開立新工務單被擋在入口而不是送出那一步：表單必須先有照片才送得出去，而照片
@@ -53,8 +53,9 @@ public class SystemWhenSteps {
             case "延後任務" -> {
                 world.ensureOnTaskDetail(staff, onlyTaskRoomOnHome(staff));
                 world.tapTestId("task.defer-button", SCREEN_TIMEOUT);
+                // 點一列預設原因就是送出，面板上沒有第二顆確認鈕
+                // （`Main.dc.html:4954`）；離線擋在送出那一刻。
                 world.tapTestId("hold.reason.請勿打擾", SCREEN_TIMEOUT);
-                world.tapTestId("hold.confirm-button", SCREEN_TIMEOUT);
             }
             case "開立新工務單" -> {
                 world.ensureOnTaskDetail(staff, onlyTaskRoomOnHome(staff));

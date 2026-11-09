@@ -515,9 +515,12 @@ public class TaskExecutionThenSteps {
      * 必查：完成畫面的實心主按鈕（accessibility id {@code celebrate.next-button}）文字包含
      * 該房號，且與 {@code tasksComplete} 回應的 {@code nextStep.roomNo} 一致。
      *
-     * <p>App 端讀不到那份回應，所以改以同一份權威資料核對：{@code nextStep.kind} 為
-     * {@code next_task} 時指的就是這位員工今天待開始（{@code accepted}）的單裡房號最小的
-     * 那一張。兩邊都要對上才算通過——只讀畫面的話，一個把房號寫死的按鈕也會過關。
+     * <p>App 端讀不到那份回應，所以改以同一份權威資料核對，挑選規則照後端的
+     * {@code nextStepOf}：有待開始（{@code accepted}）的單就指那一組的第一張（重做次數多的
+     * 先、同組內打掃排後面、再按房號），沒有待開始才指還沒做完的那一組（進行中、已中斷、
+     * 已延後依序，同組內按房號）。兩條 Rule 共用這一句，只查待開始那一組會讓「沒有待開始
+     * 時指向還沒做完的那一間」永遠紅在「一張待開始的單都沒有」。兩邊都要對上才算通過
+     * ——只讀畫面的話，一個把房號寫死的按鈕也會過關。
      *
      * <p>這一句只驗按鈕上的呈現，不按下去。「按下去會開啟那一間的任務頁」由
      * 「在 App 從完成畫面前往下一步」搭配「畫面停在某房號的任務頁」驗。
@@ -534,23 +537,47 @@ public class TaskExecutionThenSteps {
 
         // 房號在 rooms，tasks 只有 room_id——直接 SELECT room_no FROM tasks 會丟 SQL 例外，
         // 那是環境錯誤不是斷言失敗。JOIN 的寫法比照同檔 assertNoUnfinishedTasksToday()。
-        // work_date 也要限今天：跨日還沒做的 accepted 單不是「今天的下一間」。
+        // 待開始那一組不看日期，與後端 nextStepOf 一致（它收錄待開始時也不看）。
         List<Map<String, Object>> accepted = world.backend().queryRows(
-                "SELECT r.room_no AS room_no FROM tasks t"
-                        + " JOIN rooms r ON r.id = t.room_id AND r.tenant_id = t.tenant_id"
-                        + " WHERE t.tenant_id = ? AND t.assignee_id = ? AND t.state = 'accepted'"
-                        + " AND (t.work_date IS NULL OR t.work_date = ?)"
-                        + " ORDER BY r.room_no",
-                world.backend().ensureTenant(), world.loggedInStaff().id(),
-                java.sql.Date.valueOf(java.time.LocalDate.now()));
-        if (accepted.isEmpty()) {
-            throw new AssertionError("後端這位員工名下一張待開始的單都沒有，下一步不該指向「"
-                    + roomNo + "」");
+                """
+                SELECT r.room_no AS room_no FROM tasks t
+                  JOIN rooms r ON r.id = t.room_id AND r.tenant_id = t.tenant_id
+                 WHERE t.tenant_id = ? AND t.assignee_id = ? AND t.state = 'accepted'
+                 ORDER BY t.redo_count DESC,
+                          CASE WHEN t.type = 'cleaning' THEN 1 ELSE 0 END,
+                          r.room_no
+                """,
+                world.backend().ensureTenant(), world.loggedInStaff().id());
+
+        String expected;
+        String group;
+        if (!accepted.isEmpty()) {
+            expected = String.valueOf(accepted.get(0).get("room_no"));
+            group = "待開始";
+        } else {
+            List<Map<String, Object>> unfinished = world.backend().queryRows(
+                    """
+                    SELECT r.room_no AS room_no FROM tasks t
+                      JOIN rooms r ON r.id = t.room_id AND r.tenant_id = t.tenant_id
+                     WHERE t.tenant_id = ? AND t.assignee_id = ?
+                       AND t.state IN ('doing', 'interrupted', 'deferred')
+                       AND (t.work_date IS NULL OR t.work_date = ?)
+                     ORDER BY array_position(
+                                  ARRAY['doing', 'interrupted', 'deferred'], t.state),
+                              r.room_no
+                    """,
+                    world.backend().ensureTenant(), world.loggedInStaff().id(),
+                    java.sql.Date.valueOf(java.time.LocalDate.now()));
+            if (unfinished.isEmpty()) {
+                throw new AssertionError("後端這位員工名下既沒有待開始、也沒有還沒做完的單，"
+                        + "下一步不該指向「" + roomNo + "」");
+            }
+            expected = String.valueOf(unfinished.get(0).get("room_no"));
+            group = "還沒做完";
         }
-        String expected = String.valueOf(accepted.get(0).get("room_no"));
         if (!roomNo.equals(expected)) {
-            throw new AssertionError("下一步指向的房號與後端對不上：後端待開始的第一張是「"
-                    + expected + "」，畫面上卻指向「" + roomNo + "」");
+            throw new AssertionError("下一步指向的房號與後端對不上：後端" + group
+                    + "的第一張是「" + expected + "」，畫面上卻指向「" + roomNo + "」");
         }
     }
 
@@ -1041,7 +1068,7 @@ public class TaskExecutionThenSteps {
                     + "」不是這次完成的那一間，剛完成的是「" + completedRoomNo + "」");
         }
 
-        WebElement overlay = world.waitForTestId("celebrate.screen", SCREEN_TIMEOUT);
+        world.waitForTestId("celebrate.screen", SCREEN_TIMEOUT);
 
         List<WebElement> underlying =
                 world.driver().findElements(world.byTestId("task.screen"));
@@ -1063,8 +1090,13 @@ public class TaskExecutionThenSteps {
                     + "」讀得到，但回報為不可見——這一條要的就是房號仍然看得到");
         }
 
-        if (!overlay.isDisplayed()) {
-            throw new AssertionError("完成畫面本身回報為不可見，覆蓋層沒有真的疊上去");
+        // 可見性驗在卡上的標題，不驗覆蓋層那個容器節點。XCUITest 對一個自己不畫
+        // 任何東西、面積又被子節點蓋滿的 XCUIElementTypeOther 一律回報不可見，那是
+        // 它算可見性的方式，不是這張卡的狀態；標題讀得到又回報可見，才真的證明卡
+        // 在螢幕上。
+        WebElement headline = world.waitForTestId("celebrate.title", SCREEN_TIMEOUT);
+        if (!headline.isDisplayed()) {
+            throw new AssertionError("完成畫面的標題回報為不可見，覆蓋層沒有真的疊上去");
         }
     }
 

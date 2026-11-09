@@ -63,12 +63,13 @@ public class CommonThenSteps {
             Map.entry("已取消", new TaskPageEvidence("task.status-row.cancelled", "這單已取消", null)));
 
     /**
-     * 任務頁上那些提示的關閉鈕。兩個提示不會同時出現（一個是後端拒絕這次操作，
-     * 一個是離線擋下這次操作），所以逐個試、在畫面上的那個就關掉。
+     * 任務頁上那些提示的關閉鈕。它們不會同時出現（後端拒絕這次操作、離線擋下這次
+     * 操作、接力的那一間已經改派給別人），所以逐個試、在畫面上的那個就關掉。
      */
     private static final List<String> ALERT_DISMISS_BUTTONS = List.of(
             "task.busy-alert.dismiss-button",
-            "system.offline-blocked-alert.dismiss-button");
+            "system.offline-blocked-alert.dismiss-button",
+            "celebrate.reassigned-alert.dismiss-button");
 
     private final AppiumWorld world;
 
@@ -97,8 +98,11 @@ public class CommonThenSteps {
      */
     private void dismissAlertsCoveringTaskPage() {
         for (String dismissButton : ALERT_DISMISS_BUTTONS) {
-            if (!world.driver().findElements(world.byTestId(dismissButton)).isEmpty()) {
-                world.tapTestId(dismissButton, SCREEN_TIMEOUT);
+            // 點的是剛找到的那一顆，不是再定位一次：先問在不在、再用 id 等一次的寫法，
+            // 中間那一瞬間提示被關掉（上一句的斷言順手關掉、或動畫收完）就會等滿逾時，
+            // 紅在「等不到關閉鈕」而不是劇本真的要驗的事。
+            for (WebElement dismiss : world.driver().findElements(world.byTestId(dismissButton))) {
+                dismiss.click();
             }
         }
     }

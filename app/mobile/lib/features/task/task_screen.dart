@@ -533,20 +533,70 @@ class _TaskScreenState extends State<TaskScreen> {
   ///
   /// 兩種去向都先把完成畫面與剛做完的那一頁關掉，員工按返回才不會退回一張
   /// 已經做完的單。
-  void _goToNextStep(TaskNextStep step) {
+  ///
+  /// 去向是後端在完成那一刻算出來的，而員工看著完成畫面的這段時間裡主管可能
+  /// 已經把那一間改派給別人。開頁之前先問一次那張單現在的負責人：`GET /tasks`
+  /// 對同租戶的任何一筆都回 200，不問的話畫面會把別人的單畫出來，員工做完才
+  /// 發現白做。
+  Future<void> _goToNextStep(TaskNextStep step) async {
     final navigator = Navigator.of(context);
-    navigator.popUntil((route) => route.isFirst);
     if (step.kind == TaskNextStepKind.allClear) {
+      navigator.popUntil((route) => route.isFirst);
       MainShellTabRequest.goToPool();
       return;
     }
     final roomNo = step.roomNo;
-    if (roomNo == null) {
+    final taskId = step.taskId;
+    if (roomNo == null || taskId == null) {
+      navigator.popUntil((route) => route.isFirst);
+      return;
+    }
+    final TaskDetail next;
+    try {
+      next = await ApiClient.instance.getTask(taskId);
+    } on ApiException {
+      // 讀不到那一筆就當它不在名下了：這一步只負責決定要不要帶員工過去。
+      if (!mounted) {
+        return;
+      }
+      navigator.popUntil((route) => route.isFirst);
+      await _showReassignedAlert();
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    navigator.popUntil((route) => route.isFirst);
+    final me = ApiClient.instance.session?.staffId;
+    if (me != null && next.assigneeId != me) {
+      await _showReassignedAlert();
       return;
     }
     navigator.push(
       CupertinoPageRoute<void>(
-        builder: (_) => TaskScreen(roomNo: roomNo, taskId: step.taskId),
+        builder: (_) => TaskScreen(roomNo: roomNo, taskId: taskId),
+      ),
+    );
+  }
+
+  /// 接力的那一間在按下之前被改派走了。
+  ///
+  /// 誠實說它已經不在名下，而不是默默開一張別人的單或什麼都不做：兩者都會讓
+  /// 員工以為自己按錯了。
+  Future<void> _showReassignedAlert() {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => TmsAlert(
+        message: _reassignedMessage,
+        messageId: 'celebrate.reassigned-alert',
+        actions: [
+          TmsAlertAction(
+            label: '知道了',
+            id: 'celebrate.reassigned-alert.dismiss-button',
+            style: TmsAlertActionStyle.primary,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
       ),
     );
   }
@@ -1680,6 +1730,8 @@ class _TaskScreenState extends State<TaskScreen> {
     _showTask(updated);
   }
 }
+
+const String _reassignedMessage = '這一間已經不在你名下了';
 
 /// 完成慶祝那張卡要顯示的內容。
 ///

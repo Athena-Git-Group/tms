@@ -1540,6 +1540,7 @@ class TaskDetail {
     this.handovers = const <HandoverEntry>[],
     this.handoverRead = false,
     this.returnInfo,
+    this.assigneeId,
   });
 
   final String id;
@@ -1554,6 +1555,12 @@ class TaskDetail {
 
   /// 打掃任務的查房結果：passed｜waived｜failed；還沒查房時為 null。
   final String? inspection;
+
+  /// 這張單目前的負責人。還在池裡沒有人認領時為 null。
+  ///
+  /// 接力到下一間之前要拿它跟登入者比一次：主管在員工按下接力之前把那一間改派
+  /// 走的話，端點照樣回 200，畫面就會把別人的單畫出來。
+  final String? assigneeId;
 
   /// 房間 id。同房工務單要靠它向 `GET /repair-tickets?roomId=` 取。
   final String? roomId;
@@ -1624,6 +1631,7 @@ class TaskDetail {
       type: json['type'] as String? ?? 'cleaning',
       inspection: json['inspection'] as String?,
       inspectionWaived: json['inspectionWaived'] as bool? ?? false,
+      assigneeId: json['assigneeId'] as String?,
       roomId: json['roomId'] as String?,
       roomNo: json['roomNo'] as String?,
       title: json['title'] as String?,
