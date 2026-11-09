@@ -628,6 +628,26 @@ abstract final class TmsSize {
   /// 通知中心每一列的圓形分類圖示。
   static const double notificationKindIcon = 36;
 
+  /// 狀態列左側那顆填色圓形圖示（`Main.dc.html:1227`）。
+  static const double calloutIcon = 26;
+
+  /// 固定教學左側那個燈泡（`Main.dc.html:1253`）。
+  static const double calloutTeachingIcon = 28;
+
+  /// 固定教學右上角那個關閉符號（`Main.dc.html:1259`）。點擊範圍是
+  /// [minTouchTarget]，符號本身只有這麼大。
+  static const double calloutDismissGlyph = 13;
+
+  /// 交辦引言標註左側那條色條的寬度，也是它右側圓角的半徑
+  /// （`Main.dc.html:1270`）。
+  static const double quoteBar = 4;
+
+  /// 交辦引言標註標題列的訊息框圖示（`Main.dc.html:1272`）。
+  static const double quoteIcon = 18;
+
+  /// 狀態摘要卡左側那顆圓形圖示（`Main.dc.html:1771`）。
+  static const double statusSummaryIcon = 36;
+
   /// 未讀點的直徑。
   static const double unreadDot = 8;
 
