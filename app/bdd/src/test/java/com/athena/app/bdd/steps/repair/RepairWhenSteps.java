@@ -51,6 +51,16 @@ public class RepairWhenSteps {
             "門鎖", "door_lock",
             "其他", "other");
 
+    /**
+     * 劇本寫的處理人只收這兩個值，因為契約
+     * {@code CreateRepairTicketRequest.assigneeId} 只分得出「指派給開單的人」與「不指派、
+     * 進待認領」兩種結果，開工單面板也就只給這兩個選項，收人名的話劇本寫得出來、面板上
+     * 卻點不到。
+     */
+    private static final Map<String, String> WHO_SEGMENT_BY_LABEL = Map.of(
+            "我自己處理", "repair.who.me.segment",
+            "放進待認領", "repair.who.pool.segment");
+
     private final AppiumWorld world;
 
     private final RepairContext context;
@@ -290,37 +300,43 @@ public class RepairWhenSteps {
     }
 
     /**
-     * 怎麼做：在待認領點「開工單」FAB（{@code engPool.create-ticket-fab}），拍指定張數
-     * 照片，填入房間／公共區域、類別、處理人後送出——表單沿用 {@code repair} 報修面板
-     * 的 accessibility id 前綴（dsl 本模組說明），FAB 進入時不預先帶入任何原任務。
+     * 怎麼做：在工務首頁點「開工單」浮動按鈕（{@code engHome.create-ticket-fab}），拍指定
+     * 張數照片，填入房間／公共區域、類別、處理人後送出——表單沿用 {@code repair} 報修面板
+     * 的 accessibility id 前綴（dsl 本模組說明），按鈕進入時不預先帶入任何原任務。
      * 權威狀態落地：等同後端「不經過任何房務任務開立工務單」語意——request body 對照
      * 契約 {@code CreateRepairTicketRequest}：公共區域走 {@code isPublicArea}=true
      * （{@code repair.public-area-toggle}）、客房走 {@code roomId}（房號填
-     * {@code repair.room-field}）、處理人走 {@code assigneeId}（{@code repair.assignee-field}
-     * 點開後選姓名），不帶 {@code sourceTaskId}。回寫：工務單詳情或待認領列表。
+     * {@code repair.room-field}，App 以 {@code GET /rooms} 換成房間 id）、處理人走
+     * {@code assigneeId}（{@code repair.who.me.segment} 指派給自己、
+     * {@code repair.who.pool.segment} 不指派，只有公共區域有這一段），不帶
+     * {@code sourceTaskId}。回寫：工務單詳情或待認領列表。
      *
      * <p>Data table 表頭照 feature 檔：{@code 房間或公共區域}（缺欄或留白視為預設值
-     * 公共區域）、{@code 類別}（必填）、{@code 照片張數}（必填）、{@code 處理人}（選填）。
+     * 公共區域）、{@code 類別}（必填）、{@code 照片張數}（必填）、{@code 處理人}（選填，
+     * 只收「我自己處理」與「放進待認領」兩個值）。
      */
-    @當("{string} 在待認領點「開工單」，填寫以下資訊並送出：")
-    public void createTicketFromPool(String staffName, DataTable table) {
+    @當("{string} 在工務首頁點「開工單」，填寫以下資訊並送出：")
+    public void createTicketFromEngineeringHome(String staffName, DataTable table) {
         List<Map<String, String>> rows = table.asMaps();
         if (rows.size() != 1) {
             throw new IllegalArgumentException("「開工單」一次只開一張，data table 應恰有 1 列資料，收到 " + rows.size());
         }
         Map<String, String> row = rows.get(0);
-        world.ensureOnEngineeringPool(world.staff(staffName));
+        world.ensureOnEngineeringHome(world.staff(staffName));
 
-        // 用 tapUntilVisible 而不是單純 tapTestId：前者會等元素位置定格再點，而且列表還在
-        // 重排時那一下會整個落空（Appium 回報點擊成功、畫面留在待認領），補點一次就進得去。
-        // 等的是 repair.public-area-toggle——FAB 開的是獨立的開工單頁
-        // （repair_ticket_form_screen），不是任務頁那張 repair.sheet，後者的 id 這裡沒有。
-        world.tapUntilVisible("engPool.create-ticket-fab", "repair.public-area-toggle", SCREEN_TIMEOUT);
+        // 用 tapUntilVisible 而不是單純 tapTestId：前者會等元素位置定格再點，而且首頁的
+        // 卡片還在重排時那一下會整個落空（Appium 回報點擊成功、畫面留在首頁），補點一次
+        // 就進得去。等的是 repair.public-area-toggle——這顆按鈕開的是開工單面板，不是任務
+        // 頁那張 repair.sheet，後者的 id 這個畫面上沒有。
+        world.tapUntilVisible("engHome.create-ticket-fab", "repair.public-area-toggle", SCREEN_TIMEOUT);
 
         String location = row.get("房間或公共區域");
         if (location == null || location.isBlank() || "公共區域".equals(location)) {
             world.tapTestId("repair.public-area-toggle", SCREEN_TIMEOUT);
         } else {
+            // 地點類型預設就是客房，但劇本既然指名了房號就點一次，前一次操作留下的狀態
+            // 不會讓這一步的結果不一樣。
+            world.tapTestId("repair.room-type-toggle", SCREEN_TIMEOUT);
             WebElement roomField = world.waitForTestId("repair.room-field", SCREEN_TIMEOUT);
             roomField.click();
             roomField.sendKeys(location);
@@ -339,10 +355,14 @@ public class RepairWhenSteps {
             context.addPhoto("repair.photo.add-button");
         }
 
-        String assigneeName = row.get("處理人");
-        if (assigneeName != null && !assigneeName.isBlank()) {
-            world.waitForTestId("repair.assignee-field", SCREEN_TIMEOUT).click();
-            world.waitForLabelContaining(assigneeName, SCREEN_TIMEOUT).click();
+        String assignee = row.get("處理人");
+        if (assignee != null && !assignee.isBlank()) {
+            String segment = WHO_SEGMENT_BY_LABEL.get(assignee.trim());
+            if (segment == null) {
+                throw new IllegalArgumentException("認不得的處理人：「" + assignee + "」"
+                        + "（合法值：" + WHO_SEGMENT_BY_LABEL.keySet() + "）");
+            }
+            world.tapTestId(segment, SCREEN_TIMEOUT);
         }
 
         world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);

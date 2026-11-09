@@ -12,7 +12,6 @@ import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../pool/pool_widgets.dart';
 import '../ticket/repair_labels.dart';
-import '../ticket/repair_ticket_form_screen.dart';
 import '../ticket/ticket_screen.dart';
 
 /// 工務待認領（ui-plan 畫面 13 的 `engPool`）。
@@ -158,24 +157,9 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       id: 'engPool.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
-        // 導覽列只剩開工單那顆鈕：這一頁的標題是內容的一部分，跟著分流磚與
-        // 單卡一起捲（`Main.dc.html:975` 的 `<h1>`）。
-        navigationBar: CupertinoNavigationBar(
-          trailing: TmsSemantics(
-            id: 'engPool.create-ticket-fab',
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                Navigator.of(context).push(
-                  CupertinoPageRoute<void>(
-                    builder: (_) => const RepairTicketFormScreen(),
-                  ),
-                );
-              },
-              child: const Text('開工單'),
-            ),
-          ),
-        ),
+        // 沒有導覽列：這一頁的標題是內容的一部分，跟著分流磚與單卡一起捲
+        // （`Main.dc.html:975` 的 `<h1>`），而開單的入口在工務首頁的浮動按鈕
+        // 上（`Main.dc.html:4051`：待認領是接單的頁，不放開單）。
         // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
         // 的那段留白由清單自己帶。
         child: SafeArea(

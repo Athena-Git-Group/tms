@@ -214,6 +214,12 @@ abstract final class TmsColors {
   /// 分頁列選中那一格的膠囊底。Main.dc.html:1128 — rgba(118,118,128,.16)
   static const Color tabBarSelectedPill = Color(0x29767680);
 
+  /// 分段控制外框的底。Main.dc.html:2198 — rgba(118,118,128,.12)
+  static const Color segmentedTrack = Color(0x1F767680);
+
+  /// 分段控制選中那一段的陰影。Main.dc.html:4003 — 0 1px 3px rgba(0,0,0,.12)
+  static const Color segmentedThumbShadow = Color(0x1F000000);
+
   /// 分頁列底下那層 soft scroll edge 的底色。
   /// Main.dc.html:1122 — rgba(242,242,247,.72)
   static const Color bottomScrollEdge = Color(0xB8F2F2F7);

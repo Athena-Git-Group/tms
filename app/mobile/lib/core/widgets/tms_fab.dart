@@ -77,11 +77,18 @@ class TmsFab extends StatelessWidget {
     return (hasActionBar ? 0 : bottomSafeAreaInset) + 16;
   }
 
+  /// 被這顆按鈕蓋住的捲動區，底部要多留的空白。
+  ///
+  /// `Main.dc.html:5028`、`Main.dc.html:4448` — 兩處都是 72。按鈕本身 56，
+  /// 上下各留一點，捲到底時最後一列才整列看得到，不會有一半藏在按鈕底下。
+  static const double scrollPadClearance = 72;
+
   /// 被這顆按鈕蓋住的捲動區，底部要留的空白。
   ///
-  /// `Main.dc.html:5028` — 按鈕下緣位置再加 72。按鈕本身 56，上下各留一點，
-  /// 捲到底時最後一列才整列看得到，不會有一半藏在按鈕底下。
-  static double scrollPadBottom(double fabBottom) => fabBottom + 72;
+  /// 這個算法給「按鈕下緣就是捲動區下緣」的畫面（任務頁）用。浮動分頁列上方
+  /// 的畫面已經有自己的分頁列留白，改成那個留白再加 [scrollPadClearance]。
+  static double scrollPadBottom(double fabBottom) =>
+      fabBottom + scrollPadClearance;
 
   @override
   Widget build(BuildContext context) {
