@@ -475,6 +475,9 @@ public class AppiumWorld {
      * 確保 App 停在房務首頁。已經在首頁就不動；停在推進去的畫面（任務頁、工務單詳情……）
      * 時，照員工自己的動線按導覽列的「返回」一路退回來。
      *
+     * <p>詳情頁的返回鈕是自家的圓鈕（{@code nav.back-button}），還沒換過去的畫面仍是
+     * 系統預設的返回鈕（accessibility id {@code Back}），所以兩個都找。
+     *
      * <p>只等 {@code home.screen} 是不夠的：等待不會把畫面帶回去。離線完成任務之後 App
      * 留在任務頁（沒有網路就沒有慶祝頁），接著那句「在 App 打開首頁」就會在任務頁上空等到
      * 逾時，紅在「等不到 home.screen」而不是劇本真的要驗的事。
@@ -484,7 +487,10 @@ public class AppiumWorld {
             if (!driver().findElements(byTestId("home.screen")).isEmpty()) {
                 return;
             }
-            List<WebElement> back = driver().findElements(AppiumBy.accessibilityId("Back"));
+            List<WebElement> back = driver().findElements(byTestId("nav.back-button"));
+            if (back.isEmpty()) {
+                back = driver().findElements(AppiumBy.accessibilityId("Back"));
+            }
             if (back.isEmpty()) {
                 break;
             }
@@ -499,10 +505,7 @@ public class AppiumWorld {
         currentTaskRoomNo = roomNo;
         Duration timeout = Duration.ofSeconds(10);
         if (driver().findElements(byTestId("task.screen")).isEmpty()
-                || driver().findElements(
-                        AppiumBy.iOSNsPredicateString(
-                                "label CONTAINS " + nsPredicateString(roomNo + " 的任務頁")))
-                        .isEmpty()) {
+                || driver().findElements(byTestId("task.nav." + roomNo)).isEmpty()) {
             ensureOnHome(timeout);
             tapTestId("home.task." + roomNo + ".card", timeout);
             waitForTestId("task.screen", timeout);
