@@ -397,13 +397,16 @@ class TicketDetailEngineering extends StatelessWidget {
       return null;
     }
     final verifiedBy = detail.verifiedBy;
+    final title = verifiedBy == null
+        ? '已完修 · 等主管驗收'
+        : repairStatusSummaryText(detail);
     if (verifiedBy != null) {
       return TmsStatusCallout(
         kind: TmsCalloutKind.ticketFixed,
         tone: TmsCalloutTone.success,
-        title: repairStatusSummaryText(detail),
+        title: title,
         body: '這張單已結案。',
-        wrap: _summaryWrap,
+        wrap: (node) => _summaryWrap(node, title),
       );
     }
     final parts = <String>[
@@ -413,7 +416,7 @@ class TicketDetailEngineering extends StatelessWidget {
     return TmsStatusCallout(
       kind: TmsCalloutKind.ticketFixed,
       tone: TmsCalloutTone.success,
-      title: '已完修 · 等主管驗收',
+      title: title,
       body: parts.isEmpty ? '等主管驗收後這張單就結案。' : parts.join(''),
       wrap: (node) => _summaryWrap(
         TmsSemantics(
@@ -421,14 +424,19 @@ class TicketDetailEngineering extends StatelessWidget {
           label: parts.join(''),
           child: node,
         ),
+        title,
       ),
     );
   }
 
   /// 工務視角沒有房務那張摘要卡，回答「現在到哪了」的是這一條狀態列，所以它
-  /// 掛同一個 id，兩個視角的驗收才用同一句話問同一件事。
-  Widget _summaryWrap(Widget node) {
-    return TmsSemantics(id: 'ticket.status-summary-card', child: node);
+  /// 掛同一個 id 與同一句話，兩個視角的驗收才問得到同一件事。
+  Widget _summaryWrap(Widget node, String title) {
+    return TmsSemantics(
+      id: 'ticket.status-summary-card',
+      label: title,
+      child: node,
+    );
   }
 
   // ──── 照片 ────
