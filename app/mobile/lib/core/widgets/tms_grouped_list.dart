@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 import 'tms_card.dart';
+import 'tms_toggle.dart';
 
 /// iOS inset-grouped 清單的一「組」：上面一行小標題，下面一張白卡，卡裡的列
 /// 之間用一條髮絲線隔開。
@@ -194,4 +195,55 @@ class _ChevronPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChevronPainter oldDelegate) => false;
+}
+
+/// 分組清單裡的開關列：左邊標題，右邊一個開關（`Main.dc.html:468-470`）。
+///
+/// 上下內距比 [TmsGroupedRow] 的 11 小，是 6。開關本身 31 高，比一行 17pt
+/// 的文字高；兩種列用同一個內距的話，有開關的那一列會比鄰居高出幾個
+/// pixel，一整組看起來就不齊。
+class TmsGroupedToggleRow extends StatelessWidget {
+  const TmsGroupedToggleRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.toggleId,
+  });
+
+  final String label;
+
+  final bool value;
+
+  final ValueChanged<bool> onChanged;
+
+  /// 開關的 accessibility id，由呼叫端決定。
+  final String? toggleId;
+
+  /// 上下內距。`Main.dc.html:468`。
+  static const double _verticalPadding = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: TmsSize.rowMinHeight),
+      padding: const EdgeInsets.symmetric(
+        horizontal: TmsSpacing.screenEdge,
+        vertical: _verticalPadding,
+      ),
+      color: TmsColors.cardBackground,
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TmsText.body)),
+          const SizedBox(width: TmsSpacing.sm),
+          TmsToggle(
+            value: value,
+            onChanged: onChanged,
+            label: label,
+            id: toggleId,
+          ),
+        ],
+      ),
+    );
+  }
 }
