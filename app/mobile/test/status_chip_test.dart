@@ -6,10 +6,10 @@ import 'package:tms_staff_app/core/widgets/tms_status_chip.dart';
 import 'package:tms_staff_app/core/widgets/tms_tag.dart';
 import 'package:tms_staff_app/features/ticket/repair_labels.dart';
 
-/// 狀態標籤的用詞是驗收的斷言目標：BDD 直接比對任務頁 `task.status-chip`
-/// 節點讀到的字串，所以這些字不能隨版面調整一起被改掉。這組測試把每一種
-/// 狀態的字面值釘在測試裡，改動用詞時會先在這裡紅掉，而不是等模擬器跑完
-/// 整套 BDD 才發現。
+/// 狀態標籤的用詞是驗收的斷言目標：首頁的任務列與待認領單卡都拿它說明一張
+/// 單現在的狀態，所以這些字不能隨版面調整一起被改掉。這組測試把每一種狀態的
+/// 字面值釘在測試裡，改動用詞時會先在這裡紅掉，而不是等模擬器跑完整套 BDD
+/// 才發現。
 ///
 /// 配色和用詞一起釘。設計稿的狀態色表（房務在 `Main.dc.html:3544-3555`、
 /// 工務在 `Main.dc.html:2868` 與 `Main.dc.html:3835`）是員工在清單上分辨狀態

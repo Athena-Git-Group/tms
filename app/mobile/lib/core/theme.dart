@@ -116,6 +116,15 @@ abstract final class TmsColors {
   /// 群組內列與列之間那條分隔線的顏色，粗細見 [TmsSize.hairline]。
   static const Color separator = Color(0xFFE5E5EA);
 
+  /// 任務頁標題區那行來源與預估的字色：深底版（`Main.dc.html:1197`）。
+  ///
+  /// 原型寫的是 `opacity: .85` 疊在標題區前景色上，不是另一個色票，所以這裡
+  /// 落成同一個白加 85% 的 alpha，而不是找一個看起來接近的灰。
+  static const Color headerMetaOnDark = Color(0xD9FFFFFF);
+
+  /// 任務頁標題區那行來源與預估的字色：白底版（`Main.dc.html:1197`）。
+  static const Color headerMetaOnLight = Color(0xD9000000);
+
   /// 畫面背景。所有捲動容器底、底部面板底。
   static const Color groupedBackground = Color(0xFFF2F2F7);
 
@@ -760,6 +769,22 @@ abstract final class TmsSize {
 
   /// 未讀點的直徑。
   static const double unreadDot = 8;
+
+  /// 「這間房的資訊」列左側那顆未讀點的直徑（`Main.dc.html:1290`）。比
+  /// [unreadDot] 大一圈，因為它掛在列的最前面、旁邊沒有文字襯托。
+  static const double infoRowUnreadDot = 10;
+
+  /// 清潔 SOP 每一列左側那個圓形勾選框的直徑（`Main.dc.html:1314`）。
+  static const double sopCheckBox = 26;
+
+  /// 勾選框邊框的粗細（`Main.dc.html:1314`）。
+  static const double sopCheckBoxBorder = 2;
+
+  /// 勾選框裡那個白勾的邊長（`Main.dc.html:1315`）。
+  static const double sopCheckGlyph = 16;
+
+  /// 白勾的筆畫粗細（`Main.dc.html:1315`）。
+  static const double sopCheckGlyphStroke = 3;
 
   /// 空狀態的描邊圖示邊長。
   static const double emptyStateIcon = 56;

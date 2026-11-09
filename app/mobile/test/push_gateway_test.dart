@@ -151,7 +151,9 @@ void main() {
     expect(find.bySemanticsIdentifier('task.resume-banner'), findsOneWidget);
     expect(find.bySemanticsIdentifier('task.status-row.resume-button'), findsOneWidget);
     expect(find.textContaining('305'), findsWidgets);
-    expect(find.textContaining('您'), findsOneWidget);
+    // 標題直接寫後端記下的停住原因（`Main.dc.html:4318`）：恢復提示現在是停住
+    // 狀態列的一部分，不再是另一塊自己湊一句話的卡片。
+    expect(find.text('工務已修好：水電'), findsOneWidget);
 
     handle.dispose();
   });

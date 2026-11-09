@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../theme.dart';
+import '../tms_semantics.dart';
 import 'tms_grouped_list.dart';
 
 /// 狀態列的語氣。語氣決定圖示顏色、底色與圖示形狀三件事，呼叫端只選語氣。
@@ -157,10 +158,18 @@ class TmsStatusCallout extends TmsCalloutSpec {
     required this.body,
     this.reason,
     this.actions = const <TmsCalloutAction>[],
+    this.idPrefix,
     super.wrap,
   });
 
   final TmsCalloutTone tone;
+
+  /// 標題、原因與說明三段各自掛的 accessibility id 的前綴，例如給
+  /// `task.status-row.return-info` 就得到 `….title`、`….reason`、`….body`。
+  ///
+  /// 不給就三段都不掛 id。前綴由呼叫端給而不是寫死在元件裡，理由同 [wrap]：
+  /// 同一個元件在任務頁與工務單詳情上的命名不一樣。
+  final String? idPrefix;
 
   /// 一句話說明現在是什麼狀況，例如「查房退回：床鋪不合格」。
   final String title;
@@ -270,23 +279,38 @@ class TmsCalloutSlot extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  _segment(
+                    spec.idPrefix,
+                    'title',
                     spec.title,
-                    style: TmsText.headline,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (reason != null) ...[
-                    const SizedBox(height: TmsSpacing.xxs),
                     Text(
-                      reason,
-                      style: _bodyStyle.copyWith(color: TmsColors.label),
+                      spec.title,
+                      style: TmsText.headline,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  if (reason != null) ...[
+                    const SizedBox(height: TmsSpacing.xxs),
+                    _segment(
+                      spec.idPrefix,
+                      'reason',
+                      reason,
+                      Text(
+                        reason,
+                        style: _bodyStyle.copyWith(color: TmsColors.label),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: TmsSpacing.xxs),
-                  Text(spec.body, style: _bodyStyle),
+                  _segment(
+                    spec.idPrefix,
+                    'body',
+                    spec.body,
+                    Text(spec.body, style: _bodyStyle),
+                  ),
                   if (spec.actions.isNotEmpty) ...[
                     const SizedBox(height: TmsSpacing.xs2),
                     Wrap(
@@ -366,6 +390,21 @@ class TmsCalloutSlot extends StatelessWidget {
       ],
     );
   }
+}
+
+/// 把一段文字掛上 `<前綴>.<段名>` 的 accessibility id；沒有前綴時原樣回傳。
+///
+/// 同時把那段文字顯式放到節點的 label 上：容器型節點預設沒有 label，自動化
+/// 驗收定位得到卻讀不到值。
+Widget _segment(String? idPrefix, String segment, String text, Widget node) {
+  if (idPrefix == null) {
+    return node;
+  }
+  return TmsSemantics(
+    id: '$idPrefix.$segment',
+    label: text,
+    child: ExcludeSemantics(child: node),
+  );
 }
 
 /// 狀態列的說明段：15pt、行高 1.4、次級字色（`Main.dc.html:1234`）。
@@ -614,9 +653,19 @@ class TmsQuoteCallout extends StatelessWidget {
         children: [
           // 內文在上、出處在下：員工要的是那句話，誰在什麼時候寫的是看完之後
           // 才會追的事。
-          Text(entry.text, style: TmsText.body.copyWith(height: 1.4)),
+          _segment(
+            entry.idPrefix,
+            'content',
+            entry.text,
+            Text(entry.text, style: TmsText.body.copyWith(height: 1.4)),
+          ),
           const SizedBox(height: TmsSpacing.xxs),
-          Text(entry.meta, style: TmsText.footnote),
+          _segment(
+            entry.idPrefix,
+            'meta',
+            entry.meta,
+            Text(entry.meta, style: TmsText.footnote),
+          ),
         ],
       ),
     );
@@ -627,7 +676,17 @@ class TmsQuoteCallout extends StatelessWidget {
 
 /// 交辦引言標註裡的一則。
 class TmsQuoteEntry {
-  const TmsQuoteEntry({required this.text, required this.meta, this.wrap});
+  const TmsQuoteEntry({
+    required this.text,
+    required this.meta,
+    this.idPrefix,
+    this.wrap,
+  });
+
+  /// 內文與出處兩段各自掛的 accessibility id 的前綴，例如給
+  /// `task.handover.0` 就得到 `task.handover.0.content` 與
+  /// `task.handover.0.meta`。不給就兩段都不掛 id。
+  final String? idPrefix;
 
   /// 交辦內容。
   final String text;

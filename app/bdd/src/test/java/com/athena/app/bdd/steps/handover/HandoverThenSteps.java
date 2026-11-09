@@ -63,15 +63,27 @@ public class HandoverThenSteps {
     }
 
     /**
-     * 必查：以 accessibility id {@code task.handover.unread-dot} 定位未讀圓點，其可見性符合
-     * 可見狀態（顯示＝元件存在且可見，隱藏＝不存在或不可見）；不用文字「未讀／已讀」斷言。
+     * 必查：任務頁上看得出這間房還有沒看過的交辦，而且不用文字「未讀／已讀」斷言。
      * 與後端 {@code handover_reads} 一致。
+     *
+     * <p>設計原型用兩種方式表達同一件事（`Main.dc.html:1268`、`4341`）：開工前還沒看過
+     * 的交辦整塊升到頁面上（{@code task.handover.callout}），其餘情況收進「這間房的
+     * 資訊」那一列、左邊掛一顆圓點（{@code task.handover.unread-dot}）。所以「顯示」
+     * 是兩者任一成立，「隱藏」是兩者都不在。
      */
     @那麼("交辦區的未讀標示為 {string}")
     public void handoverUnreadDotVisibility(String visibleOrHidden) {
+        world.waitForTestId("task.screen", TIMEOUT);
         switch (visibleOrHidden) {
-            case "顯示" -> world.waitForTestId("task.handover.unread-dot", TIMEOUT);
-            case "隱藏" -> world.waitForTestIdGone("task.handover.unread-dot", TIMEOUT);
+            case "顯示" -> {
+                if (world.driver().findElements(world.byTestId("task.handover.callout")).isEmpty()) {
+                    world.waitForTestId("task.handover.unread-dot", TIMEOUT);
+                }
+            }
+            case "隱藏" -> {
+                world.waitForTestIdGone("task.handover.unread-dot", TIMEOUT);
+                world.waitForTestIdGone("task.handover.callout", TIMEOUT);
+            }
             default -> throw new IllegalArgumentException(
                     "找不到「" + visibleOrHidden + "」在可見狀態對照表中的權威值（顯示／隱藏）");
         }
