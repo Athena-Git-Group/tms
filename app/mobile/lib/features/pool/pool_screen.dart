@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_category_square.dart';
+import '../../core/widgets/tms_content_unavailable.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
@@ -180,11 +181,29 @@ class _PoolScreenState extends State<PoolScreen> {
                 )
               else ...[
                 if (pool != null && pool.items.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('目前沒有待認領的工單'),
-                  ),
-                if (pool != null)
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        bottom: TmsSpacing.scrollPadBottom(
+                          MediaQuery.paddingOf(context).bottom,
+                        ),
+                      ),
+                      child: TmsContentUnavailable(
+                        id: 'pool.empty-state',
+                        copy: TmsEmptyStates.housekeepingPool(
+                          filterApplied: _selected != 'all',
+                          poolHasItems: pool.counts.values.any(
+                            (count) => count > 0,
+                          ),
+                        ),
+                        onAction: () {
+                          _selected = 'all';
+                          _fetch();
+                        },
+                      ),
+                    ),
+                  )
+                else if (pool != null)
                   Expanded(
                     child: ListView(
                       padding: EdgeInsets.only(

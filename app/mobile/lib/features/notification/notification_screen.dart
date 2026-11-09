@@ -5,6 +5,7 @@ import '../../core/push_gateway.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_content_unavailable.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_notification_kind_icon.dart';
 
@@ -150,7 +151,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
         statusBar,
         header,
         const SizedBox(height: TmsSpacing.lg),
-        const _EmptyState(),
+        const TmsContentUnavailable(
+          id: 'notification.empty-state',
+          copy: TmsEmptyStates.notifications,
+          minHeight: TmsContentUnavailable.notificationMinHeight,
+        ),
       ];
     }
 
@@ -228,65 +233,6 @@ class _Header extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// 一則通知都沒有時的畫面（iOS 的 ContentUnavailableView）：不包卡片，在剩下
-/// 的空間裡置中一個描邊圖示、一行標題、一行說明。
-///
-/// 整塊的文字顯式寫在 [TmsSemantics] 的 label 上，底下的視覺再把自己的
-/// semantics 關掉：定位與讀值因此落在同一個節點，讀出來的也剛好是一句完整的
-/// 話，而不是同一段文字被 Flutter 合併兩次。
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  /// 空狀態要把剩下的一屏撐開，內容才會落在視覺中央而不是黏在標題底下。
-  static const double _minHeight = 460;
-
-  /// 置中型空狀態的左右內距比畫面邊距再寬一些，說明文才不會長到兩邊見底。
-  static const double _horizontalPadding = 32;
-
-  @override
-  Widget build(BuildContext context) {
-    return TmsSemantics(
-      id: 'notification.empty-state',
-      label: '目前沒有通知。派單、急件與退回都會出現在這裡。',
-      child: ExcludeSemantics(
-        child: Container(
-          constraints: const BoxConstraints(minHeight: _minHeight),
-          padding: const EdgeInsets.fromLTRB(
-            _horizontalPadding,
-            TmsSpacing.xl2,
-            _horizontalPadding,
-            TmsSpacing.xl2,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                CupertinoIcons.bell,
-                size: TmsSize.emptyStateIcon,
-                color: TmsColors.quaternaryLabel,
-              ),
-              const SizedBox(height: TmsSpacing.md2),
-              const Text(
-                '目前沒有通知',
-                textAlign: TextAlign.center,
-                style: TmsText.title2,
-              ),
-              const SizedBox(height: TmsSpacing.xs2),
-              Text(
-                '派單、急件與退回都會出現在這裡。',
-                textAlign: TextAlign.center,
-                style: TmsText.subheadline.copyWith(
-                  color: TmsColors.secondaryLabel,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
