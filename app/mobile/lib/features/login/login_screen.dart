@@ -248,10 +248,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   id: 'login.shared-device.staff-id-field',
                   child: LoginTextField(
                     controller: _staffIdController,
-                    maxLength: 12,
-                    // 不強制大寫：原型的員工編號是 H-0532 這種格式，這套
-                    // 系統的是 hk1、mt1，而後端 findByTenantIdAndLoginId 是
-                    // 精確比對。轉大寫會讓現有帳號一律登不進去。
+                    // 不設長度上限、不強制大寫。原型的員工編號是 H-0532
+                    // 這種格式（6 碼大寫），所以它寫 maxLength 12 並轉大寫；
+                    // 這套系統沒有那個形狀：契約的 loginId 沒有任何長度或
+                    // 大小寫限制，種子帳號是 hk1，而 app/bdd 的 fixture 是
+                    // 「fx-」加 12 碼共 15 字。照原型設限會把合法帳號擋在外面，
+                    // 而後端 findByTenantIdAndLoginId 又是精確比對，結果是登不進去。
                     uppercase: false,
                     autofillHints: const <String>[AutofillHints.username],
                   ),
