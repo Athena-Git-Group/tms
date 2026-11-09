@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/test_backdoor.dart';
 import 'package:tms_staff_app/core/widgets/tms_callout.dart';
 import 'package:tms_staff_app/core/widgets/tms_fab.dart';
 import 'package:tms_staff_app/core/widgets/tms_tip_popover.dart';
@@ -328,6 +329,60 @@ void main() {
     });
   });
 
+  group('導覽列計時（Main.dc.html:5036）', () {
+    testWidgets('捲過標題區之後，導覽列上的計時跟著標題區同一支計時器逐秒跳', (tester) async {
+      addTearDown(TestHooks.instance.reset);
+      final startedAt = DateTime(2026, 11, 9, 9);
+      TestHooks.instance.injectedClockIso = startedAt
+          .add(const Duration(minutes: 12, seconds: 5))
+          .toIso8601String();
+
+      ApiClient.instance = _FakeApiClient(
+        task: _task(
+          state: 'doing',
+          accumulatedSeconds: 0,
+          segmentStartedAt: startedAt,
+        ),
+        // 內容要長到捲得動，導覽列才會換成捲動後那一組標題。
+        sopItems: <SopItem>[
+          for (var i = 0; i < 8; i++)
+            SopItem(
+              id: 's$i',
+              appliesTo: 'cleaning',
+              itemKey: 'k$i',
+              label: '項目 $i',
+            ),
+        ],
+        tickets: const <RepairTicketSummary>[],
+      );
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: TaskScreen(roomNo: '305', taskId: 't-305'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      await tester.drag(
+        find.byType(SingleChildScrollView),
+        const Offset(0, -200),
+      );
+      await tester.pump();
+      expect(find.text('305 · 12:05'), findsOneWidget);
+
+      TestHooks.instance.injectedClockIso = startedAt
+          .add(const Duration(minutes: 12, seconds: 6))
+          .toIso8601String();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('305 · 12:06'), findsOneWidget);
+
+      // 離開畫面讓那支每秒醒來的計時器停掉，否則 flutter test 會判定有計時器
+      // 沒取消。
+      await tester.pumpWidget(const CupertinoApp(home: SizedBox.shrink()));
+      await tester.pump(const Duration(seconds: 2));
+    });
+  });
+
   group('查一下（Main.dc.html:1330-1348、4436）', () {
     testWidgets('是圖示浮動鈕，第一次進來還帶一顆說明泡泡', (tester) async {
       await pumpTask(tester, task: _task(state: 'doing'));
@@ -358,6 +413,7 @@ TaskDetail _task({
   int? estMin = 35,
   int elapsedMinutes = 12,
   int? accumulatedSeconds,
+  DateTime? segmentStartedAt,
   bool inspectionWaived = false,
   String? holdReason,
   List<String> checkedSopItems = const <String>[],
@@ -376,6 +432,7 @@ TaskDetail _task({
     estMin: estMin,
     elapsedMinutes: elapsedMinutes,
     accumulatedSeconds: accumulatedSeconds,
+    segmentStartedAt: segmentStartedAt,
     inspectionWaived: inspectionWaived,
     holdReason: holdReason,
     checkedSopItems: checkedSopItems,

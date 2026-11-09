@@ -1090,7 +1090,14 @@ class _TaskScreenState extends State<TaskScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (doing) ...[
-            TaskTimerHero(task: task),
+            TaskTimerHero(
+              task: task,
+              onTick: () {
+                if (mounted) {
+                  setState(() {});
+                }
+              },
+            ),
             const SizedBox(height: TmsSpacing.xs2),
             Text(
               '${widget.roomNo} · $title',
@@ -1634,13 +1641,25 @@ int? _overtimeMinutes(TaskDetail task, {DateTime? now}) {
 /// 超時與計時讀同一個逐秒重算的已做秒數，但超時換成整分才進位：秒數跨過
 /// 整分前後膠囊不會忽隱忽現，整分一到才加一分。
 class TaskTimerHero extends StatefulWidget {
-  const TaskTimerHero({super.key, required this.task, this.clock});
+  const TaskTimerHero({
+    super.key,
+    required this.task,
+    this.clock,
+    this.onTick,
+  });
 
   final TaskDetail task;
 
   /// 讀「現在幾點」的方法。平常不給，計時就讀手機的時鐘；widget 測試給一個
   /// 自己說了算的時鐘，才能在不真的等一秒的情況下驗計時有往前跳。
   final DateTime Function()? clock;
+
+  /// 每秒重算一次之後通知擺放的畫面。
+  ///
+  /// 導覽列捲動後也寫同一串計時，它和這個元件是兄弟節點，自己重畫不會帶到
+  /// 它。整頁只留這一支每秒醒來的計時器，導覽列跟著這一下一起重畫；導覽列
+  /// 另外掛一支的話，兩串字會在不同的時刻各自進位，同一幀上讀到差一秒。
+  final VoidCallback? onTick;
 
   @override
   State<TaskTimerHero> createState() => _TaskTimerHeroState();
@@ -1678,6 +1697,7 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) {
           setState(() {});
+          widget.onTick?.call();
         }
       });
     } else if (!wanted) {
