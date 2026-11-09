@@ -45,9 +45,8 @@ void main() {
     expect(find.bySemanticsIdentifier('home.screen'), findsOneWidget);
     expect(labelOf(tester, 'home.progress.cleaned-ratio'), '2 / 7');
     expect(labelOf(tester, 'home.progress.inspected-count'), '1');
-    expect(labelOf(tester, 'home.progress.ad-hoc-count'), '3');
-    expect(labelOf(tester, 'home.progress.remaining-minutes'), '135 分');
-    expect(labelOf(tester, 'home.streak-badge'), '5');
+    expect(labelOf(tester, 'home.progress.ad-hoc-count'), '3 單');
+    expect(labelOf(tester, 'home.progress.remaining-minutes'), '135 分鐘');
 
     // 任務清單在進度卡與主卡底下，測試視窗一屏放不完，先捲到清單再讀。
     await tester.drag(find.byType(ListView), const Offset(0, -400));

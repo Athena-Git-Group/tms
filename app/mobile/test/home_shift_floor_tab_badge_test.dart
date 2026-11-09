@@ -17,13 +17,14 @@ void main() {
     ApiClient.instance = ApiClient();
   });
 
-  /// 今天的日期字串，與首頁問候列用的是同一個算法。
+  /// 今天的日期字串，與首頁問候列用的是同一個算法（Main.dc.html:128）。
   String todayLabel() {
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     final now = DateTime.now();
-    return '${now.month} 月 ${now.day} 日';
+    return '週${weekdays[now.weekday - 1]} ${now.month}/${now.day}';
   }
 
-  /// 只在徽章裡面找這個數字。首頁上別處也有數字（例如零退回天數），直接用
+  /// 只在徽章裡面找這個數字。首頁上別處也有數字（例如進度卡那幾格），直接用
   /// `find.text` 會找到不是徽章的那一個。
   Finder badgeText(String text) => find.descendant(
     of: find.byType(TmsCountBadge),
