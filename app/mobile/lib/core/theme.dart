@@ -508,7 +508,7 @@ abstract final class TmsSpacing {
 /// [cardHero]，分組列表／狀態列／工作磚用 [card]，底部面板內的白卡用
 /// [cardInSheet]。
 abstract final class TmsRadius {
-  /// 照片縮圖、加照片的虛線框、底部面板上緣。
+  /// 照片縮圖、加照片的虛線框。
   static const double sm = 10;
 
   /// 交辦引言、池內「做到哪」備註列、查一下的出處卡。
@@ -535,6 +535,9 @@ abstract final class TmsRadius {
   /// 蓋住整個畫面的對話卡，目前只有慶祝卡。`Main.dc.html:4463` 的 `ui.dialogR`。
   /// 它比 [alert] 再大一階，因為這張卡佔的面積也大一截。
   static const double dialog = 36;
+
+  /// 底部面板上緣（`Main.dc.html:4932`）。
+  static const double sheet = 38;
 
   /// 膠囊：所有主按鈕、chip、標籤、徽章、頭像、未讀點、進度條。
   static const double pill = 999;

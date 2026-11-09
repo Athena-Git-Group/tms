@@ -12,6 +12,7 @@ import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_motion.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
@@ -209,16 +210,27 @@ class _TaskScreenState extends State<TaskScreen> {
                   ),
                 ],
               ),
+              // 面板升起時背後那一頁要壓暗，點暗掉的地方要能把面板收回去。
+              // 壓暗只是一塊疊上去的顏色，不是 modal barrier，底下那一頁的
+              // 離線列與待同步筆數仍然讀得到（理由見 [RepairSheet]）。
+              if (_repairSheetOpen)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _closeRepairSheet,
+                    child: const ColoredBox(color: TmsColors.scrimSheet),
+                  ),
+                ),
               if (_repairSheetOpen)
                 Align(
                   alignment: Alignment.bottomCenter,
-                  child: RepairSheet(
-                    roomNo: widget.roomNo,
-                    sourceTaskId: _openRepairSheetTaskId,
-                    onClose: () => setState(() {
-                      _repairSheetOpen = false;
-                      _openRepairSheetTaskId = null;
-                    }),
+                  child: TmsMotionView(
+                    spec: TmsMotion.up,
+                    child: RepairSheet(
+                      roomNo: widget.roomNo,
+                      sourceTaskId: _openRepairSheetTaskId,
+                      onClose: _closeRepairSheet,
+                    ),
                   ),
                 ),
             ],
@@ -238,6 +250,13 @@ class _TaskScreenState extends State<TaskScreen> {
     setState(() {
       _repairSheetOpen = true;
       _openRepairSheetTaskId = _loadedTask?.id;
+    });
+  }
+
+  void _closeRepairSheet() {
+    setState(() {
+      _repairSheetOpen = false;
+      _openRepairSheetTaskId = null;
     });
   }
 
