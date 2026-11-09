@@ -303,6 +303,8 @@ class ApiClient {
   /// `POST /repair-tickets`：開立工務單（契約 `createRepairTicket`）。
   /// 三條開單路徑擇一：房務從原任務報修帶 [sourceTaskId]，工務自開帶
   /// [roomId] 或 [isPublicArea]=true。急件由系統判定，請求不帶任何急件欄位。
+  /// [description] 是員工自己打的狀況說明，選填；空字串與 null 都不送這個
+  /// 欄位，後端收到的就是「沒有寫說明」，而不是一段空白的說明。
   /// [idempotencyKey] 給離線佇列重送用：同一次送出重送幾遍都帶同一把鍵，
   /// 後端才認得出是同一次動作、只建立一張單。
   Future<RepairTicketDetail> createRepairTicket({
@@ -310,6 +312,7 @@ class ApiClient {
     String? roomId,
     bool isPublicArea = false,
     required String category,
+    String? description,
     required List<String> photoIds,
     bool interruptSourceTask = false,
     String? idempotencyKey,
@@ -324,6 +327,8 @@ class ApiClient {
         if (roomId != null) 'roomId': roomId,
         if (isPublicArea) 'isPublicArea': true,
         'category': category,
+        if (description != null && description.isNotEmpty)
+          'description': description,
         'photoIds': photoIds,
         if (interruptSourceTask) 'interruptSourceTask': true,
       },
@@ -440,6 +445,32 @@ class ApiClient {
       idempotent: true,
     );
     return AskAnswer.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /room-memories/answers/{answerId}/feedback`：對一則回答說有沒有
+  /// 幫助（契約 `submitKbFeedback`）。回饋寫進稽核紀錄；說沒幫助時後端會通知
+  /// SOP 管理者去查被引用的那筆資料。
+  Future<void> submitAskFeedback({
+    required String answerId,
+    required bool helpful,
+  }) async {
+    await _requestJson(
+      'POST',
+      '/room-memories/answers/$answerId/feedback',
+      body: {'helpful': helpful},
+      idempotent: true,
+    );
+  }
+
+  /// `POST /room-memories/answers/{answerId}/escalate`：把查不到的那一題轉給
+  /// 主管（契約 `escalateKbQuestion`）。後端建一筆待回覆的提問，主管回覆後用
+  /// 推播通知發問的員工。
+  Future<void> escalateAskQuestion(String answerId) async {
+    await _requestJson(
+      'POST',
+      '/room-memories/answers/$answerId/escalate',
+      idempotent: true,
+    );
   }
 
   /// `GET /notifications`：我的通知清單，後端已依 createdAt 新到舊排好；

@@ -84,23 +84,6 @@ public class RepairWhenSteps {
         world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
     }
 
-    /**
-     * 怎麼做：在報修畫面選「中斷 → 需要工務協助」後送出。權威狀態落地：同
-     * {@link #submitTicket(String)}，另外原任務會被中斷。
-     *
-     * <p>中斷開關的 accessibility id 取 {@code repair.interrupt-source-task-toggle}：
-     * 報修面板的開關一律以契約 {@code CreateRepairTicketRequest} 的欄位名命名再加
-     * {@code -toggle}（既有的 {@code repair.public-area-toggle} 對 {@code isPublicArea}
-     * 就是這樣），讀的人從 id 就知道它送的是哪一個欄位。
-     */
-    @當("{string} 以中斷模式送出工務單")
-    public void submitTicketInInterruptMode(String staffName) {
-        world.staff(staffName);
-        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
-        world.tapTestId("repair.interrupt-source-task-toggle", SCREEN_TIMEOUT);
-        world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
-    }
-
     /** 怎麼做：從任務頁進入報修畫面，點選類別。App 會呼叫開單前檢查。 */
     @當("{string} 在 {string} 的報修畫面選擇類別 {string}")
     public void chooseRepairCategory(String staffName, String task, String category) {

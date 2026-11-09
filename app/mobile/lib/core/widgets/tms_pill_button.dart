@@ -8,6 +8,13 @@ enum TmsPillButtonStyle {
   /// 主要動作：品牌色底、白字。停用時底色換成不透明灰，字維持白色。
   filled,
 
+  /// 送出急件：深紅底、白字，其餘與 [filled] 相同（`Main.dc.html:4941`）。
+  ///
+  /// 只有報修面板的置底鈕在急件時用得上。急件不經主管審核直接送到工務，按下
+  /// 去的後果和一般送出不同，所以底色也要不同；用 [filled] 的話，員工會在同
+  /// 一顆看起來一模一樣的按鈕上做出兩種結果的動作。
+  urgentFilled,
+
   /// 次要動作：白底、品牌色 1.5 的外框與文字。
   outlined,
 
@@ -119,6 +126,10 @@ class TmsPillButton extends StatelessWidget {
         background = TmsColors.brandPrimary;
         disabledBackground = TmsColors.opaqueSeparator;
         foreground = TmsColors.brandOnPrimary;
+      case TmsPillButtonStyle.urgentFilled:
+        background = TmsColors.onErrorContainer;
+        disabledBackground = TmsColors.opaqueSeparator;
+        foreground = TmsColors.brandOnPrimary;
       case TmsPillButtonStyle.outlined:
         background = TmsColors.cardBackground;
         disabledBackground = TmsColors.cardBackground;
@@ -165,6 +176,7 @@ class TmsPillButton extends StatelessWidget {
       case TmsPillButtonStyle.inverse:
         return button;
       case TmsPillButtonStyle.filled:
+      case TmsPillButtonStyle.urgentFilled:
         final glow = this.glow;
         if (glow == null || !enabled) {
           return button;

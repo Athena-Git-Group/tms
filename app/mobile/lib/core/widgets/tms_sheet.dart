@@ -318,17 +318,17 @@ class TmsSheet extends StatelessWidget {
   }
 }
 
-/// 面板置底那一顆滿寬膠囊鈕，以及面板裡少數要跟它長一樣的次要動作。
+/// 面板置底那一顆滿寬膠囊鈕。
 ///
-/// 高度與圓角跟著設計走（52pt 滿寬膠囊），呼叫端只決定文字、主次與可不可按。
-/// 實心的那一種直接是 [TmsPillButton]，所以配色、停用時的灰底與可按時的光暈
-/// 跟畫面上其他主按鈕同一套，不會面板裡一種、畫面上另一種。
+/// 高度與圓角跟著設計走（52pt 滿寬膠囊），呼叫端只決定文字、外觀與可不可按。
+/// 它直接是 [TmsPillButton]，所以配色、停用時的灰底與可按時的光暈跟畫面上其
+/// 他主按鈕同一套，不會面板裡一種、畫面上另一種。
 class TmsSheetButton extends StatelessWidget {
   const TmsSheetButton({
     super.key,
     required this.label,
     required this.onPressed,
-    this.filled = true,
+    this.style = TmsPillButtonStyle.filled,
     this.child,
   });
 
@@ -337,8 +337,8 @@ class TmsSheetButton extends StatelessWidget {
   /// 不給值代表現在不能按。
   final VoidCallback? onPressed;
 
-  /// 實心主按鈕（預設）或白底描邊的次要按鈕。
-  final bool filled;
+  /// 外觀。報修面板判定為急件時傳 [TmsPillButtonStyle.urgentFilled]。
+  final TmsPillButtonStyle style;
 
   /// 要放別的東西（例如送出中的轉圈）時用這個取代文字。
   final Widget? child;
@@ -348,35 +348,13 @@ class TmsSheetButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (filled) {
-      return TmsPillButton(
-        label: label,
-        height: height,
-        glow: TmsPillGlow.alt,
-        onPressed: onPressed,
-        child: child,
-      );
-    }
-    final content = child ??
-        Text(
-          label,
-          style: TmsText.headline.copyWith(color: TmsColors.brandPrimary),
-        );
-    return SizedBox(
-      width: double.infinity,
+    return TmsPillButton(
+      label: label,
+      style: style,
       height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: TmsColors.cardBackground,
-          borderRadius: BorderRadius.circular(TmsRadius.pill),
-          border: Border.all(color: TmsColors.brandPrimary, width: 1.5),
-        ),
-        child: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: onPressed,
-          child: content,
-        ),
-      ),
+      glow: TmsPillGlow.alt,
+      onPressed: onPressed,
+      child: child,
     );
   }
 }
