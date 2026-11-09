@@ -1713,17 +1713,22 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
           ),
         ),
         const SizedBox(width: TmsSpacing.sm2),
-        Padding(
-          padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
-          child: overtimeMinutes != null
-              ? _buildOvertimeChip(overtimeMinutes, onDark: true)
-              : Text(
+        // 膠囊比旁邊那行字高，所以它離底線遠一點，兩者的視覺中線才對得上
+        // 計時的字身（`Main.dc.html:1172`、`1175`）。
+        overtimeMinutes != null
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
+                child: _buildOvertimeChip(overtimeMinutes, onDark: true),
+              )
+            : Padding(
+                padding: const EdgeInsets.only(bottom: TmsSpacing.xs2),
+                child: Text(
                   task.estMin == null ? '' : '/ 預估 ${task.estMin} 分',
                   style: TmsText.subheadline.copyWith(
-                    color: TmsColors.brandContainer,
+                    color: TmsColors.headerMetaOnDark,
                   ),
                 ),
-        ),
+              ),
       ],
     );
   }
