@@ -36,9 +36,14 @@ public class PoolThenSteps {
             "修繕", "repair",
             "其他", "other");
 
-    /** 單卡資訊表「項目」欄 → 單卡上那一列的 accessibility id 後綴。 */
+    /**
+     * 單卡資訊表「項目」欄 → 單卡上那一列的 accessibility id 後綴。
+     *
+     * <p>四列在卡上長得不一樣：來源是標題底下那一行副標，接手進度是卡內整塊的
+     * 備註，原因與說明是標籤列上的膠囊。讀值的方式一樣，所以這裡只記 id。
+     */
     private static final Map<String, String> CARD_FIELD_IDS = Map.of(
-            "來源", "source-tag",
+            "來源", "subtitle",
             "原因", "return-reason",
             "接手進度", "handoff-progress",
             "說明", "rule-hit-tag");
@@ -122,7 +127,7 @@ public class PoolThenSteps {
 
     /**
      * 必查：該單卡逐項顯示表格中的值；「說明」為「規則引擎命中：{規則名}」，與後端
-     * {@code rule_hit} 一致。accessibility id：{@code pool.card.{roomNo}.source-tag}、
+     * {@code rule_hit} 一致。accessibility id：{@code pool.card.{roomNo}.subtitle}、
      * {@code .return-reason}、{@code .handoff-progress}、{@code .rule-hit-tag}。
      */
     @那麼("{string} 的單卡顯示以下資訊：")
@@ -195,6 +200,42 @@ public class PoolThenSteps {
             WebElement count = world.waitForTestId(countId, SCREEN_TIMEOUT);
             assertLabelContains(count, countId, String.valueOf(expected));
         }
+    }
+
+    /**
+     * 必查：池裡一張單都接不到時，待認領顯示這個標題與這句說明。
+     * accessibility id：{@code pool.empty-state}。
+     *
+     * <p>標題與說明讀的是同一個節點：空狀態整塊只掛一個 id，兩句話一起放進它的
+     * label，定位與讀值才落在同一個元素上。
+     */
+    @那麼("待認領空狀態顯示標題 {string} 與說明 {string}")
+    public void poolEmptyStateShows(String title, String description) {
+        WebElement emptyState = world.waitForTestId("pool.empty-state", SCREEN_TIMEOUT);
+        assertLabelContains(emptyState, "pool.empty-state", title);
+        assertLabelContains(emptyState, "pool.empty-state", description);
+    }
+
+    /**
+     * 必查：空狀態底下有這顆文字按鈕。
+     * accessibility id：{@code pool.empty-state.action}。
+     */
+    @那麼("待認領空狀態的動作鈕是 {string}")
+    public void poolEmptyStateActionIs(String label) {
+        WebElement action = world.waitForTestId("pool.empty-state.action", SCREEN_TIMEOUT);
+        assertLabelContains(action, "pool.empty-state.action", label);
+    }
+
+    /**
+     * 必查：空狀態底下沒有任何動作鈕。
+     *
+     * <p>整池都沒有單的時候切回全部分類看到的還是空清單，所以這個分支不給按鈕，
+     * 員工才不會按一下發現什麼都沒變。
+     */
+    @那麼("待認領空狀態沒有動作鈕")
+    public void poolEmptyStateHasNoAction() {
+        world.waitForTestId("pool.empty-state", SCREEN_TIMEOUT);
+        assertAbsent("pool.empty-state.action");
     }
 
     /** 斷言某個 accessibility id 不在畫面上。用 findElements（空清單）而不是 findElement（要等逾時）。 */

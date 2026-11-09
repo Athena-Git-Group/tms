@@ -71,6 +71,29 @@ Widget? poolWaitedTag({int? waitedMinutes, String? reminderStage}) {
   );
 }
 
+/// 單卡上的同樓層標籤：這張單在不在員工自己負責的樓層。
+///
+/// 給房務與工務兩個待認領畫面共用，回傳 null 表示這張卡不畫這顆標籤。
+/// 標籤只在同樓層時出現，連「優先通知」也要同樓層才講
+/// （`Main.dc.html:4251-4252`）：跨樓層的單搶過去得先走一趟，催不同樓層的人
+/// 去接只會讓她放下手邊那間房。
+///
+/// [id] 一律是同一個，因為兩種說法佔的是卡上同一個位置、回答的是同一個問題。
+Widget? poolSameFloorTag({
+  required String id,
+  required bool sameFloor,
+  required bool priorityNotify,
+}) {
+  if (!sameFloor) {
+    return null;
+  }
+  return PoolCardField(
+    id: id,
+    text: priorityNotify ? '優先通知 · 同樓層' : '同樓層 · 離你最近',
+    tone: priorityNotify ? TmsTagTone.brand : TmsTagTone.info,
+  );
+}
+
 /// 一張待認領單卡的外框。
 ///
 /// [id] 是卡本身的 accessibility id；卡內各列另外用 [PoolCardField] 掛
@@ -106,9 +129,11 @@ class PoolCard extends StatelessWidget {
       label: semanticsLabel,
       child: TmsCard(
         style: TmsCardStyle.hero,
+        // 上下各 8，相鄰兩卡之間就是原型那一列的 `gap: 16px`
+        // （`Main.dc.html:249`、`973`）。
         margin: const EdgeInsets.symmetric(
           horizontal: TmsSpacing.screenEdge,
-          vertical: TmsSpacing.xs2,
+          vertical: TmsSpacing.sm,
         ),
         highlighted: highlighted,
         onTap: onTap,
@@ -123,9 +148,10 @@ class PoolCard extends StatelessWidget {
 
 /// 單卡上的一顆標籤，同時是測試要讀值的那個節點。
 ///
-/// 卡上的附加資訊（來源、退池原因、接手進度、未接提醒）全部長這個樣子：同樣
+/// 卡上的附加情況（同樓層、退池原因、未接提醒、等多久）全部長這個樣子：同樣
 /// 大小的膠囊，只有顏色不同。做成一樣大小的膠囊是因為這幾段文字沒有主從之
-/// 分——員工要的是「掃過去看有沒有紅的」，不是逐行讀完。
+/// 分——員工要的是「掃過去看有沒有紅的」，不是逐行讀完。來源與接手進度不走
+/// 這裡：前者是副標那一行，後者是卡內整塊的備註。
 ///
 /// 文字同時掛在 accessibility label 上：容器型 semantics 節點本身沒有 label，
 /// Appium 以 id 定位後讀到的會是空字串，定位與讀值必須落在同一個節點。
@@ -151,6 +177,70 @@ class PoolCardField extends StatelessWidget {
   }
 }
 
+/// 單卡標題底下那一行副標（`Main.dc.html:279`、`996`）。
+///
+/// 副標不是標籤：它講的是這張單從哪來、大概要做多久，是讀完標題後接著讀的
+/// 一句話，所以排成一整行灰字而不是一顆膠囊。排不下就截字，不換行——卡的
+/// 高度要在列表裡齊平，員工掃列表時靠的是每張卡一樣高。
+class PoolCardSubtitle extends StatelessWidget {
+  const PoolCardSubtitle({super.key, required this.id, required this.text});
+
+  final String id;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return TmsSemantics(
+      id: id,
+      label: text,
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TmsText.subheadline.copyWith(color: TmsColors.secondaryLabel),
+      ),
+    );
+  }
+}
+
+/// 卡內整寬的「做到哪」備註塊（`Main.dc.html:290`）。
+///
+/// 接手別人做到一半的單時，前一個人交代的進度是要照著做的指示，不是一句附加
+/// 說明。它因此佔掉卡內一整塊灰底，不跟標籤擠在同一列——標籤可以掃過去，這段
+/// 要讀完。
+class PoolCardNote extends StatelessWidget {
+  const PoolCardNote({super.key, required this.id, required this.text});
+
+  final String id;
+  final String text;
+
+  /// 備註塊的開頭，點明這段字講的是「前一個人做到哪裡」。
+  static const String prefix = '做到哪：';
+
+  @override
+  Widget build(BuildContext context) {
+    final full = '$prefix$text';
+    return TmsSemantics(
+      id: id,
+      label: full,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: TmsSpacing.md,
+          vertical: TmsSpacing.sm2,
+        ),
+        decoration: BoxDecoration(
+          color: TmsColors.groupedBackground,
+          borderRadius: BorderRadius.circular(TmsRadius.md),
+        ),
+        child: Text(
+          full,
+          style: TmsText.subheadline.copyWith(color: TmsColors.labelSoft),
+        ),
+      ),
+    );
+  }
+}
+
 /// 單卡上的標籤列：幾顆標籤橫著排，排不下就換行。
 class PoolTagRow extends StatelessWidget {
   const PoolTagRow({super.key, required this.tags});
@@ -159,11 +249,7 @@ class PoolTagRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: TmsTag.gap,
-      runSpacing: TmsTag.gap,
-      children: tags,
-    );
+    return Wrap(spacing: TmsTag.gap, runSpacing: TmsTag.gap, children: tags);
   }
 }
 
@@ -280,7 +366,10 @@ class PoolFilterRow extends StatelessWidget {
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
     );
   }
 }

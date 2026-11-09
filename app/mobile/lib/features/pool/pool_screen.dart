@@ -33,6 +33,9 @@ class _PoolScreenState extends State<PoolScreen> {
   /// `{category}` 段；`all` 是「不帶 category 參數」的彙總磚，不是任務類別。
   /// 圖示方塊的底色與圖示色照原型逐格指定，不從類別色推算：「全部」不是一個
   /// 任務類別，推不出顏色，而備品磚用的是比任務列更亮的橘，兩者刻意不同。
+  ///
+  /// 只有「全部」是實心圖示，其餘三格是描邊（`Main.dc.html:258-261`）：實心
+  /// 的那一格是彙總，描邊的三格是分類。
   static const _categories = [
     (
       key: 'all',
@@ -44,7 +47,7 @@ class _PoolScreenState extends State<PoolScreen> {
     (
       key: 'amenity',
       label: '備品',
-      icon: CupertinoIcons.cube_box_fill,
+      icon: CupertinoIcons.cube,
       iconBackground: TmsColors.brandAccentVivid,
       iconForeground: TmsColors.brandOnPrimary,
     ),
@@ -58,7 +61,7 @@ class _PoolScreenState extends State<PoolScreen> {
     (
       key: 'other',
       label: '其他',
-      icon: CupertinoIcons.bubble_left_fill,
+      icon: CupertinoIcons.bubble_left,
       iconBackground: TmsColors.otherContainer,
       iconForeground: TmsColors.onOtherContainer,
     ),
@@ -132,102 +135,104 @@ class _PoolScreenState extends State<PoolScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pool = _pool;
     return TmsSemantics(
       id: 'pool.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
-        navigationBar: const CupertinoNavigationBar(middle: Text('待認領')),
+        // 不用 CupertinoNavigationBar：這一頁的標題是內容的一部分，跟著分類磚
+        // 與單卡一起捲（`Main.dc.html:251` 的 `<h1>`）。
         // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
         // 的那段留白由清單自己帶。
         child: SafeArea(
           bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不
-              // 到單，員工要先知道現在連不上，而不是按了認領才發現。
-              const SystemStatusBar(
-                padding: EdgeInsets.fromLTRB(
-                  TmsSpacing.screenEdge,
-                  TmsSpacing.md,
-                  TmsSpacing.screenEdge,
-                  0,
-                ),
+          child: ListView(
+            padding: EdgeInsets.only(
+              top: TmsSpacing.md,
+              bottom: TmsSpacing.scrollPadBottom(
+                MediaQuery.paddingOf(context).bottom,
               ),
-              _categoryRow(pool?.counts ?? const <String, int>{}),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(_error!),
-                ),
-              if (pool == null && _error == null)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: CupertinoActivityIndicator(),
-                ),
-              // 兩種「接不到單」要分開講。一個人都不在職時，池裡就算還躺著單也
-              // 沒有人搶得走，畫面要提示補人、而不是說「都接完了」；這時也不把
-              // 單卡列出來——卡上的「認領這單」對主管沒有意義，對停用的員工更
-              // 按不得（dsl「待認領顯示空狀態」要求搶單動作不可用）。
-              if (pool != null && pool.activeStaffCount == 0)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TmsSemantics(
-                    id: 'pool.empty-state--no-active-staff',
-                    label: _noActiveStaffMessage,
-                    child: const Text(_noActiveStaffMessage),
-                  ),
-                )
-              else ...[
-                if (pool != null && pool.items.isEmpty)
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.only(
-                        bottom: TmsSpacing.scrollPadBottom(
-                          MediaQuery.paddingOf(context).bottom,
-                        ),
-                      ),
-                      child: TmsContentUnavailable(
-                        id: 'pool.empty-state',
-                        copy: TmsEmptyStates.housekeepingPool(
-                          filterApplied: _selected != 'all',
-                          poolHasItems: pool.counts.values.any(
-                            (count) => count > 0,
-                          ),
-                        ),
-                        onAction: () {
-                          _selected = 'all';
-                          _fetch();
-                        },
-                      ),
-                    ),
-                  )
-                else if (pool != null)
-                  Expanded(
-                    child: ListView(
-                      padding: EdgeInsets.only(
-                        bottom: TmsSpacing.scrollPadBottom(
-                          MediaQuery.paddingOf(context).bottom,
-                        ),
-                      ),
-                      children: [
-                        for (final item in pool.items)
-                          _HousekeepingPoolCard(
-                            item: item,
-                            isHighlighted: item.roomNo == widget.highlightRoomNo,
-                            onTap: () => _openTask(item),
-                            onClaim: () => _claim(item),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ],
+            ),
+            children: _content(),
           ),
         ),
       ),
     );
+  }
+
+  List<Widget> _content() {
+    final pool = _pool;
+    return [
+      // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
+      // 員工要先知道現在連不上，而不是按了認領才發現。
+      const SystemStatusBar(
+        padding: EdgeInsets.fromLTRB(
+          TmsSpacing.screenEdge,
+          0,
+          TmsSpacing.screenEdge,
+          TmsSpacing.md,
+        ),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+        child: Text('待認領', style: TmsText.largeTitle),
+      ),
+      const SizedBox(height: TmsSpacing.lg),
+      _categoryRow(pool?.counts ?? const <String, int>{}),
+      if (_error != null) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TmsSpacing.screenEdge,
+          ),
+          child: Text(_error!),
+        ),
+      ],
+      if (pool == null && _error == null) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        const Center(child: CupertinoActivityIndicator()),
+      ],
+      // 兩種「接不到單」要分開講。一個人都不在職時，池裡就算還躺著單也沒有人
+      // 搶得走，畫面要提示補人、而不是說「都接完了」；這時也不把單卡列出來
+      // ——卡上的「認領這單」對主管沒有意義，對停用的員工更按不得
+      // （dsl「待認領顯示空狀態」要求搶單動作不可用）。
+      if (pool != null && pool.activeStaffCount == 0) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TmsSpacing.screenEdge,
+          ),
+          child: TmsSemantics(
+            id: 'pool.empty-state--no-active-staff',
+            label: _noActiveStaffMessage,
+            child: const Text(_noActiveStaffMessage),
+          ),
+        ),
+      ] else if (pool != null && pool.items.isEmpty) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        TmsContentUnavailable(
+          id: 'pool.empty-state',
+          copy: TmsEmptyStates.housekeepingPool(
+            filterApplied: _selected != 'all',
+            poolHasItems: pool.counts.values.any((count) => count > 0),
+          ),
+          onAction: () {
+            _selected = 'all';
+            _fetch();
+          },
+        ),
+      ] else if (pool != null) ...[
+        // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分類磚與第一張卡之間才
+        // 是原型的 16（`Main.dc.html:249`）。
+        const SizedBox(height: TmsSpacing.sm),
+        for (final item in pool.items)
+          _HousekeepingPoolCard(
+            item: item,
+            isHighlighted: item.roomNo == widget.highlightRoomNo,
+            onTap: () => _openTask(item),
+            onClaim: () => _claim(item),
+          ),
+      ],
+    ];
   }
 
   /// 這個部門沒有在職員工時的空狀態全文。
@@ -236,27 +241,24 @@ class _PoolScreenState extends State<PoolScreen> {
   /// 分類磚列。筆數一律讀後端回的 `counts`，帶 category 查詢時 counts 仍是整池
   /// 的數字，所以切換分類不會讓別的磚數字跟著變。
   Widget _categoryRow(Map<String, int> counts) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
-      child: PoolFilterRow(
-        tiles: [
-          for (final category in _categories)
-            PoolFilterChip(
-              id: 'pool.category.${category.key}.chip',
-              label: category.label,
-              icon: category.icon,
-              iconBackground: category.iconBackground,
-              iconForeground: category.iconForeground,
-              selected: _selected == category.key,
-              countId: 'pool.category.${category.key}.count',
-              count: counts[category.key] ?? 0,
-              onTap: () {
-                _selected = category.key;
-                _fetch();
-              },
-            ),
-        ],
-      ),
+    return PoolFilterRow(
+      tiles: [
+        for (final category in _categories)
+          PoolFilterChip(
+            id: 'pool.category.${category.key}.chip',
+            label: category.label,
+            icon: category.icon,
+            iconBackground: category.iconBackground,
+            iconForeground: category.iconForeground,
+            selected: _selected == category.key,
+            countId: 'pool.category.${category.key}.count',
+            count: counts[category.key] ?? 0,
+            onTap: () {
+              _selected = category.key;
+              _fetch();
+            },
+          ),
+      ],
     );
   }
 }
@@ -280,8 +282,8 @@ class _HousekeepingPoolCard extends StatelessWidget {
   ///
   /// 兩段的語氣刻意不同：第一段只是提醒同仁，第二段已經驚動主管，紅色讓它在
   /// 一列標籤裡先被看到。
-  static const Map<String,
-      ({String idSuffix, String text, TmsTagTone tone})> _reminderTags = {
+  static const Map<String, ({String idSuffix, String text, TmsTagTone tone})>
+  _reminderTags = {
     'staff_reminded': (
       idSuffix: 'unaccepted-notified-peer',
       text: '未接 · 已提醒同仁',
@@ -306,6 +308,9 @@ class _HousekeepingPoolCard extends StatelessWidget {
     // `pool.card.{roomNo}--highlighted`。
     final cardId = 'pool.card.${item.roomNo}';
     final isPublicArea = item.roomNo == publicAreaRoomNo;
+    // 副標整行的設計是「{來源} · 約 N 分」，但 `GET /pool` 的 PoolItem 沒有
+    // 預估分鐘這個欄位，所以只寫得出來源那一段。後端補上欄位之前，這裡寧可
+    // 短一截也不湊一個數字：單卡上的分鐘數員工會拿來排今天要先做哪一間。
     final sourceLabel = housekeepingPoolSourceLabels[item.source];
     // 自動化規則開的單，退池原因欄位裝的是「規則引擎命中：{規則名}」，
     // 那是規則說明而不是誰退的；其他來源才是退池原因。
@@ -313,6 +318,11 @@ class _HousekeepingPoolCard extends StatelessWidget {
         ? '$cardId.rule-hit-tag'
         : '$cardId.return-reason';
     final reminderTag = _reminderTags[item.reminderStage];
+    final sameFloorTag = poolSameFloorTag(
+      id: '$cardId.same-floor-tag',
+      sameFloor: item.sameFloor,
+      priorityNotify: item.priorityNotify,
+    );
     final waitedTag = poolWaitedTag(
       waitedMinutes: item.waitedMinutes,
       reminderStage: item.reminderStage,
@@ -354,30 +364,18 @@ class _HousekeepingPoolCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TmsText.headline,
                   ),
+                  if (sourceLabel != null) ...[
+                    const SizedBox(height: TmsSpacing.xs),
+                    PoolCardSubtitle(id: '$cardId.subtitle', text: sourceLabel),
+                  ],
                   const SizedBox(height: TmsSpacing.xs),
                   PoolTagRow(
                     tags: [
-                      if (item.sameFloor)
-                        PoolCardField(
-                          id: '$cardId.same-floor-tag',
-                          text: '同樓層',
-                          tone: TmsTagTone.info,
-                        ),
-                      if (sourceLabel != null)
-                        PoolCardField(
-                          id: '$cardId.source-tag',
-                          text: sourceLabel,
-                        ),
+                      ?sameFloorTag,
                       if (item.returnReason != null)
                         PoolCardField(
                           id: reasonFieldId,
                           text: item.returnReason!,
-                        ),
-                      if (item.handoverNote != null)
-                        PoolCardField(
-                          id: '$cardId.handoff-progress',
-                          text: item.handoverNote!,
-                          tone: TmsTagTone.warn,
                         ),
                       if (reminderTag != null)
                         PoolCardField(
@@ -395,6 +393,14 @@ class _HousekeepingPoolCard extends StatelessWidget {
             ),
           ],
         ),
+        // 設計上接手的單還要在標籤列掛一顆「接手 {前一位負責人} 的進度」，
+        // 但 PoolItem 只給得出交代內容、給不出前一位負責人是誰。後端補上這個
+        // 欄位之前，整顆標籤不畫，交代內容由這塊備註自己講完。
+        if (item.handoverNote != null)
+          PoolCardNote(
+            id: '$cardId.handoff-progress',
+            text: item.handoverNote!,
+          ),
         PoolClaimButton(id: '$cardId.claim-button', onPressed: onClaim),
       ],
     );

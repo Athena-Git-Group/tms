@@ -14,7 +14,9 @@ import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 void main() {
   Widget host(Widget child, {double width = 375}) {
     return CupertinoApp(
-      home: Center(child: SizedBox(width: width, child: child)),
+      home: Center(
+        child: SizedBox(width: width, child: child),
+      ),
     );
   }
 
@@ -27,10 +29,10 @@ void main() {
           children: [
             PoolTagRow(
               tags: const [
-                PoolCardField(id: 'pool.card.317.source-tag', text: '請假退回'),
+                PoolCardField(id: 'pool.card.317.return-reason', text: '小陳請假'),
                 PoolCardField(
-                  id: 'pool.card.317.handoff-progress',
-                  text: '浴室已刷完，還沒換床單',
+                  id: 'pool.card.317.status-tag--unaccepted-notified-peer',
+                  text: '未接 · 已提醒同仁',
                   tone: TmsTagTone.warn,
                 ),
               ],
@@ -40,14 +42,130 @@ void main() {
       ),
     );
 
-    expect(find.text('請假退回'), findsOneWidget);
-    expect(find.text('浴室已刷完，還沒換床單'), findsOneWidget);
+    expect(find.text('小陳請假'), findsOneWidget);
+    expect(find.text('未接 · 已提醒同仁'), findsOneWidget);
     expect(
-      tester.getSemantics(find.text('浴室已刷完，還沒換床單')).identifier,
-      'pool.card.317.handoff-progress',
+      tester.getSemantics(find.text('未接 · 已提醒同仁')).identifier,
+      'pool.card.317.status-tag--unaccepted-notified-peer',
     );
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+
+  // Main.dc.html:279 的副標行：來源與預估時間寫成一整行 15pt 灰字，排不下就
+  // 截字，不是一顆膠囊標籤。
+  testWidgets('副標是一整行灰字，定位節點讀得到來源', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      host(
+        width: 200,
+        const PoolCardSubtitle(id: 'pool.card.317.subtitle', text: '請假退回'),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.text('請假退回'));
+    expect(text.style?.fontSize, 15);
+    expect(text.style?.color, TmsColors.secondaryLabel);
+    expect(text.maxLines, 1);
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(
+      tester.getSemantics(find.text('請假退回')).identifier,
+      'pool.card.317.subtitle',
+    );
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  // Main.dc.html:290 的備註塊：整寬灰底、圓角 12，文案帶「做到哪：」開頭。
+  testWidgets('接手進度是卡內整塊備註，文案帶「做到哪：」', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      host(
+        const PoolCardNote(
+          id: 'pool.card.317.handoff-progress',
+          text: '浴室已刷完，還沒換床單',
+        ),
+      ),
+    );
+
+    expect(find.text('做到哪：浴室已刷完，還沒換床單'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text('做到哪：浴室已刷完，還沒換床單')).identifier,
+      'pool.card.317.handoff-progress',
+    );
+    final box = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.text('做到哪：浴室已刷完，還沒換床單'),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    final decoration = box.decoration! as BoxDecoration;
+    expect(decoration.color, TmsColors.groupedBackground);
+    expect(decoration.borderRadius, BorderRadius.circular(TmsRadius.md));
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  // Main.dc.html:4251-4252：優先通知要同樓層才講，兩種說法共用卡上同一個位置。
+  testWidgets('同樓層標籤：優先通知是品牌實色，一般是淺色，跨樓層不畫', (tester) async {
+    expect(
+      poolSameFloorTag(id: 'x', sameFloor: false, priorityNotify: true),
+      isNull,
+    );
+
+    for (final (priorityNotify, label, tone) in const [
+      (true, '優先通知 · 同樓層', TmsTagTone.brand),
+      (false, '同樓層 · 離你最近', TmsTagTone.info),
+    ]) {
+      final tag =
+          poolSameFloorTag(
+                id: 'pool.card.317.same-floor-tag',
+                sameFloor: true,
+                priorityNotify: priorityNotify,
+              )!
+              as PoolCardField;
+      expect(tag.text, label);
+      expect(tag.tone, tone);
+    }
+
+    await tester.pumpWidget(
+      host(
+        PoolTagRow(
+          tags: [
+            poolSameFloorTag(
+              id: 'pool.card.317.same-floor-tag',
+              sameFloor: true,
+              priorityNotify: true,
+            )!,
+          ],
+        ),
+      ),
+    );
+    expect(find.text('優先通知 · 同樓層'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  // Main.dc.html:249 的 `gap: 16px`：單卡上下各 8，相鄰兩卡之間就是 16。
+  testWidgets('相鄰兩張單卡之間是 16', (tester) async {
+    await tester.pumpWidget(
+      host(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            PoolCard(id: 'pool.card.317', children: [Text('317')]),
+            PoolCard(id: 'pool.card.313', children: [Text('313')]),
+          ],
+        ),
+      ),
+    );
+
+    final first = tester.getRect(find.text('317'));
+    final second = tester.getRect(find.text('313'));
+    // 卡內上下內距各 16，兩卡之間的外距 16 夾在中間。
+    expect(second.top - first.bottom, 16 + 16 + 16);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('房號方塊：四個字的區域名縮字級，不撐破 56pt 的方塊', (tester) async {

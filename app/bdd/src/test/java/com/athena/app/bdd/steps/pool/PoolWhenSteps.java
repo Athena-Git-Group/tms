@@ -47,4 +47,18 @@ public class PoolWhenSteps {
         world.tapTestId("pool.category." + key + ".chip", SCREEN_TIMEOUT);
         context.selectCategory(key);
     }
+
+    /**
+     * 怎麼做：點空狀態底下那顆文字按鈕，等列表更新。
+     * accessibility id：{@code pool.empty-state.action}。
+     *
+     * <p>待認領的空狀態只有一顆按鈕，按下去就是把分類切回全部，所以情境裡選中
+     * 的分類也跟著回到全部——後面的列表斷言要拿不帶分類的查詢去讀回。
+     */
+    @當("{string} 點待認領空狀態的動作鈕")
+    public void tapPoolEmptyStateAction(String staffName) {
+        world.ensureOnPool(world.staff(staffName));
+        world.tapTestId("pool.empty-state.action", SCREEN_TIMEOUT);
+        context.selectCategory("all");
+    }
 }
