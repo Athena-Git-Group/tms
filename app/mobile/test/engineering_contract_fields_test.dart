@@ -147,18 +147,18 @@ void main() {
   });
 
   group('房務待認領', () {
-    testWidgets('等待分鐘缺席時單卡維持現在的樣子，分類磚的 0 照畫', (tester) async {
+    testWidgets('等待分鐘缺席時單卡維持現在的樣子，筆數 0 的分類磚沒有徽章', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpHousekeepingPool(tester, _housekeepingPool());
 
       expect(find.textContaining('等 '), findsNothing);
       expect(find.text('剛進來'), findsNothing);
-      // 房務的分類磚與工務相反：筆數是 0 也要畫出來，那是驗收要讀的節點。
+      // 筆數 0 的分類連徽章節點都不存在（Main.dc.html:4232 的 `hasCount`）。
       expect(
         find.bySemanticsIdentifier('pool.category.cleaning.count'),
-        findsOneWidget,
+        findsNothing,
       );
-      expect(find.text('0'), findsNWidgets(2));
+      expect(find.text('0'), findsNothing);
       handle.dispose();
       expect(tester.takeException(), isNull);
     });

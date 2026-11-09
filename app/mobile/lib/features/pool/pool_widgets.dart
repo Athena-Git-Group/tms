@@ -198,10 +198,13 @@ class PoolClaimButton extends StatelessWidget {
 
 /// 一格待認領分類磚。
 ///
-/// [count] 有值時磚上多一顆數量徽章；再給 [countId]，徽章就是一個能被單獨
-/// 定位、讀得出數字的節點。房務的分類磚要逐類別驗筆數，所以兩個都給；工務
-/// 的分流磚沒有斷言在讀，只給 [count]。點磚一律是重打一次查詢，不在本機過
-/// 濾，所以這個元件只負責外觀與回呼。
+/// [count] 大於 0 時磚上多一顆數量徽章，0 或不給值時沒有徽章。再給 [countId]，
+/// 徽章就是一個能被單獨定位、讀得出數字的節點。房務的分類磚要逐類別驗筆數，
+/// 所以兩個都給；工務的分流磚沒有斷言在讀，只給 [count]。點磚一律是重打一次
+/// 查詢，不在本機過濾，所以這個元件只負責外觀與回呼。
+///
+/// [unselectedBackground] 透傳給 [TmsCategoryTile]，由呼叫端決定磚沒選中時疊
+/// 在什麼底色上。
 class PoolFilterChip extends StatelessWidget {
   const PoolFilterChip({
     super.key,
@@ -214,6 +217,7 @@ class PoolFilterChip extends StatelessWidget {
     required this.onTap,
     this.countId,
     this.count,
+    this.unselectedBackground,
   });
 
   final String id;
@@ -225,19 +229,19 @@ class PoolFilterChip extends StatelessWidget {
   final VoidCallback onTap;
   final String? countId;
   final int? count;
+  final Color? unselectedBackground;
 
   @override
   Widget build(BuildContext context) {
     final countValue = count;
     Widget? badge;
-    if (countId != null) {
-      badge = TmsSemantics(
-        id: countId!,
-        label: '${countValue ?? 0}',
-        child: TmsCountBadge(count: countValue ?? 0),
-      );
-    } else if (countValue != null) {
+    // 筆數 0 的分類不掛徽章，理由見 [TmsCountBadge] 的類別註解。
+    if (countValue != null && countValue > 0) {
       badge = TmsCountBadge(count: countValue);
+      final id = countId;
+      if (id != null) {
+        badge = TmsSemantics(id: id, label: '$countValue', child: badge);
+      }
     }
     return TmsSemantics(
       id: id,
@@ -249,6 +253,7 @@ class PoolFilterChip extends StatelessWidget {
         selected: selected,
         onTap: onTap,
         badge: badge,
+        unselectedBackground: unselectedBackground,
       ),
     );
   }

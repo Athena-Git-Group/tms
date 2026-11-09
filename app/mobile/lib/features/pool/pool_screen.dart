@@ -291,9 +291,11 @@ class _HousekeepingPoolCard extends StatelessWidget {
       reminderStage: item.reminderStage,
     );
 
+    final categoryAppearance = tmsCategoryAppearance(item.category);
     final roomSquare = TmsRoomSquare(
-      type: item.category,
       where: isPublicArea ? publicAreaRoomNo : item.roomNo,
+      label: categoryAppearance.label,
+      palette: categoryAppearance.palette,
     );
 
     return PoolCard(

@@ -371,7 +371,15 @@ class _InHandTicketRow extends StatelessWidget {
           child: ExcludeSemantics(
             child: Row(
               children: [
-                TmsRoomSquare(type: 'repair', where: place, size: 48),
+                TmsCategorySquare(
+                  where: place,
+                  palette: tmsRepairSquarePalette(
+                    isUrgent: ticket.isUrgent,
+                    isDone: ticket.state == 'done',
+                  ),
+                  // 「公共區域」四個字用 16pt 會撐破 48pt 的方塊。
+                  fontSize: ticket.roomNo == null ? 13 : 16,
+                ),
                 const SizedBox(width: TmsSpacing.md),
                 Expanded(
                   child: Column(

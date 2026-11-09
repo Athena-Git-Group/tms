@@ -473,7 +473,10 @@ class _TaskRow extends StatelessWidget {
           child: ExcludeSemantics(
             child: Row(
               children: [
-                TmsCategorySquare(type: task.type),
+                TmsCategorySquare(
+                  where: task.roomNo,
+                  palette: tmsCategoryAppearance(task.type).palette,
+                ),
                 const SizedBox(width: TmsSpacing.md),
                 Expanded(
                   child: Column(

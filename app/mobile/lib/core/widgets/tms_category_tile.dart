@@ -2,21 +2,34 @@ import 'package:flutter/cupertino.dart';
 
 import '../theme.dart';
 
-/// 紅色數量徽章：分類磚右上角那顆數字。
+/// 紅色數量徽章：分類磚右上角、分頁列圖示右上角那顆數字。
 ///
-/// 數字永遠畫出來，就算是 0 也一樣。原型在 0 的時候把徽章藏起來，但那是給人
-/// 看的原型；這個數字同時是驗收要讀的值（每一格分類磚都要對得上後端回的
-/// counts），藏起來等於讀不到，所以這裡選擇顯示。
+/// 兩處的規格差在一號尺寸，分類磚是 20pt 高配 12pt 數字
+/// （`Main.dc.html:264`），分頁列是 18pt 高配 11pt 數字
+/// （`Main.dc.html:1136`）。差別小到不值得拆成兩個元件，但也不該讓呼叫端各自
+/// 傳一組尺寸數字，所以用兩個具名建構子把規格收在這裡。
+///
+/// 計數是 0 的時候呼叫端不要畫這顆徽章，由呼叫端自己判斷：一顆寫著 0 的紅點
+/// 會讓員工以為有東西等著處理。
 class TmsCountBadge extends StatelessWidget {
-  const TmsCountBadge({super.key, required this.count});
+  /// 分類磚上的徽章。
+  const TmsCountBadge({super.key, required this.count}) : _onTabBar = false;
+
+  /// 分頁列圖示上的徽章。
+  const TmsCountBadge.tabBar({super.key, required this.count})
+    : _onTabBar = true;
 
   final int count;
 
+  final bool _onTabBar;
+
   @override
   Widget build(BuildContext context) {
+    final diameter = _onTabBar ? 18.0 : 20.0;
     return Container(
-      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-      padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.xs2),
+      constraints: BoxConstraints(minWidth: diameter),
+      height: diameter,
+      padding: EdgeInsets.symmetric(horizontal: _onTabBar ? 5 : TmsSpacing.xs2),
       alignment: Alignment.center,
       decoration: const BoxDecoration(
         color: TmsColors.systemRed,
@@ -27,7 +40,9 @@ class TmsCountBadge extends StatelessWidget {
         '$count',
         maxLines: 1,
         softWrap: false,
-        style: TmsText.caption1.copyWith(color: TmsColors.brandOnPrimary),
+        style: (_onTabBar ? TmsText.caption2 : TmsText.caption1).copyWith(
+          color: TmsColors.brandOnPrimary,
+        ),
       ),
     );
   }
@@ -48,6 +63,7 @@ class TmsCategoryTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.badge,
+    this.unselectedBackground,
   });
 
   final String label;
@@ -56,6 +72,15 @@ class TmsCategoryTile extends StatelessWidget {
   final Color iconForeground;
   final bool selected;
   final VoidCallback onTap;
+
+  /// 沒選中時磚的底色；不給值就是全透明。
+  ///
+  /// 房務的磚疊在白底上，不給底色；工務的磚疊在淺灰底上，要靠一層半透明白
+  /// 才看得出磚的範圍，那一側傳 [translucentBackground]。
+  final Color? unselectedBackground;
+
+  /// 工務分流磚沒選中時的底色（`Main.dc.html:4091` 的 `rgba(255,255,255,.55)`）。
+  static const Color translucentBackground = Color(0x8CFFFFFF);
 
   /// 右上角的數量徽章；不給值時不畫。
   ///
@@ -76,14 +101,14 @@ class TmsCategoryTile extends StatelessWidget {
         TmsSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: selected ? TmsColors.cardBackground : null,
+        color: selected ? TmsColors.cardBackground : unselectedBackground,
         borderRadius: BorderRadius.circular(TmsRadius.tile),
-        // 沒選中時外環用透明色而不是不畫：外環有沒有佔位會差 2pt，不畫的話
-        // 點下去整格內容會往內縮一下。
-        border: Border.all(
-          color: selected ? TmsColors.brandPrimary : const Color(0x00000000),
-          width: 2,
-        ),
+        // 外環長在磚的外面而不是內側，磚的內容框因此不隨選中與否移動
+        // （`Main.dc.html:4232` 的 `box-shadow: 0 0 0 2px`）。畫成內縮邊框的話，
+        // 點一下整格圖示與標籤會往內跳 2pt。
+        boxShadow: selected
+            ? const [BoxShadow(color: TmsColors.brandPrimary, spreadRadius: 2)]
+            : null,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -119,7 +144,8 @@ class TmsCategoryTile extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 tile,
-                Positioned(top: 0, right: 2, child: badge!),
+                // 徽章上緣凸出磚外 4pt（`Main.dc.html:264`）。
+                Positioned(top: -4, right: 2, child: badge!),
               ],
             ),
     );
