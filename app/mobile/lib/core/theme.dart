@@ -548,6 +548,12 @@ abstract final class TmsText {
 /// [screenEdge] 是全域規則：所有捲動容器的左右邊距都是 16，列表群組內的列再縮
 /// 16，所以列文字離畫面邊緣共 32。
 abstract final class TmsSpacing {
+  /// 連線狀態列標題與說明之間（`Main.dc.html:84`、`96`）。
+  ///
+  /// 這是整套間距的下限，目前只有那一處用得上。這兩行字靠行高就已經分開，留白
+  /// 只負責不讓它們黏在一起。別處要兩行文字的間距請用 [xxs]。
+  static const double xxxs = 1;
+
   /// 同一欄位內上下兩行文字之間。
   static const double xxs = 2;
 

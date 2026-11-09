@@ -165,12 +165,7 @@ class _PoolScreenState extends State<PoolScreen> {
       // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
       // 員工要先知道現在連不上，而不是按了認領才發現。
       const SystemStatusBar(
-        padding: EdgeInsets.fromLTRB(
-          TmsSpacing.screenEdge,
-          0,
-          TmsSpacing.screenEdge,
-          TmsSpacing.md,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
       ),
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),

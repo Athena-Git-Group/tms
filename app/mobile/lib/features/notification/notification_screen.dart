@@ -125,9 +125,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   List<Widget> _buildContent() {
     // 連線狀態列固定在內容最上方：離線時通知清單停在最後一次抓到的那一份，
     // 員工得先知道這一屏可能不是最新的，才不會以為「沒有新通知」。
-    const statusBar = SystemStatusBar(
-      padding: EdgeInsets.only(bottom: TmsSpacing.md),
-    );
+    const statusBar = SystemStatusBar();
     // 「全部標為已讀」只在還有未讀時出現（`Main.dc.html:344`）：全部都讀過之後
     // 這顆按鈕按了什麼也不會變，留著只是讓人以為還有事情沒做。
     final header = _Header(
