@@ -233,9 +233,7 @@ class MeScreen extends StatelessWidget {
             children: [
               // 連線狀態列固定在內容最上方：登出與各項設定都要連得上後端，
               // 員工要先知道現在的連線狀況。
-              const SystemStatusBar(
-                padding: EdgeInsets.only(bottom: TmsSpacing.md),
-              ),
+              const SystemStatusBar(),
               _IdentityCard(onTap: () => _showNotAvailable(context, '個人資料')),
               const SizedBox(height: TmsSpacing.xl),
               _WorkTiles(

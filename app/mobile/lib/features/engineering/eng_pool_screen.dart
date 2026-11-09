@@ -152,18 +152,18 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 捲動內容的上緣留白。用 ListView 的那幾頁寫在 `padding` 的 top，這一頁
+        // 的內容是 `Column`，所以自己擺一段。
+        const SizedBox(height: TmsSpacing.md),
         // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
         // 員工要先知道現在連不上，而不是按了認領才發現。
         const SystemStatusBar(
-          padding: EdgeInsets.fromLTRB(
-            TmsSpacing.screenEdge,
-            TmsSpacing.md,
-            TmsSpacing.screenEdge,
-            0,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
+          // 上緣不留白：磚列上方那一段由連線狀態列的
+          // `SystemStatusBar.contentGap` 帶，這裡再留一次會疊成兩段。
+          padding: const EdgeInsets.only(bottom: TmsSpacing.md),
           // 徽章只掛在急件、房務報修、櫃檯三格，數字一律讀後端回的 counts，
           // 不在本機數列表：帶篩選查詢時列表只有該分流的單，本機數出來的是
           // 「這一頁有幾張」而不是「這個分流有幾張」。「全部」那格沒有徽章，

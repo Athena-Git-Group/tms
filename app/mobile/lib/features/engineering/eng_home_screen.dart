@@ -56,7 +56,7 @@ class EngHomeScreen extends StatelessWidget {
             children: const [
               // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
               // 連線不穩定，不必等某個操作失敗才發現。
-              SystemStatusBar(padding: EdgeInsets.only(bottom: TmsSpacing.md)),
+              SystemStatusBar(),
               _LoadFailureNotice(),
               _GreetingRow(),
               SizedBox(height: TmsSpacing.lg),

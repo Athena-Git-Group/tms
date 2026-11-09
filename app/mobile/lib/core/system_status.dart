@@ -40,21 +40,36 @@ const String offlineDescription = '只能完成進行中的單';
 class SystemStatusBar extends StatelessWidget {
   const SystemStatusBar({super.key, this.padding = EdgeInsets.zero});
 
-  /// 狀態列四周的留白，只在真的有一列要顯示時才生效。
+  /// 狀態列上方與左右的留白，只在真的有一列要顯示時才生效。
   ///
   /// 擺進沒有左右內距的版面時（分頁的 `Column` 直接貼著螢幕邊），狀態列得自
   /// 己補上畫面邊距，否則它會比底下每一塊內容都寬一圈。留白寫在這裡而不是讓
   /// 呼叫端包一層 `Padding`：包在外面的那層在連線正常時仍然佔著高度，畫面頂
   /// 端會空出一條沒有東西的縫。
+  ///
+  /// 下緣留白不吃這個值，見 [contentGap]。
   final EdgeInsets padding;
+
+  /// 狀態列與它下面那一塊內容的距離（`Main.dc.html:76`）。
+  ///
+  /// 這段留白由元件自己帶，不由各畫面傳進來。原型的捲動容器用 `gap: 16px`
+  /// 一視同仁地撐開每一塊內容，所以這個值是狀態列在版面裡的位置決定的，不是
+  /// 各畫面的選擇。交給呼叫端去加的話，七個掛點就會長出七個值，而且新畫面掛
+  /// 上狀態列時最容易漏掉的就是這一段。
+  static const double contentGap = TmsSpacing.lg;
 
   @override
   Widget build(BuildContext context) {
+    assert(
+      padding.bottom == 0,
+      '狀態列的下緣留白是 contentGap，呼叫端再給一次會疊成兩段',
+    );
+    final barPadding = padding + const EdgeInsets.only(bottom: contentGap);
     return ValueListenableBuilder<bool>(
       valueListenable: ConnectionStatus.instance.offline,
       builder: (context, offline, _) {
         if (offline) {
-          return Padding(padding: padding, child: const _OfflineBar());
+          return Padding(padding: barPadding, child: const _OfflineBar());
         }
         return ValueListenableBuilder<bool>(
           valueListenable: ConnectionStatus.instance.unstable,
@@ -63,7 +78,7 @@ class SystemStatusBar extends StatelessWidget {
               return const SizedBox.shrink();
             }
             return Padding(
-              padding: padding,
+              padding: barPadding,
               child: _StatusStrip(
                 id: 'system.connection-issue-bar',
                 icon: CupertinoIcons.exclamationmark_triangle,
@@ -229,7 +244,7 @@ class _StatusBarFrame extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 title,
-                const SizedBox(height: TmsSpacing.xxs),
+                const SizedBox(height: TmsSpacing.xxxs),
                 description,
               ],
             ),
