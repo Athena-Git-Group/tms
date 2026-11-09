@@ -148,7 +148,7 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
                 for (final category in repairCategories)
                   TmsSemantics(
                     id: 'repair.category.${category.key}.chip',
-                    child: TmsOptionRow(
+                    child: TmsOptionRow.category(
                       title: Text(category.label),
                       selected: _category == category.key,
                       onTap: () {

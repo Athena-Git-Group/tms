@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 import 'tms_card.dart';
@@ -17,6 +17,7 @@ class TmsGroupedSection extends StatelessWidget {
     super.key,
     this.header,
     this.style = TmsCardStyle.grouped,
+    this.trailingDivider = false,
     required this.children,
   });
 
@@ -28,22 +29,32 @@ class TmsGroupedSection extends StatelessWidget {
   /// 裝它的面板還圓。
   final TmsCardStyle style;
 
+  /// 最後一列底下要不要也畫一條線。
+  ///
+  /// 原型兩種都有。設定列、通知列這類一組就是一組的清單，最後一列不畫
+  /// （`Main.dc.html:4572`）。面板裡的選項清單與清潔 SOP 清單每一列都畫，含
+  /// 最後一列（`Main.dc.html:1450`、`1461`、`1601`、`1312`）。差別在於後者底
+  /// 下還會接補充說明或下一組，那條底線是在說這一組到這裡為止。
+  final bool trailingDivider;
+
   /// 群組裡的列，由上到下。分隔線由這裡插，呼叫端不用自己畫。
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
+    const divider = SizedBox(
+      height: TmsSize.hairline,
+      child: ColoredBox(color: TmsColors.separator),
+    );
     final rows = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        rows.add(
-          const SizedBox(
-            height: TmsSize.hairline,
-            child: ColoredBox(color: TmsColors.separator),
-          ),
-        );
+        rows.add(divider);
       }
       rows.add(children[i]);
+    }
+    if (trailingDivider && children.isNotEmpty) {
+      rows.add(divider);
     }
     final radius = style == TmsCardStyle.inSheet
         ? TmsRadius.cardInSheet
@@ -127,11 +138,7 @@ class TmsGroupedRow extends StatelessWidget {
           ),
           if (showChevron) ...[
             const SizedBox(width: TmsSpacing.sm),
-            const Icon(
-              CupertinoIcons.chevron_forward,
-              size: TmsSize.chevron,
-              color: TmsColors.chevron,
-            ),
+            const TmsChevron(),
           ],
         ],
       ),
@@ -145,4 +152,46 @@ class TmsGroupedRow extends StatelessWidget {
       child: row,
     );
   }
+}
+
+/// 列尾那個「點了會換頁」的箭頭（`Main.dc.html:421`）。
+///
+/// 自己畫而不用 `CupertinoIcons.chevron_forward`。原型的箭頭是 8 × 13 的描邊
+/// 圖形，高比寬多一半。系統圖示的字框是正方形，畫出來矮而胖，筆畫粗細也由字
+/// 型決定，調不到原型的 2。
+class TmsChevron extends StatelessWidget {
+  const TmsChevron({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(
+      size: Size(TmsSize.chevronWidth, TmsSize.chevronHeight),
+      painter: _ChevronPainter(),
+    );
+  }
+}
+
+class _ChevronPainter extends CustomPainter {
+  const _ChevronPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 原型的 path 畫在 8 × 13 的 viewBox 上：M1.5 1.5 l5 5 -5 5。
+    final path = Path()
+      ..moveTo(1.5, 1.5)
+      ..lineTo(6.5, 6.5)
+      ..lineTo(1.5, 11.5);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = TmsSize.chevronStroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = TmsColors.chevron,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ChevronPainter oldDelegate) => false;
 }

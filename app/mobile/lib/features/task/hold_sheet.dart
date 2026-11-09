@@ -173,11 +173,12 @@ class _HoldSheetState extends State<HoldSheet> {
         children: [
           TmsGroupedSection(
             style: TmsCardStyle.inSheet,
+            trailingDivider: true,
             children: [
               for (final option in options)
                 TmsSemantics(
                   id: 'hold.reason.$option',
-                  child: TmsOptionRow(
+                  child: TmsOptionRow.reason(
                     title: Text(option),
                     selected: _selectedOption == option,
                     onTap: () => setState(() => _selectedOption = option),

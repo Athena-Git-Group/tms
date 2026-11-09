@@ -315,11 +315,12 @@ class _RepairSheetState extends State<RepairSheet> {
     return TmsGroupedSection(
       header: '問題類別',
       style: TmsCardStyle.inSheet,
+      trailingDivider: true,
       children: [
         for (final category in repairCategories)
           TmsSemantics(
             id: 'repair.category.${category.key}.chip',
-            child: TmsOptionRow(
+            child: TmsOptionRow.category(
               title: Text(category.label),
               selected: _category == category.key,
               onTap: () => _pickCategory(category.key),

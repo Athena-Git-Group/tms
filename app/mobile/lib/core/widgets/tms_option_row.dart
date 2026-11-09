@@ -1,68 +1,112 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 
-/// 這一列尾端要畫什麼。
-enum TmsOptionAccessory {
-  /// 選中時畫一個品牌色的勾；沒選中時尾端留白。用在「從幾個裡面挑一個」的
-  /// 清單（延後原因、報修類別）。
-  check,
-
-  /// 永遠畫一個 chevron。用在「點了會往下走一步」的清單（查一下的建議問題）。
-  chevron,
-
-  /// 尾端什麼都不畫。
-  none,
-}
-
-/// 分組清單裡可以點選的一列：左邊是選項文字（必要時下面再一行小字），右邊是
-/// 勾或 chevron。
+/// 面板裡「列出幾個選項讓員工挑」的一列。
 ///
-/// 面板裡所有「列出幾個選項讓員工挑」的地方都用這一個：延後／中斷原因、報修
-/// 類別、查一下的建議問題。選中與否靠尾端那個勾來說，不靠字重——只有字重差別
-/// 的話，員工在走廊的光線下根本看不出自己到底選了哪一列。
+/// 設計原型有四種這樣的清單。每一種的列高、上下內距、副標字級都是一組綁在一
+/// 起的值，不是可以任意組合的參數。所以這裡開四個具名建構子，一個對一種清單，
+/// 而不是開一組參數讓呼叫端自己配。44 高的列掛一行副標、建議問題列尾端跑出一
+/// 個勾，這些組合在原型裡不存在，也就不該在這個元件的介面裡存在。
 ///
-/// 一列最矮 52pt（原型規格，比一般設定列的 44 高一點：這些列是現場戴著手套
-/// 單手點的）。
+/// 列高差三種是刻意的。原因列 52 是中斷流程時單手點的，類別列 44 是接在原因
+/// 之後的第二層選擇、照 iOS 一般列高，建議問題列 56 要放兩行字。
 ///
-/// [title] 與 [subtitle] 收的是 widget 不是字串：有些列的文字本身要掛
-/// accessibility id（查一下的建議問題與範圍各掛一個），呼叫端得有地方把那層
-/// 包進來。字級與顏色由這一列統一指定，傳進來的 `Text` 不必自己帶 style。
+/// [title] 與副標收 widget 不收字串。有些列的文字本身要掛 accessibility id，
+/// 例如建議問題與它的範圍各掛一個，呼叫端得有地方把那層包進來。字級與顏色由
+/// 這一列統一指定，傳進來的 `Text` 不必自己帶 style。
 class TmsOptionRow extends StatelessWidget {
-  const TmsOptionRow({
+  /// 延後／中斷原因列（`Main.dc.html:1450`）。
+  ///
+  /// 原型點一下就直接送出，不留選中狀態，所以列尾什麼都不畫。這個畫面目前還
+  /// 是先選一列、再按確認鈕，中間那段沒有任何回饋員工會不知道自己選到了，
+  /// [selected] 就是補這段回饋用的。互動改成點了就送出之後，呼叫端把它拿掉，
+  /// 這一列才完全等於原型。
+  const TmsOptionRow.reason({
     super.key,
     required this.title,
     required this.onTap,
-    this.subtitle,
     this.selected = false,
-    this.accessory = TmsOptionAccessory.check,
-  });
+  }) : subtitle = null,
+       _minHeight = 52,
+       _verticalPadding = 0,
+       _subtitleStyle = null,
+       _subtitleGap = 0,
+       _checkGap = TmsSpacing.sm;
+
+  /// 報修問題類別列（`Main.dc.html:1461`）。
+  const TmsOptionRow.category({
+    super.key,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+  }) : subtitle = null,
+       _minHeight = 44,
+       _verticalPadding = 0,
+       _subtitleStyle = null,
+       _subtitleGap = 0,
+       _checkGap = TmsSpacing.sm;
+
+  /// 「查一下」建議問題列（`Main.dc.html:1601`）。
+  ///
+  /// 點了會往下走一步，但列尾不畫 chevron，原型這裡刻意只有文字。一排問題各
+  /// 自帶一個箭頭，箭頭就變成背景雜訊，讀的人反而要先過濾掉它才看得到問題。
+  const TmsOptionRow.suggestion({
+    super.key,
+    required this.title,
+    required Widget scope,
+    required this.onTap,
+  }) : subtitle = scope,
+       selected = false,
+       _minHeight = 56,
+       _verticalPadding = TmsSpacing.sm2,
+       _subtitleStyle = TmsText.caption1Regular,
+       _subtitleGap = TmsSpacing.xxs,
+       _checkGap = 0;
+
+  /// 工務完修回報的處理結果列（`Main.dc.html:2179`）。
+  const TmsOptionRow.result({
+    super.key,
+    required this.title,
+    required Widget detail,
+    required this.selected,
+    required this.onTap,
+  }) : subtitle = detail,
+       _minHeight = 52,
+       _verticalPadding = TmsSpacing.sm,
+       _subtitleStyle = TmsText.footnote,
+       _subtitleGap = 1,
+       _checkGap = TmsSpacing.sm2;
 
   final Widget title;
 
-  /// 選項底下那一行補充說明（查一下的「範圍」）；不給就只有一行。
+  /// 選項底下那一行補充說明。只有建議問題列與處理結果列有。
   final Widget? subtitle;
 
+  /// 選中時列尾畫一個品牌色的勾。選中與否只靠這個勾表示，不動字重。只有字重
+  /// 差別的話，員工在走廊的光線下看不出自己選了哪一列。
   final bool selected;
-
-  final TmsOptionAccessory accessory;
 
   final VoidCallback? onTap;
 
-  /// 原型的面板選項列高度。
-  static const double minHeight = 52;
+  final double _minHeight;
+  final double _verticalPadding;
+  final TextStyle? _subtitleStyle;
+  final double _subtitleGap;
+  final double _checkGap;
 
   @override
   Widget build(BuildContext context) {
     final sub = subtitle;
+    final subStyle = _subtitleStyle;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        constraints: const BoxConstraints(minHeight: minHeight),
-        padding: const EdgeInsets.symmetric(
+        constraints: BoxConstraints(minHeight: _minHeight),
+        padding: EdgeInsets.symmetric(
           horizontal: TmsSpacing.screenEdge,
-          vertical: TmsSpacing.sm2,
+          vertical: _verticalPadding,
         ),
         color: TmsColors.cardBackground,
         child: Row(
@@ -73,32 +117,62 @@ class TmsOptionRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DefaultTextStyle(style: TmsText.body, child: title),
-                  if (sub != null) ...[
-                    const SizedBox(height: TmsSpacing.xxs),
-                    DefaultTextStyle(style: TmsText.footnote, child: sub),
+                  if (sub != null && subStyle != null) ...[
+                    SizedBox(height: _subtitleGap),
+                    DefaultTextStyle(style: subStyle, child: sub),
                   ],
                 ],
               ),
             ),
-            if (accessory == TmsOptionAccessory.check && selected) ...[
-              const SizedBox(width: TmsSpacing.sm),
-              const Icon(
-                CupertinoIcons.check_mark,
-                size: 20,
-                color: TmsColors.brandPrimary,
-              ),
-            ],
-            if (accessory == TmsOptionAccessory.chevron) ...[
-              const SizedBox(width: TmsSpacing.sm),
-              const Icon(
-                CupertinoIcons.chevron_forward,
-                size: TmsSize.chevron,
-                color: TmsColors.chevron,
-              ),
+            if (selected) ...[
+              SizedBox(width: _checkGap),
+              const TmsOptionCheck(),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+/// 選項列尾端那個勾（`Main.dc.html:1463`）。
+///
+/// 自己畫而不用 `CupertinoIcons.check_mark`。原型的勾是 16 × 16 的描邊圖形，
+/// 筆畫粗細與兩端的圓頭都寫死在 SVG 裡。字形的筆畫粗細由字型決定，調不到。
+class TmsOptionCheck extends StatelessWidget {
+  const TmsOptionCheck({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(
+      size: Size(TmsSize.optionCheck, TmsSize.optionCheck),
+      painter: _CheckPainter(),
+    );
+  }
+}
+
+class _CheckPainter extends CustomPainter {
+  const _CheckPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 原型的 path 畫在 24 格的 viewBox 上：M5 12.5 l4.5 4.5 L19 7.5。
+    final scale = size.width / 24;
+    final path = Path()
+      ..moveTo(5 * scale, 12.5 * scale)
+      ..lineTo(9.5 * scale, 17 * scale)
+      ..lineTo(19 * scale, 7.5 * scale);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = TmsSize.optionCheckStroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = TmsColors.brandPrimary,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CheckPainter oldDelegate) => false;
 }

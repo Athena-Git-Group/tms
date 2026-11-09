@@ -187,12 +187,12 @@ void main() {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TmsOptionRow(
+            TmsOptionRow.reason(
               title: const Text('請勿打擾'),
               selected: true,
               onTap: () {},
             ),
-            TmsOptionRow(
+            TmsOptionRow.reason(
               title: const Text('住客還在房內'),
               onTap: () {},
             ),
@@ -201,7 +201,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(CupertinoIcons.check_mark), findsOneWidget);
+    expect(find.byType(TmsOptionCheck), findsOneWidget);
   });
 
   testWidgets('照片格四態各畫各的，失敗時才出現重試', (tester) async {
