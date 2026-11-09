@@ -133,12 +133,18 @@ public class RepairGivenSteps {
      * 怎麼做：測試後門的 {@code /drop-write-response} 讓前幾次開單請求在後端已處理後才
      * 逾時，迫使 App 用同一個 {@code Idempotency-Key} 重送。
      *
+     * <p>注入限定在 {@code POST /repair-tickets} 這條路徑上。要重送的是開單請求，不是
+     * 照片位置：離線押著的那一筆動作送出時會先建立每張照片的上傳位置，那也是一個帶
+     * {@code Idempotency-Key} 的寫入，不限定路徑的話前幾次額度全被照片那一步吃掉，
+     * 開單請求一次都沒有重送過，這條 Rule 就只是看起來綠的。
+     *
      * <p>不用在送出前攔下請求的做法：那樣後端一張單都沒有，重送幾次都只會建立一張，
      * 驗不到「後端只認列一次」。
      */
     @假設("恢復連線後的前 {int} 次送出會因網路不穩而重送")
     public void firstRetriesAfterReconnectAreFlaky(int retryCount) {
-        world.postBackdoorJson("/drop-write-response", "{\"count\":" + retryCount + "}");
+        world.postBackdoorJson("/drop-write-response",
+                "{\"count\":" + retryCount + ",\"pathPrefix\":\"/repair-tickets\"}");
     }
 
     /**

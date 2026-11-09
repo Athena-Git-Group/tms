@@ -12,6 +12,11 @@ import 'widgets/tms_alert.dart';
 /// 是不是同一回事。
 const String offlineOnlyCompleteMessage = '目前離線，只能完成進行中的單';
 
+/// 離線時被擋下的「恢復處理」用這一句。原型的離線提示標題是逐動作組出來的
+/// （`Main.dc.html:3039` 的 `'目前離線，無法' + what`），恢復是其中唯一有
+/// 專屬文案的入口。
+const String offlineCannotResumeMessage = '目前離線，無法恢復處理';
+
 /// 離線完成任務或離線開立工務單之後，畫面用這一句告訴員工東西還在手機上。
 const String pendingSyncMessage = '已離線暫存，連線後自動同步';
 
@@ -264,11 +269,14 @@ class _StatusBarFrame extends StatelessWidget {
 /// 呼叫端必須在呼叫後端之前就先問 [ConnectionStatus.isOffline] 並改走這裡，不要
 /// 讓請求送出去再靠失敗回應補救：離線時那個請求根本到不了後端，員工只會看到
 /// 轉圈到逾時。
-Future<void> showOfflineBlockedAlert(BuildContext context) {
+Future<void> showOfflineBlockedAlert(
+  BuildContext context, {
+  String message = offlineOnlyCompleteMessage,
+}) {
   return showCupertinoDialog<void>(
     context: context,
     builder: (dialogContext) => TmsAlert(
-      message: offlineOnlyCompleteMessage,
+      message: message,
       messageId: 'system.offline-blocked-alert',
       actions: [
         TmsAlertAction(

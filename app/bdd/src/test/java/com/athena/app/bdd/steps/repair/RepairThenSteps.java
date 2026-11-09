@@ -251,13 +251,15 @@ public class RepairThenSteps {
     }
 
     /**
-     * 必查：待送出標示消失，App 本機佇列是空的。佇列空了的判準是離線列整列不見——
-     * 那一列顯示的就是佇列長度本身（{@code ConnectionStatus.pendingSyncCount}）。
+     * 必查：待送出標示消失，App 本機佇列是空的。
+     *
+     * <p>佇列空了的判準是問 App 自己還剩幾筆（{@link AppiumWorld#waitForPendingSyncDrained}），
+     * 不是畫面頂部的離線列不見：看那一列的話這一句什麼都沒驗到，理由見那一支。
      */
     @那麼("畫面不再標示待送出")
     public void noLongerMarkedPendingSync() {
         world.waitForTestIdGone("ticket.summary.offline-queued-label", QUEUE_DRAIN_TIMEOUT);
-        world.waitForTestIdGone("system.offline-bar", QUEUE_DRAIN_TIMEOUT);
+        world.waitForPendingSyncDrained(QUEUE_DRAIN_TIMEOUT);
     }
 
     /**

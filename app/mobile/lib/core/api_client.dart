@@ -47,6 +47,13 @@ class ApiClient {
   /// 一次的能力。
   static int dropWriteResponseCount = 0;
 
+  /// 上面那個額度只扣在路徑以這個字串開頭的請求上；空字串代表不限路徑。
+  ///
+  /// 一次使用者動作往往送出好幾個帶 `Idempotency-Key` 的請求（離線押著的報修
+  /// 單送出時，先替每張照片建立上傳位置，才開單）。不限路徑的話額度會被排在
+  /// 前面那個請求吃完，真正要驗重送的那一個一次也沒重送過，測試照樣是綠的。
+  static String dropWriteResponsePathPrefix = '';
+
   final String baseUrl;
 
   /// 登入成功後存下的 JWT；之後的請求放進 `Authorization: Bearer` 標頭。
@@ -564,7 +571,9 @@ class ApiClient {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw ApiException(statusCode: response.statusCode, body: text);
       }
-      if (idempotent && dropWriteResponseCount > 0) {
+      if (idempotent &&
+          dropWriteResponseCount > 0 &&
+          path.startsWith(dropWriteResponsePathPrefix)) {
         dropWriteResponseCount--;
         throw TimeoutException('送出後沒有收到回應：$method $path');
       }

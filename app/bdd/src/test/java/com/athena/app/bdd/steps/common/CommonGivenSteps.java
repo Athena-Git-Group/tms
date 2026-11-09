@@ -83,7 +83,8 @@ public class CommonGivenSteps {
                 row.get("狀態"),
                 elapsedMinutes == null ? 0 : elapsedMinutes,
                 optionalInt(row, "重做次數"),
-                pausedReason);
+                pausedReason,
+                "是".equals(row.get("免查房")));
     }
 
     /**

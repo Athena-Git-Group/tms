@@ -49,9 +49,11 @@ public class PushThenSteps {
      * （{@code lib/features/pool/pool_screen.dart} 只在標亮時才掛這個 id，存在即代表
      * 樣式也對）；任務頁沒有獨立的房號節點，房號斷言改抓導覽列標題文字（本身就含房號）。
      * 工務單詳情（{@code lib/features/ticket/ticket_screen.dart}）整頁掛
-     * {@code ticket.screen}，單號斷言抓摘要卡的標題文字「工務單 {單號} · {房號}」；
-     * 「不是任務頁」再用 {@code task.screen} 不得存在把關——修繕推播導錯到任務頁時，
-     * 不能只靠等 ticket.screen 逾時來間接發現。
+     * {@code ticket.screen}；工務視角的詳情頁一個字的單號都不寫，所以「停在哪一張單」
+     * 改以房號對上：畫面讀標題區的地點（{@code ticket.hero.where}），單號那一半拿去
+     * 後端查那一列的房號，兩邊要一致。只讀畫面不夠，因為畫面讀到的房號本身證明不了
+     * 那是推播所指的那一張單。「不是任務頁」再用 {@code task.screen} 不得存在把關——
+     * 修繕推播導錯到任務頁時，不能只靠等 ticket.screen 逾時來間接發現。
      */
     @那麼("App 停在 {string}")
     public void appStaysOn(String screenDescription) {
@@ -70,7 +72,12 @@ public class PushThenSteps {
         } else if (ticketMatcher.matches()) {
             String ticketNo = ticketMatcher.group(1);
             world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
-            world.waitForLabelContaining("工務單 " + ticketNo, SCREEN_TIMEOUT);
+            String roomNo = roomNoOf(ticketNo);
+            String onScreen = world.waitForLabelOf("ticket.hero.where", roomNo, SCREEN_TIMEOUT);
+            if (!roomNo.equals(onScreen)) {
+                throw new AssertionError("預期停在 " + ticketNo + " 的工務單詳情頁（房號 "
+                        + roomNo + "），但標題區的地點讀到「" + onScreen + "」");
+            }
             List<WebElement> taskScreens = world.driver().findElements(world.byTestId("task.screen"));
             if (!taskScreens.isEmpty()) {
                 throw new AssertionError("預期停在 " + ticketNo
@@ -83,6 +90,21 @@ public class PushThenSteps {
         } else {
             throw new IllegalArgumentException("認不得的畫面字串：「" + screenDescription + "」");
         }
+    }
+
+    /** 權威讀回：該工務單所在的房號。 */
+    private String roomNoOf(String ticketNo) {
+        List<Map<String, Object>> rows = world.backend().queryRows(
+                """
+                SELECT r.room_no FROM repair_tickets rt
+                JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
+                WHERE rt.tenant_id = ? AND rt.ticket_no = ?
+                """, world.backend().ensureTenant(), ticketNo);
+        if (rows.size() != 1) {
+            throw new IllegalStateException("單號「" + ticketNo + "」在後端應恰有 1 張工務單，實際 "
+                    + rows.size() + " 張");
+        }
+        return (String) rows.get(0).get("room_no");
     }
 
     /**

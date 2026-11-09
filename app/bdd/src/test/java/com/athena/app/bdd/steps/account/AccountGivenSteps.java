@@ -68,7 +68,7 @@ public class AccountGivenSteps {
     @假設("{string} 已在 App 登入，名下有進行中的任務 {string}")
     public void loggedInWithTaskInProgress(String staffName, String roomNo) {
         world.seedTasks(staffName, List.of(
-                new AppiumWorld.TaskFixture(roomNo, "退房清潔", null, null, "進行中", 0, null, null)));
+                new AppiumWorld.TaskFixture(roomNo, "退房清潔", null, null, "進行中", 0, null, null, false)));
         world.ensureLoggedInAs(world.staff(staffName));
         // 「進行中」是被改種成 accepted ＋ 欠一次「在 App 按開始」的起始狀態，
         // 不補這一步，任務停在 accepted，登出守衛看不到 doing 的單就不會攔，

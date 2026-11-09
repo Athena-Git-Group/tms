@@ -85,6 +85,42 @@ void main() {
     handle.dispose();
   });
 
+  // 這張卡是疊在任務頁上的覆蓋層而不是路由，所以沒有 modal barrier 幫它收下
+  // 落在卡外面的點擊。不收的話底下那一頁的按鍵仍然按得到。
+  testWidgets('遮罩收下落在卡外面的點擊，底下那一頁按不到', (tester) async {
+    var tappedUnderneath = false;
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => tappedUnderneath = true,
+                child: const ColoredBox(color: CupertinoColors.white),
+              ),
+            ),
+            Positioned.fill(
+              child: CelebrateScreen(
+                roomNo: '305',
+                subline: '已通知主管查房',
+                actualMinutes: 25,
+                onBackHome: () {},
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 卡置中，所以畫面最上緣那一點一定落在遮罩上。
+    await tester.tapAt(const Offset(200, 8));
+    await tester.pumpAndSettle();
+
+    expect(tappedUnderneath, isFalse);
+  });
+
   testWidgets('氣氛開著時飾帶與彩屑那一組在畫面上', (tester) async {
     final handle = tester.ensureSemantics();
 

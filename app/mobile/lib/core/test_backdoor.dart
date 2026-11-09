@@ -52,6 +52,7 @@ class TestHooks {
     uploadFailAtIndex = null;
     rememberedAccount.value = null;
     ApiClient.dropWriteResponseCount = 0;
+    ApiClient.dropWriteResponsePathPrefix = '';
     ConnectionStatus.instance.reset();
   }
 }
@@ -129,6 +130,7 @@ class TestBackdoor {
             'rememberedAccount': TestHooks.instance.rememberedAccount.value?.loginId,
             'flakyConnection': ConnectionStatus.instance.isUnstable,
             'dropWriteResponseCount': ApiClient.dropWriteResponseCount,
+            'dropWriteResponsePathPrefix': ApiClient.dropWriteResponsePathPrefix,
             'pendingSyncCount': ConnectionStatus.instance.pendingSyncCount.value,
           }));
           await request.response.close();
@@ -180,7 +182,11 @@ class TestBackdoor {
           // 一側收不到回應，逼 App 用同一把 Idempotency-Key 再送一次。
           // /flaky-connection 做不到這件事：它只是把連線標成不穩、改走降級
           // 輪詢，任何一次送出都還是一次就成功。
+          // pathPrefix 指定額度只扣在哪一段路徑上，理由見
+          // ApiClient.dropWriteResponsePathPrefix；不帶就是不限路徑。
           ApiClient.dropWriteResponseCount = payload['count'] as int? ?? 0;
+          ApiClient.dropWriteResponsePathPrefix =
+              payload['pathPrefix'] as String? ?? '';
           _respondOk(request);
           break;
         case 'POST /flaky-connection':

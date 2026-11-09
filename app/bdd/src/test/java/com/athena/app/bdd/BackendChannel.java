@@ -645,6 +645,27 @@ public class BackendChannel {
                 """, tenantId, key, toJson(value), OffsetDateTime.now());
     }
 
+    /**
+     * 免查房是租戶層的開關，產品碼在開工那一步讀它、把結果寫進這張單的
+     * {@code tasks.inspection_waived}，所以要免查房的單必須在開關打開的那一刻開工。
+     * 直接改這張單的欄位沒有用：開工會依開關覆寫它。
+     *
+     * <p>開關用完就收回：同一個場景裡後面建的其他單不該跟著免查。
+     */
+    private void withInspectionWaivedDuringStart(
+            long tenantId, boolean inspectionWaived, Runnable start) {
+        if (!inspectionWaived) {
+            start.run();
+            return;
+        }
+        setTenantConfig(tenantId, "inspection_waived_enabled", true);
+        try {
+            start.run();
+        } finally {
+            clearTenantConfig(tenantId, "inspection_waived_enabled");
+        }
+    }
+
     /** 刪掉一筆租戶設定，讓這個鍵回到「沒有設定」的預設行為。 */
     public void clearTenantConfig(long tenantId, String key) {
         execute("DELETE FROM tenant_config WHERE tenant_id = ? AND key = ?", tenantId, key);
@@ -725,7 +746,8 @@ public class BackendChannel {
             case "accepted" -> postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
             case "doing" -> {
                 postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
-                postTaskAction(taskId, "start", assignee);
+                withInspectionWaivedDuringStart(tenantId, inspectionWaived,
+                        () -> postTaskAction(taskId, "start", assignee));
             }
             case "interrupted" -> {
                 postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
@@ -738,7 +760,8 @@ public class BackendChannel {
             }
             case "done" -> {
                 postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
-                postTaskAction(taskId, "start", assignee);
+                withInspectionWaivedDuringStart(tenantId, inspectionWaived,
+                        () -> postTaskAction(taskId, "start", assignee));
                 postTaskAction(taskId, "complete", assignee);
             }
             case "deferred" -> {
@@ -764,19 +787,9 @@ public class BackendChannel {
                 // 「完成 · 免查房」走另一條：開工前鎖定免查，產品碼在完成那一步自己
                 // 落成 inspected／waived，不需要也不可以補寫 inspection = 'passed'。
                 postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
-                if (inspectionWaived) {
-                    // 免查房是租戶層的開關，產品碼在開工那一步讀它、把結果寫進這張單的
-                    // inspection_waived。先把開關打開再開工，完成那一步才會落成
-                    // inspected／waived。直接改這張單的欄位沒有用：開工會依開關覆寫它。
-                    setTenantConfig(tenantId, "inspection_waived_enabled", true);
-                }
-                postTaskAction(taskId, "start", assignee);
+                withInspectionWaivedDuringStart(tenantId, inspectionWaived,
+                        () -> postTaskAction(taskId, "start", assignee));
                 postTaskAction(taskId, "complete", assignee);
-                if (inspectionWaived) {
-                    // 開關只負責把這張單帶到免查房，之後同一個場景裡建的其他單不該跟著
-                    // 免查，所以用完就收回。
-                    clearTenantConfig(tenantId, "inspection_waived_enabled");
-                }
                 if (!inspectionWaived) {
                     execute("UPDATE tasks SET state = 'inspected', inspection = 'passed'"
                             + " WHERE tenant_id = ? AND id = ?", tenantId, taskId);

@@ -108,15 +108,21 @@ class CelebrateScreen extends StatelessWidget {
     );
     return TmsSemantics(
       id: 'celebrate.screen',
-      child: ColoredBox(
-        color: TmsColors.scrimCelebrate,
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(TmsSpacing.xl2),
-              child: celebrationEnabled
-                  ? TmsMotionView(spec: TmsMotion.pop, child: dialog)
-                  : dialog,
+      // 遮罩自己收下落在卡外面的那些點擊。這一層不是路由，不收的話底下那一頁
+      // 的按鍵仍然按得到，員工會在完成畫面蓋著的時候又按一次完成。點遮罩不關
+      // 卡：離開這張卡只有卡上那兩顆鍵（`Main.dc.html:1371` 的遮罩沒有關閉行為）。
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        child: ColoredBox(
+          color: TmsColors.scrimCelebrate,
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(TmsSpacing.xl2),
+                child: celebrationEnabled
+                    ? TmsMotionView(spec: TmsMotion.pop, child: dialog)
+                    : dialog,
+              ),
             ),
           ),
         ),

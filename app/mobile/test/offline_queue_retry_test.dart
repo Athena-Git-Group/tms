@@ -25,6 +25,7 @@ void main() {
     await backend.stop();
     ApiClient.instance = ApiClient();
     ApiClient.dropWriteResponseCount = 0;
+    ApiClient.dropWriteResponsePathPrefix = '';
     ConnectionStatus.instance.reset();
   });
 
@@ -78,6 +79,41 @@ void main() {
     expect(backend.ticketRequests, hasLength(2));
     expect(backend.createdTicketIds, hasLength(1));
   });
+
+  test('注入限定在開單路徑時，照片位置不吃額度，重送的是開單請求', () async {
+    ApiClient.dropWriteResponseCount = 3;
+    ApiClient.dropWriteResponsePathPrefix = '/repair-tickets';
+
+    ConnectionStatus.instance.setOffline(true);
+    await _submitAcTicketWithPhoto();
+    ConnectionStatus.instance.setOffline(false);
+    await _waitUntil(() => ConnectionStatus.instance.pendingSyncCount.value == 0);
+
+    expect(backend.photoCreates, hasLength(1),
+        reason: '建立照片位置也帶 Idempotency-Key，但不在限定的路徑上，不該被丟掉回應');
+    expect(backend.ticketRequests, hasLength(4),
+        reason: '前 3 次開單逾時、第 4 次才收到回應');
+    expect(backend.createdTicketIds, hasLength(1));
+    expect(ApiClient.dropWriteResponseCount, 0);
+  });
+}
+
+/// 照 `features/task/repair_sheet.dart` 的送出動線：同一筆動作裡先替照片建立
+/// 上傳位置，再開單。已經拿到位置的照片重送時不再建立一次。
+Future<bool> _submitAcTicketWithPhoto() {
+  String? photoId;
+  return OfflineQueue.instance.submit(
+    kind: 'repair-ticket',
+    send: (idempotencyKey) async {
+      photoId ??= await ApiClient.instance.createRepairPhoto(purpose: 'report');
+      await ApiClient.instance.createRepairTicket(
+        sourceTaskId: 'task-310',
+        category: 'air_conditioning',
+        photoIds: <String>[photoId!],
+        idempotencyKey: idempotencyKey,
+      );
+    },
+  );
 }
 
 Future<bool> _submitAcTicket() {
@@ -109,7 +145,7 @@ Future<void> _waitUntil(
   }
 }
 
-/// 只認得本測試用到的兩個端點的假後端，開單走 `Idempotency-Key` 去重：同一把
+/// 只認得本測試用到的那幾個端點的假後端，開單走 `Idempotency-Key` 去重：同一把
 /// 鍵再送一次回同一張單，不會多建一張。
 class _FakeBackend {
   _FakeBackend._(this._server);
@@ -134,6 +170,9 @@ class _FakeBackend {
 
   /// 收到內容的照片 id。
   final List<String> photoUploads = <String>[];
+
+  /// 每一次「建立照片上傳位置」請求帶的 `Idempotency-Key`，照收到的順序。
+  final List<String> photoCreates = <String>[];
 
   final Map<String, String> _ticketIdByKey = <String, String>{};
 
@@ -163,6 +202,16 @@ class _FakeBackend {
         'state': 'pending_review',
         'reporterName': '阿美',
       }));
+      await request.response.close();
+      return;
+    }
+
+    if (request.method == 'POST' && path == '/repair-photos') {
+      photoCreates.add(request.headers.value('Idempotency-Key')!);
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.contentType = ContentType.json;
+      request.response
+          .write(jsonEncode({'id': 'photo-${photoCreates.length}'}));
       await request.response.close();
       return;
     }

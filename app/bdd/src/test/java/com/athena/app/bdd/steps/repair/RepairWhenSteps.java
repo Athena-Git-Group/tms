@@ -187,15 +187,16 @@ public class RepairWhenSteps {
      * 留在本類別：Cucumber glue 掃全部 steps package，模組歸屬不影響它被兩邊的 feature
      * 找到。
      *
-     * <p>「處理完」以畫面頂部的離線列（{@code system.offline-bar}）消失為準：那一列顯示的
-     * 就是佇列長度本身（{@code ConnectionStatus.pendingSyncCount}），它不見代表佇列已經
-     * 空了。不等它就往下走，後面的權威讀回會在請求還在路上時數到比較少的筆數。
+     * <p>「處理完」以 App 本機佇列長度歸零為準，問的是 App 自己而不是畫面
+     * （{@link AppiumWorld#waitForPendingSyncDrained}，那一支說明了為什麼畫面頂部的
+     * 離線列答不了這個問題）。不等它就往下走，後面的權威讀回會在請求還在路上時數到
+     * 比較少的筆數。
      */
     @當("{string} 的手機恢復連線")
     public void phoneBackOnline(String staffName) {
         world.staff(staffName);
         world.goOnline();
-        world.waitForTestIdGone("system.offline-bar", QUEUE_DRAIN_TIMEOUT);
+        world.waitForPendingSyncDrained(QUEUE_DRAIN_TIMEOUT);
     }
 
     // ──── 工務視角（T312–T314 落點） ────

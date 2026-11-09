@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/connection_status.dart';
 import 'package:tms_staff_app/features/celebrate/celebrate_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 
@@ -27,6 +28,7 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
         .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
+    ConnectionStatus.instance.reset();
   });
 
   testWidgets('已中斷的單按「恢復處理」會送出 resume，畫面換成後端回的進行中那一筆', (
@@ -78,6 +80,24 @@ void main() {
     );
   });
 
+  // 離線提示的標題在原型裡是逐動作組出來的（`Main.dc.html:3039` 的
+  // `'目前離線，無法' + what`），恢復處理有自己的那一句。
+  testWidgets('離線時按「恢復處理」擋在送出之前，提示講的是無法恢復處理', (tester) async {
+    final client = _FakeApiClient(_task(state: 'interrupted'));
+    ApiClient.instance = client;
+    ConnectionStatus.instance.setOffline(true);
+    await tester.pumpWidget(
+      const CupertinoApp(home: TaskScreen(roomNo: '308', taskId: 't-308')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier('task.primary-button'));
+    await tester.pumpAndSettle();
+
+    expect(client.resumedTaskIds, isEmpty);
+    expect(find.text('目前離線，無法恢復處理'), findsOneWidget);
+  });
+
   testWidgets('備品單送達之後也給完成畫面，只是不帶今日進度', (tester) async {
     final client = _FakeApiClient(_task(state: 'doing'));
     ApiClient.instance = client;
@@ -115,6 +135,8 @@ class _FakeApiClient extends ApiClient {
 
   final List<String> resumedTaskIds = <String>[];
 
+  final List<String> completedTaskIds = <String>[];
+
   @override
   Future<TaskDetail> getTask(String taskId) async => _task;
 
@@ -132,6 +154,7 @@ class _FakeApiClient extends ApiClient {
     String? resolutionType,
     String? idempotencyKey,
   }) async {
+    completedTaskIds.add(taskId);
     _task = _task.copyWithStateForTest('done');
     return TaskCompletion(task: _task);
   }

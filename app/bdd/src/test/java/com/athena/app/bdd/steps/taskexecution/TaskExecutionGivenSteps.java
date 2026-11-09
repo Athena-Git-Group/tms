@@ -52,7 +52,7 @@ public class TaskExecutionGivenSteps {
     public void alreadySkippedSop(String staffName, String task, String sopItem) {
         world.backend().ensureCleaningSopItemId(sopItem);
         world.seedTasks(staffName, List.of(new AppiumWorld.TaskFixture(
-                task, TASK_TITLE, CLEANING_CATEGORY, null, "進行中", 0, null, null)));
+                task, TASK_TITLE, CLEANING_CATEGORY, null, "進行中", 0, null, null, false)));
 
         BackendChannel.CreatedStaff staff = world.staff(staffName);
         world.ensureOnTaskDetail(staff, task);
@@ -270,8 +270,10 @@ public class TaskExecutionGivenSteps {
      * done 或 inspected；這一句完成只押在手機上，後端還停在 doing，受測動作是之後恢復連線
      * 時這一筆有沒有真的送出去。所以離線切換要在點「完成」<b>之前</b>就生效，不是事後補切。
      *
-     * <p>切離線之前先把測試資料欠的「在 App 按開始」補完（{@code settleDeferredStarts}）：
-     * 開工是離線時被擋下來的動作，裝置離線後那一筆進行中就再也補不起來了。
+     * <p>切離線之前先登入，再把測試資料欠的「在 App 按開始」補完
+     * （{@code settleDeferredStarts}）：App 拒絕離線登入，而開工也是離線時被擋下來的
+     * 動作，兩件事在裝置離線之後都再也做不成。這一句的參數裡就有當事員工，所以直接
+     * 指名登入她，不交給離線切換那一側去推定。
      *
      * <p>停在完成畫面以覆蓋層 {@code celebrate.screen} 出現為準，再回頭讀一次後端那一列，
      * 確認狀態仍是 {@code doing}。不查這一項的話，App 要是其實偷偷送出去了（或根本沒離線），
@@ -281,6 +283,7 @@ public class TaskExecutionGivenSteps {
     @假設("{string} 已在離線時完成 {string}，這一筆還押在手機上")
     public void alreadyCompletedWhileOffline(String staffName, String task) {
         BackendChannel.CreatedStaff staff = world.staff(staffName);
+        world.ensureLoggedInAs(staff);
         world.settleDeferredStarts();
         world.goOffline();
 

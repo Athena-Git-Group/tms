@@ -6,6 +6,7 @@ import io.cucumber.java.zh_tw.那麼;
 import org.openqa.selenium.WebElement;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 /** 介面根共通句的 Then（dsl.md Then 句型區）。 */
@@ -61,6 +62,14 @@ public class CommonThenSteps {
             Map.entry("完成 · 免查房", new TaskPageEvidence("task.status-row.finished", "完成 · 免查房", null)),
             Map.entry("已取消", new TaskPageEvidence("task.status-row.cancelled", "這單已取消", null)));
 
+    /**
+     * 任務頁上那些提示的關閉鈕。兩個提示不會同時出現（一個是後端拒絕這次操作，
+     * 一個是離線擋下這次操作），所以逐個試、在畫面上的那個就關掉。
+     */
+    private static final List<String> ALERT_DISMISS_BUTTONS = List.of(
+            "task.busy-alert.dismiss-button",
+            "system.offline-blocked-alert.dismiss-button");
+
     private final AppiumWorld world;
 
     public CommonThenSteps(AppiumWorld world) {
@@ -70,16 +79,27 @@ public class CommonThenSteps {
     /**
      * 必查：畫面出現包含該文字的提示（Alert 或 Toast）。
      *
-     * <p>提示如果是 Alert，它是蓋在畫面上的 modal——Flutter 會把底下整頁的 semantics
-     * 擋掉，後續對同一畫面的斷言會什麼都找不到。所以驗完文字就順手關掉提示，讓情境
-     * 接著驗「被擋下的那一間仍然是待開始」這種畫面狀態（使用者的實際動線也是看完
-     * 提示就把它關掉）。沒有可關的提示（Toast 自己會消失）就什麼都不做。
+     * <p>驗完文字就順手把提示關掉（見 {@link #dismissAlertsCoveringTaskPage()}），
+     * 讓情境接著驗「被擋下的那一間仍然是待開始」這種畫面狀態。
      */
     @那麼("畫面提示 {string}")
     public void screenPrompts(String message) {
         world.waitForLabelContaining(message, SCREEN_TIMEOUT);
-        if (!world.driver().findElements(world.byTestId("task.busy-alert.dismiss-button")).isEmpty()) {
-            world.tapTestId("task.busy-alert.dismiss-button", SCREEN_TIMEOUT);
+        dismissAlertsCoveringTaskPage();
+    }
+
+    /**
+     * 關掉蓋在任務頁上的提示。
+     *
+     * <p>提示如果是 Alert，它是蓋在畫面上的 modal——Flutter 會把底下整頁的 semantics
+     * 擋掉，對同一畫面的斷言會什麼都找不到，看起來像畫面根本沒更新。使用者的實際動線
+     * 也是看完提示就把它關掉。沒有可關的提示（Toast 自己會消失）就什麼都不做。
+     */
+    private void dismissAlertsCoveringTaskPage() {
+        for (String dismissButton : ALERT_DISMISS_BUTTONS) {
+            if (!world.driver().findElements(world.byTestId(dismissButton)).isEmpty()) {
+                world.tapTestId(dismissButton, SCREEN_TIMEOUT);
+            }
         }
     }
 
@@ -87,11 +107,16 @@ public class CommonThenSteps {
      * 必查：任務頁上寫出該狀態的那一塊符合 {@link #TASK_PAGE_EVIDENCE}，且後端權威狀態
      * 與「狀態用語對照」一致。兩邊都要對上才算通過：只看畫面會讓一塊寫死文字的版面
      * 過關，只看後端則驗不到使用者看見什麼。
+     *
+     * <p>讀畫面之前先關掉蓋在任務頁上的提示（見 {@link #dismissAlertsCoveringTaskPage()}）。
+     * 這一句用在「動作被擋下之後，那一間沒有任何改變」這種情境上，而被擋下來的時候畫面
+     * 正蓋著一個說明原因的提示。
      */
     @那麼("{string} 在 App 顯示為 {string}")
     public void taskDisplayedAs(String task, String state) {
         assertBackendState(task, state);
 
+        dismissAlertsCoveringTaskPage();
         returnToTaskDetailFromCelebration(task);
         TaskPageEvidence evidence = TASK_PAGE_EVIDENCE.get(state);
         if (evidence == null) {

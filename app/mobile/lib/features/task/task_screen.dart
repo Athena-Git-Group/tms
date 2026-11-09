@@ -379,7 +379,10 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 間」，離線時沒有人能做這個判定，先放行會讓同一位員工手上出現兩筆進行中。
   Future<void> _resume(TaskDetail task) async {
     if (ConnectionStatus.instance.isOffline) {
-      await showOfflineBlockedAlert(context);
+      await showOfflineBlockedAlert(
+        context,
+        message: offlineCannotResumeMessage,
+      );
       return;
     }
     try {
@@ -459,10 +462,12 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// 這一類任務完成之後要不要給那張慶祝卡。
   ///
-  /// 工務單有自己的完修回報與驗收流程，那張卡講的是「一間房交出去了」，接在
-  /// 完修後面會讓員工以為這張單已經結案。打掃與備品都要給：備品只是不帶今日
-  /// 進度那一塊（契約 `TaskCompletion.cleaningDoneToday` 只有打掃類會帶）。
-  bool _showsCelebrate(TaskDetail task) => task.type != 'repair';
+  /// 打掃與備品才給，依 truth 的 `工務單/dsl.md:50`「那張卡是房務打掃與備品完成
+  /// 才走的」。備品只是不帶今日進度那一塊（契約 `TaskCompletion.cleaningDoneToday`
+  /// 只有打掃類會帶）。工務單有自己的完修回報與驗收流程，那張卡講的是「一間房
+  /// 交出去了」，接在完修後面會讓員工以為這張單已經結案。
+  bool _showsCelebrate(TaskDetail task) =>
+      task.type == 'cleaning' || task.type == 'amenity';
 
   /// 離線完成時那張卡的內容。
   ///

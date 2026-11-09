@@ -8,7 +8,6 @@ import org.openqa.selenium.WebElement;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
 import java.util.UUID;
 
 /** 任務執行模組的 Then。 */
@@ -826,8 +825,6 @@ public class TaskExecutionThenSteps {
      * 畫面可能還在轉場或蓋著提示，離線列要等它落定才找得到。給一兩秒會把「還沒畫好」
      * 誤判成「這一頁沒有離線列」。
      */
-    private static final Duration PENDING_COUNT_READ_TIMEOUT = Duration.ofSeconds(3);
-
     /**
      * 必查：App 本機的待送出佇列沒有因這次操作而增加，離線列的待同步筆數
      * （accessibility id {@code system.offline-bar.pending-count}）與操作前相同；
@@ -844,40 +841,27 @@ public class TaskExecutionThenSteps {
      * <p>用於離線時被擋在送出之前的動作，也就是恢復處理、開始、認領與延後。離線完成
      * 剛好相反，它會押進佇列等補送，兩者的斷言不可互相沿用。
      *
-     * <p>讀不到離線列一樣算失敗，不當成「佇列是空的」，操作前那一次與操作後那一次都是。
-     * 離線列只要在畫面上就一定帶著筆數節點，連筆數 0 也帶，但那一列只掛在少數幾個頁面。
-     * 離線期間讀不到，代表這一頁沒有那一列，筆數根本沒量到；沒量到就不能宣告這次操作
-     * 沒有進佇列。這兩種失敗各有各的訊息：一個是操作前的基準沒量到，一個是現在這一頁
-     * 讀不到，不能混成同一句，否則訊息會把讀不到說成筆數變了。
+     * <p>筆數兩次都讀測試後門的 {@code pendingSyncCount}，不讀畫面上那一列。離線被擋下
+     * 的動作會彈一個對話框，而對話框會把底下整頁的 accessibility 節點擋掉，拿畫面讀的話
+     * 這一句會在「這一頁讀不到那一列」上失敗，而那跟佇列有沒有多一筆無關。
      */
     @那麼("這次操作沒有留在手機上等補送")
     public void actionNotQueuedForLaterSend() {
-        OptionalInt baseline = world.offlineWindowPendingCount();
-        if (baseline.isEmpty()) {
-            throw new AssertionError("切到離線的那一刻，當時那一頁上找不到離線列"
-                    + "（system.offline-bar.pending-count），操作前本機待送出佇列有幾筆"
-                    + "根本沒量到，無從比對操作前後，這一句不算通過。"
-                    + "這不是筆數變了，是基準缺了");
-        }
-        int before = baseline.getAsInt();
-        OptionalInt after = OptionalInt.of(before);
+        int before = world.offlineWindowPendingCount().orElseThrow(() -> new AssertionError(
+                "切到離線的那一刻沒有量到本機待送出佇列的筆數，無從比對操作前後"));
+        int after = before;
         for (int elapsed = 0; elapsed < OFFLINE_QUEUE_SETTLE_SECONDS; elapsed++) {
-            after = world.pendingSyncCountOnScreen(PENDING_COUNT_READ_TIMEOUT);
-            if (after.isPresent() && after.getAsInt() != before) {
+            after = world.pendingSyncCountInApp();
+            if (after != before) {
                 break;
             }
             if (elapsed < OFFLINE_QUEUE_SETTLE_SECONDS - 1) {
                 sleepSeconds(1);
             }
         }
-        if (after.isEmpty()) {
-            throw new AssertionError("離線期間這一頁上找不到離線列"
-                    + "（system.offline-bar.pending-count），本機待送出佇列有幾筆無從得知，"
-                    + "這一句不算通過");
-        }
-        if (after.getAsInt() != before) {
+        if (after != before) {
             throw new AssertionError("這次操作被擋在送出之前，本機待送出佇列的筆數就不該變："
-                    + "操作前是 " + before + " 筆，現在是 " + after.getAsInt() + " 筆");
+                    + "操作前是 " + before + " 筆，現在是 " + after + " 筆");
         }
 
         String task = world.currentTaskRoomNo();

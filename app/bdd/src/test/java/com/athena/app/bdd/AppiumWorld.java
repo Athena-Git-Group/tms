@@ -10,7 +10,6 @@ import io.appium.java_client.ios.options.XCUITestOptions;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import org.openqa.selenium.By;
-import org.openqa.selenium.Keys;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
@@ -83,12 +82,6 @@ public class AppiumWorld {
 
     /** 從推進去的畫面退回首頁時，最多按幾次導覽列的「返回」。 */
     private static final int MAX_BACK_TAPS = 3;
-
-    /**
-     * 清一個文字欄位最多讀回確認幾輪。欄位裡最長的值是員工編號與密碼（十餘個字元），
-     * 倒退刪一輪就該清完；多留兩輪是給 WDA 偶發吃掉一次按鍵的餘裕。
-     */
-    private static final int CLEAR_FIELD_ROUNDS = 3;
 
     /** 登入送出最多試幾次（第一次落空時原樣重送）。 */
     private static final int MAX_LOGIN_ATTEMPTS = 2;
@@ -362,9 +355,11 @@ public class AppiumWorld {
      * <p>同一情境要求換成另一位員工時直接噴錯：推播／通知中心的場景都只有一位
      * 當事員工，換人代表劇本或 stepdef 寫錯，默默重登會把錯誤藏起來。
      *
-     * <p>送出後等不到首頁、而畫面還停在登入頁的那一次，原樣再送一次：這是連跑整個套件時
-     * 的偶發（送出的那一下落在重繪之間，欄位有值但請求沒發出去），不是帳密錯。重送之後
-     * 仍停在登入頁才讓它紅，訊息裡附現場元素樹。
+     * <p>送出後等不到首頁、而畫面還停在登入頁的那一次，重點一次送出鍵：這是連跑整個套件
+     * 時的偶發（送出的那一下落在重繪之間，欄位有值但請求沒發出去），不是帳密錯。只重點
+     * 送出鍵，帳密維持原樣不重打：{@link #typeInto} 的 sendKeys 不清空欄位，重打會把員工
+     * 編號接成兩份，後端回「員工編號或密碼不正確」，真正的原因被一個看起來像帳密錯的
+     * 錯誤橫幅蓋掉。重送之後仍停在登入頁才讓它紅，訊息裡附現場元素樹。
      */
     public void ensureLoggedInAs(BackendChannel.CreatedStaff staff) {
         if (loggedInStaff != null) {
@@ -377,15 +372,9 @@ public class AppiumWorld {
         Duration timeout = LOGIN_TIMEOUT;
         String landing = landingScreenId(staff);
         postBackdoorJson("/remembered-account", "{\"employee\":null}");
+        typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
+        typeInto("login.password-field", timeout, staff.password());
         for (int attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
-            if (attempt > 1) {
-                // typeInto 是 sendKeys（不清空），重送前要先把上一次留在欄位裡的值清掉，
-                // 否則員工編號會變成接起來的兩份。
-                clearField("login.shared-device.staff-id-field", timeout);
-                clearField("login.password-field", timeout);
-            }
-            typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
-            typeInto("login.password-field", timeout, staff.password());
             tapTestId("login.submit-button", timeout);
             if (waitForTestIdQuietly(landing, timeout) != null) {
                 loggedInStaff = staff;
@@ -578,6 +567,9 @@ public class AppiumWorld {
      *
      * <p>情境把裝置切到離線之前要先呼叫這裡。開工是離線時被擋下來的動作之一，裝置一旦
      * 離線，那一筆進行中就再也補不起來，情境會停在待開始上驗一個它沒有要驗的狀態。
+     *
+     * <p>這裡只補開始。一筆都不欠時它什麼也不做，不會順帶把登入的身分建立起來——
+     * 離線前要有人登入由 {@link #goOffline()} 負責。
      */
     public void settleDeferredStarts() {
         for (Map.Entry<String, DeferredStart> entry :
@@ -601,8 +593,6 @@ public class AppiumWorld {
      * 等多久就把那張單的已做秒數（{@code tasks.worked_sec}）往前推多久。目前沒有離線
      * 場景在斷言已做分鐘數，但等待越短，日後加這種斷言時越不容易被推歪。
      */
-    private static final Duration OFFLINE_BAR_BASELINE_PROBE = Duration.ofSeconds(2);
-
     /**
      * 把裝置切到無網路，並記下這個離線視窗的開場基準。
      *
@@ -610,21 +600,29 @@ public class AppiumWorld {
      * 這兩項在動作做完之後就再也讀不回來，所以必須在動作之前量。為什麼非比這兩項
      * 不可，見「這次操作沒有留在手機上等補送」那一句的說明。
      *
-     * <p>筆數在切到離線之後才讀：待送出筆數只在離線列上顯示，連線正常時整列不出現。
-     * 讀不到離線列就記成「沒量到」，不記 0；兩者的差別見
-     * {@link #offlineWindowPendingCount} 的說明。
+     * <p>筆數讀的是測試後門的 {@code pendingSyncCount}，不是畫面上那一列。離線列只掛在
+     * 少數幾個頁面、而且會被覆蓋層與對話框蓋掉，拿它當基準會把「這一頁沒有那一列」
+     * 混進「佇列是空的」。後門回的是 App 自己的佇列長度，任何一頁都讀得到。
      *
      * <p>基準只在「由連線轉離線」的那一次量。已經在離線視窗裡時再呼叫一次只是把裝置
      * 維持在離線，不重量：重量會把視窗開場之後押進佇列的那幾筆算進基準，等於拿操作後
      * 的筆數當操作前的筆數。
+     *
+     * <p>還沒有人登入時，先以劇本裡那位現場員工登入，再斷網。App 依設計拒絕離線登入
+     * （登入頁一偵測到離線就只彈提示，連請求都不發），所以身分只能在斷網之前建立；
+     * 劇本寫「名下有以下任務、手機目前離線、做一個需要身分的動作」而沒有一句登入時，
+     * 少了這一步，之後每一句都會停在登入頁的離線提示上。
      */
     public void goOffline() {
         boolean alreadyInOfflineWindow = offlineWindowPendingCount != null;
+        if (loggedInStaff == null) {
+            ensureLoggedInAs(onlyFieldStaff());
+        }
         postBackdoorJson("/offline", "{\"offline\":true}");
         if (alreadyInOfflineWindow) {
             return;
         }
-        offlineWindowPendingCount = pendingSyncCountOnScreen(OFFLINE_BAR_BASELINE_PROBE);
+        offlineWindowPendingCount = OptionalInt.of(pendingSyncCountInApp());
         offlineWindowTaskStates = taskStatesByRoomNo();
     }
 
@@ -642,35 +640,10 @@ public class AppiumWorld {
     }
 
     /**
-     * 目前畫面上離線列顯示的待送出佇列筆數，也就是 App 本機還沒送到後端的動作筆數。
-     *
-     * <p>回傳空值代表畫面上找不到離線列，不代表佇列是空的。離線列只要在畫面上，
-     * 這個筆數節點就一定渲染，連筆數 0 也渲染；而離線列只掛在少數幾個頁面。所以
-     * 離線期間讀不到它，說的是「現在這一頁沒有離線列」（頁面正在轉場、被覆蓋層蓋住，
-     * 或這一頁根本沒掛那一列），筆數無從得知。呼叫端自行決定空值怎麼算，不在這裡
-     * 拿 0 當「讀不到」的代稱：那會讓比對筆數的斷言在什麼都沒量到時照樣通過。
-     */
-    public OptionalInt pendingSyncCountOnScreen(Duration timeout) {
-        WebElement pendingCount = waitForTestIdQuietly("system.offline-bar.pending-count", timeout);
-        if (pendingCount == null) {
-            return OptionalInt.empty();
-        }
-        String label = pendingCount.getAttribute("label");
-        try {
-            return OptionalInt.of(Integer.parseInt(label == null ? "" : label.trim()));
-        } catch (NumberFormatException notANumber) {
-            throw new AssertionError("讀不出離線列的待同步筆數，實際讀到「" + label + "」");
-        }
-    }
-
-    /**
-     * 這個離線視窗開場時，App 本機待送出佇列的筆數；回傳空值代表那一刻畫面上找不到
-     * 離線列，筆數沒量到。
+     * 這個離線視窗開場時，App 本機待送出佇列的筆數。
      *
      * <p>根本沒有離線視窗時直接噴錯，那是劇本漏了把手機切到離線，或是切過之後又恢復
-     * 連線把基準清掉了。量過但沒量到則回空值，由呼叫端自己噴錯：那是「基準沒量到」，
-     * 跟「筆數是 0」是兩回事，錯誤訊息要講得出是哪一種。兩種情形都不許自行補預設值，
-     * 補小了會讓比對筆數的斷言永遠通過。
+     * 連線把基準清掉了。不許自行補預設值：補小了會讓比對筆數的斷言永遠通過。
      */
     public OptionalInt offlineWindowPendingCount() {
         if (offlineWindowPendingCount == null) {
@@ -917,6 +890,24 @@ public class AppiumWorld {
     }
 
     /**
+     * 本情境唯一那位現場員工，也就是有部門的那一位（主管與值班經理的部門是 NULL）。
+     * 給「需要一個登入身分、但句型裡沒有員工參數」的地方用，例如把手機切到離線那一句：
+     * 離線之前得先有人登入，而劇本只在背景建了一位現場員工，就以那一位為準。沒有或
+     * 不只一位時直接噴錯，讓劇本自己補清楚是哪一位，不默默挑一個頂上（理由同
+     * {@link #onlyManager()}）。
+     */
+    private BackendChannel.CreatedStaff onlyFieldStaff() {
+        List<BackendChannel.CreatedStaff> fieldStaff = staffByName.values().stream()
+                .filter(s -> s.dept() != null)
+                .toList();
+        if (fieldStaff.size() != 1) {
+            throw new IllegalStateException("本情境有 " + fieldStaff.size()
+                    + " 位現場員工，無法推定操作人；背景「飯店有以下員工」需要剛好一位有部門的員工");
+        }
+        return fieldStaff.get(0);
+    }
+
+    /**
      * 改某位已建員工的登入帳密（「"X" 的員工編號密碼為 …」）。除了落地到後端
      * （{@link BackendChannel#setCredentials}），還要把 {@link #staffByName} 裡那筆換成
      * 帶新帳密的 record——後續的 Given／When 都用姓名查員工，查到舊的 fixture 帳密
@@ -1004,7 +995,7 @@ public class AppiumWorld {
                     assignee,
                     workedMinutes,
                     task.pausedReason(),
-                    "完成 · 免查房".equals(task.status()));
+                    task.inspectionWaived() || "完成 · 免查房".equals(task.status()));
             if (task.redoCount() != null) {
                 backend.setRedoCount(taskId, task.redoCount());
             }
@@ -1026,6 +1017,11 @@ public class AppiumWorld {
      */
     private static boolean startableInApp(String stateCode, TaskFixture task) {
         if (!"doing".equals(stateCode) || task.pausedReason() != null) {
+            return false;
+        }
+        // 免查房擋這條路：那個鎖定值是開工那一刻依租戶開關寫進任務的，而這條路的
+        // 開工晚到員工按下主按鈕那一刻，開關那時已經收回去了。
+        if (task.inspectionWaived()) {
             return false;
         }
         return task.elapsedMinutes() == 0;
@@ -1142,6 +1138,57 @@ public class AppiumWorld {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("測試後門 /state 回應不是合法 JSON：" + body, e);
         }
+    }
+
+    /**
+     * App 本機待送出佇列目前還有幾筆（測試後門 {@code GET /state} 的
+     * {@code pendingSyncCount}）。
+     *
+     * <p>要等「佇列送完」的地方讀這裡，不要改讀畫面上的離線列：那一列整段只綁連線狀態
+     * （{@code ConnectionStatus.offline}），一恢復連線就連同裡面的筆數節點一起不見，
+     * 跟佇列還剩幾筆無關。拿它當佇列空了的判準，會在補送還在路上時就放行，接著的權威
+     * 讀回數到的是沒送完的筆數。
+     */
+    public int pendingSyncCountInApp() {
+        String body;
+        try {
+            body = httpGet("/state");
+        } catch (IOException e) {
+            throw new IllegalStateException("讀測試後門 /state 失敗", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("讀測試後門 /state 時被中斷", e);
+        }
+        try {
+            JsonNode state = new ObjectMapper().readTree(body);
+            JsonNode pending = state.get("pendingSyncCount");
+            if (pending == null || pending.isNull()) {
+                throw new IllegalStateException("測試後門 /state 沒有回 pendingSyncCount：" + body);
+            }
+            return pending.asInt();
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("測試後門 /state 回應不是合法 JSON：" + body, e);
+        }
+    }
+
+    /**
+     * 等 App 本機待送出佇列清空。
+     *
+     * <p>等的是一個會變的權威條件（佇列長度），不是等一段固定時間：每一筆補送都是一次
+     * HTTP 來回，快慢看模擬器當下的負載。逾時還沒空就直接噴錯並附上還剩幾筆。
+     */
+    public void waitForPendingSyncDrained(Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        int remaining = pendingSyncCountInApp();
+        while (System.nanoTime() < deadline) {
+            if (remaining == 0) {
+                return;
+            }
+            sleep(200);
+            remaining = pendingSyncCountInApp();
+        }
+        throw new AssertionError("App 本機待送出佇列沒有在 " + timeout.getSeconds()
+                + "s 內清空，還剩 " + remaining + " 筆");
     }
 
     /**
@@ -1336,40 +1383,6 @@ public class AppiumWorld {
         } catch (Exception e) {
             return "（存檔失敗：" + e.getMessage() + "）";
         }
-    }
-
-    /**
-     * 清空文字欄位（先點一下取得焦點，再清掉現有內容）。
-     *
-     * <p>不能只呼叫 {@code clear()} 就當它清掉了：XCUITest 對 Flutter 的文字欄位下
-     * {@code clear()} 會回成功、欄位裡的字卻一個都沒少（實測重現）。{@link #ensureLoggedInAs}
-     * 的第二次送出正是靠這一支清場，清不掉時 {@link #typeInto} 的 sendKeys 會把帳密接在
-     * 舊值後面變成兩份，後端當然回「員工編號或密碼不正確」——登入明明只是第一次送出落空，
-     * 現場卻留下一個看起來像帳密錯的錯誤橫幅，把真正的原因蓋掉。所以這裡清完要讀回欄位值
-     * 確認真的空了，沒空就逐字倒退刪。
-     */
-    private void clearField(String testId, Duration timeout) {
-        withStaleRetry(testId, timeout, field -> {
-            field.click();
-            field.clear();
-            int previousLength = Integer.MAX_VALUE;
-            for (int round = 0; round < CLEAR_FIELD_ROUNDS; round++) {
-                String remaining = fieldValue(field);
-                // 清乾淨了就停。這一輪一個字也沒少也停——讀回來的多半是欄位的提示文字
-                // 而不是真的內容，再敲下去只是把時間花在一個刪不動的東西上。
-                if (remaining.isEmpty() || remaining.length() >= previousLength) {
-                    return;
-                }
-                previousLength = remaining.length();
-                field.sendKeys(String.valueOf(Keys.BACK_SPACE).repeat(remaining.length()));
-            }
-        });
-    }
-
-    /** 文字欄位目前的內容；讀不到值時當成空字串。 */
-    private static String fieldValue(WebElement field) {
-        String value = field.getAttribute("value");
-        return value == null ? "" : value;
     }
 
     /**
@@ -1661,6 +1674,7 @@ public class AppiumWorld {
             String status,
             int elapsedMinutes,
             Integer redoCount,
-            String pausedReason) {
+            String pausedReason,
+            boolean inspectionWaived) {
     }
 }
