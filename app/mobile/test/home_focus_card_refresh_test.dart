@@ -12,7 +12,20 @@ import 'package:tms_staff_app/features/shell/main_shell.dart';
 /// 那一層的今日進度不會自己變新。沒有這條線，員工做完一間退回首頁，看到的
 /// 是進場時那一份舊資料——主卡還叫他「繼續處理」一間他已經做完的房。
 void main() {
+  // 這組測試用 `pumpAndSettle` 等畫面靜止。進行中卡那顆圓點是無限循環的呼吸
+  // 動畫，動態開著就永遠排得出下一幀，`pumpAndSettle` 會等到逾時而不是靜止。
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+      disableAnimations: true,
+    );
+  });
+
   tearDown(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 
