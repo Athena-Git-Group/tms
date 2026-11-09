@@ -58,7 +58,7 @@ public class AccountGivenSteps {
     public void loggedInAndPhoneOffline(String staffName) {
         loginViaSharedDevice(staffName);
         openMeTab();
-        world.postBackdoorJson("/offline", "{\"offline\":true}");
+        world.goOffline();
     }
 
     /**

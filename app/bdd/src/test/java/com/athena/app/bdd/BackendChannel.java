@@ -552,8 +552,9 @@ public class BackendChannel {
     }
 
     /**
-     * 落地一筆房間往事（{@code room_memory}）。這張表是投影：產品上只有工務單完修回寫
-     * 會長出一筆（{@code kind=repair}），沒有任何建立端點，所以直接落地——情境要的是
+     * 落地一筆房間往事（{@code room_memory}）。這張表是從完修紀錄整理出來、方便查詢的
+     * 目前狀態副本，隨時可以照完修紀錄重算。產品上只有工務單完修回寫會長出一筆
+     * （{@code kind=repair}），沒有任何建立端點，所以這裡直接落地。情境要的是
      * 「這間房過去修過什麼」這個既成事實，不是重演一次完修流程。
      *
      * <p>{@code summary} 的落地慣例是「{標題}：{原文}」合併成一欄（查一下的出處卡再由
@@ -1102,6 +1103,44 @@ public class BackendChannel {
             throw new IllegalStateException("fixture 狀態轉移失敗：POST /tasks/" + taskId + "/" + action
                     + " -> HTTP " + response.statusCode() + "，body=" + response.body());
         }
+    }
+
+    /**
+     * 測試資料補欄：把 tasks.cancel_reason 落成指定值。
+     *
+     * <p>作廢端點（{@code POST /tasks/{id}/cancel}）目前只把 reason 記進
+     * task_events 的 payload，tasks 列的 cancel_reason 欄位沒有一起更新
+     * （{@code TaskEngine.cancel} 的 UPDATE 沒寫這一欄；員工自行撤回那條路
+     * 有寫 staff_withdrew）。DSL 宣告主管作廢落地後 cancel_reason 要是
+     * manager_void，所以走完端點後用這裡把欄位補上。後端補寫這一欄之後，
+     * 這個方法就該刪掉——這是已回報上游的後端缺口，不是長期設計。
+     */
+    public void supplementCancelReason(UUID taskId, String reason) {
+        execute("UPDATE tasks SET cancel_reason = ? WHERE tenant_id = ? AND id = ?",
+                reason, ensureTenant(), taskId);
+    }
+
+    /**
+     * 以某員工身分重送一次任務動作，預期後端以 4xx 拒絕，回傳解析後的錯誤 body
+     * （contracts 的 Error：{@code {code, message, …}}）。預期之外的狀態碼
+     * （2xx 成功、5xx 掛掉）直接噴錯。
+     *
+     * <p>給「App 的動作被後端拒絕，畫面要原封不動轉述後端 message」的 Then 用：
+     * App 當下收到的那份 4xx 回應事後讀不到，所以以同一位員工對同一筆任務重送
+     * 同一個動作，取回同一句拒絕訊息當比對基準。被拒的動作在後端沒有副作用，
+     * 重送不會改變狀態——但那是這裡的前提不是證明，呼叫端仍應在重送後自己查核
+     * 權威狀態沒變。
+     */
+    public JsonNode taskActionRejection(UUID taskId, String action, CreatedStaff actor) {
+        HttpResponse<String> response = send(
+                request("POST", "/tasks/" + taskId + "/" + action, jwt(actor))
+                        .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                        .POST(HttpRequest.BodyPublishers.noBody()));
+        if (response.statusCode() < 400 || response.statusCode() >= 500) {
+            throw new AssertionError("預期後端以 4xx 拒絕 POST /tasks/" + taskId + "/" + action
+                    + "，實際 HTTP " + response.statusCode() + "，body=" + response.body());
+        }
+        return parseJson(response.body());
     }
 
     /** 權威讀回（REST）：GET /api/v1 下任意路徑，回傳解析後的 JSON。斷言入口，非 200 直接噴錯。 */

@@ -33,6 +33,24 @@ public class RepairThenSteps {
     /** 等後端收到離線期間保存的開單的上限：每一筆都是一次 HTTP 來回，比畫面轉場久。 */
     private static final Duration QUEUE_DRAIN_TIMEOUT = Duration.ofSeconds(20);
 
+    /** 完成畫面那一層覆蓋層的 accessibility id（產品端 {@code celebrate_screen.dart} 的根節點）。 */
+    private static final String CELEBRATE_OVERLAY_ID = "celebrate.screen";
+
+    /**
+     * 等完修回報送出真的做完的上限。這段要涵蓋帶完修照片的一次網路來回，
+     * 所以取和等離線開單送完的 {@link #QUEUE_DRAIN_TIMEOUT} 同一個量級，
+     * 不是 {@link #SCREEN_TIMEOUT} 那種單純畫面轉場的量級。模擬器慢一點就逾時的話，
+     * 紅的是環境不是產品。
+     */
+    private static final Duration COMPLETION_SUBMIT_TIMEOUT = Duration.ofSeconds(20);
+
+    /**
+     * 完修送出做完之後繼續盯覆蓋層的長度，給畫面時間把覆蓋層畫出來。
+     * 這段在確認送出做完的那一刻重新起算，不受等送出用掉多少時間影響，
+     * 否則送出慢的場次會把盯的時間無聲砍短，漏看的反而不會失敗。
+     */
+    private static final Duration CELEBRATE_SETTLE = Duration.ofSeconds(3);
+
     private final AppiumWorld world;
 
     private final RepairContext context;
@@ -620,6 +638,67 @@ public class RepairThenSteps {
     }
 
     /**
+     * 必查：畫面上沒有完成畫面那一層覆蓋層（accessibility id
+     * {@code celebrate.screen} 不存在），員工留在工務單自己的回報流程上。
+     * 用於工務單的完修回報——那張卡是房務打掃與備品完成才走的，工務單有
+     * 自己的回報與驗收流程。
+     *
+     * <p>只檢查「有沒有跳走」不夠，要確認那一層根本沒出現，所以這裡不是最後看一眼
+     * 停在哪一頁，而是從送出完修那一刻起就每一輪檢查覆蓋層在不在，檢查的方式見
+     * {@link #requireNoCelebrateOverlay()}。
+     *
+     * <p>盯的範圍分成兩段各自計時。第一段用 {@link #COMPLETION_SUBMIT_TIMEOUT} 輪詢等
+     * 完修回報面板關閉（{@code completeSheet.submit-button} 不在了）且畫面停在工務單詳情
+     * （{@code ticket.screen} 還在），確認送出真的做完；等不到就失敗，否則沒跑完的場次會
+     * 偽裝成通過。第二段在確認送出做完的那一刻重新起算整段 {@link #CELEBRATE_SETTLE}，
+     * 讓畫面有機會把覆蓋層畫出來。兩段分開計時，是因為合用一份預算時送出愈慢、
+     * 盯的時間愈短，而那種場次已經算通過，不會有人發現少盯了。
+     */
+    @那麼("不出現完成畫面")
+    public void noCompletionCelebrationOverlay() {
+        long submitDeadline = System.nanoTime() + COMPLETION_SUBMIT_TIMEOUT.toNanos();
+        boolean completionSettled = false;
+        while (System.nanoTime() < submitDeadline) {
+            requireNoCelebrateOverlay();
+            if (world.driver().findElements(world.byTestId("completeSheet.submit-button")).isEmpty()
+                    && !world.driver().findElements(world.byTestId("ticket.screen")).isEmpty()) {
+                completionSettled = true;
+                break;
+            }
+            pause(200);
+        }
+
+        if (!completionSettled) {
+            throw new AssertionError("等不到完修回報送出完成（面板沒關掉、或畫面不在工務單詳情），"
+                    + "逾時 " + COMPLETION_SUBMIT_TIMEOUT.getSeconds()
+                    + "s；這樣「沒出現完成畫面」只是因為送出還沒走完");
+        }
+
+        long settleDeadline = System.nanoTime() + CELEBRATE_SETTLE.toNanos();
+        while (System.nanoTime() < settleDeadline) {
+            requireNoCelebrateOverlay();
+            pause(200);
+        }
+        // 迴圈是先查再睡，最後那次睡之後還沒查過，補一次才算盯滿整段。
+        requireNoCelebrateOverlay();
+    }
+
+    /**
+     * 這一輪畫面上不能有完成畫面那一層覆蓋層，查到就當場失敗。以 {@code findElements}
+     * 回傳的空清單判定不存在：找不到就是空清單、不必等逾時，所以能密集輪詢。
+     * 覆蓋層是疊在任務頁上的一層，可以出現一下再自己收掉，只在最後抓一張畫面
+     * 會整個漏掉，所以要每一輪都查。
+     */
+    private void requireNoCelebrateOverlay() {
+        List<WebElement> overlay = world.driver().findElements(world.byTestId(CELEBRATE_OVERLAY_ID));
+        if (!overlay.isEmpty()) {
+            throw new AssertionError("工務單的完修回報不走房務的完成畫面，"
+                    + "但畫面上出現了 " + CELEBRATE_OVERLAY_ID + " 這一層覆蓋層（"
+                    + overlay.size() + " 個）");
+        }
+    }
+
+    /**
      * 必查：詳情頂部步驟條固定依序顯示四步（第 i 步以 {@code ticket.stepper.{i}} 定位、
      * 文字等於步驟名，i 從 1 起算），目前步驟另掛 {@code ticket.stepper.{i}--current}；
      * 後端狀態與目前步驟對照一致（待開始＝accepted、維修中＝doing、完修＝done 且尚未
@@ -739,6 +818,16 @@ public class RepairThenSteps {
             "已接單", "accepted",
             "維修中", "doing",
             "已完修", "done");
+
+    /** 輪詢畫面時的間隔；被中斷就不再裝作沒事，否則盯不到覆蓋層會被誤讀成通過。 */
+    private static void pause(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("盯畫面有沒有出現完成畫面時被中斷", e);
+        }
+    }
 
     /** 畫面上某個節點的文字必須包含期望值；{@code what} 用在錯誤訊息裡說明在看哪一段。 */
     private void assertLabelContains(String testId, String expected, String what) {

@@ -213,7 +213,138 @@ public class TaskExecutionService {
             repairService.resolveOnComplete(
                     taskId, request.photoIds(), request.resolutionNote(), request.resolutionType());
         }
-        return detail;
+        return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
+    }
+
+    /**
+     * 完成回應在 TaskDetail 之上多帶的兩個值（contracts TaskCompletion）：接下來該去哪一間
+     * （nextStep），以及今天做到第幾張打掃單（cleaningDoneToday）。
+     *
+     * <p>兩個值都在送出完成的同一次往返裡給完。要員工為了知道下一間是哪一間再打一次端點，
+     * 完成畫面就會在訊號差的樓層卡住，而那正是最需要立刻看到回饋的時候。
+     *
+     * <p>今日進度只有打掃類帶。那個計數數的是打掃單，備品單完成時回一個打掃數字，畫面會
+     * 顯示一個與這次操作無關的進度。
+     */
+    private Map<String, Object> withCompletionExtras(
+            long tenantId, CurrentActor actor, Map<String, Object> completedTask, Map<String, Object> detail) {
+        Map<String, Object> response = new LinkedHashMap<>(detail);
+        List<Map<String, Object>> rows = openAndDoneRowsOf(tenantId, actor);
+        response.put("nextStep", nextStepOf(rows));
+        if ("cleaning".equals(String.valueOf(completedTask.get("type")))) {
+            response.put("cleaningDoneToday", cleaningDoneTodayOf(rows));
+        }
+        return response;
+    }
+
+    /**
+     * 算兩個衍生值要用的資料列：呼叫者名下還沒結束的單，加上今天已結案的打掃單。
+     *
+     * <p>一次查完兩個值共用的資料列，不為了 nextStep 和 cleaningDoneToday 各查一次——
+     * 兩次查詢之間若有別的動作落地，同一份回應裡的兩個值會對應到不同時刻的世界。
+     *
+     * <p>兩個值都是查詢期算出來的，不存欄位也不存計數器：存起來就會和首頁的「已清完間數」
+     * 各算各的，而那兩個數字必須永遠一致。
+     */
+    private List<Map<String, Object>> openAndDoneRowsOf(long tenantId, CurrentActor actor) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT t.id, t.type, t.state, t.work_date, t.done_at, t.redo_count, r.room_no
+                  FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? AND t.assignee_id = ?
+                   AND t.state IN ('accepted', 'doing', 'interrupted', 'deferred', 'done', 'inspected')
+                """,
+                tenantId, actor.staffId());
+    }
+
+    /**
+     * 完成之後員工該去哪裡，三者擇一：還有待開始的單就指那一張（next_task）、沒有待開始
+     * 但還有沒做完的就指那一張（unfinished_task）、兩者都沒有就是今天排定的房都清完了
+     * （all_clear）。
+     *
+     * <p>種類寫成 kind 這個封閉三值，不讓 App 靠「taskId 是不是 null」推斷：「查不到下一間」
+     * 與「今天都清完了」在畫面上會長得一樣，員工看到的結論卻相反。
+     *
+     * <p>待開始那一組的排序與首頁「下一間」（{@link #myToday} 的 nextTasks）同一套，否則
+     * 同一時刻兩個畫面會指向不同房間。待開始收錄時不看日期，也與 nextTasks 一致。
+     * 沒做完那一組依進行中、已中斷、已延後排，同一組內房號遞增；它們屬不屬於今天，判定
+     * 沿用 {@link #belongsToToday}。
+     */
+    private Map<String, Object> nextStepOf(List<Map<String, Object>> rows) {
+        LocalDate today = LocalDate.ofInstant(clock.instant(), clock.getZone());
+        OffsetDateTime dayStart = today.atStartOfDay(clock.getZone()).toOffsetDateTime();
+        OffsetDateTime dayEnd = today.plusDays(1).atStartOfDay(clock.getZone()).toOffsetDateTime();
+
+        List<Map<String, Object>> accepted = new ArrayList<>();
+        List<Map<String, Object>> unfinished = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String state = String.valueOf(row.get("state"));
+            if ("accepted".equals(state)) {
+                accepted.add(row);
+                continue;
+            }
+            if (!UNFINISHED_NEXT_STEP_STATES.contains(state)) {
+                continue;
+            }
+            OffsetDateTime doneAt = SqlTimestamps.toOffsetDateTime(row.get("done_at"));
+            boolean doneToday = doneAt != null && !doneAt.isBefore(dayStart) && doneAt.isBefore(dayEnd);
+            if (belongsToToday(toLocalDate(row.get("work_date")), state, today, doneToday)) {
+                unfinished.add(row);
+            }
+        }
+
+        accepted.sort(Comparator
+                .comparingInt((Map<String, Object> r) -> ((Number) r.get("redo_count")).intValue()).reversed()
+                .thenComparing(r -> "cleaning".equals(String.valueOf(r.get("type"))) ? 1 : 0)
+                .thenComparing(r -> String.valueOf(r.get("room_no"))));
+        unfinished.sort(Comparator
+                .comparingInt((Map<String, Object> r) -> UNFINISHED_NEXT_STEP_ORDER.indexOf(String.valueOf(r.get("state"))))
+                .thenComparing(r -> String.valueOf(r.get("room_no"))));
+
+        if (!accepted.isEmpty()) {
+            return nextStep("next_task", accepted.getFirst());
+        }
+        if (!unfinished.isEmpty()) {
+            return nextStep("unfinished_task", unfinished.getFirst());
+        }
+        Map<String, Object> allClear = new LinkedHashMap<>();
+        allClear.put("kind", "all_clear");
+        return allClear;
+    }
+
+    /** 挑選順序：進行中的排最前，再來已中斷，最後已延後。手上正在做的那一間最該先回去。 */
+    private static final List<String> UNFINISHED_NEXT_STEP_ORDER = List.of("doing", "interrupted", "deferred");
+
+    private static final Set<String> UNFINISHED_NEXT_STEP_STATES = Set.copyOf(UNFINISHED_NEXT_STEP_ORDER);
+
+    private static Map<String, Object> nextStep(String kind, Map<String, Object> row) {
+        Map<String, Object> nextStep = new LinkedHashMap<>();
+        nextStep.put("kind", kind);
+        nextStep.put("taskId", String.valueOf(row.get("id")));
+        nextStep.put("roomNo", row.get("room_no"));
+        return nextStep;
+    }
+
+    /**
+     * 今天做到第幾張打掃單：本人今日（work_date＝今天）未取消、已結案的打掃任務數。
+     *
+     * <p>收錄口徑與首頁「X / Y 間房已清完」的分子（{@link #myToday} 的 cleaningDone）
+     * 同一套，含鎖定免查房而直接結案的單——完成畫面與首頁給出不同數字，員工無從判斷
+     * 哪一個才算數。
+     */
+    private int cleaningDoneTodayOf(List<Map<String, Object>> rows) {
+        LocalDate today = LocalDate.ofInstant(clock.instant(), clock.getZone());
+        int done = 0;
+        for (Map<String, Object> row : rows) {
+            String state = String.valueOf(row.get("state"));
+            boolean doneLike = "done".equals(state) || "inspected".equals(state);
+            if (doneLike && "cleaning".equals(String.valueOf(row.get("type")))
+                    && today.equals(toLocalDate(row.get("work_date")))) {
+                done++;
+            }
+        }
+        return done;
     }
 
     /**

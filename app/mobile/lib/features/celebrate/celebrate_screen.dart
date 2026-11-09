@@ -13,6 +13,27 @@ import '../../core/widgets/tms_card.dart';
 /// 版面是一張浮在半透明遮罩上的對話卡，不是鋪滿整個螢幕的一頁內容。員工看完
 /// 這張卡就要往下一間走，整頁式的畫面會讓人以為自己進了另一個流程、還得找路
 /// 回去。
+///
+/// **accessibility id 詞彙表**（plan 002 Foundational T403 釘定；App 端與
+/// `app/bdd` 的 step definitions 共用同一組名稱，兩邊改名要一起改）：
+///
+/// - `celebrate.screen`：整張覆蓋層。遮罩底下那一頁必須仍看得見，所以它疊在
+///   任務頁上、不是取代任務頁。
+/// - `celebrate.title`：標題，帶剛完成的房號。
+/// - `celebrate.subline`：標題下方那一句「接下來會怎樣」。
+/// - `celebrate.actual-minutes`：這次用時（主要數字）與當初預估（附註）同一塊。
+/// - `celebrate.today-progress`：今日進度「第 N 單」那一塊。非打掃類與氣氛關閉
+///   時整塊不渲染——是不存在，不是顯示 0 或空白。
+/// - `celebrate.queued-note`：離線時「已先記錄在手機」那一行。
+/// - `celebrate.all-done-note`：都清完時的提示句。
+/// - `celebrate.next-button`：往下一步走的實心主按鈕（下一間／回到某一間／去待認領）。
+/// - `celebrate.back-home-button`：底部回到首頁的文字按鈕。
+/// - `celebrate.celebration`：氣氛元素（飾帶、彩屑、勾勾方塊）的群組。租戶關閉
+///   `completion_celebration_enabled` 時整組不渲染。
+///
+/// 目前這個檔只實作了 `celebrate.screen`、`celebrate.title`、
+/// `celebrate.actual-minutes`、`celebrate.estimate-minutes` 與
+/// `celebrate.back-home-button`；其餘在 Phase 4D 隨對應元素一起落地。
 class CelebrateScreen extends StatelessWidget {
   const CelebrateScreen({
     super.key,

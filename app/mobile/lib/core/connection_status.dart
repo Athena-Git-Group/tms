@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import 'today_refresh.dart';
-
 import 'api_client.dart';
+import 'today_refresh.dart';
 
 /// 全 App 共用的連線狀態，以及離線期間還沒送出去的動作。
 ///

@@ -1,5 +1,8 @@
 package com.athena.app.bdd;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.AppiumDriver;
 import io.appium.java_client.ios.IOSDriver;
@@ -23,10 +26,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -142,6 +147,31 @@ public class AppiumWorld {
      * 讀法與用途見 {@link #currentTaskRoomNo()}。
      */
     private String currentTaskRoomNo;
+
+    /**
+     * 裝置切到離線的那一刻，App 本機待送出佇列的筆數。
+     *
+     * <p>給「這次操作沒有留在手機上等補送」用：那一句要比的是「操作前後佇列筆數相同」，
+     * 操作之後才讀畫面是比不出來的，所以基準要在動作發生之前就先量好。離線視窗一開始
+     * 就量，是因為這一句服務的動作（恢復處理、開始、認領、延後）全都發生在離線之後，
+     * 中間沒有別的動作會動到佇列。
+     *
+     * <p>這個欄位分三種狀態，三者意思不同不可混用：null 代表這個情境還沒切過離線，
+     * 根本沒有離線視窗；空的 {@code OptionalInt} 代表切離線的那一刻畫面上找不到離線列，
+     * 筆數沒量到；有值才是真的量到的筆數。沒量到絕不記成 0——記成 0 的話，手機上明明
+     * 押著幾筆的情境會拿 0 去比，比出來的差值跟這次操作無關，錯誤訊息還會指向錯的原因。
+     */
+    private OptionalInt offlineWindowPendingCount;
+
+    /**
+     * 裝置切到離線的那一刻，後端每一間房那一筆任務的狀態（房號 -> {@code tasks.state}）；
+     * 這個情境還沒切過離線時為 null。
+     *
+     * <p>同樣給「這次操作沒有留在手機上等補送」用的另一面：後端該任務狀態要與操作前
+     * 一樣。切離線時任務頁還沒打開（{@link #currentTaskRoomNo} 還是 null），所以這裡
+     * 把當下全部房務任務的狀態都記下來，由斷言時再挑出當事那一間。
+     */
+    private Map<String, String> offlineWindowTaskStates;
 
     private static volatile AppiumDriver driver;
     private static volatile boolean shutdownHookRegistered;
@@ -279,6 +309,8 @@ public class AppiumWorld {
         notificationViewer = null;
         loggedInStaff = null;
         currentTaskRoomNo = null;
+        offlineWindowPendingCount = null;
+        offlineWindowTaskStates = null;
         // 真後端的資料在情境之間會留下來（不像以前的記憶體 fixture 隨 App process 消失），
         // 不清掉會讓上一個情境的任務繼續出現在待認領池；清法與 tms 的 ResetHooks 相同。
         backend.resetBusinessData();
@@ -538,6 +570,138 @@ public class AppiumWorld {
 
     /** 欠一次「在 App 按開始」的那筆任務掛在誰名下。 */
     private record DeferredStart(BackendChannel.CreatedStaff staff) {
+    }
+
+    /**
+     * 量離線視窗開場基準時，花多久找離線列。
+     *
+     * <p>這是短探測，不是在等離線列非出現不可。離線列只掛在少數幾個頁面，停在登入畫面
+     * 或報修面板上切離線時，等再久也不會冒出那一列；等不到就記成「沒量到」，交給斷言
+     * 那一側噴錯，不在這裡拖長每個離線情境的時間。
+     *
+     * <p>探測短還順帶壓低一個風險：切離線這一步插在「在 App 按過開始」與離線動作之間，
+     * 等多久就把那張單的已做秒數（{@code tasks.worked_sec}）往前推多久。目前沒有離線
+     * 場景在斷言已做分鐘數，但等待越短，日後加這種斷言時越不容易被推歪。
+     */
+    private static final Duration OFFLINE_BAR_BASELINE_PROBE = Duration.ofSeconds(2);
+
+    /**
+     * 把裝置切到無網路，並記下這個離線視窗的開場基準。
+     *
+     * <p>基準包含兩項：App 本機待送出佇列的筆數，以及後端每一筆房務任務的狀態。
+     * 這兩項在動作做完之後就再也讀不回來，所以必須在動作之前量。為什麼非比這兩項
+     * 不可，見「這次操作沒有留在手機上等補送」那一句的說明。
+     *
+     * <p>筆數在切到離線之後才讀：待送出筆數只在離線列上顯示，連線正常時整列不出現。
+     * 讀不到離線列就記成「沒量到」，不記 0；兩者的差別見
+     * {@link #offlineWindowPendingCount} 的說明。
+     *
+     * <p>基準只在「由連線轉離線」的那一次量。已經在離線視窗裡時再呼叫一次只是把裝置
+     * 維持在離線，不重量：重量會把視窗開場之後押進佇列的那幾筆算進基準，等於拿操作後
+     * 的筆數當操作前的筆數。
+     */
+    public void goOffline() {
+        boolean alreadyInOfflineWindow = offlineWindowPendingCount != null;
+        postBackdoorJson("/offline", "{\"offline\":true}");
+        if (alreadyInOfflineWindow) {
+            return;
+        }
+        offlineWindowPendingCount = pendingSyncCountOnScreen(OFFLINE_BAR_BASELINE_PROBE);
+        offlineWindowTaskStates = taskStatesByRoomNo();
+    }
+
+    /**
+     * 把裝置切回有網路，並丟掉這個離線視窗的開場基準。
+     *
+     * <p>基準只對它被量下來的那一段離線視窗有效。恢復連線後不清掉的話，
+     * 「離線、恢復連線、再離線、下斷言」的情境會拿第二段離線視窗的現況去比第一段
+     * 留下的陳舊筆數，比出來的差值跟這次操作無關。
+     */
+    public void goOnline() {
+        postBackdoorJson("/offline", "{\"offline\":false}");
+        offlineWindowPendingCount = null;
+        offlineWindowTaskStates = null;
+    }
+
+    /**
+     * 目前畫面上離線列顯示的待送出佇列筆數，也就是 App 本機還沒送到後端的動作筆數。
+     *
+     * <p>回傳空值代表畫面上找不到離線列，不代表佇列是空的。離線列只要在畫面上，
+     * 這個筆數節點就一定渲染，連筆數 0 也渲染；而離線列只掛在少數幾個頁面。所以
+     * 離線期間讀不到它，說的是「現在這一頁沒有離線列」（頁面正在轉場、被覆蓋層蓋住，
+     * 或這一頁根本沒掛那一列），筆數無從得知。呼叫端自行決定空值怎麼算，不在這裡
+     * 拿 0 當「讀不到」的代稱：那會讓比對筆數的斷言在什麼都沒量到時照樣通過。
+     */
+    public OptionalInt pendingSyncCountOnScreen(Duration timeout) {
+        WebElement pendingCount = waitForTestIdQuietly("system.offline-bar.pending-count", timeout);
+        if (pendingCount == null) {
+            return OptionalInt.empty();
+        }
+        String label = pendingCount.getAttribute("label");
+        try {
+            return OptionalInt.of(Integer.parseInt(label == null ? "" : label.trim()));
+        } catch (NumberFormatException notANumber) {
+            throw new AssertionError("讀不出離線列的待同步筆數，實際讀到「" + label + "」");
+        }
+    }
+
+    /**
+     * 這個離線視窗開場時，App 本機待送出佇列的筆數；回傳空值代表那一刻畫面上找不到
+     * 離線列，筆數沒量到。
+     *
+     * <p>根本沒有離線視窗時直接噴錯，那是劇本漏了把手機切到離線，或是切過之後又恢復
+     * 連線把基準清掉了。量過但沒量到則回空值，由呼叫端自己噴錯：那是「基準沒量到」，
+     * 跟「筆數是 0」是兩回事，錯誤訊息要講得出是哪一種。兩種情形都不許自行補預設值，
+     * 補小了會讓比對筆數的斷言永遠通過。
+     */
+    public OptionalInt offlineWindowPendingCount() {
+        if (offlineWindowPendingCount == null) {
+            throw new IllegalStateException(
+                    "目前這個離線視窗沒有量到開場的待送出筆數，無從比對操作前後的筆數。"
+                            + "手機要嘛還沒切到離線，要嘛切過之後又恢復連線把基準清掉了");
+        }
+        return offlineWindowPendingCount;
+    }
+
+    /**
+     * 這個離線視窗開場時，後端某房號那一筆任務的狀態。
+     *
+     * <p>沒有基準，或切到離線時後端根本沒有這一筆房務任務，都直接噴錯。兩者都不是
+     * 斷言可以自行補上預設值的情況。基準會缺，可能是手機還沒切到離線，也可能是切過
+     * 之後又恢復連線，把上一段離線視窗的基準清掉了。
+     */
+    public String offlineWindowTaskState(String roomNo) {
+        if (offlineWindowTaskStates == null) {
+            throw new IllegalStateException(
+                    "目前這個離線視窗沒有量到開場的後端狀態，無從比對操作前後的狀態。"
+                            + "手機要嘛還沒切到離線，要嘛切過之後又恢復連線把基準清掉了");
+        }
+        String state = offlineWindowTaskStates.get(roomNo);
+        if (state == null) {
+            throw new IllegalStateException(
+                    "切到離線時後端沒有「" + roomNo + "」這一筆任務，無從比對操作前後的狀態");
+        }
+        return state;
+    }
+
+    /**
+     * 權威讀回：本情境每一間房那一筆房務任務目前的狀態，以房號為鍵。
+     *
+     * <p>工務單不算在內，範圍與 {@link #taskRowByRoomNo} 相同：句型裡用房號指稱的
+     * 一律是房務那一筆。
+     */
+    private Map<String, String> taskStatesByRoomNo() {
+        List<Map<String, Object>> rows = backend.queryRows(
+                """
+                SELECT r.room_no AS room_no, t.state AS state FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? AND t.type <> 'repair'
+                """, backend.ensureTenant());
+        Map<String, String> states = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            states.put(String.valueOf(row.get("room_no")), String.valueOf(row.get("state")));
+        }
+        return states;
     }
 
     /**
@@ -917,18 +1081,48 @@ public class AppiumWorld {
         }
     }
 
-    private void httpGet(String path) throws IOException, InterruptedException {
+    private String httpGet(String path) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + BACKDOOR_PORT + path))
                 .GET()
                 .timeout(Duration.ofSeconds(5))
                 .build();
-        HttpResponse<Void> response = HttpClient.newBuilder()
+        HttpResponse<String> response = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .build()
-                .send(request, HttpResponse.BodyHandlers.discarding());
+                .send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (response.statusCode() != 200) {
             throw new IOException("GET " + path + " -> HTTP " + response.statusCode());
+        }
+        return response.body();
+    }
+
+    /**
+     * 讀回裝置目前被注入的時鐘（測試後門 {@code GET /state} 的 {@code injectedClockIso}）；
+     * 這個場景還沒撥過裝置時鐘時回 {@code null}。
+     *
+     * <p>給「把時間往前撥 N 分鐘」這種<b>相對</b>推撥句用：相對推撥的基準必須是
+     * 「目前生效的裝置時間」——場景前面若已有句子撥過時鐘（「現在時間是」「已中斷
+     * N 分鐘」），再拿真實當下當基準會把時鐘倒轉回去，撥快的那一段就被吃掉了。
+     */
+    public OffsetDateTime injectedDeviceClock() {
+        String body;
+        try {
+            body = httpGet("/state");
+        } catch (IOException e) {
+            throw new IllegalStateException("讀測試後門 /state 失敗", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("讀測試後門 /state 時被中斷", e);
+        }
+        try {
+            JsonNode state = new ObjectMapper().readTree(body);
+            JsonNode injected = state.get("injectedClockIso");
+            return injected == null || injected.isNull()
+                    ? null
+                    : OffsetDateTime.parse(injected.asText());
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("測試後門 /state 回應不是合法 JSON：" + body, e);
         }
     }
 

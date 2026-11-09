@@ -132,6 +132,10 @@ tasksComplete:
       工務單完成時推播報修人，連結的原任務停住原因改為「工務已修好：<類別>」，但原任務不自動恢復。
       完修後的工務單新增「等主管驗收」子狀態（不開新狀態值，見 RepairTicket.verifiedBy／verifiedAt）；
       主管驗收通過後呼叫 verifyRepairTicket。
+      回應除了剛完成的任務詳情，另外帶完成畫面要用的兩個值（見 TaskCompletion）：
+      nextStep 是接下來該去哪一間（next_task／unfinished_task／all_clear 三種去向），
+      cleaningDoneToday 是今天完成的第幾張打掃單（只有打掃類帶）。
+      兩者都在這一次往返內給完，App 不為了畫完成畫面再查一次今日進度。
     tags:
     - 任務 API
     parameters:
@@ -149,7 +153,7 @@ tasksComplete:
         content:
           application/json:
             schema:
-              $ref: '../../components/schemas/任務.yaml#/TaskDetail'
+              $ref: '../../components/schemas/任務.yaml#/TaskCompletion'
       '404':
         $ref: '../../components/responses.yaml#/NotFound'
       '409':
@@ -441,7 +445,10 @@ tasksResume:
     summary: 恢復自己中斷的任務
     description: >-
       負責人把自己 interrupted 的任務轉回 doing。已做分鐘從中斷前的累計接續，不含中斷期間。
-      同一位員工已有另一筆 doing 時，回 409 doing_task_exists，規則同 tasksStart。
+      中斷時記下的停住原因在這一步清空（回應的 holdReason 為 null）——
+      那張單已經接回來做了，停住原因留著會讓任務頁繼續顯示一個已經不成立的理由。
+      同一位員工已有另一筆 doing 時，回 409 doing_task_exists，規則同 tasksStart：
+      context 帶那一筆的 taskId 與 roomNo，message 例如「302 還在進行中」。
     tags:
     - 任務 API
     parameters:

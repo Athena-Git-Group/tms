@@ -261,6 +261,27 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
+  /// 把已中斷的這一間接回來繼續做。
+  ///
+  /// 離線時擋在這裡的理由同 [_start]：回到進行中要由後端判定「一次只做一
+  /// 間」，離線時沒有人能做這個判定，先放行會讓同一位員工手上出現兩筆進行中。
+  Future<void> _resume(TaskDetail task) async {
+    if (ConnectionStatus.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
+      return;
+    }
+    try {
+      final resumed = await ApiClient.instance.resumeTask(task.id);
+      if (!mounted) {
+        return;
+      }
+      _showTask(resumed);
+      TodayRefresh.instance.request();
+    } on ApiException catch (e) {
+      await _showBusyAlert(e, fallback: '還有另一間在進行中');
+    }
+  }
+
   /// 完成這一間：連線正常時直接送給後端，離線時留在手機上等連線恢復。
   ///
   /// 離線時唯一還能做的事就是把手上進行中的這間做完，所以這裡不擋，改交給
@@ -299,14 +320,7 @@ class _TaskScreenState extends State<TaskScreen> {
     // 慶祝頁給的是「一間房做完了」的回饋，所以只有打掃類走這一段；備品類送達
     // 之後留在任務頁。
     if (completed.type == 'cleaning') {
-      await Navigator.of(context).push(
-        CupertinoPageRoute<void>(
-          builder: (_) => CelebrateScreen(
-            actualMinutes: completed.elapsedMinutes,
-            estimateMinutes: completed.estMin,
-          ),
-        ),
-      );
+      await Navigator.of(context).push(_celebrateRoute(completed));
     }
   }
 
@@ -637,11 +651,10 @@ class _TaskScreenState extends State<TaskScreen> {
                 id: 'task.primary-button',
                 child: TmsPillButton(
                   label: primaryLabel,
-                  // 目前只接「開始」與「完成」；恢復處理等對應情境進場再接
-                  // （接了也沒有情境在驗，會變成沒人讀的分支）。
                   onPressed: switch (primaryLabel) {
                     '開始' => () => _start(task),
                     '完成' => () => _complete(task),
+                    '恢復處理' => () => _resume(task),
                     _ => () {},
                   },
                 ),
@@ -1035,6 +1048,29 @@ class _TaskScreenState extends State<TaskScreen> {
     }
     _showTask(updated);
   }
+}
+
+/// 完成慶祝的路由。
+///
+/// `opaque: false` 是這張卡能成立的前提：慶祝頁是一張浮在半透明遮罩上的對話
+/// 卡，遮罩底下要看得到剛做完的那張任務頁。用一般的不透明路由推上去的話，
+/// Flutter 不會再畫底下那一頁，遮罩後面什麼都沒有，整個畫面只會是一片黑。
+///
+/// 轉場用淡入而不是 iOS 預設的右滑：遮罩從旁邊滑進來會像換了一頁，淡入才讀得
+/// 出「這張卡蓋在原本那一頁上面」。
+PageRouteBuilder<void> _celebrateRoute(TaskDetail task) {
+  return PageRouteBuilder<void>(
+    opaque: false,
+    barrierDismissible: false,
+    transitionDuration: const Duration(milliseconds: 200),
+    reverseTransitionDuration: const Duration(milliseconds: 160),
+    pageBuilder: (_, _, _) => CelebrateScreen(
+      actualMinutes: task.elapsedMinutes,
+      estimateMinutes: task.estMin,
+    ),
+    transitionsBuilder: (_, animation, _, child) =>
+        FadeTransition(opacity: animation, child: child),
+  );
 }
 
 /// 超時膠囊：深底上是深橘底深褐字，白底上是橘淡底棕字。

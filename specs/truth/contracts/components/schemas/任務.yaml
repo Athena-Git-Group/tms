@@ -371,3 +371,62 @@ TaskDetail:
         allOf:
         - $ref: '#/ReturnInfo'
         nullable: true
+
+NextStep:
+  description: >-
+    完成一間之後，員工接下來該去哪裡。三種去向用 kind 明確分辨，**不是**靠
+    taskId 是不是 null 推斷——後者會讓「查不到下一間」與「今天都清完了」在畫面上
+    長得一模一樣，員工看到的結論卻完全相反。
+    挑選口徑：先找本人今日 accepted 的單（沿用 MyToday.nextTasks 的排序，兩處必須指向同一間）；
+    沒有時再找本人今日未結束的單（doing、interrupted、deferred），
+    依 doing→interrupted→deferred、同組房號遞增取第一筆；兩者皆無即為 all_clear。
+    「今日」的判定沿用 MyToday 的口徑：work_date 有值時比 work_date，
+    沒有值（非打掃類）時未結束狀態算今天、已結束看 doneAt 是否落在今天。
+  type: object
+  required:
+  - kind
+  properties:
+    kind:
+      type: string
+      enum:
+      - next_task
+      - unfinished_task
+      - all_clear
+      description: >-
+        next_task＝還有待開始的下一張任務；unfinished_task＝沒有待開始的單，
+        但今天還有停在一半的單（進行中、已中斷或已延後）；all_clear＝今天排定的房都清完了。
+    taskId:
+      type: string
+      format: uuid
+      description: kind 為 next_task 或 unfinished_task 時必有；all_clear 時不出現。
+    roomNo:
+      type: string
+      description: kind 為 next_task 或 unfinished_task 時必有；all_clear 時不出現。
+
+TaskCompletion:
+  description: >-
+    完成一間之後回給 App 的東西：剛完成的那張任務詳情，加上完成畫面要用的兩個值。
+    兩個值都在完成這一次往返內給完，App 不為了畫完成畫面再打一次 MyToday——
+    多一次往返會讓完成畫面在訊號差的樓層卡住，而那正是員工最需要立刻看到回饋的時候。
+  allOf:
+  - $ref: '#/TaskDetail'
+  - type: object
+    required:
+    - nextStep
+    properties:
+      nextStep:
+        $ref: '#/NextStep'
+      cleaningDoneToday:
+        type: integer
+        format: int32
+        minimum: 0
+        description: >-
+          這是呼叫者今天完成的第幾張打掃單（含開工時鎖定免查房而直接結案的單）。
+          與 MyToday.cleaningDone 同一套口徑，兩個畫面的數字必須一致。
+          **只有打掃類任務的完成會帶這個欄位**；備品等其他類別不帶，完成畫面據此整塊不呈現今日進度。
+      celebrationEnabled:
+        type: boolean
+        description: >-
+          租戶是否開啟完成慶祝的氣氛呈現（對應 tenant_config 的 completion_celebration_enabled）。
+          false 時完成畫面仍然出現、接續按鈕仍然可用，只是不呈現飾帶、彩屑、入場動態與今日進度——
+          關掉的是氣氛，不是接力。省略時視為 true。

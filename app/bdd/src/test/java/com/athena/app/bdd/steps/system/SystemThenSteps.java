@@ -39,7 +39,7 @@ public class SystemThenSteps {
                     + stateWhileOffline + "」");
         }
 
-        world.postBackdoorJson("/offline", "{\"offline\":false}");
+        world.goOnline();
         String state = waitForBackendState(task);
         if (!"done".equals(state) && !"inspected".equals(state)) {
             throw new AssertionError("恢復連線後「" + task + "」的完成沒有送出去，後端仍是「"

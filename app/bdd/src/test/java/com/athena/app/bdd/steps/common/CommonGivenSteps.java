@@ -115,6 +115,6 @@ public class CommonGivenSteps {
         // 切離線之前先把測試資料欠的「在 App 按開始」補完：開工是離線時被擋下來的
         // 動作，裝置離線後那一筆進行中就再也補不起來了。
         world.settleDeferredStarts();
-        world.postBackdoorJson("/offline", "{\"offline\":true}");
+        world.goOffline();
     }
 }

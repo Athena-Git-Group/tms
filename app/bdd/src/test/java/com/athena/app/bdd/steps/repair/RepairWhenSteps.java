@@ -162,6 +162,12 @@ public class RepairWhenSteps {
     /**
      * 怎麼做：把裝置切回有網路（測試後門的 {@code /offline}），等待待送出佇列處理完。
      *
+     * <p><b>權威位置：介面根</b> {@code specs/truth/features/ios-app/dsl.md}。這一句同時
+     * 服務 {@code 工務單} 與 {@code 任務執行} 兩個模組，後者用在「離線完成的那一筆，恢復
+     * 連線後真的送到後端」，所以登記在介面根而不是任一模組的 {@code dsl.md}。stepdef 仍
+     * 留在本類別：Cucumber glue 掃全部 steps package，模組歸屬不影響它被兩邊的 feature
+     * 找到。
+     *
      * <p>「處理完」以畫面頂部的離線列（{@code system.offline-bar}）消失為準：那一列顯示的
      * 就是佇列長度本身（{@code ConnectionStatus.pendingSyncCount}），它不見代表佇列已經
      * 空了。不等它就往下走，後面的權威讀回會在請求還在路上時數到比較少的筆數。
@@ -169,7 +175,7 @@ public class RepairWhenSteps {
     @當("{string} 的手機恢復連線")
     public void phoneBackOnline(String staffName) {
         world.staff(staffName);
-        world.postBackdoorJson("/offline", "{\"offline\":false}");
+        world.goOnline();
         world.waitForTestIdGone("system.offline-bar", QUEUE_DRAIN_TIMEOUT);
     }
 

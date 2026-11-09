@@ -365,6 +365,20 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
+  /// `POST /tasks/{id}/resume`：負責人把自己已中斷的任務接回來繼續做（契約
+  /// `tasksResume`）。中斷時停住的原因由後端清掉，任務回到進行中。
+  ///
+  /// 「一次一間」的判定同 [startTask]：手上已經有另一筆進行中的單時後端回 409
+  /// `doing_task_exists`，哪一間擋住了由後端說了算。
+  Future<TaskDetail> resumeTask(String taskId) async {
+    final json = await _requestJson(
+      'POST',
+      '/tasks/$taskId/resume',
+      idempotent: true,
+    );
+    return TaskDetail.fromJson(json as Map<String, dynamic>);
+  }
+
   /// `GET /tasks/{id}`：單一任務的員工視角詳情。
   Future<TaskDetail> getTask(String taskId) async {
     final json = await _requestJson('GET', '/tasks/$taskId');

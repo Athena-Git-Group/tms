@@ -6,7 +6,7 @@ tenant_config:
       format: int64
     key:
       type: string
-      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）
+      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）
     value:
       type: string
       description: 結構依 key 而異
@@ -31,7 +31,7 @@ tenant_configRequest:
       format: int64
     key:
       type: string
-      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）
+      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）
     value:
       type: string
       description: 結構依 key 而異

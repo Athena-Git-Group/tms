@@ -19,3 +19,4 @@ reviews/
 
 # Maven 建置產物（app/bdd 等 Java 模組）
 target/
+.tms-parity/

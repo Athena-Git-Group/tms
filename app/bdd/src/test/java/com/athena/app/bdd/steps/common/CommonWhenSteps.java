@@ -51,7 +51,8 @@ public class CommonWhenSteps {
 
     /**
      * 怎麼做：在任務頁點主按鈕「完成」。權威狀態落地：成功時後端任務依 {@code tasksComplete}
-     * 語意轉為 done 或 inspected；失敗時後端不變。回寫：畫面提示、任務頁或完成慶祝頁內容。
+     * 語意轉為 done 或 inspected；失敗時後端不變。回寫：畫面提示、任務頁或完成畫面內容。
+     * 完成畫面是疊在這張任務頁上的覆蓋層，底下那一頁不會被換掉。
      * accessibility id：{@code task.primary-button}。
      */
     @當("{string} 在 App 完成 {string}")

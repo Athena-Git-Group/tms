@@ -373,6 +373,10 @@ components:
       $ref: './components/schemas/任務.yaml#/ReturnInfo'
     TaskDetail:
       $ref: './components/schemas/任務.yaml#/TaskDetail'
+    NextStep:
+      $ref: './components/schemas/任務.yaml#/NextStep'
+    TaskCompletion:
+      $ref: './components/schemas/任務.yaml#/TaskCompletion'
     RepairCategory:
       $ref: './components/schemas/工務單.yaml#/RepairCategory'
     CreateRepairPhotoRequest:

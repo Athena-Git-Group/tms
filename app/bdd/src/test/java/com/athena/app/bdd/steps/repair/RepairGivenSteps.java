@@ -107,19 +107,25 @@ public class RepairGivenSteps {
      * 的 Rule「離線時開始、認領、延後、開新工務單一律被擋」，離線時點報修只會收到
      * 離線提示，根本進不了報修面板；能在離線時走完的只有「把已經填好的這張送出」
      * （`報修照片與送出.feature` 的「阿美在電梯裡送出 310 冷氣單」就是這條動線）。
+     *
+     * <p>也因為這樣，這一句一次只押得出一張：第一張送出之後手機已經離線，第二張連面板
+     * 都打不開。張數要求超過 1 時直接噴錯，不假裝做得到——照著做只會在離線狀態下反覆點
+     * 報修按鈕，最後定位不到面板而逾時，錯誤訊息還指向錯的地方。
      */
     @假設("^\"([^\"]+)\" 的手機有 (\\d+) 張待送出的 (\\S+) 冷氣工務單$")
     public void phoneHasPendingAcTickets(String staffName, int count, String roomNo) {
         // 開工是離線時被擋下來的動作，裝置一旦離線那一筆進行中就再也補不起來，
         // 所以切離線之前先把測試資料欠的「在 App 按開始」補完（同共通 Given「手機目前離線」）。
         world.settleDeferredStarts();
-        for (int i = 0; i < count; i++) {
-            context.openRepairSheet(staffName, roomNo);
-            world.tapTestId("repair.category." + REPAIR_CATEGORY.get("冷氣") + ".chip", SCREEN_TIMEOUT);
-            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
-            world.postBackdoorJson("/offline", "{\"offline\":true}");
-            world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
+        if (count != 1) {
+            throw new IllegalStateException("這一句一次只押得出 1 張待送出的工務單，劇本要求 "
+                    + count + " 張。第一張送出之後手機已經離線，第二張連報修面板都打不開");
         }
+        context.openRepairSheet(staffName, roomNo);
+        world.tapTestId("repair.category." + REPAIR_CATEGORY.get("冷氣") + ".chip", SCREEN_TIMEOUT);
+        world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+        world.goOffline();
+        world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
         assertNoTicketInBackend("離線送出的單只會留在手機的待送出佇列");
     }
 

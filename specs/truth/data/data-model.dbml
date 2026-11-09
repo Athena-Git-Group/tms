@@ -22,7 +22,7 @@ Table tenants {
 
 Table tenant_config {
   tenant_id  bigint      [not null, ref: > tenants.id]
-  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）']
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）|completion_celebration_enabled（002 新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力。這一鍵只影響呈現，不影響 tasks 的任何欄位，也不影響「今天第幾單」與「完成後的接續去向」兩個衍生值的計算）']
   value      jsonb       [not null, note: '結構依 key 而異']
   updated_at timestamptz [not null]
   updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
@@ -220,6 +220,14 @@ Table tasks {
   待認領未接提醒（本輪新增，取代原逾時升級鏈 L1/L2/L3）：排程依 tenant_config.unclaimed_reminder_minutes 掃描 state=pool 的任務，
   一般單與急件各自的「提醒同仁」「通知主管」門檻各只跨越一次、各發一次推播並寫入 reminder_stage；離開 pool 時 reminder_stage 清空，
   不保留歷史（沿用既有投影可清空重建的精神，由排程重新計算，不需要額外的 task_events 型別）。
+  完成當下的兩個衍生值（本輪新增說明，不新增欄位）：
+    「今天第幾單」＝本人今日（work_date＝今天）未取消的 cleaning 任務中，state 為 done 或 inspected 的數量，
+    含 inspection_waived 直接結案者；與首頁已清完間數同一個計數，不另存計數欄位，否則兩個畫面會各算各的。
+    「完成後的接續去向」＝先找本人今日 state=accepted 的單（沿用既有下一間排序），沒有時再找本人今日
+    state 為 doing、interrupted、deferred 的單，依 doing→interrupted→deferred、同組 room_no 遞增取第一筆；
+    兩者皆無即為「今天排定的房都清完了」。兩段查詢都走既有索引 (tenant_id, assignee_id, state)，不新增索引。
+    「今天」的判定沿用既有口徑：work_date 有值時比 work_date，沒有值（非打掃類）時未結束狀態一律算今天、
+    已結束看 done_at 是否落在今天——兩個新值與 todayTasks／nextTasks 必須共用這一套，否則同一張單會在不同畫面有兩種歸屬。
   '''
 }
 
