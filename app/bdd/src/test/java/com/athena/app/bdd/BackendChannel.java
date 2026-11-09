@@ -483,6 +483,28 @@ public class BackendChannel {
     }
 
     /**
+     * 把一張單在後端的時間軸整批往前推 N 分鐘：事件時刻、開工時刻與最後更新時刻一起推。
+     * 推完這張單看起來就像 N 分鐘前發生那些事，兩邊的時鐘都不必動。
+     *
+     * <p>「已經中斷 N 分鐘」沒有辦法用等的，也不能靠撥時鐘。撥裝置時鐘只動得到 App
+     * 那一邊，後端恢復開工時寫的起算時刻用的是後端自己的系統時鐘，兩邊差出來的那一段
+     * 會被算進已做時間；而注入值是固定的一個時刻，畫面上的計時從此不再前進，「計時正在
+     * 走」就驗不出來了。
+     *
+     * <p>事件整批推同一個量，彼此的先後次序不變。{@code worked_sec} 與
+     * {@code segment_started_at} 刻意不動：中斷期間不累計工時，往前推時間不該改到
+     * 已經累計好的那個數字。
+     */
+    public void backdateTaskTimeline(UUID taskId, int minutes) {
+        long tenantId = ensureTenant();
+        execute("UPDATE task_events SET created_at = created_at - make_interval(mins => ?)"
+                + " WHERE tenant_id = ? AND task_id = ?", minutes, tenantId, taskId);
+        execute("UPDATE tasks SET started_at = started_at - make_interval(mins => ?),"
+                + " updated_at = updated_at - make_interval(mins => ?)"
+                + " WHERE tenant_id = ? AND id = ?", minutes, minutes, tenantId, taskId);
+    }
+
+    /**
      * 凍結一張交班單，裡面只有一則指定對象的項目（欄位對照 tms {@code HandoverFixtures}：
      * {@code snapshot} 是 {@code [{target, content, authorName}, …]}，{@code generated_by}
      * 固定 {@code system}）。交班單沒有建立端點——它是班末掃描凍結出來的快照，所以直接落地。
@@ -770,12 +792,18 @@ public class BackendChannel {
             if ("doing".equals(stateCode)) {
                 execute("UPDATE tasks SET worked_sec = 0, segment_started_at = ? WHERE tenant_id = ? AND id = ?",
                         OffsetDateTime.now().minusMinutes(workedMinutes), tenantId, taskId);
-            } else if ("interrupted".equals(stateCode)) {
+            } else if (List.of("interrupted", "done", "inspected").contains(stateCode)) {
+                // 終局狀態的已做分鐘是完成當下的累計值，畫面上讀的就是它。這個 UPDATE
+                // 排在狀態轉移之後，刻意覆寫完成那一步自己算出來的 worked_sec：fixture
+                // 的開工與完成只隔幾毫秒，算出來一律是 0 分，場景要的分鐘數只能直接落。
                 execute("UPDATE tasks SET worked_sec = ?, segment_started_at = NULL WHERE tenant_id = ? AND id = ?",
                         workedMinutes * 60, tenantId, taskId);
             } else {
                 throw new IllegalArgumentException(
-                        "workedMinutes 只在 doing|interrupted 有意義，收到 state=" + stateCode);
+                        "已做分鐘只在 doing|interrupted|done|inspected 有意義，收到 state=" + stateCode
+                                + "。依契約（specs/truth/contracts/components/schemas/員工工作台.yaml"
+                                + " 的 workedMinutes）accepted 與 deferred 的已做分鐘一律是 0，"
+                                + "填非 0 是劇本寫錯");
             }
         }
         if (holdReason != null) {

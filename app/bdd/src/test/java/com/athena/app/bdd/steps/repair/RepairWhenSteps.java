@@ -120,8 +120,11 @@ public class RepairWhenSteps {
      *       ——工務的單一定掛在自己名下。</li>
      *   <li>房務（報修人）：dsl 的三條路（任務頁／通知／「我的」）裡只有任務頁的
      *       同房工務單區有契約可依（{@code listRepairTickets?roomId=}），所以走
-     *       首頁該房任務列 → 任務頁 → 該單的工務單列
-     *       （{@code task.repair-ticket.{單號}.card}）。</li>
+     *       首頁該房任務列 → 任務頁 → 「這間房的資訊」的工務單列
+     *       （{@code task.info-row.repair-tickets}）。該房未撤回的單只有一張時那一列
+     *       直接開詳情，兩張以上才先推工務單清單頁，再點該單那一列
+     *       （{@code room-info.repair-ticket.{單號}.row}）。張數去後端問，不試點看看：
+     *       試錯的寫法在 App 真的壞掉時會多吞一次逾時。</li>
      * </ul>
      */
     @當("{string} 在 App 打開 {string} 的工務單詳情")
@@ -133,7 +136,11 @@ public class RepairWhenSteps {
         } else {
             world.tapTestId("home.task." + roomNoOf(ticketNo) + ".card", SCREEN_TIMEOUT);
             world.waitForTestId("task.screen", SCREEN_TIMEOUT);
-            world.tapTestId("task.repair-ticket." + ticketNo + ".card", SCREEN_TIMEOUT);
+            world.tapTestId("task.info-row.repair-tickets", SCREEN_TIMEOUT);
+            if (uncancelledTicketCountOfRoom(ticketNo) > 1) {
+                world.waitForTestId("room-info.repair-tickets.screen", SCREEN_TIMEOUT);
+                world.tapTestId("room-info.repair-ticket." + ticketNo + ".row", SCREEN_TIMEOUT);
+            }
         }
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
     }
@@ -151,6 +158,24 @@ public class RepairWhenSteps {
                     + rows.size() + " 張");
         }
         return (String) rows.get(0).get("room_no");
+    }
+
+    /**
+     * 權威讀回：該工務單所在房間有幾張未撤回的單——任務頁那一列是直接開詳情還是先推
+     * 清單頁，取決於這個數字。
+     *
+     * <p>排除值只有 {@code cancelled} 一個，跟後端 {@code listRepairTickets}
+     * （{@code tms/src/main/java/com/athena/tms/repair/RepairService.java} 的
+     * {@code listByRoom}）同一口徑；多排一個狀態就會數少，進法會選錯分支。
+     */
+    private int uncancelledTicketCountOfRoom(String ticketNo) {
+        return world.backend().queryRows(
+                """
+                SELECT rt.ticket_no FROM repair_tickets target
+                JOIN repair_tickets rt ON rt.tenant_id = target.tenant_id AND rt.room_id = target.room_id
+                JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
+                WHERE target.tenant_id = ? AND target.ticket_no = ? AND t.state <> 'cancelled'
+                """, world.backend().ensureTenant(), ticketNo).size();
     }
 
     /**

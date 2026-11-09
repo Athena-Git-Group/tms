@@ -285,12 +285,14 @@ public class RepairThenSteps {
     /**
      * 必查：報修畫面的急件判定卡顯示「系統判定：急件 · {理由}」，與後端 {@code urgentSuggestion}
      * 的判定結果與 {@code rule} 一致；沒有輸入可以更改這個判定。
-     * accessibility id：{@code repair.urgent-judgement.card}、{@code repair.urgent-judgement.reason}。
+     * accessibility id：{@code repair.urgent-judgement.card}。
+     *
+     * <p>判定與理由合成一句讀，不是分兩句讀。理由是判定的一部分，分開驗的話
+     * 「急件」與理由之間漏接成「系統判定：急件VIP · 15:00 入住」也會過。
      */
     @那麼("畫面顯示系統判定為急件，理由 {string}")
     public void showsSystemUrgentJudgement(String reason) {
-        assertLabelContains("repair.urgent-judgement.card", "系統判定：急件", "急件判定卡");
-        assertLabelContains("repair.urgent-judgement.reason", reason, "急件判定理由");
+        assertLabelContains("repair.urgent-judgement.card", "系統判定：急件 · " + reason, "急件判定卡");
 
         List<Map<String, Object>> reservations = todayReservationsForRepairRoom();
         if (reservations.isEmpty()) {

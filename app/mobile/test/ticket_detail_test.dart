@@ -303,6 +303,32 @@ void main() {
       expect(find.text('放回待認領'), findsNothing);
     });
 
+    // 原型放回待認領之後直接關掉詳情頁（`Main.dc.html:3762`），所以沒有這個
+    // 畫面的樣本；這一條的依據是 truth 的 `工務單/dsl.md:78`，它要求放回之後
+    // 工務單詳情要顯示狀態摘要卡「待認領」。
+    testWidgets('放回待認領之後，工務視角的詳情用狀態摘要卡說它沒有人負責', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(engineering(ticket(state: 'pool')));
+
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsIdentifier('ticket.status-summary-card'),
+            )
+            .label,
+        '待認領',
+      );
+
+      await tester.pumpWidget(engineering(ticket(state: 'accepted')));
+      expect(
+        find.bySemanticsIdentifier('ticket.status-summary-card'),
+        findsNothing,
+      );
+
+      handle.dispose();
+    });
+
     testWidgets('「這張單的資訊」沒有負責人時寫等工務認領（Main.dc.html:3919）', (
       tester,
     ) async {

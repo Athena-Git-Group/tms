@@ -368,6 +368,18 @@ class TicketDetailEngineering extends StatelessWidget {
     return TmsCalloutSlot(
       candidates: [
         _fixedCallout(detail),
+        if (detail.state == 'pool')
+          TmsStatusCallout(
+            kind: TmsCalloutKind.ticketInPool,
+            tone: TmsCalloutTone.info,
+            title: repairStateText(detail.state),
+            body: '還沒有人認領這張單，其他工務同仁都接得到。',
+            // 前綴給了，標題與說明才各自成為獨立節點；不給的話那兩段是裸
+            // Text，會被併進外層節點的 label，讀狀態的一方拿到的是兩段接起
+            // 來的字。
+            idPrefix: 'ticket.status-summary-card',
+            wrap: (node) => _summaryWrap(node, repairStateText(detail.state)),
+          ),
         if (detail.state == 'pending_review')
           const TmsStatusCallout(
             kind: TmsCalloutKind.ticketAwaitingReview,

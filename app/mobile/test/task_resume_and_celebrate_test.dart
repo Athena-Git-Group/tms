@@ -63,10 +63,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CelebrateScreen), findsOneWidget);
-    // 遮罩是半透明的，所以推它上來的那條路由必須是不透明的反面：路由只要
-    // opaque，Flutter 就不再畫底下那一頁，遮罩後面會是一片黑。
-    final route = ModalRoute.of(tester.element(find.byType(CelebrateScreen)))!;
-    expect(route.opaque, isFalse);
+    // 卡在這一頁自己的 Stack 上，所以底下那一頁仍然在畫面樹與 accessibility
+    // 樹上。做成路由的話 Flutter 的 `ModalBarrier` 會把底下那一頁的 semantics
+    // 整批擋掉（`BlockSemantics`），遮罩底下是哪一間房就讀不到了。
+    expect(find.bySemanticsIdentifier('task.screen'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('task.nav.302'), findsOneWidget);
+    expect(
+      ModalRoute.of(tester.element(find.byType(CelebrateScreen))),
+      same(
+        ModalRoute.of(
+          tester.element(find.bySemanticsIdentifier('task.screen')),
+        ),
+      ),
+    );
+  });
+
+  testWidgets('備品單送達之後也給完成畫面，只是不帶今日進度', (tester) async {
+    final client = _FakeApiClient(_task(state: 'doing'));
+    ApiClient.instance = client;
+    await tester.pumpWidget(
+      const CupertinoApp(home: TaskScreen(roomNo: '308', taskId: 't-308')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier('task.primary-button'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('celebrate.screen'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('celebrate.today-progress'), findsNothing);
   });
 }
 

@@ -23,9 +23,9 @@ void main() {
       tester.widget<Text>(find.text(text)).style!;
 
   group('進行中卡的計時欄（Main.dc.html:174-182）', () {
-    testWidgets('超時時計時轉黃、長出深橘膠囊，分鐘數無條件進位', (tester) async {
-      // 已做 40 分 30 秒、預估 35 分：原型 Main.dc.html:3156 的
-      // max(1, ceil((2430 - 2100) / 60)) 得 6。
+    testWidgets('超時時計時轉黃、長出深橘膠囊，分鐘數跟計時同一套捨去', (tester) async {
+      // 已做 40 分 30 秒、預估 35 分：已做分鐘減預估分鐘得 5
+      // （`specs/truth/features/ios-app/任務執行/dsl.md:46`）。
       await tester.pumpWidget(
         host(
           const TmsHeroTimer(
@@ -39,10 +39,10 @@ void main() {
       expect(find.text('40:30'), findsOneWidget);
       expect(styleOf(tester, '40:30').color, TmsColors.overtimeTimerOnDark);
 
-      expect(find.text('超時 6 分'), findsOneWidget);
+      expect(find.text('超時 5 分'), findsOneWidget);
       final capsule = tester.widget<Container>(
         find
-            .ancestor(of: find.text('超時 6 分'), matching: find.byType(Container))
+            .ancestor(of: find.text('超時 5 分'), matching: find.byType(Container))
             .first,
       );
       final decoration = capsule.decoration! as BoxDecoration;
@@ -54,7 +54,7 @@ void main() {
           vertical: TmsSpacing.xxs,
         ),
       );
-      final capsuleText = styleOf(tester, '超時 6 分');
+      final capsuleText = styleOf(tester, '超時 5 分');
       expect(capsuleText.color, TmsColors.onOvertimeCapsule);
       expect(capsuleText.fontSize, 12);
       expect(capsuleText.fontWeight, FontWeight.w800);

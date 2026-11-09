@@ -301,34 +301,31 @@ public class TaskExecutionGivenSteps {
     }
 
     /**
-     * 怎麼做：把裝置時間與後端 {@code Clock} 一起往前撥到中斷事件之後的該分鐘數。
-     * 權威狀態落地：中斷事件時間不變，目前時刻離中斷已過該分鐘數；{@code worked_sec}
-     * 不變——這一句只撥時鐘，不寫任務的任何欄位。
+     * 怎麼做：把這張單的中斷事件與任務時間戳整批往前推該分鐘數，裝置與後端的時鐘都不動。
+     * 權威狀態落地：目前時刻離那筆中斷事件已過該分鐘數；{@code worked_sec} 與
+     * {@code segment_started_at} 不變——中斷期間不累計工時。
      *
-     * <p>撥到哪一刻是從後端那筆中斷事件（{@code task_events.type = 'interrupted'}）的
-     * 時刻算出來的，不是「現在再加該分鐘數」：前面那句「名下有以下任務」是走正式的
-     * 中斷端點把單帶到已中斷，中斷事件落在鋪資料的那一瞬間，而鋪資料到這一句之間已經
-     * 過了不確定的時間。以事件時刻為基準，情境說的「已中斷 N 分鐘」才剛好是 N 分鐘，
-     * 不會把鋪資料的耗時也算進去。
+     * <p>為什麼不撥時鐘。撥裝置時鐘（測試後門的 {@code POST /clock}）只動得到 App 那一邊，
+     * 後端的恢復端點寫 {@code segment_started_at} 用的是後端自己的系統時鐘。恢復之後裝置
+     * 時間比後端的起算點快了該分鐘數，中斷的那一段就全被算成已做時間。注入值還是固定的
+     * 一個時刻，畫面上的計時從此不再前進，連「計時正在走」都驗不出來。把資料往前推沒有
+     * 這兩個問題：兩邊的時鐘都還在正常走，差距只存在於資料本身。
      *
-     * <p>裝置半邊：注入測試後門的 {@code POST /clock}（{@code TestHooks.injectedClockIso}），
-     * 任務頁的計時從這個注入值讀。後端半邊目前「設不進去」，理由見共通 Given
-     * 「現在時間是」：跑著的後端用 {@code ClockConfig} 的系統時鐘，沒有任何可供外部
-     * 調整的端點（tms 自己的 BDD 是同 JVM 直接撥 {@code MutableClock}，harness 構不到）。
-     * 所以這一句目前只撥得動裝置那一邊——恢復處理之後後端寫下的
-     * {@code segment_started_at} 仍落在真實的當下，與撥快的裝置時間差了該分鐘數，任務頁
-     * 的已做時間會多算這一段。等後端開出測試用 Clock 端點時，這裡要改成兩邊一起撥。
+     * <p>整張單的事件推同一個量，所以中斷事件也跟著後退該分鐘數，從現在回看就是「N 分鐘
+     * 前中斷的」，誤差只有鋪資料到這一句之間的那不到一秒。推之前先讀那筆中斷事件
+     * （{@code task_events.type = 'interrupted'}）確認它在：劇本在還沒中斷的單上說
+     * 「已中斷 N 分鐘」時，往前推時間不會失敗，只會悄悄推一張狀態不對的單。
      */
     @假設("{string} 已中斷 {int} 分鐘")
     public void taskInterruptedForMinutes(String task, int minutes) {
         UUID taskId = (UUID) world.taskRowByRoomNo(task).get("id");
-        OffsetDateTime moment = lastInterruptedAt(taskId).plusMinutes(minutes);
-        world.postBackdoorJson("/clock", "{\"isoTime\":\"" + moment + "\"}");
+        lastInterruptedAt(taskId);
+        world.backend().backdateTaskTimeline(taskId, minutes);
     }
 
     /**
      * 權威讀回：這張單最後一筆中斷事件的時刻。查不到就噴錯——那代表劇本在還沒中斷的
-     * 單上說「已中斷 N 分鐘」，沒有基準時刻可以撥。
+     * 單上說「已中斷 N 分鐘」，沒有基準時刻可以往前推。
      */
     private OffsetDateTime lastInterruptedAt(UUID taskId) {
         List<Map<String, Object>> rows = world.backend().queryRows("""

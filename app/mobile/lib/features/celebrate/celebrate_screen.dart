@@ -36,20 +36,34 @@ import '../../core/widgets/tms_motion.dart';
 /// - `celebrate.next-button`：往下一步走的實心主按鈕（下一間／回到某一間／去待認領）。
 /// - `celebrate.back-home-button`：底部回到首頁的文字按鈕。
 ///
-/// `celebrate.celebration`（氣氛元素的群組，租戶關閉完成慶祝時整組不渲染）
-/// 還沒落地。
+/// - `celebrate.celebration`：氣氛元素的群組（頂部飾帶、彩屑與入場動態）。租戶
+///   關掉完成慶祝時整組不渲染，今日進度也跟著收起來——關掉的是氣氛，不是接力，
+///   所以標題、說明、這次用時與接續鍵都還在。
 class CelebrateScreen extends StatelessWidget {
   const CelebrateScreen({
     super.key,
     required this.actualMinutes,
     required this.subline,
+    required this.onBackHome,
     this.roomNo,
     this.estimateMinutes,
     this.todayNth,
     this.nextStep,
     this.queued = false,
+    this.celebrationEnabled = true,
     this.onNextStep,
   });
+
+  /// 這張卡是疊在底下那一頁上的覆蓋層，不是一條路由，所以離開要由推它上來的
+  /// 那一頁決定。做成路由的話 Flutter 的 `ModalBarrier` 會連帶把底下那一頁的
+  /// accessibility 節點整批擋掉（`BlockSemantics`），遮罩底下那一間房就再也讀
+  /// 不到了。原型也是把它畫在任務頁裡（`Main.dc.html:1370-1371` 的
+  /// `position: absolute; inset: 0`）。
+  final VoidCallback onBackHome;
+
+  /// 租戶是否開著完成慶祝的氣氛呈現（契約 `TaskCompletion.celebrationEnabled`，
+  /// 省略時視為 true）。
+  final bool celebrationEnabled;
 
   /// 剛完成的房號。後端那一筆沒有房號時標題只說「完成！」——沒有房號可帶，
   /// 不是帶一個湊出來的房號。
@@ -79,24 +93,30 @@ class CelebrateScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dialog = _CelebrateDialog(
+      roomNo: roomNo,
+      subline: subline,
+      actualMinutes: actualMinutes,
+      estimateMinutes: estimateMinutes,
+      // 今日進度算在氣氛那一組裡，關掉氣氛時整塊不出現。
+      todayNth: celebrationEnabled ? todayNth : null,
+      nextStep: nextStep,
+      queued: queued,
+      celebrationEnabled: celebrationEnabled,
+      onNextStep: onNextStep,
+      onBackHome: onBackHome,
+    );
     return TmsSemantics(
       id: 'celebrate.screen',
-      child: CupertinoPageScaffold(
-        backgroundColor: TmsColors.scrimCelebrate,
+      child: ColoredBox(
+        color: TmsColors.scrimCelebrate,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(TmsSpacing.xl2),
-              child: _CelebrateDialog(
-                roomNo: roomNo,
-                subline: subline,
-                actualMinutes: actualMinutes,
-                estimateMinutes: estimateMinutes,
-                todayNth: todayNth,
-                nextStep: nextStep,
-                queued: queued,
-                onNextStep: onNextStep,
-              ),
+              child: celebrationEnabled
+                  ? TmsMotionView(spec: TmsMotion.pop, child: dialog)
+                  : dialog,
             ),
           ),
         ),
@@ -116,7 +136,9 @@ class _CelebrateDialog extends StatelessWidget {
     required this.todayNth,
     required this.nextStep,
     required this.queued,
+    required this.celebrationEnabled,
     required this.onNextStep,
+    required this.onBackHome,
   });
 
   final String? roomNo;
@@ -126,7 +148,9 @@ class _CelebrateDialog extends StatelessWidget {
   final int? todayNth;
   final TaskNextStep? nextStep;
   final bool queued;
+  final bool celebrationEnabled;
   final void Function(TaskNextStep step)? onNextStep;
+  final VoidCallback onBackHome;
 
   /// 頂部那條淡色飾帶的高度。勾勾方塊壓在飾帶的下緣上，飾帶要夠高才接得住。
   static const double _bannerHeight = 132;
@@ -140,44 +164,56 @@ class _CelebrateDialog extends StatelessWidget {
         borderRadius: BorderRadius.circular(TmsRadius.dialog),
         child: Stack(
           children: [
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              height: _bannerHeight,
-              child: const ColoredBox(color: TmsColors.brandContainer),
-            ),
-            const _Confetti(
-              left: 34,
-              top: 92,
-              size: 10,
-              radius: 3,
-              color: TmsColors.brandAccentVivid,
-            ),
-            const _Confetti(
-              left: 72,
-              top: 110,
-              size: 8,
-              radius: TmsRadius.pill,
-              color: TmsColors.brandPrimary,
-              delay: Duration(milliseconds: 300),
-            ),
-            const _Confetti(
-              right: 48,
-              top: 100,
-              size: 10,
-              radius: TmsRadius.pill,
-              color: Color(0xFFFFB783),
-              delay: Duration(milliseconds: 600),
-            ),
-            const _Confetti(
-              right: 86,
-              top: 116,
-              size: 8,
-              radius: 2,
-              color: TmsColors.systemGreen,
-              delay: Duration(milliseconds: 900),
-            ),
+            if (celebrationEnabled)
+              Positioned.fill(
+                child: TmsSemantics(
+                  id: 'celebrate.celebration',
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        height: _bannerHeight,
+                        child: const ColoredBox(
+                          color: TmsColors.brandContainer,
+                        ),
+                      ),
+                      const _Confetti(
+                        left: 34,
+                        top: 92,
+                        size: 10,
+                        radius: 3,
+                        color: TmsColors.brandAccentVivid,
+                      ),
+                      const _Confetti(
+                        left: 72,
+                        top: 110,
+                        size: 8,
+                        radius: TmsRadius.pill,
+                        color: TmsColors.brandPrimary,
+                        delay: Duration(milliseconds: 300),
+                      ),
+                      const _Confetti(
+                        right: 48,
+                        top: 100,
+                        size: 10,
+                        radius: TmsRadius.pill,
+                        color: Color(0xFFFFB783),
+                        delay: Duration(milliseconds: 600),
+                      ),
+                      const _Confetti(
+                        right: 86,
+                        top: 116,
+                        size: 8,
+                        radius: 2,
+                        color: TmsColors.systemGreen,
+                        delay: Duration(milliseconds: 900),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 22,
@@ -187,7 +223,7 @@ class _CelebrateDialog extends StatelessWidget {
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: _cardChildren(context),
+                children: _cardChildren(),
               ),
             ),
           ],
@@ -198,7 +234,7 @@ class _CelebrateDialog extends StatelessWidget {
 
   /// 卡上由上往下的每一段，段與段之間 12（`Main.dc.html:1374` 的 `gap: 12`）。
   /// 標題再多 8、統計磚與接續那一段再多 4，是原型在這三處各自加的 margin-top。
-  List<Widget> _cardChildren(BuildContext context) {
+  List<Widget> _cardChildren() {
     final step = nextStep;
     return <Widget>[
       const _CheckMark(),
@@ -275,10 +311,7 @@ class _CelebrateDialog extends StatelessWidget {
             padding: EdgeInsets.zero,
             borderRadius: BorderRadius.circular(TmsRadius.pill),
             minimumSize: const Size(double.infinity, _backHomeButtonHeight),
-            onPressed: () {
-              // 慶祝頁之後的「下一間卡」呈現是首頁 feature 的事，這裡只負責返回。
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
+            onPressed: onBackHome,
             child: Text(
               _backHomeLabel,
               style: TmsText.headline.copyWith(color: TmsColors.brandPrimary),

@@ -66,6 +66,14 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 所以開關它就是任務頁自己的一個狀態。
   bool _repairSheetOpen = false;
 
+  /// 完成慶祝那張卡要顯示的內容；沒在顯示時為 null。
+  ///
+  /// 跟報修面板一樣疊在這一頁上而不另開路由：Flutter 的 `ModalBarrier` 一律把
+  /// 自己包在 `BlockSemantics` 裡，所以用路由推上來的覆蓋層會連帶把底下那一頁
+  /// 的 accessibility 節點整批擋掉，遮罩底下是哪一間房就讀不到了。原型也是把
+  /// 它畫在任務頁裡（`Main.dc.html:1370-1371`）。
+  _CelebrateContent? _celebrate;
+
   /// 報修面板開啟時的原任務 id（契約的 sourceTaskId）。
   String? _openRepairSheetTaskId;
 
@@ -216,6 +224,22 @@ class _TaskScreenState extends State<TaskScreen> {
                         ? _backToInterruptReasons
                         : null,
                   ),
+                ),
+              ),
+            if (_celebrate case final celebrate?)
+              Positioned.fill(
+                child: CelebrateScreen(
+                  roomNo: celebrate.roomNo,
+                  subline: celebrate.subline,
+                  actualMinutes: celebrate.actualMinutes,
+                  estimateMinutes: celebrate.estimateMinutes,
+                  todayNth: celebrate.todayNth,
+                  nextStep: celebrate.nextStep,
+                  queued: celebrate.queued,
+                  celebrationEnabled: celebrate.celebrationEnabled,
+                  onNextStep: _goToNextStep,
+                  onBackHome: () =>
+                      Navigator.of(context).popUntil((route) => route.isFirst),
                 ),
               ),
           ],
@@ -399,12 +423,14 @@ class _TaskScreenState extends State<TaskScreen> {
       return;
     }
     if (!sent) {
-      setState(() => _completionPendingSync = true);
-      // 離線時後端還沒收到這一筆，去向與今日進度都算不出來，但員工該拿到的
-      // 回饋不欠：完成畫面照常出現，卡上那一行說這一筆還押在手機上。
-      if (task.type == 'cleaning') {
-        await Navigator.of(context).push(_celebrateRoute(task, queued: true));
-      }
+      // 離線時後端還沒收到這一筆，所以去向與今日進度改用手機上最後一次拿到
+      // 的今日進度推算。員工該拿到的回饋不欠，卡上那一行說這一筆還押在手機上。
+      setState(() {
+        _completionPendingSync = true;
+        _celebrate = _showsCelebrate(task)
+            ? _offlineCelebrate(task)
+            : _celebrate;
+      });
       return;
     }
     var completed = completion?.task;
@@ -416,17 +442,85 @@ class _TaskScreenState extends State<TaskScreen> {
     }
     _showTask(completed);
     TodayRefresh.instance.request();
-    // 慶祝頁給的是「一間房做完了」的回饋，所以只有打掃類走這一段；備品類送達
-    // 之後留在任務頁。
-    if (completed.type == 'cleaning') {
-      await Navigator.of(context).push(
-        _celebrateRoute(
-          completed,
-          completion: completion,
-          onNextStep: _goToNextStep,
-        ),
-      );
+    if (_showsCelebrate(completed)) {
+      setState(() {
+        _celebrate = _CelebrateContent(
+          roomNo: completed!.roomNo,
+          subline: _celebrateSubline(completed),
+          actualMinutes: completed.elapsedMinutes,
+          estimateMinutes: completed.estMin,
+          todayNth: completion?.cleaningDoneToday,
+          nextStep: completion?.nextStep,
+          celebrationEnabled: completion?.celebrationEnabled ?? true,
+        );
+      });
     }
+  }
+
+  /// 這一類任務完成之後要不要給那張慶祝卡。
+  ///
+  /// 工務單有自己的完修回報與驗收流程，那張卡講的是「一間房交出去了」，接在
+  /// 完修後面會讓員工以為這張單已經結案。打掃與備品都要給：備品只是不帶今日
+  /// 進度那一塊（契約 `TaskCompletion.cleaningDoneToday` 只有打掃類會帶）。
+  bool _showsCelebrate(TaskDetail task) => task.type != 'repair';
+
+  /// 離線完成時那張卡的內容。
+  ///
+  /// 去向與今日進度都由手機上最後一次 `GET /me/today` 的結果推算，口徑跟後端
+  /// 的 `nextStep` 一致（待開始優先、重做次數多的先、同組內打掃排後面再按房號）
+  /// ——兩邊分岔的話，同一位員工離線完成與連線完成會被指向不同的房間。
+  /// 手機上連一份今日進度都還沒有時去向算不出來，那一段整段不出現。
+  _CelebrateContent _offlineCelebrate(TaskDetail task) {
+    final today = ApiClient.instance.lastKnownToday;
+    final others = (today?.todayTasks ?? const <TodayTask>[])
+        .where((t) => t.taskId != task.id)
+        .toList();
+    final accepted = others.where((t) => t.state == 'accepted').toList()
+      ..sort((a, b) {
+        final byRedo = b.redoCount.compareTo(a.redoCount);
+        if (byRedo != 0) {
+          return byRedo;
+        }
+        final byKind = (a.type == 'cleaning' ? 1 : 0).compareTo(
+          b.type == 'cleaning' ? 1 : 0,
+        );
+        return byKind != 0 ? byKind : a.roomNo.compareTo(b.roomNo);
+      });
+    const unfinishedOrder = <String>['doing', 'interrupted', 'deferred'];
+    final unfinished = others
+        .where((t) => unfinishedOrder.contains(t.state))
+        .toList()
+      ..sort((a, b) {
+        final byState = unfinishedOrder
+            .indexOf(a.state)
+            .compareTo(unfinishedOrder.indexOf(b.state));
+        return byState != 0 ? byState : a.roomNo.compareTo(b.roomNo);
+      });
+    final TaskNextStep? nextStep = switch ((today, accepted, unfinished)) {
+      (null, _, _) => null,
+      (_, [final next, ...], _) => TaskNextStep(
+        kind: TaskNextStepKind.nextTask,
+        taskId: next.taskId,
+        roomNo: next.roomNo,
+      ),
+      (_, _, [final next, ...]) => TaskNextStep(
+        kind: TaskNextStepKind.unfinishedTask,
+        taskId: next.taskId,
+        roomNo: next.roomNo,
+      ),
+      _ => const TaskNextStep(kind: TaskNextStepKind.allClear),
+    };
+    return _CelebrateContent(
+      roomNo: task.roomNo,
+      subline: _celebrateSubline(task),
+      actualMinutes: task.elapsedMinutes,
+      estimateMinutes: task.estMin,
+      todayNth: task.type == 'cleaning' && today != null
+          ? today.cleaningDone + 1
+          : null,
+      nextStep: nextStep,
+      queued: true,
+    );
   }
 
   /// 從完成畫面接著走：還有下一間就直接開那一間的任務頁，都清完了就回到
@@ -870,21 +964,18 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ),
       ],
-      // 停住原因那一段文字要被原樣讀到，所以顯式掛在節點的 label 上；
-      // explicitChildNodes 讓說明與文字鍵留在自己的節點上，不被接進來。
+      // 前綴給了，標題與說明才各自成為獨立節點。不給的話那兩段是裸 Text，
+      // 會被併進外層節點的 label，讀停住原因的一方拿到的是三段接起來的字。
+      idPrefix: 'task.status-row.hold-reason',
+      // 停住原因那一段文字要被原樣讀到，所以顯式掛在節點的 label 上。
       wrap: (node) {
         final reasonNode = TmsSemantics(
           id: 'task.status-row.hold-reason',
           label: holdReason,
-          explicitChildNodes: true,
           child: node,
         );
         return repaired
-            ? TmsSemantics(
-                id: 'task.resume-banner',
-                explicitChildNodes: true,
-                child: reasonNode,
-              )
+            ? TmsSemantics(id: 'task.resume-banner', child: reasonNode)
             : reasonNode;
       },
     );
@@ -1585,38 +1676,30 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 }
 
-/// 完成慶祝的路由。
+/// 完成慶祝那張卡要顯示的內容。
 ///
-/// `opaque: false` 是這張卡能成立的前提：慶祝頁是一張浮在半透明遮罩上的對話
-/// 卡，遮罩底下要看得到剛做完的那張任務頁。用一般的不透明路由推上去的話，
-/// Flutter 不會再畫底下那一頁，遮罩後面什麼都沒有，整個畫面只會是一片黑。
-///
-/// 轉場用淡入而不是 iOS 預設的右滑：遮罩從旁邊滑進來會像換了一頁，淡入才讀得
-/// 出「這張卡蓋在原本那一頁上面」。
-PageRouteBuilder<void> _celebrateRoute(
-  TaskDetail task, {
-  TaskCompletion? completion,
-  bool queued = false,
-  void Function(TaskNextStep step)? onNextStep,
-}) {
-  return PageRouteBuilder<void>(
-    opaque: false,
-    barrierDismissible: false,
-    transitionDuration: const Duration(milliseconds: 200),
-    reverseTransitionDuration: const Duration(milliseconds: 160),
-    pageBuilder: (_, _, _) => CelebrateScreen(
-      roomNo: task.roomNo,
-      subline: _celebrateSubline(task),
-      actualMinutes: task.elapsedMinutes,
-      estimateMinutes: task.estMin,
-      todayNth: completion?.cleaningDoneToday,
-      nextStep: completion?.nextStep,
-      queued: queued,
-      onNextStep: onNextStep,
-    ),
-    transitionsBuilder: (_, animation, _, child) =>
-        FadeTransition(opacity: animation, child: child),
-  );
+/// 讀不到的欄位一律是 null 而不是湊出來的值：沒有去向就不畫接續鍵、沒有今日
+/// 進度就不畫那一塊，驗收才分得出「做好了」和「資料還沒來」。
+class _CelebrateContent {
+  const _CelebrateContent({
+    required this.roomNo,
+    required this.subline,
+    required this.actualMinutes,
+    required this.estimateMinutes,
+    required this.todayNth,
+    required this.nextStep,
+    this.queued = false,
+    this.celebrationEnabled = true,
+  });
+
+  final String? roomNo;
+  final String subline;
+  final int actualMinutes;
+  final int? estimateMinutes;
+  final int? todayNth;
+  final TaskNextStep? nextStep;
+  final bool queued;
+  final bool celebrationEnabled;
 }
 
 /// 完成畫面上那一句「這一間接下來會怎樣」。
@@ -1703,9 +1786,15 @@ int? _workedSecondsNow(TaskDetail task, DateTime? now) {
 
 /// 超時幾分鐘；沒超過預估就回 null。
 ///
-/// 公式照原型的 `overInfo`（`Main.dc.html:3153-3156`）：已做秒數超過預估秒數就
-/// 算超時，差額換成分鐘時無條件進位而且至少是 1，所以剛跨過預估的那一秒寫的
-/// 是「超時 1 分」而不是 0。首頁那張進行中的卡用的是同一條式子，兩個畫面才不
+/// 出現條件照原型的 `overInfo`（`Main.dc.html:3153-3156`）：已做秒數超過預估秒
+/// 數就算超時，而且至少寫 1 分，剛跨過預估的那一秒寫的是「超時 1 分」不是 0。
+///
+/// 分鐘數刻意不照原型的無條件進位，改成「已做分鐘減預估分鐘」。原型同一支
+/// 檔案裡計時用捨去、超時用進位，於是 40:30 的計時旁邊會寫「超時 6 分」——同
+/// 一塊畫面上兩個數字各用一套口徑，而進位那一邊多報了一分鐘沒做的工。超時分
+/// 鐘數的定義在 `specs/truth/features/ios-app/任務執行/dsl.md:46`（已做分鐘減
+/// 預估分鐘），而已做分鐘是捨去的（契約 `任務.yaml:341-343` 寫明分鐘層級以
+/// `elapsedMinutes` 為準）。首頁那張進行中的卡用的是同一條式子，兩個畫面才不
 /// 會對同一張單講出差一分鐘的兩個數字。
 ///
 /// 不分狀態都算：停在一半的單也要看得出它停住前已經超時了。已做秒數跟著計時
@@ -1721,11 +1810,10 @@ int? _overtimeMinutes(TaskDetail task, {DateTime? now}) {
     return null;
   }
   final seconds = _workedSecondsNow(task, now) ?? task.elapsedMinutes * 60;
-  final over = seconds - estMin * 60;
-  if (over <= 0) {
+  if (seconds <= estMin * 60) {
     return null;
   }
-  return math.max(1, (over / 60).ceil());
+  return math.max(1, seconds ~/ 60 - estMin);
 }
 
 /// 進行中那張單的計時主角：56pt 的計時，右邊接超時膠囊或預估工時。

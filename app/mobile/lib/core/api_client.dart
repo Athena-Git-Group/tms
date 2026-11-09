@@ -107,10 +107,21 @@ class ApiClient {
     return result;
   }
 
+  /// 手機上最後一次成功取回的今日進度；一次都還沒取到時為 null。
+  ///
+  /// 離線時算不出「接下來去哪一間」和「今天第幾單」的那些畫面讀這一份。存在
+  /// 這裡而不是各畫面各留一份：同一份快照才保證離線的完成畫面與首頁講的是同
+  /// 一個今天。
+  MyToday? get lastKnownToday => _lastKnownToday;
+
+  MyToday? _lastKnownToday;
+
   /// `GET /me/today`：我的今日進度與下一間推薦。
   Future<MyToday> getMyToday() async {
     final json = await _requestJson('GET', '/me/today');
-    return MyToday.fromJson(json as Map<String, dynamic>);
+    final today = MyToday.fromJson(json as Map<String, dynamic>);
+    _lastKnownToday = today;
+    return today;
   }
 
   /// `GET /pool`：部門待認領池（含分類筆數）。四個查詢維度都來自契約
@@ -1689,6 +1700,7 @@ class TaskCompletion {
     required this.task,
     this.nextStep,
     this.cleaningDoneToday,
+    this.celebrationEnabled = true,
   });
 
   final TaskDetail task;
@@ -1699,11 +1711,16 @@ class TaskCompletion {
   /// null——備品單完成時給一個打掃數字，員工會看到一個與這次操作無關的進度。
   final int? cleaningDoneToday;
 
+  /// 租戶是否開著完成慶祝的氣氛呈現。後端省略這個鍵時視為 true，照契約
+  /// `TaskCompletion.celebrationEnabled` 的「省略時視為 true」。
+  final bool celebrationEnabled;
+
   factory TaskCompletion.fromJson(Map<String, dynamic> json) {
     return TaskCompletion(
       task: TaskDetail.fromJson(json),
       nextStep: TaskNextStep.fromJson(json['nextStep']),
       cleaningDoneToday: json['cleaningDoneToday'] as int?,
+      celebrationEnabled: json['celebrationEnabled'] as bool? ?? true,
     );
   }
 }

@@ -1031,9 +1031,10 @@ public class TaskExecutionThenSteps {
      *       推成 offstage 時，那一層的 semantics 節點會整批從 accessibility 樹上消失，
      *       {@code findElements} 回空清單——這一點就是本條要擋的 bug 與正確實作之間
      *       唯一的機械差別。</li>
-     *   <li>任務頁導覽列那一句「{房號} 的任務頁」必須仍然讀得到。這串字只有任務頁有，
-     *       完成畫面自己的標題雖然也帶房號，但不帶「的任務頁」，所以它不會把這個斷言
-     *       混過去——讀到它，等於讀到底下那一頁的房號本體，而不只是「有個下層存在」。</li>
+     *   <li>任務頁的凍結導覽列（{@code task.nav.{房號}}）必須仍然讀得到。這個節點只有
+     *       任務頁有，而且房號就在 id 裡，所以讀到它等於讀到底下那一頁的房號本體，
+     *       而不只是「有個下層存在」。完成畫面自己的標題也帶房號，但它不是這個節點，
+     *       混不過去。</li>
      *   <li>房號必須就是剛按下完成的那一間（{@link AppiumWorld#currentTaskRoomNo()}），
      *       不是別的某一頁；覆蓋層蓋錯一頁跟蓋在黑底上一樣算失敗。</li>
      *   <li>兩個節點都再問一次是否 displayed：被半透明遮罩蓋著的節點在螢幕上仍有實際
@@ -1071,9 +1072,9 @@ public class TaskExecutionThenSteps {
                     + "」的任務頁還在元素樹上，但回報為不可見——遮罩蓋住的那一頁必須仍然看得到");
         }
 
-        WebElement roomNoOnTaskScreen =
-                world.waitForLabelContaining(task + " 的任務頁", SCREEN_TIMEOUT);
-        if (!roomNoOnTaskScreen.isDisplayed()) {
+        WebElement navBarOnTaskScreen =
+                world.waitForTestId("task.nav." + task, SCREEN_TIMEOUT);
+        if (!navBarOnTaskScreen.isDisplayed()) {
             throw new AssertionError("遮罩底下那一頁的房號「" + task
                     + "」讀得到，但回報為不可見——這一條要的就是房號仍然看得到");
         }
@@ -1084,9 +1085,11 @@ public class TaskExecutionThenSteps {
     }
 
     /**
-     * 必查：目前畫面是該房號的任務頁——{@code task.screen} 在畫面上，導覽列標題
-     * 「{房號} 的任務頁」帶的是這個房號（任務頁沒有獨立的房號節點，房號只讀得到
-     * 導覽列標題），而且完成畫面那張覆蓋層已經收掉。
+     * 必查：目前畫面是該房號的任務頁——{@code task.screen} 在畫面上，凍結導覽列
+     * （{@code task.nav.{房號}}）帶的是這個房號，而且完成畫面那張覆蓋層已經收掉。
+     *
+     * <p>房號驗在導覽列節點上，因為它的 id 自帶房號，是這一頁唯一不必讀文案就認得出
+     * 房號的節點。
      *
      * <p>「中途沒有經過首頁」驗不到：Appium 事後只讀得到當下的元素樹，證不了路上
      * 停過哪幾頁，所以這裡驗的是終點狀態，不假裝驗到路徑。真的被丟回首頁而停在那裡
@@ -1100,7 +1103,9 @@ public class TaskExecutionThenSteps {
     @那麼("畫面停在 {string} 的任務頁")
     public void screenStaysOnTaskDetailOf(String task) {
         world.waitForTestId("task.screen", SCREEN_TIMEOUT);
-        world.waitForLabelContaining(task + " 的任務頁", SCREEN_TIMEOUT);
+        if (!world.waitForTestId("task.nav." + task, SCREEN_TIMEOUT).isDisplayed()) {
+            throw new AssertionError("「" + task + "」的任務頁導覽列讀得到，但回報為不可見");
+        }
         assertScreenAbsent("celebrate.screen", "「" + task + "」的任務頁");
     }
 

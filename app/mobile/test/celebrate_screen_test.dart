@@ -37,6 +37,7 @@ void main() {
     int? todayNth = 4,
     TaskNextStep? nextStep,
     bool queued = false,
+    bool celebrationEnabled = true,
     void Function(TaskNextStep step)? onNextStep,
   }) async {
     await tester.pumpWidget(
@@ -49,12 +50,50 @@ void main() {
           todayNth: todayNth,
           nextStep: nextStep,
           queued: queued,
+          celebrationEnabled: celebrationEnabled,
           onNextStep: onNextStep,
+          onBackHome: () {},
         ),
       ),
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('關掉氣氛呈現：飾帶與彩屑那一組不存在，今日進度跟著收起來，接續鍵照舊', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+
+    await pumpCelebrate(
+      tester,
+      celebrationEnabled: false,
+      nextStep: const TaskNextStep(
+        kind: TaskNextStepKind.nextTask,
+        taskId: 't-306',
+        roomNo: '306',
+      ),
+    );
+
+    expect(find.bySemanticsIdentifier('celebrate.celebration'), findsNothing);
+    expect(find.bySemanticsIdentifier('celebrate.today-progress'), findsNothing);
+    // 關掉的是氣氛不是接力，所以這幾塊都還在（`Main.dc.html:1372-1409`）。
+    expect(labelOf(tester, 'celebrate.title'), '305 完成！');
+    expect(labelOf(tester, 'celebrate.subline'), '已通知主管查房');
+    expect(labelOf(tester, 'celebrate.actual-minutes'), '25 / 30 分');
+    expect(labelOf(tester, 'celebrate.next-button'), '下一間：306');
+
+    handle.dispose();
+  });
+
+  testWidgets('氣氛開著時飾帶與彩屑那一組在畫面上', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    await pumpCelebrate(tester);
+
+    expect(find.bySemanticsIdentifier('celebrate.celebration'), findsOneWidget);
+
+    handle.dispose();
+  });
 
   testWidgets('還有下一間：標題帶房號、兩塊統計磚、實心鍵寫著下一間的房號', (tester) async {
     final handle = tester.ensureSemantics();

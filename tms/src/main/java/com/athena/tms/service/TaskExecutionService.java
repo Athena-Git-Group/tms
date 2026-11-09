@@ -234,7 +234,20 @@ public class TaskExecutionService {
         if ("cleaning".equals(String.valueOf(completedTask.get("type")))) {
             response.put("cleaningDoneToday", cleaningDoneTodayOf(rows));
         }
+        response.put("celebrationEnabled", celebrationEnabled(tenantId));
         return response;
+    }
+
+    /**
+     * 租戶有沒有開著完成慶祝的氣氛呈現，給完成畫面決定要不要呈現飾帶、彩屑與今日進度。
+     *
+     * <p>租戶沒有設定過這個鍵時視為開著，完成畫面照常呈現氣氛。
+     */
+    private boolean celebrationEnabled(long tenantId) {
+        List<String> values = jdbcTemplate.queryForList(
+                "SELECT value #>> '{}' FROM tenant_config WHERE tenant_id = ? AND key = 'completion_celebration_enabled'",
+                String.class, tenantId);
+        return values.isEmpty() || !"false".equals(values.get(0));
     }
 
     /**
@@ -473,10 +486,18 @@ public class TaskExecutionService {
         return toDetail(taskRowLookup.require(tenantId, taskId));
     }
 
-    /** 負責人恢復已中斷的任務。 */
+    /**
+     * 負責人恢復已中斷的任務。
+     *
+     * <p>恢復跟開工一樣要先確認這位員工沒有另一筆進行中的任務：兩者都把一張單推進 doing，
+     * 而「一位員工同時最多一筆 doing」是 uq_tasks_one_doing_per_staff 的落地義務。少了這
+     * 一句，恢復會直接撞唯一索引炸成 500，員工看到的不是「哪一間還在進行中」。
+     */
     public Map<String, Object> resume(UUID taskId) {
         long tenantId = TenantContext.require();
-        return transition(tenantId, taskId, CurrentActor.require(),
+        CurrentActor actor = CurrentActor.require();
+        rejectIfAnotherTaskDoing(tenantId, taskId, actor);
+        return transition(tenantId, taskId, actor,
                 (actorRef) -> taskEngine.resume(tenantId, taskId, actorRef));
     }
 

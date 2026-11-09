@@ -294,6 +294,22 @@ public class RepairGivenSteps {
     }
 
     /**
+     * 怎麼做：不經 App，直接以該員工身分對該工務單的任務呼叫 {@code POST /tasks/{id}/claim}。
+     * 權威狀態落地：該單已是已接單，處理人是這位員工。
+     *
+     * <p>撞單要的是「列表載入之後、按下認領之前這段時間裡單被別人接走」，所以這一句一定
+     * 排在「已在 App 打開工務待認領」之後，而且刻意不讓 App 重取列表：受測的就是員工手上
+     * 那份已經過時的列表按下去會怎樣。反過來先把單建成已接單再開列表，那張單從第一刻就
+     * 不在待認領池裡，認領鈕根本畫不出來，撞單這條路也就走不到。
+     */
+    @假設("{string} 已搶先認領 {string}")
+    public void alreadyClaimedFirst(String staffName, String ticketNo) {
+        Map<String, Object> ticket = world.backend().repairTicketRow(ticketNo);
+        world.backend().postTaskAction(
+                (UUID) ticket.get("task_id"), "claim", world.staff(staffName));
+    }
+
+    /**
      * {@link #engineerWorkloadToday} 專用：建一張最小可用的工務單（單號取自租戶計數器、
      * 房號為合成值，情境不依賴這兩者；類別固定 other），對照 tms
      * {@code RepairGivenSteps.createEngineeringTicketFor}，落地 tasks 與 repair_tickets

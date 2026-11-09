@@ -249,12 +249,15 @@ class TmsHeroCard extends StatelessWidget {
 
 /// 超時幾分鐘；沒超時回 null。
 ///
-/// 原型 `Main.dc.html:3153-3156`：秒數超過預估就算超時，分鐘數無條件進位並且
-/// 至少是 1，所以剛跨過預估的那一秒顯示的是「超時 1 分」而不是 0。走不了秒時
-/// 拿已做分鐘代入同一條式子，結果就是分鐘相減。
+/// 出現條件照原型 `Main.dc.html:3153-3156`：秒數超過預估就算超時，而且至少寫
+/// 1 分，剛跨過預估的那一秒顯示「超時 1 分」不是 0。
 ///
-/// 主卡的計時欄與首頁任務列的副標講的是同一件事，兩邊各算一次就會在進位那一
-/// 步分岔，同一張單在卡上寫「超時 6 分」、在列上寫「超時 5 分」。
+/// 分鐘數是已做分鐘減預估分鐘，不照原型的無條件進位。理由與依據同
+/// `task_screen.dart` 的 `_overtimeMinutes`：超時分鐘數的定義在
+/// `specs/truth/features/ios-app/任務執行/dsl.md:46`，而已做分鐘是捨去的。
+///
+/// 主卡的計時欄與首頁任務列的副標講的是同一件事，所以共用這一支；兩邊各算一
+/// 次就會分岔，同一張單在卡上寫「超時 6 分」、在列上寫「超時 5 分」。
 int? tmsOvertimeMinutes({
   required int? estMin,
   required int workedMinutes,
@@ -264,11 +267,10 @@ int? tmsOvertimeMinutes({
     return null;
   }
   final seconds = workedSeconds ?? workedMinutes * 60;
-  final over = seconds - estMin * 60;
-  if (over <= 0) {
+  if (seconds <= estMin * 60) {
     return null;
   }
-  return math.max(1, (over / 60).ceil());
+  return math.max(1, seconds ~/ 60 - estMin);
 }
 
 /// 進行中那張主卡右側的計時欄：計時數字，超時時底下再掛一顆膠囊。

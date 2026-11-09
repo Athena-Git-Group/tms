@@ -83,6 +83,10 @@ enum TmsCalloutKind {
   /// 工務單詳情：維修暫停中（`Main.dc.html:3896`）。
   ticketPaused(TmsCalloutSurface.ticket),
 
+  /// 工務單詳情：這張單回到待認領，現在沒有人負責。排在暫停之後，因為「有人
+  /// 在處理但停住了」比「還沒有人接」更該先讓員工看到。
+  ticketInPool(TmsCalloutSurface.ticket),
+
   /// 工務單詳情：已完修等驗收，或已驗收結案。
   ticketFixed(TmsCalloutSurface.ticket),
 
