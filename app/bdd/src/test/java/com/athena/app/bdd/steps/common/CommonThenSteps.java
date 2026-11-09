@@ -30,6 +30,37 @@ public class CommonThenSteps {
             "待查房", Boolean.TRUE,
             "已送達", Boolean.FALSE);
 
+    /**
+     * 任務頁上寫出一個狀態的那一塊：要定位哪一個節點、那個節點該讀到什麼字、
+     * 以及步驟條該停在哪一步。後兩者留空就只查節點在不在。
+     */
+    private record TaskPageEvidence(String testId, String title, String step) {}
+
+    /**
+     * 狀態用語 → 任務頁上寫出這個狀態的那一塊。
+     *
+     * <p>設計原型的任務頁沒有狀態 chip：這張單走到哪一步由標題區底下的步驟條表達，
+     * 停住、作廢、等查房這類例外交給狀態列（`Main.dc.html:1165`）。所以畫面這一半
+     * 查這張表決定讀哪一個節點、期望讀到什麼字。
+     *
+     * <p>狀態列的標題掛在容器底下的 {@code .title} 節點上：容器本身用
+     * explicitChildNodes 把說明與文字鍵留在各自的節點，自己沒有可讀的文字。
+     *
+     * <p>已延後與已中斷的狀態列標題寫的是後端記下的停住原因（自由文字），不是狀態
+     * 用語，所以那兩個只查「停住原因那一塊在畫面上」，兩者的分別交給步驟條。
+     */
+    private static final Map<String, TaskPageEvidence> TASK_PAGE_EVIDENCE = Map.ofEntries(
+            Map.entry("待開始", new TaskPageEvidence("task.step-track", null, "已接")),
+            Map.entry("退回重做", new TaskPageEvidence("task.status-row.return-info", null, "已接")),
+            Map.entry("進行中", new TaskPageEvidence("task.step-track", null, "進行中")),
+            Map.entry("已延後", new TaskPageEvidence("task.status-row.hold-reason", null, "已接")),
+            Map.entry("已中斷", new TaskPageEvidence("task.status-row.hold-reason", null, "進行中")),
+            Map.entry("待查房", new TaskPageEvidence("task.status-row.awaiting-inspection", "等主管查房", "完成")),
+            Map.entry("已送達", new TaskPageEvidence("task.status-row.awaiting-inspection", "已送達", "送達")),
+            Map.entry("查房通過", new TaskPageEvidence("task.status-row.finished", "查房通過", null)),
+            Map.entry("完成 · 免查房", new TaskPageEvidence("task.status-row.finished", "完成 · 免查房", null)),
+            Map.entry("已取消", new TaskPageEvidence("task.status-row.cancelled", "這單已取消", null)));
+
     private final AppiumWorld world;
 
     public CommonThenSteps(AppiumWorld world) {
@@ -53,20 +84,35 @@ public class CommonThenSteps {
     }
 
     /**
-     * 必查：任務卡或任務頁顯示該狀態文字（accessibility id {@code task.status-chip}），
-     * 且後端權威狀態與「狀態用語對照」一致。兩邊都要對上才算通過：只看畫面會讓一個
-     * 寫死文字的 chip 過關，只看後端則驗不到使用者看見什麼。
+     * 必查：任務頁上寫出該狀態的那一塊符合 {@link #TASK_PAGE_EVIDENCE}，且後端權威狀態
+     * 與「狀態用語對照」一致。兩邊都要對上才算通過：只看畫面會讓一塊寫死文字的版面
+     * 過關，只看後端則驗不到使用者看見什麼。
      */
     @那麼("{string} 在 App 顯示為 {string}")
     public void taskDisplayedAs(String task, String state) {
         assertBackendState(task, state);
 
         returnToTaskDetailFromCelebration(task);
-        world.waitForTestId("task.status-chip", SCREEN_TIMEOUT);
-        String actual = world.waitForLabelOf("task.status-chip", state, SCREEN_TIMEOUT);
-        if (!state.equals(actual)) {
-            throw new AssertionError(
-                    "「" + task + "」的狀態 chip 不符：預期「" + state + "」，實際「" + actual + "」");
+        TaskPageEvidence evidence = TASK_PAGE_EVIDENCE.get(state);
+        if (evidence == null) {
+            throw new IllegalArgumentException(
+                    "找不到「" + state + "」在任務頁狀態呈現對照表中的權威值");
+        }
+        world.waitForTestId(evidence.testId(), SCREEN_TIMEOUT);
+        if (evidence.title() != null) {
+            String titleId = evidence.testId() + ".title";
+            String actual = world.waitForLabelOf(titleId, evidence.title(), SCREEN_TIMEOUT);
+            if (!evidence.title().equals(actual)) {
+                throw new AssertionError("「" + task + "」的狀態列標題不符：預期「"
+                        + evidence.title() + "」，實際「" + actual + "」");
+            }
+        }
+        if (evidence.step() != null) {
+            String actual = world.waitForLabelOf("task.step-track", evidence.step(), SCREEN_TIMEOUT);
+            if (!evidence.step().equals(actual)) {
+                throw new AssertionError("「" + task + "」的步驟條不符：狀態「" + state
+                        + "」應該停在「" + evidence.step() + "」，實際停在「" + actual + "」");
+            }
         }
     }
 
@@ -77,15 +123,15 @@ public class CommonThenSteps {
      * <p>完成畫面是**疊在剛完成的那張任務頁上的覆蓋層**，不是取代任務頁的另一頁
      * （見 `specs/truth/features/ios-app/任務執行/完成畫面.feature` 的 Rule
      * 「完成後出現的完成畫面，蓋在剛做完的那張任務頁上」）。因此底下那一頁仍然在
-     * widget tree 裡，`task.status-chip` 就算被遮住也**找得到**。這裡必須先走完這段
-     * 動線再去讀 chip：少了它，斷言會在員工看不到 chip 的畫面上通過。
+     * widget tree 裡，狀態列與步驟條就算被遮住也**找得到**。這裡必須先走完這段
+     * 動線再去讀：少了它，斷言會在員工什麼都看不到的畫面上通過。
      *
      * <p>「回到首頁」是完成畫面底部的文字按鈕。視覺層級最高的是往下一步走的實心主按鈕
      * {@code celebrate.next-button}。這裡刻意點前者——走的是「先回首頁
      * 再進那一間」的動線，不是接力去下一間，否則會離開要斷言的那張單。
      *
-     * <p>不在完成畫面上時什麼都不做。改成在完成畫面上也露出狀態 chip 是另一種解法，
-     * 但那會讓這個斷言在員工根本看不到 chip 的畫面上通過。
+     * <p>不在完成畫面上時什麼都不做。改成在完成畫面上也露出狀態是另一種解法，但那會
+     * 讓這個斷言在員工根本看不到狀態的畫面上通過。
      */
     private void returnToTaskDetailFromCelebration(String task) {
         if (world.driver().findElements(world.byTestId("celebrate.screen")).isEmpty()) {

@@ -28,15 +28,19 @@ public class TaskExecutionThenSteps {
     /**
      * 必查：任務頁的已做時間顯示該分鐘數；等待一段時間後數字不變。後端累計時間一致。
      * accessibility id：{@code task.hero.paused-elapsed}。
+     *
+     * <p>停住的單上那串字寫成「分:秒」（`Main.dc.html:1189`），和進行中的計時同一種
+     * 寫法，所以這裡把字串換算回秒再比分鐘。停住的單沒有正在跑的段落，分鐘數不會在
+     * 讀取之間跳動，因此要求完全相等。
      */
     @那麼("任務頁顯示已做 {int} 分鐘，且計時沒有在走")
     public void showsWorkedMinutesPausedTimer(int minutes) {
-        String expected = "已做 " + minutes + " 分";
         WebElement element = world.waitForTestId("task.hero.paused-elapsed", SCREEN_TIMEOUT);
-        String actual = element.getAttribute("label");
-        if (!expected.equals(actual)) {
-            throw new AssertionError(
-                    "任務頁的已做時間不符：預期「" + expected + "」，實際「" + actual + "」");
+        String expected = element.getAttribute("label");
+        long shownMinutes = timerSecondsOf(expected) / 60;
+        if (shownMinutes != minutes) {
+            throw new AssertionError("任務頁的已做時間不符：預期 " + minutes
+                    + " 分鐘，實際讀到「" + expected + "」");
         }
 
         Map<String, Object> row = world.taskRowByRoomNo(world.currentTaskRoomNo());
@@ -149,8 +153,8 @@ public class TaskExecutionThenSteps {
     }
 
     /**
-     * 必查：任務頁 SOP 進度文字（{@code x / y · 跳過不擋流程}）包含該關鍵字；勾選與跳過都
-     * 計入 x，y 為 SOP 總項數。accessibility id：{@code task.sop.progress}。
+     * 必查：任務頁 SOP 進度文字（{@code x / y · 跳過不擋流程}）包含該關鍵字；只有勾選
+     * 計入 x，跳過不算，y 為 SOP 總項數。accessibility id：{@code task.sop.progress}。
      */
     @那麼("{string} 的 SOP 進度顯示 {string}")
     public void sopProgressShows(String task, String keyword) {
@@ -161,17 +165,18 @@ public class TaskExecutionThenSteps {
                     + "」：實際「" + actual + "」");
         }
 
-        // 分子是「這張單已經處理掉幾項」，勾選與跳過都算；兩邊對不上代表畫面數的
-        // 跟後端記的不是同一回事。
+        // 分子是「這張單已經勾起來幾項」，跳過的不算（`Main.dc.html:4291`）：跳過的
+        // 意思是這一項這次不做，把它算進分子會讓進度講出一個沒做過的數字。兩邊對不
+        // 上代表畫面數的跟後端記的不是同一回事。
         UUID taskId = (UUID) world.taskRowByRoomNo(task).get("id");
         long handled = ((Number) world.backend().queryRows(
                 "SELECT count(*) AS handled FROM task_sop_checks"
-                        + " WHERE tenant_id = ? AND task_id = ? AND (checked OR skipped)",
+                        + " WHERE tenant_id = ? AND task_id = ? AND checked",
                 world.backend().ensureTenant(), taskId).get(0).get("handled")).longValue();
         long shown = Long.parseLong(actual.substring(0, actual.indexOf('/')).trim());
         if (shown != handled) {
             throw new AssertionError("「" + task + "」的 SOP 進度分子不符：畫面上是 " + shown
-                    + "，後端已處理的是 " + handled + " 項");
+                    + "，後端已勾選的是 " + handled + " 項");
         }
     }
 

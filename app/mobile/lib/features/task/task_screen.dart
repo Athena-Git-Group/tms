@@ -539,10 +539,10 @@ class _TaskScreenState extends State<TaskScreen> {
       );
     }
 
-    final hasActionBar =
-        _primaryAction(task) != null || _buildSecondaryButton(task) != null;
+    // 「查一下」讓開操作列的依據是有沒有主按鈕（`Main.dc.html:5027`）。次要按鈕
+    // 只出現在待開始與進行中，那兩種狀態一定也有主按鈕。
     final fabBottom = TmsFab.bottomAboveActionBar(
-      hasActionBar: hasActionBar,
+      hasActionBar: _primaryAction(task) != null,
       bottomSafeAreaInset: MediaQuery.paddingOf(context).bottom,
     );
     // 作廢的單沒有東西好查（`Main.dc.html:4372`）。
