@@ -1370,6 +1370,7 @@ class TaskDetail {
     this.inspectionWaived = false,
     this.estMin,
     this.elapsedMinutes = 0,
+    this.accumulatedSeconds,
     this.segmentStartedAt,
     this.source,
     this.checkedSopItems = const <String>[],
@@ -1409,14 +1410,22 @@ class TaskDetail {
   /// 「預估 N 分」都讀它。
   final int? estMin;
 
-  /// 已做分鐘。分鐘層級的權威值：超時判定一律讀它，不讀 [segmentStartedAt]
-  /// 推出來的秒數，免得秒數跨過整分的那一瞬間讓超時膠囊忽隱忽現。
+  /// 已做分鐘。分鐘層級的權威值：進行中時**已含**正在跑的這一段，所以不能
+  /// 拿它當走秒公式的基準再加本段一次，那會把本段重複累計。停住的單顯示
+  /// 「已做 N 分」讀它。
   final int elapsedMinutes;
 
+  /// 進入目前這一段**之前**的累計秒數（契約 `accumulatedSeconds`，不含中斷
+  /// 期間、也不含正在跑的這一段）。任務頁的計時與超時都以它當基準：
+  /// `accumulatedSeconds + (現在 − segmentStartedAt)` 才是目前已做秒數。
+  ///
+  /// 後端還沒回這一欄時這裡是 null，計時退回只顯示 [elapsedMinutes]——寧可
+  /// 不走秒，也不能退回拿已含本段的分鐘數再加一次本段。
+  final int? accumulatedSeconds;
+
   /// 目前這一段計時的起算時刻（契約 `segmentStartedAt`）。只有進行中的任務
-  /// 有值，其餘狀態為 null。任務頁拿它把計時算到秒：以 [elapsedMinutes] 當
-  /// 進入本段之前的累計，加上「現在時間減這個時刻」，每秒重算一次，不必為
-  /// 了跳動的秒數反覆打端點。
+  /// 有值，其餘狀態為 null。任務頁拿它與 [accumulatedSeconds] 把計時算到
+  /// 秒，每秒重算一次，不必為了跳動的秒數反覆打端點。
   ///
   /// 後端還沒回這一欄時這裡是 null，計時就退回只顯示分鐘——少一欄不該讓整
   /// 頁打不開。
@@ -1461,6 +1470,7 @@ class TaskDetail {
       note: json['note'] as String?,
       estMin: json['estMin'] as int?,
       elapsedMinutes: json['elapsedMinutes'] as int? ?? 0,
+      accumulatedSeconds: json['accumulatedSeconds'] as int?,
       segmentStartedAt: _dateTime(json['segmentStartedAt']),
       source: json['source'] as String?,
       checkedSopItems: _stringList(json['checkedSopItems']),

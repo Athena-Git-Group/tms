@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
+import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
@@ -256,10 +257,7 @@ class _TaskScreenState extends State<TaskScreen> {
       _showTask(started);
       TodayRefresh.instance.request();
     } on ApiException catch (e) {
-      if (!mounted) {
-        return;
-      }
-      await _showBusyAlert(e.errorMessage ?? '還有另一間在進行中');
+      await _showBusyAlert(e, fallback: '還有另一間在進行中');
     }
   }
 
@@ -269,13 +267,22 @@ class _TaskScreenState extends State<TaskScreen> {
   /// [OfflineQueue]。它會在連線恢復時用同一把 `Idempotency-Key` 送出去，員工
   /// 不必記得回頭再按一次完成。
   Future<void> _complete(TaskDetail task) async {
-    final sent = await OfflineQueue.instance.submit(
-      kind: 'complete',
-      send: (idempotencyKey) => ApiClient.instance.completeTask(
-        task.id,
-        idempotencyKey: idempotencyKey,
-      ),
-    );
+    final bool sent;
+    try {
+      sent = await OfflineQueue.instance.submit(
+        kind: 'complete',
+        send: (idempotencyKey) => ApiClient.instance.completeTask(
+          task.id,
+          idempotencyKey: idempotencyKey,
+        ),
+      );
+    } on ApiException catch (e) {
+      // 連線正常時佇列把後端的拒絕原樣往上拋（例如這張單剛被主管作廢）。
+      // 這裡不接住的話，員工按下完成只會看到畫面毫無反應——被拒不能無聲，
+      // 原因是後端說了算，App 不自己湊話。
+      await _showBusyAlert(e, fallback: '完成沒有成功，請稍後再試');
+      return;
+    }
     if (!mounted) {
       return;
     }
@@ -328,25 +335,35 @@ class _TaskScreenState extends State<TaskScreen> {
     });
   }
 
-  /// 「一次一間」提示（ui-plan F2-R1 的 `task.busy-alert`）。訊息直接用後端
-  /// 409 的 message——哪一間還在進行中是後端說了算，App 不自己湊這句話。
-  Future<void> _showBusyAlert(String message) {
+  /// 後端拒絕開工、恢復或完成時的提示（ui-plan F2-R1 的 `task.busy-alert`）。
+  /// 訊息直接用後端回應的 message——被拒的原因是後端說了算，App 不自己湊這
+  /// 句話；後端沒給 message 時才退回呼叫端給的 `fallback` 文案。畫面已被移除
+  /// 時直接不彈，不然對話框會掛在一個已經不存在的畫面上。
+  Future<void> _showBusyAlert(ApiException e, {required String fallback}) async {
+    if (!mounted) {
+      return;
+    }
+    final message = e.errorMessage ?? fallback;
     return showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => TmsSemantics(
-        id: 'task.busy-alert',
-        child: CupertinoAlertDialog(
-          content: Text(message),
-          actions: [
-            TmsSemantics(
-              id: 'task.busy-alert.dismiss-button',
-              child: CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('知道了'),
-              ),
-            ),
-          ],
+      // `task.busy-alert` 掛在內容文字上、不掛在整個對話框上：提示的驗收要
+      // 讀這個節點本身的文字，而對話框層的 accessibility 讀值會被 alert 語意
+      // 多併進一段「Alert」，拒絕原因就驗不到一字不差了。
+      builder: (dialogContext) => CupertinoAlertDialog(
+        content: TmsSemantics(
+          id: 'task.busy-alert',
+          label: message,
+          child: ExcludeSemantics(child: Text(message)),
         ),
+        actions: [
+          TmsSemantics(
+            id: 'task.busy-alert.dismiss-button',
+            child: CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('知道了'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1054,16 +1071,43 @@ Widget _buildOvertimeChip(int overtimeMinutes, {required bool onDark}) {
   );
 }
 
-/// 超時分鐘數是已做分鐘減去預估分鐘，只有進行中而且真的超過時才有值。
+/// 目前已做秒數：契約的走秒公式 `accumulatedSeconds + (現在 − segmentStartedAt)`。
+///
+/// 兩個欄位缺一就回 null——沒有基準或沒有起算點都走不了秒，呼叫端各自退回
+/// 分鐘層級的顯示。基準不能拿 [TaskDetail.elapsedMinutes] 代打：它在進行中
+/// 已含正在跑的這一段，再加一次本段會把本段重複累計，顯示約兩倍。
+///
+/// 「現在」沒給時讀 [deviceNow]，不直接叫 `DateTime.now()`：自動化測試把裝
+/// 置時間往前撥時，計時與超時才會跟著撥過去的時刻走。手機時間比起算時刻早
+/// （時鐘沒對準）時當本段還沒開始算，不讓計時倒退。
+int? _workedSecondsNow(TaskDetail task, DateTime? now) {
+  final startedAt = task.segmentStartedAt;
+  final base = task.accumulatedSeconds;
+  if (startedAt == null || base == null) {
+    return null;
+  }
+  final segment = (now ?? deviceNow()).difference(startedAt).inSeconds;
+  return base + (segment > 0 ? segment : 0);
+}
+
+/// 超時分鐘數是目前已做分鐘減去預估分鐘，只有進行中而且真的超過時才有值。
+///
+/// 已做分鐘跟著計時同一條走秒公式逐秒重算（見 [_workedSecondsNow]），換成
+/// 整分才進位：畫面開著不操作，超時也會隨時間變大，不停在進頁或上次向後端
+/// 取資料那一刻；又因為只有跨過整分值才會變，秒數跳動不會讓超時膠囊忽隱忽
+/// 現。走不了秒時退回後端給的已做分鐘。
 ///
 /// 超時在這個畫面上只是提示。算出超時不會呼叫任何後端端點，也不會讓員工
 /// 收到推播。
-int? _overtimeMinutes(TaskDetail task) {
+int? _overtimeMinutes(TaskDetail task, {DateTime? now}) {
   final estMin = task.estMin;
   if (task.state != 'doing' || estMin == null) {
     return null;
   }
-  final over = task.elapsedMinutes - estMin;
+  final workedSeconds = _workedSecondsNow(task, now);
+  final workedMinutes =
+      workedSeconds == null ? task.elapsedMinutes : workedSeconds ~/ 60;
+  final over = workedMinutes - estMin;
   return over > 0 ? over : null;
 }
 
@@ -1077,9 +1121,8 @@ int? _overtimeMinutes(TaskDetail task) {
 /// 話，手機睡著或同一張單在別的裝置上被推進之後，秒數會和後端的已做時間
 /// 愈走愈遠。
 ///
-/// 超時與否一律看已做分鐘（[TaskDetail.elapsedMinutes]），不看這裡算出來的
-/// 秒數：秒數跨過整分的那一瞬間若也拿去判超時，超時膠囊會在那一秒忽隱忽
-/// 現。
+/// 超時與計時讀同一個逐秒重算的已做秒數，但超時換成整分才進位：秒數跨過
+/// 整分前後膠囊不會忽隱忽現，整分一到才加一分。
 class TaskTimerHero extends StatefulWidget {
   const TaskTimerHero({super.key, required this.task, this.clock});
 
@@ -1115,10 +1158,12 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
     super.dispose();
   }
 
-  /// 只有真的要逐秒重畫時才留著計時器。沒有起算時刻的單上留一支每秒醒來的
-  /// 計時器，會白白把畫面重畫一次又一次，電池也跟著耗。
+  /// 只有真的要逐秒重畫時才留著計時器。走不了秒的單（起算時刻或累計秒數還
+  /// 沒給）上留一支每秒醒來的計時器，會白白把畫面重畫一次又一次，電池也跟
+  /// 著耗。
   void _syncTicker() {
-    final wanted = widget.task.segmentStartedAt != null;
+    final wanted = widget.task.segmentStartedAt != null &&
+        widget.task.accumulatedSeconds != null;
     if (wanted && _ticker == null) {
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) {
@@ -1134,16 +1179,27 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
-    final overtimeMinutes = _overtimeMinutes(task);
+    // 「現在」整個 frame 只讀一次，計時字串與超時膠囊拿同一個時刻去算。
+    // 各讀各的時刻時，兩次讀取可能跨在整秒或整分的交界兩側，同一幀上
+    // 計時已進位、超時卻還沒跟上。
+    final now = widget.clock?.call() ?? deviceNow();
+    final overtimeMinutes = _overtimeMinutes(task, now: now);
+    final timerText = taskTimerText(task, now: now);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text(
-          taskTimerText(task, now: widget.clock?.call()),
-          style: TmsText.displayHero.copyWith(
-            color: overtimeMinutes != null
-                ? TmsColors.overtimeTimerOnDark
-                : TmsColors.brandOnPrimary,
+        TmsSemantics(
+          id: 'task.hero.running-elapsed',
+          label: timerText,
+          child: ExcludeSemantics(
+            child: Text(
+              timerText,
+              style: TmsText.displayHero.copyWith(
+                color: overtimeMinutes != null
+                    ? TmsColors.overtimeTimerOnDark
+                    : TmsColors.brandOnPrimary,
+              ),
+            ),
           ),
         ),
         const SizedBox(width: TmsSpacing.sm2),
@@ -1165,17 +1221,14 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
 
 /// 計時主角上的那串字。
 ///
-/// 後端給了本段起算時刻時走到秒，寫成「分:秒」，超過一小時才補上小時那一
-/// 段；沒有起算時刻時只講已做分鐘。秒數是已做分鐘換算成秒，加上現在時間減
-/// 起算時刻。手機時間比起算時刻早（時鐘沒對準）時當這一段還沒開始算，不讓
-/// 計時倒退。
+/// 走得了秒時寫成「分:秒」，超過一小時才補上小時那一段；走不了秒（契約的
+/// `accumulatedSeconds` 或 `segmentStartedAt` 還沒給）時只講已做分鐘。公式
+/// 與退回條件見 [_workedSecondsNow]。
 String taskTimerText(TaskDetail task, {DateTime? now}) {
-  final startedAt = task.segmentStartedAt;
-  if (startedAt == null) {
+  final total = _workedSecondsNow(task, now);
+  if (total == null) {
     return '${task.elapsedMinutes} 分';
   }
-  final segment = (now ?? DateTime.now()).difference(startedAt).inSeconds;
-  final total = task.elapsedMinutes * 60 + (segment > 0 ? segment : 0);
   final hours = total ~/ 3600;
   final minutes = (total % 3600) ~/ 60;
   final seconds = total % 60;

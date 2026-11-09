@@ -956,6 +956,12 @@ public class TaskExecutionService {
         detail.put("deferredBySelf", row.get("deferred_by_self"));
         detail.put("elapsedMinutes", minutes);
         detail.put("accumulatedMinutes", minutes);
+        // 任務頁走秒公式的基準值（contracts TaskDetail.accumulatedSeconds）：App 以
+        // 「這個值 + (現在 − segmentStartedAt)」逐秒重算已做時間。基準必須不含正在走
+        // 的這一段，所以直接給 worked_sec（段落結束才結算進去的累計秒數）；若改給含
+        // 本段的分鐘值換算，App 會把正在走的這一段加兩次，顯示約兩倍的已做時間。
+        detail.put("accumulatedSeconds",
+                row.get("worked_sec") == null ? 0 : ((Number) row.get("worked_sec")).intValue());
         // 目前這一段計時的起算時刻（contracts TaskDetail.segmentStartedAt）。任務頁拿它
         // 逐秒重算碼表，不必為了跳動的秒數反覆打端點。欄位本身只在 doing 時有值——
         // 開工寫入、中斷與完工清空——所以其餘狀態自然是 null，這裡不另外判狀態。
