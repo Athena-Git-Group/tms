@@ -187,19 +187,20 @@ void main() {
     expect(route.transitionDuration, TmsMotion.up.duration);
   });
 
-  testWidgets('選項列只有選中的那一列有勾', (tester) async {
+  testWidgets('類別列只有選中的那一列有勾', (tester) async {
     await tester.pumpWidget(
       host(
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TmsOptionRow.reason(
-              title: const Text('請勿打擾'),
+            TmsOptionRow.category(
+              title: const Text('冷氣'),
               selected: true,
               onTap: () {},
             ),
-            TmsOptionRow.reason(
-              title: const Text('住客還在房內'),
+            TmsOptionRow.category(
+              title: const Text('水電'),
+              selected: false,
               onTap: () {},
             ),
           ],
@@ -208,6 +209,18 @@ void main() {
     );
 
     expect(find.byType(TmsOptionCheck), findsOneWidget);
+  });
+
+  // 原型 Main.dc.html:1450：原因列點一下就送出，沒有「選好了但還沒送」的
+  // 中間狀態，所以這一種列畫不出勾。
+  testWidgets('原因列畫不出勾', (tester) async {
+    await tester.pumpWidget(
+      host(
+        TmsOptionRow.reason(title: const Text('請勿打擾'), onTap: () {}),
+      ),
+    );
+
+    expect(find.byType(TmsOptionCheck), findsNothing);
   });
 
   // 原型 Main.dc.html:1509-1533。

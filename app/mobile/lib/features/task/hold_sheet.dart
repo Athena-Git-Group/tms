@@ -12,9 +12,9 @@ import '../../core/widgets/tms_sheet.dart';
 
 /// 員工暫時做不下去時，用這個面板說明原因，交接的人與主管才看得到任務為什麼停住。
 ///
-/// 延後與中斷是同一套互動：點一個預設原因把它選起來，再點確認送出；預設原因
-/// 都不適用時選「其他原因」，多出一個說明欄，說明要 1 到 60 字才送得出去。
-/// 兩者的差別只有標題、預設原因清單與送出時呼叫的端點，都收在 [HoldSheetModeCopy]。
+/// 延後與中斷是同一套互動：點一個預設原因就直接送出。預設原因都不適用時選
+/// 「其他原因」，面板換成第二步的說明欄，說明要 1 到 60 字才送得出去。兩者的
+/// 差別只有標題、預設原因清單與送出時呼叫的端點，都收在 [HoldSheetModeCopy]。
 ///
 /// 說明的字數上限是後端自己把關的，超過時後端拒收整筆操作。面板這層的字數
 /// 提示與送出鈕禁用，是為了讓員工在按下去之前就知道寫太長了，不是權威判定。
@@ -27,12 +27,21 @@ enum HoldSheetMode {
 }
 
 /// 兩種用途的全部差異都收在這裡：面板標題、預設原因清單、送出走哪個端點。
-/// 面板本體不再逐處分支，新增用途時也只要補這個 extension 的三個分支。
+/// 面板本體不再逐處分支，新增用途時也只要補這個 extension 的分支。
 extension HoldSheetModeCopy on HoldSheetMode {
-  /// 面板標題用的名稱，也是說明文字「延後原因」「中斷原因」的前半。
+  /// 面板標題用的名稱，也是置底鈕「確定延後」「確定中斷」的後半。
   String get title => switch (this) {
         HoldSheetMode.defer => '延後',
         HoldSheetMode.interrupt => '中斷',
+      };
+
+  /// 第一步的面板標題（`Main.dc.html:4928`）。
+  ///
+  /// 寫成問句而不是「延後原因」，是因為這一步整面只有一張原因清單。標題要說
+  /// 的是「現在請你回答什麼」，名詞片語只說得出「這裡放了什麼」。
+  String get question => switch (this) {
+        HoldSheetMode.defer => '為什麼要延後？',
+        HoldSheetMode.interrupt => '為什麼要中斷？',
       };
 
   /// 各自的預設原因。
@@ -61,8 +70,46 @@ extension HoldSheetModeCopy on HoldSheetMode {
 /// 這個選項本身不是原因文字，選它代表員工要自己填一段說明。
 const String _otherReasonOption = '其他原因';
 
+/// 中斷清單裡唯一不是「說明一段原因」的選項：選它要開一張工務單。
+const String _needsMaintenanceOption = '需要工務協助';
+
 /// 說明文字的字數上限，與後端對原因長度的限制同值。
 const int _maxReasonLength = 60;
+
+/// 面板收起來時交給任務頁的結論。
+///
+/// 任務頁對兩種結局要做的事完全不同：一種是把畫面換成後端回的新任務狀態，
+/// 另一種是接著開工務單表單。兩者共用一個可空欄位的話，任務頁每次都得先判
+/// 斷這次拿到的是哪一種，而判斷錯的那一次會把表單該開的時候當成已送出。
+sealed class HoldSheetResult {
+  const HoldSheetResult();
+}
+
+/// 原因已經送出，[task] 是後端認定的新任務狀態。
+class HoldSheetSubmitted extends HoldSheetResult {
+  const HoldSheetSubmitted(this.task);
+
+  final TaskDetail task;
+}
+
+/// 員工在中斷清單選了「需要工務協助」：這一步不送原因，改開工務單表單
+/// （`Main.dc.html:4954`）。表單送出時才會連同把原任務轉為已中斷。
+class HoldSheetNeedsMaintenance extends HoldSheetResult {
+  const HoldSheetNeedsMaintenance();
+}
+
+/// 面板裡的第幾步。
+///
+/// 選「其他原因」是整個面板換成第二步，不是在清單下面展開一張卡
+/// （`Main.dc.html:1553`）：標題、左上鈕與置底鈕三樣東西都跟著換，而清單會
+/// 消失。寫成展開的話，這三樣各自都得記住自己現在該長什麼樣。
+enum _HoldStep {
+  /// 預設原因清單。點一列就送出，所以這一步沒有置底鈕。
+  reasons,
+
+  /// 自填說明。只有這一步有置底的「確定延後／確定中斷」。
+  other,
+}
 
 class HoldSheet extends StatefulWidget {
   const HoldSheet({super.key, required this.mode, required this.taskId});
@@ -74,14 +121,13 @@ class HoldSheet extends StatefulWidget {
 
   /// 任務頁開啟面板的唯一入口。
   ///
-  /// 送出成功時回傳後端認定的新任務狀態，讓任務頁以後端的說法更新畫面，而不是
-  /// 自己猜任務變成什麼狀態；員工沒有送出就關掉面板時回傳 null。
-  static Future<TaskDetail?> show(
+  /// 員工沒有送出就關掉面板時回傳 null，任務頁什麼都不必做。
+  static Future<HoldSheetResult?> show(
     BuildContext context, {
     required HoldSheetMode mode,
     required String taskId,
   }) {
-    return TmsSheetRoute.show<TaskDetail>(
+    return TmsSheetRoute.show<HoldSheetResult>(
       context,
       (_) => HoldSheet(mode: mode, taskId: taskId),
     );
@@ -92,8 +138,7 @@ class HoldSheet extends StatefulWidget {
 }
 
 class _HoldSheetState extends State<HoldSheet> {
-  /// 目前選中的那一列：預設原因的文字，或 [_otherReasonOption]。
-  String? _selectedOption;
+  _HoldStep _step = _HoldStep.reasons;
 
   final TextEditingController _noteController = TextEditingController();
 
@@ -110,34 +155,32 @@ class _HoldSheetState extends State<HoldSheet> {
     super.dispose();
   }
 
-  bool get _isOtherSelected => _selectedOption == _otherReasonOption;
-
-  /// 真正要送給後端的原因文字；員工還沒選任何一列時沒有東西可送，回 null。
-  String? get _reasonToSubmit {
-    if (_selectedOption == null) {
-      return null;
-    }
-    return _isOtherSelected ? _noteController.text.trim() : _selectedOption;
-  }
-
-  /// 送出鈕目前可不可以按。
+  /// 自填說明目前可不可以送出。
   ///
   /// 這個值要經由 [TmsSemantics] 顯式傳出去。Flutter 的按鈕在沒有 onPressed 時
   /// 不會把「不可用」寫進 accessibility 樹，少了這一層，自動化測試讀到的按鈕
   /// 永遠是可用的，字數超過仍然驗不出禁用。
-  bool get _canSubmit {
-    final reason = _reasonToSubmit;
-    if (reason == null) {
-      return false;
-    }
-    return reason.isNotEmpty && reason.length <= _maxReasonLength;
+  bool get _canSubmitNote {
+    final note = _noteController.text.trim();
+    return note.isNotEmpty && note.length <= _maxReasonLength;
   }
 
-  Future<void> _submit() async {
-    final reason = _reasonToSubmit;
-    if (reason == null) {
-      return;
+  /// 點了一列預設原因。
+  ///
+  /// 「其他原因」與「需要工務協助」不是原因文字，是往下一步走的入口；其餘每
+  /// 一列的文字就是要送出去的原因，點下去直接送（`Main.dc.html:4954`）。
+  void _pickReason(String option) {
+    switch (option) {
+      case _otherReasonOption:
+        setState(() => _step = _HoldStep.other);
+      case _needsMaintenanceOption:
+        Navigator.of(context).pop(const HoldSheetNeedsMaintenance());
+      default:
+        _submit(option);
     }
+  }
+
+  Future<void> _submit(String reason) async {
     // 離線時延後與中斷都擋在這裡，不送請求。這兩個動作會把單子留在手機以外
     // 的地方等別人接手，後端不知情的話，主管與同仁看到的仍然是一筆沒人動過
     // 的任務。
@@ -149,83 +192,96 @@ class _HoldSheetState extends State<HoldSheet> {
     if (!mounted) {
       return;
     }
-    Navigator.of(context).pop(updated);
+    Navigator.of(context).pop(HoldSheetSubmitted(updated));
   }
 
   @override
   Widget build(BuildContext context) {
-    final options = [...widget.mode.presetReasons, _otherReasonOption];
-
+    final onList = _step == _HoldStep.reasons;
     return TmsSemantics(
       id: 'hold.sheet',
       explicitChildNodes: true,
       child: TmsSheet(
-        title: '${widget.mode.title}原因',
-        onLeadingTap: () => Navigator.of(context).pop(),
-        bottomAction: TmsSemantics(
-          id: 'hold.confirm-button',
-          enabled: _canSubmit,
-          child: TmsSheetButton(
-            label: '確認',
-            onPressed: _canSubmit ? _submit : null,
-          ),
-        ),
-        children: [
-          TmsGroupedSection(
-            style: TmsCardStyle.inSheet,
-            trailingDivider: true,
-            children: [
-              for (final option in options)
-                TmsSemantics(
-                  id: 'hold.reason.$option',
-                  child: TmsOptionRow.reason(
-                    title: Text(option),
-                    selected: _selectedOption == option,
-                    onTap: () => setState(() => _selectedOption = option),
-                  ),
+        title: onList ? widget.mode.question : _otherReasonOption,
+        leading: onList ? TmsSheetLeading.close : TmsSheetLeading.back,
+        onLeadingTap: onList
+            ? () => Navigator.of(context).pop()
+            : () => setState(() => _step = _HoldStep.reasons),
+        bottomAction: onList
+            ? null
+            : TmsSemantics(
+                id: 'hold.confirm-button',
+                enabled: _canSubmitNote,
+                child: TmsSheetButton(
+                  label: '確定${widget.mode.title}',
+                  onPressed: _canSubmitNote
+                      ? () => _submit(_noteController.text.trim())
+                      : null,
                 ),
-            ],
-          ),
-          if (_isOtherSelected)
-            TmsCard(
-              style: TmsCardStyle.inSheet,
-              padding: const EdgeInsets.fromLTRB(
-                TmsSpacing.md2,
-                TmsSpacing.md,
-                TmsSpacing.md2,
-                TmsSpacing.md,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TmsSemantics(
-                    id: 'hold.other-reason-field',
-                    child: CupertinoTextField(
-                      controller: _noteController,
-                      placeholder: '請簡單說明',
-                      maxLines: 2,
-                      padding: EdgeInsets.zero,
-                      decoration: const BoxDecoration(),
-                      style: TmsText.callout,
-                    ),
-                  ),
-                  const SizedBox(height: TmsSpacing.sm),
-                  // 不另外指定 label：文字本身就是子節點的 label，顯式再給一次
-                  // 會被接成兩份，讀值變成同一段文字出現兩遍。
-                  TmsSemantics(
-                    id: 'hold.char-count',
-                    child: Text(
-                      _charCountText,
-                      textAlign: TextAlign.right,
-                      style: TmsText.caption1.copyWith(
-                        color: TmsColors.secondaryLabel,
-                      ),
-                    ),
-                  ),
-                ],
+        children: onList ? [_reasonList()] : [_noteCard()],
+      ),
+    );
+  }
+
+  Widget _reasonList() {
+    final options = [...widget.mode.presetReasons, _otherReasonOption];
+    return TmsGroupedSection(
+      style: TmsCardStyle.inSheet,
+      trailingDivider: true,
+      children: [
+        for (final option in options)
+          TmsSemantics(
+            id: 'hold.reason.$option',
+            child: TmsOptionRow.reason(
+              title: Text(option),
+              onTap: () => _pickReason(option),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _noteCard() {
+    return TmsCard(
+      style: TmsCardStyle.inSheet,
+      padding: const EdgeInsets.fromLTRB(
+        TmsSpacing.md2,
+        TmsSpacing.md,
+        TmsSpacing.md2,
+        TmsSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('請簡單說明原因', style: TmsText.footnoteEmphasized),
+          const SizedBox(height: TmsSpacing.sm),
+          TmsSemantics(
+            id: 'hold.other-reason-field',
+            child: CupertinoTextField(
+              controller: _noteController,
+              placeholder: '例如：住客說下午 2 點後再來打掃',
+              maxLines: 3,
+              minLines: 3,
+              padding: EdgeInsets.zero,
+              decoration: const BoxDecoration(),
+              style: TmsText.callout,
+            ),
+          ),
+          const SizedBox(height: TmsSpacing.sm),
+          // 不另外指定 label：文字本身就是子節點的 label，顯式再給一次
+          // 會被接成兩份，讀值變成同一段文字出現兩遍。
+          TmsSemantics(
+            id: 'hold.char-count',
+            child: Text(
+              _charCountText,
+              textAlign: TextAlign.right,
+              style: TmsText.caption1.copyWith(
+                color: TmsColors.secondaryLabel,
               ),
             ),
+          ),
         ],
       ),
     );

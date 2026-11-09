@@ -18,16 +18,14 @@ import '../theme.dart';
 class TmsOptionRow extends StatelessWidget {
   /// 延後／中斷原因列（`Main.dc.html:1450`）。
   ///
-  /// 原型點一下就直接送出，不留選中狀態，所以列尾什麼都不畫。這個畫面目前還
-  /// 是先選一列、再按確認鈕，中間那段沒有任何回饋員工會不知道自己選到了，
-  /// [selected] 就是補這段回饋用的。互動改成點了就送出之後，呼叫端把它拿掉，
-  /// 這一列才完全等於原型。
+  /// 點一下就直接送出，所以列尾什麼都不畫，也沒有選中狀態可畫——員工按下去
+  /// 的下一刻面板就收起來了，中間沒有一個「選好了但還沒送」的時刻。
   const TmsOptionRow.reason({
     super.key,
     required this.title,
     required this.onTap,
-    this.selected = false,
   }) : subtitle = null,
+       selected = false,
        _minHeight = 52,
        _verticalPadding = 0,
        _subtitleStyle = null,

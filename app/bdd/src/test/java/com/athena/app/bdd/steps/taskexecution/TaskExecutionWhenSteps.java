@@ -19,6 +19,9 @@ public class TaskExecutionWhenSteps {
 
     private static final String OTHER_REASON = "其他原因";
 
+    /** 中斷清單裡唯一不送原因、改開工務單表單的那一列。 */
+    private static final String NEEDS_MAINTENANCE_REASON = "需要工務協助";
+
     private final AppiumWorld world;
 
     public TaskExecutionWhenSteps(AppiumWorld world) {
@@ -75,24 +78,24 @@ public class TaskExecutionWhenSteps {
     }
 
     /**
-     * 怎麼做：在任務頁點「延後」開啟延後面板，點該預設原因，再點確認。權威狀態落地：等同
+     * 怎麼做：在任務頁點「延後」開啟延後面板，點該預設原因（點下去就送出）。權威狀態落地：等同
      * 後端 {@code tasksDefer} 語意，{@code hold_reason}＝該原因文字，{@code deferred_by_self}=true。
      * 回寫：任務頁。
      */
     @當("{string} 在 App 為 {string} 選擇延後原因 {string} 並確認")
     public void chooseDeferReason(String staffName, String task, String reason) {
         openHoldSheet(staffName, task, "task.defer-button");
-        chooseReasonAndConfirm(reason);
+        chooseReason(reason);
     }
 
     /**
-     * 怎麼做：在任務頁點「中斷」開啟中斷面板，點該預設原因，再點確認。權威狀態落地：等同
+     * 怎麼做：在任務頁點「中斷」開啟中斷面板，點該預設原因（點下去就送出）。權威狀態落地：等同
      * 後端 {@code tasksInterrupt} 語意，{@code hold_reason}＝該原因文字。回寫：任務頁。
      */
     @當("{string} 在 App 為 {string} 選擇中斷原因 {string} 並確認")
     public void chooseInterruptReason(String staffName, String task, String reason) {
         openHoldSheet(staffName, task, "task.interrupt-button");
-        chooseReasonAndConfirm(reason);
+        chooseReason(reason);
     }
 
     /**
@@ -115,6 +118,17 @@ public class TaskExecutionWhenSteps {
         typeOtherDeferReason(staffName, task, FILLER_CHARACTER.repeat(charCount));
     }
 
+    /**
+     * 怎麼做：在任務頁點「中斷」開啟中斷面板，點「需要工務協助」。這一列不送原因，面板
+     * 原地換成工務單表單。權威狀態落地：這一步不動後端，原任務要等表單送出時才轉為已中斷。
+     * 回寫：畫面上的面板內容。「需要工務協助」是 feature 文字裡的固定字面。
+     */
+    @當("{string} 在 App 為 {string} 的中斷面板選「需要工務協助」")
+    public void chooseNeedsMaintenance(String staffName, String task) {
+        openHoldSheet(staffName, task, "task.interrupt-button");
+        world.tapTestId("hold.reason." + NEEDS_MAINTENANCE_REASON, SCREEN_TIMEOUT);
+    }
+
     /** 進該房的任務頁，點延後或中斷的入口，等面板出現。 */
     private void openHoldSheet(String staffName, String task, String entryTestId) {
         world.ensureOnTaskDetail(world.staff(staffName), task);
@@ -122,10 +136,16 @@ public class TaskExecutionWhenSteps {
         world.waitForTestId("hold.sheet", SCREEN_TIMEOUT);
     }
 
-    /** 選一個預設原因後送出。 */
-    private void chooseReasonAndConfirm(String reason) {
+    /**
+     * 點一個預設原因。
+     *
+     * <p>點下去就是送出，面板上沒有第二顆確認鈕：預設原因本身就是要送出去的那段文字，
+     * 再問一次「確定嗎」只是讓員工在走廊上多按一下。面板是在後端回應之後才關閉的，
+     * 所以它消失代表這次操作整個做完了，接下來的斷言讀到的才是更新後的任務頁。
+     */
+    private void chooseReason(String reason) {
         world.tapTestId("hold.reason." + reason, SCREEN_TIMEOUT);
-        confirm();
+        world.waitForTestIdGone("hold.sheet", SCREEN_TIMEOUT);
     }
 
     /**

@@ -1283,4 +1283,23 @@ public class TaskExecutionThenSteps {
                     + " 筆 completed 事件，被拒的完成不該留下任何完成事件");
         }
     }
+
+    /**
+     * 必查：畫面上是工務單表單而不是原因清單，而且這一步還沒有中斷任何東西——原任務
+     * 仍是進行中，後端也還沒有這張單。accessibility id：{@code repair.sheet}、
+     * {@code hold.sheet}。
+     */
+    @那麼("{string} 的面板換成工務單表單，原任務還沒有被中斷")
+    public void sheetSwitchedToRepairForm(String roomNo) {
+        world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+        if (!world.driver().findElements(world.byTestId("hold.sheet")).isEmpty()) {
+            throw new AssertionError("工務單表單出現了，中斷原因清單卻還在畫面上");
+        }
+        Map<String, Object> row = world.taskRowByRoomNo(roomNo);
+        String state = String.valueOf(row.get("state"));
+        if (!"doing".equals(state)) {
+            throw new AssertionError("選「需要工務協助」只是換一張表單，原任務不該在這一步就被動到"
+                    + "（實際 state=" + state + "）");
+        }
+    }
 }

@@ -69,6 +69,10 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 報修面板開啟時的原任務 id（契約的 sourceTaskId）。
   String? _openRepairSheetTaskId;
 
+  /// 這次的報修是從中斷面板的「需要工務協助」轉過來的，送出時要同時把原任務
+  /// 轉為已中斷。從導覽列的報修圖示進來時是 false，原任務照常進行。
+  bool _repairInterruptsSourceTask = false;
+
   /// 這一間房未撤回的工務單，順序照後端給的順序。
   List<RepairTicketSummary> _repairTickets = const <RepairTicketSummary>[];
 
@@ -207,6 +211,10 @@ class _TaskScreenState extends State<TaskScreen> {
                     roomNo: widget.roomNo,
                     sourceTaskId: _openRepairSheetTaskId,
                     onClose: _closeRepairSheet,
+                    interruptSourceTask: _repairInterruptsSourceTask,
+                    onBack: _repairInterruptsSourceTask
+                        ? _backToInterruptReasons
+                        : null,
                   ),
                 ),
               ),
@@ -295,6 +303,7 @@ class _TaskScreenState extends State<TaskScreen> {
     setState(() {
       _repairSheetOpen = true;
       _openRepairSheetTaskId = _loadedTask?.id;
+      _repairInterruptsSourceTask = false;
     });
   }
 
@@ -302,7 +311,21 @@ class _TaskScreenState extends State<TaskScreen> {
     setState(() {
       _repairSheetOpen = false;
       _openRepairSheetTaskId = null;
+      _repairInterruptsSourceTask = false;
     });
+  }
+
+  /// 從「需要工務協助」轉過來的報修表單，左上角那顆鈕要走回中斷原因清單。
+  ///
+  /// 這兩層在畫面上是同一個面板換了內容（`Main.dc.html:1455`），在程式裡是兩
+  /// 層：報修表單貼在任務頁上（理由見 [RepairSheet]），而中斷面板是一條路由。
+  /// 回到上一步因此是「收掉表單、重新開中斷面板」，而不是把表單退回去。
+  void _backToInterruptReasons() {
+    final task = _loadedTask;
+    _closeRepairSheet();
+    if (task != null) {
+      _openHoldSheet(task, HoldSheetMode.interrupt);
+    }
   }
 
   /// 開工：成功就把畫面換成後端回的新狀態；後端用 409 擋下「一次一間」時
@@ -433,12 +456,21 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 畫面若自己先改成「已延後」再送出，後端拒收時員工會看著一個不存在的狀態
   /// 繼續操作下去。
   Future<void> _openHoldSheet(TaskDetail task, HoldSheetMode mode) async {
-    final updated = await HoldSheet.show(context, mode: mode, taskId: task.id);
-    if (updated == null || !mounted) {
+    final result = await HoldSheet.show(context, mode: mode, taskId: task.id);
+    if (result == null || !mounted) {
       return;
     }
-    _showTask(updated);
-    TodayRefresh.instance.request();
+    switch (result) {
+      case HoldSheetSubmitted(:final task):
+        _showTask(task);
+        TodayRefresh.instance.request();
+      case HoldSheetNeedsMaintenance():
+        setState(() {
+          _repairSheetOpen = true;
+          _openRepairSheetTaskId = task.id;
+          _repairInterruptsSourceTask = true;
+        });
+    }
   }
 
   /// 把畫面換成指定的那一筆任務。
@@ -1001,7 +1033,7 @@ class _TaskScreenState extends State<TaskScreen> {
         onPressed: () {
           // 按過這一顆就等於知道它是做什麼的，說明泡泡不必再出現。
           setState(() => _askTipSeen = true);
-          AskSheet.show(context, taskId: task.id);
+          AskSheet.show(context, taskId: task.id, roomNo: widget.roomNo);
         },
       ),
     );

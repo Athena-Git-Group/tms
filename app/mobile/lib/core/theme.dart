@@ -396,6 +396,19 @@ abstract final class TmsText {
     color: TmsColors.label,
   );
 
+  /// Subheadline 的最粗版。查一下出處卡的標題（`Main.dc.html:1631`）與報修面
+  /// 板急件判定卡的標題（`Main.dc.html:1493`）。
+  ///
+  /// 這兩處的 15pt 都和同一張卡裡的 13pt 內文並排，600 在這個字級差下拉不開
+  /// 距離，所以原型特地用到 700。
+  static const TextStyle subheadlineBold = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 15,
+    height: 20 / 15,
+    fontWeight: FontWeight.w700,
+    color: TmsColors.label,
+  );
+
   /// Subheadline 的中等字重版。步驟條上「還沒走到」那幾步的標籤；目前那一步
   /// 用 700，兩者的粗細差就是「走到哪裡」的視覺線索。
   static const TextStyle subheadlineMedium = TextStyle(

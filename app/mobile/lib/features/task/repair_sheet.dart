@@ -11,12 +11,12 @@ import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_option_row.dart';
 import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_cell.dart';
-import '../../core/widgets/tms_selection_chip.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_sheet.dart';
 import '../ticket/repair_labels.dart';
 
 /// 報修面板（ui-plan 畫面 6 的 `repairSheet`，即工務單表單）：房務在任務頁
-/// 點報修圖示進來，選類別、拍 1–3 張照片，送出一張工務單。
+/// 點報修圖示進來，選類別、寫一段狀況說明、拍 1–3 張照片，送出一張工務單。
 ///
 /// <h2>為什麼是貼在任務頁上的面板，不是蓋住整頁的 modal</h2>
 ///
@@ -24,6 +24,13 @@ import '../ticket/repair_labels.dart';
 /// 那一間還是進行中），離線時也要看得到頂部的離線列與待同步筆數。Flutter 的
 /// modal 路由會把底下整頁的 semantics 擋掉，那些資訊就連畫面上都讀不到了，
 /// 所以這個面板是任務頁自己的一層，不另開路由。
+///
+/// <h2>會不會中斷原任務，由進來的路徑決定</h2>
+///
+/// 從任務頁導覽列的報修圖示進來的單，原任務照常進行；從中斷面板選「需要工務
+/// 協助」轉過來的，送出時同時把原任務轉為已中斷。表單上不放切換開關：兩條路
+/// 徑的員工在進來之前就已經決定了要不要停下手邊的工作，表單再問一次只會讓他
+/// 有機會把自己剛做的決定推翻掉，而且推翻了也沒有任何提示。
 ///
 /// <h2>浮水印為什麼要另外掛一個節點</h2>
 ///
@@ -36,6 +43,8 @@ class RepairSheet extends StatefulWidget {
     required this.roomNo,
     required this.sourceTaskId,
     required this.onClose,
+    this.interruptSourceTask = false,
+    this.onBack,
   });
 
   /// 這張單要報修的房號；浮水印與開單都用它。
@@ -47,15 +56,46 @@ class RepairSheet extends StatefulWidget {
   /// 送出成功或員工取消時收起面板。
   final VoidCallback onClose;
 
+  /// 送出時是否同時把原任務轉為已中斷（契約的 interruptSourceTask）。
+  final bool interruptSourceTask;
+
+  /// 回到上一步。從中斷面板轉過來時給值，左上角那顆鈕就變成返回；不給值代表
+  /// 這是報修的第一步，左上角是關閉。
+  final VoidCallback? onBack;
+
   @override
   State<RepairSheet> createState() => _RepairSheetState();
+}
+
+/// 置底那顆鈕此刻的長相與能不能按。
+///
+/// 原型把文案、可按與底色三件事各自寫成一條三元運算式，三條都從同一組狀態
+/// 推導（`Main.dc.html:4938`、`:4940`、`:4941`）。拆成三條之後，改了其中一
+/// 條的條件而忘了另外兩條，畫面上就會出現一顆寫著「上傳照片中」卻按得下去
+/// 的紅底按鈕。這裡一次算出三個欄位，三者只有一個來源。
+class _SubmitAction {
+  const _SubmitAction({
+    required this.label,
+    required this.enabled,
+    required this.style,
+  });
+
+  final String label;
+  final bool enabled;
+  final TmsPillButtonStyle style;
 }
 
 class _RepairSheetState extends State<RepairSheet> {
   /// 契約 CreateRepairTicketRequest.photoIds 的上下限：1–3 張。
   static const int _maxPhotos = 3;
 
+  /// 狀況說明的字數上限。延後原因與完修說明也是這個數，員工在三個地方看到
+  /// 的輸入上限才一致。
+  static const int _maxDescriptionLength = 60;
+
   final List<RepairPhoto> _photos = [];
+
+  final TextEditingController _descriptionController = TextEditingController();
 
   String? _category;
 
@@ -63,18 +103,25 @@ class _RepairSheetState extends State<RepairSheet> {
   /// 兩者都由後端算，App 只呈現。
   RepairTicketPrecheck? _precheck;
 
-  /// 「中斷 → 需要工務協助」模式：送出的同時把原任務轉為已中斷。
-  bool _interruptSourceTask = false;
-
   bool _submitting = false;
-
-  /// 這張單已經留在手機的待送出佇列裡。
-  bool _queuedOffline = false;
 
   /// 員工已經試過加第 4 張。加入按鈕要到這一刻才收起來（ui-plan 畫面 6 的
   /// 失敗回饋「第 4 張 → 加入按鈕消失」）：張數還在上限內就先留著按鈕，
   /// 員工才不會在沒有任何動作的情況下看著按鈕自己不見。
   bool _photoLimitHit = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 字數提示要跟著每一個字更新，所以監聽欄位本身，不等到送出才讀一次。
+    _descriptionController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
   /// 選類別時向後端要開單前檢查。判定與重複提示都是後端的結論，選到別的
   /// 類別就再問一次——同一間房不同類別的重複單與急件規則本來就不同。
@@ -196,6 +243,7 @@ class _RepairSheetState extends State<RepairSheet> {
       }
     }
 
+    final description = _descriptionController.text.trim();
     bool sent;
     try {
       sent = await OfflineQueue.instance.submit(
@@ -205,10 +253,11 @@ class _RepairSheetState extends State<RepairSheet> {
           await ApiClient.instance.createRepairTicket(
             sourceTaskId: widget.sourceTaskId,
             category: category,
+            description: description,
             photoIds: [
               for (final photo in _photos) photo.photoId!,
             ],
-            interruptSourceTask: _interruptSourceTask,
+            interruptSourceTask: widget.interruptSourceTask,
             idempotencyKey: idempotencyKey,
           );
         },
@@ -222,54 +271,121 @@ class _RepairSheetState extends State<RepairSheet> {
       return;
     }
     if (!sent) {
-      setState(() {
-        _submitting = false;
-        _queuedOffline = true;
-      });
+      setState(() => _submitting = false);
       return;
     }
     widget.onClose();
   }
 
+  /// 系統把這張單判為急件了沒有。還沒選類別、或檢查還沒回來時都不算。
+  bool get _urgent => _precheck?.urgent ?? false;
+
+  /// 置底鈕此刻的長相（`Main.dc.html:4938`）。
+  _SubmitAction get _submitAction {
+    final failed = _photos.any((photo) => photo.uploadFailed);
+    if (failed) {
+      return const _SubmitAction(
+        label: '有照片上傳失敗，點縮圖重試',
+        enabled: false,
+        style: TmsPillButtonStyle.filled,
+      );
+    }
+    if (_submitting) {
+      final uploaded = _photos.where((photo) => photo.photoId != null).length;
+      return _SubmitAction(
+        label: '上傳照片中 $uploaded / ${_photos.length}…',
+        enabled: false,
+        style: TmsPillButtonStyle.filled,
+      );
+    }
+    final urgent = _urgent;
+    return _SubmitAction(
+      label: urgent ? '送出急件（直接給工務）' : '送出給主管審核',
+      enabled: _category != null && _photos.isNotEmpty,
+      style: urgent
+          ? TmsPillButtonStyle.urgentFilled
+          : TmsPillButtonStyle.filled,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final canSubmit =
-        _category != null && _photos.isNotEmpty && !_submitting;
+    final action = _submitAction;
+    final onBack = widget.onBack;
+    final precheck = _precheck;
     return TmsSemantics(
       id: 'repair.sheet',
       child: TmsSheet(
         title: '報修',
-        onLeadingTap: widget.onClose,
+        leading:
+            onBack == null ? TmsSheetLeading.close : TmsSheetLeading.back,
+        onLeadingTap: onBack ?? widget.onClose,
         bottomAction: TmsSemantics(
           id: 'repair.submit-button',
           // 可否送出要顯式標出來：CupertinoButton 的 onPressed 為
           // null 時，框架不會把 disabled 曝露到 accessibility tree。
-          enabled: canSubmit,
+          enabled: action.enabled,
           child: TmsSheetButton(
-            label: '送出',
-            onPressed: canSubmit ? _submit : null,
+            label: action.label,
+            style: action.style,
+            onPressed: action.enabled ? _submit : null,
           ),
         ),
         children: [
           _categoryList(),
-          if (_precheck?.duplicate != null)
-            _duplicateCallout(_precheck!.duplicate!),
-          if (_precheck != null) _urgentJudgementCard(_precheck!),
+          if (precheck?.duplicate != null)
+            _duplicateCallout(precheck!.duplicate!),
+          _descriptionCard(),
+          if (precheck != null) _urgentJudgementBlock(precheck),
+          if (_category == null) _urgentPendingNote(),
           _photoCard(),
+          if (_photos.isEmpty) _needPhotoNote(),
+          _photoNote(),
+        ],
+      ),
+    );
+  }
+
+  /// 狀況說明：選填，員工寫一句話讓主管與工務在看到照片之前就知道發生什麼事。
+  Widget _descriptionCard() {
+    return TmsCard(
+      style: TmsCardStyle.inSheet,
+      padding: const EdgeInsets.fromLTRB(
+        TmsSpacing.md2,
+        TmsSpacing.md,
+        TmsSpacing.md2,
+        TmsSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('狀況說明（選填）', style: TmsText.footnoteEmphasized),
+          const SizedBox(height: TmsSpacing.sm),
           TmsSemantics(
-            id: 'repair.interrupt-source-task-toggle',
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TmsSelectionChip(
-                label: '中斷 · 需要工務協助',
-                selected: _interruptSourceTask,
-                onTap: () => setState(
-                  () => _interruptSourceTask = !_interruptSourceTask,
-                ),
+            id: 'repair.description-field',
+            child: CupertinoTextField(
+              controller: _descriptionController,
+              placeholder: '例如：冷氣開了不冷，出風口有滴水',
+              maxLines: 2,
+              minLines: 2,
+              maxLength: _maxDescriptionLength,
+              padding: EdgeInsets.zero,
+              decoration: const BoxDecoration(),
+              style: TmsText.callout,
+            ),
+          ),
+          const SizedBox(height: TmsSpacing.sm),
+          TmsSemantics(
+            id: 'repair.description-char-count',
+            child: Text(
+              '${_descriptionController.text.length} / $_maxDescriptionLength',
+              textAlign: TextAlign.right,
+              style: TmsText.caption1.copyWith(
+                color: TmsColors.secondaryLabel,
               ),
             ),
           ),
-          if (_queuedOffline) _offlineQueuedLabel(),
         ],
       ),
     );
@@ -277,6 +393,7 @@ class _RepairSheetState extends State<RepairSheet> {
 
   /// 照片區：一張白卡，上面一行標題與張數，底下是照片格與「加入照片」格。
   Widget _photoCard() {
+    const label = '照片（必填，至少 1 張、最多 3 張）';
     return TmsCard(
       style: TmsCardStyle.inSheet,
       padding: const EdgeInsets.fromLTRB(
@@ -296,12 +413,9 @@ class _RepairSheetState extends State<RepairSheet> {
               const Expanded(
                 child: TmsSemantics(
                   id: 'repair.photo.count-label',
-                  label: '照片（至少 1 張、最多 3 張）',
+                  label: label,
                   child: ExcludeSemantics(
-                    child: Text(
-                      '照片（至少 1 張、最多 3 張）',
-                      style: TmsText.footnoteEmphasized,
-                    ),
+                    child: Text(label, style: TmsText.footnoteEmphasized),
                   ),
                 ),
               ),
@@ -332,6 +446,57 @@ class _RepairSheetState extends State<RepairSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 一張都還沒拍時，把「為什麼非拍不可」與「沒有相機權限怎麼辦」寫在送出鈕
+  /// 上方。只說「送出鈕不能按」的話，員工會以為是當掉了。
+  Widget _needPhotoNote() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: TmsSpacing.xs),
+      child: TmsSemantics(
+        id: 'repair.photo.required-note',
+        child: Text(
+          '至少 1 張照片才能送出，方便主管與工務判斷狀況。沒有相機權限時，可以從相簿選擇。',
+          style: TmsText.footnote,
+        ),
+      ),
+    );
+  }
+
+  /// 照片與離線的處理說明。
+  ///
+  /// 兩段文字共用一行：離線時先說這張單會先留在手機，有照片時再說照片被怎麼
+  /// 處理過。兩段都沒有時整行不出現。
+  ///
+  /// 待送出的可及節點掛在離線那一段上，而不是另外畫一行「待送出」。原型沒有
+  /// 那一行，而離線這一段講的就是同一件事；畫兩行的話，恢復連線後員工會看到
+  /// 其中一行消失、另一行還在。
+  Widget _photoNote() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: ConnectionStatus.instance.offline,
+      builder: (context, offline, _) {
+        final text = [
+          if (offline) '目前離線：工務單與照片會先存在手機，恢復連線後自動上傳、送出。',
+          if (_photos.isNotEmpty)
+            '照片已加上浮水印（房號 · 拍攝時間）並壓縮（長邊 1600px、JPEG）。',
+        ].join();
+        if (text.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final note = Padding(
+          padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.xs),
+          child: Text(text, style: TmsText.footnote),
+        );
+        if (!offline) {
+          return note;
+        }
+        return TmsSemantics(
+          id: 'ticket.summary.offline-queued-label',
+          label: text,
+          child: ExcludeSemantics(child: note),
+        );
+      },
     );
   }
 
@@ -377,7 +542,7 @@ class _RepairSheetState extends State<RepairSheet> {
         children: [
           const Icon(
             CupertinoIcons.info_circle_fill,
-            size: 26,
+            size: TmsSize.calloutIcon,
             color: TmsColors.brandPrimary,
           ),
           const SizedBox(width: TmsSpacing.md),
@@ -406,7 +571,7 @@ class _RepairSheetState extends State<RepairSheet> {
                     alignment: Alignment.centerLeft,
                     onPressed: () => _appendPhotosToDuplicate(duplicate),
                     child: Text(
-                      '補充照片到 ${duplicate.ticketNo}',
+                      '補充照片到這張單',
                       style: TmsText.subheadlineEmphasized.copyWith(
                         color: TmsColors.brandPrimary,
                       ),
@@ -440,72 +605,101 @@ class _RepairSheetState extends State<RepairSheet> {
     }
   }
 
-  /// 急件判定卡：只呈現後端算出來的判定，並把「這是系統依飯店設定規則判定、
-  /// 房務不能更改」寫在卡上。卡上刻意沒有任何可點的切換元件——判定改不改得了
-  /// 不能只靠一句說明，畫面上根本不給入口才算數。
-  Widget _urgentJudgementCard(RepairTicketPrecheck precheck) {
-    final headline =
-        precheck.urgent ? '系統判定：急件' : '系統判定：一般件';
-    final rule = precheck.urgentRule;
-    final note = '急件判定依飯店設定的規則判定，房務不能更改，只能由主管事後降級。';
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
+  /// 還沒選類別時，先說一句判定要等什麼。急件與否決定這張單走不走主管審核，
+  /// 畫面上一直空著的話，員工會以為這張單沒有急件這回事。
+  Widget _urgentPendingNote() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
       child: TmsSemantics(
-        id: 'repair.urgent-judgement.card',
-        label: rule == null ? '$headline\n$note' : '$headline · $rule\n$note',
-        explicitChildNodes: true,
-        child: TmsCard(
-          style: TmsCardStyle.inSheet,
-          padding: const EdgeInsets.all(TmsSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ExcludeSemantics(child: Text(headline, style: TmsText.headline)),
-              if (rule != null)
-                TmsSemantics(
-                  id: 'repair.urgent-judgement.reason',
-                  label: rule,
-                  child: ExcludeSemantics(child: Text(rule)),
-                ),
-              ExcludeSemantics(
-                child: Text(
-                  note,
-                  style: TmsText.footnote
-                      .copyWith(color: TmsColors.secondaryLabel),
-                ),
-              ),
-            ],
-          ),
-        ),
+        id: 'repair.urgent-judgement.pending-note',
+        child: Text('選好類別後，系統會判定是不是急件。', style: TmsText.footnote),
       ),
     );
   }
 
-  /// 待送出標示。它跟著離線佇列的長度走：佇列清空的那一刻標示就該消失，
-  /// 另記一個旗標的話，送出去之後畫面還會繼續說這張單沒送出。
-  Widget _offlineQueuedLabel() {
-    return ValueListenableBuilder<int>(
-      valueListenable: ConnectionStatus.instance.pendingSyncCount,
-      builder: (context, pendingCount, _) {
-        if (pendingCount == 0) {
-          return const SizedBox.shrink();
-        }
-        return Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: TmsSemantics(
-            id: 'ticket.summary.offline-queued-label',
-            label: '待送出：工務單與照片已保存在手機',
-            child: const ExcludeSemantics(
-              child: Text(
-                '待送出：工務單與照片已保存在手機',
-                style: TmsText.footnote,
-              ),
+  /// 急件判定：一張卡加一行卡外的說明。
+  ///
+  /// 卡上刻意沒有任何可點的切換元件——判定改不改得了不能只靠一句說明，畫面上
+  /// 根本不給入口才算數。說明那一行放在卡外，因為它講的不是這一張單被判成什
+  /// 麼，而是整套判定規則歸誰管；放進卡裡會跟判定結果讀成同一件事。
+  ///
+  /// 卡與說明包在同一個可及節點裡。讀螢幕的人與自動化測試要的是「這張單被判
+  /// 成什麼，以及我能不能改」這一個完整結論，拆成兩個節點的話，讀到卡的人不
+  /// 會知道下面還有一行限制。
+  Widget _urgentJudgementBlock(RepairTicketPrecheck precheck) {
+    final urgent = precheck.urgent;
+    final rule = precheck.urgentRule;
+    final headline = urgent
+        ? (rule == null ? '系統判定：急件' : '系統判定：急件 · $rule')
+        : '系統判定：一般件';
+    const note = '急件由系統依飯店設定的規則判定，房務不能更改。判錯時由主管修正。';
+    const urgentBody = '送出後直接給工務，並同步通知主管。';
+    return TmsSemantics(
+      id: 'repair.urgent-judgement.card',
+      label: urgent ? '$headline\n$urgentBody\n$note' : '$headline\n$note',
+      explicitChildNodes: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TmsCard(
+            style: TmsCardStyle.inSheet,
+            backgroundColor:
+                urgent ? TmsColors.errorContainer : TmsColors.cardBackground,
+            padding: const EdgeInsets.symmetric(
+              vertical: TmsSpacing.md,
+              horizontal: TmsSpacing.lg,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: TmsSpacing.xxxs),
+                  child: Icon(
+                    urgent
+                        ? CupertinoIcons.bolt_fill
+                        : CupertinoIcons.info_circle_fill,
+                    size: _judgementIconSize,
+                    color: urgent
+                        ? TmsColors.systemRed
+                        : TmsColors.quaternaryLabel,
+                  ),
+                ),
+                const SizedBox(width: TmsSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ExcludeSemantics(
+                        child: Text(headline, style: TmsText.subheadlineBold),
+                      ),
+                      if (urgent) ...[
+                        const SizedBox(height: TmsSpacing.xxs),
+                        const ExcludeSemantics(
+                          child: Text(urgentBody, style: TmsText.footnote),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      },
+          const SizedBox(height: TmsSpacing.xs2),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+            child: ExcludeSemantics(
+              child: Text(note, style: TmsText.footnote),
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  /// 急件判定卡左邊那顆圖示的邊長（`Main.dc.html:1489`）。
+  static const double _judgementIconSize = 22;
 
   /// 一張照片的縮圖。序號從 1 算起，與 dsl 的句型一致。
   ///
