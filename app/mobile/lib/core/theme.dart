@@ -102,6 +102,10 @@ abstract final class TmsColors {
   /// 步驟條上「還沒走到」那幾步的圖示色。
   static const Color systemGray2 = Color(0xFFAEAEB2);
 
+  /// 比 [systemGray2] 再淡一階的灰。直列時間軸上「還沒走到」那幾步的虛線圓、
+  /// 待處理清單列前的空心圓（`Main.dc.html:1801`、`Main.dc.html:761`）。
+  static const Color systemGray3 = Color(0xFFC7C7CC);
+
   /// 不透明分隔線／邊框／停用底。面板抓柄、底部動作列上緣線、停用的主按鈕底。
   static const Color opaqueSeparator = Color(0xFFC6C6C8);
 

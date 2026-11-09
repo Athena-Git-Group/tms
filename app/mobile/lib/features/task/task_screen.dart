@@ -816,6 +816,8 @@ class _TaskScreenState extends State<TaskScreen> {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
     final currentIndex = steps.indexOf(current);
+    // 查房通過代表整張單結案，沒有哪一步還「停在那裡」，四步一律畫成完成。
+    final allDone = task.state == 'inspected';
     return Padding(
       padding: const EdgeInsets.only(top: TmsSpacing.md2),
       child: TmsSemantics(
@@ -826,7 +828,12 @@ class _TaskScreenState extends State<TaskScreen> {
           onDark: onDark,
           steps: [
             for (final step in steps)
-              _trackStep(steps.indexOf(step), currentIndex, step),
+              _trackStep(
+                steps.indexOf(step),
+                currentIndex,
+                step,
+                allDone: allDone,
+              ),
           ],
         ),
       ),
@@ -834,9 +841,14 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   /// 步驟條上的一步：走到哪一步決定圖示形態，id 與讀值用步驟名當識別段。
-  static TmsStepTrackStep _trackStep(int index, int currentIndex, String step) {
+  static TmsStepTrackStep _trackStep(
+    int index,
+    int currentIndex,
+    String step, {
+    required bool allDone,
+  }) {
     final TmsStepStatus status;
-    if (index < currentIndex) {
+    if (allDone || index < currentIndex) {
       status = TmsStepStatus.done;
     } else if (index == currentIndex) {
       status = TmsStepStatus.current;
