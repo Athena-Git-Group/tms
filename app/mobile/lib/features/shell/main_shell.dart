@@ -24,6 +24,32 @@ abstract final class MainShellTabRequest {
   static void goToPool() => pending.value = _poolIndex;
 }
 
+/// 現在停在第幾個分頁，給分頁內容自己讀。
+///
+/// [IndexedStack] 會把建過的分頁留在樹上，所以切走的分頁不會收到任何通知，自
+/// 己也看不出來已經被切走。工務首頁的首次使用教學氣泡要在員工離開首頁之後就
+/// 不再出現，少了這個通道它永遠以為自己還在畫面上。
+///
+/// 外殼還沒掛上時（例如元件測試只 pump 一個分頁）當成停在首頁，那是分頁內容
+/// 單獨出現時唯一說得通的位置。
+class MainShellTab extends InheritedWidget {
+  const MainShellTab({super.key, required this.index, required super.child});
+
+  final int index;
+
+  /// 首頁是四個分頁裡的第一個。
+  static const int homeIndex = 0;
+
+  static int indexOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<MainShellTab>();
+    return scope?.index ?? homeIndex;
+  }
+
+  @override
+  bool updateShouldNotify(MainShellTab oldWidget) =>
+      oldWidget.index != index;
+}
+
 /// 登入後的主畫面外殼：底部四個分頁，首頁／待認領／通知／我的。
 ///
 /// 四個分頁是員工整天會來回切的地方，所以它們彼此平行、互相之間沒有返回
@@ -125,12 +151,18 @@ class _MainShellBodyState extends State<_MainShellBody> {
       child: Stack(
         children: [
           Positioned.fill(
-            child: IndexedStack(
+            child: MainShellTab(
               index: _index,
-              children: [
-                for (var i = 0; i < tabs.length; i++)
-                  if (_built.contains(i)) tabs[i] else const SizedBox.shrink(),
-              ],
+              child: IndexedStack(
+                index: _index,
+                children: [
+                  for (var i = 0; i < tabs.length; i++)
+                    if (_built.contains(i))
+                      tabs[i]
+                    else
+                      const SizedBox.shrink(),
+                ],
+              ),
             ),
           ),
           Positioned(

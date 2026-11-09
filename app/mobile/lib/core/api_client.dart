@@ -307,6 +307,8 @@ class ApiClient {
   /// 欄位，後端收到的就是「沒有寫說明」，而不是一段空白的說明。
   /// [idempotencyKey] 給離線佇列重送用：同一次送出重送幾遍都帶同一把鍵，
   /// 後端才認得出是同一次動作、只建立一張單。
+  /// [assigneeId] 只有工務自開與櫃檯交辦走得通：帶了就直接把單指派給那個人、
+  /// 略過待認領與審核，不帶就進待認領。
   Future<RepairTicketDetail> createRepairTicket({
     String? sourceTaskId,
     String? roomId,
@@ -315,6 +317,7 @@ class ApiClient {
     String? description,
     required List<String> photoIds,
     bool interruptSourceTask = false,
+    String? assigneeId,
     String? idempotencyKey,
   }) async {
     final json = await _requestJson(
@@ -331,9 +334,22 @@ class ApiClient {
           'description': description,
         'photoIds': photoIds,
         if (interruptSourceTask) 'interruptSourceTask': true,
+        'assigneeId': ?assigneeId,
       },
     );
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `GET /rooms`：房間主檔（契約 `listRooms`）。
+  ///
+  /// 開工單要帶的是房間 id，員工打的是房號，兩者之間沒有別的換算路徑，所以
+  /// 這一支的用途就是把房號換成 id，順便決定員工打的房號到底存不存在。
+  Future<List<RoomSummary>> listRooms() async {
+    final json = await _requestJson('GET', '/rooms') as List<Object?>;
+    return [
+      for (final row in json)
+        RoomSummary.fromJson(row! as Map<String, dynamic>),
+    ];
   }
 
   /// `POST /tasks/{id}/start`：負責人開工（契約 `tasksStart`）。同一位員工
@@ -1117,6 +1133,22 @@ class RepairTicketSummary {
       isUrgent: json['isUrgent'] as bool? ?? false,
       state: json['state'] as String,
       reporterName: json['reporterName'] as String? ?? '',
+    );
+  }
+}
+
+/// `rooms`：房間主檔的一筆。開工單只需要房號與 id 這兩個欄位。
+class RoomSummary {
+  const RoomSummary({required this.id, required this.roomNo});
+
+  final String id;
+
+  final String roomNo;
+
+  factory RoomSummary.fromJson(Map<String, dynamic> json) {
+    return RoomSummary(
+      id: json['id'] as String,
+      roomNo: json['roomNo'] as String? ?? '',
     );
   }
 }

@@ -6,13 +6,17 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_content_unavailable.dart';
+import '../../core/widgets/tms_fab.dart';
 import '../../core/widgets/tms_greeting_row.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_home_cards.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_status_chip.dart';
+import '../../core/widgets/tms_tip_popover.dart';
 import '../pool/pool_widgets.dart';
+import '../shell/main_shell.dart';
 import '../ticket/repair_labels.dart';
+import '../ticket/repair_ticket_form_sheet.dart';
 import '../ticket/ticket_screen.dart';
 import '../today/my_today_scope.dart';
 import '../today/progress_value.dart';
@@ -33,44 +37,120 @@ import '../today/progress_value.dart';
 ///
 /// 畫面最上面沒有導覽列（`Main.dc.html:856-863`）：第一塊就是問候列，標題由
 /// 問候語本身擔任，再加一條寫著「工務首頁」的導覽列等於把同一件事說兩次。
-class EngHomeScreen extends StatelessWidget {
+/// 開工單的浮動按鈕只掛在這一頁，待認領不放（`Main.dc.html:4051`）：待認領是
+/// 員工去接別人開的單的地方，在那裡擺一顆開單鈕，他會分不清自己按下去是要接
+/// 單還是要開一張新的。
+class EngHomeScreen extends StatefulWidget {
   const EngHomeScreen({super.key});
 
   @override
+  State<EngHomeScreen> createState() => _EngHomeScreenState();
+}
+
+class _EngHomeScreenState extends State<EngHomeScreen> {
+  /// 員工已經看過開工單的教學氣泡了。
+  ///
+  /// 按 ×、按那顆按鈕、離開首頁，三者任一發生就算看過（`Main.dc.html:4052`、
+  /// `Main.dc.html:4046`）。這是畫面自己的狀態而不是元件的狀態，因為後兩個
+  /// 條件元件看不到。
+  bool _tipSeen = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MainShellTab.indexOf(context) != MainShellTab.homeIndex) {
+      _tipSeen = true;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final fabBottom = TmsFab.bottomAboveTabBar(bottomInset);
     return TmsSemantics(
       id: 'engHome.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
-        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
-        // 的那段留白由捲動內容自己帶。
-        child: SafeArea(
-          bottom: false,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              TmsSpacing.screenEdge,
-              TmsSpacing.md,
-              TmsSpacing.screenEdge,
-              TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
+        // 氣泡下緣的箭頭尖凸出卡片外面，預設的裁切會把它削掉。
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁
+            // 列的那段留白由捲動內容自己帶。
+            SafeArea(
+              bottom: false,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  TmsSpacing.screenEdge,
+                  TmsSpacing.md,
+                  TmsSpacing.screenEdge,
+                  // 浮動按鈕壓在最後一張卡上面，所以分頁列的留白之外還要再讓
+                  // 開按鈕（`Main.dc.html:4448`）。
+                  TmsSpacing.scrollPadBottom(bottomInset) +
+                      TmsFab.scrollPadClearance,
+                ),
+                children: const [
+                  // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
+                  // 連線不穩定，不必等某個操作失敗才發現。
+                  SystemStatusBar(),
+                  _LoadFailureNotice(),
+                  _GreetingRow(),
+                  SizedBox(height: TmsSpacing.lg),
+                  _EngineeringProgress(),
+                  SizedBox(height: TmsSpacing.lg),
+                  _FocusCard(),
+                  SizedBox(height: TmsSpacing.lg),
+                  _InHandTickets(),
+                ],
+              ),
             ),
-            children: const [
-              // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
-              // 連線不穩定，不必等某個操作失敗才發現。
-              SystemStatusBar(),
-              _LoadFailureNotice(),
-              _GreetingRow(),
-              SizedBox(height: TmsSpacing.lg),
-              _EngineeringProgress(),
-              SizedBox(height: TmsSpacing.lg),
-              _FocusCard(),
-              SizedBox(height: TmsSpacing.lg),
-              _InHandTickets(),
-            ],
-          ),
+            Positioned(
+              right: TmsFab.sideInset,
+              bottom: fabBottom,
+              child: TmsSemantics(
+                id: 'engHome.create-ticket-fab',
+                child: TmsFab(
+                  glyph: TmsFabGlyph.plus,
+                  semanticsLabel: '開工單',
+                  onPressed: () {
+                    setState(() => _tipSeen = true);
+                    RepairTicketFormSheet.show(context);
+                  },
+                ),
+              ),
+            ),
+            if (_tipVisible)
+              Positioned(
+                right: TmsFab.sideInset,
+                bottom: TmsTipPopover.bottomAbove(fabBottom, TmsFab.diameter),
+                child: TmsTipPopover(
+                  title: '在這裡開工單',
+                  message: '巡檢時發現問題，拍照就能直接開單。',
+                  width: _tipWidth,
+                  onDismiss: () => setState(() => _tipSeen = true),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
+
+  /// 氣泡此刻該不該出現。
+  ///
+  /// 畫面上已經有別的東西蓋上來（確認對話框、開工單面板、推到上面的詳情頁）
+  /// 時這一顆讓位，否則兩層提示會同時要員工的注意力。這些東西都是推在這一頁
+  /// 上面的路由，所以問這一頁還是不是最上層那個就知道（`Main.dc.html:4052`
+  /// 的 `!s.eDetail && !s.eSheet && !s.alert`）。
+  bool get _tipVisible {
+    if (_tipSeen) {
+      return false;
+    }
+    return ModalRoute.of(context)?.isCurrent ?? true;
+  }
+
+  /// `Main.dc.html:1037` — 開工單氣泡的卡片寬度 260
+  static const double _tipWidth = 260;
 }
 
 /// 今日進度載入失敗時的一行提示。

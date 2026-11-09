@@ -424,6 +424,20 @@ public class AppiumWorld {
     }
 
     /**
+     * 確保 App 已以這位工務的身分登入，並停在工務首頁（{@code engHome}）。登入後就落在
+     * 這一頁，所以只有前面的句子把畫面切走時才要切回來；已經在首頁上時不重複點。
+     */
+    public void ensureOnEngineeringHome(BackendChannel.CreatedStaff staff) {
+        ensureLoggedInAs(staff);
+        Duration timeout = Duration.ofSeconds(10);
+        if (!driver().findElements(byTestId("engHome.screen")).isEmpty()) {
+            return;
+        }
+        waitForLabelContaining("首頁", timeout).click();
+        waitForTestId("engHome.screen", timeout);
+    }
+
+    /**
      * 確保 App 已以這位員工的身分登入，並停在房務待認領（{@code pool}）。待認領不是
      * 登入後的落地畫面，要從首頁再點一次入口；已經在待認領上時不重複點（與
      * {@link #ensureOnEngineeringPool} 同一套作法）。
