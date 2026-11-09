@@ -7,6 +7,7 @@ import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_pill_button.dart';
@@ -253,6 +254,7 @@ class _TaskScreenState extends State<TaskScreen> {
         return;
       }
       _showTask(started);
+      TodayRefresh.instance.request();
     } on ApiException catch (e) {
       if (!mounted) {
         return;
@@ -286,6 +288,7 @@ class _TaskScreenState extends State<TaskScreen> {
       return;
     }
     _showTask(completed);
+    TodayRefresh.instance.request();
     // 慶祝頁給的是「一間房做完了」的回饋，所以只有打掃類走這一段；備品類送達
     // 之後留在任務頁。
     if (completed.type == 'cleaning') {
@@ -309,6 +312,7 @@ class _TaskScreenState extends State<TaskScreen> {
       return;
     }
     _showTask(updated);
+    TodayRefresh.instance.request();
   }
 
   /// 把畫面換成指定的那一筆任務。

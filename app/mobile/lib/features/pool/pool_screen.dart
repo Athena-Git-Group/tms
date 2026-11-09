@@ -5,6 +5,7 @@ import '../../core/connection_status.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../task/task_screen.dart';
@@ -115,6 +116,8 @@ class _PoolScreenState extends State<PoolScreen> {
       return;
     }
     await ApiClient.instance.claimTask(item.taskId);
+    // 接到的單立刻就是「我的任務」的一列，首頁那一份今日進度因此變舊了。
+    TodayRefresh.instance.request();
     await _fetch();
   }
 

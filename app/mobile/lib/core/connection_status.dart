@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'today_refresh.dart';
+
 import 'api_client.dart';
 
 /// 全 App 共用的連線狀態，以及離線期間還沒送出去的動作。
@@ -164,6 +166,8 @@ class OfflineQueue {
         }
         _pending.remove(operation);
         pendingCount.value = _pending.length;
+        // 押在手機上的完成這時才真的進到後端，首頁的間數與主卡要跟著換。
+        TodayRefresh.instance.request();
       }
     } finally {
       _flushing = false;
