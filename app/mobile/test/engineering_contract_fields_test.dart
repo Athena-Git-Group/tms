@@ -16,7 +16,20 @@ import 'package:tms_staff_app/features/pool/pool_screen.dart';
 /// 缺席那半邊比齊全那半邊重要：後端先上線的是現在這份回應，齊全那半邊要等
 /// 批次 2 落地才會真的跑到。
 void main() {
+  // 這組測試一律用 `pumpAndSettle` 等畫面不再有下一幀。工務首頁維修中那張卡
+  // 的圓點是無限循環的呼吸動畫，動態開著就永遠排得出下一幀，`pumpAndSettle`
+  // 會等到逾時而不是等到畫面靜止。
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+      disableAnimations: true,
+    );
+  });
+
   tearDown(() {
+    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 

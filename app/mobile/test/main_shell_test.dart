@@ -12,7 +12,20 @@ import 'package:tms_staff_app/features/shell/main_shell.dart';
 /// 這組測試走同一條路，所以分頁列的文字或首頁的 id 一旦被改掉就會先在這裡
 /// 紅掉，不必等整套模擬器驗收跑完才發現。
 void main() {
+  // 這組測試一律用 `pumpAndSettle` 等畫面不再有下一幀。首頁進行中卡那顆圓點
+  // 是無限循環的呼吸動畫，動態開著就永遠排得出下一幀，`pumpAndSettle` 會等到
+  // 逾時而不是等到畫面靜止。
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+      disableAnimations: true,
+    );
+  });
+
   tearDown(() {
+    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 
@@ -81,7 +94,10 @@ void main() {
     await tester.pumpWidget(
       const CupertinoApp(
         home: MediaQuery(
-          data: MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          data: MediaQueryData(
+            padding: EdgeInsets.only(bottom: 34),
+            disableAnimations: true,
+          ),
           child: HousekeepingShell(),
         ),
       ),
@@ -108,7 +124,10 @@ void main() {
     await tester.pumpWidget(
       const CupertinoApp(
         home: MediaQuery(
-          data: MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          data: MediaQueryData(
+            padding: EdgeInsets.only(bottom: 34),
+            disableAnimations: true,
+          ),
           child: HousekeepingShell(),
         ),
       ),
