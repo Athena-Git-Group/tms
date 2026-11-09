@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
+import 'password_rules.dart';
 
 /// 登入與強制改密兩個畫面共用的版面零件。
 ///
@@ -412,14 +413,16 @@ class LoginErrorText extends StatelessWidget {
   }
 }
 
-/// 帳號被鎖住時的白卡：紅色圓形鎖頭加兩行字。
+/// 在員工按下任何按鈕之前，先用一張白卡告訴他現在的處境：帳號被鎖住了，或者
+/// 他手上這組是臨時密碼。卡上是一顆圓形鎖頭加兩行字。
 ///
-/// 做成一張卡而不是一行紅字，是因為這時員工什麼都不能做，得先讀懂「要等多
-/// 久、或者找誰」；一行紅字會被當成打錯字那種可以立刻重試的錯誤。
-class LoginLockoutCard extends StatelessWidget {
-  const LoginLockoutCard({
+/// 做成一張卡而不是一行紅字，是因為這兩種處境員工都得先讀懂「要等多久、或者
+/// 接下來要做什麼」；一行紅字會被當成打錯字那種可以立刻重試的錯誤。
+class LoginNoticeCard extends StatelessWidget {
+  const LoginNoticeCard({
     super.key,
     required this.semanticsId,
+    required this.iconColor,
     required this.title,
     required this.body,
   });
@@ -427,6 +430,10 @@ class LoginLockoutCard extends StatelessWidget {
   /// accessibility id（`login.lockout-banner`）。[body] 同時放到這個節點的
   /// accessibility label，讀值與定位才落在同一個元素上。
   final String semanticsId;
+
+  /// 鎖頭底下那顆圓的顏色。擋住去路的用系統紅，還能往下走的用系統橘
+  /// （`Main.dc.html:709`、`:719`）。
+  final Color iconColor;
 
   final String title;
   final String body;
@@ -445,10 +452,7 @@ class LoginLockoutCard extends StatelessWidget {
             width: 36,
             height: 36,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: TmsColors.systemRed,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
             child: const Icon(
               CupertinoIcons.lock_fill,
               size: 18,
@@ -479,6 +483,175 @@ class LoginLockoutCard extends StatelessWidget {
       id: semanticsId,
       label: body,
       child: ExcludeSemantics(child: card),
+    );
+  }
+}
+
+/// 告訴員工「這一項已經過了」的綠色圓底白勾。
+///
+/// 確認密碼欄右側用 20pt 的一顆，密碼規則清單每一列用 14pt 的一顆
+/// （`Main.dc.html:745`、`:762`）。`CupertinoIcons` 的實心打勾圓是整塊同色，
+/// 勾痕要靠底下的背景透出來；這兩處都疊在白卡上，換個底色就看不見勾，所以
+/// 照原型的兩條 path 自己描。
+class LoginCheckBadge extends StatelessWidget {
+  const LoginCheckBadge({
+    super.key,
+    required this.size,
+    required this.strokeWidth,
+  });
+
+  /// 整顆圓的邊長。
+  final double size;
+
+  /// 白色勾痕的線寬，以原型的 24×24 viewBox 為尺度。
+  final double strokeWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: _CheckBadgePainter(strokeWidth: strokeWidth),
+    );
+  }
+}
+
+class _CheckBadgePainter extends CustomPainter {
+  const _CheckBadgePainter({required this.strokeWidth});
+
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 24;
+    canvas.drawCircle(
+      Offset(12 * scale, 12 * scale),
+      10.5 * scale,
+      Paint()..color = TmsColors.systemGreen,
+    );
+    final check = Path()
+      ..moveTo(7.5 * scale, 12.4 * scale)
+      ..lineTo(10.5 * scale, 15.4 * scale)
+      ..lineTo(16.5 * scale, 8.8 * scale);
+    canvas.drawPath(
+      check,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = TmsColors.brandOnPrimary
+        ..strokeWidth = strokeWidth * scale
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CheckBadgePainter oldDelegate) =>
+      oldDelegate.strokeWidth != strokeWidth;
+}
+
+/// 還沒符合的那幾條規則前面的灰色空心圈（`Main.dc.html:763`）。
+class LoginUncheckedMark extends StatelessWidget {
+  const LoginUncheckedMark({super.key, required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size.square(size),
+      painter: const _UncheckedMarkPainter(),
+    );
+  }
+}
+
+class _UncheckedMarkPainter extends CustomPainter {
+  const _UncheckedMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.width / 24;
+    canvas.drawCircle(
+      Offset(12 * scale, 12 * scale),
+      9.5 * scale,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = TmsColors.systemGray3
+        ..strokeWidth = 2 * scale,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_UncheckedMarkPainter oldDelegate) => false;
+}
+
+/// 讓員工在打字的當下看得到自己離「可以送出」還差哪幾條規則，貼在輸入卡下方，
+/// 一條一列。
+///
+/// 每一列前面一顆記號：符合了換成綠色打勾、字轉深綠，還沒符合維持灰色空心圈
+/// （`Main.dc.html:757-766`）。整份清單一直在畫面上，不是只在出錯時才出現，
+/// 員工才不必靠送出失敗的訊息去猜後端要的是什麼。
+class PasswordRuleChecklist extends StatelessWidget {
+  const PasswordRuleChecklist({
+    super.key,
+    required this.rules,
+    this.semanticsId,
+  });
+
+  final List<PasswordRule> rules;
+
+  /// 自動化測試用來讀到整份清單的 accessibility id。清單的 accessibility
+  /// label 會把每一條規則的現況串成一句，例如「至少 8 碼：已符合」。
+  final String? semanticsId;
+
+  /// 記號的邊長（`Main.dc.html:762`）。
+  static const double _markSize = 14;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    for (final rule in rules) {
+      if (rows.isNotEmpty) {
+        rows.add(const SizedBox(height: TmsSpacing.xs));
+      }
+      rows.add(
+        Row(
+          children: <Widget>[
+            rule.satisfied
+                ? const LoginCheckBadge(size: _markSize, strokeWidth: 2.6)
+                : const LoginUncheckedMark(size: _markSize),
+            const SizedBox(width: TmsSpacing.xs2),
+            Expanded(
+              child: Text(
+                rule.label,
+                style: TmsText.footnote.copyWith(
+                  height: 1.3,
+                  color: rule.satisfied
+                      ? TmsColors.onSuccessContainer
+                      : TmsColors.secondaryLabel,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final Widget list = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: rows,
+      ),
+    );
+    final id = semanticsId;
+    if (id == null) {
+      return list;
+    }
+    return TmsSemantics(
+      id: id,
+      label: rules
+          .map((rule) => '${rule.label}：${rule.satisfied ? '已符合' : '還沒符合'}')
+          .join('，'),
+      child: ExcludeSemantics(child: list),
     );
   }
 }

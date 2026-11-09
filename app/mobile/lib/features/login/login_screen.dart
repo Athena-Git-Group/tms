@@ -112,7 +112,12 @@ class _LoginScreenState extends State<LoginScreen> {
       // 工務落在工務首頁，其他部門維持房務首頁。
       final Widget landing;
       if (result.mustChangePassword) {
-        landing = const ForcePasswordChangeScreen();
+        // 強制改密畫面要拿這兩個值比對「和臨時密碼不同」「不能是員工編號」
+        // 兩條規則，而那一頁沒有欄位能讓員工再輸入一次。
+        landing = ForcePasswordChangeScreen(
+          loginId: loginId,
+          temporaryPassword: _passwordController.text,
+        );
       } else if (result.dept == 'engineering') {
         landing = const EngineeringShell();
       } else {
@@ -183,8 +188,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final blocks = <Widget>[
       LoginBrandHeader(title: copy.title, subtitle: copy.subtitle),
       if (_lockedOut)
-        const LoginLockoutCard(
+        const LoginNoticeCard(
           semanticsId: 'login.lockout-banner',
+          iconColor: TmsColors.systemRed,
           title: '暫時無法登入',
           body: '連續輸錯 5 次，請 15 分鐘後再試，或請主管在後台重設密碼。',
         ),
