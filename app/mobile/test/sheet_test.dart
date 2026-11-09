@@ -210,31 +210,48 @@ void main() {
     expect(find.byIcon(CupertinoIcons.check_mark), findsOneWidget);
   });
 
-  testWidgets('照片格四態各畫各的，失敗時才出現重試', (tester) async {
+  // 原型 Main.dc.html:1509-1533。
+  testWidgets('照片格四態各畫各的，失敗時整格變成重試', (tester) async {
     await tester.pumpWidget(
       host(
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TmsPhotoCell(
-              state: TmsPhotoState.failed,
-              watermark: const Text('305 · 10:12'),
-              failureAction: CupertinoButton(
-                onPressed: () {},
-                child: const Text('重試'),
-              ),
+              upload: const TmsPhotoFailed(),
+              sizeLabel: '19 KB',
+              onRetry: () {},
             ),
-            const TmsPhotoCell(state: TmsPhotoState.uploading),
-            const TmsPhotoCell(state: TmsPhotoState.done),
+            const TmsPhotoCell(upload: TmsPhotoUploading(0.2)),
+            const TmsPhotoCell(upload: TmsPhotoUploaded()),
           ],
         ),
       ),
     );
 
     expect(find.text('重試'), findsOneWidget);
-    expect(find.text('305 · 10:12'), findsOneWidget);
-    expect(find.byType(CupertinoActivityIndicator), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.arrow_clockwise), findsOneWidget);
+    expect(find.text('19 KB'), findsOneWidget);
+    expect(find.text('20%'), findsOneWidget);
+    expect(find.byType(CupertinoActivityIndicator), findsNothing);
     // 完成態的綠角標。
     expect(find.byIcon(CupertinoIcons.check_mark), findsOneWidget);
+  });
+
+  // 原型 Main.dc.html:1513-1516：移除鈕只在呼叫端准許移除時出現。
+  testWidgets('照片格在不准移除時不畫移除鈕', (tester) async {
+    await tester.pumpWidget(
+      host(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TmsPhotoCell(onRemove: () {}),
+            const TmsPhotoCell(),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.byIcon(CupertinoIcons.xmark), findsOneWidget);
   });
 }

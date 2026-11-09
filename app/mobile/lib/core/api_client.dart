@@ -907,6 +907,7 @@ class RepairTicketDetail {
     this.rejectReason,
     this.urgentDowngradeReason,
     this.originTicketNo,
+    this.photos = const [],
   });
 
   final String taskId;
@@ -935,6 +936,10 @@ class RepairTicketDetail {
   final String? urgentDowngradeReason;
   final String? originTicketNo;
 
+  /// 報修時附的照片（契約 RepairTicket.photos）。詳情頁照片區的張數與格數都
+  /// 看這一欄。
+  final List<RepairTicketPhoto> photos;
+
   /// 公共區域單（無房號）才可以放回待認領；客房單只能走暫停。
   bool get isPublicArea => roomNo == '公共區域';
 
@@ -953,6 +958,30 @@ class RepairTicketDetail {
       rejectReason: json['rejectReason'] as String?,
       urgentDowngradeReason: json['urgentDowngradeReason'] as String?,
       originTicketNo: json['originTicketNo'] as String?,
+      photos: [
+        for (final photo in (json['photos'] as List<dynamic>? ?? const []))
+          RepairTicketPhoto.fromJson(photo as Map<String, dynamic>),
+      ],
+    );
+  }
+}
+
+/// 工務單上的一張照片（契約 RepairPhoto）。
+///
+/// 契約只回照片 id 與上傳狀態，沒有取得影像內容的端點，所以詳情頁畫得出照片
+/// 的張數與格子，畫不出縮圖。
+class RepairTicketPhoto {
+  const RepairTicketPhoto({required this.id, required this.status});
+
+  final String id;
+
+  /// pending 或 uploaded。
+  final String status;
+
+  factory RepairTicketPhoto.fromJson(Map<String, dynamic> json) {
+    return RepairTicketPhoto(
+      id: json['id'] as String,
+      status: json['status'] as String,
     );
   }
 }
