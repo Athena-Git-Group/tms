@@ -9,6 +9,7 @@ import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
+import '../../core/widgets/tms_action_bar.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
@@ -181,7 +182,10 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ),
         ),
+        // 置底操作列自己吃掉底部安全區（原型就是這樣貼著螢幕底緣），這裡再
+        // 留一次會變成留兩倍。
         child: SafeArea(
+          bottom: false,
           child: Stack(
             children: [
               Column(
@@ -613,57 +617,31 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 置底動作列：左邊次要、右邊主要，寬度 1 比 2。
+  /// 置底動作列。
   ///
-  /// 一個狀態最多只露出這兩顆。主按鈕的文字由 [_primaryActionLabel] 的狀態
-  /// 對照表決定，次要按鈕是待開始的「延後」與進行中的「中斷」；兩顆都沒有的
-  /// 狀態（待查房、已送達、完成…）整列不畫。
+  /// 一個狀態最多只露出兩顆。主按鈕的文字由 [_primaryActionLabel] 的狀態
+  /// 對照表決定，次要按鈕是待開始的「延後」與進行中的「中斷」。
   Widget _buildActionBar(TaskDetail task) {
     final primaryLabel = _primaryActionLabel(task);
-    final secondary = _buildSecondaryButton(task);
-    if (primaryLabel == null && secondary == null) {
-      return const SizedBox.shrink();
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: TmsSpacing.screenEdge,
-        vertical: TmsSpacing.md,
-      ),
-      decoration: const BoxDecoration(
-        color: TmsColors.cardBackground,
-        border: Border(
-          top: BorderSide(
-            color: TmsColors.opaqueSeparator,
-            width: TmsSize.hairline,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (secondary != null) Expanded(flex: 1, child: secondary),
-          if (secondary != null && primaryLabel != null)
-            const SizedBox(width: TmsSpacing.md),
-          if (primaryLabel != null)
-            Expanded(
-              flex: 2,
-              // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
-              // 會被 Flutter 接成「開始\n開始」。
-              child: TmsSemantics(
-                id: 'task.primary-button',
-                child: TmsPillButton(
-                  label: primaryLabel,
-                  // 目前只接「開始」與「完成」；恢復處理等對應情境進場再接
-                  // （接了也沒有情境在驗，會變成沒人讀的分支）。
-                  onPressed: switch (primaryLabel) {
-                    '開始' => () => _start(task),
-                    '完成' => () => _complete(task),
-                    _ => () {},
-                  },
-                ),
+    return TmsActionBar(
+      secondary: _buildSecondaryButton(task),
+      primary: primaryLabel == null
+          ? null
+          // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
+          // 會被 Flutter 接成「開始\n開始」。
+          : TmsSemantics(
+              id: 'task.primary-button',
+              child: TmsPillButton(
+                label: primaryLabel,
+                // 目前只接「開始」與「完成」；恢復處理等對應情境進場再接
+                // （接了也沒有情境在驗，會變成沒人讀的分支）。
+                onPressed: switch (primaryLabel) {
+                  '開始' => () => _start(task),
+                  '完成' => () => _complete(task),
+                  _ => () {},
+                },
               ),
             ),
-        ],
-      ),
     );
   }
 

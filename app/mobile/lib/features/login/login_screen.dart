@@ -7,6 +7,7 @@ import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_action_bar.dart';
 import '../shell/main_shell.dart';
 import 'force_password_change_screen.dart';
 import 'login_widgets.dart';
@@ -112,7 +113,9 @@ class _LoginScreenState extends State<LoginScreen> {
     return CupertinoPageScaffold(
       backgroundColor: TmsColors.groupedBackground,
       navigationBar: const CupertinoNavigationBar(middle: Text('登入')),
+      // 置底操作列自己吃掉底部安全區，外面再包一層就會留兩倍白。
       child: SafeArea(
+        bottom: false,
         child: ValueListenableBuilder<RememberedAccount?>(
           valueListenable: TestHooks.instance.rememberedAccount,
           builder: (context, remembered, _) {
@@ -182,13 +185,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                LoginActionBar(
+                TmsFormActionBar(
                   children: [
                     TmsSemantics(
                       id: 'login.submit-button',
                       enabled: !_submitting && !lockedOut,
                       child: TmsPillButton(
                         label: '登入',
+                        // 表單置底列的送出鈕在原型裡用另一組光暈。
+                        glow: TmsPillGlow.alt,
                         onPressed: _submitting || lockedOut
                             ? null
                             : () => _submit(remembered),

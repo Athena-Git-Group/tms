@@ -7,6 +7,7 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_category_tile.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../pool/pool_widgets.dart';
 import '../ticket/repair_labels.dart';
@@ -338,6 +339,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
         ),
         PoolClaimButton(
           id: '$itemId.claim-button',
+          glow: TmsPillGlow.alt,
           onPressed: () => _claim(item),
         ),
       ],

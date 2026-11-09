@@ -4,8 +4,10 @@ import '../../core/api_client.dart';
 import '../../core/repair_photo_capture.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_action_bar.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_selection_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
 import 'repair_labels.dart';
@@ -169,14 +171,23 @@ class _TicketScreenState extends State<TicketScreen> {
       id: 'ticket.screen',
       child: CupertinoPageScaffold(
         navigationBar: const CupertinoNavigationBar(middle: Text('工務單詳情')),
+        // 置底操作列自己吃掉底部安全區，外面再包一層就會留兩倍白。
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+          bottom: false,
+          child: Column(
             children: [
-              if (_error != null) Text(_error!),
-              if (ticket == null && _error == null)
-                const Center(child: CupertinoActivityIndicator()),
-              if (ticket != null) ..._ticketBody(ticket),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (_error != null) Text(_error!),
+                    if (ticket == null && _error == null)
+                      const Center(child: CupertinoActivityIndicator()),
+                    if (ticket != null) ..._ticketBody(ticket),
+                  ],
+                ),
+              ),
+              if (ticket != null) _buildActionBar(ticket),
             ],
           ),
         ),
@@ -243,45 +254,71 @@ class _TicketScreenState extends State<TicketScreen> {
             ),
           ),
         ),
-      const SizedBox(height: 24),
-      // 撤回只在工務還沒認領前成立（契約 withdrawRepairTicket：pool 與
-      // pending_review 才收）。已被認領的 `already_claimed` 直接表現為按鈕
-      // 不存在——先顯示再讓員工點了才報 409，是拿錯誤訊息當說明書。
-      if (ticket.state == 'pool' || ticket.state == 'pending_review')
-        TmsSemantics(
-          id: 'ticket.withdraw-button',
-          child: CupertinoButton(
-            onPressed: _withdraw,
-            child: const Text('撤回'),
-          ),
-        ),
-      // 補資料再送出只有主管未核准（rejected）時才有意義，其他狀態不顯示。
-      if (ticket.state == 'rejected')
-        TmsSemantics(
-          id: 'ticket.resubmit-button',
-          child: CupertinoButton.filled(
-            onPressed: _resubmit,
-            child: const Text('補資料再送出'),
-          ),
-        ),
-      if (ticket.isPublicArea &&
-          (ticket.state == 'accepted' || ticket.state == 'doing'))
-        TmsSemantics(
-          id: 'ticket.release-to-pool-button',
-          child: CupertinoButton(
-            onPressed: _releaseToPool,
-            child: const Text('放回待認領'),
-          ),
-        ),
-      if (ticket.state == 'doing')
-        TmsSemantics(
-          id: 'ticket.complete-button',
-          child: CupertinoButton.filled(
-            onPressed: _openCompleteSheet,
-            child: const Text('完修'),
-          ),
-        ),
     ];
+  }
+
+  /// 置底操作列。一個狀態最多只露出一顆次要加一顆主要，狀態條件彼此不重疊，
+  /// 所以不會出現第三顆。
+  Widget _buildActionBar(RepairTicketDetail ticket) {
+    return TmsActionBar(
+      secondary: _secondaryAction(ticket),
+      primary: _primaryAction(ticket),
+    );
+  }
+
+  /// 這個狀態的次要動作。
+  ///
+  /// 撤回只在工務還沒認領前成立（契約 withdrawRepairTicket：pool 與
+  /// pending_review 才收）。已被認領的 `already_claimed` 直接表現為按鈕
+  /// 不存在——先顯示再讓員工點了才報 409，是拿錯誤訊息當說明書。
+  Widget? _secondaryAction(RepairTicketDetail ticket) {
+    if (ticket.state == 'pool' || ticket.state == 'pending_review') {
+      return TmsSemantics(
+        id: 'ticket.withdraw-button',
+        child: TmsPillButton(
+          label: '撤回工務單',
+          style: TmsPillButtonStyle.dangerOutlined,
+          onPressed: _withdraw,
+        ),
+      );
+    }
+    if (ticket.isPublicArea &&
+        (ticket.state == 'accepted' || ticket.state == 'doing')) {
+      return TmsSemantics(
+        id: 'ticket.release-to-pool-button',
+        child: TmsPillButton(
+          label: '放回待認領',
+          style: TmsPillButtonStyle.outlined,
+          onPressed: _releaseToPool,
+        ),
+      );
+    }
+    return null;
+  }
+
+  /// 這個狀態的主要動作。
+  ///
+  /// 補資料再送出只有主管未核准（rejected）時才有意義，其他狀態不顯示。
+  Widget? _primaryAction(RepairTicketDetail ticket) {
+    if (ticket.state == 'rejected') {
+      return TmsSemantics(
+        id: 'ticket.resubmit-button',
+        child: TmsPillButton(label: '補資料再送出', onPressed: _resubmit),
+      );
+    }
+    if (ticket.state == 'doing') {
+      return TmsSemantics(
+        id: 'ticket.complete-button',
+        child: TmsPillButton(
+          label: '完修',
+          // 工務視角的主按鈕用原型另一組光暈，房務視角的「補資料再送出」用
+          // 預設那一組。
+          glow: TmsPillGlow.alt,
+          onPressed: _openCompleteSheet,
+        ),
+      );
+    }
+    return null;
   }
 
   /// 一步的畫面：外層節點只在「這一步是目前步驟」時掛 `--current` id，
