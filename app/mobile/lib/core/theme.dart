@@ -182,6 +182,26 @@ abstract final class TmsColors {
   /// 玻璃底板的外陰影。Main.dc.html:1126 — 0 4px 16px rgba(0,0,0,.12)
   static const Color glassShadow = Color(0x1F000000);
 
+  /// 浮動按鈕的玻璃底色。Main.dc.html:4055 — rgba(255,255,255,.62)
+  ///
+  /// 比分頁列的 [glassSurface] 濃一階：分頁列是一條橫跨畫面的長板，底下大多是
+  /// 空白；浮動按鈕只有 56 見方，常常正好壓在單卡或清單文字上，太透就看不出
+  /// 它是一顆按鈕。
+  static const Color fabSurface = Color(0x9EFFFFFF);
+
+  /// 浮動按鈕的外框。Main.dc.html:4055 — rgba(255,255,255,.8)
+  static const Color fabBorder = Color(0xCCFFFFFF);
+
+  /// 浮動按鈕上緣那條高光。Main.dc.html:4056 —
+  /// inset 0 1px 0 rgba(255,255,255,.9)
+  static const Color fabHighlight = Color(0xE6FFFFFF);
+
+  /// 浮動按鈕的外陰影。Main.dc.html:4056 — 0 8px 24px rgba(0,0,0,.16)
+  static const Color fabShadow = Color(0x29000000);
+
+  /// 首次使用教學氣泡的外陰影。Main.dc.html:1037 — 0 10px 30px rgba(0,0,0,.18)
+  static const Color tipPopoverShadow = Color(0x2E000000);
+
   /// 分頁列選中那一格的膠囊底。Main.dc.html:1128 — rgba(118,118,128,.16)
   static const Color tabBarSelectedPill = Color(0x29767680);
 
