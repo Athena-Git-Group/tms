@@ -687,7 +687,10 @@ class _TaskScreenState extends State<TaskScreen> {
             onTap: () {
               Navigator.of(context).push(
                 CupertinoPageRoute<void>(
-                  builder: (_) => TicketScreen(taskId: ticket.taskId),
+                  builder: (_) => TicketScreen(
+                    view: TicketView.housekeeping,
+                    taskId: ticket.taskId,
+                  ),
                 ),
               );
             },
@@ -697,7 +700,10 @@ class _TaskScreenState extends State<TaskScreen> {
         label: '工務單詳情',
         onTap: () {
           Navigator.of(context).push(
-            CupertinoPageRoute<void>(builder: (_) => const TicketScreen()),
+            CupertinoPageRoute<void>(
+              builder: (_) =>
+                  const TicketScreen(view: TicketView.housekeeping),
+            ),
           );
         },
       ),

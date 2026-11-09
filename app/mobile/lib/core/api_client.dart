@@ -916,6 +916,10 @@ class RepairTicketDetail {
     required this.isUrgent,
     required this.state,
     required this.reporterName,
+    this.createdAt,
+    this.description,
+    this.assigneeName,
+    this.urgentRule,
     this.verifiedBy,
     this.verifiedAt,
     this.resolutionNote,
@@ -942,6 +946,22 @@ class RepairTicketDetail {
   final String state;
   final String reporterName;
 
+  /// 詳情頁用這個時刻算「已送出 N 分鐘」與時間軸第一步的時刻。後端沒給時留
+  /// null，那兩段話整段不顯示，而不是填 0 分鐘讓員工以為單剛送出。
+  final DateTime? createdAt;
+
+  /// 報修的人自己打的問題說明。工務視角拿它當標題區的主標，沒有說明時改用
+  /// 類別，員工才不會看到一片空白的標題區。
+  final String? description;
+
+  /// 負責這張單的工務同仁。還沒有人接時是 null，資訊列表那一列改寫「等工務
+  /// 認領」，讓房務看得出來單還在池子裡而不是資料漏傳。
+  final String? assigneeName;
+
+  /// 系統判定急件時命中的規則，例如「VIP · 15:00 入住」。急件狀態列要寫出判
+  /// 定理由，員工才知道這張單為什麼被插到前面；一般件沒有規則，是 null。
+  final String? urgentRule;
+
   /// 驗收通過的主管顯示名稱；尚未驗收為 null。App 只讀不寫——驗收是主管端
   /// 的動作，App 沒有驗收操作。
   final String? verifiedBy;
@@ -967,6 +987,11 @@ class RepairTicketDetail {
       isUrgent: json['isUrgent'] as bool? ?? false,
       state: json['state'] as String,
       reporterName: json['reporterName'] as String,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+      description: json['description'] as String?,
+      assigneeName: json['assigneeName'] as String?,
+      urgentRule:
+          (json['urgentJudgement'] as Map<String, dynamic>?)?['rule'] as String?,
       verifiedBy: json['verifiedBy'] as String?,
       verifiedAt: json['verifiedAt'] as String?,
       resolutionNote: json['resolutionNote'] as String?,

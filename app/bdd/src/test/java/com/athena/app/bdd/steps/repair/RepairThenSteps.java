@@ -341,10 +341,12 @@ public class RepairThenSteps {
     /**
      * 必查：狀態摘要卡（{@code ticket.status-summary-card}）顯示該文案，而且與後端的
      * 工務單狀態一致。對照表（dsl 的狀態用語）：等主管審核＝pending_review、
-     * 主管未核准＝rejected、待認領＝pool、已接單＝accepted、維修中＝doing、
-     * 已完修＝done。
+     * 主管未核准＝rejected、等工務接單＝pool、已接單＝accepted、維修中＝doing、
+     * 已修好＝done。房務端的文案多半還帶著工務的名字與一句補充，所以比對的是
+     * 「文案包含這一段」而不是整句相等。
      *
-     * <p>工務端多看得到兩種文案，它們在後端是同一個狀態（done）、差別在驗收欄位：
+     * <p>工務端沒有摘要卡，同一句話寫在狀態列上並掛同一個 id。那裡多看得到兩種
+     * 文案，它們在後端是同一個狀態（done）、差別在驗收欄位：
      * 「已完修 · 等主管驗收」要求 {@code verified_at} 還是 null，「已驗收 · {主管}」
      * 要求驗收人就是文案上那一位——把驗收人一起比對，畫面才不會顯示別人的名字也算過。
      */
@@ -558,8 +560,9 @@ public class RepairThenSteps {
     }
 
     /**
-     * 必查：狀態摘要卡（{@code ticket.status-summary-card}）顯示「已完修」、處理結果
-     * （{@code ticket.resolution-label}）顯示該結果文字；後端該單已完修
+     * 必查：工務端的狀態列（{@code ticket.status-summary-card}）顯示「已完修」、處理結果
+     * （{@code ticket.resolution-label}，寫在同一條狀態列的內文裡）顯示該結果文字；
+     * 後端該單已完修
      * （{@code tasks.state = 'done'}），且各結果的連動也已落地——暫時處理有一張
      * {@code origin_ticket_task_id} 指回本單的追蹤單、無法修復時該房
      * {@code rooms.hk_state} 已轉為 out_of_order。
@@ -814,10 +817,10 @@ public class RepairThenSteps {
     private static final Map<String, String> STATE_BY_SUMMARY = Map.of(
             "等主管審核", "pending_review",
             "主管未核准", "rejected",
-            "待認領", "pool",
+            "等工務接單", "pool",
             "已接單", "accepted",
             "維修中", "doing",
-            "已完修", "done");
+            "已修好", "done");
 
     /** 輪詢畫面時的間隔；被中斷就不再裝作沒事，否則盯不到覆蓋層會被誤讀成通過。 */
     private static void pause(long millis) {

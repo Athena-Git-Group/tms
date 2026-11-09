@@ -118,7 +118,10 @@ class _RepairTicketFormScreenState extends State<RepairTicketFormScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           CupertinoPageRoute<void>(
-            builder: (_) => TicketScreen(taskId: ticket.taskId),
+            builder: (_) => TicketScreen(
+              view: TicketView.engineering,
+              taskId: ticket.taskId,
+            ),
           ),
         );
       }
