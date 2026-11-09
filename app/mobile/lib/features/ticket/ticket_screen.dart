@@ -6,6 +6,9 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_photo_action_sheet.dart';
+import '../../core/widgets/tms_photo_cell.dart';
+import '../../core/widgets/tms_photo_viewer.dart';
 import '../../core/widgets/tms_selection_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
 import 'repair_labels.dart';
@@ -152,7 +155,10 @@ class _TicketScreenState extends State<TicketScreen> {
   Future<void> _openCompleteSheet() async {
     final submitted = await showCupertinoModalPopup<String>(
       context: context,
-      builder: (_) => _CompleteSheet(taskId: widget.taskId!),
+      builder: (_) => _CompleteSheet(
+        taskId: widget.taskId!,
+        roomNo: _ticket?.roomNo ?? '',
+      ),
     );
     if (submitted != null) {
       setState(() {
@@ -243,6 +249,8 @@ class _TicketScreenState extends State<TicketScreen> {
             ),
           ),
         ),
+      const SizedBox(height: TmsSpacing.md),
+      ..._photoSection(ticket),
       const SizedBox(height: 24),
       // 撤回只在工務還沒認領前成立（契約 withdrawRepairTicket：pool 與
       // pending_review 才收）。已被認領的 `already_claimed` 直接表現為按鈕
@@ -284,6 +292,93 @@ class _TicketScreenState extends State<TicketScreen> {
     ];
   }
 
+  /// 能不能補照片看的是後端收不收：契約 appendRepairTicketPhotos 在單結案後
+  /// 回 409，所以這裡用同一條界線決定要不要畫出「補照片」格，不另外猜一套。
+  List<Widget> _photoSection(RepairTicketDetail ticket) {
+    final canAdd = ticket.state != 'done' && ticket.state != 'cancelled';
+    final photos = ticket.photos;
+    if (photos.isEmpty && !canAdd) {
+      return const [];
+    }
+    final head = '照片（${photos.length} 張，含浮水印）';
+    return [
+      TmsSemantics(
+        id: 'ticket.photo.count-label',
+        label: head,
+        child: Padding(
+          padding: const EdgeInsets.only(left: TmsSpacing.screenEdge),
+          child: ExcludeSemantics(
+            child: Text(head, style: TmsText.footnote),
+          ),
+        ),
+      ),
+      const SizedBox(height: TmsSpacing.xs2),
+      TmsCard(
+        padding: const EdgeInsets.all(TmsSpacing.md),
+        child: GridView.count(
+          crossAxisCount: 3,
+          mainAxisSpacing: TmsSpacing.sm,
+          crossAxisSpacing: TmsSpacing.sm,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            for (var i = 0; i < photos.length; i++)
+              TmsSemantics(
+                id: 'ticket.photo.${i + 1}',
+                child: TmsPhotoCell(
+                  edge: null,
+                  semanticsLabel: '放大 ${ticket.ticketNo} 照片 ${i + 1}',
+                  onTap: () => _openViewer(ticket, i),
+                ),
+              ),
+            if (canAdd)
+              TmsSemantics(
+                id: 'ticket.photo.add-button',
+                child: TmsAddPhotoButton.inGrid(
+                  label: '補照片',
+                  onTap: _appendPhoto,
+                ),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  void _openViewer(RepairTicketDetail ticket, int index) {
+    showTmsPhotoViewer(
+      context,
+      title: '${ticket.ticketNo} · ${repairCategoryText(ticket.category)}',
+      initialIndex: index,
+      photos: [
+        for (var i = 0; i < ticket.photos.length; i++)
+          TmsViewerPhoto(description: '${ticket.ticketNo} 照片 ${i + 1}'),
+      ],
+    );
+  }
+
+  /// 補一張照片到這張單上。
+  Future<void> _appendPhoto() async {
+    final taskId = widget.taskId;
+    if (taskId == null) {
+      return;
+    }
+    final source = await showTmsPhotoActionSheet(context);
+    if (source == null || !mounted) {
+      return;
+    }
+    try {
+      final photoId = await captureAndUploadRepairPhoto(purpose: 'report');
+      await ApiClient.instance
+          .appendRepairTicketPhotos(taskId, photoIds: [photoId]);
+      await _load();
+    } on ApiException catch (e) {
+      _showError(e.errorMessage ?? '補照片失敗，請稍後再試。');
+    } catch (_) {
+      _showError('補照片失敗，請稍後再試。');
+    }
+  }
+
   /// 一步的畫面：外層節點只在「這一步是目前步驟」時掛 `--current` id，
   /// 內層節點（固定 id＋步驟名）給步驟順序的斷言用。
   ///
@@ -323,42 +418,80 @@ class _TicketScreenState extends State<TicketScreen> {
 /// 送出走 `POST /tasks/{id}/complete`，成功時把選到的處理結果文字回傳給
 /// 詳情頁顯示。
 class _CompleteSheet extends StatefulWidget {
-  const _CompleteSheet({required this.taskId});
+  const _CompleteSheet({required this.taskId, required this.roomNo});
 
   final String taskId;
+
+  /// 這張單的房號；完修照片的浮水印用它。
+  final String roomNo;
 
   @override
   State<_CompleteSheet> createState() => _CompleteSheetState();
 }
 
 class _CompleteSheetState extends State<_CompleteSheet> {
-  final List<String> _photoIds = [];
+  /// 契約 CompleteTaskRequest.photoIds 的上下限：1-3 張。
+  static const int _maxPhotos = 3;
+
+  final List<RepairPhoto> _photos = [];
   String? _selectedResolution;
   bool _submitting = false;
   String? _error;
 
+  /// 已經上傳成功、可以引用進完修回報的照片。
+  List<String> get _uploadedPhotoIds =>
+      [for (final photo in _photos) if (photo.photoId != null) photo.photoId!];
+
+  bool get _allPhotosUploaded =>
+      _photos.isNotEmpty && _uploadedPhotoIds.length == _photos.length;
+
   Future<void> _addPhoto() async {
-    try {
-      final photoId =
-          await captureAndUploadRepairPhoto(purpose: 'completion');
-      if (mounted) {
-        setState(() {
-          _photoIds.add(photoId);
-          _error = null;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = '照片上傳失敗，請再試一次。';
-        });
-      }
+    if (_photos.length >= _maxPhotos) {
+      return;
     }
+    final source = await showTmsPhotoActionSheet(context);
+    if (source == null || !mounted) {
+      return;
+    }
+    final photo = RepairPhoto(
+      watermark: repairPhotoWatermark(
+        roomNo: widget.roomNo,
+        takenAt: DateTime.now(),
+      ),
+    );
+    setState(() {
+      _photos.add(photo);
+      _error = null;
+    });
+    await _upload(photo);
+  }
+
+  /// 把這一張送上去，並把結果記在它自己身上，讓員工只重傳失敗的那一張。
+  Future<void> _upload(RepairPhoto photo) async {
+    setState(() => photo.uploading = true);
+    try {
+      photo.photoId =
+          await captureAndUploadRepairPhoto(purpose: 'completion');
+      photo.uploadFailed = false;
+    } catch (_) {
+      photo.uploadFailed = true;
+    }
+    photo.uploading = false;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _photos.removeAt(index);
+      _error = null;
+    });
   }
 
   Future<void> _submit() async {
     final resolution = _selectedResolution;
-    if (resolution == null || _photoIds.isEmpty || _submitting) {
+    if (resolution == null || !_allPhotosUploaded || _submitting) {
       return;
     }
     setState(() {
@@ -367,7 +500,7 @@ class _CompleteSheetState extends State<_CompleteSheet> {
     try {
       await ApiClient.instance.completeTask(
         widget.taskId,
-        photoIds: _photoIds,
+        photoIds: _uploadedPhotoIds,
         resolutionType: resolution,
       );
       if (mounted) {
@@ -396,7 +529,7 @@ class _CompleteSheetState extends State<_CompleteSheet> {
   @override
   Widget build(BuildContext context) {
     final canSubmit =
-        _selectedResolution != null && _photoIds.isNotEmpty && !_submitting;
+        _selectedResolution != null && _allPhotosUploaded && !_submitting;
     return Container(
       color: CupertinoColors.systemBackground,
       padding: const EdgeInsets.all(16),
@@ -409,18 +542,7 @@ class _CompleteSheetState extends State<_CompleteSheet> {
             const Text('完修回報',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                TmsSemantics(
-                  id: 'completeSheet.photo.add-button',
-                  child: CupertinoButton(
-                    onPressed: _addPhoto,
-                    child: const Text('拍完修照片'),
-                  ),
-                ),
-                Text('已拍 ${_photoIds.length} 張'),
-              ],
-            ),
+            _photoCard(),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -461,6 +583,112 @@ class _CompleteSheetState extends State<_CompleteSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 一張照片都還沒有時，卡片下面多一行說明，告訴員工沒有相機權限時還可以
+  /// 從相簿挑。不說的話，相機被關掉的人會以為自己回報不了完修。
+  Widget _photoCard() {
+    const label = '完修照片（必填，至少 1 張、最多 3 張）';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TmsCard(
+          style: TmsCardStyle.inSheet,
+          padding: const EdgeInsets.fromLTRB(
+            TmsSpacing.md2,
+            TmsSpacing.md,
+            TmsSpacing.md2,
+            TmsSpacing.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  const Expanded(
+                    child: TmsSemantics(
+                      id: 'completeSheet.photo.count-label',
+                      label: label,
+                      child: ExcludeSemantics(
+                        child: Text(label, style: TmsText.footnoteEmphasized),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${_photos.length} / $_maxPhotos',
+                    style: TmsText.caption1.copyWith(
+                      fontWeight: FontWeight.w400,
+                      color: TmsColors.secondaryLabel,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: TmsSpacing.sm2),
+              Wrap(
+                spacing: TmsSpacing.sm,
+                runSpacing: TmsSpacing.sm,
+                children: [
+                  for (var i = 0; i < _photos.length; i++) _thumbnail(i),
+                  if (_photos.length < _maxPhotos)
+                    TmsSemantics(
+                      id: 'completeSheet.photo.add-button',
+                      child: TmsAddPhotoButton(
+                        label: '加入照片',
+                        onTap: _addPhoto,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        if (_photos.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(
+              top: TmsSpacing.sm,
+              left: TmsSpacing.xs,
+              right: TmsSpacing.xs,
+            ),
+            child: Text(
+              '修繕完成必須拍照。沒有相機權限時，可以從相簿選擇。',
+              style: TmsText.footnote,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 一張完修照片的縮圖。序號從 1 算起，與 dsl 的句型一致。
+  Widget _thumbnail(int index) {
+    final photo = _photos[index];
+    final statusText = photo.uploadFailed
+        ? '上傳失敗'
+        : (photo.photoId == null ? '上傳中' : '已上傳');
+    final TmsPhotoUpload upload;
+    if (photo.uploadFailed) {
+      upload = const TmsPhotoFailed();
+    } else if (photo.photoId != null) {
+      upload = const TmsPhotoUploaded();
+    } else {
+      upload = const TmsPhotoUploading(0);
+    }
+    return TmsSemantics(
+      id: 'completeSheet.photo.${index + 1}.upload-status',
+      label: statusText,
+      child: TmsSemantics(
+        id: 'completeSheet.photo.${index + 1}.watermark-label',
+        label: photo.watermark,
+        child: TmsPhotoCell(
+          upload: upload,
+          onRemove: photo.uploading ? null : () => _removePhoto(index),
+          onRetry: () => _upload(photo),
         ),
       ),
     );

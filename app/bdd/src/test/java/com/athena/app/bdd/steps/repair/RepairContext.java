@@ -21,6 +21,11 @@ public class RepairContext {
     /** 畫面切換有轉場動畫，用輪詢等待取代固定 sleep。 */
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(8);
 
+    /** 動作選單的進場動畫約 0.26 秒，等它站定再點。 */
+    private static final Duration MENU_TIMEOUT = Duration.ofSeconds(3);
+
+    private static final String PHOTO_MENU_CAMERA = "photoMenu.camera-button";
+
     private final AppiumWorld world;
 
     private String repairRoomNo;
@@ -42,6 +47,31 @@ public class RepairContext {
         world.ensureOnTaskDetail(world.staff(staffName), roomNo);
         world.tapTestId("task.repair-button", SCREEN_TIMEOUT);
         world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 加一張照片到目前這張表單上。
+     *
+     * <p>點「加入照片」會先跳出 iOS 動作選單問要拍照還是從相簿選，所以每一個
+     * 要照片的劇本都得點兩下。兩下分散在各個 step 裡各寫一次，選單日後改了
+     * 就得在六個地方各改一次，所以集中在這裡。
+     *
+     * @param addButtonId 該畫面「加入照片」的 accessibility id；報修面板與完修
+     *                    回報面板的前綴不同。
+     */
+    public void addPhoto(String addButtonId) {
+        world.tapTestId(addButtonId, SCREEN_TIMEOUT);
+        long deadline = System.nanoTime() + MENU_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (!world.driver().findElements(world.byTestId(PHOTO_MENU_CAMERA)).isEmpty()) {
+                world.tapTestId(PHOTO_MENU_CAMERA, SCREEN_TIMEOUT);
+                return;
+            }
+            if (world.driver().findElements(world.byTestId(addButtonId)).isEmpty()) {
+                return;
+            }
+        }
+        throw new AssertionError("點了 " + addButtonId + " 之後沒有跳出拍照／從相簿選擇的選單");
     }
 
     /**

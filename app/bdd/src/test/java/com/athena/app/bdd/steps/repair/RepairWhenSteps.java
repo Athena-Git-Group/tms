@@ -61,14 +61,15 @@ public class RepairWhenSteps {
     }
 
     /**
-     * 怎麼做：還沒在報修畫面時，先從任務頁進入；然後用相機拍指定張數。
+     * 怎麼做：還沒在報修畫面時，先從任務頁進入；然後用相機拍指定張數。每一張都是
+     * 點「加入照片」再從跳出來的選單選「拍照」（見 {@link RepairContext#addPhoto}）。
      * 回寫：報修畫面的照片縮圖與檔案。accessibility id：{@code repair.photo.add-button}。
      */
     @當("{string} 在 {string} 的報修畫面拍 {int} 張照片")
     public void takePhotos(String staffName, String task, int photoCount) {
         context.openRepairSheet(staffName, task);
         for (int i = 0; i < photoCount; i++) {
-            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+            context.addPhoto("repair.photo.add-button");
         }
     }
 
@@ -246,7 +247,8 @@ public class RepairWhenSteps {
     }
 
     /**
-     * 怎麼做：在工務單詳情點完修（{@code ticket.complete-button}），拍指定張數照片，
+     * 怎麼做：在工務單詳情點完修（{@code ticket.complete-button}），拍指定張數照片
+     * （每一張都要先在選單上選「拍照」），
      * 選處理結果後送出（完修面板沿用雛形 {@code completeSheet} 簡稱：
      * {@code completeSheet.photo.add-button}、{@code completeSheet.result.{resolutionType}}、
      * {@code completeSheet.submit-button}）。權威狀態落地：等同後端對應的完修 When——
@@ -263,7 +265,7 @@ public class RepairWhenSteps {
         openInHandTicketDetail(staffName);
         world.tapTestId("ticket.complete-button", SCREEN_TIMEOUT);
         for (int i = 0; i < photoCount; i++) {
-            world.tapTestId("completeSheet.photo.add-button", SCREEN_TIMEOUT);
+            context.addPhoto("completeSheet.photo.add-button");
         }
         world.tapTestId("completeSheet.result." + resolutionType, SCREEN_TIMEOUT);
         world.tapTestId("completeSheet.submit-button", SCREEN_TIMEOUT);
@@ -292,7 +294,7 @@ public class RepairWhenSteps {
         world.tapTestId("ticket.complete-button", SCREEN_TIMEOUT);
         world.waitForTestId("completeSheet.photo.add-button", SCREEN_TIMEOUT);
         for (int i = 0; i < photoCount; i++) {
-            world.tapTestId("completeSheet.photo.add-button", SCREEN_TIMEOUT);
+            context.addPhoto("completeSheet.photo.add-button");
         }
         world.tapTestId("completeSheet.result." + resolutionType, SCREEN_TIMEOUT);
         // 刻意停在面板上：不點 completeSheet.submit-button。
@@ -345,7 +347,7 @@ public class RepairWhenSteps {
 
         int photoCount = Integer.parseInt(row.get("照片張數").trim());
         for (int i = 0; i < photoCount; i++) {
-            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+            context.addPhoto("repair.photo.add-button");
         }
 
         String assigneeName = row.get("處理人");
