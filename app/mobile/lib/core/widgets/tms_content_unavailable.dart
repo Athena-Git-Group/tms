@@ -144,6 +144,9 @@ class TmsContentUnavailable extends StatelessWidget {
           const SizedBox(height: TmsSpacing.xs2),
           TmsSemantics(
             id: '$id.action',
+            // 按鈕的字同時掛在這個節點上，驗收才讀得到：容器型節點本身沒有
+            // label，以 id 定位後拿到的會是空字串。
+            label: actionLabel,
             child: CupertinoButton(
               padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.md),
               minimumSize: const Size(0, TmsSize.minTouchTarget),
