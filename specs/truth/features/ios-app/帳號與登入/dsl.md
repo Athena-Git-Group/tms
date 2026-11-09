@@ -32,10 +32,10 @@ accessibility id 畫面簡稱：`login`（登入畫面）、`me`（我的，登�
 
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | App 實作語意（Appium） |
 | --- | --- | --- | --- | --- |
-| `登入畫面顯示 "{員工}" 的身分卡，只有密碼欄位` | `員工`：字串。 | 不支援 | 無 | `必查`：`login.remembered-identity.card` 顯示該員工姓名；畫面上沒有 `login.shared-device.staff-id-field`。 |
+| `登入畫面顯示 "{員工}" 的身分卡，只有密碼欄位` | `員工`：字串。 | 不支援 | 無 | `必查`：`login.remembered-identity.card` 顯示該員工姓名與員工編號；畫面上沒有 `login.shared-device.staff-id-field`。 |
 | `登入畫面顯示員工編號與密碼兩個欄位` | 無 | 不支援 | 無 | `必查`：`login.shared-device.staff-id-field`、`login.password-field` 都存在且可輸入。 |
 | `登入畫面顯示錯誤 "{提示}"` | `提示`：字串；固定文案 `員工編號或密碼不正確`。 | 不支援 | 無 | `必查`：`login.error-banner` 顯示該文字；後端沒有核發憑證。 |
-| `登入畫面顯示帳號已鎖定，剩餘 {分鐘} 分鐘` | `分鐘`：整數。 | 不支援 | 無 | `必查`：`login.lockout-banner` 顯示剩餘鎖定分鐘數；`login.submit-button` 禁用。 |
+| `登入畫面顯示帳號已鎖定，剩餘 {分鐘} 分鐘` | `分鐘`：整數。 | 不支援 | 無 | `必查`：`login.lockout-banner` 要員工等滿該分鐘數（固定文案，不倒數）；`login.submit-button` 禁用。 |
 | `App 進入強制改密畫面，完成前無法使用其他畫面` | 無 | 不支援 | 無 | `必查`：顯示 `login.force-password-change.new-password-field` 等元件；Tab bar 與返回手勢都無法離開這個畫面。 |
 | `"{員工}" 登入成功，進入首頁` | `員工`：字串。 | 不支援 | 無 | `必查`：App 停在首頁，顯示該員工的今日進度。 |
 | `App 顯示登出被攔住，原因為 "{原因}"` | `原因`：字串；`目前離線，連線後才能登出`、`還有進行中的任務，請先完成或中斷再登出`。 | 不支援 | 無 | `必查`：`me.logout-blocked-alert` 顯示該原因文字；App 仍停在已登入狀態，沒有真的登出。 |

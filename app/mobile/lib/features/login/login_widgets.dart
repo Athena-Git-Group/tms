@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
@@ -31,11 +32,18 @@ class LoginBrandHeader extends StatelessWidget {
           decoration: BoxDecoration(
             color: TmsColors.brandPrimary,
             borderRadius: BorderRadius.circular(TmsRadius.card),
+            boxShadow: const <BoxShadow>[
+              // Main.dc.html:2324 的 `0 6px 16px rgba(12,118,128,.25)`。
+              BoxShadow(
+                color: Color(0x400C7680),
+                offset: Offset(0, 6),
+                blurRadius: 16,
+              ),
+            ],
           ),
-          child: const Icon(
-            CupertinoIcons.house_fill,
-            size: 34,
-            color: TmsColors.brandOnPrimary,
+          child: const CustomPaint(
+            size: Size.square(34),
+            painter: _HouseCheckPainter(),
           ),
         ),
         const SizedBox(height: TmsSpacing.md2),
@@ -50,6 +58,162 @@ class LoginBrandHeader extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// 品牌方塊裡那個「房子外框加一個打勾」的圖。
+///
+/// `CupertinoIcons` 的房子字形都是整間房子（實心或線框），沒有一個在屋內帶
+/// 打勾，所以照原型的兩條 path 自己描一次（`Main.dc.html:2324`）。
+class _HouseCheckPainter extends CustomPainter {
+  const _HouseCheckPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 原型的 path 畫在 24×24 的 viewBox 上，線寬 1.9 也是那個尺度下的值。
+    final scale = size.width / 24;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..color = TmsColors.brandOnPrimary
+      ..strokeWidth = 1.9 * scale
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final house = Path()
+      ..moveTo(3.5 * scale, 10.5 * scale)
+      ..lineTo(12 * scale, 4 * scale)
+      ..lineTo(20.5 * scale, 10.5 * scale)
+      ..lineTo(20.5 * scale, 20 * scale)
+      ..lineTo(3.5 * scale, 20 * scale)
+      ..close();
+    final check = Path()
+      ..moveTo(9 * scale, 14.5 * scale)
+      ..lineTo(11.2 * scale, 16.7 * scale)
+      ..lineTo(15.5 * scale, 12 * scale);
+
+    canvas.drawPath(house, paint);
+    canvas.drawPath(check, paint);
+  }
+
+  @override
+  bool shouldRepaint(_HouseCheckPainter oldDelegate) => false;
+}
+
+/// 記住帳號時，表單白卡最上面那一列：圓形頭像、姓名、以及身分的第二行。
+///
+/// 它和密碼欄在同一張卡裡，不是另外一張。員工看到的是「這個人，輸入他的密碼」
+/// 一件事；拆成兩張卡會變成兩件不相干的事，中間那段空白還會讓人以為身分卡是
+/// 可以點開來換人的。
+class LoginIdentityRow extends StatelessWidget {
+  const LoginIdentityRow({
+    super.key,
+    required this.name,
+    required this.subtitle,
+  });
+
+  /// 員工姓名。
+  final String name;
+
+  /// 姓名底下那一行，例如員工編號。
+  final String subtitle;
+
+  /// 頭像裡那個字。中文名取最後一個字（阿美→美、阿德→德），對齊原型的
+  /// `acct.initial`（`Main.dc.html:4504`）。
+  static String initialOf(String name) =>
+      name.isEmpty ? '' : name.characters.last;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: TmsColors.cardBackground,
+      padding: const EdgeInsets.symmetric(
+        horizontal: TmsSpacing.screenEdge,
+        vertical: TmsSpacing.md,
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: TmsSize.minTouchTarget,
+            height: TmsSize.minTouchTarget,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: TmsColors.brandAccentContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              initialOf(name),
+              // 19pt 不在字級表上，是原型給頭像單獨訂的（Main.dc.html:2342）。
+              style: const TextStyle(
+                fontFamilyFallback: TmsText.fontFamilyStack,
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: TmsColors.brandOnAccentContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: TmsSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(name, style: TmsText.headline),
+                const SizedBox(height: TmsSpacing.xxs),
+                Text(
+                  subtitle,
+                  style: TmsText.subheadline.copyWith(
+                    color: TmsColors.secondaryLabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 密碼欄右側那顆眼睛：切換密碼要不要遮起來。
+///
+/// 員工在走廊上單手打密碼，打錯了看不出來是哪一個字打錯；能看一眼再送出，比
+/// 連錯五次被鎖十五分鐘好。
+class LoginPasswordVisibilityButton extends StatelessWidget {
+  const LoginPasswordVisibilityButton({
+    super.key,
+    required this.obscured,
+    required this.onPressed,
+    required this.semanticsId,
+  });
+
+  /// 密碼現在是不是遮著的。
+  final bool obscured;
+
+  final VoidCallback onPressed;
+
+  final String semanticsId;
+
+  @override
+  Widget build(BuildContext context) {
+    return TmsSemantics(
+      id: semanticsId,
+      label: obscured ? '顯示密碼' : '隱藏密碼',
+      child: ExcludeSemantics(
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(
+            TmsSize.minTouchTarget,
+            TmsSize.minTouchTarget,
+          ),
+          onPressed: onPressed,
+          child: Icon(
+            obscured ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+            size: 22,
+            color: TmsColors.quaternaryLabel,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -90,7 +254,13 @@ class LoginFormCard extends StatelessWidget {
 /// 名稱固定留在列內，不用提示字（placeholder）：提示字一輸入就消失，員工打到
 /// 一半被打斷回來時，看到的是兩個都有字的欄位，分不出哪一格是員工編號。
 class LoginFieldRow extends StatelessWidget {
-  const LoginFieldRow({super.key, required this.label, required this.field});
+  const LoginFieldRow({
+    super.key,
+    required this.label,
+    required this.field,
+    this.trailing,
+    this.hasError = false,
+  });
 
   /// 欄位名稱。
   final String label;
@@ -98,23 +268,47 @@ class LoginFieldRow extends StatelessWidget {
   /// 輸入區本身，由呼叫端給——它要掛自己的 accessibility id。
   final Widget field;
 
+  /// 輸入區右側的鈕，目前只有密碼欄的眼睛用得到。
+  ///
+  /// 有這顆鈕的那一列，右側內距是 6 而不是 16。鈕本身是 44pt 見方的觸控區，
+  /// 中間的圖示只佔 22pt，右側一樣給 16 的話，圖示會比其他列的右緣再往內縮。
+  final Widget? trailing;
+
+  /// 這一欄這次送出有沒有出錯。
+  ///
+  /// 出錯時名稱轉紅。錯誤訊息一律是「員工編號或密碼不正確」，不講是哪一格
+  /// 打錯的，紅色的名稱是員工唯一看得出該重打哪一格的線索。
+  final bool hasError;
+
   /// 名稱欄的寬度。兩頁的欄位名稱都在四個字以內，固定寬度讓各列的輸入區左緣
   /// 對齊；跟著文字長度變寬的話，每一列的游標起點都不一樣。
-  static const double _labelWidth = 76;
+  ///
+  /// 80 是原型的繁體中文值（`Main.dc.html:4526`）。原型另外給日文與英文 116、
+  /// 越南文 140，那幾個值要等介面語言真的換得動才有意義。
+  static const double _labelWidth = 80;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: TmsColors.cardBackground,
-      padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+      padding: EdgeInsets.only(
+        left: TmsSpacing.screenEdge,
+        right: trailing == null ? TmsSpacing.screenEdge : TmsSpacing.xs2,
+      ),
       constraints: const BoxConstraints(minHeight: 48),
       child: Row(
-        children: [
+        children: <Widget>[
           SizedBox(
             width: _labelWidth,
-            child: Text(label, style: TmsText.body),
+            child: Text(
+              label,
+              style: hasError
+                  ? TmsText.body.copyWith(color: TmsColors.systemRed)
+                  : TmsText.body,
+            ),
           ),
           Expanded(child: field),
+          ?trailing,
         ],
       ),
     );
@@ -127,20 +321,59 @@ class LoginTextField extends StatelessWidget {
     super.key,
     required this.controller,
     this.obscureText = false,
+    this.maxLength,
+    this.uppercase = false,
+    this.autofillHints,
   });
 
   final TextEditingController controller;
   final bool obscureText;
+
+  /// 最多能打幾個字；null 代表不限。超過的字打不進去，不另外跳提示。
+  final int? maxLength;
+
+  /// 打進去的小寫字母要不要當場變成大寫。
+  ///
+  /// 員工編號印在識別證上是 `H-0532` 這種大寫寫法，鍵盤卻會從小寫開始。
+  /// 不轉的話，螢幕上的字和識別證上的字長得不一樣，員工會以為自己打錯了。
+  final bool uppercase;
+
+  /// 交給 iOS 鑰匙圈判斷要不要跳自動填入的提示，例如
+  /// [AutofillHints.username]。
+  final List<String>? autofillHints;
 
   @override
   Widget build(BuildContext context) {
     return CupertinoTextField(
       controller: controller,
       obscureText: obscureText,
+      autofillHints: autofillHints,
+      textCapitalization: uppercase
+          ? TextCapitalization.characters
+          : TextCapitalization.none,
+      maxLength: maxLength,
+      inputFormatters: <TextInputFormatter>[
+        if (uppercase) UpperCaseTextInputFormatter(),
+      ],
       padding: const EdgeInsets.symmetric(vertical: TmsSpacing.md),
       decoration: const BoxDecoration(),
       style: TmsText.body,
     );
+  }
+}
+
+/// 把輸入的字一律轉成大寫。
+///
+/// [TextCapitalization.characters] 只是請鍵盤把 shift 打開，員工貼上一段
+/// 小寫文字、或用不理會這個提示的第三方鍵盤時都不會生效，所以實際的轉換在
+/// 這裡做一次。
+class UpperCaseTextInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return newValue.copyWith(text: newValue.text.toUpperCase());
   }
 }
 
