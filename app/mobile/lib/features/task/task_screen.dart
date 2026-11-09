@@ -18,6 +18,7 @@ import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
 import '../celebrate/celebrate_screen.dart';
+import '../shell/main_shell.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
 import 'ask_sheet.dart';
@@ -313,13 +314,16 @@ class _TaskScreenState extends State<TaskScreen> {
   /// 不必記得回頭再按一次完成。
   Future<void> _complete(TaskDetail task) async {
     final bool sent;
+    TaskCompletion? completion;
     try {
       sent = await OfflineQueue.instance.submit(
         kind: 'complete',
-        send: (idempotencyKey) => ApiClient.instance.completeTask(
-          task.id,
-          idempotencyKey: idempotencyKey,
-        ),
+        send: (idempotencyKey) async {
+          completion = await ApiClient.instance.completeTask(
+            task.id,
+            idempotencyKey: idempotencyKey,
+          );
+        },
       );
     } on ApiException catch (e) {
       // 連線正常時佇列把後端的拒絕原樣往上拋（例如這張單剛被主管作廢）。
@@ -333,19 +337,56 @@ class _TaskScreenState extends State<TaskScreen> {
     }
     if (!sent) {
       setState(() => _completionPendingSync = true);
+      // 離線時後端還沒收到這一筆，去向與今日進度都算不出來，但員工該拿到的
+      // 回饋不欠：完成畫面照常出現，卡上那一行說這一筆還押在手機上。
+      if (task.type == 'cleaning') {
+        await Navigator.of(context).push(_celebrateRoute(task, queued: true));
+      }
       return;
     }
-    final completed = await ApiClient.instance.getTask(task.id);
-    if (!mounted) {
-      return;
+    var completed = completion?.task;
+    if (completed == null) {
+      completed = await ApiClient.instance.getTask(task.id);
+      if (!mounted) {
+        return;
+      }
     }
     _showTask(completed);
     TodayRefresh.instance.request();
     // 慶祝頁給的是「一間房做完了」的回饋，所以只有打掃類走這一段；備品類送達
     // 之後留在任務頁。
     if (completed.type == 'cleaning') {
-      await Navigator.of(context).push(_celebrateRoute(completed));
+      await Navigator.of(context).push(
+        _celebrateRoute(
+          completed,
+          completion: completion,
+          onNextStep: _goToNextStep,
+        ),
+      );
     }
+  }
+
+  /// 從完成畫面接著走：還有下一間就直接開那一間的任務頁，都清完了就回到
+  /// 待認領。
+  ///
+  /// 兩種去向都先把完成畫面與剛做完的那一頁關掉，員工按返回才不會退回一張
+  /// 已經做完的單。
+  void _goToNextStep(TaskNextStep step) {
+    final navigator = Navigator.of(context);
+    navigator.popUntil((route) => route.isFirst);
+    if (step.kind == TaskNextStepKind.allClear) {
+      MainShellTabRequest.goToPool();
+      return;
+    }
+    final roomNo = step.roomNo;
+    if (roomNo == null) {
+      return;
+    }
+    navigator.push(
+      CupertinoPageRoute<void>(
+        builder: (_) => TaskScreen(roomNo: roomNo, taskId: step.taskId),
+      ),
+    );
   }
 
   /// 任務停在哪個狀態、停住原因記成什麼，一律以後端送出後回傳的那一筆為準。
@@ -1064,19 +1105,43 @@ class _TaskScreenState extends State<TaskScreen> {
 ///
 /// 轉場用淡入而不是 iOS 預設的右滑：遮罩從旁邊滑進來會像換了一頁，淡入才讀得
 /// 出「這張卡蓋在原本那一頁上面」。
-PageRouteBuilder<void> _celebrateRoute(TaskDetail task) {
+PageRouteBuilder<void> _celebrateRoute(
+  TaskDetail task, {
+  TaskCompletion? completion,
+  bool queued = false,
+  void Function(TaskNextStep step)? onNextStep,
+}) {
   return PageRouteBuilder<void>(
     opaque: false,
     barrierDismissible: false,
     transitionDuration: const Duration(milliseconds: 200),
     reverseTransitionDuration: const Duration(milliseconds: 160),
     pageBuilder: (_, _, _) => CelebrateScreen(
+      roomNo: task.roomNo,
+      subline: _celebrateSubline(task),
       actualMinutes: task.elapsedMinutes,
       estimateMinutes: task.estMin,
+      todayNth: completion?.cleaningDoneToday,
+      nextStep: completion?.nextStep,
+      queued: queued,
+      onNextStep: onNextStep,
     ),
     transitionsBuilder: (_, animation, _, child) =>
         FadeTransition(opacity: animation, child: child),
   );
+}
+
+/// 完成畫面上那一句「這一間接下來會怎樣」。
+///
+/// 三種說法由剛完成的那張單決定，不是由完成畫面自己挑：免查房是開工當下依
+/// 租戶設定鎖在任務上的，之後設定變更不影響，所以這裡讀的是任務上的鎖定值，
+/// 不是租戶設定。
+String _celebrateSubline(TaskDetail task) {
+  if (task.type != 'cleaning') {
+    return '住客會收到完成通知';
+  }
+  final waived = task.inspectionWaived || task.inspection == 'waived';
+  return waived ? '免查房，直接完成' : '已通知主管查房';
 }
 
 /// 超時膠囊：深底上是深橘底深褐字，白底上是橘淡底棕字。

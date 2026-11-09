@@ -168,13 +168,13 @@ class ApiClient {
   ///
   /// [idempotencyKey] 給離線佇列再送一次時指定同一把鍵用；不帶時每次都配一把
   /// 新的，一次動作只保護它自己的重送。
-  Future<void> completeTask(
+  Future<TaskCompletion?> completeTask(
     String taskId, {
     List<String>? photoIds,
     String? resolutionType,
     String? idempotencyKey,
   }) async {
-    await _requestJson(
+    final json = await _requestJson(
       'POST',
       '/tasks/$taskId/complete',
       idempotent: true,
@@ -184,6 +184,7 @@ class ApiClient {
         if (resolutionType != null) 'resolutionType': resolutionType,
       },
     );
+    return json is Map<String, dynamic> ? TaskCompletion.fromJson(json) : null;
   }
 
   /// `GET /repair-tickets?roomId=`：同房未撤回的工務單（契約
@@ -1526,6 +1527,87 @@ class TaskDetail {
           .toList(),
       handoverRead: json['handoverRead'] as bool? ?? false,
       returnInfo: ReturnInfo.fromJson(json['returnInfo']),
+    );
+  }
+}
+
+/// 契約 `NextStep.kind`：完成一間之後員工該去哪裡。
+///
+/// 三種去向明確分辨，不是靠 [TaskNextStep.taskId] 是不是 null 推斷——後者會讓
+/// 「查不到下一間」與「今天都清完了」在畫面上長得一模一樣，員工看到的結論卻
+/// 完全相反。
+enum TaskNextStepKind {
+  /// 還有待開始的下一張任務。
+  nextTask,
+
+  /// 沒有待開始的單，但今天還有停在一半的單（進行中、已中斷或已延後）。
+  unfinishedTask,
+
+  /// 今天排定的房都清完了。
+  allClear,
+}
+
+/// 契約 `NextStep`：完成一間之後的去向與那一間是誰。
+class TaskNextStep {
+  const TaskNextStep({required this.kind, this.taskId, this.roomNo});
+
+  final TaskNextStepKind kind;
+
+  /// 下一張任務的 id；[TaskNextStepKind.allClear] 時為 null。
+  final String? taskId;
+
+  /// 下一張任務的房號；[TaskNextStepKind.allClear] 時為 null。
+  final String? roomNo;
+
+  /// 後端沒給去向、或給了一個 App 還不認得的 kind 時回 null。認不得的去向
+  /// 硬歸到三種的其中一種，會把員工帶去一個後端沒有說的地方。
+  static TaskNextStep? fromJson(Object? json) {
+    if (json is! Map<String, dynamic>) {
+      return null;
+    }
+    final kind = switch (json['kind']) {
+      'next_task' => TaskNextStepKind.nextTask,
+      'unfinished_task' => TaskNextStepKind.unfinishedTask,
+      'all_clear' => TaskNextStepKind.allClear,
+      _ => null,
+    };
+    if (kind == null) {
+      return null;
+    }
+    return TaskNextStep(
+      kind: kind,
+      taskId: json['taskId'] as String?,
+      roomNo: json['roomNo'] as String?,
+    );
+  }
+}
+
+/// 契約 `TaskCompletion`：完成一間之後回給 App 的東西，剛完成的那張任務詳情
+/// 加上完成畫面要用的兩個值。
+///
+/// 兩個值都在完成這一次往返內給完，App 不為了畫完成畫面再打一次今日進度——
+/// 多一次往返會讓完成畫面在訊號差的樓層卡住，而那正是員工最需要立刻看到回饋
+/// 的時候。
+class TaskCompletion {
+  const TaskCompletion({
+    required this.task,
+    this.nextStep,
+    this.cleaningDoneToday,
+  });
+
+  final TaskDetail task;
+
+  final TaskNextStep? nextStep;
+
+  /// 這是呼叫者今天完成的第幾張打掃單。只有打掃類的完成帶這個值，其餘為
+  /// null——備品單完成時給一個打掃數字，員工會看到一個與這次操作無關的進度。
+  final int? cleaningDoneToday;
+
+  factory TaskCompletion.fromJson(Map<String, dynamic> json) {
+    return TaskCompletion(
+      task: TaskDetail.fromJson(json),
+      nextStep: TaskNextStep.fromJson(json['nextStep']),
+      cleaningDoneToday: json['cleaningDoneToday'] as int?,
     );
   }
 }

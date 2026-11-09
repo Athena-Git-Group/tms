@@ -72,7 +72,7 @@ class _RejectingApiClient extends ApiClient {
   );
 
   @override
-  Future<void> completeTask(
+  Future<TaskCompletion?> completeTask(
     String taskId, {
     List<String>? photoIds,
     String? resolutionType,

@@ -13,7 +13,19 @@ import 'package:tms_staff_app/features/task/task_screen.dart';
 /// 鈕。慶祝卡則是一張鋪在半透明遮罩上的對話卡，路由只要是不透明的，遮罩底下
 /// 就不會有東西被畫出來，員工看到的是一整片黑。
 void main() {
+  // 慶祝卡的彩屑是無限循環的飄浮動畫，動態開著就永遠排得出下一幀，
+  // `pumpAndSettle` 會等到逾時而不是等到畫面靜止。
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+      disableAnimations: true,
+    );
+  });
+
   tearDown(() {
+    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 
@@ -90,13 +102,14 @@ class _FakeApiClient extends ApiClient {
   }
 
   @override
-  Future<void> completeTask(
+  Future<TaskCompletion?> completeTask(
     String taskId, {
     List<String>? photoIds,
     String? resolutionType,
     String? idempotencyKey,
   }) async {
     _task = _task.copyWithStateForTest('done');
+    return TaskCompletion(task: _task);
   }
 
   @override
