@@ -58,6 +58,10 @@ public class ScenarioWorld {
         return required(repairTicketTaskIds, ticketNo, "工務單");
     }
 
+    public boolean hasRepairTicket(String ticketNo) {
+        return repairTicketTaskIds.containsKey(ticketNo);
+    }
+
     public java.util.List<String> photoIds() {
         return photoIds;
     }

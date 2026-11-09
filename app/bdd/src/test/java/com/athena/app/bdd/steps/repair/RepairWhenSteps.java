@@ -270,6 +270,35 @@ public class RepairWhenSteps {
     }
 
     /**
+     * 怎麼做：在工務單詳情點完修打開完修回報面板，拍指定張數照片（0 張代表不拍），
+     * 選處理結果，停在面板上不送出——與 {@link #completeRepairWithResolution} 差在
+     * 最後不點 {@code completeSheet.submit-button}，讓後續 Then 斷言送出鈕狀態與
+     * 「後端沒有收到這次完修」。權威狀態落地：後端該工務單不變，仍是維修中。
+     * 回寫：完修回報面板的照片縮圖、已選結果與送出鈕狀態。
+     *
+     * <p>面板本身沒有獨立的 accessibility id（{@code ticket_screen.dart} 的
+     * {@code _CompleteSheet}），以面板內一定存在的 {@code completeSheet.photo.add-button}
+     * 出現為「面板已打開」的判準——0 張時也要先等到它，才能保證接著點的結果 chip
+     * 是面板上的，不是詳情頁殘影。
+     */
+    @當("{string} 在工務單詳情打開完修回報，選結果 {string}，附 {int} 張照片")
+    public void openCompletionSheetWithoutSubmitting(String staffName, String resolutionLabel, int photoCount) {
+        String resolutionType = RESOLUTION_TYPE_BY_LABEL.get(resolutionLabel);
+        if (resolutionType == null) {
+            throw new IllegalArgumentException("認不得的完修處理結果：「" + resolutionLabel + "」"
+                    + "（合法值：" + RESOLUTION_TYPE_BY_LABEL.keySet() + "）");
+        }
+        openInHandTicketDetail(staffName);
+        world.tapTestId("ticket.complete-button", SCREEN_TIMEOUT);
+        world.waitForTestId("completeSheet.photo.add-button", SCREEN_TIMEOUT);
+        for (int i = 0; i < photoCount; i++) {
+            world.tapTestId("completeSheet.photo.add-button", SCREEN_TIMEOUT);
+        }
+        world.tapTestId("completeSheet.result." + resolutionType, SCREEN_TIMEOUT);
+        // 刻意停在面板上：不點 completeSheet.submit-button。
+    }
+
+    /**
      * 怎麼做：在待認領點「開工單」FAB（{@code engPool.create-ticket-fab}），拍指定張數
      * 照片，填入房間／公共區域、類別、處理人後送出——表單沿用 {@code repair} 報修面板
      * 的 accessibility id 前綴（dsl 本模組說明），FAB 進入時不預先帶入任何原任務。

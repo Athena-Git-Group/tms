@@ -22,6 +22,7 @@ public class PushGivenSteps {
     private static final Pattern POOL_HIGHLIGHT = Pattern.compile("^待認領並標亮 (\\d+)$");
     private static final Pattern HOME = Pattern.compile("^首頁$");
     private static final Pattern POOL_PLAIN = Pattern.compile("^待認領$");
+    private static final Pattern TICKET_DETAIL = Pattern.compile("^(\\S+) 的工務單詳情$");
 
     private final AppiumWorld world;
 
@@ -33,12 +34,21 @@ public class PushGivenSteps {
      * 怎麼做：透過後端測試資料建立去處所指的任務，再送出一則推播 payload 給裝置，內容依
      * 後端推播格式帶任務 id 或待認領入口。App 處於背景。
      *
-     * <p>「去處」是給人看的白話字串（dsl.md 的四種形式：X 的任務頁、待認領、待認領並
-     * 標亮 X、首頁），這裡解析成 {@code lib/core/push_gateway.dart} 認得的
-     * {@code dest}/{@code room}/{@code highlight} 欄位。去處指向「待認領並標亮 X」時，
-     * 待認領池要有一張房號 X、狀態待認領的卡才有東西可以標亮，所以連帶補上這張卡的
-     * fixture（{@link AppiumWorld#ensurePoolTask}）；指向任務頁時不用額外建資料，
+     * <p>「去處」是給人看的白話字串（dsl.md 的五種形式：X 的任務頁、待認領、待認領並
+     * 標亮 X、首頁、X 的工務單詳情（X＝單號）），這裡解析成
+     * {@code lib/core/push_gateway.dart} 認得的 {@code dest}/{@code room}/
+     * {@code highlight} 欄位。去處指向「待認領並標亮 X」時，待認領池要有一張房號 X、
+     * 狀態待認領的卡才有東西可以標亮，所以連帶補上這張卡的 fixture
+     * （{@link AppiumWorld#ensurePoolTask}）；指向任務頁時不用額外建資料，
      * 任務頁的標題本身就帶房號，不靠 fixture 存在與否。
+     *
+     * <p>去處是「X 的工務單詳情」時，payload 帶 {@code dest}=ticket 與該修繕任務的
+     * task id（contracts PushTarget：{@code kind}=ticket 時 {@code taskId} 帶的是該
+     * 修繕任務的 task id，與工務單詳情端點的路徑參數同一個 id）。單號到 task id 的
+     * 對照走後端權威讀回 {@code repair_tickets.task_id}（同 steps/repair 的
+     * {@code repairTicketRow} 做法），所以該單號的工務單 fixture（「已有以下工務單：」
+     * 等句型）必須先鋪好，查不到就讓這一步早爆。App 照 {@code dest} 機械導頁，
+     * 不自己查任務類別。
      *
      * <p>送推播前先以該員工登入（{@link AppiumWorld#ensureLoggedInAs}）：App 的
      * 起始畫面一律是登入殼，點開推播後的去處畫面（待認領池等）要用她的 JWT 向
@@ -49,6 +59,7 @@ public class PushGivenSteps {
         world.ensureLoggedInAs(world.staff(staffName));
         Matcher taskMatcher = TASK_SCREEN.matcher(destination);
         Matcher highlightMatcher = POOL_HIGHLIGHT.matcher(destination);
+        Matcher ticketMatcher = TICKET_DETAIL.matcher(destination);
 
         if (taskMatcher.matches()) {
             String room = taskMatcher.group(1);
@@ -61,6 +72,12 @@ public class PushGivenSteps {
             String room = highlightMatcher.group(1);
             world.ensurePoolTask(room, title);
             world.sendPush(title, "", "pool", null, null, room);
+        } else if (ticketMatcher.matches()) {
+            // 修繕任務的推播由後端發 kind=ticket，這裡同形：payload 帶該修繕任務的
+            // task id，不帶房號——工務單詳情靠 task id 直取，跟房號無關。
+            String ticketNo = ticketMatcher.group(1);
+            String taskId = world.backend().repairTicketRow(ticketNo).get("task_id").toString();
+            world.sendPush(title, "", "ticket", null, taskId, null);
         } else if (HOME.matcher(destination).matches()) {
             world.sendPush(title, "", "home", null, null, null);
         } else if (POOL_PLAIN.matcher(destination).matches()) {

@@ -82,6 +82,48 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('push payload dest=ticket taskId 把 App 導到工務單詳情，不是任務頁', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+
+    // 修繕任務的推播帶 kind=ticket＋該修繕任務的 task id（contracts PushTarget），
+    // App 照 kind 機械導頁，不先打 GET /tasks/{id} 查類別——所以 fake 的
+    // tasksById 刻意不給這張單，getTask 被呼叫會 404 讓導頁壞掉、測試變紅。
+    ApiClient.instance = _FakeApiClient(
+      ticketsById: {
+        'task-w0620': const RepairTicketDetail(
+          taskId: 'task-w0620',
+          ticketNo: 'W-0620',
+          roomNo: '202',
+          category: 'other',
+          isUrgent: false,
+          state: 'doing',
+          reporterName: '小葉',
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        navigatorKey: navigatorKey,
+        home: const MyTodayScope(child: HomeScreen()),
+      ),
+    );
+    await tester.pump();
+
+    PushGateway.instance
+        .handlePushPayload(const {'dest': 'ticket', 'taskId': 'task-w0620'});
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('ticket.screen'), findsOneWidget);
+    expect(find.textContaining('W-0620'), findsWidgets);
+    expect(find.bySemanticsIdentifier('task.screen'), findsNothing);
+
+    handle.dispose();
+  });
+
   testWidgets('已中斷且停住原因含工務已修好時，任務頁顯示恢復提示列', (tester) async {
     final handle = tester.ensureSemantics();
 
@@ -137,10 +179,12 @@ class _FakeApiClient extends ApiClient {
   _FakeApiClient({
     this.pool = const <PoolItem>[],
     this.tasksById = const <String, TaskDetail>{},
+    this.ticketsById = const <String, RepairTicketDetail>{},
   });
 
   final List<PoolItem> pool;
   final Map<String, TaskDetail> tasksById;
+  final Map<String, RepairTicketDetail> ticketsById;
 
   @override
   Future<DeptPool> getPool({
@@ -178,5 +222,14 @@ class _FakeApiClient extends ApiClient {
       throw const ApiException(statusCode: 404, body: '');
     }
     return task;
+  }
+
+  @override
+  Future<RepairTicketDetail> readRepairTicket(String taskId) async {
+    final ticket = ticketsById[taskId];
+    if (ticket == null) {
+      throw const ApiException(statusCode: 404, body: '');
+    }
+    return ticket;
   }
 }

@@ -1185,8 +1185,9 @@ class NotificationItem {
   final String title;
   final String? body;
 
-  /// 點開後的去處（shared.yaml 的 PushTarget）：`kind` 是 task｜pool｜home，
-  /// kind=task 帶 `taskId`，kind=pool 可帶 `highlightTaskId`。
+  /// 點開後的去處（shared.yaml 的 PushTarget）：`kind` 是
+  /// task｜ticket｜pool｜home，kind=task 與 kind=ticket 帶 `taskId`，
+  /// kind=pool 可帶 `highlightTaskId`。
   final Map<String, dynamic> target;
 
   final DateTime createdAt;

@@ -102,6 +102,20 @@ public class PushOutboxWriter {
         target.put("taskId", taskId.toString());
     }
 
+    /**
+     * 在 payload 補上「點開直達本人這張單」的去處，去處種類依任務類別決定：
+     * 修繕任務（tasks.type=repair，即工務單）用 target.kind=ticket，App 開工務單詳情；
+     * 打掃與備品任務用 target.kind=task，App 開任務頁。兩種都帶同一個 task id。
+     * 這個對應收在這裡一處，呼叫端不自己判斷類別；若由呼叫端各自決定 kind，
+     * 修繕單就可能被導進任務頁，而任務頁沒有完修回報的入口，員工會被完修照片
+     * 的檢核擋下卻無處補照片。
+     */
+    public static void targetOwnedTask(ObjectNode payload, String taskType, UUID taskId) {
+        ObjectNode target = payload.putObject("target");
+        target.put("kind", "repair".equals(taskType) ? "ticket" : "task");
+        target.put("taskId", taskId.toString());
+    }
+
     /** 在 payload 補上「點開到部門待接池」的去處（target.kind=pool）。 */
     public static void targetPool(ObjectNode payload, String dept) {
         ObjectNode target = payload.putObject("target");

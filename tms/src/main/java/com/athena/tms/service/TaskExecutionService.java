@@ -335,7 +335,7 @@ public class TaskExecutionService {
                     "reassigned_away:" + taskId + ":seq:" + seq + ":" + recipient);
         }
         ObjectNode payload = PushOutboxWriter.payload(objectMapper, newAssigneeId, "reassigned_to_me", "主管改派一單給您");
-        PushOutboxWriter.targetTask(payload, taskId);
+        PushOutboxWriter.targetOwnedTask(payload, String.valueOf(before.get("type")), taskId);
         pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                 "reassigned_to_me:" + taskId + ":seq:" + seq + ":" + newAssigneeId);
 

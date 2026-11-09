@@ -164,6 +164,11 @@ public class RepairGivenSteps {
     /**
      * 怎麼做：透過後端測試資料建立這些工務單。權威狀態落地：後端有這些工務單。
      *
+     * <p>權威位置在介面根 {@code specs/truth/features/ios-app/dsl.md}（不是本模組的
+     * {@code 工務單/dsl.md}）：這句是跨模組共用句型，推播模組的
+     * {@code 推播/點開推播的去處.feature} 也用它鋪工務單資料
+     * （單號／房號／類別／狀態／報修人／處理人／來源）。
+     *
      * <p>表頭與語意逐欄對照後端同名 Given（tms {@code RepairGivenSteps.existingRepairTickets}）：
      * {@code 單號}／{@code 房號}／{@code 類別}／{@code 狀態}／{@code 報修人} 必填，
      * {@code 處理人}（pool 以外的狀態必要）、{@code 急件}（「是」才算急件）、

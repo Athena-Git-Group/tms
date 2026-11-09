@@ -292,6 +292,13 @@ public class CommonThenSteps {
             if (world.hasTask(label)) {
                 requireUuidEquals("taskId", target.taskId(), UUID.fromString(world.taskId(label)));
             }
+        } else if (destination.endsWith(" 的工務單詳情")) {
+            // dsl.md：工務單詳情為 kind=ticket 並帶該修繕任務的 taskId（本人的修繕任務一律用這種，不用 task）。
+            requireKind(target, "ticket");
+            String ticketNo = destination.substring(0, destination.length() - " 的工務單詳情".length());
+            if (world.hasRepairTicket(ticketNo)) {
+                requireUuidEquals("taskId", target.taskId(), UUID.fromString(world.repairTicketTaskId(ticketNo)));
+            }
         } else {
             throw new AssertionError("無法解析的推播去處格式（不在 dsl.md PushTarget 對照範圍內）：" + destination);
         }

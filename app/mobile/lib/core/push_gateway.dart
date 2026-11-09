@@ -5,6 +5,7 @@ import 'api_client.dart';
 import '../features/pool/pool_screen.dart';
 import '../features/shell/main_shell.dart';
 import '../features/task/task_screen.dart';
+import '../features/ticket/ticket_screen.dart';
 
 /// 推播點開後導頁的唯一入口。
 ///
@@ -17,11 +18,13 @@ import '../features/task/task_screen.dart';
 /// 收到推播事件」跟「收到之後怎麼導頁」切開。
 ///
 /// payload 欄位約定（跟原生側共用）：
-/// - `dest`：`pool` / `task` / `home`。
+/// - `dest`：`pool` / `task` / `ticket` / `home`。
 /// - `room`：`dest == 'task'` 時要帶，指定要開哪個房號的任務頁。
 /// - `taskId`：`dest == 'task'` 時可選帶。帶了就直接開這張任務的詳情；
 ///   沒帶時任務頁只能用房號反查（反查只蓋得到待認領與下一間推薦，
-///   已中斷等狀態要靠這個欄位才找得到單）。
+///   已中斷等狀態要靠這個欄位才找得到單）。`dest == 'ticket'` 時必帶，
+///   是該修繕任務的 task id（契約 `PushTarget`：kind=ticket 由後端依任務
+///   類別決定，App 照 kind 機械導頁開工務單詳情，不自己查任務類別）。
 /// - `highlight`：`dest == 'pool'` 時可選帶，指定待認領池要標亮哪個房號。
 class PushGateway {
   PushGateway._();
@@ -65,27 +68,34 @@ class PushGateway {
   }
 
   /// 通知中心點一則通知後的導頁入口：通知帶的是契約 `PushTarget` 形狀的
-  /// 去處描述（`kind` 是 pool／task／home，`kind == 'task'` 帶 `taskId`，
-  /// `kind == 'pool'` 可帶 `highlightTaskId`），這裡把它換算成推播 payload
-  /// 再交給 [handlePushPayload]，讓去處與畫面的對照只存在這個 class 一處。
+  /// 去處描述（`kind` 是 pool／task／ticket／home，`kind == 'task'` 與
+  /// `kind == 'ticket'` 帶 `taskId`，`kind == 'pool'` 可帶
+  /// `highlightTaskId`），這裡把它換算成推播 payload 再交給
+  /// [handlePushPayload]。去處與畫面的對照若在通知中心另寫一份，兩份遲早
+  /// 長歪，同一筆事件從推播點開與從通知中心點開會導到不同畫面；對照收在
+  /// 這個 class 一處，兩個入口的行為才一致。
   ///
-  /// payload 以房號溝通，而去處描述帶的是任務 id，所以要先用
-  /// `GET /tasks/{id}` 把任務 id 換成房號。該帶任務 id 卻沒帶、或任務
-  /// 查不到房號時不導頁，留在原畫面。
+  /// 任務頁以房號定位，去處描述卻只帶任務 id，`kind == 'task'` 要先以
+  /// `GET /tasks/{id}` 查出房號才導得進去；工務單詳情頁以任務 id 定位，
+  /// 沒有這個落差。依契約 `PushTarget`，App 照 kind 導頁，不自己查任務
+  /// 類別推演去處。該帶任務 id 卻沒帶、或任務查不到房號時不導頁，留在
+  /// 原畫面。
   Future<void> openTarget(Map<String, dynamic> target) async {
     final kind = target['kind'] as String?;
     final payload = <String, dynamic>{'dest': kind};
-    if (kind == 'task') {
+    if (kind == 'task' || kind == 'ticket') {
       final taskId = target['taskId'] as String?;
       if (taskId == null) {
         return;
       }
-      final roomNo = (await ApiClient.instance.getTask(taskId)).roomNo;
-      if (roomNo == null) {
-        return;
-      }
-      payload['room'] = roomNo;
       payload['taskId'] = taskId;
+      if (kind == 'task') {
+        final roomNo = (await ApiClient.instance.getTask(taskId)).roomNo;
+        if (roomNo == null) {
+          return;
+        }
+        payload['room'] = roomNo;
+      }
     } else if (kind == 'pool') {
       final highlightTaskId = target['highlightTaskId'] as String?;
       if (highlightTaskId != null) {
@@ -125,6 +135,17 @@ class PushGateway {
         navigator.push(
           CupertinoPageRoute<void>(
             builder: (_) => TaskScreen(roomNo: room, taskId: taskId),
+          ),
+        );
+        break;
+      case 'ticket':
+        // 修繕任務（工務單）的推播：靠 task id 直取工務單詳情，跟房號無關。
+        if (taskId == null) {
+          return;
+        }
+        navigator.push(
+          CupertinoPageRoute<void>(
+            builder: (_) => TicketScreen(taskId: taskId),
           ),
         );
         break;

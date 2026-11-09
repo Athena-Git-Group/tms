@@ -124,10 +124,13 @@ public class PushManagerActionSteps {
      * <p>contracts 的 tasksReassign requestBody 掛的是整列 tasksRequest schema，但這個
      * 動作實際只改一個欄位；送整列任務資料反而要求呼叫端重複提供這個動作不該變動的
      * type／dept／state 等欄位，所以這裡只送改派這個動作本身需要的 assigneeId。
+     *
+     * <p>dsl.md 的任務參數：房號，修繕任務（工務單）用單號。W- 開頭視為工務單單號，
+     * 透過「已有以下工務單：」登記的單號→task id 對照解析；其餘視為房號走任務對照。
      */
     @當("{string} 把 {string} 改派給 {string}")
     public void managerReassignsTask(String managerName, String taskKey, String newAssigneeName) {
-        UUID taskId = UUID.fromString(world.taskId(taskKey));
+        UUID taskId = UUID.fromString(resolveTaskId(taskKey));
         LastOperationGuard.captureFor(dbProbe, taskId);
 
         Map<String, Object> body = Map.of("assigneeId", world.staffId(newAssigneeName));
@@ -179,6 +182,11 @@ public class PushManagerActionSteps {
             throw new AssertionError(
                     staffName + " 預期只收到一次標題「" + title + "」的推播，實際 outbox 有 " + count + " 筆");
         }
+    }
+
+    /** 任務參數解析：W- 開頭的是工務單單號（查工務單對照），其餘是房號（查任務對照）。 */
+    private String resolveTaskId(String taskKey) {
+        return taskKey.startsWith("W-") ? world.repairTicketTaskId(taskKey) : world.taskId(taskKey);
     }
 
     private PushPayloadView parsePush(Map<String, Object> outboxRow) {

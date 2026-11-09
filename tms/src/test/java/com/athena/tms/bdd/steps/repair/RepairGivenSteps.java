@@ -403,6 +403,11 @@ public class RepairGivenSteps {
         if ("待認領".equals(chinese)) {
             return "pool";
         }
+        if ("待開始".equals(chinese)) {
+            // 狀態用語對照的通用列：待開始 = accepted。工務單寫「待開始」時等同「已接單」，
+            // 差別只在措辭（有處理人但還沒動工），不是另一個狀態。
+            return "accepted";
+        }
         return Terms.repairTicketState(chinese);
     }
 

@@ -96,6 +96,46 @@ public class RepairThenSteps {
     }
 
     /**
+     * 必查：完修回報面板送出鈕（{@code completeSheet.submit-button}）的可互動狀態
+     * （enabled/disabled）符合；禁用時無法真的觸發送出動作，不是事後才報錯。
+     *
+     * <p>與報修面板的「送出鈕為」是不同面板的不同句型，各自獨立：這裡定位的是完修回報
+     * 面板的送出鈕，「無法觸發」的權威佐證是後端該單仍維修中（{@code tasks.state = 'doing'}），
+     * 不是「沒有建新單」。
+     */
+    @那麼("完修回報的送出鈕為 {string}")
+    public void completeSheetSubmitButtonState(String enabledOrDisabled) {
+        boolean expectedEnabled = switch (enabledOrDisabled) {
+            case "啟用" -> true;
+            case "禁用" -> false;
+            default -> throw new IllegalArgumentException(
+                    "認不得的按鈕狀態「" + enabledOrDisabled + "」（只支援 啟用｜禁用）");
+        };
+        WebElement submit = world.waitForTestId("completeSheet.submit-button", SCREEN_TIMEOUT);
+        if (submit.isEnabled() != expectedEnabled) {
+            throw new AssertionError("完修回報的送出鈕應為「" + enabledOrDisabled + "」，實際是「"
+                    + (submit.isEnabled() ? "啟用" : "禁用") + "」");
+        }
+        if (!expectedEnabled) {
+            // 只讀 enabled 屬性的話，一顆畫成灰色但照樣送得出去的按鈕也會過關；
+            // 所以禁用時要真的按下去，再驗送出沒有發生。
+            try {
+                submit.click();
+            } catch (RuntimeException ignored) {
+                // 這句要驗的是「送出沒有發生」；禁用鈕拒絕點擊而拋例外，
+                // 正是沒有發生的一種表現，不能當成測試失敗。
+            }
+            // 面板本身沒有 accessibility id，以送出鈕仍在畫面上代表面板沒有因送出而關掉。
+            world.waitForTestId("completeSheet.submit-button", SCREEN_TIMEOUT);
+            Map<String, Object> row = singleTicketRow("1 = 1", "本情境唯一的工務單");
+            if (!"doing".equals(row.get("state"))) {
+                throw new AssertionError("禁用的送出鈕不該真的送出完修，但後端該單狀態是 "
+                        + row.get("state") + "（應仍為 doing／維修中）");
+            }
+        }
+    }
+
+    /**
      * 必查：以 accessibility id {@code repair.photo.count-label} 定位的欄位標題文字包含該
      * 提示；不要求事後 Alert 或 Toast 出現同樣文字。
      */
@@ -539,6 +579,43 @@ public class RepairThenSteps {
             }
             default -> throw new IllegalArgumentException(
                     "認不得的處理結果「" + resolutionLabel + "」（只支援 已修好｜暫時處理｜無法修復）");
+        }
+    }
+
+    /**
+     * 必查：後端該工務單狀態仍是維修中，沒有新的完修事件、完修照片與完修結果。
+     *
+     * <p>「完修事件」與「完修結果」在後端是同一筆真相——{@code task_events.type = 'completed'}
+     * （結果 {@code resolutionType} 放在它的 payload 裡；{@code repair_tickets} 沒有獨立的
+     * 結果欄），所以查無 completed 事件就同時排除了兩者。「完修照片」另查
+     * {@code repair_photos.purpose = 'completion'}——照片走獨立的兩段式上傳，就算完修
+     * 請求本身沒送出去，先建出 completion 照片列也算走漏，要分開驗。
+     */
+    @那麼("後端沒有收到這次完修")
+    public void backendHasNotReceivedCompletion() {
+        Map<String, Object> row = singleTicketRow("1 = 1", "本情境唯一的工務單");
+        String state = String.valueOf(row.get("state"));
+        if (!"doing".equals(state)) {
+            throw new AssertionError("後端該工務單應仍是維修中（doing），實際是 " + state);
+        }
+
+        Object taskId = row.get("task_id");
+        List<Map<String, Object>> completedEvents = world.backend().queryRows("""
+                SELECT id FROM task_events
+                WHERE tenant_id = ? AND task_id = ? AND type = 'completed'
+                """, world.backend().ensureTenant(), taskId);
+        if (!completedEvents.isEmpty()) {
+            throw new AssertionError("後端不該有這張單的完修事件（task_events.type=completed），實際查到 "
+                    + completedEvents.size() + " 筆");
+        }
+
+        List<Map<String, Object>> completionPhotos = world.backend().queryRows("""
+                SELECT id FROM repair_photos
+                WHERE tenant_id = ? AND ticket_task_id = ? AND purpose = 'completion'
+                """, world.backend().ensureTenant(), taskId);
+        if (!completionPhotos.isEmpty()) {
+            throw new AssertionError("後端不該有這張單的完修照片（repair_photos.purpose=completion），實際查到 "
+                    + completionPhotos.size() + " 張");
         }
     }
 

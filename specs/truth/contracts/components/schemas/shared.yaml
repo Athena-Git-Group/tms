@@ -796,7 +796,11 @@ PushPayload:
       $ref: '#/PushTarget'
 PushTarget:
   type: object
-  description: 點開推播後的去處。屬於本人的任務帶 taskId；不屬於本人的帶待認領入口。
+  description: >-
+    點開推播後的去處。屬於本人的任務帶 taskId：打掃／備品任務用 task（App 開任務頁）、
+    修繕任務（工務單）用 ticket（App 開工務單詳情）——去處種類由後端在發推播時依任務類別決定，
+    App 照 kind 機械導頁，不自己查任務類別推演。不屬於本人的帶待認領入口。
+    通知中心的每一筆（NotificationItem.target）共用這個 schema，點通知項的導頁規則相同。
   required:
   - kind
   properties:
@@ -804,13 +808,14 @@ PushTarget:
       type: string
       enum:
       - task
+      - ticket
       - pool
       - home
     taskId:
       type: string
       format: uuid
       nullable: true
-      description: kind=task 時必填。
+      description: kind=task 或 kind=ticket 時必填；ticket 帶的是該修繕任務的 task id（與工務單詳情端點的路徑參數同一個 id）。
     dept:
       type: string
       enum:

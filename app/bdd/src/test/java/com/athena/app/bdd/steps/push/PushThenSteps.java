@@ -30,6 +30,7 @@ public class PushThenSteps {
 
     private static final Pattern POOL_HIGHLIGHTED = Pattern.compile("^待認領，(\\d+) 標亮$");
     private static final Pattern TASK_SCREEN = Pattern.compile("^(\\d+) 的任務頁$");
+    private static final Pattern TICKET_DETAIL = Pattern.compile("^(W-\\d+) 的工務單詳情$");
     private static final Pattern HOME = Pattern.compile("^首頁$");
     private static final Pattern POOL_PLAIN = Pattern.compile("^待認領$");
 
@@ -40,17 +41,23 @@ public class PushThenSteps {
     }
 
     /**
-     * 必查：目前畫面符合描述；有標亮時，該房的單卡在可視範圍內並有標亮樣式。
+     * 必查：目前畫面符合描述；有標亮時，該房的單卡在可視範圍內並有標亮樣式；
+     * 畫面是工務單詳情時，顯示的是該單號的工務單詳情頁，不是任務頁。
      *
-     * <p>「畫面」字串跟 {@link PushGivenSteps} 解析「去處」用的是同一套四種白話形式
+     * <p>「畫面」字串跟 {@link PushGivenSteps} 解析「去處」用的是同一套白話形式
      * （dsl.md），這裡對應回 accessibility id：標亮用 {@code pool.card.{roomNo}--highlighted}
      * （{@code lib/features/pool/pool_screen.dart} 只在標亮時才掛這個 id，存在即代表
      * 樣式也對）；任務頁沒有獨立的房號節點，房號斷言改抓導覽列標題文字（本身就含房號）。
+     * 工務單詳情（{@code lib/features/ticket/ticket_screen.dart}）整頁掛
+     * {@code ticket.screen}，單號斷言抓摘要卡的標題文字「工務單 {單號} · {房號}」；
+     * 「不是任務頁」再用 {@code task.screen} 不得存在把關——修繕推播導錯到任務頁時，
+     * 不能只靠等 ticket.screen 逾時來間接發現。
      */
     @那麼("App 停在 {string}")
     public void appStaysOn(String screenDescription) {
         Matcher highlightedMatcher = POOL_HIGHLIGHTED.matcher(screenDescription);
         Matcher taskMatcher = TASK_SCREEN.matcher(screenDescription);
+        Matcher ticketMatcher = TICKET_DETAIL.matcher(screenDescription);
 
         if (highlightedMatcher.matches()) {
             String room = highlightedMatcher.group(1);
@@ -60,6 +67,15 @@ public class PushThenSteps {
             String room = taskMatcher.group(1);
             world.waitForTestId("task.screen", SCREEN_TIMEOUT);
             world.waitForLabelContaining(room + " 的任務頁", SCREEN_TIMEOUT);
+        } else if (ticketMatcher.matches()) {
+            String ticketNo = ticketMatcher.group(1);
+            world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
+            world.waitForLabelContaining("工務單 " + ticketNo, SCREEN_TIMEOUT);
+            List<WebElement> taskScreens = world.driver().findElements(world.byTestId("task.screen"));
+            if (!taskScreens.isEmpty()) {
+                throw new AssertionError("預期停在 " + ticketNo
+                        + " 的工務單詳情頁，但畫面上同時找得到任務頁（task.screen）");
+            }
         } else if (HOME.matcher(screenDescription).matches()) {
             world.waitForTestId("home.screen", SCREEN_TIMEOUT);
         } else if (POOL_PLAIN.matcher(screenDescription).matches()) {
