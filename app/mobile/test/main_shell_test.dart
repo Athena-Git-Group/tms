@@ -71,6 +71,21 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('疊在外殼上的畫面要求去待認領時，外殼自己切過去', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pumpShell(tester);
+
+    MainShellTabRequest.goToPool();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('pool.screen'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('home.screen'), findsNothing);
+    // 要求讀走就清掉，下一次外殼重建不會又被彈回待認領。
+    expect(MainShellTabRequest.pending.value, isNull);
+
+    handle.dispose();
+  });
+
   testWidgets('點分頁列的「通知」與「我的」各自切到對應的畫面', (tester) async {
     final handle = tester.ensureSemantics();
     await pumpShell(tester);

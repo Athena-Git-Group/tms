@@ -10,6 +10,20 @@ import '../notification/notification_screen.dart';
 import '../pool/pool_screen.dart';
 import '../today/my_today_scope.dart';
 
+/// 推到外殼之上的畫面要求外殼切分頁的通道。
+///
+/// 完成畫面的「去『待認領』看看」疊在外殼上好幾層，手上拿不到外殼那個
+/// state，所以它只在這裡留下要去哪一個分頁，外殼自己讀走並切過去。外殼
+/// 還沒掛上時留下的要求不會有人處理，下一次要求會蓋掉它。
+abstract final class MainShellTabRequest {
+  /// 待認領是四個分頁裡的第二個。
+  static const int _poolIndex = 1;
+
+  static final ValueNotifier<int?> pending = ValueNotifier<int?>(null);
+
+  static void goToPool() => pending.value = _poolIndex;
+}
+
 /// 登入後的主畫面外殼：底部四個分頁，首頁／待認領／通知／我的。
 ///
 /// 四個分頁是員工整天會來回切的地方，所以它們彼此平行、互相之間沒有返回
@@ -70,6 +84,30 @@ class _MainShellBodyState extends State<_MainShellBody> {
   int _index = 0;
 
   final Set<int> _built = <int>{0};
+
+  @override
+  void initState() {
+    super.initState();
+    MainShellTabRequest.pending.addListener(_applyTabRequest);
+  }
+
+  @override
+  void dispose() {
+    MainShellTabRequest.pending.removeListener(_applyTabRequest);
+    super.dispose();
+  }
+
+  void _applyTabRequest() {
+    final requested = MainShellTabRequest.pending.value;
+    if (requested == null) {
+      return;
+    }
+    MainShellTabRequest.pending.value = null;
+    setState(() {
+      _index = requested;
+      _built.add(requested);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
