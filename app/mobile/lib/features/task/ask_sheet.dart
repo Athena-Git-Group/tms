@@ -7,7 +7,6 @@ import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_option_row.dart';
 import '../../core/widgets/tms_sheet.dart';
-import 'task_callouts.dart';
 
 /// 查一下面板（ui-plan 畫面 8 的 `askSheet`）：列出這張任務的推薦問題，
 /// 讓員工在房內遇到不確定的事時先查、查不到再麻煩主管。
@@ -213,10 +212,8 @@ class _SourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const metaStyle = TmsText.footnote;
-    return TaskCallout(
+    return _SourceCardFrame(
       id: 'ask.answer.source-card.$index',
-      tint: calloutSourceTint,
-      explicitChildNodes: true,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -242,6 +239,42 @@ class _SourceCard extends StatelessWidget {
           child: Text(source.excerpt, style: TmsText.footnote),
         ),
       ],
+    );
+  }
+}
+
+
+/// 出處卡的外框：整頁寬、畫面背景色的圓角方塊，內容由上而下靠左排。
+///
+/// 底色用畫面背景色而不是白色，讓它比上面那段回答往後退一層——它不是在對員工
+/// 說話，只是把答案的來源原樣貼出來。
+class _SourceCardFrame extends StatelessWidget {
+  const _SourceCardFrame({required this.id, required this.children});
+
+  final String id;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return TmsSemantics(
+      id: id,
+      explicitChildNodes: true,
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: TmsSize.rowMinHeight),
+        padding: const EdgeInsets.symmetric(
+          vertical: TmsSpacing.md,
+          horizontal: TmsSpacing.lg,
+        ),
+        decoration: BoxDecoration(
+          color: TmsColors.groupedBackground,
+          borderRadius: BorderRadius.circular(TmsRadius.card),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ),
     );
   }
 }

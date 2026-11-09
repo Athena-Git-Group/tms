@@ -91,9 +91,11 @@ void main() {
   });
 
   testWidgets('超時膠囊整分才進位，不因為秒數跳動忽隱忽現', (tester) async {
-    // 進入本段之前累計 0 秒，本段已走 40 分 30 秒，預估 35 分：超時 5 分。
+    // 超時分鐘數照原型的 `overInfo` 無條件進位（`Main.dc.html:3155` 的
+    // `max(1, ceil((sec - est * 60) / 60))`）：本段已走 40 分 10 秒、預估 35 分，
+    // 超出去的 310 秒進位成 6 分。首頁那張進行中的卡用的是同一條式子。
     final startedAt = DateTime(2026, 11, 8, 9);
-    var now = startedAt.add(const Duration(minutes: 40, seconds: 30));
+    var now = startedAt.add(const Duration(minutes: 40, seconds: 10));
 
     await pumpHero(
       tester,
@@ -107,19 +109,19 @@ void main() {
       clock: () => now,
     );
 
-    expect(find.text('超時 5 分'), findsOneWidget);
+    expect(find.text('超時 6 分'), findsOneWidget);
 
     // 同一分鐘內秒數再怎麼跳，超時那句話不變也不消失。
-    now = now.add(const Duration(seconds: 15));
+    now = now.add(const Duration(seconds: 20));
     await tester.pump(const Duration(seconds: 1));
-    expect(heroText(tester), '40:45');
-    expect(find.text('超時 5 分'), findsOneWidget);
-
-    // 跨過整分那一刻才進位成 6 分，膠囊始終都在。
-    now = now.add(const Duration(seconds: 15));
-    await tester.pump(const Duration(seconds: 1));
-    expect(heroText(tester), '41:00');
+    expect(heroText(tester), '40:30');
     expect(find.text('超時 6 分'), findsOneWidget);
+
+    // 超出去的秒數跨過下一個整分才進位成 7 分，膠囊始終都在。
+    now = now.add(const Duration(seconds: 31));
+    await tester.pump(const Duration(seconds: 1));
+    expect(heroText(tester), '41:01');
+    expect(find.text('超時 7 分'), findsOneWidget);
   });
 
   testWidgets('離開畫面之後，每秒醒來的計時器不再留著', (tester) async {
