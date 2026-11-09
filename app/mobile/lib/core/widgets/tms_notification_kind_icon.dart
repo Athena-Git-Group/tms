@@ -36,10 +36,10 @@ enum TmsNotificationKind {
     glyph: CupertinoIcons.bubble_left_fill,
   ),
 
-  /// 池裡來了新的單。
+  /// 池裡來了新的單。描邊托盤，不是實心的（`Main.dc.html:356`）。
   newRequest(
     background: TmsColors.brandPrimary,
-    glyph: CupertinoIcons.tray_fill,
+    glyph: CupertinoIcons.tray,
   ),
 
   /// 保養派單。

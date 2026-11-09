@@ -206,6 +206,37 @@ public class PushThenSteps {
         }
     }
 
+    /**
+     * 必查：{@code notification.mark-all-read-button} 不存在或不可見；後端該員工
+     * 已經沒有 {@code read_at} 為 null 的通知。畫面是點擊後才刷新的，所以用輪詢等
+     * 按鈕消失，不能只看當下一瞬間。
+     */
+    @那麼("通知中心沒有「全部標為已讀」")
+    public void notificationCenterHasNoMarkAllReadButton() {
+        world.waitForTestId("notification.screen", SCREEN_TIMEOUT);
+
+        long deadline = System.nanoTime() + SCREEN_TIMEOUT.toNanos();
+        while (true) {
+            List<WebElement> buttons =
+                    world.driver().findElements(world.byTestId("notification.mark-all-read-button"));
+            if (buttons.isEmpty() || buttons.stream().noneMatch(WebElement::isDisplayed)) {
+                break;
+            }
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("通知中心的「全部標為已讀」在 "
+                        + SCREEN_TIMEOUT.getSeconds() + "s 內沒有消失");
+            }
+            sleep(200);
+        }
+
+        List<Map<String, Object>> unread = world.backend().queryRows(
+                "SELECT id FROM notifications WHERE tenant_id = ? AND recipient_staff_id = ? AND read_at IS NULL",
+                world.backend().ensureTenant(), world.notificationViewer().id());
+        if (!unread.isEmpty()) {
+            throw new AssertionError("後端還有 " + unread.size() + " 則未讀通知，不該收掉「全部標為已讀」");
+        }
+    }
+
     /** 必查：通知中心顯示該空狀態文字，沒有任何通知項目。 */
     @那麼("通知中心顯示空狀態 {string}")
     public void notificationCenterShowsEmptyState(String message) {
