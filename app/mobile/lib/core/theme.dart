@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -48,6 +50,11 @@ abstract final class TmsColors {
 
   /// 強調亮色。慶祝頁彩屑、工務待認領「其他」類別磚的圖示底。
   static const Color brandAccentVivid = Color(0xFFFF8E2B);
+
+  /// 強調淺色。首頁房務與工務「進行中」卡上那顆會呼吸的小圓點，以及慶祝頁的
+  /// 一部分彩屑。它只出現在品牌色深底上，比 [brandAccentVivid] 再淺一階，
+  /// 深底上才讀得出來。
+  static const Color brandAccentSoft = Color(0xFFFFB783);
 
   // ── 狀態與類別色 ────────────────────────────────────────────────────
 
@@ -100,6 +107,11 @@ abstract final class TmsColors {
 
   /// 列尾 chevron 的顏色。
   static const Color chevron = Color(0xFFC4C4C6);
+
+  /// 工務單列列尾 chevron 的顏色。設計原型只有這一列用這個值，其餘六處都用
+  /// [chevron]，兩者只差藍通道的最後一階，肉眼看不出來。照原型落值是為了讓下
+  /// 次比對的人不必重新判斷哪一個才算數。
+  static const Color chevronOnTicketRow = Color(0xFFC4C4C7);
 
   /// 群組內列與列之間那條分隔線的顏色，粗細見 [TmsSize.hairline]。
   static const Color separator = Color(0xFFE5E5EA);
@@ -178,9 +190,20 @@ abstract final class TmsColors {
 /// textScaler——放大的是字，不是版面。
 ///
 /// 17pt 是主幹：[headline]（600）與 [body]（400）只差字重，用來區分「這一列的
-/// 主文」與「一般內容」。字重收斂成 400／600／700 三級，只有大型展示數字用
-/// 800。
+/// 主文」與「一般內容」。字重收斂成 400／500／600／700 四級，只有大型展示數字
+/// 用 800。500 只用在「主角旁邊的配角」，也就是統計數字後的單位字
+/// （[footnoteMedium]）與步驟條還沒走到的那幾步（[subheadlineMedium]）。
 abstract final class TmsText {
+  /// 中日韓字形的字型遞補順序。
+  ///
+  /// 拉丁字母與數字交給平台預設的系統字型（iOS 上是 SF Pro Text）；系統字型沒
+  /// 有的字（主要是中文）才往下找這份清單。不寫死遞補順序的話，同一個中文字
+  /// 在不同語系設定的機器上會落到不同字型，字寬與筆畫粗細跟著變，版面就排不準。
+  static const List<String> fontFamilyStack = <String>[
+    'PingFang TC',
+    'Noto Sans TC',
+  ];
+
   /// 等寬數字。房號與計時器要用，否則秒數每跳一次，整串數字就左右抖一次。
   static const List<FontFeature> tabularNumbers = <FontFeature>[
     FontFeature.enable('tnum'),
@@ -188,6 +211,7 @@ abstract final class TmsText {
 
   /// Large Title。分頁大標（待認領、通知）。
   static const TextStyle largeTitle = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 34,
     height: 41 / 34,
     fontWeight: FontWeight.w700,
@@ -197,6 +221,7 @@ abstract final class TmsText {
 
   /// Title 1。首頁問候語、登入頁標題。
   static const TextStyle title1 = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 28,
     height: 34 / 28,
     fontWeight: FontWeight.w700,
@@ -206,6 +231,7 @@ abstract final class TmsText {
 
   /// Title 2。空狀態標題。
   static const TextStyle title2 = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 22,
     height: 28 / 22,
     fontWeight: FontWeight.w700,
@@ -214,14 +240,34 @@ abstract final class TmsText {
 
   /// Title 3。區段標題（我的任務、清潔 SOP）、身分卡姓名、統計數字。
   static const TextStyle title3 = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 20,
     height: 25 / 20,
     fontWeight: FontWeight.w700,
     color: TmsColors.label,
   );
 
+  /// Title 3 的常規字重版。iOS 動作選單（「拍照」「從相簿選擇」）的選項字。
+  /// 行高不宣告，由選項列自己的 57pt 最小高度把文字撐在垂直中央。
+  static const TextStyle title3Regular = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 20,
+    fontWeight: FontWeight.w400,
+    color: TmsColors.label,
+  );
+
+  /// Title 3 的中等字重版。iOS 動作選單的「取消」。字重 600 比 [title3] 的
+  /// 700 輕一階，和 [subheadlineEmphasized]、[footnoteEmphasized] 同一級。
+  static const TextStyle title3Emphasized = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 20,
+    fontWeight: FontWeight.w600,
+    color: TmsColors.label,
+  );
+
   /// Headline。導覽列標題、列主文、狀態列標題、按鈕文字。
   static const TextStyle headline = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 17,
     height: 22 / 17,
     fontWeight: FontWeight.w600,
@@ -230,6 +276,7 @@ abstract final class TmsText {
 
   /// Body。分組列表的一般列、SOP 項目、輸入框、交辦內文。
   static const TextStyle body = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 17,
     height: 22 / 17,
     fontWeight: FontWeight.w400,
@@ -238,6 +285,7 @@ abstract final class TmsText {
 
   /// Callout。多行輸入框的內文。
   static const TextStyle callout = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 16,
     height: 21 / 16,
     fontWeight: FontWeight.w400,
@@ -249,6 +297,7 @@ abstract final class TmsText {
   /// 這一級是現場資訊的下限：日期、班別、樓層、列表副標都在這裡，不再往下掉到
   /// 13——房務邊走邊看、走廊燈光偏暗，13pt 灰字辨識度不夠。
   static const TextStyle subheadline = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 15,
     height: 20 / 15,
     fontWeight: FontWeight.w400,
@@ -257,14 +306,26 @@ abstract final class TmsText {
 
   /// Subheadline 的強調版。班別、文字按鈕。
   static const TextStyle subheadlineEmphasized = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 15,
     height: 20 / 15,
     fontWeight: FontWeight.w600,
     color: TmsColors.label,
   );
 
+  /// Subheadline 的中等字重版。步驟條上「還沒走到」那幾步的標籤；目前那一步
+  /// 用 700，兩者的粗細差就是「走到哪裡」的視覺線索。
+  static const TextStyle subheadlineMedium = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 15,
+    height: 20 / 15,
+    fontWeight: FontWeight.w500,
+    color: TmsColors.label,
+  );
+
   /// Footnote。分組標題、提示文、通知時間、統計標籤。
   static const TextStyle footnote = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 13,
     height: 18 / 13,
     fontWeight: FontWeight.w400,
@@ -273,24 +334,50 @@ abstract final class TmsText {
 
   /// Footnote 的強調版。卡片上的小分類標籤（「下一間」）。
   static const TextStyle footnoteEmphasized = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 13,
     height: 18 / 13,
     fontWeight: FontWeight.w600,
     color: TmsColors.label,
   );
 
+  /// Footnote 的中等字重版。緊跟在大號統計數字後面的單位字（「分」「張工單」）
+  /// 與離線列的說明文。字重 500 讓單位字不跟數字搶，又不像 400 那樣在小字級
+  /// 上糊掉。
+  static const TextStyle footnoteMedium = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 13,
+    height: 18 / 13,
+    fontWeight: FontWeight.w500,
+    color: TmsColors.label,
+  );
+
   /// Caption 1。狀態 chip、徽章數字、照片張數。
   static const TextStyle caption1 = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 12,
     height: 16 / 12,
     fontWeight: FontWeight.w600,
     color: TmsColors.label,
   );
 
-  /// Caption 2。tab bar 標籤、類別磚小字。
+  /// Caption 2。類別磚小字、待認領卡上的類別名。
   static const TextStyle caption2 = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 11,
     height: 13 / 11,
+    fontWeight: FontWeight.w600,
+    color: TmsColors.label,
+  );
+
+  /// 全 App 最小的字級。只有兩處用得上：分頁列的分頁名，以及照片縮圖底部那條
+  /// 顯示檔案大小的字條。行高不宣告，兩處都靠所在容器的高度把文字撐在中央。
+  ///
+  /// 這一級不該再往別處擴散。10pt 已經低於現場邊走邊看讀得清的下限，它成立是
+  /// 因為這兩處的文字旁邊都有圖示或縮圖可以辨認，字只是補充。
+  static const TextStyle caption3 = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 10,
     fontWeight: FontWeight.w600,
     color: TmsColors.label,
   );
@@ -302,6 +389,7 @@ abstract final class TmsText {
 
   /// 任務頁當主角的房號或計時。
   static const TextStyle displayHero = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 56,
     height: 1,
     fontWeight: FontWeight.w800,
@@ -311,6 +399,7 @@ abstract final class TmsText {
 
   /// 首頁進行中卡與下一間卡的房號。
   static const TextStyle displayRoomNo = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 44,
     height: 1,
     fontWeight: FontWeight.w800,
@@ -320,6 +409,7 @@ abstract final class TmsText {
 
   /// 進度環中央的數字。
   static const TextStyle displayMetric = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 30,
     height: 1,
     fontWeight: FontWeight.w700,
@@ -329,6 +419,7 @@ abstract final class TmsText {
 
   /// 房號當主角時退居副位的計時。
   static const TextStyle displayTimer = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
     fontSize: 26,
     height: 1,
     fontWeight: FontWeight.w700,
@@ -384,6 +475,31 @@ abstract final class TmsSpacing {
 
   /// 分組清單一般列的上下內距。配上 17pt 的列文字剛好湊到 44 的最小觸控高度。
   static const double groupedRowVertical = 11;
+
+  /// 浮動分頁列離畫面左右兩邊的距離。
+  static const double floatingTabBarSide = 20;
+
+  /// 浮動分頁列下緣離畫面底部的距離，依裝置底部安全區算出。
+  ///
+  /// 安全區扣掉 13，是因為 home indicator 本身已經佔掉一條空白，分頁列貼著它
+  /// 下緣看起來才和兩側的 20 等距。最少留 10，否則沒有 home indicator 的機型
+  /// 會把分頁列壓在畫面最底邊。
+  static double floatingTabBarBottom(double bottomSafeAreaInset) {
+    return math.max(bottomSafeAreaInset - 13, 10);
+  }
+
+  /// 捲動內容底部要留的空白，依裝置底部安全區算出。
+  ///
+  /// 浮動分頁列是浮在內容上方的，不像不透明分頁列會把內容往上推。捲到底時最後
+  /// 一列會剛好被它蓋住，所以捲動容器要自己讓開分頁列的整個高度與下緣距離，
+  /// 再加 20 當呼吸空間。
+  ///
+  /// 不需要讓開分頁列的畫面（表單頁、明細頁）不走這個值，它們自己留 24。
+  static double scrollPadBottom(double bottomSafeAreaInset) {
+    return TmsSize.floatingTabBarHeight +
+        floatingTabBarBottom(bottomSafeAreaInset) +
+        20;
+  }
 }
 
 /// 圓角 token。
@@ -452,6 +568,12 @@ abstract final class TmsSize {
 
   /// 空狀態的描邊圖示邊長。
   static const double emptyStateIcon = 56;
+
+  /// 浮動分頁列的高度。
+  static const double floatingTabBarHeight = 62;
+
+  /// 浮動分頁列的圓角，剛好是高度的一半，所以兩端是半圓。
+  static const double floatingTabBarRadius = 31;
 }
 
 /// Cupertino 側的主題。App 殼是 `CupertinoApp`，可點文字、游標與選取色都吃這裡
