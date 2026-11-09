@@ -25,10 +25,12 @@ import '../login/login_screen.dart';
 ///
 /// 1. **離線**：離線狀態讀全 App 共用的 [ConnectionStatus]。離線時登出會讓
 ///    本機憑證被丟掉而後端無從得知，先攔住。
-/// 2. **名下有進行中的任務**：以後端回應為準——用 `GET /me/today` 判斷
-///    還有沒有未完成的打掃單（`cleaningDone < cleaningTotal`）或剩餘工時
-///    （`remainingMinutes > 0`）。後端沒有「我的進行中任務清單」端點，
-///    這兩個統計是目前契約內能拿到的最接近訊號；App 不在本機另記任務狀態。
+/// 2. **名下有進行中的任務**：以後端回應為準——用 `GET /me/today` 的
+///    `todayTasks` 看有沒有任何一張單的 state 是 `doing`。「進行中」只算
+///    正在做的那一間；待開始、已延後、已中斷、待查房的單都不是進行中——
+///    延後與中斷本來就是員工為了可以先放下（包括下班登出）而做的動作，
+///    拿「今天還沒全做完」或「剩餘工時 > 0」來攔，會讓名下掛著延後單的人
+///    永遠登不出。App 不在本機另記任務狀態。
 class MeScreen extends StatelessWidget {
   const MeScreen({super.key});
 
@@ -41,9 +43,9 @@ class MeScreen extends StatelessWidget {
     bool hasTasksInProgress;
     try {
       final today = await ApiClient.instance.getMyToday();
-      hasTasksInProgress =
-          today.cleaningDone < today.cleaningTotal ||
-          today.remainingMinutes > 0;
+      hasTasksInProgress = today.todayTasks.any(
+        (task) => task.state == 'doing',
+      );
     } catch (_) {
       // 查不到權威狀態就不放行登出：寧可多攔一次，也不要讓還掛著單的人
       // 把憑證丟掉。
