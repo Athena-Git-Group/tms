@@ -25,7 +25,7 @@ accessibility id 畫面簡稱：`login`（登入畫面）、`me`（我的，登�
 | --- | --- | --- | --- | --- |
 | `"{員工}" 在記住帳號畫面輸入密碼 "{密碼}" 並登入` | `員工`：字串。<br>`密碼`：字串。 | 不支援 | 無 | `怎麼做`：在登入畫面以 `login.password-field` 輸入密碼，點 `login.submit-button`。`回寫`：登入結果畫面。 |
 | `"{員工}" 在共用手機畫面輸入員工編號 "{員工編號}" 密碼 "{密碼}" 並登入` | `員工`：字串。<br>`員工編號`：字串。<br>`密碼`：字串。 | 不支援 | 無 | `怎麼做`：在登入畫面以 `login.shared-device.staff-id-field` 輸入員工編號、`login.password-field` 輸入密碼，點 `login.submit-button`。`回寫`：登入結果畫面。 |
-| `"{員工}" 設定新密碼 "{新密碼}" 並確認` | `員工`：字串。<br>`新密碼`：字串。 | 不支援 | 無 | `怎麼做`：在強制改密畫面以 `login.force-password-change.new-password-field`、`login.force-password-change.confirm-password-field` 輸入兩次新密碼，點 `login.force-password-change.submit-button`。 |
+| `"{員工}" 設定新密碼 "{新密碼}" 並確認` | `員工`：字串。<br>`新密碼`：字串。 | 不支援 | 無 | `怎麼做`：在強制改密畫面以 `login.force-password-change.new-password-field`、`login.force-password-change.confirm-password-field` 輸入兩次新密碼，點 `login.force-password-change.submit-button`，再在跳出的確認對話框點 `login.force-password-change.confirm-alert.confirm-button`。 |
 | `"{員工}" 在「我的」點登出` | `員工`：字串。 | 不支援 | 無 | `怎麼做`：在「我的」分頁點登出項目。 |
 
 ## Then 句型
