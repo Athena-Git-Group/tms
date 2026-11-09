@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/navigation.dart';
 import '../../core/theme.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/tms_semantics.dart';
@@ -244,13 +245,14 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showForgotPassword(BuildContext context) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('忘記密碼？'),
-        content: const Text('請找主管在後台重設密碼。'),
+      builder: (dialogContext) => TmsAlert(
+        title: '忘記密碼？',
+        message: '請找主管在後台重設密碼。',
         actions: [
-          CupertinoDialogAction(
+          TmsAlertAction(
+            label: '知道了',
+            style: TmsAlertActionStyle.primary,
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
           ),
         ],
       ),

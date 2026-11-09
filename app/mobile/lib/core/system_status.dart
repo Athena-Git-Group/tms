@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'connection_status.dart';
 import 'theme.dart';
 import 'tms_semantics.dart';
+import 'widgets/tms_alert.dart';
 
 /// 離線時唯一還能做的事是把手上進行中的那間房做完，其餘動作被擋下來時都用
 /// 這一句話告訴員工原因。
@@ -251,21 +252,17 @@ class _StatusBarFrame extends StatelessWidget {
 Future<void> showOfflineBlockedAlert(BuildContext context) {
   return showCupertinoDialog<void>(
     context: context,
-    builder: (dialogContext) => TmsSemantics(
-      id: 'system.offline-blocked-alert',
-      label: offlineOnlyCompleteMessage,
-      child: CupertinoAlertDialog(
-        content: const ExcludeSemantics(child: Text(offlineOnlyCompleteMessage)),
-        actions: [
-          TmsSemantics(
-            id: 'system.offline-blocked-alert.dismiss-button',
-            child: CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
-            ),
-          ),
-        ],
-      ),
+    builder: (dialogContext) => TmsAlert(
+      message: offlineOnlyCompleteMessage,
+      messageId: 'system.offline-blocked-alert',
+      actions: [
+        TmsAlertAction(
+          label: '知道了',
+          id: 'system.offline-blocked-alert.dismiss-button',
+          style: TmsAlertActionStyle.primary,
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+      ],
     ),
   );
 }

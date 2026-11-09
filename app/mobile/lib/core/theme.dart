@@ -529,6 +529,13 @@ abstract final class TmsRadius {
   /// 任務頁標題區的下緣、慶祝頁的勾勾方塊。
   static const double xl = 28;
 
+  /// Alert 對話框。`Main.dc.html:4860` 的 `al.r`。
+  static const double alert = 34;
+
+  /// 蓋住整個畫面的對話卡，目前只有慶祝卡。`Main.dc.html:4463` 的 `ui.dialogR`。
+  /// 它比 [alert] 再大一階，因為這張卡佔的面積也大一截。
+  static const double dialog = 36;
+
   /// 膠囊：所有主按鈕、chip、標籤、徽章、頭像、未讀點、進度條。
   static const double pill = 999;
 }

@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/repair_photo_capture.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_selection_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
@@ -135,12 +136,13 @@ class _TicketScreenState extends State<TicketScreen> {
     }
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        content: Text(message),
+      builder: (dialogContext) => TmsAlert(
+        message: message,
         actions: [
-          CupertinoDialogAction(
+          TmsAlertAction(
+            label: '知道了',
+            style: TmsAlertActionStyle.primary,
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
           ),
         ],
       ),

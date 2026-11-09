@@ -6,6 +6,7 @@ import '../../core/navigation.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../login/login_screen.dart';
@@ -71,23 +72,18 @@ class MeScreen extends StatelessWidget {
   void _showBlockedAlert(BuildContext context, String reason) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => TmsSemantics(
-        id: 'me.logout-blocked-alert',
-        label: '無法登出：$reason',
-        child: CupertinoAlertDialog(
-          title: const Text('無法登出'),
-          content: Text(reason),
-          actions: [
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const TmsSemantics(
-                id: 'me.logout-blocked-alert.confirm-button',
-                child: Text('知道了'),
-              ),
-            ),
-          ],
-        ),
+      builder: (dialogContext) => TmsAlert(
+        title: '無法登出',
+        message: reason,
+        messageId: 'me.logout-blocked-alert',
+        actions: [
+          TmsAlertAction(
+            label: '知道了',
+            id: 'me.logout-blocked-alert.confirm-button',
+            style: TmsAlertActionStyle.primary,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
       ),
     );
   }
@@ -97,14 +93,14 @@ class MeScreen extends StatelessWidget {
   void _showNotAvailable(BuildContext context, String feature) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(feature),
-        content: const Text('這個設定尚未開放。'),
+      builder: (dialogContext) => TmsAlert(
+        title: feature,
+        message: '這個設定尚未開放。',
         actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
+          TmsAlertAction(
+            label: '知道了',
+            style: TmsAlertActionStyle.primary,
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
           ),
         ],
       ),
