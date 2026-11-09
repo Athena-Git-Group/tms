@@ -6,6 +6,7 @@ import '../../core/navigation.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../login/login_screen.dart';
@@ -71,23 +72,18 @@ class MeScreen extends StatelessWidget {
   void _showBlockedAlert(BuildContext context, String reason) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => TmsSemantics(
-        id: 'me.logout-blocked-alert',
-        label: '無法登出：$reason',
-        child: CupertinoAlertDialog(
-          title: const Text('無法登出'),
-          content: Text(reason),
-          actions: [
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const TmsSemantics(
-                id: 'me.logout-blocked-alert.confirm-button',
-                child: Text('知道了'),
-              ),
-            ),
-          ],
-        ),
+      builder: (dialogContext) => TmsAlert(
+        title: '無法登出',
+        message: reason,
+        messageId: 'me.logout-blocked-alert',
+        actions: [
+          TmsAlertAction(
+            label: '知道了',
+            id: 'me.logout-blocked-alert.confirm-button',
+            style: TmsAlertActionStyle.primary,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
       ),
     );
   }
@@ -97,14 +93,14 @@ class MeScreen extends StatelessWidget {
   void _showNotAvailable(BuildContext context, String feature) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(feature),
-        content: const Text('這個設定尚未開放。'),
+      builder: (dialogContext) => TmsAlert(
+        title: feature,
+        message: '這個設定尚未開放。',
         actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
+          TmsAlertAction(
+            label: '知道了',
+            style: TmsAlertActionStyle.primary,
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
           ),
         ],
       ),
@@ -119,13 +115,16 @@ class MeScreen extends StatelessWidget {
         backgroundColor: TmsColors.groupedBackground,
         // 身分卡本身就是這一頁的標題區，上面不再放一行導覽列大標題——員工一
         // 眼要看到的是「我是誰」，不是「這頁叫我的」。
+        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由捲動內容自己帶。
         child: SafeArea(
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               TmsSpacing.screenEdge,
               TmsSpacing.md,
               TmsSpacing.screenEdge,
-              TmsSpacing.xxl,
+              TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
             ),
             children: [
               // 連線狀態列固定在內容最上方：登出與各項設定都要連得上後端，

@@ -30,13 +30,16 @@ class HomeScreen extends StatelessWidget {
       id: 'home.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
+        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由捲動內容自己帶。
         child: SafeArea(
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               TmsSpacing.screenEdge,
               TmsSpacing.md,
               TmsSpacing.screenEdge,
-              TmsSpacing.xxl,
+              TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
             ),
             children: const [
               // 連線狀態列固定在內容最上方，員工在首頁一眼就知道現在是離線
@@ -473,7 +476,10 @@ class _TaskRow extends StatelessWidget {
           child: ExcludeSemantics(
             child: Row(
               children: [
-                TmsCategorySquare(type: task.type),
+                TmsCategorySquare(
+                  where: task.roomNo,
+                  palette: tmsCategoryAppearance(task.type).palette,
+                ),
                 const SizedBox(width: TmsSpacing.md),
                 Expanded(
                   child: Column(
@@ -505,6 +511,7 @@ class _TaskRow extends StatelessWidget {
                   state: task.state,
                   type: task.type,
                   inspection: task.inspection,
+                  redoCount: task.redoCount,
                 ),
               ],
             ),

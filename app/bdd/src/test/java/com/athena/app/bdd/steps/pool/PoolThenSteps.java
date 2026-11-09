@@ -169,8 +169,11 @@ public class PoolThenSteps {
     }
 
     /**
-     * 必查：分類標籤逐列顯示類別與筆數，並與後端回應一致。
+     * 必查：分類標籤逐列顯示類別與筆數，並與後端回應一致。筆數 0 的分類畫面上沒有筆數節點。
      * accessibility id：{@code pool.category.{category}.chip}、{@code pool.category.{category}.count}。
+     *
+     * <p>筆數 0 的分類要斷言節點不存在，而不是斷言節點上寫著 0。畫面上一顆寫著 0 的紅色
+     * 徽章看起來像有單子等著接，員工會白點一次；設計因此在 0 的時候整顆徽章不畫。
      */
     @那麼("待認領分類標籤顯示如下：")
     public void poolCategoryChipsShow(DataTable table) {
@@ -184,8 +187,20 @@ public class PoolThenSteps {
                 throw new AssertionError("後端 GET /pool 的 counts." + key + " 與劇本不符：預期 "
                         + expected + "，實際 " + backendCount);
             }
-            WebElement count = world.waitForTestId("pool.category." + key + ".count", SCREEN_TIMEOUT);
-            assertLabelContains(count, "pool.category." + key + ".count", String.valueOf(expected));
+            String countId = "pool.category." + key + ".count";
+            if (expected == 0) {
+                assertAbsent(countId);
+                continue;
+            }
+            WebElement count = world.waitForTestId(countId, SCREEN_TIMEOUT);
+            assertLabelContains(count, countId, String.valueOf(expected));
+        }
+    }
+
+    /** 斷言某個 accessibility id 不在畫面上。用 findElements（空清單）而不是 findElement（要等逾時）。 */
+    private void assertAbsent(String id) {
+        if (!world.driver().findElements(world.byTestId(id)).isEmpty()) {
+            throw new AssertionError("畫面上不應出現 " + id + "，實際找得到");
         }
     }
 

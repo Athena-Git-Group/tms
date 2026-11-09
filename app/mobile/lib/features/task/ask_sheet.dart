@@ -23,9 +23,9 @@ class AskSheet extends StatefulWidget {
 
   /// 任務頁的開啟入口統一走這裡。
   static Future<void> show(BuildContext context, {required String taskId}) {
-    return showCupertinoModalPopup<void>(
-      context: context,
-      builder: (_) => AskSheet(taskId: taskId),
+    return TmsSheetRoute.show<void>(
+      context,
+      (_) => AskSheet(taskId: taskId),
     );
   }
 
@@ -65,7 +65,6 @@ class _AskSheetState extends State<AskSheet> {
       explicitChildNodes: true,
       child: TmsSheet(
         title: '查一下',
-        leadingLabel: '關閉',
         onLeadingTap: () => Navigator.of(context).pop(),
         bottomAction: TmsSemantics(
           id: 'ask.ask-manager-button',

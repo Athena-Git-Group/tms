@@ -9,8 +9,11 @@ import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
+import '../../core/widgets/tms_action_bar.dart';
+import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
+import '../../core/widgets/tms_motion.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
@@ -179,7 +182,10 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ),
         ),
+        // 置底操作列自己吃掉底部安全區（原型就是這樣貼著螢幕底緣），這裡再
+        // 留一次會變成留兩倍。
         child: SafeArea(
+          bottom: false,
           child: Stack(
             children: [
               Column(
@@ -208,16 +214,27 @@ class _TaskScreenState extends State<TaskScreen> {
                   ),
                 ],
               ),
+              // 面板升起時背後那一頁要壓暗，點暗掉的地方要能把面板收回去。
+              // 壓暗只是一塊疊上去的顏色，不是 modal barrier，底下那一頁的
+              // 離線列與待同步筆數仍然讀得到（理由見 [RepairSheet]）。
+              if (_repairSheetOpen)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _closeRepairSheet,
+                    child: const ColoredBox(color: TmsColors.scrimSheet),
+                  ),
+                ),
               if (_repairSheetOpen)
                 Align(
                   alignment: Alignment.bottomCenter,
-                  child: RepairSheet(
-                    roomNo: widget.roomNo,
-                    sourceTaskId: _openRepairSheetTaskId,
-                    onClose: () => setState(() {
-                      _repairSheetOpen = false;
-                      _openRepairSheetTaskId = null;
-                    }),
+                  child: TmsMotionView(
+                    spec: TmsMotion.up,
+                    child: RepairSheet(
+                      roomNo: widget.roomNo,
+                      sourceTaskId: _openRepairSheetTaskId,
+                      onClose: _closeRepairSheet,
+                    ),
                   ),
                 ),
             ],
@@ -237,6 +254,13 @@ class _TaskScreenState extends State<TaskScreen> {
     setState(() {
       _repairSheetOpen = true;
       _openRepairSheetTaskId = _loadedTask?.id;
+    });
+  }
+
+  void _closeRepairSheet() {
+    setState(() {
+      _repairSheetOpen = false;
+      _openRepairSheetTaskId = null;
     });
   }
 
@@ -360,22 +384,17 @@ class _TaskScreenState extends State<TaskScreen> {
     final message = e.errorMessage ?? fallback;
     return showCupertinoDialog<void>(
       context: context,
-      // `task.busy-alert` 掛在內容文字上、不掛在整個對話框上：提示的驗收要
-      // 讀這個節點本身的文字，而對話框層的 accessibility 讀值會被 alert 語意
-      // 多併進一段「Alert」，拒絕原因就驗不到一字不差了。
-      builder: (dialogContext) => CupertinoAlertDialog(
-        content: TmsSemantics(
-          id: 'task.busy-alert',
-          label: message,
-          child: ExcludeSemantics(child: Text(message)),
-        ),
+      // `task.busy-alert` 掛在內文那一行上：驗收要一字不差讀到後端回的拒絕
+      // 原因，而對話框層的節點除了內文還含標題與按鈕的文字，讀出來會多出東西。
+      builder: (dialogContext) => TmsAlert(
+        message: message,
+        messageId: 'task.busy-alert',
         actions: [
-          TmsSemantics(
+          TmsAlertAction(
+            label: '知道了',
             id: 'task.busy-alert.dismiss-button',
-            child: CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
-            ),
+            style: TmsAlertActionStyle.primary,
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
         ],
       ),
@@ -612,56 +631,31 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 置底動作列：左邊次要、右邊主要，寬度 1 比 2。
+  /// 置底動作列。
   ///
-  /// 一個狀態最多只露出這兩顆。主按鈕的文字由 [_primaryActionLabel] 的狀態
-  /// 對照表決定，次要按鈕是待開始的「延後」與進行中的「中斷」；兩顆都沒有的
-  /// 狀態（待查房、已送達、完成…）整列不畫。
+  /// 一個狀態最多只露出兩顆。主按鈕的文字由 [_primaryActionLabel] 的狀態
+  /// 對照表決定，次要按鈕是待開始的「延後」與進行中的「中斷」。
   Widget _buildActionBar(TaskDetail task) {
     final primaryLabel = _primaryActionLabel(task);
-    final secondary = _buildSecondaryButton(task);
-    if (primaryLabel == null && secondary == null) {
-      return const SizedBox.shrink();
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: TmsSpacing.screenEdge,
-        vertical: TmsSpacing.md,
-      ),
-      decoration: const BoxDecoration(
-        color: TmsColors.cardBackground,
-        border: Border(
-          top: BorderSide(
-            color: TmsColors.opaqueSeparator,
-            width: TmsSize.hairline,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (secondary != null) Expanded(flex: 1, child: secondary),
-          if (secondary != null && primaryLabel != null)
-            const SizedBox(width: TmsSpacing.md),
-          if (primaryLabel != null)
-            Expanded(
-              flex: 2,
-              // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
-              // 會被 Flutter 接成「開始\n開始」。
-              child: TmsSemantics(
-                id: 'task.primary-button',
-                child: TmsPillButton(
-                  label: primaryLabel,
-                  onPressed: switch (primaryLabel) {
-                    '開始' => () => _start(task),
-                    '完成' => () => _complete(task),
-                    '恢復處理' => () => _resume(task),
-                    _ => () {},
-                  },
-                ),
+    return TmsActionBar(
+      secondary: _buildSecondaryButton(task),
+      primary: primaryLabel == null
+          ? null
+          // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
+          // 會被 Flutter 接成「開始\n開始」。
+          : TmsSemantics(
+              id: 'task.primary-button',
+              child: TmsPillButton(
+                label: primaryLabel,
+                // 「恢復處理」接的是延後或中斷之後回到這一頁的情境。
+                onPressed: switch (primaryLabel) {
+                  '開始' => () => _start(task),
+                  '完成' => () => _complete(task),
+                  '恢復處理' => () => _resume(task),
+                  _ => () {},
+                },
               ),
             ),
-        ],
-      ),
     );
   }
 
@@ -829,6 +823,8 @@ class _TaskScreenState extends State<TaskScreen> {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
     final currentIndex = steps.indexOf(current);
+    // 查房通過代表整張單結案，沒有哪一步還「停在那裡」，四步一律畫成完成。
+    final allDone = task.state == 'inspected';
     return Padding(
       padding: const EdgeInsets.only(top: TmsSpacing.md2),
       child: TmsSemantics(
@@ -839,7 +835,12 @@ class _TaskScreenState extends State<TaskScreen> {
           onDark: onDark,
           steps: [
             for (final step in steps)
-              _trackStep(steps.indexOf(step), currentIndex, step),
+              _trackStep(
+                steps.indexOf(step),
+                currentIndex,
+                step,
+                allDone: allDone,
+              ),
           ],
         ),
       ),
@@ -847,9 +848,14 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   /// 步驟條上的一步：走到哪一步決定圖示形態，id 與讀值用步驟名當識別段。
-  static TmsStepTrackStep _trackStep(int index, int currentIndex, String step) {
+  static TmsStepTrackStep _trackStep(
+    int index,
+    int currentIndex,
+    String step, {
+    required bool allDone,
+  }) {
     final TmsStepStatus status;
-    if (index < currentIndex) {
+    if (allDone || index < currentIndex) {
       status = TmsStepStatus.done;
     } else if (index == currentIndex) {
       status = TmsStepStatus.current;

@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_category_square.dart';
+import '../../core/widgets/tms_content_unavailable.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
@@ -137,7 +138,10 @@ class _PoolScreenState extends State<PoolScreen> {
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
         navigationBar: const CupertinoNavigationBar(middle: Text('待認領')),
+        // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由清單自己帶。
         child: SafeArea(
+          bottom: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -177,13 +181,36 @@ class _PoolScreenState extends State<PoolScreen> {
                 )
               else ...[
                 if (pool != null && pool.items.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('目前沒有待認領的工單'),
-                  ),
-                if (pool != null)
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        bottom: TmsSpacing.scrollPadBottom(
+                          MediaQuery.paddingOf(context).bottom,
+                        ),
+                      ),
+                      child: TmsContentUnavailable(
+                        id: 'pool.empty-state',
+                        copy: TmsEmptyStates.housekeepingPool(
+                          filterApplied: _selected != 'all',
+                          poolHasItems: pool.counts.values.any(
+                            (count) => count > 0,
+                          ),
+                        ),
+                        onAction: () {
+                          _selected = 'all';
+                          _fetch();
+                        },
+                      ),
+                    ),
+                  )
+                else if (pool != null)
                   Expanded(
                     child: ListView(
+                      padding: EdgeInsets.only(
+                        bottom: TmsSpacing.scrollPadBottom(
+                          MediaQuery.paddingOf(context).bottom,
+                        ),
+                      ),
                       children: [
                         for (final item in pool.items)
                           _HousekeepingPoolCard(
@@ -291,9 +318,11 @@ class _HousekeepingPoolCard extends StatelessWidget {
       reminderStage: item.reminderStage,
     );
 
+    final categoryAppearance = tmsCategoryAppearance(item.category);
     final roomSquare = TmsRoomSquare(
-      type: item.category,
       where: isPublicArea ? publicAreaRoomNo : item.roomNo,
+      label: categoryAppearance.label,
+      palette: categoryAppearance.palette,
     );
 
     return PoolCard(

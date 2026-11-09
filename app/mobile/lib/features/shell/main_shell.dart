@@ -5,7 +5,7 @@ import '../engineering/eng_home_screen.dart';
 import '../engineering/eng_pool_screen.dart';
 import '../home/home_screen.dart';
 import '../me/me_screen.dart';
-import '../../core/widgets/tms_category_tile.dart';
+import '../../core/widgets/tms_tab_bar.dart';
 import '../notification/notification_screen.dart';
 import '../pool/pool_screen.dart';
 import '../today/my_today_scope.dart';
@@ -45,7 +45,17 @@ class _MainShell extends StatelessWidget {
 
 /// 外殼的分頁骨架。獨立成一個元件，是為了讓它的 `context` 落在
 /// [MyTodayScope] 底下——分頁列的徽章要靠這一點才讀得到今日進度。
-class _MainShellBody extends StatelessWidget {
+///
+/// 分頁列是浮在內容上方的玻璃板，不是把內容往上推的實心列，所以這裡用
+/// [Stack] 自己疊三層：分頁內容鋪滿整個畫面、底部的 soft scroll edge、最上
+/// 面的 [TmsTabBar]。Flutter 內建的 `CupertinoTabScaffold` 做不到這件事，它
+/// 一定把分頁列的高度從內容區扣掉，內容就不會從玻璃底下透出來。
+///
+/// 切過的分頁要留在原地：員工切到待認領再切回首頁，首頁得還是原來那一屏。
+/// [IndexedStack] 會把每一個建過的分頁留在樹上，捲動位置與畫面狀態因此不會
+/// 掉。沒去過的分頁先擺一個空殼，進去的時候才真的建起來，不然四個分頁會在
+/// 登入當下同時打自己的讀取請求。
+class _MainShellBody extends StatefulWidget {
   const _MainShellBody({required this.homeTab, required this.poolTab});
 
   final Widget homeTab;
@@ -53,104 +63,79 @@ class _MainShellBody extends StatelessWidget {
   final Widget poolTab;
 
   @override
-  Widget build(BuildContext context) {
-    final today = MyTodayScope.todayOf(context);
-    return CupertinoTabScaffold(
-      tabBar: CupertinoTabBar(
-        backgroundColor: _tabBarBackground,
-        activeColor: TmsColors.brandPrimary,
-        inactiveColor: TmsColors.quaternaryLabel,
-        iconSize: _tabIconSize,
-        border: const Border(
-          top: BorderSide(
-            color: TmsColors.opaqueSeparator,
-            width: TmsSize.hairline,
-          ),
-        ),
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.house_fill),
-            label: '首頁',
-          ),
-          BottomNavigationBarItem(
-            icon: _TabIcon(
-              icon: CupertinoIcons.tray_full,
-              badgeCount: today?.poolBadgeCount ?? 0,
-            ),
-            label: '待認領',
-          ),
-          BottomNavigationBarItem(
-            icon: _TabIcon(
-              icon: CupertinoIcons.bell,
-              badgeCount: today?.unreadNotificationBadgeCount ?? 0,
-            ),
-            label: '通知',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.person),
-            label: '我的',
-          ),
-        ],
-      ),
-      tabBuilder: (context, index) {
-        switch (index) {
-          case 0:
-            return homeTab;
-          case 1:
-            return poolTab;
-          case 2:
-            return const NotificationScreen();
-          default:
-            return const MeScreen();
-        }
-      },
-    );
-  }
+  State<_MainShellBody> createState() => _MainShellBodyState();
 }
 
-/// 分頁列上的一格圖示，右上角可以掛一顆紅色數量徽章。
-///
-/// 計數是 0 時整顆徽章不畫。分類磚上的徽章 0 也照顯示，那是因為那幾顆數字
-/// 本身就是驗收要讀的值；分頁列這兩顆沒有人讀，留一顆「0」在圖示旁邊只會
-/// 讓員工以為有東西等著處理。
-class _TabIcon extends StatelessWidget {
-  const _TabIcon({required this.icon, required this.badgeCount});
+class _MainShellBodyState extends State<_MainShellBody> {
+  int _index = 0;
 
-  final IconData icon;
-
-  final int badgeCount;
+  final Set<int> _built = <int>{0};
 
   @override
   Widget build(BuildContext context) {
-    if (badgeCount <= 0) {
-      return Icon(icon);
-    }
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Icon(icon),
-        Positioned(
-          top: -_tabBadgeInset,
-          left: _tabIconSize * _tabBadgeLeftRatio,
-          child: TmsCountBadge(count: badgeCount),
-        ),
-      ],
+    final today = MyTodayScope.todayOf(context);
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final tabs = <Widget>[
+      widget.homeTab,
+      widget.poolTab,
+      const NotificationScreen(),
+      const MeScreen(),
+    ];
+
+    return CupertinoPageScaffold(
+      backgroundColor: TmsColors.groupedBackground,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IndexedStack(
+              index: _index,
+              children: [
+                for (var i = 0; i < tabs.length; i++)
+                  if (_built.contains(i)) tabs[i] else const SizedBox.shrink(),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: TmsBottomScrollEdge(
+              height: TmsSpacing.bottomScrollEdgeHeight(bottomInset),
+            ),
+          ),
+          Positioned(
+            left: TmsSpacing.floatingTabBarSide,
+            right: TmsSpacing.floatingTabBarSide,
+            bottom: TmsSpacing.floatingTabBarBottom(bottomInset),
+            child: TmsTabBar(
+              currentIndex: _index,
+              onSelect: (index) {
+                setState(() {
+                  _index = index;
+                  _built.add(index);
+                });
+              },
+              items: [
+                const TmsTabItem(label: '首頁', glyph: TmsTabGlyph.home),
+                TmsTabItem(
+                  label: '待認領',
+                  glyph: TmsTabGlyph.pool,
+                  badgeCount: today?.poolBadgeCount ?? 0,
+                ),
+                TmsTabItem(
+                  label: '通知',
+                  glyph: TmsTabGlyph.notification,
+                  badgeCount: today?.unreadNotificationBadgeCount ?? 0,
+                ),
+                const TmsTabItem(label: '我的', glyph: TmsTabGlyph.me),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-
-/// 分頁列的底色。它帶一點透明度，捲到底的內容會在分頁列底下透出來一點，
-/// 員工因此看得出清單還沒到底。
-const Color _tabBarBackground = Color(0xF0F9F9F9);
-
-/// 分頁圖示的邊長。
-const double _tabIconSize = 26;
-
-/// 徽章相對圖示上緣往外探出的距離。
-const double _tabBadgeInset = TmsSpacing.xs;
-
-/// 徽章左緣落在圖示寬度的哪一個比例上（原型是 54%）。
-const double _tabBadgeLeftRatio = 0.54;
 
 /// 房務員工登入後的主畫面。
 class HousekeepingShell extends StatelessWidget {
@@ -158,10 +143,7 @@ class HousekeepingShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _MainShell(
-      homeTab: HomeScreen(),
-      poolTab: PoolScreen(),
-    );
+    return const _MainShell(homeTab: HomeScreen(), poolTab: PoolScreen());
   }
 }
 
@@ -171,9 +153,6 @@ class EngineeringShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _MainShell(
-      homeTab: EngHomeScreen(),
-      poolTab: EngPoolScreen(),
-    );
+    return const _MainShell(homeTab: EngHomeScreen(), poolTab: EngPoolScreen());
   }
 }

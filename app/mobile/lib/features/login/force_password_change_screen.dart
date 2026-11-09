@@ -5,6 +5,7 @@ import '../../core/navigation.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/widgets/tms_action_bar.dart';
 import '../shell/main_shell.dart';
 import 'login_widgets.dart';
 
@@ -126,7 +127,9 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
         middle: Text('設定新密碼'),
         automaticallyImplyLeading: false,
       ),
+      // 置底操作列自己吃掉底部安全區，外面再包一層就會留兩倍白。
       child: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Expanded(
@@ -154,13 +157,15 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                 ),
               ),
             ),
-            LoginActionBar(
+            TmsFormActionBar(
               children: [
                 TmsSemantics(
                   id: 'login.force-password-change.submit-button',
                   enabled: !_submitting,
                   child: TmsPillButton(
                     label: '確認',
+                    // 表單置底列的送出鈕在原型裡用另一組光暈。
+                    glow: TmsPillGlow.alt,
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
                         ? const CupertinoActivityIndicator(

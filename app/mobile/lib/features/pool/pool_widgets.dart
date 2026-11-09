@@ -4,6 +4,7 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_category_tile.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_tag.dart';
 
 /// 房務待認領與工務待認領共用的單卡、欄位列與分類磚。
@@ -168,29 +169,32 @@ class PoolTagRow extends StatelessWidget {
 
 /// 單卡底部那顆滿寬的「認領這單」。
 class PoolClaimButton extends StatelessWidget {
-  const PoolClaimButton({super.key, required this.id, required this.onPressed});
+  const PoolClaimButton({
+    super.key,
+    required this.id,
+    required this.onPressed,
+    this.glow = TmsPillGlow.standard,
+  });
 
   final String id;
   final VoidCallback onPressed;
+
+  /// 要畫哪一組光暈。房務待認領用預設那一組，工務待認領在原型裡用的是
+  /// [TmsPillGlow.alt]。
+  final TmsPillGlow? glow;
+
+  /// 認領鈕比置底的主按鈕矮一截：它在單卡裡面，跟整張卡比例要對得上。
+  static const double _height = 46;
 
   @override
   Widget build(BuildContext context) {
     return TmsSemantics(
       id: id,
-      child: GestureDetector(
-        onTap: onPressed,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 46),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: TmsColors.brandPrimary,
-            borderRadius: BorderRadius.circular(TmsRadius.pill),
-          ),
-          child: Text(
-            '認領這單',
-            style: TmsText.headline.copyWith(color: TmsColors.brandOnPrimary),
-          ),
-        ),
+      child: TmsPillButton(
+        label: '認領這單',
+        height: _height,
+        glow: glow,
+        onPressed: onPressed,
       ),
     );
   }
@@ -198,10 +202,13 @@ class PoolClaimButton extends StatelessWidget {
 
 /// 一格待認領分類磚。
 ///
-/// [count] 有值時磚上多一顆數量徽章；再給 [countId]，徽章就是一個能被單獨
-/// 定位、讀得出數字的節點。房務的分類磚要逐類別驗筆數，所以兩個都給；工務
-/// 的分流磚沒有斷言在讀，只給 [count]。點磚一律是重打一次查詢，不在本機過
-/// 濾，所以這個元件只負責外觀與回呼。
+/// [count] 大於 0 時磚上多一顆數量徽章，0 或不給值時沒有徽章。再給 [countId]，
+/// 徽章就是一個能被單獨定位、讀得出數字的節點。房務的分類磚要逐類別驗筆數，
+/// 所以兩個都給；工務的分流磚沒有斷言在讀，只給 [count]。點磚一律是重打一次
+/// 查詢，不在本機過濾，所以這個元件只負責外觀與回呼。
+///
+/// [unselectedBackground] 透傳給 [TmsCategoryTile]，由呼叫端決定磚沒選中時疊
+/// 在什麼底色上。
 class PoolFilterChip extends StatelessWidget {
   const PoolFilterChip({
     super.key,
@@ -214,6 +221,7 @@ class PoolFilterChip extends StatelessWidget {
     required this.onTap,
     this.countId,
     this.count,
+    this.unselectedBackground,
   });
 
   final String id;
@@ -225,19 +233,19 @@ class PoolFilterChip extends StatelessWidget {
   final VoidCallback onTap;
   final String? countId;
   final int? count;
+  final Color? unselectedBackground;
 
   @override
   Widget build(BuildContext context) {
     final countValue = count;
     Widget? badge;
-    if (countId != null) {
-      badge = TmsSemantics(
-        id: countId!,
-        label: '${countValue ?? 0}',
-        child: TmsCountBadge(count: countValue ?? 0),
-      );
-    } else if (countValue != null) {
+    // 筆數 0 的分類不掛徽章，理由見 [TmsCountBadge] 的類別註解。
+    if (countValue != null && countValue > 0) {
       badge = TmsCountBadge(count: countValue);
+      final id = countId;
+      if (id != null) {
+        badge = TmsSemantics(id: id, label: '$countValue', child: badge);
+      }
     }
     return TmsSemantics(
       id: id,
@@ -249,6 +257,7 @@ class PoolFilterChip extends StatelessWidget {
         selected: selected,
         onTap: onTap,
         badge: badge,
+        unselectedBackground: unselectedBackground,
       ),
     );
   }

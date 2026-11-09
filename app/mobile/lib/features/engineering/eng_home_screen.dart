@@ -8,6 +8,7 @@ import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_home_cards.dart';
 import '../../core/widgets/tms_pill_button.dart';
+import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
@@ -36,13 +37,16 @@ class EngHomeScreen extends StatelessWidget {
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
         navigationBar: const CupertinoNavigationBar(middle: Text('工務首頁')),
+        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由捲動內容自己帶。
         child: SafeArea(
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               TmsSpacing.screenEdge,
               TmsSpacing.md,
               TmsSpacing.screenEdge,
-              TmsSpacing.xxl,
+              TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
             ),
             children: const [
               // 連線狀態列固定在內容最上方，員工一眼就知道現在是離線還是
@@ -355,10 +359,13 @@ class _InHandTicketRow extends StatelessWidget {
     // 讓單卡至少還是個可指認的節點，而不是整串變成同一個 null。
     final ticketNo = ticket.ticketNo ?? ticket.taskId;
     final place = ticket.roomNo ?? '公共區域';
-    final state = repairStateText(ticket.state);
+    final status = repairStatusAppearance(
+      state: ticket.state,
+      isUrgent: ticket.isUrgent,
+    );
     return TmsSemantics(
       id: 'engHome.in-hand.$ticketNo.card',
-      label: '$ticketNo $place $state',
+      label: '$ticketNo $place ${status.text}',
       child: GestureDetector(
         onTap: () => _openTicket(context, ticket.taskId),
         child: Container(
@@ -371,7 +378,15 @@ class _InHandTicketRow extends StatelessWidget {
           child: ExcludeSemantics(
             child: Row(
               children: [
-                TmsRoomSquare(type: 'repair', where: place, size: 48),
+                TmsCategorySquare(
+                  where: place,
+                  palette: tmsRepairSquarePalette(
+                    isUrgent: ticket.isUrgent,
+                    isDone: ticket.state == 'done',
+                  ),
+                  // 「公共區域」四個字用 16pt 會撐破 48pt 的方塊。
+                  fontSize: ticket.roomNo == null ? 13 : 16,
+                ),
                 const SizedBox(width: TmsSpacing.md),
                 Expanded(
                   child: Column(
@@ -397,11 +412,7 @@ class _InHandTicketRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: TmsSpacing.sm),
-                if (ticket.isUrgent) ...[
-                  const TmsTag(label: '急件', tone: TmsTagTone.danger),
-                  const SizedBox(width: TmsSpacing.xs2),
-                ],
-                TmsTag(label: state, tone: TmsTagTone.neutralStrong),
+                TmsStatusChip.of(status),
               ],
             ),
           ),

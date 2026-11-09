@@ -81,9 +81,9 @@ class HoldSheet extends StatefulWidget {
     required HoldSheetMode mode,
     required String taskId,
   }) {
-    return showCupertinoModalPopup<TaskDetail>(
-      context: context,
-      builder: (_) => HoldSheet(mode: mode, taskId: taskId),
+    return TmsSheetRoute.show<TaskDetail>(
+      context,
+      (_) => HoldSheet(mode: mode, taskId: taskId),
     );
   }
 
@@ -161,7 +161,6 @@ class _HoldSheetState extends State<HoldSheet> {
       explicitChildNodes: true,
       child: TmsSheet(
         title: '${widget.mode.title}原因',
-        leadingLabel: '關閉',
         onLeadingTap: () => Navigator.of(context).pop(),
         bottomAction: TmsSemantics(
           id: 'hold.confirm-button',

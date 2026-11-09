@@ -85,10 +85,10 @@ class _CelebrateDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TmsCard(
-      style: TmsCardStyle.hero,
+      style: TmsCardStyle.dialog,
       padding: EdgeInsets.zero,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(TmsRadius.cardHero),
+        borderRadius: BorderRadius.circular(TmsRadius.dialog),
         child: Stack(
           children: [
             Positioned(

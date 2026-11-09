@@ -102,6 +102,10 @@ abstract final class TmsColors {
   /// 步驟條上「還沒走到」那幾步的圖示色。
   static const Color systemGray2 = Color(0xFFAEAEB2);
 
+  /// 比 [systemGray2] 再淡一階的灰。直列時間軸上「還沒走到」那幾步的虛線圓、
+  /// 待處理清單列前的空心圓（`Main.dc.html:1801`、`Main.dc.html:761`）。
+  static const Color systemGray3 = Color(0xFFC7C7CC);
+
   /// 不透明分隔線／邊框／停用底。面板抓柄、底部動作列上緣線、停用的主按鈕底。
   static const Color opaqueSeparator = Color(0xFFC6C6C8);
 
@@ -159,6 +163,31 @@ abstract final class TmsColors {
 
   /// 離線列上的次要文字（說明與待同步筆數）。
   static const Color offlineBarSecondaryLabel = Color(0xBFEBEBF5);
+
+  // ── 毛玻璃 ──────────────────────────────────────────────────────────
+  //
+  // 這幾個值都帶 alpha，疊在 [TmsGlass] 模糊過的背景上才是最後看到的顏色，
+  // 單獨拿去當實心底色會太淡。
+
+  /// 浮動分頁列的玻璃底色。Main.dc.html:1126 — rgba(255,255,255,.55)
+  static const Color glassSurface = Color(0x8CFFFFFF);
+
+  /// 玻璃底板的外框。Main.dc.html:1126 — rgba(255,255,255,.7)
+  static const Color glassBorder = Color(0xB3FFFFFF);
+
+  /// 玻璃底板上緣那條高光。Main.dc.html:1126 —
+  /// inset 0 1px 0 rgba(255,255,255,.8)
+  static const Color glassHighlight = Color(0xCCFFFFFF);
+
+  /// 玻璃底板的外陰影。Main.dc.html:1126 — 0 4px 16px rgba(0,0,0,.12)
+  static const Color glassShadow = Color(0x1F000000);
+
+  /// 分頁列選中那一格的膠囊底。Main.dc.html:1128 — rgba(118,118,128,.16)
+  static const Color tabBarSelectedPill = Color(0x29767680);
+
+  /// 分頁列底下那層 soft scroll edge 的底色。
+  /// Main.dc.html:1122 — rgba(242,242,247,.72)
+  static const Color bottomScrollEdge = Color(0xB8F2F2F7);
 
   // ── 疊層 ────────────────────────────────────────────────────────────
 
@@ -496,6 +525,15 @@ abstract final class TmsSpacing {
         floatingTabBarBottom(bottomSafeAreaInset) +
         20;
   }
+
+  /// 分頁列底下那層 soft scroll edge 的高度，依裝置底部安全區算出。
+  ///
+  /// 它蓋住的正好是浮動分頁列佔到的那一段，所以是分頁列的高度加上它的下緣
+  /// 距離。捲到底的最後一列從這一層底下透出來，員工看得出清單還沒走完。
+  static double bottomScrollEdgeHeight(double bottomSafeAreaInset) {
+    return TmsSize.floatingTabBarHeight +
+        floatingTabBarBottom(bottomSafeAreaInset);
+  }
 }
 
 /// 圓角 token。
@@ -504,7 +542,7 @@ abstract final class TmsSpacing {
 /// [cardHero]，分組列表／狀態列／工作磚用 [card]，底部面板內的白卡用
 /// [cardInSheet]。
 abstract final class TmsRadius {
-  /// 照片縮圖、加照片的虛線框、底部面板上緣。
+  /// 照片縮圖、加照片的虛線框。
   static const double sm = 10;
 
   /// 交辦引言、池內「做到哪」備註列、查一下的出處卡。
@@ -524,6 +562,16 @@ abstract final class TmsRadius {
 
   /// 任務頁標題區的下緣、慶祝頁的勾勾方塊。
   static const double xl = 28;
+
+  /// Alert 對話框。`Main.dc.html:4860` 的 `al.r`。
+  static const double alert = 34;
+
+  /// 蓋住整個畫面的對話卡，目前只有慶祝卡。`Main.dc.html:4463` 的 `ui.dialogR`。
+  /// 它比 [alert] 再大一階，因為這張卡佔的面積也大一截。
+  static const double dialog = 36;
+
+  /// 底部面板上緣（`Main.dc.html:4932`）。
+  static const double sheet = 38;
 
   /// 膠囊：所有主按鈕、chip、標籤、徽章、頭像、未讀點、進度條。
   static const double pill = 999;
@@ -570,6 +618,19 @@ abstract final class TmsSize {
 
   /// 浮動分頁列的圓角，剛好是高度的一半，所以兩端是半圓。
   static const double floatingTabBarRadius = 31;
+
+  /// 浮動分頁列玻璃底板與四格之間的內距。Main.dc.html:1126 — padding: 4
+  static const double floatingTabBarPadding = 4;
+
+  /// 浮動分頁列相鄰兩格之間。Main.dc.html:1126 — gap: 2
+  static const double floatingTabBarGap = 2;
+
+  /// 選中那一格的膠囊底圓角。Main.dc.html:1128 — border-radius: 27
+  static const double floatingTabBarPillRadius = 27;
+
+  /// 浮動分頁列的圖示邊長。貼底不透明那版是 26，浮動這版小一號。
+  /// Main.dc.html:1129
+  static const double floatingTabBarIcon = 24;
 }
 
 /// Cupertino 側的主題。App 殼是 `CupertinoApp`，可點文字、游標與選取色都吃這裡

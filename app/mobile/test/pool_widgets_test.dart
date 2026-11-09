@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_category_square.dart';
+import 'package:tms_staff_app/core/widgets/tms_category_tile.dart';
 import 'package:tms_staff_app/core/widgets/tms_tag.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 
@@ -52,10 +53,18 @@ void main() {
   testWidgets('房號方塊：四個字的區域名縮字級，不撐破 56pt 的方塊', (tester) async {
     await tester.pumpWidget(
       host(
-        const Row(
+        Row(
           children: [
-            TmsRoomSquare(type: 'cleaning', where: '317'),
-            TmsRoomSquare(type: 'other', where: '公共區域'),
+            TmsRoomSquare(
+              where: '317',
+              label: tmsCategoryAppearance('cleaning').label,
+              palette: tmsCategoryAppearance('cleaning').palette,
+            ),
+            TmsRoomSquare(
+              where: '公共區域',
+              label: tmsCategoryAppearance('other').label,
+              palette: tmsCategoryAppearance('other').palette,
+            ),
           ],
         ),
       ),
@@ -64,6 +73,59 @@ void main() {
     for (final where in ['317', '公共區域']) {
       expect(tester.getSize(find.text(where)).width, lessThanOrEqualTo(56));
     }
+    expect(tester.takeException(), isNull);
+  });
+
+  // 原型的工務單方塊按「急不急、修好了沒」上色（Main.dc.html:3823），房務側
+  // 才按任務類別上色（Main.dc.html:4242）。
+  testWidgets('工務單方塊：急件是紅的，一般單是品牌藍綠，已完修轉灰', (tester) async {
+    expect(
+      tmsRepairSquarePalette(isUrgent: true, isDone: false).background,
+      TmsColors.errorContainer,
+    );
+    expect(
+      tmsRepairSquarePalette(isUrgent: false, isDone: false).background,
+      TmsColors.brandContainer,
+    );
+    // 已完修的單不管急不急都是灰的：修完就不必再催。
+    expect(
+      tmsRepairSquarePalette(isUrgent: true, isDone: true).background,
+      TmsColors.groupedBackground,
+    );
+
+    await tester.pumpWidget(
+      host(
+        TmsRoomSquare(
+          where: '902',
+          label: '設備',
+          palette: tmsRepairSquarePalette(isUrgent: true, isDone: false),
+        ),
+      ),
+    );
+
+    expect(find.text('902'), findsOneWidget);
+    expect(find.text('設備'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  // Main.dc.html:233 的 48pt 方塊裡放的是 `{{t.room}}`，顏色才代表類別。
+  testWidgets('48pt 方塊裡放的是房號，不是類別兩個字', (tester) async {
+    await tester.pumpWidget(
+      host(
+        Row(
+          children: [
+            TmsCategorySquare(
+              where: '317',
+              palette: tmsCategoryAppearance('cleaning').palette,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('317'), findsOneWidget);
+    expect(find.text('打掃'), findsNothing);
+    expect(tester.getSize(find.byType(TmsCategorySquare)), const Size(48, 48));
     expect(tester.takeException(), isNull);
   });
 
@@ -91,6 +153,64 @@ void main() {
     );
 
     expect(find.text('3'), findsNWidgets(4));
+    expect(tester.takeException(), isNull);
+  });
+
+  // Main.dc.html:4232 的 `hasCount: count > 0`：筆數 0 的分類整顆徽章不畫。
+  testWidgets('筆數 0 的分類沒有徽章節點，分類磚本身還在', (tester) async {
+    await tester.pumpWidget(
+      host(
+        PoolFilterRow(
+          tiles: [
+            for (final (label, count) in const [('全部', 4), ('其他', 0)])
+              PoolFilterChip(
+                id: 'pool.category.$label.chip',
+                label: label,
+                icon: CupertinoIcons.square_grid_2x2_fill,
+                iconBackground: TmsColors.brandPrimary,
+                iconForeground: TmsColors.brandOnPrimary,
+                selected: false,
+                countId: 'pool.category.$label.count',
+                count: count,
+                onTap: () {},
+              ),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.byType(TmsCountBadge), findsOneWidget);
+    expect(find.text('4'), findsOneWidget);
+    expect(find.text('0'), findsNothing);
+    expect(find.text('其他'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  // 原型的選中外環是 `box-shadow: 0 0 0 2px`（Main.dc.html:4232），外擴而不內
+  // 縮，所以磚裡的圖示與標籤不會隨著選中往內跳。
+  testWidgets('選中與未選中的分類磚，內容位置完全一樣', (tester) async {
+    Future<Offset> iconLeftWhenSelected(bool selected) async {
+      await tester.pumpWidget(
+        host(
+          PoolFilterRow(
+            tiles: [
+              PoolFilterChip(
+                id: 'pool.category.全部.chip',
+                label: '全部',
+                icon: CupertinoIcons.square_grid_2x2_fill,
+                iconBackground: TmsColors.brandPrimary,
+                iconForeground: TmsColors.brandOnPrimary,
+                selected: selected,
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      );
+      return tester.getTopLeft(find.byType(Icon));
+    }
+
+    expect(await iconLeftWhenSelected(true), await iconLeftWhenSelected(false));
     expect(tester.takeException(), isNull);
   });
 }

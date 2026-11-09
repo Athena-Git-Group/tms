@@ -24,7 +24,14 @@ void main() {
     await tester.pumpWidget(const CupertinoApp(home: HousekeepingShell()));
     await tester.pumpAndSettle();
 
-    expect(find.text('進行中'), findsOneWidget);
+    // 主卡與列表的狀態標籤都寫「進行中」，所以要指名主卡那一個：
+    // 主卡的標籤是 13pt，列表的狀態標籤是 12pt。
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is Text && w.data == '進行中' && w.style?.fontSize == 13,
+      ),
+      findsOneWidget,
+    );
     expect(find.text('繼續處理'), findsOneWidget);
 
     // 任務頁送出完成之後打的就是這一支。

@@ -4,10 +4,13 @@ import '../theme.dart';
 
 /// 卡片在版面裡的角色，決定圓角大小。
 ///
-/// 設計上只有三級：主視覺卡最圓，分組列表次之，底部面板裡的白卡最小。
-/// 讓呼叫端選角色而不是直接填圓角，是為了避免同一個畫面上出現兩張看起來
-/// 一樣、圓角卻差幾個 pixel 的卡。
+/// 設計上只有四級：蓋住整個畫面的對話卡最圓，主視覺卡次之，再來是分組列表，
+/// 底部面板裡的白卡最小。讓呼叫端選角色而不是直接填圓角，是為了避免同一個
+/// 畫面上出現兩張看起來一樣、圓角卻差幾個 pixel 的卡。
 enum TmsCardStyle {
+  /// 蓋住整個畫面的對話卡，目前只有完成慶祝那一張。
+  dialog,
+
   /// 首頁與待認領的主視覺卡。
   hero,
 
@@ -59,6 +62,8 @@ class TmsCard extends StatelessWidget {
 
   double get _radius {
     switch (style) {
+      case TmsCardStyle.dialog:
+        return TmsRadius.dialog;
       case TmsCardStyle.hero:
         return TmsRadius.cardHero;
       case TmsCardStyle.grouped:
@@ -76,8 +81,11 @@ class TmsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor ?? TmsColors.cardBackground,
         borderRadius: BorderRadius.circular(_radius),
-        border: highlighted
-            ? Border.all(color: TmsColors.brandPrimary, width: 3)
+        // 標亮的外環長在卡的外面而不是內側，卡裡的內容因此不隨標亮移動
+        // （`Main.dc.html:4255` 的 `box-shadow: 0 0 0 3px`）。畫成內縮邊框的話，
+        // 推播把某一張卡標亮的瞬間，那張卡的整段文字會往內跳 3pt。
+        boxShadow: highlighted
+            ? const [BoxShadow(color: TmsColors.brandPrimary, spreadRadius: 3)]
             : null,
       ),
       child: child,

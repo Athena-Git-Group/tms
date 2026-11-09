@@ -83,7 +83,7 @@ public class RepairGivenSteps {
         world.tapTestId("repair.category." + lookup(REPAIR_CATEGORY, category, "工務單類別") + ".chip",
                 SCREEN_TIMEOUT);
         for (int i = 0; i < photoCount; i++) {
-            world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+            context.addPhoto("repair.photo.add-button");
         }
         assertNoTicketInBackend("這句只準備報修面板，還沒按送出");
     }
@@ -123,7 +123,7 @@ public class RepairGivenSteps {
         }
         context.openRepairSheet(staffName, roomNo);
         world.tapTestId("repair.category." + REPAIR_CATEGORY.get("冷氣") + ".chip", SCREEN_TIMEOUT);
-        world.tapTestId("repair.photo.add-button", SCREEN_TIMEOUT);
+        context.addPhoto("repair.photo.add-button");
         world.goOffline();
         world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
         assertNoTicketInBackend("離線送出的單只會留在手機的待送出佇列");

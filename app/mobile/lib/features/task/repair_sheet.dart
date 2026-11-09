@@ -9,6 +9,7 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_option_row.dart';
+import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_selection_chip.dart';
 import '../../core/widgets/tms_sheet.dart';
@@ -100,9 +101,13 @@ class _RepairSheetState extends State<RepairSheet> {
     }
   }
 
-  void _addPhoto() {
+  Future<void> _addPhoto() async {
     if (_photos.length >= _maxPhotos) {
       setState(() => _photoLimitHit = true);
+      return;
+    }
+    final source = await showTmsPhotoActionSheet(context);
+    if (source == null || !mounted) {
       return;
     }
     setState(() {
@@ -112,6 +117,13 @@ class _RepairSheetState extends State<RepairSheet> {
           takenAt: deviceNow(),
         ),
       ));
+    });
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _photos.removeAt(index);
+      _photoLimitHit = false;
     });
   }
 
@@ -227,7 +239,6 @@ class _RepairSheetState extends State<RepairSheet> {
       id: 'repair.sheet',
       child: TmsSheet(
         title: '報修',
-        leadingLabel: '關閉',
         onLeadingTap: widget.onClose,
         bottomAction: TmsSemantics(
           id: 'repair.submit-button',
@@ -278,15 +289,30 @@ class _RepairSheetState extends State<RepairSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const TmsSemantics(
-            id: 'repair.photo.count-label',
-            label: '照片（至少 1 張、最多 3 張）',
-            child: ExcludeSemantics(
-              child: Text(
-                '照片（至少 1 張、最多 3 張）',
-                style: TmsText.footnoteEmphasized,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              const Expanded(
+                child: TmsSemantics(
+                  id: 'repair.photo.count-label',
+                  label: '照片（至少 1 張、最多 3 張）',
+                  child: ExcludeSemantics(
+                    child: Text(
+                      '照片（至少 1 張、最多 3 張）',
+                      style: TmsText.footnoteEmphasized,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              Text(
+                '${_photos.length} / $_maxPhotos',
+                style: TmsText.caption1.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: TmsColors.secondaryLabel,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: TmsSpacing.sm2),
           Wrap(
@@ -480,64 +506,58 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 一張照片的縮圖：圖、浮水印、上傳狀態，失敗時多一顆只重試這一張的按鈕。
-  /// 序號從 1 算起，與 dsl 的句型一致。
+  /// 一張照片的縮圖。序號從 1 算起，與 dsl 的句型一致。
+  ///
+  /// 上傳狀態與浮水印都不畫成文字，改成兩層可及節點掛在同一格上。原型的格子
+  /// 下面沒有任何文字，狀態靠遮罩的長相表達，而浮水印是燒進像素的；自動化
+  /// 測試與讀螢幕的人讀不到像素，所以那兩段文字仍要有節點。
   Widget _thumbnail(int index) {
     final photo = _photos[index];
     final statusText = photo.uploadFailed
         ? '上傳失敗'
         : (photo.photoId == null ? '待上傳' : '已上傳');
-    final TmsPhotoState state;
+    final TmsPhotoUpload upload;
     if (photo.uploadFailed) {
-      state = TmsPhotoState.failed;
+      upload = const TmsPhotoFailed();
     } else if (photo.photoId != null) {
-      state = TmsPhotoState.done;
+      upload = const TmsPhotoUploaded();
     } else if (_submitting) {
-      state = TmsPhotoState.uploading;
+      upload = const TmsPhotoUploading(0);
     } else {
-      state = TmsPhotoState.pending;
+      upload = const TmsPhotoIdle();
     }
-    return SizedBox(
-      width: TmsPhotoCell.size,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TmsPhotoCell(
-            state: state,
-            watermark: TmsSemantics(
-              id: 'repair.photo.${index + 1}.watermark-label',
-              label: photo.watermark,
-              child: ExcludeSemantics(child: Text(photo.watermark)),
-            ),
-            failureAction: TmsSemantics(
-              id: 'repair.photo.${index + 1}.retry-button',
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(
-                  TmsPhotoCell.size,
-                  TmsPhotoCell.size,
-                ),
-                onPressed: () => _retryPhoto(index),
-                child: Text(
-                  '重試',
-                  style: TmsText.caption1.copyWith(
-                    color: TmsColors.brandOnPrimary,
-                  ),
-                ),
-              ),
-            ),
+    return TmsSemantics(
+      id: 'repair.photo.${index + 1}.upload-status',
+      label: statusText,
+      child: TmsSemantics(
+        id: 'repair.photo.${index + 1}.watermark-label',
+        label: photo.watermark,
+        child: _retryWrapper(
+          index,
+          failed: photo.uploadFailed,
+          child: TmsPhotoCell(
+            upload: upload,
+            onRemove: _submitting ? null : () => _removePhoto(index),
+            onRetry: () => _retryPhoto(index),
           ),
-          const SizedBox(height: TmsSpacing.xs),
-          TmsSemantics(
-            id: 'repair.photo.${index + 1}.upload-status',
-            label: statusText,
-            child: ExcludeSemantics(
-              child: Text(statusText, style: TmsText.footnote),
-            ),
-          ),
-        ],
+        ),
       ),
+    );
+  }
+
+  /// 上傳失敗時整格就是重試鈕，所以重試的可及節點只在失敗時存在。平常也掛著
+  /// 的話，自動化測試會在一張都沒失敗的畫面上找到三顆重試鈕。
+  Widget _retryWrapper(
+    int index, {
+    required bool failed,
+    required Widget child,
+  }) {
+    if (!failed) {
+      return child;
+    }
+    return TmsSemantics(
+      id: 'repair.photo.${index + 1}.retry-button',
+      child: child,
     );
   }
 }
