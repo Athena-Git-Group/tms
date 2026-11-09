@@ -1184,6 +1184,14 @@ class PoolItem {
   /// 口徑，也不該跟著裝置時鐘跳動。取不到時為 null，單卡不畫這顆標籤。
   final int? waitedMinutes;
 
+  /// 無房號的單在後端掛在公共區域佔位房上，房號字串就是這幾個字
+  /// （`AutomationRuleService.PUBLIC_AREA_ROOM_NO`；契約沒有獨立的布林旗標，
+  /// 同 [RepairTicketDetail.isPublicArea]）。
+  static const String publicAreaRoomNo = '公共區域';
+
+  /// 這張單開給公共區域、沒有房號。
+  bool get isPublicArea => roomNo == publicAreaRoomNo;
+
   factory PoolItem.fromJson(Map<String, dynamic> json) {
     return PoolItem(
       taskId: json['taskId'] as String,

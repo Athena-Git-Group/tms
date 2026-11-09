@@ -57,17 +57,31 @@ class TmsCategoryTile extends StatelessWidget {
   const TmsCategoryTile({
     super.key,
     required this.label,
-    required this.icon,
     required this.iconBackground,
     required this.iconForeground,
     required this.selected,
     required this.onTap,
+    this.icon,
+    this.iconChild,
     this.badge,
     this.unselectedBackground,
-  });
+  }) : assert(
+         (icon == null) != (iconChild == null),
+         'icon 與 iconChild 只能給一個',
+       );
 
   final String label;
-  final IconData icon;
+
+  /// 圖示方塊裡的字形。自繪的圖示走 [iconChild]，兩者只給一個。
+  final IconData? icon;
+
+  /// 自繪的圖示，畫在 24×24 的範圍內。
+  ///
+  /// `CupertinoIcons` 找不到形狀對得上的字形時走這裡（裁決 R4）。顏色不由這個
+  /// 元件套上去——自繪的圖形各有幾條線要各自上色，呼叫端拿自己傳的
+  /// [iconForeground] 畫，比這裡包一層 `IconTheme` 讓呼叫端去繼承好追。
+  final Widget? iconChild;
+
   final Color iconBackground;
   final Color iconForeground;
   final bool selected;
@@ -121,7 +135,8 @@ class TmsCategoryTile extends StatelessWidget {
               color: iconBackground,
               borderRadius: BorderRadius.circular(TmsRadius.cardInSheet),
             ),
-            child: Icon(icon, size: 24, color: iconForeground),
+            child:
+                iconChild ?? Icon(icon, size: 24, color: iconForeground),
           ),
           const SizedBox(height: TmsSpacing.xs2),
           Text(

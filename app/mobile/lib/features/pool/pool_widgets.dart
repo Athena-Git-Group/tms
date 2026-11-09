@@ -300,11 +300,12 @@ class PoolFilterChip extends StatelessWidget {
     super.key,
     required this.id,
     required this.label,
-    required this.icon,
     required this.iconBackground,
     required this.iconForeground,
     required this.selected,
     required this.onTap,
+    this.icon,
+    this.iconChild,
     this.countId,
     this.count,
     this.unselectedBackground,
@@ -312,7 +313,11 @@ class PoolFilterChip extends StatelessWidget {
 
   final String id;
   final String label;
-  final IconData icon;
+
+  /// 圖示字形與自繪圖示，語意同 [TmsCategoryTile] 的同名欄位。
+  final IconData? icon;
+  final Widget? iconChild;
+
   final Color iconBackground;
   final Color iconForeground;
   final bool selected;
@@ -338,6 +343,7 @@ class PoolFilterChip extends StatelessWidget {
       child: TmsCategoryTile(
         label: label,
         icon: icon,
+        iconChild: iconChild,
         iconBackground: iconBackground,
         iconForeground: iconForeground,
         selected: selected,
