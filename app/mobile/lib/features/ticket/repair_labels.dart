@@ -37,11 +37,42 @@ String repairCategoryShortText(String category) {
 }
 
 /// 完修三選一（契約 CompleteTaskRequest.resolutionType）→ 畫面文字。
-const List<({String key, String label})> repairResolutions = [
-  (key: 'fixed', label: '已修好'),
-  (key: 'temporary', label: '暫時處理'),
-  (key: 'cannot_fix', label: '無法修復'),
+///
+/// 每一個結果都帶一句 [detail]，因為三者的差別不在修好沒有，而在送出之後系統
+/// 替員工做了什麼（開追蹤單、改房況、通知誰）。只給「已修好／暫時處理／無法
+/// 修復」三個詞的話，員工得先知道飯店的流程才選得對。
+/// [hint] 是送出前的最後一次提醒，講同一件事但換成「按下去會發生什麼」。
+const List<({String key, String label, String detail, String hint})>
+repairResolutions = [
+  (
+    key: 'fixed',
+    label: '已修好，房間可正常使用',
+    detail: '通知報修的人與櫃檯',
+    hint: '送出後報修的人與櫃檯會收到通知，房務可以接著做。',
+  ),
+  (
+    key: 'temporary',
+    label: '暫時處理，需要再追蹤',
+    detail: '自動建一張追蹤單，並通知櫃檯與主管',
+    hint: '送出後會自動建立追蹤單，櫃檯與主管會收到通知。',
+  ),
+  (
+    key: 'cannot_fix',
+    label: '無法修復，房間停用（OOO）',
+    detail: 'PMS 房況改為停用，並通知櫃檯與主管',
+    hint: '送出後 PMS 房況改為停用，櫃檯與主管會收到通知。',
+  ),
 ];
+
+/// 完修結果 enum → 畫面文字。認不得的值原樣回傳，不猜一個說法。
+String repairResolutionText(String resolutionType) {
+  for (final entry in repairResolutions) {
+    if (entry.key == resolutionType) {
+      return entry.label;
+    }
+  }
+  return resolutionType;
+}
 
 /// 工務單狀態 enum → 畫面文字。認不得的值原樣回傳，不猜一個說法。
 ///
@@ -151,12 +182,38 @@ String _repairChipText(String state) {
   }
 }
 
+/// 把時刻寫成牆上時鐘那樣的 HH:MM。
+///
+/// 時間軸與狀態列只回答「這一步幾點發生」，年月日交給別的地方講：同一張單的
+/// 四個步驟幾乎都落在同一天，寫出日期只會把那一欄撐寬、把步驟名擠掉。
+String repairClockText(DateTime at) {
+  final local = at.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+/// 從 [since] 到現在過了幾分鐘，不滿一分鐘算 0。
+int repairMinutesSince(DateTime since, {DateTime? now}) {
+  final elapsed = (now ?? DateTime.now()).difference(since.toLocal());
+  return elapsed.isNegative ? 0 : elapsed.inMinutes;
+}
+
 /// 工務單詳情的狀態摘要卡文案：狀態文字之外，已完修的單還要講驗收結果。
+///
+/// 兩種視角都用同一句話回答「現在到哪了」，房務視角把它放進摘要卡、工務視角
+/// 放進狀態列。兩邊各寫一句的話，同一張單在兩個人的手機上會講成不同的事。
 String repairStatusSummaryText(RepairTicketDetail ticket) {
   if (ticket.state == 'done') {
-    return ticket.verifiedBy == null
-        ? '已完修 · 等主管驗收'
-        : '已驗收 · ${ticket.verifiedBy}';
+    final by = ticket.verifiedBy;
+    if (by == null) {
+      return '已完修 · 等主管驗收';
+    }
+    final at = ticket.verifiedAt;
+    final parsed = at == null ? null : DateTime.tryParse(at);
+    return parsed == null
+        ? '已驗收 · $by'
+        : '已驗收 · $by ${repairClockText(parsed)}';
   }
   return repairStateText(ticket.state);
 }

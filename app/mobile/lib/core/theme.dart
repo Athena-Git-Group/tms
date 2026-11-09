@@ -230,6 +230,14 @@ abstract final class TmsColors {
   /// Main.dc.html:4456 — rgba(255,255,255,.35)
   static const Color navButtonBorderOnDark = Color(0x59FFFFFF);
 
+  /// 不跟著標題區變色那顆導覽列圓鈕的外框。
+  /// Main.dc.html:1759 — rgba(255,255,255,.8)
+  static const Color plainNavButtonBorder = Color(0xCCFFFFFF);
+
+  /// 不跟著標題區變色那顆導覽列圓鈕的陰影。
+  /// Main.dc.html:1759 — rgba(0,0,0,.08)
+  static const Color plainNavButtonShadow = Color(0x14000000);
+
   // ── 疊層 ────────────────────────────────────────────────────────────
 
   /// 慶祝頁遮罩。

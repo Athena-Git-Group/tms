@@ -424,6 +424,9 @@ class _InHandTicketRow extends StatelessWidget {
 
 void _openTicket(BuildContext context, String taskId) {
   Navigator.of(context).push(
-    CupertinoPageRoute<void>(builder: (_) => TicketScreen(taskId: taskId)),
+    CupertinoPageRoute<void>(
+      builder: (_) =>
+          TicketScreen(view: TicketView.engineering, taskId: taskId),
+    ),
   );
 }

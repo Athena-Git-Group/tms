@@ -145,7 +145,16 @@ class PushGateway {
         }
         navigator.push(
           CupertinoPageRoute<void>(
-            builder: (_) => TicketScreen(taskId: taskId),
+            builder: (_) => TicketScreen(
+              // 推播是唯一事前不知道這張單要給誰看的入口：報修的人與修的人
+              // 收到的是同一則推播，看到的卻是兩支不同的畫面，所以依登入帳
+              // 號的部門決定，和原型「同一個 App 只依部門切換」一致
+              // （`Main.dc.html:1909`）。
+              view: ApiClient.instance.session?.dept == 'engineering'
+                  ? TicketView.engineering
+                  : TicketView.housekeeping,
+              taskId: taskId,
+            ),
           ),
         );
         break;

@@ -35,6 +35,7 @@ class TmsScrollNavBar extends StatelessWidget {
     required this.scrolledTitle,
     this.titleSuffix,
     this.topInset = 0,
+    this.glassFadeStop = 0.6,
     this.leading,
     this.trailing,
   });
@@ -61,6 +62,13 @@ class TmsScrollNavBar extends StatelessWidget {
   /// 底色一路鋪到螢幕頂端；畫在 [SafeArea] 裡面時留 0，安全區已經被讓出去
   /// 了，再讓一次會多出一條空白。
   final double topInset;
+
+  /// 毛玻璃底色從不透明轉到全透明的起點，0 是導覽列頂端、1 是底端。
+  ///
+  /// 頂著彩色標題區的頁面（任務頁、工務視角詳情）淡得早一點，玻璃與標題區的
+  /// 交界才不明顯；房務視角詳情底下一路都是同一塊灰，晚一點淡掉看起來才像一
+  /// 整片玻璃而不是一條橫帶（`Main.dc.html:4762`）。
+  final double glassFadeStop;
 
   /// 左側項目，通常是 [TmsNavBarBackButton]。
   final Widget? leading;
@@ -169,20 +177,20 @@ class TmsScrollNavBar extends StatelessWidget {
       blur: glassBlur,
       saturation: glassSaturation,
       color: const Color(0x00000000),
-      child: const DecoratedBox(
+      child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: <Color>[
+            colors: const <Color>[
               TmsColors.frozenNavGlass,
               TmsColors.frozenNavGlass,
               Color(0x00F2F2F7),
             ],
-            stops: <double>[0, 0.6, 1],
+            stops: <double>[0, glassFadeStop, 1],
           ),
         ),
-        child: SizedBox.expand(),
+        child: const SizedBox.expand(),
       ),
     );
   }
@@ -221,6 +229,16 @@ class _TmsNavBarTint extends InheritedWidget {
 /// 塊半透明圓底把文字區隔開。底色、邊框與陰影全部由 [TmsScrollNavBar] 透過
 /// [_TmsNavBarTint] 決定，呼叫端只給圖示、無障礙標籤與按下去要做什麼。
 /// `Main.dc.html:4455`
+/// 導覽列圓鈕的兩種長相。
+///
+/// 底下是彩色標題區的頁面用 [tinted]，鈕要跟著標題區一起變深變淺，否則捲到一
+/// 半會出現一顆在深底上發亮的白鈕。底下一路都是同一塊灰的頁面用 [plain]：那裡
+/// 沒有會變的底色可跟，固定的白玻璃鈕才讀得出來（`Main.dc.html:1759`）。
+enum TmsNavBarButtonStyle {
+  tinted,
+  plain,
+}
+
 class TmsNavBarButton extends StatelessWidget {
   const TmsNavBarButton({
     super.key,
@@ -228,7 +246,11 @@ class TmsNavBarButton extends StatelessWidget {
     required this.onPressed,
     required this.child,
     this.semanticsId,
+    this.style = TmsNavBarButtonStyle.tinted,
   });
+
+  /// 這顆鈕要不要跟著標題區變色；見 [TmsNavBarButtonStyle]。
+  final TmsNavBarButtonStyle style;
 
   /// 讀螢幕時唸出來的名字。圓鈕裡面只有圖示，不給就沒有人知道它是什麼。
   final String semanticsLabel;
@@ -250,7 +272,8 @@ class TmsNavBarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = _TmsNavBarTint.maybeOf(context);
-    final onDarkHero = tint?.onDarkHero ?? false;
+    final plain = style == TmsNavBarButtonStyle.plain;
+    final onDarkHero = !plain && (tint?.onDarkHero ?? false);
     // 把按鈕底下的節點併成一個：圓鈕裡面只有圖形，讀螢幕的人要在同一個節
     // 點上同時拿到名字與「可以按」。
     return MergeSemantics(
@@ -273,18 +296,28 @@ class TmsNavBarButton extends StatelessWidget {
                   : TmsColors.navButtonSurface,
               borderRadius: BorderRadius.circular(TmsRadius.pill),
               border: Border.all(
-                color: onDarkHero
-                    ? TmsColors.navButtonBorderOnDark
-                    : TmsColors.navButtonBorder,
-                width: TmsSize.hairline,
+                color: plain
+                    ? TmsColors.plainNavButtonBorder
+                    : (onDarkHero
+                          ? TmsColors.navButtonBorderOnDark
+                          : TmsColors.navButtonBorder),
+                width: plain ? 1 : TmsSize.hairline,
               ),
-              boxShadow: const <BoxShadow>[
-                BoxShadow(
-                  color: TmsColors.glassShadow,
-                  offset: Offset(0, 4),
-                  blurRadius: 16,
-                ),
-              ],
+              boxShadow: plain
+                  ? const <BoxShadow>[
+                      BoxShadow(
+                        color: TmsColors.plainNavButtonShadow,
+                        offset: Offset(0, 2),
+                        blurRadius: 10,
+                      ),
+                    ]
+                  : const <BoxShadow>[
+                      BoxShadow(
+                        color: TmsColors.glassShadow,
+                        offset: Offset(0, 4),
+                        blurRadius: 16,
+                      ),
+                    ],
               child: SizedBox(
                 width: TmsSize.minTouchTarget,
                 height: TmsSize.minTouchTarget,
@@ -292,7 +325,9 @@ class TmsNavBarButton extends StatelessWidget {
                 // 色，也就不會在標題區換底色時漏掉其中一顆鈕。
                 child: IconTheme.merge(
                   data: IconThemeData(
-                    color: tint?.color ?? TmsColors.label,
+                    color: plain
+                        ? TmsColors.labelSoft
+                        : (tint?.color ?? TmsColors.label),
                     size: TmsSize.navBarItemIcon,
                   ),
                   child: Center(child: child),
@@ -318,7 +353,11 @@ class TmsNavBarBackButton extends StatelessWidget {
     required this.onPressed,
     this.semanticsLabel = '返回',
     this.semanticsId = defaultSemanticsId,
+    this.style = TmsNavBarButtonStyle.tinted,
   });
+
+  /// 這顆鈕要不要跟著標題區變色；見 [TmsNavBarButtonStyle]。
+  final TmsNavBarButtonStyle style;
 
   /// 每一支詳情頁的返回鈕共用同一個 accessibility id，自動化測試要從任何
   /// 一頁退回首頁時才不必先判斷自己停在哪一頁。
@@ -333,16 +372,54 @@ class TmsNavBarBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = _TmsNavBarTint.maybeOf(context);
+    final plain = style == TmsNavBarButtonStyle.plain;
     return TmsNavBarButton(
       semanticsId: semanticsId,
       semanticsLabel: semanticsLabel,
       onPressed: onPressed,
+      style: style,
       child: CustomPaint(
-        size: const Size(TmsSize.navBarChevron, TmsSize.navBarChevron),
-        painter: _NavChevronPainter(color: tint?.color ?? TmsColors.label),
+        size: plain
+            ? const Size(_plainChevronWidth, _plainChevronHeight)
+            : const Size(TmsSize.navBarChevron, TmsSize.navBarChevron),
+        painter: plain
+            ? const _PlainChevronPainter()
+            : _NavChevronPainter(color: tint?.color ?? TmsColors.label),
       ),
     );
   }
+
+  /// `Main.dc.html:1759` 的 11 × 18 箭頭。
+  static const double _plainChevronWidth = 11;
+  static const double _plainChevronHeight = 18;
+}
+
+/// 畫 [TmsNavBarButtonStyle.plain] 那顆白鈕裡的箭頭。
+///
+/// 白玻璃底的對比低，筆畫細了在亮處就看不見，所以這個箭頭的粗細與長寬自成一
+/// 組，不跟著彩色標題區那顆走（`Main.dc.html:1759`）。
+class _PlainChevronPainter extends CustomPainter {
+  const _PlainChevronPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 12, size.height / 20);
+    canvas.drawPath(
+      Path()
+        ..moveTo(10, 2)
+        ..lineTo(2, 10)
+        ..lineTo(10, 18),
+      Paint()
+        ..color = TmsColors.labelSoft
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PlainChevronPainter oldDelegate) => false;
 }
 
 /// 畫導覽列返回鈕裡那個向左的箭頭。
