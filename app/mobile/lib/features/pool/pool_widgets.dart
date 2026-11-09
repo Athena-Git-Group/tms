@@ -4,6 +4,7 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_category_tile.dart';
+import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_tag.dart';
 
 /// 房務待認領與工務待認領共用的單卡、欄位列與分類磚。
@@ -168,29 +169,32 @@ class PoolTagRow extends StatelessWidget {
 
 /// 單卡底部那顆滿寬的「認領這單」。
 class PoolClaimButton extends StatelessWidget {
-  const PoolClaimButton({super.key, required this.id, required this.onPressed});
+  const PoolClaimButton({
+    super.key,
+    required this.id,
+    required this.onPressed,
+    this.glow = TmsPillGlow.standard,
+  });
 
   final String id;
   final VoidCallback onPressed;
+
+  /// 要畫哪一組光暈。房務待認領用預設那一組，工務待認領在原型裡用的是
+  /// [TmsPillGlow.alt]。
+  final TmsPillGlow? glow;
+
+  /// 認領鈕比置底的主按鈕矮一截：它在單卡裡面，跟整張卡比例要對得上。
+  static const double _height = 46;
 
   @override
   Widget build(BuildContext context) {
     return TmsSemantics(
       id: id,
-      child: GestureDetector(
-        onTap: onPressed,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 46),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: TmsColors.brandPrimary,
-            borderRadius: BorderRadius.circular(TmsRadius.pill),
-          ),
-          child: Text(
-            '認領這單',
-            style: TmsText.headline.copyWith(color: TmsColors.brandOnPrimary),
-          ),
-        ),
+      child: TmsPillButton(
+        label: '認領這單',
+        height: _height,
+        glow: glow,
+        onPressed: onPressed,
       ),
     );
   }

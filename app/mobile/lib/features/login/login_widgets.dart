@@ -249,39 +249,3 @@ class LoginLockoutCard extends StatelessWidget {
     );
   }
 }
-
-/// 置底的動作列：白底、上緣一條線，裡面由上到下排按鈕。
-///
-/// 送出鈕固定在畫面底部，不跟著表單捲走：員工填完最後一格時，手指已經在螢幕
-/// 下半部，送出鈕要在原地等他。
-class LoginActionBar extends StatelessWidget {
-  const LoginActionBar({super.key, required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(
-        TmsSpacing.screenEdge,
-        TmsSpacing.sm2,
-        TmsSpacing.screenEdge,
-        TmsSpacing.sm2,
-      ),
-      decoration: const BoxDecoration(
-        color: TmsColors.cardBackground,
-        border: Border(
-          top: BorderSide(
-            color: TmsColors.opaqueSeparator,
-            width: TmsSize.hairline,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
-    );
-  }
-}

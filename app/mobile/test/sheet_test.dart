@@ -153,18 +153,24 @@ void main() {
       ),
     );
 
-    // `CupertinoButton.filled` 的停用色跟設計稿對不上（`Main.dc.html:4941`）。
-    final decoration = tester
-        .widget<DecoratedBox>(
-          find
-              .descendant(
-                of: find.byType(TmsSheetButton),
-                matching: find.byType(DecoratedBox),
-              )
-              .first,
+    // 不能按的時候底色是固定的中灰（`Main.dc.html:4941`），框架自己的停用淡色
+    // 跟設計稿對不上。底色由膠囊按鈕內層畫，不假設它落在哪一層 decoration。
+    final fills = tester
+        .widgetList<DecoratedBox>(
+          find.descendant(
+            of: find.byType(TmsSheetButton),
+            matching: find.byType(DecoratedBox),
+          ),
         )
-        .decoration as BoxDecoration;
-    expect(decoration.color, const Color(0xFFC6C6C8));
+        .map(
+          (box) => switch (box.decoration) {
+            final BoxDecoration d => d.color,
+            final ShapeDecoration d => d.color,
+            _ => null,
+          },
+        )
+        .whereType<Color>();
+    expect(fills, contains(const Color(0xFFC6C6C8)));
     final label = tester.widget<Text>(find.text('送出'));
     expect(label.style?.color, TmsColors.brandOnPrimary);
   });

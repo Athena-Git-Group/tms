@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import '../theme.dart';
 import 'tms_glass.dart';
 import 'tms_motion.dart';
+import 'tms_pill_button.dart';
 
 /// 左上角那一顆鈕要帶員工回到哪裡。
 ///
@@ -320,6 +321,8 @@ class TmsSheet extends StatelessWidget {
 /// 面板置底那一顆滿寬膠囊鈕，以及面板裡少數要跟它長一樣的次要動作。
 ///
 /// 高度與圓角跟著設計走（52pt 滿寬膠囊），呼叫端只決定文字、主次與可不可按。
+/// 實心的那一種直接是 [TmsPillButton]，所以配色、停用時的灰底與可按時的光暈
+/// 跟畫面上其他主按鈕同一套，不會面板裡一種、畫面上另一種。
 class TmsSheetButton extends StatelessWidget {
   const TmsSheetButton({
     super.key,
@@ -345,27 +348,28 @@ class TmsSheetButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground =
-        filled ? TmsColors.brandOnPrimary : TmsColors.brandPrimary;
+    if (filled) {
+      return TmsPillButton(
+        label: label,
+        height: height,
+        glow: TmsPillGlow.alt,
+        onPressed: onPressed,
+        child: child,
+      );
+    }
     final content = child ??
-        Text(label, style: TmsText.headline.copyWith(color: foreground));
-    // 不能按的時候底色是固定的中灰，白字留著（`Main.dc.html:4941`）。
-    // `CupertinoButton.filled` 改用框架自己的淡色，那個值跟設計稿對不上。
-    final background = filled
-        ? (onPressed == null
-            ? TmsColors.opaqueSeparator
-            : TmsColors.brandPrimary)
-        : TmsColors.cardBackground;
+        Text(
+          label,
+          style: TmsText.headline.copyWith(color: TmsColors.brandPrimary),
+        );
     return SizedBox(
       width: double.infinity,
       height: height,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: background,
+          color: TmsColors.cardBackground,
           borderRadius: BorderRadius.circular(TmsRadius.pill),
-          border: filled
-              ? null
-              : Border.all(color: TmsColors.brandPrimary, width: 1.5),
+          border: Border.all(color: TmsColors.brandPrimary, width: 1.5),
         ),
         child: CupertinoButton(
           padding: EdgeInsets.zero,
