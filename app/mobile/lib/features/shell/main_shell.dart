@@ -110,9 +110,7 @@ class _MainShellBody extends StatelessWidget {
 
 /// 分頁列上的一格圖示，右上角可以掛一顆紅色數量徽章。
 ///
-/// 計數是 0 時整顆徽章不畫。分類磚上的徽章 0 也照顯示，那是因為那幾顆數字
-/// 本身就是驗收要讀的值；分頁列這兩顆沒有人讀，留一顆「0」在圖示旁邊只會
-/// 讓員工以為有東西等著處理。
+/// 計數是 0 的時候整顆徽章不畫，理由見 [TmsCountBadge] 的類別註解。
 class _TabIcon extends StatelessWidget {
   const _TabIcon({required this.icon, required this.badgeCount});
 
@@ -132,7 +130,7 @@ class _TabIcon extends StatelessWidget {
         Positioned(
           top: -_tabBadgeInset,
           left: _tabIconSize * _tabBadgeLeftRatio,
-          child: TmsCountBadge(count: badgeCount),
+          child: TmsCountBadge.tabBar(count: badgeCount),
         ),
       ],
     );

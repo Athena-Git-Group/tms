@@ -81,8 +81,11 @@ class TmsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor ?? TmsColors.cardBackground,
         borderRadius: BorderRadius.circular(_radius),
-        border: highlighted
-            ? Border.all(color: TmsColors.brandPrimary, width: 3)
+        // 標亮的外環長在卡的外面而不是內側，卡裡的內容因此不隨標亮移動
+        // （`Main.dc.html:4255` 的 `box-shadow: 0 0 0 3px`）。畫成內縮邊框的話，
+        // 推播把某一張卡標亮的瞬間，那張卡的整段文字會往內跳 3pt。
+        boxShadow: highlighted
+            ? const [BoxShadow(color: TmsColors.brandPrimary, spreadRadius: 3)]
             : null,
       ),
       child: child,
