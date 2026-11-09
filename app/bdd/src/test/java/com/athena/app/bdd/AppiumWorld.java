@@ -12,6 +12,7 @@ import io.cucumber.java.Before;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.remote.RemoteWebElement;
 import org.openqa.selenium.support.ui.FluentWait;
@@ -1305,14 +1306,36 @@ public class AppiumWorld {
     }
 
     /**
-     * 定位不到元素時丟出帶現場的斷言錯誤。訊息裡附上元素樹的檔案路徑，看 log 的人不必
-     * 重跑一次就能知道畫面當時停在哪一頁、有哪些元素。
+     * 定位不到元素時丟出帶現場的斷言錯誤。訊息裡附上元素樹與截圖的檔案路徑，看 log 的人
+     * 不必重跑一次就能知道畫面當時停在哪一頁、有哪些元素、實際長什麼樣子。
+     *
+     * <p>兩份現場都要留。元素樹只看得到這個 App 自己的元素，系統層的東西（鍵盤、
+     * 自動填入提示、系統對話框）不在裡面；畫面被那類東西蓋住時，元素樹會顯示該有的元素
+     * 都在、只是全部 {@code visible="false"}，看起來像 App 沒畫出來，截圖才看得出真相。
      */
     private WebElement failWithPageSource(String id, Duration timeout, RuntimeException cause) {
         String dump = dumpPageSourceTagged("missing-" + id);
+        String shot = dumpScreenshotTagged("missing-" + id);
         throw new AssertionError(
-                "等不到畫面元素 " + id + "（逾時 " + timeout.getSeconds() + "s，含往下捲動尋找）；元素樹 " + dump,
+                "等不到畫面元素 " + id + "（逾時 " + timeout.getSeconds() + "s，含往下捲動尋找）；元素樹 "
+                        + dump + "；截圖 " + shot,
                 cause);
+    }
+
+    /**
+     * 把目前畫面存成 PNG，回傳檔案路徑。檔名帶標籤與時間戳，和元素樹同一套命名。
+     *
+     * <p>存檔失敗就把失敗原因當成路徑回傳，不往外丟例外：這只是輔助資訊，為了它再丟一個
+     * 例外會蓋掉真正的失敗原因。
+     */
+    private String dumpScreenshotTagged(String tag) {
+        String path = "/tmp/tms-app-bdd-" + tag + "-" + System.currentTimeMillis() + ".png";
+        try {
+            Files.write(Path.of(path), driver().getScreenshotAs(OutputType.BYTES));
+            return path;
+        } catch (Exception e) {
+            return "（存檔失敗：" + e.getMessage() + "）";
+        }
     }
 
     /**

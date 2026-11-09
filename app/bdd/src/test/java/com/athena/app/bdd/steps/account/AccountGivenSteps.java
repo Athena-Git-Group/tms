@@ -56,7 +56,7 @@ public class AccountGivenSteps {
      */
     @假設("{string} 已在 App 登入，目前手機離線")
     public void loggedInAndPhoneOffline(String staffName) {
-        loginViaSharedDevice(staffName);
+        world.ensureLoggedInAs(world.staff(staffName));
         openMeTab();
         world.goOffline();
     }
@@ -69,7 +69,7 @@ public class AccountGivenSteps {
     public void loggedInWithTaskInProgress(String staffName, String roomNo) {
         world.seedTasks(staffName, List.of(
                 new AppiumWorld.TaskFixture(roomNo, "退房清潔", null, null, "進行中", 0, null, null)));
-        loginViaSharedDevice(staffName);
+        world.ensureLoggedInAs(world.staff(staffName));
         // 「進行中」是被改種成 accepted ＋ 欠一次「在 App 按開始」的起始狀態，
         // 不補這一步，任務停在 accepted，登出守衛看不到 doing 的單就不會攔，
         // 而這個場景要驗的正是它會攔。
@@ -85,7 +85,7 @@ public class AccountGivenSteps {
     @假設("{string} 已用臨時密碼登入，正在強制改密畫面")
     public void loggedInWithTemporaryPasswordAtForceChangeScreen(String staffName) {
         world.backend().markMustChangePassword(world.staff(staffName).id());
-        loginViaSharedDevice(staffName);
+        submitSharedDeviceLogin(staffName);
         world.waitForTestId("login.force-password-change.new-password-field", SCREEN_TIMEOUT);
     }
 
@@ -108,12 +108,18 @@ public class AccountGivenSteps {
     }
 
     /**
-     * 「已在 App 登入」的共用動作：先把裝置清成共用手機模式（不依賴前一個情境留下的
-     * 記住帳號狀態），再在登入畫面輸入員工編號與密碼送出。元素 id 依模組 dsl.md：
+     * 以共用手機模式送出一次登入，但不等首頁。
+     *
+     * <p>先把裝置清成共用手機模式（不依賴前一個情境留下的記住帳號狀態），再在登入
+     * 畫面輸入員工編號與密碼送出。元素 id 依模組 dsl.md：
      * {@code login.shared-device.staff-id-field}／{@code login.password-field}／
      * {@code login.submit-button}。
+     *
+     * <p>只有臨時密碼那一句用這裡，其餘「已在 App 登入」的句子一律走
+     * {@link AppiumWorld#ensureLoggedInAs}。臨時密碼登入成功後落地的是強制改密畫面
+     * 而不是首頁，{@code ensureLoggedInAs} 等的是首頁，用它會逾時。
      */
-    private void loginViaSharedDevice(String staffName) {
+    private void submitSharedDeviceLogin(String staffName) {
         BackendChannel.CreatedStaff staff = world.staff(staffName);
         world.postBackdoorJson("/remembered-account", "{\"employee\":null}");
         world.typeInto("login.shared-device.staff-id-field", SCREEN_TIMEOUT, staff.loginId());
@@ -122,10 +128,17 @@ public class AccountGivenSteps {
     }
 
     /**
-     * 切到「我的」分頁。Tab bar 項目沒有專屬 accessibility id（ui-plan 的 id 表只定義到
-     * 畫面內元素），用分頁的可見文字「我的」點擊，再以 {@code me.screen} 確認真的到頁。
+     * 切到「我的」分頁，不論前一步把 App 留在哪一頁。
+     *
+     * <p>先退回首頁再點分頁，因為 tab bar 只畫在六支分頁的根畫面上。前一步鋪前提時
+     * 可能把 App 推到疊在分頁之上的頁面（例如為了按「開始」而進任務頁），那裡找不到
+     * 「我的」這個字，直接點會逾時。
+     *
+     * <p>Tab bar 項目沒有專屬 accessibility id（ui-plan 的 id 表只定義到畫面內元素），
+     * 所以用分頁的可見文字「我的」點擊，再以 {@code me.screen} 確認真的到頁。
      */
     private void openMeTab() {
+        world.ensureOnHome(SCREEN_TIMEOUT);
         world.waitForLabelContaining("我的", SCREEN_TIMEOUT).click();
         world.waitForTestId("me.screen", SCREEN_TIMEOUT);
     }
