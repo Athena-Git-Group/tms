@@ -13,6 +13,7 @@ import '../../core/widgets/tms_tag.dart';
 import '../pool/pool_widgets.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/repair_ticket_form_screen.dart';
+import '../ticket/ticket_screen.dart';
 
 /// 工務待認領（ui-plan 畫面 13 的 `engPool`）。
 ///
@@ -31,15 +32,20 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
   /// 分流磚：畫面文字與 accessibility id 的 {source} 段；urgent 是急件
   /// 維度、staff／desk 是來源維度（契約 listDeptPool 的兩個篩選參數）。
   /// `sourceParam` 是該磚要送給後端的 `source` 值，沒有值代表不帶這個參數。
-  /// 圖示方塊的配色照原型的工務分流磚逐格指定：急件紅、房務報修橘、櫃檯黃，
-  /// 員工在同一排磚上靠顏色而不是讀字找到要的那一格。
+  /// 圖示方塊的配色照原型的工務分流磚逐格指定：急件紅、櫃檯黃、房務報修橘，
+  /// 員工在同一排磚上靠顏色而不是讀字找到要的那一格（`Main.dc.html:3839-3842`）。
+  ///
+  /// 四格的順序也照那四行：來源那兩格是櫃檯在前、房務報修在後。
+  ///
+  /// 圖示一律是描邊字形（原型四格都是 `fill="none" stroke-width="1.9"`，
+  /// `Main.dc.html:981`），不用 `_fill` 實心變體。
   static const _categories = [
     (
       key: 'all',
       label: '全部',
       sourceParam: null,
       countKey: null,
-      icon: CupertinoIcons.square_grid_2x2_fill,
+      icon: CupertinoIcons.square_grid_2x2,
       iconBackground: TmsColors.brandContainer,
       iconForeground: TmsColors.brandPrimary,
     ),
@@ -48,27 +54,27 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       label: '急件',
       sourceParam: null,
       countKey: 'urgent',
-      icon: CupertinoIcons.exclamationmark_triangle_fill,
+      icon: CupertinoIcons.bolt,
       iconBackground: TmsColors.errorContainer,
       iconForeground: TmsColors.onErrorContainer,
-    ),
-    (
-      key: 'staff',
-      label: '房務報修',
-      sourceParam: 'staff_report',
-      countKey: 'staffReport',
-      icon: CupertinoIcons.wrench_fill,
-      iconBackground: TmsColors.brandAccentContainer,
-      iconForeground: TmsColors.brandOnAccentContainer,
     ),
     (
       key: 'desk',
       label: '櫃檯',
       sourceParam: 'desk_forward',
       countKey: 'deskForward',
-      icon: CupertinoIcons.person_2_fill,
+      icon: CupertinoIcons.person_2,
       iconBackground: TmsColors.otherContainer,
       iconForeground: TmsColors.onOtherContainer,
+    ),
+    (
+      key: 'staff',
+      label: '房務報修',
+      sourceParam: 'staff_report',
+      countKey: 'staffReport',
+      icon: CupertinoIcons.wrench,
+      iconBackground: TmsColors.brandAccentContainer,
+      iconForeground: TmsColors.brandOnAccentContainer,
     ),
   ];
 
@@ -148,102 +154,13 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pool = _pool;
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 捲動內容的上緣留白。用 ListView 的那幾頁寫在 `padding` 的 top，這一頁
-        // 的內容是 `Column`，所以自己擺一段。
-        const SizedBox(height: TmsSpacing.md),
-        // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
-        // 員工要先知道現在連不上，而不是按了認領才發現。
-        const SystemStatusBar(
-          padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
-        ),
-        Padding(
-          // 上緣不留白：磚列上方那一段由連線狀態列的
-          // `SystemStatusBar.contentGap` 帶，這裡再留一次會疊成兩段。
-          padding: const EdgeInsets.only(bottom: TmsSpacing.md),
-          // 徽章只掛在急件、房務報修、櫃檯三格，數字一律讀後端回的 counts，
-          // 不在本機數列表：帶篩選查詢時列表只有該分流的單，本機數出來的是
-          // 「這一頁有幾張」而不是「這個分流有幾張」。「全部」那格沒有徽章，
-          // 因為下面整排單卡就是它的數字。
-          //
-          // 這三格是 0 的時候整顆徽章不畫，照原型。房務的分類磚相反，0 也照
-          // 畫——那個數字是 `待認領分類標籤顯示如下` 那句斷言要讀的節點，藏
-          // 起來就讀不到。兩邊不同是各自的理由造成的，不要為了看起來一致把
-          // 其中一邊改掉。
-          child: PoolFilterRow(
-            tiles: [
-              for (final category in _categories)
-                PoolFilterChip(
-                  id: 'engPool.category.${category.key}.chip',
-                  label: category.label,
-                  icon: category.icon,
-                  iconBackground: category.iconBackground,
-                  iconForeground: category.iconForeground,
-                  selected: _selected == category.key,
-                  count: _badgeCount(category.countKey),
-                  unselectedBackground: TmsCategoryTile.translucentBackground,
-                  onTap: () {
-                    _selected = category.key;
-                    _fetch();
-                  },
-                ),
-            ],
-          ),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(_error!),
-          ),
-        if (pool == null && _error == null)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: CupertinoActivityIndicator(),
-          ),
-        if (pool != null && pool.items.isEmpty)
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(
-                bottom: TmsSpacing.scrollPadBottom(
-                  MediaQuery.paddingOf(context).bottom,
-                ),
-              ),
-              child: TmsContentUnavailable(
-                id: 'engPool.empty-state',
-                copy: TmsEmptyStates.engineeringPool(
-                  filterApplied: _selected != 'all',
-                  poolHasItems: pool.counts.values.any((count) => count > 0),
-                ),
-                onAction: () {
-                  _selected = 'all';
-                  _fetch();
-                },
-              ),
-            ),
-          )
-        else if (pool != null)
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.only(
-                bottom: TmsSpacing.scrollPadBottom(
-                  MediaQuery.paddingOf(context).bottom,
-                ),
-              ),
-              children: [for (final item in pool.items) _engPoolCard(item)],
-            ),
-          ),
-      ],
-    );
-
     return TmsSemantics(
       id: 'engPool.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
+        // 導覽列只剩開工單那顆鈕：這一頁的標題是內容的一部分，跟著分流磚與
+        // 單卡一起捲（`Main.dc.html:975` 的 `<h1>`）。
         navigationBar: CupertinoNavigationBar(
-          middle: const Text('待認領'),
           trailing: TmsSemantics(
             id: 'engPool.create-ticket-fab',
             child: CupertinoButton(
@@ -261,9 +178,96 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
         ),
         // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
         // 的那段留白由清單自己帶。
-        child: SafeArea(bottom: false, child: content),
+        child: SafeArea(
+          bottom: false,
+          child: ListView(
+            padding: EdgeInsets.only(
+              top: TmsSpacing.md,
+              bottom: TmsSpacing.scrollPadBottom(
+                MediaQuery.paddingOf(context).bottom,
+              ),
+            ),
+            children: _content(),
+          ),
+        ),
       ),
     );
+  }
+
+  List<Widget> _content() {
+    final pool = _pool;
+    return [
+      // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
+      // 員工要先知道現在連不上，而不是按了認領才發現。
+      const SystemStatusBar(
+        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+        child: Text('待認領', style: TmsText.largeTitle),
+      ),
+      const SizedBox(height: TmsSpacing.lg),
+      // 徽章只掛在急件、櫃檯、房務報修三格，數字一律讀後端回的 counts，
+      // 不在本機數列表：帶篩選查詢時列表只有該分流的單，本機數出來的是
+      // 「這一頁有幾張」而不是「這個分流有幾張」。「全部」那格沒有徽章，
+      // 因為下面整排單卡就是它的數字。
+      //
+      // 這三格是 0 的時候整顆徽章不畫，照原型。房務的分類磚相反，0 也照
+      // 畫——那個數字是 `待認領分類標籤顯示如下` 那句斷言要讀的節點，藏
+      // 起來就讀不到。兩邊不同是各自的理由造成的，不要為了看起來一致把
+      // 其中一邊改掉。
+      PoolFilterRow(
+        tiles: [
+          for (final category in _categories)
+            PoolFilterChip(
+              id: 'engPool.category.${category.key}.chip',
+              label: category.label,
+              icon: category.icon,
+              iconBackground: category.iconBackground,
+              iconForeground: category.iconForeground,
+              selected: _selected == category.key,
+              count: _badgeCount(category.countKey),
+              unselectedBackground: TmsCategoryTile.translucentBackground,
+              onTap: () {
+                _selected = category.key;
+                _fetch();
+              },
+            ),
+        ],
+      ),
+      if (_error != null) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TmsSpacing.screenEdge,
+          ),
+          child: Text(_error!),
+        ),
+      ],
+      if (pool == null && _error == null) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        const Center(child: CupertinoActivityIndicator()),
+      ],
+      if (pool != null && pool.items.isEmpty) ...[
+        const SizedBox(height: TmsSpacing.lg),
+        TmsContentUnavailable(
+          id: 'engPool.empty-state',
+          copy: TmsEmptyStates.engineeringPool(
+            filterApplied: _selected != 'all',
+            poolHasItems: pool.counts.values.any((count) => count > 0),
+          ),
+          onAction: () {
+            _selected = 'all';
+            _fetch();
+          },
+        ),
+      ] else if (pool != null) ...[
+        // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分流磚與第一張卡之間才
+        // 是原型的 16（`Main.dc.html:973`）。
+        const SizedBox(height: TmsSpacing.sm),
+        for (final item in pool.items) _engPoolCard(item),
+      ],
+    ];
   }
 
   /// 替一格分流磚算出徽章上的數字；回 null 時那一格不畫徽章。
@@ -298,52 +302,74 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
       waitedMinutes: item.waitedMinutes,
       reminderStage: item.reminderStage,
     );
+    final roomSquare = TmsRoomSquare(
+      where: item.roomNo,
+      label: repairCategoryShortText(item.category),
+      // 待認領裡的單都還沒人接，不會是已完修。
+      palette: tmsRepairSquarePalette(isUrgent: item.urgent, isDone: false),
+    );
 
     return PoolCard(
       id: '$itemId.card',
       semanticsLabel: '$ticketNo ${item.roomNo} ${item.title}',
+      // 卡的上半整塊可點，開這張單的工務單詳情（`Main.dc.html:992`）。工務在
+      // 決定要不要接之前得先看照片與描述，只有認領鈕可按的話，他只能先接再
+      // 看，接錯了還要放回去。
+      onTap: () => Navigator.of(context).push(
+        CupertinoPageRoute<void>(
+          builder: (_) => TicketScreen(taskId: item.taskId),
+        ),
+      ),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TmsRoomSquare(
-              where: item.roomNo,
-              label: repairCategoryShortText(item.category),
-              // 待認領裡的單都還沒人接，不會是已完修。
-              palette: tmsRepairSquarePalette(
-                isUrgent: item.urgent,
-                isDone: false,
-              ),
-            ),
+            // 原型的方塊寫區域名（餐廳、1F 大廳）、另外掛一顆「公共區域」標籤
+            // （`Main.dc.html:3850`）。後端沒有區域名這個欄位，無房號的單房號
+            // 字串就是「公共區域」四個字，所以方塊已經把這件事說完了，再掛一
+            // 顆一模一樣的標籤只是讓同一句話出現兩次。要讀的節點掛在方塊上，
+            // 與房務待認領同一套。
+            if (item.isPublicArea)
+              TmsSemantics(
+                id: '$itemId.common-area-label',
+                label: PoolItem.publicAreaRoomNo,
+                child: roomSquare,
+              )
+            else
+              roomSquare,
             const SizedBox(width: TmsSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$ticketNo · ${item.roomNo}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TmsText.headline,
-                  ),
-                  const SizedBox(height: TmsSpacing.xxs),
+                  // 主標是工單標題、副標是來源（`Main.dc.html:998-999`）。
+                  // 工務掃這一列要先讀到「壞的是什麼」，單號只在對單時才用
+                  // 得上，房號左邊的方塊已經寫了。
                   Text(
                     item.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TmsText.subheadline
-                        .copyWith(color: TmsColors.secondaryLabel),
+                    style: TmsText.headline,
                   ),
+                  if (sourceLabel != null) ...[
+                    const SizedBox(height: TmsSpacing.xs),
+                    // 原型的副標是來源說明全句（「住客掃碼 · 規則命中
+                    // 「冷氣」」「櫃檯 林佩君 派單（日文已翻譯）」），而
+                    // `PoolItem` 只給得出來源 enum，報修人與規則命中都沒有
+                    // 欄位。缺的那幾段不湊，副標只寫來源這一段。
+                    PoolCardSubtitle(
+                      id: '$itemId.source-label',
+                      text: sourceLabel,
+                    ),
+                  ],
                   const SizedBox(height: TmsSpacing.xs),
                   PoolTagRow(
                     tags: [
+                      // 原型的急件標籤帶判定規則（「急件 · 安全類：漏水」，
+                      // `Main.dc.html:3848`），但 `PoolItem` 沒有規則欄位，
+                      // 所以只寫得出「急件」兩個字。
                       if (item.urgent)
                         const TmsTag(label: '急件', tone: TmsTagTone.danger),
-                      if (sourceLabel != null)
-                        PoolCardField(
-                          id: '$itemId.source-label',
-                          text: sourceLabel,
-                        ),
                       // 等待時間排在整列最後：前面幾顆講的是「這張單是什麼
                       // 單」，它講的是「它擱了多久」，工務先認單再看久不久。
                       ?waitedTag,

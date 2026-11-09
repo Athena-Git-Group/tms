@@ -113,7 +113,9 @@ void main() {
       for (final label in const ['全部', '急件', '房務報修', '櫃檯']) {
         expect(find.text(label), findsWidgets);
       }
-      expect(find.text('W-0412 · 401'), findsOneWidget);
+      // 主標是工單標題、副標是來源（`Main.dc.html:998-999`）。
+      expect(find.text('冷氣不冷'), findsOneWidget);
+      expect(find.text('房務報修'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 

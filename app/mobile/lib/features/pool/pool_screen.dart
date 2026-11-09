@@ -268,10 +268,6 @@ class _HousekeepingPoolCard extends StatelessWidget {
     required this.onClaim,
   });
 
-  /// 無房號的單在後端掛在公共區域佔位房上，房號字串就是「公共區域」
-  /// （`AutomationRuleService.PUBLIC_AREA_ROOM_NO`）。
-  static const String publicAreaRoomNo = '公共區域';
-
   /// 未接提醒階段（契約 `PoolItem.reminderStage`）→ 單卡標籤 id 後綴、文字與
   /// 語氣。只有這兩段，沒有第三段，也不另外做橫幅或徽章。
   ///
@@ -302,7 +298,6 @@ class _HousekeepingPoolCard extends StatelessWidget {
     // 的 `--state` 修飾慣例：沒標亮是 `pool.card.{roomNo}`，標亮時是
     // `pool.card.{roomNo}--highlighted`。
     final cardId = 'pool.card.${item.roomNo}';
-    final isPublicArea = item.roomNo == publicAreaRoomNo;
     // 副標整行的設計是「{來源} · 約 N 分」，但 `GET /pool` 的 PoolItem 沒有
     // 預估分鐘這個欄位，所以只寫得出來源那一段。後端補上欄位之前，這裡寧可
     // 短一截也不湊一個數字：單卡上的分鐘數員工會拿來排今天要先做哪一間。
@@ -325,7 +320,7 @@ class _HousekeepingPoolCard extends StatelessWidget {
 
     final categoryAppearance = tmsCategoryAppearance(item.category);
     final roomSquare = TmsRoomSquare(
-      where: isPublicArea ? publicAreaRoomNo : item.roomNo,
+      where: item.roomNo,
       label: categoryAppearance.label,
       palette: categoryAppearance.palette,
     );
@@ -340,10 +335,10 @@ class _HousekeepingPoolCard extends StatelessWidget {
           children: [
             // 公共區域的單沒有房號，方塊上寫的就是「公共區域」四個字；驗收
             // 要讀的是方塊上這段文字，所以 id 掛在方塊本身。
-            if (isPublicArea)
+            if (item.isPublicArea)
               TmsSemantics(
                 id: 'pool.card.common-area-label',
-                label: publicAreaRoomNo,
+                label: PoolItem.publicAreaRoomNo,
                 child: roomSquare,
               )
             else
