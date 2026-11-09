@@ -50,6 +50,7 @@ void main() {
         TmsText.footnoteEmphasized,
         TmsText.footnoteMedium,
         TmsText.caption1,
+        TmsText.caption1Regular,
         TmsText.caption2,
         TmsText.caption3,
         TmsText.displayHero,

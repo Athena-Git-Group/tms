@@ -193,12 +193,12 @@ void main() {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TmsOptionRow(
+            TmsOptionRow.reason(
               title: const Text('請勿打擾'),
               selected: true,
               onTap: () {},
             ),
-            TmsOptionRow(
+            TmsOptionRow.reason(
               title: const Text('住客還在房內'),
               onTap: () {},
             ),
@@ -207,7 +207,7 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(CupertinoIcons.check_mark), findsOneWidget);
+    expect(find.byType(TmsOptionCheck), findsOneWidget);
   });
 
   // 原型 Main.dc.html:1509-1533。

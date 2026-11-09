@@ -85,6 +85,7 @@ class _AskSheetState extends State<AskSheet> {
               }
               return TmsGroupedSection(
                 style: TmsCardStyle.inSheet,
+                trailingDivider: true,
                 children: [
                   for (var i = 0; i < suggestions.length; i++)
                     _SuggestionRow(
@@ -163,14 +164,13 @@ class _SuggestionRow extends StatelessWidget {
     return TmsSemantics(
       id: 'ask.suggestion.$index',
       explicitChildNodes: true,
-      child: TmsOptionRow(
-        accessory: TmsOptionAccessory.chevron,
+      child: TmsOptionRow.suggestion(
         onTap: onTap,
         title: TmsSemantics(
           id: 'ask.suggestion.$index.question',
           child: Text(suggestion.question),
         ),
-        subtitle: TmsSemantics(
+        scope: TmsSemantics(
           id: 'ask.suggestion.$index.scope',
           child: Text(suggestion.scope),
         ),

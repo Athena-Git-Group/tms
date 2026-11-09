@@ -386,6 +386,18 @@ abstract final class TmsText {
     color: TmsColors.label,
   );
 
+  /// Caption 1 的常規字重版。只有一處用得上，就是「查一下」建議問題列底下那
+  /// 行範圍字（`Main.dc.html:1603`）。它比同列主文小 5pt，靠位置而不是字級被
+  /// 讀到。主文已經把問題講完，範圍只是補一句這題答的是哪一間房。
+  ///
+  /// 原型沒有宣告行高，兩行的間距由列的 `gap: 2` 決定，所以這裡也不宣告。
+  static const TextStyle caption1Regular = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    color: TmsColors.secondaryLabel,
+  );
+
   /// Caption 2。類別磚小字、待認領卡上的類別名。
   static const TextStyle caption2 = TextStyle(
     fontFamilyFallback: fontFamilyStack,
@@ -597,9 +609,18 @@ abstract final class TmsSize {
   /// 主按鈕高度（任務頁、登入頁）。
   static const double primaryButtonHeight = 54;
 
-  /// 列尾 chevron 的邊長。原型是 8 × 13 的描邊箭頭，這裡用字框是正方形的
-  /// 系統圖示，取它的高度。
-  static const double chevron = 14;
+  /// 列尾 chevron 的寬與高（`Main.dc.html:421`）。原型是 8 × 13 的描邊箭頭，
+  /// 高比寬多一半；系統圖示的字框是正方形，拿它畫出來的箭頭會矮而胖。
+  static const double chevronWidth = 8;
+  static const double chevronHeight = 13;
+
+  /// 列尾 chevron 的筆畫粗細（`Main.dc.html:421`）。
+  static const double chevronStroke = 2;
+
+  /// 選項列尾端那個勾的邊長與筆畫粗細（`Main.dc.html:1463`）。原型的勾在
+  /// 24 格的畫布上畫 stroke-width 3，縮到 16 之後筆畫實際是 2。
+  static const double optionCheck = 16;
+  static const double optionCheckStroke = 2;
 
   /// 「我的」身分卡上的大頭像。首頁問候列那顆小的是 [minTouchTarget]。
   static const double avatarLarge = 60;
