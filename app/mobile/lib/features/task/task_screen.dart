@@ -12,9 +12,11 @@ import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_action_bar.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_card.dart';
+import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_motion.dart';
 import '../../core/widgets/tms_pill_button.dart';
+import '../../core/widgets/tms_scroll_nav_bar.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_step_track.dart';
 import '../celebrate/celebrate_screen.dart';
@@ -72,8 +74,9 @@ class _TaskScreenState extends State<TaskScreen> {
 
   /// 目前畫面上這一筆任務。
   ///
-  /// 導覽列的報修鍵在 `FutureBuilder` 外面，拿不到 builder 參數裡的那一筆，
-  /// 但報修要帶原任務 id 才接得回這張單，所以載到之後在這裡留一份。
+  /// 報修面板是在員工按下報修鍵的那一刻才開，當下讀不到 `FutureBuilder`
+  /// builder 參數裡的那一筆，但報修要帶原任務 id 才接得回這張單，所以載到
+  /// 之後在這裡留一份。
   TaskDetail? _loadedTask;
 
   @override
@@ -159,29 +162,6 @@ class _TaskScreenState extends State<TaskScreen> {
       id: 'task.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
-        navigationBar: CupertinoNavigationBar(
-          middle: Text('${widget.roomNo} 的任務頁'),
-          // 報修在導覽列右側，不在底部動作列：底部一次只留一主一次兩顆，
-          // 報修是「做到一半發現房間壞了」的旁支，擺進那一列會讓員工每次都要
-          // 先讀完三顆才找得到往下走的那一顆。
-          trailing: TmsSemantics(
-            id: 'task.repair-button',
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(
-                TmsSize.minTouchTarget,
-                TmsSize.minTouchTarget,
-              ),
-              onPressed: _openRepairSheet,
-              child: Text(
-                '報修',
-                style: TmsText.subheadlineEmphasized.copyWith(
-                  color: TmsColors.brandPrimary,
-                ),
-              ),
-            ),
-          ),
-        ),
         // 置底操作列自己吃掉底部安全區（原型就是這樣貼著螢幕底緣），這裡再
         // 留一次會變成留兩倍。
         child: SafeArea(
@@ -194,22 +174,40 @@ class _TaskScreenState extends State<TaskScreen> {
                   // 完成都要知道現在是不是離線、手機上還押著幾筆。
                   const SystemStatusBar(),
                   Expanded(
-                    child: FutureBuilder<TaskDetail?>(
-                      future: _taskFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Text('載入失敗，請稍後再試'),
+                    child: TmsScrollNavBarScroll(
+                      builder: (context, scrolled) =>
+                          FutureBuilder<TaskDetail?>(
+                        future: _taskFuture,
+                        builder: (context, snapshot) {
+                          final Widget content;
+                          if (snapshot.hasError) {
+                            content = const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('載入失敗，請稍後再試'),
+                            );
+                          } else if (snapshot.connectionState !=
+                              ConnectionState.done) {
+                            content = const Center(
+                              child: CupertinoActivityIndicator(),
+                            );
+                          } else {
+                            content = _buildTask(snapshot.data);
+                          }
+                          // 導覽列在載入中與載入失敗時也要在，員工才隨時回
+                          // 得去上一頁。
+                          return Stack(
+                            children: [
+                              content,
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                child: _buildNavBar(scrolled, snapshot.data),
+                              ),
+                            ],
                           );
-                        }
-                        if (snapshot.connectionState != ConnectionState.done) {
-                          return const Center(
-                            child: CupertinoActivityIndicator(),
-                          );
-                        }
-                        return _buildTask(snapshot.data);
-                      },
+                        },
+                      ),
                     ),
                   ),
                 ],
@@ -401,6 +399,61 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
+  /// 任務頁頂端那條凍結導覽列。
+  ///
+  /// 標題寫這張單的身分，讓員工在任何捲動位置都認得出自己停在哪一間房。還
+  /// 沒捲動時標題區自己就寫著房號，導覽列不重複，只寫任務類別；標題區捲走
+  /// 之後房號補回標題，進行中的單再把類別換成正在走的計時，員工不必捲回去
+  /// 就看得到還剩多少時間。
+  ///
+  /// 任務還沒載回來時只寫得出房號，那是這一頁唯一不必等後端就確定的事。
+  Widget _buildNavBar(bool scrolled, TaskDetail? task) {
+    final doing = task?.state == 'doing';
+    final kindLabel = task == null
+        ? null
+        : '${tmsCategoryAppearance(task.type).label}任務';
+    final withRoom = kindLabel == null
+        ? widget.roomNo
+        : '${widget.roomNo} · $kindLabel';
+    // 計時只在進行中與已中斷的單上有意義。已延後的單還沒開工，寫一個停著
+    // 的計時會讓員工以為時間正在走。
+    final showTimer = task != null && (doing || task.state == 'interrupted');
+    return TmsSemantics(
+      id: 'task.nav.${widget.roomNo}',
+      explicitChildNodes: true,
+      child: TmsScrollNavBar(
+        scrolled: scrolled,
+        restingBackground: doing
+            ? TmsColors.brandPrimary
+            : TmsColors.cardBackground,
+        restingForeground: doing ? TmsColors.brandOnPrimary : TmsColors.label,
+        restingTitle: doing ? withRoom : (kindLabel ?? widget.roomNo),
+        scrolledTitle: showTimer
+            ? '${widget.roomNo} · ${taskTimerText(task)}'
+            : withRoom,
+        titleSuffix:
+            task != null && _overtimeMinutes(task) != null ? ' 超時' : null,
+        leading: TmsNavBarBackButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        trailing: TmsSemantics(
+          id: 'task.repair-button',
+          // 報修在導覽列右側，不在底部動作列：底部一次只留一主一次兩顆，
+          // 報修是「做到一半發現房間壞了」的旁支，擺進那一列會讓員工每次都要
+          // 先讀完三顆才找得到往下走的那一顆。
+          child: TmsNavBarButton(
+            semanticsLabel: '報修',
+            onPressed: _openRepairSheet,
+            child: const Icon(
+              CupertinoIcons.wrench,
+              size: TmsSize.navBarItemIcon,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 目前狀態對應的主按鈕文字；這個狀態沒有主要動作時回 null。
   ///
   /// 對照表出自 `任務執行/dsl.md` 的「任務頁只顯示一個主按鈕」：待開始與
@@ -439,6 +492,9 @@ class _TaskScreenState extends State<TaskScreen> {
               // 用 SingleChildScrollView 而不是 ListView：ListView 只建視窗內
               // 的那幾列，捲到之前它們不在畫面上，驗收也定位不到。
               SingleChildScrollView(
+                // 導覽列疊在內容上面，所以內容自己要讓開導覽列那麼高，否則
+                // 標題區最上面那一行永遠鑽在導覽列底下讀不到。
+                padding: const EdgeInsets.only(top: TmsSize.frozenNavBarHeight),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

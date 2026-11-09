@@ -189,6 +189,27 @@ abstract final class TmsColors {
   /// Main.dc.html:1122 — rgba(242,242,247,.72)
   static const Color bottomScrollEdge = Color(0xB8F2F2F7);
 
+  /// 詳情頁凍結導覽列捲動後的玻璃底色。
+  /// Main.dc.html:5040 — rgba(242,242,247,.72)
+  static const Color frozenNavGlass = Color(0xB8F2F2F7);
+
+  /// 導覽列圓鈕疊在淺色標題區上的底色。
+  /// Main.dc.html:4455 — rgba(255,255,255,.7)
+  static const Color navButtonSurface = Color(0xB3FFFFFF);
+
+  /// 導覽列圓鈕疊在深色標題區上的底色。深底上用同一個亮度的白會整顆浮出
+  /// 來，壓到兩成才和標題區分得開又不搶眼。
+  /// Main.dc.html:4455 — rgba(255,255,255,.2)
+  static const Color navButtonSurfaceOnDark = Color(0x33FFFFFF);
+
+  /// 導覽列圓鈕疊在淺色標題區上的外框。
+  /// Main.dc.html:4456 — rgba(255,255,255,.9)
+  static const Color navButtonBorder = Color(0xE6FFFFFF);
+
+  /// 導覽列圓鈕疊在深色標題區上的外框。
+  /// Main.dc.html:4456 — rgba(255,255,255,.35)
+  static const Color navButtonBorderOnDark = Color(0x59FFFFFF);
+
   // ── 疊層 ────────────────────────────────────────────────────────────
 
   /// 慶祝頁遮罩。
@@ -596,6 +617,24 @@ abstract final class TmsSize {
 
   /// 導覽列高度。
   static const double navBarHeight = 44;
+
+  /// 凍結導覽列從它自己的頂端到底緣的高度：44 的項目列再加 8 的下內距。
+  /// 詳情頁的捲動內容要留這麼多上內距才不會鑽到導覽列底下。
+  /// Main.dc.html:1149,5034
+  static const double frozenNavBarHeight = 52;
+
+  /// 凍結導覽列標題左右各讓開的寬度。標題在這個範圍內置中，兩側的圓鈕再
+  /// 長也壓不到標題。Main.dc.html:1153
+  static const double frozenNavTitleInset = 96;
+
+  /// 導覽列返回鈕裡那個箭頭的邊長。Main.dc.html:1151
+  static const double navBarChevron = 24;
+
+  /// 導覽列返回鈕箭頭的線條粗細。Main.dc.html:1151
+  static const double navBarChevronStroke = 2.2;
+
+  /// 導覽列右側項目裡那個圖示的邊長。Main.dc.html:1157
+  static const double navBarItemIcon = 22;
 
   /// 分隔線粗細。
   static const double hairline = 0.5;

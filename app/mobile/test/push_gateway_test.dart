@@ -77,7 +77,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier('task.screen'), findsOneWidget);
-    expect(find.text('305 的任務頁'), findsOneWidget);
+    // 導覽列靜止時寫房號與任務類別（Main.dc.html:5036），進行中的單才把房號
+    // 接在前面。
+    expect(find.text('305 · 打掃任務'), findsOneWidget);
 
     handle.dispose();
   });

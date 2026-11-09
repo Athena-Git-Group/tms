@@ -66,7 +66,7 @@ public class PushThenSteps {
         } else if (taskMatcher.matches()) {
             String room = taskMatcher.group(1);
             world.waitForTestId("task.screen", SCREEN_TIMEOUT);
-            world.waitForLabelContaining(room + " 的任務頁", SCREEN_TIMEOUT);
+            world.waitForTestId("task.nav." + room, SCREEN_TIMEOUT);
         } else if (ticketMatcher.matches()) {
             String ticketNo = ticketMatcher.group(1);
             world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
