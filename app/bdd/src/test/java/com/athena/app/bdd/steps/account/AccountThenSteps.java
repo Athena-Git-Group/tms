@@ -31,13 +31,18 @@ public class AccountThenSteps {
     }
 
     /**
-     * 必查：{@code login.remembered-identity.card} 顯示該員工姓名；
+     * 必查：{@code login.remembered-identity.card} 顯示該員工姓名與員工編號；
      * 畫面上沒有 {@code login.shared-device.staff-id-field}。
+     *
+     * <p>姓名與員工編號兩個都要查。身分卡是員工在輸入密碼前確認「這支手機記住的是我」
+     * 的唯一依據，只查姓名的話，同名同姓的兩個人分不出來。
      */
     @那麼("登入畫面顯示 {string} 的身分卡，只有密碼欄位")
     public void loginShowsRememberedIdentityCard(String staffName) {
         WebElement card = world.waitForTestId("login.remembered-identity.card", SCREEN_TIMEOUT);
         assertLabelContains(card, "login.remembered-identity.card", staffName);
+        assertLabelContains(card, "login.remembered-identity.card",
+                world.staff(staffName).loginId());
         world.waitForTestId("login.password-field", SCREEN_TIMEOUT);
         assertAbsent("login.shared-device.staff-id-field");
     }
@@ -74,14 +79,18 @@ public class AccountThenSteps {
     }
 
     /**
-     * 必查：{@code login.lockout-banner} 顯示剩餘鎖定分鐘數；{@code login.submit-button} 禁用。
+     * 必查：{@code login.lockout-banner} 要員工等滿該分鐘數；{@code login.submit-button} 禁用。
      * 後端半邊：{@code locked_until} 已落地為未來時間，且距今不超過該分鐘數（鎖定當下起算，
      * 斷言時剩餘只會更少，不會更多）。
+     *
+     * <p>畫面那一句是固定文案「連續輸錯 5 次，請 15 分鐘後再試，或請主管在後台重設密碼。」，
+     * 不會倒數。所以畫面半邊只確認它講的等待時間和場景寫的一致，真正「還剩多久」的真相
+     * 在後端那一半。
      */
     @那麼("登入畫面顯示帳號已鎖定，剩餘 {int} 分鐘")
     public void loginShowsLockout(int minutes) {
         WebElement banner = world.waitForTestId("login.lockout-banner", SCREEN_TIMEOUT);
-        assertLabelContains(banner, "login.lockout-banner", String.valueOf(minutes));
+        assertLabelContains(banner, "login.lockout-banner", "請 " + minutes + " 分鐘後再試");
         WebElement submit = world.waitForTestId("login.submit-button", SCREEN_TIMEOUT);
         if (submit.isEnabled()) {
             throw new AssertionError("鎖定中 login.submit-button 應為禁用，實際仍可按");
