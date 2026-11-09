@@ -105,13 +105,9 @@ abstract final class TmsColors {
   /// 不透明分隔線／邊框／停用底。面板抓柄、底部動作列上緣線、停用的主按鈕底。
   static const Color opaqueSeparator = Color(0xFFC6C6C8);
 
-  /// 列尾 chevron 的顏色。
+  /// 列尾 chevron 的顏色。設計原型有一處寫成 #C4C4C7（`Main.dc.html:612`），
+  /// 其餘六處都是這個值。兩者只差藍通道的最後一階，算同一個顏色。
   static const Color chevron = Color(0xFFC4C4C6);
-
-  /// 工務單列列尾 chevron 的顏色。設計原型只有這一列用這個值，其餘六處都用
-  /// [chevron]，兩者只差藍通道的最後一階，肉眼看不出來。照原型落值是為了讓下
-  /// 次比對的人不必重新判斷哪一個才算數。
-  static const Color chevronOnTicketRow = Color(0xFFC4C4C7);
 
   /// 群組內列與列之間那條分隔線的顏色，粗細見 [TmsSize.hairline]。
   static const Color separator = Color(0xFFE5E5EA);

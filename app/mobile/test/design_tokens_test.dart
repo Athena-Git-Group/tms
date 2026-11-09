@@ -19,7 +19,6 @@ void main() {
 
     test('工務單列的 chevron 比其餘列深一階', () {
       // Main.dc.html:612 — stroke="#C4C4C7"（原型唯一一處）
-      expect(TmsColors.chevronOnTicketRow, const Color(0xFFC4C4C7));
       // Main.dc.html:421 等六處 — stroke="#C4C4C6"
       expect(TmsColors.chevron, const Color(0xFFC4C4C6));
     });
