@@ -137,7 +137,10 @@ class _PoolScreenState extends State<PoolScreen> {
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
         navigationBar: const CupertinoNavigationBar(middle: Text('待認領')),
+        // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由清單自己帶。
         child: SafeArea(
+          bottom: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -184,6 +187,11 @@ class _PoolScreenState extends State<PoolScreen> {
                 if (pool != null)
                   Expanded(
                     child: ListView(
+                      padding: EdgeInsets.only(
+                        bottom: TmsSpacing.scrollPadBottom(
+                          MediaQuery.paddingOf(context).bottom,
+                        ),
+                      ),
                       children: [
                         for (final item in pool.items)
                           _HousekeepingPoolCard(

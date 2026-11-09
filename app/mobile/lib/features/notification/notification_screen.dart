@@ -103,13 +103,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
         backgroundColor: TmsColors.groupedBackground,
         // 不用 CupertinoNavigationBar：這一頁的標題是內容的一部分，跟著列表
         // 一起捲（iOS 的 large title 行為），「全部已讀」與標題同一列。
+        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由捲動內容自己帶。
         child: SafeArea(
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               TmsSpacing.screenEdge,
               TmsSpacing.md,
               TmsSpacing.screenEdge,
-              TmsSpacing.xxl,
+              TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
             ),
             children: _buildContent(),
           ),

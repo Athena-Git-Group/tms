@@ -209,9 +209,12 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
         if (pool != null)
           Expanded(
             child: ListView(
-              children: [
-                for (final item in pool.items) _engPoolCard(item),
-              ],
+              padding: EdgeInsets.only(
+                bottom: TmsSpacing.scrollPadBottom(
+                  MediaQuery.paddingOf(context).bottom,
+                ),
+              ),
+              children: [for (final item in pool.items) _engPoolCard(item)],
             ),
           ),
       ],
@@ -238,7 +241,9 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
             ),
           ),
         ),
-        child: SafeArea(child: content),
+        // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由清單自己帶。
+        child: SafeArea(bottom: false, child: content),
       ),
     );
   }

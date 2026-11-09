@@ -115,13 +115,16 @@ class MeScreen extends StatelessWidget {
         backgroundColor: TmsColors.groupedBackground,
         // 身分卡本身就是這一頁的標題區，上面不再放一行導覽列大標題——員工一
         // 眼要看到的是「我是誰」，不是「這頁叫我的」。
+        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
+        // 的那段留白由捲動內容自己帶。
         child: SafeArea(
+          bottom: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               TmsSpacing.screenEdge,
               TmsSpacing.md,
               TmsSpacing.screenEdge,
-              TmsSpacing.xxl,
+              TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
             ),
             children: [
               // 連線狀態列固定在內容最上方：登出與各項設定都要連得上後端，
