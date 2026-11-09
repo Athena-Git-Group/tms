@@ -511,6 +511,7 @@ class _TaskRow extends StatelessWidget {
                   state: task.state,
                   type: task.type,
                   inspection: task.inspection,
+                  redoCount: task.redoCount,
                 ),
               ],
             ),

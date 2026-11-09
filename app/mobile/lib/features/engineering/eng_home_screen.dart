@@ -8,6 +8,7 @@ import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_home_cards.dart';
 import '../../core/widgets/tms_pill_button.dart';
+import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_tag.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
@@ -358,10 +359,13 @@ class _InHandTicketRow extends StatelessWidget {
     // 讓單卡至少還是個可指認的節點，而不是整串變成同一個 null。
     final ticketNo = ticket.ticketNo ?? ticket.taskId;
     final place = ticket.roomNo ?? '公共區域';
-    final state = repairStateText(ticket.state);
+    final status = repairStatusAppearance(
+      state: ticket.state,
+      isUrgent: ticket.isUrgent,
+    );
     return TmsSemantics(
       id: 'engHome.in-hand.$ticketNo.card',
-      label: '$ticketNo $place $state',
+      label: '$ticketNo $place ${status.text}',
       child: GestureDetector(
         onTap: () => _openTicket(context, ticket.taskId),
         child: Container(
@@ -408,11 +412,7 @@ class _InHandTicketRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: TmsSpacing.sm),
-                if (ticket.isUrgent) ...[
-                  const TmsTag(label: '急件', tone: TmsTagTone.danger),
-                  const SizedBox(width: TmsSpacing.xs2),
-                ],
-                TmsTag(label: state, tone: TmsTagTone.neutralStrong),
+                TmsStatusChip.of(status),
               ],
             ),
           ),
