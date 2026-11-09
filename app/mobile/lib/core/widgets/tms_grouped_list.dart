@@ -160,19 +160,25 @@ class TmsGroupedRow extends StatelessWidget {
 /// 圖形，高比寬多一半。系統圖示的字框是正方形，畫出來矮而胖，筆畫粗細也由字
 /// 型決定，調不到原型的 2。
 class TmsChevron extends StatelessWidget {
-  const TmsChevron({super.key});
+  const TmsChevron({super.key, this.color = TmsColors.chevron});
+
+  /// 箭頭顏色。列尾那顆是淺灰，狀態列上「查看工務單」後面那顆跟著文字走品
+  /// 牌色（`Main.dc.html:1241`）。
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return const CustomPaint(
-      size: Size(TmsSize.chevronWidth, TmsSize.chevronHeight),
-      painter: _ChevronPainter(),
+    return CustomPaint(
+      size: const Size(TmsSize.chevronWidth, TmsSize.chevronHeight),
+      painter: _ChevronPainter(color: color),
     );
   }
 }
 
 class _ChevronPainter extends CustomPainter {
-  const _ChevronPainter();
+  const _ChevronPainter({required this.color});
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -188,10 +194,10 @@ class _ChevronPainter extends CustomPainter {
         ..strokeWidth = TmsSize.chevronStroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
-        ..color = TmsColors.chevron,
+        ..color = color,
     );
   }
 
   @override
-  bool shouldRepaint(_ChevronPainter oldDelegate) => false;
+  bool shouldRepaint(_ChevronPainter oldDelegate) => oldDelegate.color != color;
 }
