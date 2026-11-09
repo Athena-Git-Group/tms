@@ -69,13 +69,43 @@ void main() {
       findsNothing,
     );
 
+    // 還有未讀，按鈕在，文案是原型的全句（Main.dc.html:344）。
     expect(
       find.bySemanticsIdentifier('notification.mark-all-read-button'),
       findsOneWidget,
     );
+    expect(find.text('全部標為已讀'), findsOneWidget);
     // 內文有就顯示，沒有就整段不畫。
     expect(find.text('退房清潔，預估 30 分鐘。'), findsOneWidget);
     expect(find.text('5 分鐘前'), findsOneWidget);
+
+    handle.dispose();
+  });
+
+  // Main.dc.html:344 的 `<sc-if value="{{nt.hasUnread}}">`：沒有未讀時整顆按鈕
+  // 不畫。按了不會改變任何東西的按鈕留在畫面上，會讓人以為還有事情沒做。
+  testWidgets('全部通知都已讀時，標題列不畫「全部標為已讀」', (tester) async {
+    final handle = tester.ensureSemantics();
+    final now = DateTime.now();
+    ApiClient.instance = _FakeApiClient([
+      NotificationItem(
+        id: 'n-read',
+        event: 'inspection_passed',
+        title: '302 查房通過',
+        body: null,
+        target: const {'kind': 'home'},
+        createdAt: now.subtract(const Duration(minutes: 5)),
+        readAt: now,
+      ),
+    ]);
+    await pumpScreen(tester);
+
+    expect(labelOf(tester, 'notification.item.n-read.title'), '302 查房通過');
+    expect(
+      find.bySemanticsIdentifier('notification.mark-all-read-button'),
+      findsNothing,
+    );
+    expect(find.text('全部標為已讀'), findsNothing);
 
     handle.dispose();
   });
@@ -90,6 +120,10 @@ void main() {
       '目前沒有通知。派單、急件與退回都會出現在這裡。',
     );
     expect(find.text('派單、急件與退回都會出現在這裡。'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier('notification.mark-all-read-button'),
+      findsNothing,
+    );
 
     handle.dispose();
   });
@@ -150,8 +184,9 @@ void main() {
     expect(at(const Duration(seconds: 20)), '剛剛');
     expect(at(const Duration(minutes: 5)), '5 分鐘前');
     expect(at(const Duration(hours: 3)), '3 小時前');
+    // 一天以上一律「昨天 HH:mm」，不改寫成日期（Main.dc.html:4553 的 ago()）。
     expect(at(const Duration(hours: 30)), '昨天 04:30');
-    expect(at(const Duration(days: 5)), '11/2');
+    expect(at(const Duration(days: 5)), '昨天 10:30');
   });
 }
 

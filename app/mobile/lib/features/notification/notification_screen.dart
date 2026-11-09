@@ -103,7 +103,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
         // 不用 CupertinoNavigationBar：這一頁的標題是內容的一部分，跟著列表
-        // 一起捲（iOS 的 large title 行為），「全部已讀」與標題同一列。
+        // 一起捲（iOS 的 large title 行為），「全部標為已讀」與標題同一列。
         // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
         // 的那段留白由捲動內容自己帶。
         child: SafeArea(
@@ -128,7 +128,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
     const statusBar = SystemStatusBar(
       padding: EdgeInsets.only(bottom: TmsSpacing.md),
     );
-    final header = _Header(onMarkAllRead: _markAllRead);
+    // 「全部標為已讀」只在還有未讀時出現（`Main.dc.html:344`）：全部都讀過之後
+    // 這顆按鈕按了什麼也不會變，留著只是讓人以為還有事情沒做。
+    final header = _Header(
+      onMarkAllRead: _markAllRead,
+      showMarkAllRead: _items?.any((item) => item.isUnread) ?? false,
+    );
     if (_loadFailed) {
       return [
         statusBar,
@@ -197,22 +202,26 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
         const SizedBox(height: TmsSpacing.lg),
       ],
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
         child: Text(
           '有即時動態時，急件不另外推播，只更新即時動態並展開提醒；這裡會保留紀錄。',
-          style: TmsText.footnote,
+          // `Main.dc.html:408` 的 `line-height: 1.5`。這段是整頁最底下的一塊
+          // 說明，行距比 [TmsText.footnote] 的 18/13 鬆，才不會讀成一團。
+          style: TmsText.footnote.copyWith(height: 1.5),
         ),
       ),
     ];
   }
 }
 
-/// 畫面最上方：大標題與右側的「全部已讀」，兩者底端對齊。
+/// 畫面最上方：大標題與右側的「全部標為已讀」，兩者底端對齊。
 class _Header extends StatelessWidget {
-  const _Header({required this.onMarkAllRead});
+  const _Header({required this.onMarkAllRead, required this.showMarkAllRead});
 
   final VoidCallback onMarkAllRead;
+
+  final bool showMarkAllRead;
 
   @override
   Widget build(BuildContext context) {
@@ -220,18 +229,19 @@ class _Header extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         const Expanded(child: Text('通知', style: TmsText.largeTitle)),
-        TmsSemantics(
-          id: 'notification.mark-all-read-button',
-          child: CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(0, TmsSize.minTouchTarget),
-            onPressed: onMarkAllRead,
-            child: Text(
-              '全部已讀',
-              style: TmsText.body.copyWith(color: TmsColors.brandPrimary),
+        if (showMarkAllRead)
+          TmsSemantics(
+            id: 'notification.mark-all-read-button',
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, TmsSize.minTouchTarget),
+              onPressed: onMarkAllRead,
+              child: Text(
+                '全部標為已讀',
+                style: TmsText.body.copyWith(color: TmsColors.brandPrimary),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -293,9 +303,18 @@ class _NotificationRow extends StatelessWidget {
   /// 中央會掉到標題底下。這個值是列的上緣到標題中線的距離。
   static const double _dotTopInset = 14;
 
+  /// 標題行高（`Main.dc.html:359` 的 `line-height: 1.35`）。通知列的標題常常
+  /// 折成兩行，比 [TmsText.headline] 的 22/17 再鬆一點才不會黏在一起。
+  static const double _titleLineHeight = 1.35;
+
+  /// 內文行高（`Main.dc.html:360` 的 `line-height: 1.4`）。
+  static const double _bodyLineHeight = 1.4;
+
   @override
   Widget build(BuildContext context) {
     final body = item.body;
+    final titleStyle = (item.isUnread ? TmsText.headline : TmsText.body)
+        .copyWith(height: _titleLineHeight);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -347,7 +366,11 @@ class _NotificationRow extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      // 標題 17 與時間 13 以文字基線對齊（`Main.dc.html:359`）。
+                      // 靠頂端對齊的話，兩段字級不同的文字上緣齊、底下各自
+                      // 參差，時間看起來會浮在標題上方。
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
                       children: [
                         Expanded(
                           child: TmsSemantics(
@@ -357,12 +380,7 @@ class _NotificationRow extends StatelessWidget {
                             // 對），再讓 Text 自己的 semantics 合併進來會變成
                             // 同一段文字重複兩次。
                             child: ExcludeSemantics(
-                              child: Text(
-                                item.title,
-                                style: item.isUnread
-                                    ? TmsText.headline
-                                    : TmsText.body,
-                              ),
+                              child: Text(item.title, style: titleStyle),
                             ),
                           ),
                         ),
@@ -383,6 +401,7 @@ class _NotificationRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TmsText.subheadline.copyWith(
                           color: TmsColors.secondaryLabel,
+                          height: _bodyLineHeight,
                         ),
                       ),
                     ],
@@ -445,10 +464,11 @@ TmsNotificationKind _kindOf(NotificationItem item) {
 }
 
 /// 把通知時間寫成員工看得懂的相對說法：一分鐘內「剛剛」，一小時內數分鐘，
-/// 一天內數小時，昨天寫「昨天 HH:mm」，更早寫日期。
+/// 一天內數小時，更早一律「昨天 HH:mm」（`Main.dc.html:4553`）。
 ///
 /// 絕對時刻對當班的人沒有用——她要知道的是「這則是剛剛才來的，還是上一班
-/// 留下的」。
+/// 留下的」。一天以上不再改寫成日期：這一頁是當班看的流水紀錄，知道「不是
+/// 今天的」就夠，確切哪一天點進去那張單上看。
 String relativeTimeLabel(DateTime createdAt, DateTime now) {
   final local = createdAt.toLocal();
   final minutes = now.difference(local).inMinutes;
@@ -461,10 +481,7 @@ String relativeTimeLabel(DateTime createdAt, DateTime now) {
   if (minutes < 60 * 24) {
     return '${minutes ~/ 60} 小時前';
   }
-  if (minutes < 60 * 48) {
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '昨天 $hour:$minute';
-  }
-  return '${local.month}/${local.day}';
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '昨天 $hour:$minute';
 }
