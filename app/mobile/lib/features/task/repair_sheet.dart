@@ -227,7 +227,6 @@ class _RepairSheetState extends State<RepairSheet> {
       id: 'repair.sheet',
       child: TmsSheet(
         title: '報修',
-        leadingLabel: '關閉',
         onLeadingTap: widget.onClose,
         bottomAction: TmsSemantics(
           id: 'repair.submit-button',
