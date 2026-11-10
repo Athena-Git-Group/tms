@@ -167,9 +167,6 @@ public class HandoverGivenSteps {
     @假設("{string} 已下班，{string} 改由 {string} 接手")
     public void staffOffShiftRoomTakenOver(String staffName, String roomNo, String successorName) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
-        // 後面「接手」的對象也必須是已經在背景建好的員工，不然這句自己就該先噴錯，
-        // 不必等到換人規則真的跑起來才發現漏設。
-        UUID.fromString(world.staffId(successorName));
 
         String shiftEndHHmm = (String) dbProbe
                 .queryOne(
@@ -191,7 +188,13 @@ public class HandoverGivenSteps {
 
         jobTrigger.run("shift-end-scan");
 
-        roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
+        UUID taskId = UUID.fromString(world.taskId(roomNo));
+        ScenarioWorld.ApiResponse claimed = apiClient.post(
+                "/tasks/" + taskId + "/claim", BddApiClient.Auth.staff(world.jwt(successorName)), null);
+        if (claimed.status() / 100 != 2) {
+            throw new IllegalStateException("「" + successorName + "」接手「" + roomNo + "」失敗：status="
+                    + claimed.status() + "，body=" + claimed.body());
+        }
     }
 
     private List<Map<String, Object>> buildInspectionItemsFailingOne(long tenantId, String failLabel) {

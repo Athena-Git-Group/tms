@@ -35,6 +35,7 @@ public class CommonThenSteps {
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
     private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
     private final OutboxAwait outboxAwait;
     private final MutableClock clock;
     private final JwtService jwtService;
@@ -45,6 +46,7 @@ public class CommonThenSteps {
             ScenarioWorld world,
             BddApiClient apiClient,
             DbProbe dbProbe,
+            LastOperationGuard lastOperationGuard,
             OutboxAwait outboxAwait,
             MutableClock clock,
             JwtService jwtService,
@@ -53,6 +55,7 @@ public class CommonThenSteps {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
         this.outboxAwait = outboxAwait;
         this.clock = clock;
         this.jwtService = jwtService;
@@ -224,7 +227,7 @@ public class CommonThenSteps {
     }
 
     private void assertAuthoritativeStateUnchanged() {
-        LastOperationGuard.Snapshot before = LastOperationGuard.current();
+        LastOperationGuard.Snapshot before = lastOperationGuard.current();
         Map<String, Object> afterRow = dbProbe.taskRow(before.taskId()).orElse(null);
         if (!Objects.equals(before.taskRow(), afterRow)) {
             throw new AssertionError("操作被拒絕後 tasks 仍被改動：操作前=" + before.taskRow() + "，操作後=" + afterRow);

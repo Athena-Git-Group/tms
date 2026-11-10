@@ -34,6 +34,8 @@ public final class IntegrationSseSupport {
         private final List<Event> everything = new CopyOnWriteArrayList<Event>();
         private final Stream<String> body;
         private final Thread reader;
+        private volatile boolean closed;
+        private volatile Throwable readerFailure;
 
         IntegrationSseClient(int port, String path, String apiKey) throws Exception {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).header("X-API-Key", apiKey).header("Accept", "text/event-stream").GET().build();
@@ -77,6 +79,9 @@ public final class IntegrationSseSupport {
                 }
             }
             catch (Exception exception) {
+                if (!this.closed) {
+                    this.readerFailure = exception;
+                }
             }
         }
 
@@ -93,6 +98,7 @@ public final class IntegrationSseSupport {
             Event event;
             long deadline = System.nanoTime() + timeout.toNanos();
             do {
+                this.failIfReaderDied();
                 if ((remaining = deadline - System.nanoTime()) > 0L) continue;
                 Assertions.fail((String)("\u6574\u5408\u9023\u7dda\u7b49\u4e0d\u5230" + what + "\uff1b\u5df2\u6536\u5230: " + this.summary()));
             } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !match.test(event));
@@ -100,7 +106,16 @@ public final class IntegrationSseSupport {
         }
 
         public List<Event> roomStatusEvents() {
+            this.failIfReaderDied();
             return this.everything.stream().filter(e -> e.name().equals("room_status")).toList();
+        }
+
+        /** 讀取執行緒因例外中止（不是測試主動關流）時，讓接下來讀流的斷言直接失敗並帶出原因。 */
+        private void failIfReaderDied() {
+            Throwable failure = this.readerFailure;
+            if (failure != null) {
+                throw new AssertionError("SSE 讀取執行緒已因例外中止；已收到: " + this.summary(), failure);
+            }
         }
 
         private String summary() {
@@ -109,6 +124,7 @@ public final class IntegrationSseSupport {
 
         @Override
         public void close() {
+            this.closed = true;
             this.body.close();
             this.reader.interrupt();
         }

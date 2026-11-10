@@ -117,7 +117,11 @@ public class InspectionThenSteps {
                     "「" + roomNo + "」同一事件不該有另一筆不同房況的回寫，但找到 " + otherStatusCount + " 筆");
         }
 
-        pmsProbe.lastWritebackFor(roomNo);
+        Map<String, Object> received = pmsProbe.lastWritebackFor(roomNo);
+        if (!expectedStatus.equals(received.get("status"))) {
+            throw new AssertionError(
+                    "模擬 PMS adapter 預期收到「" + roomNo + "」房況 " + expectedStatus + "，實際收到 " + received);
+        }
     }
 
     @那麼("{string} 沒有回寫 PMS，同步紀錄記一筆未回寫")
@@ -128,7 +132,10 @@ public class InspectionThenSteps {
             throw new AssertionError("「" + roomNo + "」預期沒有回寫 PMS，但 outbox 找到 kind=pms_status 的資料");
         }
 
-        pmsProbe.lastWritebackFor(roomNo);
+        Map<String, Object> received = pmsProbe.lastWritebackFor(roomNo);
+        if (!received.isEmpty()) {
+            throw new AssertionError("模擬 PMS adapter 預期沒有收到「" + roomNo + "」的任何房況，實際收到 " + received);
+        }
     }
 
     @那麼("{string} 的任務事件依序包含 {事件清單}")

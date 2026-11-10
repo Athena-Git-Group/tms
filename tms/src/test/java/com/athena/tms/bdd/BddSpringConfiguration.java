@@ -5,7 +5,9 @@ import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.HandoverFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
 import com.athena.tms.bdd.support.KafkaGroupAwait;
+import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.RecordingPushSender;
+import com.athena.tms.bdd.support.RepairCountGuard;
 import com.athena.tms.push.PushSender;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.OutboxAwait;
@@ -83,6 +85,19 @@ public class BddSpringConfiguration {
         @ScenarioScope
         BddApiClient bddApiClient(Environment environment, ObjectMapper objectMapper, ScenarioWorld scenarioWorld) {
             return new BddApiClient(environment, objectMapper, scenarioWorld);
+        }
+
+        /** 操作前快照是場景各自的狀態，所以和 ScenarioWorld 一樣每個場景各開一份。 */
+        @Bean
+        @ScenarioScope
+        LastOperationGuard lastOperationGuard(DbProbe dbProbe) {
+            return new LastOperationGuard(dbProbe);
+        }
+
+        @Bean
+        @ScenarioScope
+        RepairCountGuard repairCountGuard(DbProbe dbProbe, TenantFixtures tenantFixtures) {
+            return new RepairCountGuard(dbProbe, tenantFixtures);
         }
 
         /**

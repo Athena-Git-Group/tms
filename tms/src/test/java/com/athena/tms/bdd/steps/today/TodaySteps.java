@@ -131,16 +131,6 @@ public class TodaySteps {
         }
     }
 
-    @那麼("今日進度包含連續零退回天數")
-    public void hasZeroReturnStreak() {
-        JsonNode json = world.lastResponse().json();
-        Integer value = intOrNull(json, "zeroReturnStreakDays");
-        if (value == null || value < 0) {
-            throw new AssertionError("zeroReturnStreakDays 預期為 0 以上的整數，實際 "
-                    + (json == null ? "無回應內容" : json.get("zeroReturnStreakDays")));
-        }
-    }
-
     private UUID requireQueriedStaffId() {
         if (lastQueriedStaffName == null) {
             throw new IllegalStateException("尚未呼叫過「查看今日進度」，無法判斷要以哪位員工的任務重算權威狀態");

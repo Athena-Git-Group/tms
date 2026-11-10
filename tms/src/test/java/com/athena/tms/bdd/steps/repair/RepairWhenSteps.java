@@ -2,11 +2,10 @@ package com.athena.tms.bdd.steps.repair;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
-import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.LastOperationGuard;
+import com.athena.tms.bdd.support.RepairCountGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.RoomFixtures;
-import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.當;
@@ -25,29 +24,29 @@ import org.springframework.http.HttpMethod;
  * <p>destructive 操作（可能接 common「這次操作被拒絕」）前都呼叫
  * {@link LastOperationGuard#captureFor}；會接 {@link RepairThenSteps} 的
  * 「系統沒有建立工務單」「不該發生：沒有建立工務單」的操作，另外呼叫
- * {@link RepairCountGuard#captureFor}（本模組專屬的全租戶筆數快照，見其 Javadoc）。
+ * {@link RepairCountGuard#capture}（全租戶筆數快照，見其 Javadoc）。
  */
 public class RepairWhenSteps {
 
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
-    private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
+    private final RepairCountGuard repairCountGuard;
     private final MutableClock clock;
-    private final TenantFixtures tenantFixtures;
     private final RoomFixtures roomFixtures;
 
     public RepairWhenSteps(
             ScenarioWorld world,
             BddApiClient apiClient,
-            DbProbe dbProbe,
+            LastOperationGuard lastOperationGuard,
+            RepairCountGuard repairCountGuard,
             MutableClock clock,
-            TenantFixtures tenantFixtures,
             RoomFixtures roomFixtures) {
         this.world = world;
         this.apiClient = apiClient;
-        this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
+        this.repairCountGuard = repairCountGuard;
         this.clock = clock;
-        this.tenantFixtures = tenantFixtures;
         this.roomFixtures = roomFixtures;
     }
 
@@ -75,8 +74,8 @@ public class RepairWhenSteps {
     @當("{string} 中斷 {string} 並以已準備的照片開立水電工務單")
     public void interruptAndOpenTicketWithPreparedPhotos(String staffName, String taskKey) {
         UUID sourceTaskId = UUID.fromString(world.taskId(taskKey));
-        LastOperationGuard.captureFor(dbProbe, sourceTaskId);
-        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+        lastOperationGuard.captureFor(sourceTaskId);
+        repairCountGuard.capture();
 
         Map<String, Object> body = Map.of(
                 "sourceTaskId", sourceTaskId.toString(),
@@ -106,7 +105,7 @@ public class RepairWhenSteps {
         int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
         String assigneeName = blankToNull(row.get("處理人"));
 
-        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+        repairCountGuard.capture();
 
         String jwt = world.jwt(engineerName);
         List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
@@ -150,7 +149,7 @@ public class RepairWhenSteps {
         int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
         String assigneeName = blankToNull(row.get("處理人"));
 
-        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+        repairCountGuard.capture();
 
         String jwt = world.jwt(deskStaffName);
         List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
@@ -193,7 +192,7 @@ public class RepairWhenSteps {
     @當("{string} 以原因 {string} 將 {string} 降級為一般件")
     public void downgradeTicketUrgency(String managerName, String reason, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
 
         Map<String, Object> body = Map.of("note", reason);
         apiClient.post(
@@ -205,7 +204,7 @@ public class RepairWhenSteps {
     @當("{string} 核准 {string}")
     public void approveTicket(String managerName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
         apiClient.post(
                 "/repair-tickets/" + ticketTaskId + "/approve",
                 BddApiClient.Auth.staff(world.jwt(managerName)),
@@ -216,7 +215,7 @@ public class RepairWhenSteps {
     public void selectCategoryForPrecheck(String staffName, String roomNo, String categoryChinese) {
         UUID sourceTaskId = UUID.fromString(world.taskId(roomNo));
         // precheck 本身不建單；T6／T8 要驗「不該發生：沒有建立工務單」，在這裡先留一份筆數快照。
-        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+        repairCountGuard.capture();
 
         Map<String, Object> body =
                 Map.of("sourceTaskId", sourceTaskId.toString(), "category", Terms.repairCategory(categoryChinese));
@@ -226,7 +225,7 @@ public class RepairWhenSteps {
     @當("{string} 補 {int} 張照片到 {string}")
     public void appendPhotosToTicket(String staffName, int count, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
 
         String jwt = world.jwt(staffName);
         List<String> photoIds = uploadPhotos(jwt, "report", count);
@@ -238,7 +237,7 @@ public class RepairWhenSteps {
     @當("{string} 以原因 {string} 退回 {string}")
     public void rejectTicket(String managerName, String reason, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
 
         Map<String, Object> body = Map.of("reason", reason);
         apiClient.post(
@@ -248,7 +247,7 @@ public class RepairWhenSteps {
     @當("{string} 驗收通過 {string}")
     public void verifyTicket(String managerName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
         apiClient.post(
                 "/repair-tickets/" + ticketTaskId + "/verify", BddApiClient.Auth.staff(world.jwt(managerName)), null);
     }
@@ -256,7 +255,7 @@ public class RepairWhenSteps {
     @當("{string} 把 {string} 放回工務待認領")
     public void releaseTicketToPool(String staffName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
         apiClient.post(
                 "/repair-tickets/" + ticketTaskId + "/release-to-pool",
                 BddApiClient.Auth.staff(world.jwt(staffName)),
@@ -289,7 +288,7 @@ public class RepairWhenSteps {
     @當("{string} 撤回 {string}")
     public void withdrawTicket(String staffName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
         apiClient.post(
                 "/repair-tickets/" + ticketTaskId + "/withdraw", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
@@ -297,7 +296,7 @@ public class RepairWhenSteps {
     @當("{string} 補資料再送出 {string}")
     public void resubmitTicket(String staffName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
         apiClient.post(
                 "/repair-tickets/" + ticketTaskId + "/resubmit", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
@@ -305,7 +304,7 @@ public class RepairWhenSteps {
     @當("{string} 附 {int} 張完修照片、處理說明 {string} 完成 {string}")
     public void completeWithPhotosAndNote(String staffName, int photoCount, String note, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
 
         String jwt = world.jwt(staffName);
         List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
@@ -317,8 +316,8 @@ public class RepairWhenSteps {
     @當("{string} 附 {int} 張完修照片，回報 {string} 暫時處理，說明 {string}")
     public void completeWithTemporaryResolution(String staffName, int photoCount, String ticketNo, String note) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
-        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+        lastOperationGuard.captureFor(ticketTaskId);
+        repairCountGuard.capture();
 
         String jwt = world.jwt(staffName);
         List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
@@ -333,7 +332,7 @@ public class RepairWhenSteps {
     @當("{string} 附 {int} 張完修照片，回報 {string} 無法修復，說明 {string}")
     public void completeWithCannotFixResolution(String staffName, int photoCount, String ticketNo, String note) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
 
         String jwt = world.jwt(staffName);
         List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
@@ -348,7 +347,7 @@ public class RepairWhenSteps {
     @當("{string} 不附完修照片完成 {string}")
     public void completeWithoutPhotos(String staffName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        LastOperationGuard.captureFor(dbProbe, ticketTaskId);
+        lastOperationGuard.captureFor(ticketTaskId);
 
         Map<String, Object> body = Map.of("photoIds", List.of());
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), body);
@@ -362,8 +361,8 @@ public class RepairWhenSteps {
         int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
 
         UUID sourceTaskId = UUID.fromString(world.taskId(taskKey));
-        LastOperationGuard.captureFor(dbProbe, sourceTaskId);
-        RepairCountGuard.captureFor(dbProbe, tenantFixtures.testTenantId());
+        lastOperationGuard.captureFor(sourceTaskId);
+        repairCountGuard.capture();
 
         String jwt = world.jwt(staffName);
         List<String> photoIds = uploadPhotos(jwt, "report", photoCount);

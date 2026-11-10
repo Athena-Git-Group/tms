@@ -2,7 +2,6 @@ package com.athena.tms.bdd.steps.common;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
-import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.JobTrigger;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
@@ -19,7 +18,7 @@ public class CommonWhenSteps {
 
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
-    private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
     private final MutableClock clock;
     private final JobTrigger jobTrigger;
     private final PmsProbe pmsProbe;
@@ -29,7 +28,7 @@ public class CommonWhenSteps {
     public CommonWhenSteps(
             ScenarioWorld world,
             BddApiClient apiClient,
-            DbProbe dbProbe,
+            LastOperationGuard lastOperationGuard,
             MutableClock clock,
             JobTrigger jobTrigger,
             PmsProbe pmsProbe,
@@ -37,7 +36,7 @@ public class CommonWhenSteps {
             JdbcClient jdbcClient) {
         this.world = world;
         this.apiClient = apiClient;
-        this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
         this.clock = clock;
         this.jobTrigger = jobTrigger;
         this.pmsProbe = pmsProbe;
@@ -49,28 +48,28 @@ public class CommonWhenSteps {
     public void staffStartsTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
         // 後面可能接「這次操作被拒絕」，需要操作前的任務列快照才比得出「沒有被改動」。
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
         apiClient.post("/tasks/" + taskId + "/start", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
     @當("{string} 恢復 {string}")
     public void staffResumesTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
         apiClient.post("/tasks/" + taskId + "/resume", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
     @當("{string} 完成 {string}")
     public void staffCompletesTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
         apiClient.post("/tasks/" + taskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
     @當("{string} 判定 {string} 查房全部項目通過")
     public void staffPassesFullInspection(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
 
         long tenantId = tenantFixtures.testTenantId();
         List<String> itemKeys = jdbcClient

@@ -9,7 +9,6 @@ MyToday:
   - remainingMinutes
   - todayTasks
   - nextTasks
-  - zeroReturnStreakDays
   properties:
     cleaningDone:
       type: integer
@@ -94,15 +93,6 @@ MyToday:
       description: >-
         分頁列「通知」那一格的紅色數量徽章要顯示的數字：呼叫者未讀（readAt 為 null）的通知筆數。
         口徑與通知中心清單的未讀列數一致。為 0 時畫面不顯示徽章。
-    zeroReturnStreakDays:
-      type: integer
-      format: int32
-      minimum: 0
-      description: >-
-        連續零退回天數。計算口徑由後端唯一定義，見
-        `specs/truth/features/backend/今日進度/dsl.md` 的「連續零退回天數的計算口徑」章節：
-        以有出勤的工作日連續計，退回＝tasks.inspection=failed（含抽查退回），
-        沒出勤的日子跳過不中斷，今天計入且當天一有退回即歸零。App 只呈現、不重算。
     engineeringSummary:
       type: object
       nullable: true

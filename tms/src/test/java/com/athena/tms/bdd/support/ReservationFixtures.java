@@ -2,6 +2,7 @@ package com.athena.tms.bdd.support;
 
 import com.athena.tms.common.UuidV7;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -41,16 +42,22 @@ public class ReservationFixtures {
     /**
      * @param attrs 屬性列表（例如 "vip"、"pet"），落地成 {@code {"vip": true, "pet": true}}，
      *              對齊 dbml 對 reservations_cache.attrs 的註記（VIP/親子/寵物/紀念日）。
-     * @param checkinDate 入住日；退房日固定是入住隔天 11:00（比照 V2__seed_dev.sql 的住期慣例），
+     * @param checkinDate 入住日，入住時刻用飯店預設的 15:00；退房日固定是入住隔天 11:00（比照 V2__seed_dev.sql 的住期慣例），
      *              需要多晚或跨房重疊情境的呼叫端請直接用 JdbcClient 另外處理，不在這個入口的範圍內。
      * @param guestName 可空：reservations_cache.guest_name 本身就是可空欄位。
      */
     public UUID upsertReservation(String roomNo, List<String> attrs, LocalDate checkinDate, String guestName) {
+        return upsertReservation(roomNo, attrs, checkinDate, LocalTime.of(15, 0), guestName);
+    }
+
+    /** 同上，但入住時刻由呼叫端指定。 */
+    public UUID upsertReservation(
+            String roomNo, List<String> attrs, LocalDate checkinDate, LocalTime checkinTime, String guestName) {
         long tenantId = tenantFixtures.testTenantId();
         UUID roomId = roomFixtures.roomId(roomNo);
         String reservationRef = "fixture:" + roomNo + ":" + checkinDate;
 
-        OffsetDateTime checkinAt = checkinDate.atTime(15, 0).atZone(clock.getZone()).toOffsetDateTime();
+        OffsetDateTime checkinAt = checkinDate.atTime(checkinTime).atZone(clock.getZone()).toOffsetDateTime();
         OffsetDateTime checkoutAt = checkinDate.plusDays(1).atTime(11, 0).atZone(clock.getZone()).toOffsetDateTime();
         OffsetDateTime syncedAt = OffsetDateTime.now(clock);
         String attrsJson = toAttrsJson(attrs);

@@ -15,6 +15,7 @@ import com.athena.tms.service.TaskEngine;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -196,7 +197,7 @@ public class RepairGivenSteps {
     public void roomIsVipCheckinToday(String roomNo, String checkinTime) {
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
         LocalDate today = clock.instant().atZone(clock.getZone()).toLocalDate();
-        reservationFixtures.upsertReservation(roomNo, List.of("vip"), today, null);
+        reservationFixtures.upsertReservation(roomNo, List.of("vip"), today, LocalTime.parse(checkinTime), null);
     }
 
     @假設("{string} 已對 {string} 選擇工務單類別 {string} 並看到 {string} 的重複提示")
