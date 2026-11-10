@@ -129,9 +129,6 @@ public class TaskExecutionGivenSteps {
         UUID taskId = (UUID) world.taskRowByRoomNo(task).get("id");
         world.backend().postTaskAction(
                 taskId, "cancel", world.staff(staffName), Map.of("reason", "manager_void"));
-        // 端點目前沒把 cancel_reason 寫進 tasks 列，先用測試資料補上
-        // （缺口說明見 BackendChannel#supplementCancelReason）。
-        world.backend().supplementCancelReason(taskId, "manager_void");
 
         Map<String, Object> row = world.taskRowByRoomNo(task);
         String state = String.valueOf(row.get("state"));

@@ -210,10 +210,10 @@ public class AutomationRuleService {
                 UPDATE tasks
                    SET rule_hit = ?, rule_idem_key = ?, due_at = ?,
                        pool_source = CASE WHEN state = 'pool' THEN 'system' ELSE pool_source END,
-                       created_at = ?, updated_at = ?
+                       updated_at = ?
                  WHERE tenant_id = ? AND id = ?
                 """,
-                ruleTask.name(), ruleTask.idemKey(), dueAt, now, now, tenantId, task.getId());
+                ruleTask.name(), ruleTask.idemKey(), dueAt, now, tenantId, task.getId());
 
         if ("pool".equals(initialState)) {
             // 進池的準備工單沒有指定的負責人，部門成員不會主動盯著池看，

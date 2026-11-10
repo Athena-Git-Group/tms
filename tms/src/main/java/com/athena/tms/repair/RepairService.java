@@ -617,13 +617,9 @@ public class RepairService {
         String ticketNo = nextTicketNo(tenantId);
         Task ticketTask = taskEngine.create(new TaskCreateCommand(
                 tenantId, "repair", taskSource, effectiveRoomId, null, "engineering", initialState, assigneeId,
-                categoryLabel + " 工務單", null, null, null, null, staffActor));
+                categoryLabel + " 工務單", null, null, null, null, staffActor, isUrgent));
         UUID ticketTaskId = ticketTask.getId();
 
-        if (isUrgent) {
-            jdbcTemplate.update(
-                    "UPDATE tasks SET urgent = true WHERE tenant_id = ? AND id = ?", tenantId, ticketTaskId);
-        }
         if (poolSource != null && "pool".equals(initialState)) {
             jdbcTemplate.update(
                     "UPDATE tasks SET pool_source = ? WHERE tenant_id = ? AND id = ?",
