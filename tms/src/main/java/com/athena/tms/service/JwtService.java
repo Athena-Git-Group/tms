@@ -1,19 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.nimbusds.jose.JOSEException
- *  com.nimbusds.jose.JWSAlgorithm
- *  com.nimbusds.jose.JWSHeader
- *  com.nimbusds.jose.JWSSigner
- *  com.nimbusds.jose.JWSVerifier
- *  com.nimbusds.jose.crypto.MACSigner
- *  com.nimbusds.jose.crypto.MACVerifier
- *  com.nimbusds.jwt.JWTClaimsSet
- *  com.nimbusds.jwt.JWTClaimsSet$Builder
- *  com.nimbusds.jwt.SignedJWT
- *  org.springframework.stereotype.Service
- */
 package com.athena.tms.service;
 
 import com.athena.tms.config.AuthProperties;

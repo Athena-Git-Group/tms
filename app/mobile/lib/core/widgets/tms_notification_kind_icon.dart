@@ -12,7 +12,6 @@ import '../theme.dart';
 /// [memo] 與 [newRequest] 共用主色是故意的：兩者都是「有人把事情交到你這裡」，
 /// 差別只在交的是一句話還是一張單，用符號區分就夠，不必再多一個顏色。
 enum TmsNotificationKind {
-  /// 急件。
   urgent(
     background: TmsColors.systemRed,
     glyph: CupertinoIcons.bolt_fill,
@@ -42,7 +41,6 @@ enum TmsNotificationKind {
     glyph: CupertinoIcons.tray,
   ),
 
-  /// 保養派單。
   maintenance(
     background: TmsColors.maintenanceIcon,
     glyph: CupertinoIcons.calendar,
@@ -60,7 +58,6 @@ enum TmsNotificationKind {
   /// 圓形底的顏色。符號一律是白的，所以這七個值都是配得起白字的深色。
   final Color background;
 
-  /// 圓形底上的符號。
   final IconData glyph;
 }
 
@@ -70,7 +67,6 @@ class TmsNotificationKindIcon extends StatelessWidget {
 
   final TmsNotificationKind kind;
 
-  /// 圓形底上的符號邊長。
   static const double _glyphSize = 18;
 
   @override

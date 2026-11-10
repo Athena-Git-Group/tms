@@ -183,7 +183,6 @@ class _ChevronPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 原型的 path 畫在 8 × 13 的 viewBox 上：M1.5 1.5 l5 5 -5 5。
     final path = Path()
       ..moveTo(1.5, 1.5)
       ..lineTo(6.5, 6.5)
@@ -226,7 +225,6 @@ class TmsGroupedToggleRow extends StatelessWidget {
   /// 開關的 accessibility id，由呼叫端決定。
   final String? toggleId;
 
-  /// 上下內距。`Main.dc.html:468`。
   static const double _verticalPadding = 6;
 
   @override

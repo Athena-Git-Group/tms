@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** 推播模組的 Then。 */
 public class PushThenSteps {
 
     /**
@@ -92,7 +91,6 @@ public class PushThenSteps {
         }
     }
 
-    /** 權威讀回：該工務單所在的房號。 */
     private String roomNoOf(String ticketNo) {
         List<Map<String, Object>> rows = world.backend().queryRows(
                 """
@@ -107,18 +105,12 @@ public class PushThenSteps {
         return (String) rows.get(0).get("room_no");
     }
 
-    /**
-     * 必查：任務頁顯示工務已修好的提示，並有可點的恢復按鈕；後端任務仍為 interrupted。
-     * accessibility id：{@code task.resume-banner}、{@code task.status-row.resume-button}。
-     */
     @那麼("任務頁提示可以恢復 {string}")
     public void taskDetailOffersResume(String task) {
         world.waitForTestId("task.resume-banner", SCREEN_TIMEOUT);
         world.waitForTestId("task.status-row.resume-button", SCREEN_TIMEOUT);
         world.waitForLabelContaining(task, SCREEN_TIMEOUT);
     }
-
-    // ──── 通知中心（T309–T311 落點） ────
 
     /**
      * 必查：以 {@code notification.group.{today|earlier}.section} 定位該分組，其中的
@@ -173,7 +165,7 @@ public class PushThenSteps {
     /**
      * 把 JDBC 回來的 {@code created_at}（timestamptz；pgjdbc 的 getObject 回
      * {@code java.sql.Timestamp}）換算成系統時區的日期。分組用系統時鐘與系統時區，
-     * 跟 {@link PushGivenSteps} 建通知時刻用的是同一套（詳見那邊 parseMoment 的說明）。
+     * 跟 {@link PushGivenSteps} 建通知時刻用的是同一套。
      */
     private static LocalDate toLocalDate(Object createdAt) {
         if (createdAt instanceof Timestamp timestamp) {
@@ -185,10 +177,6 @@ public class PushThenSteps {
         throw new IllegalStateException("認不得的 created_at 型別：" + createdAt);
     }
 
-    /**
-     * 必查：該通知項的 {@code notification.item.{id}.unread-dot} 可見；
-     * 後端該筆通知的 {@code read_at} 仍為 null（未讀）。
-     */
     @那麼("{string} 的通知顯示未讀藍點")
     public void notificationShowsUnreadDot(String title) {
         Map<String, Object> row = notificationRow(title);
@@ -259,7 +247,6 @@ public class PushThenSteps {
         }
     }
 
-    /** 必查：通知中心顯示該空狀態文字，沒有任何通知項目。 */
     @那麼("通知中心顯示空狀態 {string}")
     public void notificationCenterShowsEmptyState(String message) {
         world.waitForTestId("notification.screen", SCREEN_TIMEOUT);
@@ -275,7 +262,6 @@ public class PushThenSteps {
         }
     }
 
-    /** 把「A、B、C」形式的標題清單切成有序 List，順手去掉前後空白。 */
     private static List<String> splitTitleList(String titleListText) {
         List<String> titles = new ArrayList<>();
         for (String piece : titleListText.split("、")) {

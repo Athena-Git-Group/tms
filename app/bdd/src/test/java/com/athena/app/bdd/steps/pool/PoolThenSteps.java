@@ -61,7 +61,6 @@ public class PoolThenSteps {
         this.context = context;
     }
 
-    /** 分類中文 → 契約 PoolCategory 的值；查不到就噴錯帶原詞。 */
     static String categoryKey(String chinese) {
         String key = CATEGORY_KEYS.get(chinese);
         if (key == null) {
@@ -70,10 +69,6 @@ public class PoolThenSteps {
         return key;
     }
 
-    /**
-     * 必查：列表中的單卡順序剛好等於清單，沒有多也沒有少，並與後端回應一致。房號清單以
-     * 「、」分隔，純文字（非 quoted string），故用 regex 形式的 step definition 擷取。
-     */
     @那麼("^待認領列表依序為 (.+)$")
     public void poolListOrderIs(String roomListText) {
         List<String> expected = splitList(roomListText);
@@ -94,10 +89,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：有同樓層標示的單卡剛好是這些房號。
-     * accessibility id：{@code pool.card.{roomNo}.same-floor-tag}。
-     */
     @那麼("^待認領列表中標示同樓層的單為 (.+)$")
     public void poolSameFloorTagsAre(String roomListText) {
         List<String> expected = splitList(roomListText);
@@ -125,11 +116,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：該單卡逐項顯示表格中的值；「說明」為「規則引擎命中：{規則名}」，與後端
-     * {@code rule_hit} 一致。accessibility id：{@code pool.card.{roomNo}.subtitle}、
-     * {@code .return-reason}、{@code .handoff-progress}、{@code .rule-hit-tag}。
-     */
     @那麼("{string} 的單卡顯示以下資訊：")
     public void poolCardShowsInfo(String task, DataTable table) {
         String key = cardKey(task);
@@ -216,10 +202,6 @@ public class PoolThenSteps {
         assertLabelContains(emptyState, "pool.empty-state", description);
     }
 
-    /**
-     * 必查：空狀態底下有這顆文字按鈕。
-     * accessibility id：{@code pool.empty-state.action}。
-     */
     @那麼("待認領空狀態的動作鈕是 {string}")
     public void poolEmptyStateActionIs(String label) {
         WebElement action = world.waitForTestId("pool.empty-state.action", SCREEN_TIMEOUT);
@@ -267,11 +249,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：該單卡顯示此標籤文字，與後端未接提醒所到達的階段一致。
-     * accessibility id：{@code pool.card.{roomNo}.status-tag--unaccepted-notified-peer}／
-     * {@code pool.card.{roomNo}.status-tag--unaccepted-notified-manager}。
-     */
     @那麼("{string} 的單卡標示為 {string}")
     public void poolCardLabeledAs(String task, String label) {
         String suffix = REMINDER_TAG_IDS.get(label);
@@ -331,7 +308,6 @@ public class PoolThenSteps {
         return byTitle;
     }
 
-    /** 「說明」那一列的值必須與後端 {@code tasks.rule_hit} 一致（dsl 的必查）。 */
     private void assertRuleHitMatches(String task, String shown) {
         List<Map<String, Object>> rows = world.backend().queryRows(
                 "SELECT rule_hit FROM tasks WHERE tenant_id = ? AND title = ?",

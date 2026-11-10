@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.springframework.jdbc.datasource.DelegatingDataSource
- */
 package com.athena.tms.config;
 
 import com.athena.tms.common.TenantContext;
@@ -54,7 +48,6 @@ extends DelegatingDataSource {
                     statement2.execute("SET app.tenant_id = '0'");
                 }
                 catch (SQLException statement2) {
-                    // empty catch block
                 }
                 this.target.close();
                 return null;

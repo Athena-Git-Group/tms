@@ -102,7 +102,6 @@ class TmsPillButton extends StatelessWidget {
 
   final TmsPillButtonStyle style;
 
-  /// 按鈕高度，單位是 logical pixel。
   final double height;
 
   /// 這一顆要畫哪一組光暈。預設 [TmsPillGlow.standard]，工務視角與表單置底列

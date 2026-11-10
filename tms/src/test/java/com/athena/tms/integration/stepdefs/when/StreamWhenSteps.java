@@ -1,11 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.athena.tms.dto.TaskCreateCommand
- *  com.athena.tms.entity.Task
- *  io.cucumber.java.en.When
- */
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.dto.TaskCreateCommand;

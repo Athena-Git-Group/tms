@@ -154,7 +154,6 @@ class _CheckPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 原型的 path 畫在 24 格的 viewBox 上：M5 12.5 l4.5 4.5 L19 7.5。
     final scale = size.width / 24;
     final path = Path()
       ..moveTo(5 * scale, 12.5 * scale)

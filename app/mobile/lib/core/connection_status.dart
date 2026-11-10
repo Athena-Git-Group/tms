@@ -103,7 +103,6 @@ class OfflineQueue {
 
   final List<PendingOperation> _pending = <PendingOperation>[];
 
-  /// 是否正在送佇列裡的動作。
   bool _flushing = false;
 
   /// 待同步的筆數，一律由佇列長度推出來。另外記一個計數器的話，只要有一條
@@ -173,7 +172,6 @@ class OfflineQueue {
     }
   }
 
-  /// 送出一筆動作，失敗就再試，回傳後端是否終於收下。
   Future<bool> _sendWithRetry(PendingOperation operation) async {
     for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
       try {

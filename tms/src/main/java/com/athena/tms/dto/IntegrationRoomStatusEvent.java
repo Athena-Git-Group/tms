@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.fasterxml.jackson.annotation.JsonProperty
- */
 package com.athena.tms.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;

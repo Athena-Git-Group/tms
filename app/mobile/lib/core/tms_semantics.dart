@@ -29,7 +29,6 @@ class TmsSemantics extends StatelessWidget {
   /// accessibility id，dot 分段＋kebab-case，例如 `login.submit-button`。
   final String id;
 
-  /// 目前是否啟用（給按鈕等可禁用元件用；預設 true）。
   final bool enabled;
 
   /// 顯式 accessibility label。給「測試要讀這個節點本身的文字」的元件用：

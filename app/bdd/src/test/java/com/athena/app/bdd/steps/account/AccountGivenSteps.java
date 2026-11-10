@@ -31,7 +31,6 @@ public class AccountGivenSteps {
                 "{\"employee\":" + json(staff.loginId()) + ",\"name\":" + json(staff.name()) + "}");
     }
 
-    /** 怎麼做：清除 App 本機的記住帳號設定（{@code employee} 給 null 代表共用手機）。 */
     @假設("這支手機是共用手機，沒有記住任何帳號")
     public void phoneIsSharedWithoutRememberedAccount() {
         world.postBackdoorJson("/remembered-account", "{\"employee\":null}");
@@ -49,10 +48,6 @@ public class AccountGivenSteps {
         world.setStaffCredentials(staffName, employeeNo, password);
     }
 
-    /**
-     * 怎麼做：以該員工登入後把裝置切到無網路（測試後門 {@code POST /offline}），
-     * 停在「我的」分頁。權威狀態落地：後端已核發該員工的憑證；離線只是裝置側注入。
-     */
     @假設("{string} 已在 App 登入，目前手機離線")
     public void loggedInAndPhoneOffline(String staffName) {
         world.ensureLoggedInAs(world.staff(staffName));
@@ -60,10 +55,6 @@ public class AccountGivenSteps {
         world.goOffline();
     }
 
-    /**
-     * 怎麼做：透過後端測試資料建立該員工進行中（{@code doing}）的任務，再以該員工登入，
-     * 停在「我的」分頁。權威狀態落地：後端任務真相已存在且掛在該員工名下。
-     */
     @假設("{string} 已在 App 登入，名下有進行中的任務 {string}")
     public void loggedInWithTaskInProgress(String staffName, String roomNo) {
         world.seedTasks(staffName, List.of(
@@ -76,11 +67,6 @@ public class AccountGivenSteps {
         openMeTab();
     }
 
-    /**
-     * 怎麼做：以共用手機模式用該員工的臨時密碼完成登入，停在強制改密畫面，還沒設定新密碼。
-     * 權威狀態落地：後端 {@code must_change_password=true}，LoginResponse 帶
-     * {@code mustChangePassword=true}，App 據此進強制改密畫面。
-     */
     @假設("{string} 已用臨時密碼登入，正在強制改密畫面")
     public void loggedInWithTemporaryPasswordAtForceChangeScreen(String staffName) {
         world.backend().markMustChangePassword(world.staff(staffName).id());
@@ -134,7 +120,6 @@ public class AccountGivenSteps {
         world.waitForTestId("me.screen", SCREEN_TIMEOUT);
     }
 
-    /** 把字串包成 JSON 字面值（後門 payload 用；值來自 feature 檔，僅做基本跳脫）。 */
     private static String json(String s) {
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }

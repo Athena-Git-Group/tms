@@ -75,8 +75,7 @@ public class AccountThenSteps {
 
     /**
      * dsl.md「登入失敗，提示 "{提示}"」必查：回應 4xx，body 的提示文字等於固定文案；
-     * 且沒有建立任何憑證（回應沒有非空的 token）。「失敗次數累計」待 `/api-plan`／
-     * `/data-plan` 補欄位，目前無從查起，不在本句斷言範圍。
+     * 且沒有建立任何憑證（回應沒有非空的 token）。
      */
     @那麼("登入失敗，提示 {string}")
     public void loginFailedWithHint(String hint) {

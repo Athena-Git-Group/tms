@@ -101,11 +101,9 @@ public class InspectionGivenSteps {
 
             UUID taskId;
             if ("failed".equals(result)) {
-                // dsl.md：「退回重做是 accepted 且 redo 1」。
                 taskId = builder.state("accepted").redoCount(1).create();
                 appendResultEvent(tenantId, taskId, "inspection_failed");
             } else {
-                // dsl.md：「通過與免查是 inspected」。
                 taskId = builder.state("inspected").create();
                 if ("waived".equals(result)) {
                     // TaskFixtures 的 inspected 狀態固定走 engine.passInspection，事件型別

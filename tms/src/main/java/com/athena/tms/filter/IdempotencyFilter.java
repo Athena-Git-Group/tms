@@ -1,19 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  jakarta.servlet.FilterChain
- *  jakarta.servlet.ServletException
- *  jakarta.servlet.ServletRequest
- *  jakarta.servlet.ServletResponse
- *  jakarta.servlet.http.HttpServletRequest
- *  jakarta.servlet.http.HttpServletResponse
- *  org.springframework.core.annotation.Order
- *  org.springframework.http.HttpMethod
- *  org.springframework.stereotype.Component
- *  org.springframework.web.filter.OncePerRequestFilter
- *  org.springframework.web.util.ContentCachingResponseWrapper
- */
 package com.athena.tms.filter;
 
 import com.athena.tms.service.IdempotencyService;
@@ -48,9 +32,6 @@ extends OncePerRequestFilter {
         this.tenantResolver = tenantResolver;
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         if (!HttpMethod.POST.matches(request.getMethod())) {
             filterChain.doFilter((ServletRequest)request, (ServletResponse)response);

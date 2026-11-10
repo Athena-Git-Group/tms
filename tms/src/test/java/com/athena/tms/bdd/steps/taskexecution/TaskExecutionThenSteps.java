@@ -201,7 +201,6 @@ public class TaskExecutionThenSteps {
                     "完成回報沒有任務 id，無法判斷是誰完成了哪一張單："
                             + world.lastResponse().body());
         }
-        // 要用的值到這裡都已經離開 lastResponse，下面可以安心再打別的端點。
 
         if (reported != ordinal) {
             throw new AssertionError(
@@ -484,7 +483,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /** all_clear 時 taskId／roomNo 不出現；欄位在但有值就是形狀不對。 */
     /**
      * 「不該帶這個欄位」一律用 {@code has()} 判定鍵在不在，不用 {@code textOrNull}：
      * 後者會讓 {@code "taskId": null} 過關、卻讓 {@code "taskId": ""} 失敗，與同檔

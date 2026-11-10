@@ -121,7 +121,6 @@ class TmsSheet extends StatelessWidget {
     this.bottomAction,
   });
 
-  /// 標題列正中央那一行字。
   final String title;
 
   /// 左上角那顆鈕的意思。沒給 [onLeadingTap] 就不畫這顆鈕。
@@ -146,7 +145,6 @@ class TmsSheet extends StatelessWidget {
   /// 不會想到旁邊還點得到。
   static const double _gapToScreenTop = 40;
 
-  /// 標題列高度。
   static const double _titleRowHeight = 52;
 
   @override
@@ -343,7 +341,6 @@ class TmsSheetButton extends StatelessWidget {
   /// 要放別的東西（例如送出中的轉圈）時用這個取代文字。
   final Widget? child;
 
-  /// 置底按鈕的高度。
   static const double height = 52;
 
   @override

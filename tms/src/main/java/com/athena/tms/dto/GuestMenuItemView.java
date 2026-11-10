@@ -1,6 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- */
 package com.athena.tms.dto;
 
 import com.athena.tms.service.GuestTenantConfigReader;

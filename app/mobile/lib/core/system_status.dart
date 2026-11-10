@@ -29,10 +29,8 @@ final String connectionIssueMessage =
 /// 「所以會怎樣」；只留一行的話員工得自己從「資料可能延遲」反推連線出問題了。
 const String connectionIssueTitle = '即時連線異常';
 
-/// 離線那一列的標題。
 const String offlineTitle = '目前離線';
 
-/// 離線那一列的說明：離線時還能做什麼，一句話講完。
 const String offlineDescription = '只能完成進行中的單';
 
 /// 畫面頂部的連線狀態列，離線與連線不穩定兩種情況各顯示一列。

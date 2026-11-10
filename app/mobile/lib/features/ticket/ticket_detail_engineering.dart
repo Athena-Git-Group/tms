@@ -173,7 +173,6 @@ class TicketDetailEngineering extends StatelessWidget {
     return spaced;
   }
 
-  // ──── 標題區 ────
 
   /// 滿版標題區：地點當主角、問題標題、來源與類別那一行，最後是步驟條。
   ///
@@ -328,7 +327,6 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  // ──── 區塊 ────
 
   List<Widget> _sections(RepairTicketDetail detail) {
     return [
@@ -357,7 +355,6 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  // ──── 狀態列 ────
 
   /// 一頁最多一條狀態列，誰蓋過誰由 [TmsCalloutKind] 的宣告順序決定，這裡只
   /// 說哪幾條成立。
@@ -451,7 +448,6 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  // ──── 照片 ────
 
   /// 工務視角只看得到報修照片，沒有補照片格：補照片是報修的人在自己那一頁做
   /// 的事（`Main.dc.html:2000`）。
@@ -487,7 +483,6 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  // ──── 這張單的資訊 ────
 
   Widget _infoCard(RepairTicketDetail detail) {
     final rows = <({String key, String value})>[
@@ -516,7 +511,6 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  // ──── 置底操作列 ────
 
   /// 一個狀態一組按鍵（`Main.dc.html:3908`）。
   ///

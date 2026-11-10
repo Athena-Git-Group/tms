@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/** 介面根共通句的 When（dsl.md When 句型區）。 */
 public class CommonWhenSteps {
 
     private final ScenarioWorld world;
@@ -107,7 +106,6 @@ public class CommonWhenSteps {
     @當("從 PMS 拉今日房態，{string} 的訂房帶 {string} 屬性")
     public void pullTodayRoomStateFromPms(String roomNo, String attribute) {
         LocalDate checkinDate = clock.instant().atZone(clock.getZone()).toLocalDate();
-        // PmsProbe 固定丟 UnsupportedOperationException（main 還沒有 PmsAdapter），見其類別註解。
         pmsProbe.pushTodayRoomState(roomNo, List.of(attribute), checkinDate);
     }
 

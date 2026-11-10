@@ -205,10 +205,6 @@ public class AutomationRuleService {
 
         OffsetDateTime now = OffsetDateTime.now(clock);
         OffsetDateTime dueAt = ruleTask.dueAfterMinutes() == null ? null : now.plusMinutes(ruleTask.dueAfterMinutes());
-        // TaskEngine 建單時以系統真實時間寫 created_at，但排程與逾時判斷都以注入的
-        // Clock 為準；把時間欄位改回 Clock 的讀數，「今天建了幾張」和「何時到期」
-        // 才會落在同一個「今天」。進待接池的單補 pool_source=system；直接派給
-        // 負責人的單沒有進過池，pool_source 維持原值。
         jdbcTemplate.update(
                 """
                 UPDATE tasks

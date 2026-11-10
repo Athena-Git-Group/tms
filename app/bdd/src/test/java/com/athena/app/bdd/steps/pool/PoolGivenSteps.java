@@ -7,7 +7,6 @@ import io.cucumber.java.zh_tw.假設;
 
 import java.util.Map;
 
-/** 待認領模組的 Given。 */
 public class PoolGivenSteps {
 
     private final AppiumWorld world;
@@ -16,7 +15,6 @@ public class PoolGivenSteps {
         this.world = world;
     }
 
-    /** 怎麼做：透過後端測試資料建立待認領任務。權威狀態落地：後端有這些 pool 的任務。 */
     @假設("房務待認領有以下任務：")
     public void housekeepingPoolHasTasks(DataTable table) {
         for (Map<String, String> row : table.asMaps()) {
@@ -71,16 +69,13 @@ public class PoolGivenSteps {
                 reminder == null ? null : BackendChannel.reminderStage(reminder));
     }
 
-    /** 自動化規則單的「交代或原因」前綴，後面接規則名（backend dsl.md 同名句型）。 */
     private static final String RULE_HIT_PREFIX = "規則引擎命中：";
 
-    /** 怎麼做：透過後端測試資料把該員工停用。權威狀態落地：後端 staff 為停用，名下已接任務不變。 */
     @假設("{string} 已停用")
     public void staffDeactivated(String staffName) {
         world.backend().deactivateStaff(world.staff(staffName).id());
     }
 
-    /** 怎麼做：以該員工登入後切到待認領分頁，等列表載入完成。 */
     @假設("{string} 已在 App 打開待認領")
     public void alreadyOpenedPool(String staffName) {
         world.ensureOnPool(world.staff(staffName));

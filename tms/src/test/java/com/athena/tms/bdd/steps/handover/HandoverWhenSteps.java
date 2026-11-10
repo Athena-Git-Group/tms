@@ -5,7 +5,6 @@ import com.athena.tms.bdd.support.BddApiClient;
 import io.cucumber.java.zh_tw.當;
 import java.util.UUID;
 
-/** 房間交辦模組的 When（dsl.md When 句型區）。 */
 public class HandoverWhenSteps {
 
     private final ScenarioWorld world;

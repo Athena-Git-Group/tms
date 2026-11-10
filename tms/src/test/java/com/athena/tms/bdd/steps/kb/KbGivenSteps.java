@@ -184,7 +184,6 @@ public class KbGivenSteps {
                         + "以問題開頭的房號推定任務，但沒有命中）");
     }
 
-    /** 建一個全新的 cleaning SOP 項，回傳其 item_key。 */
     private String createSopItem(String label) {
         long tenantId = tenantFixtures.testTenantId();
         String itemKey = "kb-sop-" + UuidV7.generate();

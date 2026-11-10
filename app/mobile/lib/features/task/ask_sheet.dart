@@ -23,7 +23,6 @@ import '../../core/widgets/tms_sheet.dart';
 class AskSheet extends StatefulWidget {
   const AskSheet({super.key, required this.taskId, required this.roomNo});
 
-  /// 要查哪一張任務的情境。
   final String taskId;
 
   /// 這張任務的房號，寫在面板標題上。員工手上常常同時有好幾間，標題不帶房號
@@ -84,7 +83,6 @@ class _AskSheetState extends State<AskSheet> {
   /// 回饋只收一次，收完整列換成一句謝謝（`Main.dc.html:1667`）。
   bool? _feedback;
 
-  /// 這一題已經轉給主管了。
   bool _escalated = false;
 
   @override
@@ -468,7 +466,6 @@ class _EscalatedNotice extends StatelessWidget {
   }
 }
 
-/// 回饋列上那兩顆白底描邊的膠囊。
 class _FeedbackChip extends StatelessWidget {
   const _FeedbackChip({required this.label, required this.onTap});
 

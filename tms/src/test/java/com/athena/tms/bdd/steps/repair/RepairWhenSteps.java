@@ -354,7 +354,6 @@ public class RepairWhenSteps {
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), body);
     }
 
-    /** W1／W2／W3 共用：準備照片（若 Data Table 要求）後呼叫 createRepairTicket。 */
     private void createTicket(
             String staffName, String taskKey, DataTable table, boolean interrupt, String idempotencyKey) {
         Map<String, String> row = table.asMaps(String.class, String.class).get(0);

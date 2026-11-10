@@ -2,11 +2,9 @@ import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 
-/// 分段控制裡的一段。
 class TmsSegment<T> {
   const TmsSegment({required this.value, required this.label, this.wrap});
 
-  /// 選到這一段代表的值。
   final T value;
 
   final String label;
@@ -37,21 +35,16 @@ class TmsSegmentedControl<T> extends StatelessWidget {
 
   final List<TmsSegment<T>> segments;
 
-  /// 目前選中的值。
   final T value;
 
   final ValueChanged<T> onChanged;
 
-  /// 外框內距。`Main.dc.html:2198` — padding 2
   static const double trackPadding = 2;
 
-  /// 外框圓角。`Main.dc.html:2198` — border-radius 9px
   static const double trackRadius = 9;
 
-  /// 一段的最小高度。`Main.dc.html:2200` — min-height 32px
   static const double segmentHeight = 32;
 
-  /// 一段的圓角。`Main.dc.html:2200` — border-radius 7px
   static const double segmentRadius = 7;
 
   @override
@@ -93,7 +86,6 @@ class TmsSegmentedControl<T> extends StatelessWidget {
             : null,
         child: Text(
           segment.label,
-          // `Main.dc.html:4003` — 選中的那一段字重 600，其餘 400
           style: (selected ? TmsText.footnoteEmphasized : TmsText.footnote)
               .copyWith(color: TmsColors.label),
         ),

@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-/** 推播模組的 When。 */
 public class PushWhenSteps {
 
     private final AppiumWorld world;
@@ -16,13 +15,10 @@ public class PushWhenSteps {
         this.world = world;
     }
 
-    /** 怎麼做：在通知中心點這則推播，等 App 切到前景並完成導頁。 */
     @當("{string} 點開這則推播")
     public void tapThisPush(String staffName) {
         world.tapPushNotification();
     }
-
-    // ──── 通知中心（T309–T311 落點） ────
 
     /** 等候畫面元素的統一逾時：導頁有轉場動畫，用輪詢等待取代固定 sleep，逾時才當失敗。 */
     private static final Duration UI_TIMEOUT = Duration.ofSeconds(10);
@@ -59,7 +55,6 @@ public class PushWhenSteps {
         world.tapTestId("notification.item." + notificationId(staffName, title) + ".title", UI_TIMEOUT);
     }
 
-    /** 怎麼做：點 {@code notification.mark-all-read-button}。權威狀態落地：該員工所有通知都標為已讀。 */
     @當("{string} 在通知中心點「全部標為已讀」")
     public void tapMarkAllNotificationsRead(String staffName) {
         world.tapTestId("notification.mark-all-read-button", UI_TIMEOUT);

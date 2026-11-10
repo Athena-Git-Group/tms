@@ -101,7 +101,6 @@ enum TmsCalloutKind {
 
   const TmsCalloutKind(this.surface);
 
-  /// 這條規則屬於哪一個畫面。
   final TmsCalloutSurface surface;
 }
 
@@ -110,10 +109,8 @@ enum TmsCalloutKind {
 /// 兩個畫面各有一條互不相干的優先序，排在一起比大小沒有意義，所以挑選時會檢
 /// 查候選是不是同一個畫面的。
 enum TmsCalloutSurface {
-  /// 房務任務頁。
   task,
 
-  /// 工務單詳情。
   ticket,
 }
 
@@ -692,7 +689,6 @@ class TmsQuoteEntry {
   /// `task.handover.0.meta`。不給就兩段都不掛 id。
   final String? idPrefix;
 
-  /// 交辦內容。
   final String text;
 
   /// 出處那一行，例如「交班單 · 阿美 · 09:30」。

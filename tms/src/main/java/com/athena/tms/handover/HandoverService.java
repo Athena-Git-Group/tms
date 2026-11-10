@@ -102,7 +102,6 @@ public class HandoverService {
                 OffsetDateTime.class, tenantId, taskId, staffId);
     }
 
-    /** 這位員工有沒有讀過這張任務的交辦（TaskDetail.handoverRead）。 */
     public boolean isRead(long tenantId, UUID taskId, UUID staffId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM handover_reads WHERE tenant_id = ? AND task_id = ? AND staff_id = ?",

@@ -72,7 +72,6 @@ class CelebrateScreen extends StatelessWidget {
   /// 標題下方那一句「這一間接下來會怎樣」，由完成的那張單決定，不是畫面自己挑。
   final String subline;
 
-  /// 這一間實際做了幾分鐘。
   final int actualMinutes;
 
   /// 這一間預估幾分鐘；沒有估時的任務為 null。
@@ -131,8 +130,6 @@ class CelebrateScreen extends StatelessWidget {
   }
 }
 
-/// 對話卡本體：頂部飾帶與彩屑、旋轉的勾勾方塊、標題與說明、統計磚、接續鍵與
-/// 回首頁鍵。
 class _CelebrateDialog extends StatelessWidget {
   const _CelebrateDialog({
     required this.roomNo,

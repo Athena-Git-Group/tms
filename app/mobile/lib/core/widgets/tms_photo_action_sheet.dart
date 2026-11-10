@@ -6,10 +6,8 @@ import 'tms_motion.dart';
 
 /// 員工要從哪裡取得這張照片。
 enum TmsPhotoSource {
-  /// 現在拍一張。
   camera,
 
-  /// 從相簿裡挑已經有的。
   library,
 }
 
@@ -45,10 +43,8 @@ class _PhotoActionSheet extends StatelessWidget {
   /// 選單兩張卡與螢幕下緣之間的最小留白，原型寫 `max(安全區下緣, 8)`。
   static const double _minBottomInset = TmsSpacing.sm;
 
-  /// 選單列的最小高度。
   static const double _rowHeight = 57;
 
-  /// iOS 26 的動作選單圓角。
   static const double _radius = 26;
 
   @override

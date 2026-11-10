@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** 任務執行模組的 Given。 */
 public class TaskExecutionGivenSteps {
 
     /** 這一句自己建的任務用什麼內容與類別：SOP 清單只掛在打掃類任務上。 */
@@ -243,7 +242,6 @@ public class TaskExecutionGivenSteps {
         backend.setTenantConfig(backend.ensureTenant(), "completion_celebration_enabled", false);
     }
 
-    /** 等後端把該房的任務翻成完成態，回傳最後讀到的狀態（逾時就回最後一次讀到的值）。 */
     private String awaitCompletedState(String roomNo, Duration timeout) {
         long deadline = System.nanoTime() + timeout.toNanos();
         String state = String.valueOf(world.taskRowByRoomNo(roomNo).get("state"));
@@ -294,7 +292,6 @@ public class TaskExecutionGivenSteps {
         assertBackendStateUnchanged(task);
     }
 
-    /** 權威讀回：離線完成不該動到後端，該任務這時仍必須是進行中（{@code doing}）。 */
     private void assertBackendStateUnchanged(String task) {
         String state = String.valueOf(world.taskRowByRoomNo(task).get("state"));
         if (!"doing".equals(state)) {

@@ -46,11 +46,6 @@ public class SystemThenSteps {
         }
     }
 
-    /**
-     * 必查：畫面頂部離線列顯示該文案與待同步筆數，筆數與 App 本機待送出佇列筆數一致
-     * （涵蓋待送出的工務單與離線完成的任務）。accessibility id：
-     * {@code system.offline-bar}、{@code system.offline-bar.pending-count}。
-     */
     @那麼("離線列顯示 {string} 與待同步筆數 {int}")
     public void offlineBarShowsTextAndPendingCount(String text, int pendingCount) {
         assertLabel("system.offline-bar", text);
@@ -70,7 +65,6 @@ public class SystemThenSteps {
         }
     }
 
-    /** 後端這筆任務離開進行中之前一直重查，逾時就把當下的狀態回給呼叫端去報錯。 */
     private String waitForBackendState(String roomNo) {
         long deadline = System.nanoTime() + SYNC_TIMEOUT.toNanos();
         String state = "";

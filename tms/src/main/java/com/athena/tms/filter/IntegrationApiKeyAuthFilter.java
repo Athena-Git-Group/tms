@@ -1,20 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  jakarta.servlet.FilterChain
- *  jakarta.servlet.ServletException
- *  jakarta.servlet.ServletRequest
- *  jakarta.servlet.ServletResponse
- *  jakarta.servlet.http.HttpServletRequest
- *  jakarta.servlet.http.HttpServletResponse
- *  org.springframework.security.authentication.UsernamePasswordAuthenticationToken
- *  org.springframework.security.core.Authentication
- *  org.springframework.security.core.authority.SimpleGrantedAuthority
- *  org.springframework.security.core.context.SecurityContext
- *  org.springframework.security.core.context.SecurityContextHolder
- *  org.springframework.web.filter.OncePerRequestFilter
- */
 package com.athena.tms.filter;
 
 import com.athena.tms.common.CurrentActor;
@@ -57,9 +40,6 @@ extends OncePerRequestFilter {
         this.apiErrorResponses = apiErrorResponses;
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try {
             boolean shouldAuthenticate;

@@ -59,10 +59,6 @@ public class PushManagerActionSteps {
     }
 
     /**
-     * dsl.md 怎麼做：以主管身分呼叫 createInspections，該項 pass=false。權威狀態落地：
-     * 依基線查房退回規則，任務轉為 accepted，redo 加 1，inspection failed；寫入負責人
-     * 的 push outbox。回寫：回應。
-     *
      * <p>createInspections 的 items 鍵集必須是租戶查房項目全集（缺項 422），所以這裡先
      * 查出全部查房項目，只把 Gherkin 點名的那一項判為不合格，其餘判為合格。
      */
@@ -102,11 +98,6 @@ public class PushManagerActionSteps {
         apiClient.post("/inspections", BddApiClient.Auth.staff(world.jwt(managerName)), body);
     }
 
-    /**
-     * dsl.md 怎麼做：以主管身分呼叫 tasksCancel（POST /tasks/{id}/cancel），body 為
-     * CancelTaskRequest，note 為原因文字。權威狀態落地：任務轉為 cancelled，並寫入
-     * 負責人的 push outbox。回寫：回應。預設參數：作廢原因代碼 manager_void。
-     */
     @當("{string} 以原因 {string} 作廢 {string}")
     public void managerVoidsTask(String managerName, String reasonNote, String taskKey) {
         UUID taskId = UUID.fromString(world.taskId(taskKey));
@@ -117,10 +108,6 @@ public class PushManagerActionSteps {
     }
 
     /**
-     * dsl.md 怎麼做：以主管身分呼叫 tasksReassign（POST /tasks/{id}/reassign）。
-     * 權威狀態落地：負責人改為新員工，並寫入原負責人與新負責人的 push outbox。
-     * 回寫：回應。
-     *
      * <p>contracts 的 tasksReassign requestBody 掛的是整列 tasksRequest schema，但這個
      * 動作實際只改一個欄位；送整列任務資料反而要求呼叫端重複提供這個動作不該變動的
      * type／dept／state 等欄位，所以這裡只送改派這個動作本身需要的 assigneeId。
@@ -138,11 +125,6 @@ public class PushManagerActionSteps {
     }
 
     /**
-     * dsl.md 怎麼做：以主管身分呼叫 createLeaves（POST /leaves）登記該員工今日請假，
-     * 觸發基線請假連鎖。權威狀態落地：該員工未完成的任務轉為 pool，
-     * priority_notify=true、pool_source=leave_return；寫入同樓層房務員的 push outbox。
-     * 回寫：回應。
-     *
      * <p>dsl.md 只給請假員工本人，沒有指定哪位主管登記；身分只是用來滿足
      * createLeaves 的認證（API 本身認誰登記的主管不是這句要驗證的對象），
      * 所以現場建一個不對外曝光姓名的主管帳號。

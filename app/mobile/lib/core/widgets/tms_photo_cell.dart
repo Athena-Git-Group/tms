@@ -85,7 +85,6 @@ class TmsPhotoCell extends StatelessWidget {
   /// 用這種。
   final double? edge;
 
-  /// 表單上照片列的格子邊長。
   static const double size = 72;
 
   @override
@@ -158,10 +157,8 @@ class TmsPhotoCell extends StatelessWidget {
   }
 }
 
-/// 字條的底色，原型寫 `rgba(0,0,0,.5)`。
 const Color _stripBackground = Color(0x80000000);
 
-/// 蓋在格子上的叉與勾的邊長。
 const double _glyphSize = 12;
 
 class _RemoveButton extends StatelessWidget {
@@ -169,7 +166,6 @@ class _RemoveButton extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  /// 移除鈕的直徑。
   static const double _buttonSize = 28;
 
   @override
@@ -362,7 +358,6 @@ class TmsAddPhotoButton extends StatelessWidget {
   }
 }
 
-/// 原型的相機圖示邊長。
 const double _cameraIconSize = 26;
 
 /// 「加入照片」格的虛線框。Flutter 的 `Border` 只有實線，虛線得自己畫：沿著
@@ -370,7 +365,6 @@ const double _cameraIconSize = 26;
 class _DashedBorderPainter extends CustomPainter {
   const _DashedBorderPainter();
 
-  /// 一段實線與一段空白的長度。
   static const double _dash = 5;
   static const double _gap = 4;
 

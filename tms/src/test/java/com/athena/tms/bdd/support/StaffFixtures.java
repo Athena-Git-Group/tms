@@ -14,11 +14,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  *
  * <p>兩種形狀：現場部門員工（房務／工務／櫃檯）role 與 dept 剛好同值；主管／值班經理
  * 這類不固定部門的角色 dept 必須是 NULL（見 {@link #createFieldStaff}／{@link #createManagerLikeStaff}）。
- * 值班經理對應的權威角色代碼 {@code duty_manager}（見 dsl.md 部門用語對照）目前不在
- * {@code staff_accounts.role} 的 CHECK 值域內（V1 schema 只有 frontdesk|housekeeping|
- * engineering|manager|owner）——這是 schema 落後 dsl.md 的已知缺口，呼叫
- * {@link #createManagerLikeStaff} 建值班經理時 INSERT 會違反 CHECK 直接噴錯，
- * 在 Feature GREEN 補上 schema 前，這是合法的 RED 訊號，不是本類別要蒙混過去的事。
  *
  * <p>班次與負責樓層查 {@code plan_rooms}（V4 已補建）：只有現場部門員工才有「負責樓層／班次」
  * 這個概念，這裡直接幫這位員工建一筆最小可用的 plan_rooms 列——帶一張 draft 狀態的
@@ -28,7 +23,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  */
 public class StaffFixtures {
 
-    /** 固定明文密碼，僅供測試環境；比照舊 integration 測試（TestData.PASSWORD）的慣例。 */
     public static final String DEFAULT_PASSWORD = "demo1234";
 
     /** dsl.md「飯店有以下員工：」列的「班次結束」預設值。 */
@@ -55,7 +49,6 @@ public class StaffFixtures {
         this.jwtService = jwtService;
     }
 
-    /** 現場部門員工（房務／工務／櫃檯）：role 與 dept 同值，支援負責樓層／班次結束。 */
     public CreatedStaff createFieldStaff(
             String name, String deptCode, Integer floor, String shiftEndHHmm, String stateCode) {
         if (!SUPPORTED_DEPTS.contains(deptCode)) {

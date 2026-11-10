@@ -21,10 +21,8 @@ import 'task_screen.dart';
 class _RoomInfoScaffold extends StatelessWidget {
   const _RoomInfoScaffold({required this.title, required this.children});
 
-  /// 導覽列正中央那一行，例如「交辦 · 305」。
   final String title;
 
-  /// 內容區由上到下的區塊，彼此間距 12。
   final List<Widget> children;
 
   /// 捲動內容與導覽列之間的距離。`Main.dc.html:4757` — ptBody = dv.top + 52 + 12

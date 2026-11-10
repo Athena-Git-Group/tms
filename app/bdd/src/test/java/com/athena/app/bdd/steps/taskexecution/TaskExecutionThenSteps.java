@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** 任務執行模組的 Then。 */
 public class TaskExecutionThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -63,11 +62,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 必查：以 accessibility id {@code task.step-track} 定位，打掃類步驟條
-     * （已接→進行中→完成→查房／免查房）目前標示的步驟與後端 {@code tasks.state}／
-     * {@code inspection} 對照一致。
-     */
     @那麼("任務頁顯示打掃步驟條，目前停在 {string}")
     public void showsCleaningStepTrack(String step) {
         Map<String, Object> row = world.taskRowByRoomNo(world.currentTaskRoomNo());
@@ -79,10 +73,6 @@ public class TaskExecutionThenSteps {
         assertStepTrack(List.of("已接", "進行中", "完成", waived ? "免查房" : "查房"), step, row);
     }
 
-    /**
-     * 必查：以 accessibility id {@code task.step-track} 定位，備品類步驟條
-     * （已接→進行中→送達）目前標示的步驟與後端 {@code tasks.state} 對照一致。
-     */
     @那麼("任務頁顯示備品步驟條，目前停在 {string}")
     public void showsAmenityStepTrack(String step) {
         Map<String, Object> row = world.taskRowByRoomNo(world.currentTaskRoomNo());
@@ -134,10 +124,6 @@ public class TaskExecutionThenSteps {
         };
     }
 
-    /**
-     * 必查：以 accessibility id {@code task.primary-button} 定位，畫面上只有一個置底主按鈕，
-     * 文字與目前狀態對照表相符；延後／中斷是次要按鈕，不算在此主按鈕判定內。
-     */
     @那麼("任務頁只顯示一個主按鈕，文字為 {string}")
     public void showsOnlyOnePrimaryButton(String buttonText) {
         world.waitForTestId("task.primary-button", SCREEN_TIMEOUT);
@@ -151,10 +137,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 必查：任務頁 SOP 進度文字（{@code x / y · 跳過不擋流程}）包含該關鍵字；只有勾選
-     * 計入 x，跳過不算，y 為 SOP 總項數。accessibility id：{@code task.sop.progress}。
-     */
     @那麼("{string} 的 SOP 進度顯示 {string}")
     public void sopProgressShows(String task, String keyword) {
         WebElement element = world.waitForTestId("task.sop.progress", SCREEN_TIMEOUT);
@@ -276,7 +258,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /** 這個節點的文字要剛好等於這一句。 */
     private void assertLabel(String testId, String expected) {
         String actual = world.waitForTestId(testId, SCREEN_TIMEOUT).getAttribute("label");
         if (!expected.equals(actual)) {
@@ -285,10 +266,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 必查：透過後端測試資料查核，該員工的 {@code outbox} 沒有任何 kind {@code push} 的資料；
-     * 用於確認超時提示這種純 App 端顯示沒有連帶觸發推播。
-     */
     @那麼("後端沒有對 {string} 送出任何推播")
     public void noPushSentTo(String staffName) {
         long tenantId = world.backend().ensureTenant();
@@ -364,10 +341,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 必查：延後面板「其他原因」欄位下方即時字數提示等於該文字。
-     * accessibility id：{@code hold.char-count}。
-     */
     @那麼("延後面板顯示字數 {string}")
     public void deferPanelCharCount(String countText) {
         WebElement element = world.waitForTestId("hold.char-count", SCREEN_TIMEOUT);
@@ -378,7 +351,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /** 等指定秒數，用來確認畫面上的數字在這段時間內沒有變。 */
     private static void sleepSeconds(int seconds) {
         try {
             Thread.sleep(seconds * 1000L);
@@ -846,13 +818,6 @@ public class TaskExecutionThenSteps {
     private static final int OFFLINE_QUEUE_SETTLE_SECONDS = 5;
 
     /**
-     * 盯待送出筆數時，每一次讀畫面給多久。
-     *
-     * <p>讀不到離線列就是這一句失敗，所以這個時限要給得夠寬。剛點完按鈕的那一下
-     * 畫面可能還在轉場或蓋著提示，離線列要等它落定才找得到。給一兩秒會把「還沒畫好」
-     * 誤判成「這一頁沒有離線列」。
-     */
-    /**
      * 必查：App 本機的待送出佇列沒有因這次操作而增加，離線列的待同步筆數
      * （accessibility id {@code system.offline-bar.pending-count}）與操作前相同；
      * 後端該任務的狀態也與操作前一樣。
@@ -1305,11 +1270,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 必查：畫面上是工務單表單而不是原因清單，而且這一步還沒有中斷任何東西——原任務
-     * 仍是進行中，後端也還沒有這張單。accessibility id：{@code repair.sheet}、
-     * {@code hold.sheet}。
-     */
     @那麼("{string} 的面板換成工務單表單，原任務還沒有被中斷")
     public void sheetSwitchedToRepairForm(String roomNo) {
         world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);

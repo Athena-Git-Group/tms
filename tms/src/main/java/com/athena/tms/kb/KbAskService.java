@@ -201,7 +201,6 @@ public class KbAskService {
                 escalationId, answerId, question, uuidOf(audit.get("task_id")), askedBy, "pending", null, null);
     }
 
-    /** 主管看提問清單；status 不給時全列。 */
     public List<KbEscalationView> listEscalations(String status) {
         long tenantId = TenantContext.require();
         StringBuilder sql = new StringBuilder(

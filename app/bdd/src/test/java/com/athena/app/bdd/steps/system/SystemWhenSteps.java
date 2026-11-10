@@ -7,7 +7,6 @@ import io.cucumber.java.zh_tw.當;
 import java.time.Duration;
 import java.util.List;
 
-/** 系統層模組的 When。 */
 public class SystemWhenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);

@@ -60,10 +60,6 @@ public class RepairThenSteps {
         this.context = context;
     }
 
-    /**
-     * 必查：照片檔案上有該浮水印文字（以 OCR 或 App 揭露的中繼資料比對）。上傳到後端的照片
-     * 也帶有同樣的浮水印。accessibility id：{@code repair.photo.{index}.watermark-label}。
-     */
     @那麼("這張照片的浮水印為 {string}")
     public void photoWatermarkIs(String watermark) {
         assertLabelContains("repair.photo.1.watermark-label", watermark, "照片浮水印");
@@ -83,10 +79,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：以 accessibility id {@code repair.photo.add-button}／送出鈕定位，其可互動狀態
-     * （enabled/disabled）符合；禁用時無法真的觸發送出動作，不是事後才報錯。
-     */
     @那麼("送出鈕為 {string}")
     public void submitButtonState(String enabledOrDisabled) {
         boolean expectedEnabled = switch (enabledOrDisabled) {
@@ -153,10 +145,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：以 accessibility id {@code repair.photo.count-label} 定位的欄位標題文字包含該
-     * 提示；不要求事後 Alert 或 Toast 出現同樣文字。
-     */
     @那麼("照片欄位提示 {string}")
     public void photoFieldHint(String hint) {
         assertLabelContains("repair.photo.count-label", hint, "照片欄位標題");
@@ -178,10 +166,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：以 accessibility id {@code repair.photo.add-button} 定位，元件不存在或不可見；
-     * 不要求出現「最多 3 張」的事後提示文字。
-     */
     @那麼("加入照片的按鈕已消失")
     public void addPhotoButtonGone() {
         // 先等報修面板本身在畫面上，否則面板還沒畫出來時的「找不到」會誤判為通過。
@@ -191,11 +175,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：該張照片有失敗標示與單張重試操作；其他照片顯示已上傳。
-     * accessibility id：{@code repair.photo.{index}.upload-status}、
-     * {@code repair.photo.{index}.retry-button}。
-     */
     @那麼("報修畫面標示第 {int} 張照片上傳失敗，並提供只重試這一張")
     public void nthPhotoFailedWithRetryOption(int photoIndex) {
         assertLabelContains("repair.photo." + photoIndex + ".upload-status", "失敗", "照片上傳狀態");
@@ -218,10 +197,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：App 本機佇列有這張單與它的照片；畫面上有待送出標示。重新開啟 App 後仍在。
-     * accessibility id：{@code ticket.summary.offline-queued-label}。
-     */
     @那麼("工務單與照片保存在手機，畫面標示待送出")
     public void ticketAndPhotosSavedOffline() {
         world.waitForTestId("ticket.summary.offline-queued-label", SCREEN_TIMEOUT);
@@ -231,10 +206,6 @@ public class RepairThenSteps {
         backendHasNoTicket();
     }
 
-    /**
-     * 必查：後端該房未結案的冷氣修繕任務筆數等於張數。房號為 feature 中的裸字（無引號），
-     * 用 regex 形式的 step definition 擷取。
-     */
     @那麼("^後端只有 (\\d+) 張 (\\S+) 冷氣工務單$")
     public void backendHasOnlyNAcTickets(int count, String roomNo) {
         List<Map<String, Object>> rows = world.backend().queryRows("""
@@ -308,11 +279,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：報修畫面的急件判定卡顯示「系統判定：一般件」，與後端
-     * {@code urgentSuggestion.suggested}=false 一致；沒有輸入可以更改這個判定。
-     * accessibility id：{@code repair.urgent-judgement.card}。
-     */
     @那麼("畫面顯示系統判定為一般件")
     public void showsSystemNormalJudgement() {
         assertLabelContains("repair.urgent-judgement.card", "系統判定：一般件", "急件判定卡");
@@ -324,10 +290,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：急件判定卡上有這段固定說明文字，且判定卡上沒有任何可點的
-     * 「設為急件／取消急件」切換元件。accessibility id：{@code repair.urgent-judgement.card}。
-     */
     @那麼("畫面顯示急件判定由系統依飯店設定規則決定，房務不能更改")
     public void showsUrgentJudgementNotEditableByStaff() {
         assertLabelContains("repair.urgent-judgement.card", "依飯店設定的規則判定", "急件判定卡");
@@ -414,8 +376,6 @@ public class RepairThenSteps {
         }
     }
 
-    // ──── 工務視角 ────
-
     /**
      * 必查：以 {@code engHome.progress.in-hand-count}／{@code engHome.progress.repaired-count}／
      * {@code engHome.progress.urgent-count} 定位的三格數字等於期望值，並與後端工務視角
@@ -436,10 +396,6 @@ public class RepairThenSteps {
                 "t.state IN ('accepted', 'doing') AND t.urgent = true");
     }
 
-    /**
-     * 必查：以 {@code engPool.item.{單號}.source-label} 定位的單卡來源標示文字等於該值，
-     * 並與後端 {@code tasks.source} 對照一致（staff＝房務報修、desk＝櫃檯）。
-     */
     @那麼("工務待認領中 {string} 的來源標示為 {string}")
     public void engPoolItemSourceLabelIs(String ticketNo, String sourceLabel) {
         WebElement label = world.waitForTestId("engPool.item." + ticketNo + ".source-label", SCREEN_TIMEOUT);
@@ -461,12 +417,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：列表中的單卡順序剛好等於清單，沒有多也沒有少；清單裡的每張單在後端都是
-     * 待認領（{@code tasks.state = 'pool'}）。單號清單以「、」分隔、非 quoted string，
-     * 故用 regex 形式的 step definition 擷取（比照「待認領列表依序為」）。
-     * 順序以各單卡（{@code engPool.item.{單號}.card}）在畫面上的縱向位置判定。
-     */
     @那麼("^工務待認領依序為 (.+)$")
     public void engPoolOrderIs(String ticketListText) {
         List<String> expected = List.of(ticketListText.split("、"));
@@ -500,11 +450,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：以 {@code engPool.claim-conflict-alert} 定位的 Alert 顯示含該員工姓名的撞單提示；
-     * 後端該單仍在對方名下（有工務單的任務指派給這位員工），畫面上的操作者沒有拿到這張單；
-     * 該單已從待認領列表移除（dsl「已被對方接走」——{@code engPool.item.{單號}.card} 不存在）。
-     */
     @那麼("工務認領撞單，畫面顯示「已被 {string} 認領」")
     public void engPoolClaimConflictShows(String claimerName) {
         WebElement alert = world.waitForTestId("engPool.claim-conflict-alert", SCREEN_TIMEOUT);
@@ -541,11 +486,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：後端該單已回到待認領（{@code tasks.state = 'pool'}）且不再指派給任何人
-     * （{@code tasks.assignee_id} 為 null）；畫面上狀態摘要卡（{@code ticket.status-summary-card}）
-     * 顯示「待認領」。
-     */
     @那麼("{string} 回到工務待認領，不再指派給任何人")
     public void ticketBackToPoolUnassigned(String ticketNo) {
         WebElement summary = world.waitForTestId("ticket.status-summary-card", SCREEN_TIMEOUT);
@@ -564,14 +504,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務端的狀態列（{@code ticket.status-summary-card}）顯示「已完修」、處理結果
-     * （{@code ticket.resolution-label}，寫在同一條狀態列的內文裡）顯示該結果文字；
-     * 後端該單已完修
-     * （{@code tasks.state = 'done'}），且各結果的連動也已落地——暫時處理有一張
-     * {@code origin_ticket_task_id} 指回本單的追蹤單、無法修復時該房
-     * {@code rooms.hk_state} 已轉為 out_of_order。
-     */
     @那麼("工務單詳情顯示已完修，結果為 {string}")
     public void ticketDetailShowsResolved(String resolutionLabel) {
         WebElement summary = world.waitForTestId("ticket.status-summary-card", SCREEN_TIMEOUT);
@@ -706,12 +638,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：詳情頂部步驟條固定依序顯示四步（第 i 步以 {@code ticket.stepper.{i}} 定位、
-     * 文字等於步驟名，i 從 1 起算），目前步驟另掛 {@code ticket.stepper.{i}--current}；
-     * 後端狀態與目前步驟對照一致（待開始＝accepted、維修中＝doing、完修＝done 且尚未
-     * 驗收、驗收＝done 且 verified_at 已有值）。
-     */
     @那麼("工務單詳情的步驟條依序為 {string}，目前在 {string}")
     public void ticketDetailStepperIs(String stepListText, String currentStep) {
         List<String> steps = List.of(stepListText.split("、"));
@@ -762,8 +688,6 @@ public class RepairThenSteps {
         }
     }
 
-    // ──── 房務端生命週期 ────
-
     /**
      * 必查：詳情顯示退回原因文字；後端
      * {@code repair_tickets.reject_reason} 等於該原因、狀態為 rejected（主管未核准）。
@@ -784,10 +708,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情有可點的撤回操作入口（{@code ticket.withdraw-button}），
-     * 點下去會進入撤回確認流程。
-     */
     @那麼("工務單詳情顯示撤回按鈕")
     public void ticketDetailShowsWithdrawButton() {
         WebElement button = world.waitForTestId("ticket.withdraw-button", SCREEN_TIMEOUT);
@@ -813,8 +733,6 @@ public class RepairThenSteps {
         }
     }
 
-    // ──── 共用 helper ────
-
     /**
      * 狀態摘要卡文案 → 權威 {@code tasks.state}（對照 dsl 的狀態用語表）。工務端另外兩種
      * 文案（已完修 · 等主管驗收、已驗收 · {主管}）在後端是同一個 done，由
@@ -838,7 +756,6 @@ public class RepairThenSteps {
         }
     }
 
-    /** 畫面上某個節點的文字必須包含期望值；{@code what} 用在錯誤訊息裡說明在看哪一段。 */
     private void assertLabelContains(String testId, String expected, String what) {
         String actual = world.waitForLabelOf(testId, expected, SCREEN_TIMEOUT);
         if (actual == null || !actual.contains(expected)) {
@@ -846,7 +763,6 @@ public class RepairThenSteps {
         }
     }
 
-    /** 畫面文案與後端狀態的對照；對不上就連文案一起報出來，不只報狀態碼。 */
     private static void requireState(String summaryText, String actualState, String expectedState) {
         if (expectedState == null) {
             throw new IllegalArgumentException("認不得的狀態摘要卡文案「" + summaryText
@@ -874,7 +790,6 @@ public class RepairThenSteps {
                 """, world.backend().ensureTenant(), context.repairRoomNo());
     }
 
-    /** 依訂房列組出後端會給的急件理由：{@code (VIP · )HH:mm 入住}。 */
     private static String urgentRuleOf(Map<String, Object> reservation) {
         Object checkinAt = reservation.get("checkin_at");
         OffsetDateTime moment = checkinAt instanceof Timestamp timestamp
@@ -884,7 +799,6 @@ public class RepairThenSteps {
                 + moment.format(CHECKIN_TIME) + " 入住";
     }
 
-    /** 畫面上某個數字格（count 類 accessibility id）的文字必須剛好是這個數字。 */
     private void assertScreenNumber(String testId, int expected) {
         WebElement element = world.waitForTestId(testId, SCREEN_TIMEOUT);
         String text = element.getText();
@@ -893,7 +807,6 @@ public class RepairThenSteps {
         }
     }
 
-    /** 後端符合條件的工務單筆數必須等於期望值；{@code what} 用在錯誤訊息裡說明在數什麼。 */
     private void assertBackendCount(String what, int expected, String condition) {
         List<Map<String, Object>> rows = ticketRows(condition);
         if (rows.size() != expected) {
@@ -917,7 +830,6 @@ public class RepairThenSteps {
                   AND""" + " " + condition, all);
     }
 
-    /** 同 {@link #ticketRows}，但條件必須剛好命中一張單，否則斷言失敗。 */
     private Map<String, Object> singleTicketRow(String condition, String what, Object... params) {
         List<Map<String, Object>> rows = ticketRows(condition, params);
         if (rows.size() != 1) {

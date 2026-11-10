@@ -18,7 +18,6 @@ final class AskPanel {
     private AskPanel() {
     }
 
-    /** 一則推薦問題：問題本身與範圍標籤。 */
     record Suggestion(String question, String scope) {
     }
 
@@ -37,7 +36,6 @@ final class AskPanel {
         return rows;
     }
 
-    /** 第幾則推薦問題的文字是這一句；找不到時噴錯並列出實際有哪幾則。 */
     static int indexOf(AppiumWorld world, String question) {
         List<Suggestion> suggestions = suggestions(world);
         for (int i = 0; i < suggestions.size(); i++) {
@@ -48,7 +46,6 @@ final class AskPanel {
         throw new AssertionError("查一下面板沒有推薦問題「" + question + "」（實際＝" + describe(suggestions) + "）");
     }
 
-    /** 一張出處卡的四欄。 */
     record SourceCard(String type, String title, String excerpt, String date) {
     }
 

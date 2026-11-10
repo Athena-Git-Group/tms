@@ -127,7 +127,6 @@ public class BddSpringConfiguration {
             return new KafkaGroupAwait(KAFKA.getBootstrapServers());
         }
 
-        /** 依名稱同步觸發排程 job（不用等 {@code @Scheduled} 的真實間隔），見 {@link JobTrigger}。 */
         @Bean
         JobTrigger jobTrigger(ApplicationContext applicationContext) {
             return new JobTrigger(applicationContext);

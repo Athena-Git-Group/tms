@@ -9,15 +9,12 @@ import java.util.Map;
  */
 public class ScenarioWorld {
 
-    /** 員工姓名 -> staff id */
     private final Map<String, String> staffIds = new HashMap<>();
-    /** 員工姓名 -> JWT */
     private final Map<String, String> staffJwts = new HashMap<>();
     /** 房號（或無房號時的內容） -> task id */
     private final Map<String, String> taskIds = new HashMap<>();
     /** 工務單號（W-NNNN） -> task id */
     private final Map<String, String> repairTicketTaskIds = new HashMap<>();
-    /** 已上傳照片 id（依準備順序） */
     private final java.util.List<String> photoIds = new java.util.ArrayList<>();
 
     private ApiResponse lastResponse;
@@ -109,7 +106,6 @@ public class ScenarioWorld {
         return v;
     }
 
-    /** API 回應快照：狀態碼、原始 body 與解析後 JSON。 */
     public record ApiResponse(int status, String body, tools.jackson.databind.JsonNode json) {
     }
 }

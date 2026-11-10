@@ -18,7 +18,6 @@ enum TmsAlertActionStyle {
   destructive,
 }
 
-/// [TmsAlert] 上的一顆按鈕。
 class TmsAlertAction {
   const TmsAlertAction({
     required this.label,
@@ -79,23 +78,17 @@ class TmsAlert extends StatelessWidget {
 
   final List<TmsAlertAction> actions;
 
-  /// 對話框寬度。`Main.dc.html:4860` 的 `al.w`。
   static const double width = 300;
 
-  /// 毛玻璃底板的模糊標準差與飽和度。`Main.dc.html:2399`。
   static const double _blur = 30;
   static const double _saturation = 180;
 
-  /// 底色 `rgba(255,255,255,.82)`。`Main.dc.html:4860` 的 `al.bg`。
   static const Color _background = Color(0xD1FFFFFF);
 
-  /// 次要按鈕底色 `rgba(120,120,128,.16)`。`Main.dc.html:4867`。
   static const Color _secondaryActionBackground = Color(0x29787880);
 
-  /// 按鈕高度。`Main.dc.html:4862` 的 `al.btnH`。
   static const double _actionHeight = 48;
 
-  /// 按鈕之間的間距。`Main.dc.html:4862` 的 `al.btnGap`。
   static const double _actionGap = 10;
 
   @override
@@ -112,7 +105,6 @@ class TmsAlert extends StatelessWidget {
             color: _background,
             borderRadius: BorderRadius.circular(TmsRadius.alert),
             boxShadow: const [
-              // `0 20px 50px rgba(0,0,0,.25)`，`Main.dc.html:4861`。
               BoxShadow(
                 color: Color(0x40000000),
                 offset: Offset(0, 20),
@@ -134,8 +126,6 @@ class TmsAlert extends StatelessWidget {
     );
   }
 
-  /// 標題與內文。`padding: 22px 22px 6px`、`gap: 4`、靠左，見
-  /// `Main.dc.html:2400` 與 `:4861`。
   Widget _textBlock() {
     Widget messageText = Text(
       message,
@@ -167,8 +157,6 @@ class TmsAlert extends StatelessWidget {
     );
   }
 
-  /// 按鈕列。`padding: 14px 16px 16px`、無分隔線、每顆等寬，見
-  /// `Main.dc.html:2403` 與 `:4862`。
   Widget _actionRow() {
     final buttons = <Widget>[];
     for (final action in actions) {

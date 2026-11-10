@@ -12,7 +12,6 @@ class TmsSquarePalette {
   final Color foreground;
 }
 
-/// 房務任務類別在畫面上的短名與配色。
 class TmsCategoryAppearance {
   const TmsCategoryAppearance({required this.label, required this.palette});
 
@@ -146,7 +145,6 @@ class TmsRoomSquare extends StatelessWidget {
 
   final String where;
 
-  /// 方塊第二行的類別短名。
   final String label;
 
   final TmsSquarePalette palette;

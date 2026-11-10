@@ -15,10 +15,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 員工帳號查詢／登入 API，對應 contracts 員工帳號與登入.yaml 的 listStaffAccounts
- * （GET /staff-accounts）與 staffAccountsLogin（POST /staff-accounts/login）。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class StaffAccountController {

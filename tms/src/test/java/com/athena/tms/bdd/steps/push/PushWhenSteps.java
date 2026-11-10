@@ -28,12 +28,6 @@ public class PushWhenSteps {
         this.jdbcClient = jdbcClient;
     }
 
-    /**
-     * dsl.md 怎麼做：以該員工身分查詢通知列表。待 /api-plan：目前沒有
-     * GET /notifications，本句型假設該端點依時間新到舊回傳每筆的標題、送達時間
-     * 與已讀狀態。回寫：通知清單（存進 {@link ScenarioWorld#setLastResponse}，由
-     * apiClient.get 自動處理）。
-     */
     @當("{string} 查看通知中心")
     public void staffViewsNotificationCenter(String staffName) {
         apiClient.get("/notifications", BddApiClient.Auth.staff(world.jwt(staffName)));
@@ -72,9 +66,6 @@ public class PushWhenSteps {
      * （contracts/groups/知識與通知/通知中心.yaml 的 {@code markAllNotificationsRead}，
      * {@code POST /notifications/read-all}）。權威狀態落地：該員工名下每一則通知的
      * {@code read_at} 都已寫入目前時間；已經是已讀的不受影響。
-     *
-     * <p>dsl.md 殘留「待 /api-plan 補」字樣已過時——此端點已在 contracts 定案，
-     * 不需要另外查表取通知 id，直接呼叫端點即可。
      */
     @當("{string} 將所有通知標為已讀")
     public void staffMarksAllNotificationsRead(String staffName) {

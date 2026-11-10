@@ -15,11 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 員工 App 的任務執行 API，路由對應 contracts 的 readTasks、tasksClaim、
- * tasksDefer、tasksStart、tasksSopCheck、tasksInterrupt、tasksComplete、
- * tasksRequeue、tasksResume、listDeptPool 與 getMyToday。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class TaskExecutionController {
@@ -73,7 +68,6 @@ public class TaskExecutionController {
         return taskExecutionService.requeue(id, request);
     }
 
-    /** 請求形狀對應 contracts 任務.yaml 的 CancelTaskRequest。 */
     public record CancelTaskRequest(String reason, String note) {}
 
     @PostMapping("/tasks/{id}/cancel")
@@ -83,7 +77,6 @@ public class TaskExecutionController {
                 id, request == null ? null : request.reason(), request == null ? null : request.note());
     }
 
-    /** 改派只需要新負責人；整列任務資料其餘欄位不在這個動作的輸入裡。 */
     public record ReassignTaskRequest(UUID assigneeId) {}
 
     @PostMapping("/tasks/{id}/reassign")

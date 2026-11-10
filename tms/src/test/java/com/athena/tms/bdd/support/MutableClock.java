@@ -24,10 +24,8 @@ import java.time.ZonedDateTime;
  */
 public final class MutableClock extends Clock {
 
-    /** 固定測試基準日，和舊 {@code CucumberSpringConfiguration.HarnessConfig#fixedClock} 用的 2026-10-19 一致。 */
     public static final LocalDate DEFAULT_TEST_DATE = LocalDate.of(2026, 10, 19);
 
-    /** ClockConfig 用 {@code systemDefaultZone()}、沒有鎖定時區；測試固定用 Asia/Taipei 讓「今天」可預期。 */
     public static final ZoneId DEFAULT_ZONE = ZoneId.of("Asia/Taipei");
 
     private volatile Instant instant;
@@ -62,7 +60,6 @@ public final class MutableClock extends Clock {
         return instant;
     }
 
-    /** 直接把「現在」設成指定的 instant。 */
     public void setInstant(Instant instant) {
         this.instant = instant;
     }
@@ -77,7 +74,6 @@ public final class MutableClock extends Clock {
         this.instant = ZonedDateTime.of(DEFAULT_TEST_DATE, time, zone).toInstant();
     }
 
-    /** 把「現在」往前推進指定分鐘數（負數則往回調）。 */
     public void advanceMinutes(long minutes) {
         this.instant = this.instant.plusSeconds(minutes * 60);
     }

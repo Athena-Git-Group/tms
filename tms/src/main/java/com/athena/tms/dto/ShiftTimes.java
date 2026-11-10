@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  tools.jackson.databind.JsonNode
- */
 package com.athena.tms.dto;
 
 import java.time.LocalTime;

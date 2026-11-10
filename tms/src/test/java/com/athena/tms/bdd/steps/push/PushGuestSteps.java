@@ -68,13 +68,6 @@ public class PushGuestSteps {
         }
     }
 
-    /**
-     * dsl.md 怎麼做：先以 guestSessionsScan 取得住客 session，再以該 session 呼叫
-     * createGuestRequest（帶勾選單 itemId 與 quantity），品項預先對應到房務。
-     * 權威狀態落地：建立 dept housekeeping、狀態 pool、source guest、
-     * pool_source=guest_scan 的任務，並為房務員寫入 push outbox
-     * （PushPayload.event=pool_new_request）。回寫：任務 id。
-     */
     @當("住客在 {string} 掃碼要 {string}")
     public void guestScansForItem(String roomNo, String itemWithQuantity) {
         String sessionToken = ensureGuestSession(roomNo);
@@ -86,12 +79,6 @@ public class PushGuestSteps {
         }
     }
 
-    /**
-     * dsl.md 怎麼做：以該房的住客 session 呼叫 cancelGuestRequest（POST
-     * /guest-requests/{id}/cancel）撤回其在待認領的需求。權威狀態落地：任務轉為
-     * cancelled，cancel_reason=guest_withdrew，並寫入本部門的 push outbox
-     * （PushPayload.event=guest_withdrew）。回寫：回應。
-     */
     @當("住客撤回 {string} 的需求")
     public void guestWithdrawsRequest(String roomNo) {
         String sessionToken = ensureGuestSession(roomNo);
@@ -124,7 +111,6 @@ public class PushGuestSteps {
         }
     }
 
-    /** dsl.md 必查：權威狀態——該房今天沒有內容為該品項的任務。 */
     @那麼("{string} 今天沒有 {string} 的需求單")
     public void roomHasNoRequestToday(String roomNo, String item) {
         long tenantId = tenantFixtures.testTenantId();

@@ -3,7 +3,6 @@ package com.athena.app.bdd.steps.system;
 import com.athena.app.bdd.AppiumWorld;
 import io.cucumber.java.zh_tw.假設;
 
-/** 系統層模組的 Given。 */
 public class SystemGivenSteps {
 
     private final AppiumWorld world;

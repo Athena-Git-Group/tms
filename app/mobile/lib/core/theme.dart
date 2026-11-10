@@ -34,8 +34,6 @@ abstract final class TmsColors {
   /// [brandContainer] 上的文字色。
   static const Color brandOnContainerStrong = Color(0xFF2F5357);
 
-  static const Color brandOnContainer = Color(0xFF4C696D);
-
   /// 強調／注意力淡底（橘）。頭像底、待認領與已延後狀態、備品類別、警告語氣。
   static const Color brandAccentContainer = Color(0xFFFFDCC5);
 
@@ -854,5 +852,3 @@ ThemeData buildTmsTheme() {
     scaffoldBackgroundColor: TmsColors.groupedBackground,
   );
 }
-
-const Color tmsBrandColor = TmsColors.brandPrimary;

@@ -280,7 +280,6 @@ class _RepairSheetState extends State<RepairSheet> {
   /// 系統把這張單判為急件了沒有。還沒選類別、或檢查還沒回來時都不算。
   bool get _urgent => _precheck?.urgent ?? false;
 
-  /// 置底鈕此刻的長相（`Main.dc.html:4938`）。
   _SubmitAction get _submitAction {
     final failed = _photos.any((photo) => photo.uploadFailed);
     if (failed) {
@@ -391,7 +390,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 照片區：一張白卡，上面一行標題與張數，底下是照片格與「加入照片」格。
   Widget _photoCard() {
     const label = '照片（必填，至少 1 張、最多 3 張）';
     return TmsCard(

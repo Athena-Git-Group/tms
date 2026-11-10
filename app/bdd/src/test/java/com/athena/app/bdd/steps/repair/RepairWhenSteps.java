@@ -10,7 +10,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-/** 工務單模組的 When。 */
 public class RepairWhenSteps {
 
     /** 畫面元素出現的等待上限：畫面切換有轉場動畫，用輪詢等待取代固定 sleep。 */
@@ -70,11 +69,6 @@ public class RepairWhenSteps {
         this.context = context;
     }
 
-    /**
-     * 怎麼做：還沒在報修畫面時，先從任務頁進入；然後用相機拍指定張數。每一張都是
-     * 點「加入照片」再從跳出來的選單選「拍照」（見 {@link RepairContext#addPhoto}）。
-     * 回寫：報修畫面的照片縮圖與檔案。accessibility id：{@code repair.photo.add-button}。
-     */
     @當("{string} 在 {string} 的報修畫面拍 {int} 張照片")
     public void takePhotos(String staffName, String task, int photoCount) {
         context.openRepairSheet(staffName, task);
@@ -83,10 +77,6 @@ public class RepairWhenSteps {
         }
     }
 
-    /**
-     * 怎麼做：在報修畫面按送出（預設模式：不中斷原任務）。權威狀態落地：只有每張照片都
-     * 上傳成功，而且在線上時，才會送出開單請求。
-     */
     @當("{string} 送出工務單")
     public void submitTicket(String staffName) {
         world.staff(staffName);
@@ -94,14 +84,12 @@ public class RepairWhenSteps {
         world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
     }
 
-    /** 怎麼做：從任務頁進入報修畫面，點選類別。App 會呼叫開單前檢查。 */
     @當("{string} 在 {string} 的報修畫面選擇類別 {string}")
     public void chooseRepairCategory(String staffName, String task, String category) {
         context.openRepairSheet(staffName, task);
         world.tapTestId("repair.category." + categoryKey(category) + ".chip", SCREEN_TIMEOUT);
     }
 
-    /** 類別中文 → 契約 enum；查不到就噴錯帶原詞，不猜。 */
     private static String categoryKey(String categoryLabel) {
         String key = CATEGORY_KEY_BY_LABEL.get(categoryLabel);
         if (key == null) {
@@ -145,7 +133,6 @@ public class RepairWhenSteps {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
     }
 
-    /** 權威讀回：該工務單所在的房號（房務端從同房任務頁進詳情要用）。 */
     private String roomNoOf(String ticketNo) {
         List<Map<String, Object>> rows = world.backend().queryRows(
                 """
@@ -199,30 +186,13 @@ public class RepairWhenSteps {
         world.waitForPendingSyncDrained(QUEUE_DRAIN_TIMEOUT);
     }
 
-    // ──── 工務視角（T312–T314 落點） ────
-
-    /**
-     * 怎麼做：以該工務身分登入後進入首頁（{@code engHome}），等今日進度載入完成。
-     *
-     * <p>TEST_BACKDOOR 建置下 App 跳過登入殼（{@code app/mobile/lib/main.dart}），
-     * 工務的部門分流（登入後落在 {@code engHome} 而不是房務首頁）要等 Phase 3V 的
-     * [BDD-GREEN] 接上；這裡以 {@code engHome.screen}＋三個進度數字節點
-     * （{@code engHome.progress.in-hand-count}，T305 骨架已掛）出現為「載入完成」的
-     * 機械判準——分流還沒接上時的失敗形式是定位不到元素，不是 undefined step。
-     */
     @當("{string} 在 App 打開工務首頁")
     public void openEngineeringHome(String staffName) {
-        // 場景引用沒建過的員工是劇本錯誤，world.staff 會先在這裡爆出來。
         world.ensureLoggedInAs(world.staff(staffName));
         world.waitForTestId("engHome.screen", SCREEN_TIMEOUT);
         world.waitForTestId("engHome.progress.in-hand-count", SCREEN_TIMEOUT);
     }
 
-    /**
-     * 怎麼做：以該工務身分登入後切到待認領分頁（{@code engPool}），等列表載入完成。
-     * 判準與入口接線的取捨同 {@link #openEngineeringHome}（以及 RepairGivenSteps
-     * 的同義 Given「已在 App 打開工務待認領」）：以 {@code engPool.screen} 出現為準。
-     */
     @當("{string} 在 App 打開工務待認領")
     public void openEngineeringPool(String staffName) {
         world.ensureOnEngineeringPool(world.staff(staffName));
@@ -243,12 +213,6 @@ public class RepairWhenSteps {
         world.tapTestId("engPool.category." + sourceKey + ".chip", SCREEN_TIMEOUT);
     }
 
-    /**
-     * 怎麼做：在工務待認領點該單的「認領這單」（{@code engPool.item.{單號}.claim-button}，
-     * 單卡 id 段與 dsl 的 {@code engPool.item.{單號}.source-label} 同一套）。
-     * 權威狀態落地：等同後端 {@code tasksClaim} 語意；失敗（已被他人認領）時單仍留給
-     * 原認領人——撞單的畫面與權威狀態斷言在 Then「工務認領撞單…」。
-     */
     @當("{string} 在 App 認領 {string}")
     public void claimEngineeringTicket(String staffName, String ticketNo) {
         world.staff(staffName);
@@ -271,15 +235,6 @@ public class RepairWhenSteps {
         world.tapTestId("ticket.release-to-pool-button", SCREEN_TIMEOUT);
     }
 
-    /**
-     * 怎麼做：在工務單詳情點完修（{@code ticket.complete-button}），拍指定張數照片
-     * （每一張都要先在選單上選「拍照」），
-     * 選處理結果後送出（完修面板沿用雛形 {@code completeSheet} 簡稱：
-     * {@code completeSheet.photo.add-button}、{@code completeSheet.result.{resolutionType}}、
-     * {@code completeSheet.submit-button}）。權威狀態落地：等同後端對應的完修 When——
-     * {@code resolutionType} 對照 {@link #RESOLUTION_TYPE_BY_LABEL}（fixed／temporary／
-     * cannot_fix）。回寫：工務單詳情。
-     */
     @當("{string} 在工務單詳情完修，回報結果 {string}，附 {int} 張照片")
     public void completeRepairWithResolution(String staffName, String resolutionLabel, int photoCount) {
         String resolutionType = RESOLUTION_TYPE_BY_LABEL.get(resolutionLabel);
@@ -422,6 +377,4 @@ public class RepairWhenSteps {
         }
         return (String) rows.get(0).get("ticket_no");
     }
-
-    // ──── 房務端生命週期（T312–T314 落點） ────
 }

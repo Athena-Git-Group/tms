@@ -196,8 +196,6 @@ public class RepairGivenSteps {
     public void roomIsVipCheckinToday(String roomNo, String checkinTime) {
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
         LocalDate today = clock.instant().atZone(clock.getZone()).toLocalDate();
-        // ReservationFixtures 的入住時間固定 15:00（見其 Javadoc），這裡的 {時刻} 參數目前無法
-        // 透過既有入口客製化；dsl.md 要求的「reservations_cache 已有該訂單」本身仍有落地。
         reservationFixtures.upsertReservation(roomNo, List.of("vip"), today, null);
     }
 
@@ -374,7 +372,6 @@ public class RepairGivenSteps {
                 .single();
     }
 
-    /** 見 {@link #existingRepairTickets}：把該員工名下所有 doing 任務透過 TaskEngine 完修結案。 */
     private void completeExistingDoingTasks(long tenantId, UUID assigneeId) {
         List<Map<String, Object>> doingRows = jdbcClient
                 .sql("SELECT id, dept FROM tasks WHERE tenant_id = ? AND assignee_id = ? AND state = 'doing'")

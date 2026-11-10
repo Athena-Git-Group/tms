@@ -25,8 +25,6 @@ import 'connection_status.dart';
 /// [ApiClient.dropWriteResponseCount]，由發請求的那一層自己讀。注入端與讀取
 /// 端分開，畫面才不必為了問「現在是不是離線」而認識測試後門，將來換成真實的
 /// 網路偵測也只是換掉寫入的那一端。
-/// 其餘開關存在 [TestHooks] 這個 singleton 裡；其中裝置時間與上傳失敗還沒有
-/// 畫面在讀，等對應功能開發到需要被測試控制時再接上。
 class TestHooks {
   TestHooks._();
 
@@ -78,7 +76,6 @@ class RememberedAccount {
   /// 員工編號（staff_accounts.login_id）。
   final String loginId;
 
-  /// 員工姓名，身分卡顯示用。
   final String name;
 }
 

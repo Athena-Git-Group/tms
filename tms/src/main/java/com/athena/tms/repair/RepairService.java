@@ -605,10 +605,6 @@ public class RepairService {
         boolean isUrgent = Boolean.TRUE.equals(urgentJudgement.get("suggested"));
         String urgentRule = (String) urgentJudgement.get("rule");
 
-        // 開單去向（裁決：主管審核／退回／重送翻案）：assigneeId 有值時略過工務待認領與
-        // 審核直接 accepted；路徑②③（工務自開／櫃檮交辦，sourceTaskId 為 null）與急件
-        // 不論來源都直接進 pool；只有路徑①（房務報修）且非急件時先進 pending_review，
-        // 等主管用 approve／reject 處理完才會轉進 pool。
         String initialState;
         if (assigneeId != null) {
             initialState = "accepted";
@@ -624,9 +620,6 @@ public class RepairService {
                 categoryLabel + " 工務單", null, null, null, null, staffActor));
         UUID ticketTaskId = ticketTask.getId();
 
-        // urgent 不在 TaskCreateCommand 的欄位裡（它是工務單這個 plan 才加的
-        // tasks 欄位），建完再補一筆 UPDATE，仍在同一個交易內；repair_tickets.is_urgent／
-        // urgent_rule 下面緊接著同一個交易寫入，兩邊判定結果一致。
         if (isUrgent) {
             jdbcTemplate.update(
                     "UPDATE tasks SET urgent = true WHERE tenant_id = ? AND id = ?", tenantId, ticketTaskId);

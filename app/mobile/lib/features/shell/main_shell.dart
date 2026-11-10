@@ -16,7 +16,6 @@ import '../today/my_today_scope.dart';
 /// state，所以它只在這裡留下要去哪一個分頁，外殼自己讀走並切過去。外殼
 /// 還沒掛上時留下的要求不會有人處理，下一次要求會蓋掉它。
 abstract final class MainShellTabRequest {
-  /// 待認領是四個分頁裡的第二個。
   static const int _poolIndex = 1;
 
   static final ValueNotifier<int?> pending = ValueNotifier<int?>(null);
@@ -37,7 +36,6 @@ class MainShellTab extends InheritedWidget {
 
   final int index;
 
-  /// 首頁是四個分頁裡的第一個。
   static const int homeIndex = 0;
 
   static int indexOf(BuildContext context) {
@@ -65,10 +63,8 @@ class MainShellTab extends InheritedWidget {
 class _MainShell extends StatelessWidget {
   const _MainShell({required this.homeTab, required this.poolTab});
 
-  /// 第一個分頁的內容。房務是房務首頁，工務是工務首頁。
   final Widget homeTab;
 
-  /// 第二個分頁的內容。房務與工務各看自己部門的待認領。
   final Widget poolTab;
 
   @override
@@ -207,7 +203,6 @@ class _MainShellBodyState extends State<_MainShellBody> {
   }
 }
 
-/// 房務員工登入後的主畫面。
 class HousekeepingShell extends StatelessWidget {
   const HousekeepingShell({super.key});
 
@@ -217,7 +212,6 @@ class HousekeepingShell extends StatelessWidget {
   }
 }
 
-/// 工務員工登入後的主畫面。
 class EngineeringShell extends StatelessWidget {
   const EngineeringShell({super.key});
 

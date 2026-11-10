@@ -2101,7 +2101,6 @@ class _InfoRow extends StatelessWidget {
 
   final String label;
 
-  /// 右側摘要，例如「2 則」或「3 張・2 張未結案」。
   final String value;
 
   final VoidCallback onTap;
@@ -2112,7 +2111,6 @@ class _InfoRow extends StatelessWidget {
   /// 未讀點的 accessibility id，給自動化驗收定位用。
   final String? unreadId;
 
-  /// 右側摘要的字色。
   final Color valueColor;
 
   @override

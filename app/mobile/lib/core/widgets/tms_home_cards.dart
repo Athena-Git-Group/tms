@@ -28,7 +28,6 @@ class TmsProgressRingCard extends StatelessWidget {
   /// 環正中央放的東西，通常是「已完成／總數」加一行說明。
   final Widget ringCenter;
 
-  /// 環右邊那一欄。
   final Widget details;
 
   /// 卡片最下面橫跨整張卡的一列；不給就不畫。
@@ -66,10 +65,8 @@ class TmsProgressRingCard extends StatelessWidget {
 class TmsStatBlock extends StatelessWidget {
   const TmsStatBlock({super.key, required this.value, required this.caption});
 
-  /// 這一格的數字。
   final Widget value;
 
-  /// 數字下面那一行說明。
   final String caption;
 
   /// 說明與數字之間 1pt，比 [TmsSpacing] 最小的一級還窄。原型
@@ -131,7 +128,6 @@ class TmsHeroCard extends StatelessWidget {
   /// 深底那張右上角那顆裝飾圓的底色：白色壓到 8% 的透明度。
   static const Color _darkOrnament = Color(0x14FFFFFF);
 
-  /// 進行中那一行小字前面那顆圓點。
   static const Color _pulseDot = Color(0xFFFFB783);
 
   /// 右上角那塊方塊的邊長、圓角、離卡右緣與上緣的距離，以及裡面圖示的大小。

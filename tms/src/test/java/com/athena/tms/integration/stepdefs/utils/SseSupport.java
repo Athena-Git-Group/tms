@@ -1,15 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.apache.kafka.clients.producer.KafkaProducer
- *  org.apache.kafka.clients.producer.ProducerRecord
- *  org.apache.kafka.common.serialization.StringSerializer
- *  org.junit.jupiter.api.Assertions
- *  org.springframework.core.env.Environment
- *  tools.jackson.databind.JsonNode
- *  tools.jackson.databind.json.JsonMapper
- */
 package com.athena.tms.integration.stepdefs.utils;
 
 import com.athena.tms.integration.stepdefs.CucumberSpringConfiguration;
@@ -104,7 +92,6 @@ public class SseSupport {
                 }
             }
             catch (Exception exception) {
-                // empty catch block
             }
         }
 

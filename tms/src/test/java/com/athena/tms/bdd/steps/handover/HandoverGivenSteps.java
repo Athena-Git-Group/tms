@@ -189,14 +189,8 @@ public class HandoverGivenSteps {
         LocalTime afterShiftEnd = LocalTime.parse(shiftEndHHmm).plusMinutes(1);
         clock.setTodayAt(afterShiftEnd.format(DateTimeFormatter.ofPattern("HH:mm")));
 
-        // dsl.md：「依基線查房退回換人規則，把任務改由接手人負責」——這條規則由班末掃描
-        // job 判定並執行換人，main 尚未建立這個 job（JobTrigger 固定丟
-        // UnsupportedOperationException，見其類別註解），這是這句目前合法的失敗結果，
-        // 不是本類別要蒙混過去的事。
         jobTrigger.run("shift-end-scan");
 
-        // 這裡只是讓 Java 編譯器知道 roomNo 確實有被這句語意用到（換人規則鎖定的對象）；
-        // 實際換人由上面的 job 完成，job 跑完才會回填 tasks.assignee_id。
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
     }
 

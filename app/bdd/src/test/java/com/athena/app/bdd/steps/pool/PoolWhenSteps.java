@@ -5,7 +5,6 @@ import io.cucumber.java.zh_tw.當;
 
 import java.time.Duration;
 
-/** 待認領模組的 When。 */
 public class PoolWhenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -18,7 +17,6 @@ public class PoolWhenSteps {
         this.context = context;
     }
 
-    /** 怎麼做：以該員工登入後切到待認領分頁，等列表載入完成。 */
     @當("{string} 在 App 打開待認領")
     public void openPool(String staffName) {
         world.ensureOnPool(world.staff(staffName));
@@ -36,10 +34,6 @@ public class PoolWhenSteps {
         world.ensureOnPool(world.staff(staffName));
     }
 
-    /**
-     * 怎麼做：點該分類標籤，等列表更新。
-     * accessibility id：{@code pool.category.{category}.chip}。
-     */
     @當("{string} 點選待認領分類 {string}")
     public void selectPoolCategory(String staffName, String category) {
         world.ensureOnPool(world.staff(staffName));

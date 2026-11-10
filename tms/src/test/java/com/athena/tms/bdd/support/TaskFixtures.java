@@ -61,7 +61,6 @@ public class TaskFixtures {
         return new Builder();
     }
 
-    /** 待認領任務的簡便入口，等同 {@code builder().state("pool")...create()}。 */
     public UUID createPoolTask(String roomNo, String title, String typeCode, String deptCode, Integer estMin) {
         return builder().roomNo(roomNo).title(title).type(typeCode).dept(deptCode).estMin(estMin).state("pool").create();
     }
@@ -203,19 +202,16 @@ public class TaskFixtures {
             return this;
         }
 
-        /** 自動化規則命中的規則名（tasks.rule_hit，SLA/自動化規則增補）。 */
         public Builder ruleHit(String v) {
             this.ruleHit = v;
             return this;
         }
 
-        /** 到期時間（tasks.due_at，SLA/自動化規則增補），今日的 {@code HH:mm}。 */
         public Builder dueAtToday(String hhmm) {
             this.dueAtHHmm = hhmm;
             return this;
         }
 
-        /** state=deferred 時是否為本人延後（tasks.deferred_by_self，本 plan 新增）。 */
         public Builder deferredBySelf(boolean v) {
             this.deferredBySelf = v;
             return this;

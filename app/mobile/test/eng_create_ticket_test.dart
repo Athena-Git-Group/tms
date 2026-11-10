@@ -225,7 +225,6 @@ void _useIPhoneSurface(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-/// 加一張照片：點「加入照片」→ 在系統選單上選「拍照」。
 Future<void> _addPhoto(WidgetTester tester) async {
   await tester.tap(find.text('加入照片'));
   await tester.pumpAndSettle();

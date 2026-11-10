@@ -36,7 +36,6 @@ public class InspectionReviewController {
         this.inspectionReviewService = inspectionReviewService;
     }
 
-    /** 請求形狀對應 contracts 查房.yaml 的 SpotCheckRequest：taskId＋抽查判定的項目清單。 */
     public record SpotCheckRequest(UUID taskId, List<InspectionRequest.Item> items) {}
 
     @PostMapping("/spot-checks")

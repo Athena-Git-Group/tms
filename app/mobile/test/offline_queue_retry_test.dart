@@ -162,13 +162,10 @@ class _FakeBackend {
   /// 每一次開單請求帶的 `Idempotency-Key`，照收到的順序。
   final List<String> ticketKeys = <String>[];
 
-  /// 每一次開單請求的內容，照收到的順序。
   final List<Map<String, dynamic>> ticketRequests = <Map<String, dynamic>>[];
 
-  /// 真正建立出來的單號。
   final Set<String> createdTicketIds = <String>{};
 
-  /// 收到內容的照片 id。
   final List<String> photoUploads = <String>[];
 
   /// 每一次「建立照片上傳位置」請求帶的 `Idempotency-Key`，照收到的順序。

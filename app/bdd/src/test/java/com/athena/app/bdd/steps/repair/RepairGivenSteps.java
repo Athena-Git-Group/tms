@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** 工務單模組的 Given。 */
 public class RepairGivenSteps {
 
     /**
@@ -73,10 +72,6 @@ public class RepairGivenSteps {
                 + moment.atZone(ZoneId.systemDefault()).toOffsetDateTime() + "\"}");
     }
 
-    /**
-     * 怎麼做：從任務頁進入報修畫面，選類別並拍指定張數的照片，停在報修畫面還沒送出。
-     * 權威狀態落地：後端還沒有工務單。
-     */
     @假設("{string} 在 {string} 的報修畫面選了類別 {string}，附了 {int} 張照片")
     public void repairScreenHasPhotosAttached(String staffName, String task, String category, int photoCount) {
         context.openRepairSheet(staffName, task);
@@ -242,19 +237,12 @@ public class RepairGivenSteps {
         }
     }
 
-    /**
-     * 怎麼做：透過後端測試資料（或先執行一次等效的降級操作）讓該工務單
-     * {@code is_urgent}=false、{@code urgent_downgrade_reason}＝該原因。權威狀態落地：
-     * 後端該工務單已是一般件，並記錄降級原因。
-     */
     @假設("{string} 已將 {string} 降級為一般件，原因為 {string}")
     public void managerDowngradesTicket(String managerName, String ticketNo, String reason) {
         Map<String, Object> ticket = world.backend().repairTicketRow(ticketNo);
         world.backend().downgradeRepairTicketUrgency(
                 (UUID) ticket.get("task_id"), world.staff(managerName), reason);
     }
-
-    // ──── 工務視角（T312–T314 落點） ────
 
     /**
      * 怎麼做：透過後端測試資料建立符合統計數字的工務單。權威狀態落地：後端有這些工務單。
@@ -285,17 +273,8 @@ public class RepairGivenSteps {
         }
     }
 
-    /**
-     * 怎麼做：以該工務身分登入後切到待認領分頁（engPool），等列表載入完成。
-     *
-     * <p>TEST_BACKDOOR 建置下 App 跳過登入殼直接進首頁（{@code app/mobile/lib/main.dart}），
-     * 工務視角的分頁入口要等 Phase 3V 的 [BDD-GREEN] 掛上；這裡以 {@code engPool.screen}
-     * （T305 骨架已掛的畫面根節點）出現作為「列表載入完成」的機械判準——入口還沒接上時
-     * 的失敗形式是定位不到元素，不是 undefined step。
-     */
     @假設("{string} 已在 App 打開工務待認領")
     public void alreadyOpenedEngineeringPool(String staffName) {
-        // 場景引用沒建過的員工是劇本錯誤，world.staff 會先在這裡爆出來。
         world.ensureOnEngineeringPool(world.staff(staffName));
     }
 
@@ -348,7 +327,6 @@ public class RepairGivenSteps {
                 reporter, null, null);
     }
 
-    /** 中文 → 權威值；查不到就噴錯帶原詞，對齊 BackendChannel 的對照表行為。 */
     private static String lookup(Map<String, String> table, String chinese, String what) {
         String value = table.get(chinese);
         if (value == null) {
@@ -358,7 +336,6 @@ public class RepairGivenSteps {
         return value;
     }
 
-    /** 必填欄：缺欄或留白都是劇本錯誤，直接噴錯說明缺哪一欄。 */
     private static String requireCell(Map<String, String> row, String column) {
         String value = blankToNull(row.get(column));
         if (value == null) {
@@ -367,7 +344,6 @@ public class RepairGivenSteps {
         return value;
     }
 
-    /** 空字串與全空白都當成沒填。 */
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }

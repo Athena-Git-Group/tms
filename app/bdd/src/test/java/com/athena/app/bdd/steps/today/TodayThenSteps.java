@@ -11,7 +11,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/** 今日進度模組的 Then（Rule：首頁顯示後端算出的今日進度／依推薦順序列出待開始的單／手上沒有可以開始的單時顯示空狀態）。 */
 public class TodayThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -55,7 +54,6 @@ public class TodayThenSteps {
         }
     }
 
-    /** 表上的項目名稱 → 畫面節點 id（ui-plan F1 R1 的四格）。 */
     private static String progressIdOf(String item) {
         return switch (item) {
             case "打掃完成／總數" -> "home.progress.cleaned-ratio";
@@ -66,7 +64,6 @@ public class TodayThenSteps {
         };
     }
 
-    /** 表上的項目名稱 → 後端 {@code MyToday} 的對應值，組成跟表上同一種寫法的字串。 */
     private static String backendValueOf(JsonNode today, String item) {
         return switch (item) {
             case "打掃完成／總數" ->
@@ -146,7 +143,6 @@ public class TodayThenSteps {
         }
     }
 
-    /** 權威讀回：以目前登入者的身分讀 {@code GET /me/today}，就是首頁那一份資料的來源。 */
     private JsonNode todayResponse() {
         return world.backend().getJson("/me/today", world.loggedInStaff());
     }

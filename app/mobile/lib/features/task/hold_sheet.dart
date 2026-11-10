@@ -58,7 +58,6 @@ extension HoldSheetModeCopy on HoldSheetMode {
           ],
       };
 
-  /// 送出這筆原因，回傳後端認定的新任務狀態。
   Future<TaskDetail> submit(String taskId, String reason) => switch (this) {
         HoldSheetMode.defer =>
           ApiClient.instance.deferTask(taskId, reason),
@@ -116,7 +115,6 @@ class HoldSheet extends StatefulWidget {
 
   final HoldSheetMode mode;
 
-  /// 要被延後或中斷的任務。
   final String taskId;
 
   /// 任務頁開啟面板的唯一入口。
@@ -287,7 +285,6 @@ class _HoldSheetState extends State<HoldSheet> {
     );
   }
 
-  /// 欄位下方的即時字數，格式是「目前字數 / 上限」。
   String get _charCountText =>
       '${_noteController.text.length} / $_maxReasonLength';
 }

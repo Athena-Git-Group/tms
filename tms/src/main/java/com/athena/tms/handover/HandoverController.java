@@ -26,19 +26,16 @@ public class HandoverController {
         this.handoverService = handoverService;
     }
 
-    /** 櫃檯為房間留備註，建立成功回 201 與該筆 DeskNote。 */
     @PostMapping("/desk-notes")
     public ResponseEntity<Map<String, Object>> createDeskNote(@RequestBody CreateDeskNoteRequest request) {
         Map<String, Object> created = handoverService.createDeskNote(request.roomId(), request.content());
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    /** 員工展開任務的交辦；重複展開回放第一筆已讀，不新增。 */
     @PostMapping("/tasks/{id}/handover-read")
     public Map<String, Object> markHandoverRead(@PathVariable UUID id) {
         return handoverService.markRead(id);
     }
 
-    /** createDeskNote 的請求形狀，對應 contracts 的 CreateDeskNoteRequest。 */
     public record CreateDeskNoteRequest(UUID roomId, String content) {}
 }

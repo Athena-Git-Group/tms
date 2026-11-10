@@ -11,7 +11,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.UUID;
 
-/** 房間交辦模組的 Given。 */
 public class HandoverGivenSteps {
 
     private final AppiumWorld world;

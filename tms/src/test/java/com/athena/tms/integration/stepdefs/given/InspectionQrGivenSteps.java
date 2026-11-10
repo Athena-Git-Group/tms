@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  io.cucumber.java.en.Given
- */
 package com.athena.tms.integration.stepdefs.given;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;

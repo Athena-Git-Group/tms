@@ -1,13 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.junit.platform.suite.api.ConfigurationParameter
- *  org.junit.platform.suite.api.ConfigurationParameters
- *  org.junit.platform.suite.api.IncludeEngines
- *  org.junit.platform.suite.api.SelectClasspathResource
- *  org.junit.platform.suite.api.Suite
- */
 package com.athena.tms.integration;
 
 import org.junit.platform.suite.api.ConfigurationParameter;

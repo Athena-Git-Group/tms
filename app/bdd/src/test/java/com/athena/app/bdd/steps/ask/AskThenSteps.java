@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-/** 查一下模組的 Then。 */
 public class AskThenSteps {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
@@ -27,10 +26,6 @@ public class AskThenSteps {
         return value;
     }
 
-    /**
-     * 必查：推薦問題清單與範圍標籤的順序和內容剛好等於表格。
-     * accessibility id：{@code ask.suggestion.{index}}。
-     */
     @那麼("查一下畫面的推薦問題依序為：")
     public void askSuggestionsOrderIs(DataTable table) {
         List<Map<String, String>> expectedRows = table.asMaps(String.class, String.class);
@@ -69,7 +64,6 @@ public class AskThenSteps {
         }
     }
 
-    /** 本情境最近一次提問的稽核紀錄；一次也沒問過時噴錯。 */
     private Map<String, Object> latestAuditLog() {
         List<Map<String, Object>> rows = world.backend().queryRows(
                 "SELECT * FROM kb_audit_logs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -80,11 +74,6 @@ public class AskThenSteps {
         return rows.get(0);
     }
 
-    /**
-     * 必查：出處卡剛好等於表格。
-     * accessibility id：{@code ask.answer.source-card}、{@code ask.answer.source-card.type}、
-     * {@code ask.answer.source-card.date}。
-     */
     @那麼("回答下方的出處卡如下：")
     public void askShowsSourceCards(DataTable table) {
         List<Map<String, String>> expectedRows = table.asMaps(String.class, String.class);
@@ -138,7 +127,6 @@ public class AskThenSteps {
         }
     }
 
-    /** 必查：有可點的問主管按鈕。accessibility id：{@code ask.ask-manager-button}。 */
     @那麼("查一下畫面提供問主管按鈕")
     public void askOffersAskManagerButton() {
         if (!world.waitForTestId("ask.ask-manager-button", TIMEOUT).isEnabled()) {

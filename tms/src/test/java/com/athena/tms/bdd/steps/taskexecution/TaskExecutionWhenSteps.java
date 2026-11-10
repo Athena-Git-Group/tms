@@ -8,7 +8,6 @@ import io.cucumber.java.zh_tw.當;
 import java.util.Map;
 import java.util.UUID;
 
-/** 任務執行模組的 When（dsl.md When 句型區）。 */
 public class TaskExecutionWhenSteps {
 
     private final ScenarioWorld world;

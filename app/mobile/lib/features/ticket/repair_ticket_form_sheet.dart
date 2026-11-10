@@ -368,7 +368,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 照片區：一張白卡，上面一行標題與張數，底下是照片格與「加入照片」格。
   Widget _photoCard() {
     const label = '照片（必填，至少 1 張、最多 3 張）';
     return TmsCard(
@@ -469,7 +468,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 照片與離線的處理說明。兩段都沒有時整行不出現。
   Widget _photoNote() {
     return ValueListenableBuilder<bool>(
       valueListenable: ConnectionStatus.instance.offline,
@@ -611,7 +609,6 @@ class _LabelledBlock extends StatelessWidget {
   final String label;
   final Widget child;
 
-  /// 內容底下那一行說明。
   final String? footnote;
 
   @override

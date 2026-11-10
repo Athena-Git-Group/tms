@@ -79,7 +79,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     });
   }
 
-  /// 點一則通知：先標已讀（權威狀態落地），再依 target 導頁。
   Future<void> _open(NotificationItem item) async {
     final version = ++_stateVersion;
     final updated = await ApiClient.instance.markNotificationRead(item.id);
@@ -213,7 +212,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 }
 
-/// 畫面最上方：大標題與右側的「全部標為已讀」，兩者底端對齊。
 class _Header extends StatelessWidget {
   const _Header({required this.onMarkAllRead, required this.showMarkAllRead});
 
@@ -245,7 +243,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// 「今天」或「更早」一整組：小標題加一張白卡，卡裡一則通知一列。
 class _NotificationGroup extends StatelessWidget {
   const _NotificationGroup({
     required this.groupKey,

@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.springframework.stereotype.Component
- */
 package com.athena.tms.service;
 
 import java.time.Duration;
@@ -20,9 +14,6 @@ public class ScanIpRateLimiter {
     private final Map<String, Deque<Instant>> failuresByIp = new ConcurrentHashMap<String, Deque<Instant>>();
     private final Map<String, Integer> thresholdByIp = new ConcurrentHashMap<String, Integer>();
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     public int recentFailures(String ip) {
         Deque<Instant> failures = this.failuresByIp.get(ip);
         if (failures == null) {
@@ -39,9 +30,6 @@ public class ScanIpRateLimiter {
         }
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     public void recordFailure(String ip) {
         Deque failures;
         Deque deque = failures = this.failuresByIp.computeIfAbsent(ip, key -> new ArrayDeque());

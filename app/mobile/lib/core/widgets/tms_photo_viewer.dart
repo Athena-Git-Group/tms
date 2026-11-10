@@ -4,14 +4,12 @@ import '../theme.dart';
 import '../tms_semantics.dart';
 import 'tms_motion.dart';
 
-/// 全螢幕檢視裡的一張照片。
 class TmsViewerPhoto {
   const TmsViewerPhoto({this.image, required this.description});
 
   /// 要放大顯示的影像。不給時這一張只有黑底。
   final ImageProvider<Object>? image;
 
-  /// 這張照片的描述，通常是房號與拍攝時間。
   final String description;
 }
 
@@ -49,12 +47,10 @@ class TmsPhotoViewer extends StatefulWidget {
     this.initialIndex = 0,
   });
 
-  /// 標題列中央那一行，通常是單號與類別。
   final String title;
 
   final List<TmsViewerPhoto> photos;
 
-  /// 一進來停在第幾張。
   final int initialIndex;
 
   @override
@@ -65,10 +61,8 @@ class _TmsPhotoViewerState extends State<TmsPhotoViewer> {
   late final PageController _pages;
   late int _index;
 
-  /// 標題列的最小高度。
   static const double _headerHeight = 52;
 
-  /// 左右切換鈕的直徑與距螢幕邊的距離。
   static const double _navButtonSize = TmsSize.minTouchTarget;
   static const double _navButtonInset = TmsSpacing.sm;
 
@@ -265,7 +259,6 @@ class _TmsPhotoViewerState extends State<TmsPhotoViewer> {
   }
 }
 
-/// 左右切換鈕：44pt 的半透明圓，裡面一個箭頭。
 class _NavButton extends StatelessWidget {
   const _NavButton({
     required this.id,
@@ -315,5 +308,4 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-/// 黑底上的次要文字，原型寫 `rgba(235,235,245,.6)`。
 const Color _secondaryOnBlack = Color(0x99EBEBF5);

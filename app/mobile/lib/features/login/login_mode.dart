@@ -63,16 +63,13 @@ class LoginCopy {
 
   final LoginMode mode;
 
-  /// 28pt 大標。
   final String title;
 
-  /// 大標底下那一行說明。
   final String subtitle;
 
   /// 切換帳號那顆文字鈕上的字；[LoginMode.sharedDevice] 沒有這顆鈕，值是 null。
   final String? switchLabel;
 
-  /// 要不要畫身分卡。
   bool get showsIdentityCard => mode == LoginMode.remembered;
 
   /// 要不要畫員工編號欄。身分卡與員工編號欄互斥：有身分卡就代表員工編號已經

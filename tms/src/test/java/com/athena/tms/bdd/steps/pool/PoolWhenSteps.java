@@ -14,7 +14,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-/** 待認領模組的 When（待認領/dsl.md When 句型區）。 */
 public class PoolWhenSteps {
 
     private final ScenarioWorld world;
@@ -63,8 +62,6 @@ public class PoolWhenSteps {
 
     @當("{string} 刪除 {string} 規則")
     public void managerDeletesRule(String managerName, String ruleName) {
-        // contracts 還沒有自動化規則的寫入端點，比照 PmsProbe 的接線方式直接呼叫
-        // production service；等 contracts 補上路由後，這裡改走 HTTP 即可。
         automationRuleService.deleteRule(tenantFixtures.testTenantId(), ruleName);
     }
 

@@ -32,7 +32,6 @@ enum TicketView {
 class TicketScreen extends StatefulWidget {
   const TicketScreen({super.key, required this.view, this.taskId});
 
-  /// 這一頁要畫成哪一種視角。
   final TicketView view;
 
   /// 工務單的任務 id；入口（任務頁、工務首頁單卡、開工單成功導頁、推播）帶
@@ -123,7 +122,6 @@ class _TicketScreenState extends State<TicketScreen> {
     '放回待認領失敗，請稍後再試。',
   );
 
-  /// 對這張單做一次會改狀態的操作，並以後端回傳的那一筆換掉畫面。
   Future<void> _mutate(
     Future<RepairTicketDetail> Function() action,
     String failureMessage,
@@ -224,7 +222,6 @@ class _TicketScreenState extends State<TicketScreen> {
     );
   }
 
-  /// 補一張照片到這張單上。
   Future<void> _appendPhoto() async {
     final taskId = widget.taskId;
     if (taskId == null) {

@@ -153,7 +153,6 @@ class _EngHomeScreenState extends State<EngHomeScreen> {
   static const double _tipWidth = 260;
 }
 
-/// 今日進度載入失敗時的一行提示。
 class _LoadFailureNotice extends StatelessWidget {
   const _LoadFailureNotice();
 
@@ -195,7 +194,6 @@ class _GreetingRow extends StatelessWidget {
   }
 }
 
-/// 今日進度卡：左邊一個完修完成度的環，右邊手上張數與急件數。
 class _EngineeringProgress extends StatelessWidget {
   const _EngineeringProgress();
 
@@ -372,7 +370,6 @@ class _FocusCard extends StatelessWidget {
   }
 }
 
-/// 主卡本體：維修中那一張是品牌色底白字，下一張是白底。
 class _TicketHeroCard extends StatelessWidget {
   const _TicketHeroCard({required this.ticket, required this.doing});
 
@@ -606,7 +603,6 @@ class _InHandTickets extends StatelessWidget {
   }
 }
 
-/// 手上的一張單：地點方塊、標題與來源，右邊狀態標籤，點一列進詳情。
 class _InHandTicketRow extends StatelessWidget {
   const _InHandTicketRow({required this.ticket});
 

@@ -83,7 +83,6 @@ class NewPasswordCheck {
 
   bool get allRulesSatisfied => rules.every((rule) => rule.satisfied);
 
-  /// 送出鈕要不要亮。
   bool get readyToSubmit => allRulesSatisfied && confirmMatches;
 
   /// 比對員工編號前先把大小寫與分隔符號抹平：識別證上印的是 `H-0532`，員工

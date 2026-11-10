@@ -1,12 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  jakarta.persistence.Entity
- *  jakarta.persistence.Id
- *  jakarta.persistence.Table
- *  lombok.Generated
- */
 package com.athena.tms.entity;
 
 import jakarta.persistence.Entity;
@@ -31,8 +22,6 @@ public class StaffAccount {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
-    // V15__staff_account_login_lockout.sql 新增三欄：登入本身的狀態（強制改密／連續失敗次數／鎖定到期），
-    // 清零／累加／達 5 次鎖 15 分鐘的規則落在 StaffAccountLoginService，這裡只承載狀態。
     private boolean mustChangePassword = false;
     private int failedLoginCount = 0;
     private OffsetDateTime lockedUntil;

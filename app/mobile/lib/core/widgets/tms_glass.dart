@@ -64,7 +64,6 @@ class TmsGlass extends StatelessWidget {
   /// [BoxDecoration]，由呼叫端自行在 [child] 上緣疊一條線。
   final List<BoxShadow>? boxShadow;
 
-  /// 底板內距。
   final EdgeInsetsGeometry? padding;
 
   final Widget? child;

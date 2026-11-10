@@ -10,12 +10,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 通知中心 API，對應 contracts 的 listNotifications（GET /notifications）、
- * markNotificationRead（POST /notifications/{id}/read）、
- * markAllNotificationsRead（POST /notifications/read-all）。業務規則（誰能標、
- * 已讀冪等）都在 {@link NotificationService}，這裡只做路徑與請求轉接。
- */
 @RestController
 @RequestMapping("/api/v1/notifications")
 public class NotificationController {

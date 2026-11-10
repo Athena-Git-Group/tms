@@ -214,7 +214,6 @@ class PoolCardNote extends StatelessWidget {
   final String id;
   final String text;
 
-  /// 備註塊的開頭，點明這段字講的是「前一個人做到哪裡」。
   static const String prefix = '做到哪：';
 
   @override
@@ -241,7 +240,6 @@ class PoolCardNote extends StatelessWidget {
   }
 }
 
-/// 單卡上的標籤列：幾顆標籤橫著排，排不下就換行。
 class PoolTagRow extends StatelessWidget {
   const PoolTagRow({super.key, required this.tags});
 
@@ -253,7 +251,6 @@ class PoolTagRow extends StatelessWidget {
   }
 }
 
-/// 單卡底部那顆滿寬的「認領這單」。
 class PoolClaimButton extends StatelessWidget {
   const PoolClaimButton({
     super.key,
@@ -355,7 +352,6 @@ class PoolFilterChip extends StatelessWidget {
   }
 }
 
-/// 一排分類磚：四格等寬，間距照設計的網格。
 class PoolFilterRow extends StatelessWidget {
   const PoolFilterRow({super.key, required this.tiles});
 

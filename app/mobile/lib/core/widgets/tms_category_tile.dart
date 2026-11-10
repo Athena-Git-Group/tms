@@ -12,10 +12,8 @@ import '../theme.dart';
 /// 計數是 0 的時候呼叫端不要畫這顆徽章，由呼叫端自己判斷：一顆寫著 0 的紅點
 /// 會讓員工以為有東西等著處理。
 class TmsCountBadge extends StatelessWidget {
-  /// 分類磚上的徽章。
   const TmsCountBadge({super.key, required this.count}) : _onTabBar = false;
 
-  /// 分頁列圖示上的徽章。
   const TmsCountBadge.tabBar({super.key, required this.count})
     : _onTabBar = true;
 
@@ -102,7 +100,6 @@ class TmsCategoryTile extends StatelessWidget {
   /// 而 id 的命名跟著呼叫端的畫面走（房務是 `pool.category.{分類}.count`）。
   final Widget? badge;
 
-  /// 分類磚之間的網格間距。
   static const double gap = TmsSpacing.sm2;
 
   @override

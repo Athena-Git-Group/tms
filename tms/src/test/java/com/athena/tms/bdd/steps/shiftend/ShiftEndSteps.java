@@ -49,13 +49,6 @@ public class ShiftEndSteps {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * dsl.md 怎麼做：在目前 Clock（班次結束時刻）直接觸發該員工班次的 Quartz 班末掃描 job，
-     * 並等 job 完成。JobTrigger 目前只支援不分員工的同步觸發（見其 Javadoc），
-     * 這裡先確認該員工存在（之後 job 支援鎖定單一員工時這個查找即可派上用場），
-     * 再觸發 job；main 尚未建立這個 job，{@code run} 會丟 UnsupportedOperationException，
-     * 這是目前合法的 RED 訊號。
-     */
     @當("{string} 的班末掃描執行")
     public void shiftEndScanRunsFor(String staffName) {
         world.staffId(staffName);

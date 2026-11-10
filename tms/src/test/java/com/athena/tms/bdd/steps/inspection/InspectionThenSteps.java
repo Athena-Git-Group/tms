@@ -25,10 +25,6 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * 查房模組的 Then（查房/dsl.md Then 句型區）。查 tasks／task_events／outbox 這些權威資料，
  * 並在 dsl.md 點名「跨視角／再讀確認」之處另外驗證。
- *
- * <p>「房況」「同步紀錄」兩句牽涉的 PMS 回寫目前完全沒有落地（見 {@link PmsProbe} 的
- * class Javadoc）：本套件一律先查能查到的權威狀態（outbox），最後再呼叫
- * {@link PmsProbe} 滿足 dsl.md 的「跨視角」要求，讓呼叫直接失敗成為合法的 RED 訊號。
  */
 public class InspectionThenSteps {
 
@@ -121,7 +117,6 @@ public class InspectionThenSteps {
                     "「" + roomNo + "」同一事件不該有另一筆不同房況的回寫，但找到 " + otherStatusCount + " 筆");
         }
 
-        // 跨視角：模擬 PMS adapter 收到同一個房況值（main 尚未建立回寫消費者，見 PmsProbe）。
         pmsProbe.lastWritebackFor(roomNo);
     }
 
@@ -133,8 +128,6 @@ public class InspectionThenSteps {
             throw new AssertionError("「" + roomNo + "」預期沒有回寫 PMS，但 outbox 找到 kind=pms_status 的資料");
         }
 
-        // data-model.dbml 沒有「同步紀錄」對應的資料表，沒有地方可以查「標記一筆未回寫」；
-        // 改用跨視角驗證收尾——main 尚未建立 PMS 回寫消費者，呼叫必然失敗（見 PmsProbe）。
         pmsProbe.lastWritebackFor(roomNo);
     }
 

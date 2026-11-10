@@ -36,7 +36,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
   /// 這張單；還沒載回來是 null。
   final RepairTicketDetail? ticket;
 
-  /// 載入失敗時要寫在畫面上的那句話。
   final String? errorMessage;
 
   final VoidCallback onWithdraw;
@@ -208,7 +207,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     );
   }
 
-  // ──── 狀態摘要卡 ────
 
   /// 摘要卡要說的話，以及那顆圓形圖示的形狀與底色。
   ///
@@ -298,7 +296,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     }
   }
 
-  // ──── 審核進度 ────
 
   /// 四步時間軸：房務送出 → 主管審核 → 工務處理 → 完修。
   ///
@@ -393,7 +390,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     ];
   }
 
-  // ──── 照片 ────
 
   /// 能不能補照片看的是後端收不收：契約 appendRepairTicketPhotos 在單結案後
   /// 回 409，所以這裡用同一條界線決定要不要畫出「補照片」格，不另外猜一套。
@@ -439,7 +435,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     );
   }
 
-  // ──── 內容 ────
 
   Widget _infoCard(RepairTicketDetail detail) {
     final rows = <({String key, String value})>[
@@ -504,7 +499,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     }
   }
 
-  // ──── 置底操作列 ────
 
   /// 置底操作列。這一頁一個狀態最多只有一顆鍵，兩顆不會同時出現。
   ///

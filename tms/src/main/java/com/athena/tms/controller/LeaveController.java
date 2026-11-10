@@ -26,7 +26,6 @@ public class LeaveController {
         this.leaveService = leaveService;
     }
 
-    /** 請求形狀對應 contracts 請假.yaml 的 leavesRequest。 */
     public record CreateLeaveRequest(Long tenantId, UUID staffId, OffsetDateTime fromAt, OffsetDateTime toAt) {}
 
     @PostMapping("/leaves")

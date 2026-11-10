@@ -22,11 +22,9 @@ enum LoginLanguage {
   /// BCP 47 語言代碼，與原型的 `s.lang` 同一套值。
   final String code;
 
-  /// 該語言自己的名字，語言鈕與面板上顯示的就是它。
   final String nativeName;
 }
 
-/// 右上角那顆語言鈕：地球圖示加上目前語言的原文名。
 class LoginLanguageButton extends StatelessWidget {
   const LoginLanguageButton({
     super.key,

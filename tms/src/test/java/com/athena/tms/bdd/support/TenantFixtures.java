@@ -25,7 +25,6 @@ public class TenantFixtures {
         this.jdbcClient = jdbcClient;
     }
 
-    /** 確保「測試飯店」租戶存在，回傳其 tenant id（tenants.id）。 */
     public synchronized long testTenantId() {
         if (cachedTenantId != null) {
             return cachedTenantId;

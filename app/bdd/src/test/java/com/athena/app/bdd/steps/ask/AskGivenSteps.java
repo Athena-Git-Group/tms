@@ -10,13 +10,8 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** 查一下模組的 Given。 */
 public class AskGivenSteps {
 
-    /**
-     * 房間記錄的敘述格式：「{月}/{日} {標題}「{原文}」」，例如
-     * {@code 10/02 工務單 · 冷氣「冷氣不冷 → 更換濾網，測試正常。處理人：工務 阿德」}。
-     */
     private static final Pattern RECORD =
             Pattern.compile("^(\\d{1,2})/(\\d{1,2})\\s+(.+?)「(.+)」$");
 
@@ -58,17 +53,12 @@ public class AskGivenSteps {
                 "找不到標題「" + title + "」在房間記錄種類對照表中的權威值（目前只有「工務單 …」＝修繕）");
     }
 
-    /** 怎麼做：透過後端測試資料，把該 SOP 項標為跳過。 */
     @假設("{string} 在 {string} 剛跳過 SOP 項 {string}")
     public void justSkippedSop(String staffName, String task, String sopItem) {
         UUID taskId = UUID.fromString(String.valueOf(world.taskRowByRoomNo(task).get("id")));
         world.backend().skipSopItem(taskId, world.staff(staffName), sopItem);
     }
 
-    /**
-     * 怎麼做：進入任務頁，點查一下，等推薦問題載入完成。
-     * accessibility id：{@code ask.suggestion.{index}}。
-     */
     @假設("{string} 已在 {string} 的任務頁打開查一下")
     public void alreadyOpenedAsk(String staffName, String task) {
         world.openAskPanel(world.staff(staffName), task);

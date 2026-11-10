@@ -29,7 +29,6 @@ Future<String> captureAndUploadRepairPhoto({
   return photoId;
 }
 
-/// 一張照片沒有上傳成功。
 class RepairPhotoUploadFailure implements Exception {
   const RepairPhotoUploadFailure();
 
@@ -37,7 +36,6 @@ class RepairPhotoUploadFailure implements Exception {
   String toString() => '照片上傳失敗';
 }
 
-/// 報修面板上的一張照片：浮水印、上傳結果。
 class RepairPhoto {
   RepairPhoto({required this.watermark});
 
@@ -48,7 +46,6 @@ class RepairPhoto {
   /// 照片，所以這個欄位同時就是「這張到底送上去了沒有」。
   String? photoId;
 
-  /// 最近一次上傳失敗了。重試成功會清回 false。
   bool uploadFailed = false;
 
   /// 這一張正在上傳。報修面板是按送出才整批上傳，用不到這個旗標；工務自己

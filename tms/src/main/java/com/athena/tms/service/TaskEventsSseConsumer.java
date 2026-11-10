@@ -1,22 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.apache.kafka.clients.consumer.ConsumerRecord
- *  org.slf4j.Logger
- *  org.slf4j.LoggerFactory
- *  org.springframework.beans.factory.annotation.Value
- *  org.springframework.boot.context.event.ApplicationReadyEvent
- *  org.springframework.boot.convert.DurationStyle
- *  org.springframework.context.event.EventListener
- *  org.springframework.jdbc.core.JdbcTemplate
- *  org.springframework.kafka.annotation.KafkaListener
- *  org.springframework.kafka.config.KafkaListenerEndpointRegistry
- *  org.springframework.kafka.listener.MessageListenerContainer
- *  org.springframework.stereotype.Component
- *  tools.jackson.databind.JsonNode
- *  tools.jackson.databind.ObjectMapper
- */
 package com.athena.tms.service;
 
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
@@ -157,9 +138,6 @@ public class TaskEventsSseConsumer {
         });
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     private boolean alreadyDelivered(UUID taskId, int seq) {
         Map<UUID, Integer> map = this.deliveredSeqByTask;
         synchronized (map) {

@@ -54,7 +54,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     super.dispose();
   }
 
-  /// 已經上傳成功、可以引用進完修回報的照片。
   List<String> get _uploadedPhotoIds => [
     for (final photo in _photos)
       if (photo.photoId != null) photo.photoId!,

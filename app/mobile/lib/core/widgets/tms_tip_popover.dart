@@ -35,10 +35,8 @@ class TmsTipPopover extends StatelessWidget {
     required this.onDismiss,
   });
 
-  /// 粗體那一行，例如「在這裡開工單」。
   final String title;
 
-  /// 底下那兩行說明。
   final String message;
 
   /// 卡片寬度。原型兩處的文案長短不同，寬度也不同（開工單 260、查一下 264），
@@ -84,7 +82,6 @@ class TmsTipPopover extends StatelessWidget {
         color: TmsColors.cardBackground,
         borderRadius: BorderRadius.circular(TmsRadius.card),
         boxShadow: const <BoxShadow>[
-          // `Main.dc.html:1037` — 0 10px 30px rgba(0,0,0,.18)
           BoxShadow(
             color: TmsColors.tipPopoverShadow,
             offset: Offset(0, 10),
@@ -110,7 +107,6 @@ class TmsTipPopover extends StatelessWidget {
                   const SizedBox(height: _titleGap),
                   Text(
                     message,
-                    // `Main.dc.html:1039` — 15px / line-height 1.4
                     style: TmsText.subheadline.copyWith(
                       height: 1.4,
                       color: TmsColors.secondaryLabel,
@@ -128,19 +124,14 @@ class TmsTipPopover extends StatelessWidget {
   }
 }
 
-/// `Main.dc.html:1037` — 標題與說明之間的 gap: 2
 const double _titleGap = 2;
 
-/// `Main.dc.html:1037` — 文字欄與 × 之間的 gap: 4
 const double _textToCloseGap = 4;
 
-/// `Main.dc.html:1045` — 箭頭尖 right: 22
 const double _arrowInsetRight = 22;
 
-/// `Main.dc.html:1045` — 箭頭尖 bottom: -6，方塊有 6 露在卡片外面
 const double _arrowOverhang = 6;
 
-/// `Main.dc.html:1045` — 箭頭尖是 14 見方的方塊
 const double _arrowSize = 14;
 
 class _TipArrow extends StatelessWidget {
@@ -187,7 +178,6 @@ class _CloseButton extends StatelessWidget {
   }
 }
 
-/// `Main.dc.html:1042` — × 的 SVG 是 13 見方
 const double _closeGlyphSize = 13;
 
 /// 教學氣泡右上角那個 ×。
@@ -199,13 +189,11 @@ const double _closeGlyphSize = 13;
 class TmsTipCloseGlyphPainter extends CustomPainter {
   const TmsTipCloseGlyphPainter();
 
-  /// `Main.dc.html:1041` — color: #8E8E93
   static const Color strokeColor = TmsColors.quaternaryLabel;
 
   /// 原型 SVG 的 viewBox 邊長。
   static const double _viewBox = 24;
 
-  /// `Main.dc.html:1042` — stroke-width 3
   static const double strokeWidth = 3;
 
   @override
@@ -219,7 +207,6 @@ class TmsTipCloseGlyphPainter extends CustomPainter {
 
     canvas.save();
     canvas.scale(scale);
-    // `Main.dc.html:1042` — M5 5l14 14 M19 5L5 19
     canvas.drawPath(
       Path()
         ..moveTo(5, 5)

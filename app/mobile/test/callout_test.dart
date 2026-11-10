@@ -49,7 +49,6 @@ void main() {
     );
   }
 
-  /// 畫面上某一點實際畫出來的顏色。
   Future<Color> colorAt(WidgetTester tester, Offset at) async {
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find.byKey(boundaryKey),

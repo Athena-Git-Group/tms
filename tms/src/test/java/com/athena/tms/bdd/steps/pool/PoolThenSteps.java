@@ -280,7 +280,6 @@ public class PoolThenSteps {
         throw new AssertionError("待認領回應裡找不到「" + taskKey + "」");
     }
 
-    /** 以在職的房務員身分呼叫 listDeptPool，核對回應裡有一筆符合 predicate 的 PoolItem。 */
     private void requirePoolItemVisibleToHousekeeping(
             java.util.function.Predicate<JsonNode> predicate, String describe) {
         String jwt = mintJwtForAnyActiveStaff("housekeeping");

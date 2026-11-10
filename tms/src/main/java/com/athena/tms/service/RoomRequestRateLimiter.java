@@ -1,9 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.springframework.stereotype.Component
- */
 package com.athena.tms.service;
 
 import java.time.Duration;
@@ -21,9 +15,6 @@ public class RoomRequestRateLimiter {
     private static final int MAX_REQUESTS_PER_WINDOW = 3;
     private final Map<String, Deque<Instant>> grantsByRoom = new ConcurrentHashMap<String, Deque<Instant>>();
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     public boolean tryAcquire(long tenantId, UUID roomId) {
         Deque grants;
         Deque deque = grants = this.grantsByRoom.computeIfAbsent(RoomRequestRateLimiter.key(tenantId, roomId), key -> new ArrayDeque());
@@ -40,9 +31,6 @@ public class RoomRequestRateLimiter {
         }
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     public void release(long tenantId, UUID roomId) {
         Deque<Instant> grants = this.grantsByRoom.get(RoomRequestRateLimiter.key(tenantId, roomId));
         if (grants == null) {

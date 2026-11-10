@@ -15,13 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 工務單與照片 API，路由對應 contracts 的 createRepairPhoto、
- * uploadRepairPhotoContent、precheckRepairTicket、createRepairTicket、
- * readRepairTicket、appendRepairTicketPhotos、withdrawRepairTicket、
- * downgradeRepairTicketUrgency、approveRepairTicket、rejectRepairTicket、
- * resubmitRepairTicket、verifyRepairTicket、listRepairTickets。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class RepairController {

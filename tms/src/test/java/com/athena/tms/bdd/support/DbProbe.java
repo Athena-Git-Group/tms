@@ -22,7 +22,6 @@ public class DbProbe {
         this.jdbcClient = jdbcClient;
     }
 
-    /** 泛用查詢：回傳所有符合的列，每列是欄位名 -> 值的 Map。 */
     public List<Map<String, Object>> queryMaps(String sql, Object... params) {
         return jdbcClient.sql(sql).params(params).query().listOfRows();
     }
@@ -40,18 +39,15 @@ public class DbProbe {
         return Optional.of(rows.get(0));
     }
 
-    /** 泛用查詢：筆數（例如 {@code SELECT count(*) FROM ...}）。 */
     public long count(String sql, Object... params) {
         Long result = jdbcClient.sql(sql).params(params).query(Long.class).single();
         return result;
     }
 
-    /** 任務目前的權威狀態（tasks 表整列）。 */
     public Optional<Map<String, Object>> taskRow(UUID taskId) {
         return queryOne("SELECT * FROM tasks WHERE id = ?", taskId);
     }
 
-    /** 這個任務目前累積的所有事件，依 seq 排序（task_events 表）。 */
     public List<Map<String, Object>> eventsOf(UUID taskId) {
         return queryMaps("SELECT * FROM task_events WHERE task_id = ? ORDER BY seq", taskId);
     }
@@ -61,7 +57,6 @@ public class DbProbe {
         return queryMaps("SELECT * FROM outbox WHERE kind = ? ORDER BY id", kind);
     }
 
-    /** 待送匣中某種 kind、指定分區鍵（aggregate_key）的所有列，依 id 排序。 */
     public List<Map<String, Object>> outboxRows(String kind, String aggregateKey) {
         return queryMaps(
                 "SELECT * FROM outbox WHERE kind = ? AND aggregate_key = ? ORDER BY id",

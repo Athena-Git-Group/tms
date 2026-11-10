@@ -1,12 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.athena.tms.dto.Actor
- *  io.cucumber.java.en.When
- *  org.junit.jupiter.api.Assertions
- *  org.springframework.dao.DataAccessException
- */
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.dto.Actor;

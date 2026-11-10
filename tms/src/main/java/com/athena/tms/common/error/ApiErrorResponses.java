@@ -1,16 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  jakarta.servlet.http.HttpServletRequest
- *  jakarta.servlet.http.HttpServletResponse
- *  org.springframework.security.access.AccessDeniedException
- *  org.springframework.security.core.AuthenticationException
- *  org.springframework.security.web.AuthenticationEntryPoint
- *  org.springframework.security.web.access.AccessDeniedHandler
- *  org.springframework.stereotype.Component
- *  tools.jackson.databind.ObjectMapper
- */
 package com.athena.tms.common.error;
 
 import com.athena.tms.common.error.ApiError;

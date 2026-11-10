@@ -10,7 +10,6 @@ import 'tms_glass.dart';
 /// 決定，和旁邊三個自繪圖示對不起來，四格並排時看得出其中一格比較重。
 enum TmsTabGlyph { home, pool, notification, me }
 
-/// 分頁列上的一格。
 class TmsTabItem {
   const TmsTabItem({
     required this.label,
@@ -18,7 +17,6 @@ class TmsTabItem {
     this.badgeCount = 0,
   });
 
-  /// 圖示底下那行字。
   final String label;
 
   final TmsTabGlyph glyph;
@@ -150,7 +148,6 @@ class TmsBottomScrollEdge extends StatelessWidget {
   }
 }
 
-/// 分頁列的一格：膠囊底、圖示、文字，右上角可掛一顆徽章。
 class _TabCell extends StatelessWidget {
   const _TabCell({
     required this.item,
@@ -242,7 +239,6 @@ class _TabBadgeSlot extends StatelessWidget {
   }
 }
 
-/// 一格分頁的圖示。
 class _TabGlyphIcon extends StatelessWidget {
   const _TabGlyphIcon({required this.glyph, required this.color});
 
@@ -299,7 +295,6 @@ class _TabGlyphPainter extends CustomPainter {
 
   static Path _pathFor(TmsTabGlyph glyph) {
     switch (glyph) {
-      // Main.dc.html:1129 — M4 11l8-6.5 8 6.5V20H4z M10 20v-5h4v5
       case TmsTabGlyph.home:
         return Path()
           ..moveTo(4, 11)
@@ -312,7 +307,6 @@ class _TabGlyphPainter extends CustomPainter {
           ..lineTo(10, 15)
           ..lineTo(14, 15)
           ..lineTo(14, 20);
-      // Main.dc.html:1130 — M4 13h4l1.5 3h5L16 13h4M4 13l2.5-7h11L20 13v5H4z
       case TmsTabGlyph.pool:
         return Path()
           ..moveTo(4, 13)
@@ -328,8 +322,6 @@ class _TabGlyphPainter extends CustomPainter {
           ..lineTo(20, 18)
           ..lineTo(4, 18)
           ..close();
-      // Main.dc.html:1131 — M12 3.5a5.8 5.8 0 0 0-5.8 5.8v3.6L4.5 16h15l-1.7
-      // -3.1V9.3A5.8 5.8 0 0 0 12 3.5z M9.8 19a2.3 2.3 0 0 0 4.4 0
       case TmsTabGlyph.notification:
         return Path()
           ..moveTo(12, 3.5)
@@ -355,8 +347,6 @@ class _TabGlyphPainter extends CustomPainter {
             radius: const Radius.circular(2.3),
             clockwise: false,
           );
-      // Main.dc.html:1132 — circle r=9、circle r=3.2、
-      // M6.3 18.6c1.3-2.1 3.3-3.3 5.7-3.3s4.4 1.2 5.7 3.3
       case TmsTabGlyph.me:
         return Path()
           ..addOval(Rect.fromCircle(center: const Offset(12, 12), radius: 9))
@@ -368,36 +358,26 @@ class _TabGlyphPainter extends CustomPainter {
   }
 }
 
-/// 圖示線稿的座標系邊長。Main.dc.html:1129 — viewBox="0 0 24 24"
 const double _glyphViewBox = 24;
 
-/// 圖示線稿的筆畫粗細。Main.dc.html:1129 — stroke-width: 1.9
 const double _glyphStroke = 1.9;
 
-/// 分頁列玻璃的模糊標準差。Main.dc.html:1126 — blur(24px)
 const double _glassBlur = 24;
 
-/// 分頁列玻璃的飽和度。Main.dc.html:1126 — saturate(180%)
 const double _glassSaturation = 180;
 
-/// 上緣高光那條線的粗細。Main.dc.html:1126 — inset 0 1px 0
 const double _highlightThickness = 1;
 
-/// soft scroll edge 的模糊標準差。Main.dc.html:1122 — blur(12px)
 const double _edgeBlur = 12;
 
-/// soft scroll edge 的飽和度。Main.dc.html:1122 — saturate(160%)
 const double _edgeSaturation = 160;
 
 /// soft scroll edge 上緣淡出後的顏色。原型用 mask 把整層的透明度收掉，這裡
 /// 改成同一個色相收到全透明，兩種寫法在畫面上等價。
 const Color _edgeFadeOut = Color(0x00F2F2F7);
 
-/// 圖示與文字之間。Main.dc.html:1127 — gap: 1
 const double _iconLabelGap = 1;
 
-/// 徽章上緣離整格上緣的距離。Main.dc.html:1136 — top: 3px
 const double _badgeTop = 3;
 
-/// 徽章左緣落在整格寬度的哪一個比例上。Main.dc.html:1136 — left: 56%
 const double _badgeLeftRatio = 0.56;

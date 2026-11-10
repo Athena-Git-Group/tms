@@ -50,7 +50,6 @@ public class PushDeliveryRecorder {
                 tenantId, staffId);
     }
 
-    /** 推播服務回報地址失效：把該裝置標為已撤銷，之後的推播不再送它。 */
     public void revokeDevice(long tenantId, UUID deviceId) {
         jdbcTemplate.update(
                 "UPDATE staff_devices SET revoked_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL",

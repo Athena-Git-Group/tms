@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** 查房模組的 When（查房/dsl.md When 句型區）。 */
 public class InspectionWhenSteps {
 
     private final ScenarioWorld world;

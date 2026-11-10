@@ -1,15 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.athena.tms.common.error.StateConflictException
- *  com.athena.tms.dto.Actor
- *  com.athena.tms.dto.TaskCreateCommand
- *  com.athena.tms.entity.Task
- *  io.cucumber.java.en.When
- *  org.junit.jupiter.api.Assertions
- *  org.springframework.dao.DataAccessException
- */
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.common.error.StateConflictException;
@@ -66,9 +54,6 @@ public class BackboneWhenSteps {
         this.ctx.returnedSeq(Tenants.asTenant(1L, () -> this.fixtures.engine().passInspection(1L, this.ctx.taskId(), TestData.MG1)));
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     @When(value="^\u5169\u500b\u4f75\u767c\u8acb\u6c42\u540c\u79d2\u8a8d\u9818\u4efb\u52d9 \"([^\"]+)\"$")
     public void twoConcurrentClaims(String taskSymbol) throws Exception {
         UUID taskId = this.ctx.entityId(taskSymbol);

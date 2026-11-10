@@ -1,12 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.springframework.http.ResponseEntity
- *  org.springframework.web.bind.MethodArgumentNotValidException
- *  org.springframework.web.bind.annotation.ExceptionHandler
- *  org.springframework.web.bind.annotation.RestControllerAdvice
- */
 package com.athena.tms.common.error;
 
 import com.athena.tms.common.error.ApiError;

@@ -11,7 +11,6 @@ import 'password_rules.dart';
 /// 這兩頁是同一段流程的前後兩步，員工在幾秒內會連著看到。零件各寫一份的話，
 /// 兩頁的欄位高度、卡片圓角與按鈕位置就會差一點，看起來像兩個不同的 App。
 
-/// 登入流程頁面最上面的招牌：品牌方塊、一行大標、一行說明。
 class LoginBrandHeader extends StatelessWidget {
   const LoginBrandHeader({super.key, required this.title, this.subtitle});
 
@@ -113,10 +112,8 @@ class LoginIdentityRow extends StatelessWidget {
     required this.subtitle,
   });
 
-  /// 員工姓名。
   final String name;
 
-  /// 姓名底下那一行，例如員工編號。
   final String subtitle;
 
   /// 頭像裡那個字。中文名取最後一個字（阿美→美、阿德→德），對齊原型的
@@ -188,7 +185,6 @@ class LoginPasswordVisibilityButton extends StatelessWidget {
     required this.semanticsId,
   });
 
-  /// 密碼現在是不是遮著的。
   final bool obscured;
 
   final VoidCallback onPressed;
@@ -219,7 +215,6 @@ class LoginPasswordVisibilityButton extends StatelessWidget {
   }
 }
 
-/// 表單的白卡：裡面的列由上到下排，列與列之間一條髮絲線。
 class LoginFormCard extends StatelessWidget {
   const LoginFormCard({super.key, required this.children});
 
@@ -263,7 +258,6 @@ class LoginFieldRow extends StatelessWidget {
     this.hasError = false,
   });
 
-  /// 欄位名稱。
   final String label;
 
   /// 輸入區本身，由呼叫端給——它要掛自己的 accessibility id。
@@ -500,7 +494,6 @@ class LoginCheckBadge extends StatelessWidget {
     required this.strokeWidth,
   });
 
-  /// 整顆圓的邊長。
   final double size;
 
   /// 白色勾痕的線寬，以原型的 24×24 viewBox 為尺度。

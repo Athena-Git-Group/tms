@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** 推播模組的 Given。 */
 public class PushGivenSteps {
 
     private static final Pattern TASK_SCREEN = Pattern.compile("^(\\d+) 的任務頁$");
@@ -96,8 +95,6 @@ public class PushGivenSteps {
                 """, world.backend().ensureTenant(), roomNo);
         return tasks.size() == 1 ? tasks.get(0).get("id").toString() : null;
     }
-
-    // ──── 通知中心（T309–T311 落點） ────
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(6);
 
@@ -239,10 +236,6 @@ public class PushGivenSteps {
      * 把「時刻」參數（{@code 今天 HH:mm} 或 {@code {日期} HH:mm}）解析成通知的
      * {@code created_at}。日期收相對詞（今天／昨天／前天／明天）、「11/02」這種
      * 月/日省年形式與 ISO 日期；時間一律 24 小時制。
-     *
-     * <p>用系統時鐘與系統時區，因為「現在時間是」的裝置時間注入在這個 harness
-     * 尚未實作，沒有可對齊的測試時鐘；等它落地時這裡要改成跟它共用同一個時鐘，
-     * 否則「今天／更早」的分組斷言會因兩個時鐘的日期不同而誤判。
      */
     private static OffsetDateTime parseMoment(String momentExpr) {
         String[] parts = momentExpr.trim().split("\\s+");

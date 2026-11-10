@@ -1,11 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.athena.tms.dto.Actor
- *  io.cucumber.java.en.Given
- *  org.junit.jupiter.api.Assertions
- */
 package com.athena.tms.integration.stepdefs.given;
 
 import com.athena.tms.dto.Actor;

@@ -77,7 +77,6 @@ public class GuestRequestService {
         }
     }
 
-    /** 進池的住客需求補記進池來源（tasks.pool_source=guest_scan），已有值時不覆寫。 */
     private void markGuestScanPoolSource(long tenantId, UUID taskId) {
         this.jdbcTemplate.update(
                 "UPDATE tasks SET pool_source = COALESCE(pool_source, 'guest_scan') WHERE tenant_id = ? AND id = ?",

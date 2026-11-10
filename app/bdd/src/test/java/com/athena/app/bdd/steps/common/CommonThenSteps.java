@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-/** 介面根共通句的 Then（dsl.md Then 句型區）。 */
 public class CommonThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -172,7 +171,6 @@ public class CommonThenSteps {
         world.waitForTestId("task.screen", SCREEN_TIMEOUT);
     }
 
-    /** 權威半邊：{@code tasks.state}（必要時加上 inspection／type）符合狀態用語對照。 */
     private void assertBackendState(String task, String state) {
         Map<String, Object> row = world.taskRowByRoomNo(task);
         String expectedState = BackendChannel.taskState(state);

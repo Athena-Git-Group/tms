@@ -1,11 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.apache.kafka.clients.consumer.ConsumerRecord
- *  org.apache.kafka.clients.consumer.KafkaConsumer
- *  org.apache.kafka.common.serialization.StringDeserializer
- */
 package com.athena.tms.integration.stepdefs.utils;
 
 import com.athena.tms.integration.stepdefs.CucumberSpringConfiguration;

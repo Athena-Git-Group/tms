@@ -56,10 +56,8 @@ class TmsActionBar extends StatelessWidget {
   /// 按鈕上方的說明句，例如「還有 3 項沒勾」。
   final Widget? hint;
 
-  /// 左邊那顆，佔 1 份寬。
   final Widget? secondary;
 
-  /// 右邊那顆，佔 2 份寬。
   final Widget? primary;
 
   /// 操作列自己要吃掉的底部安全區，對應原型的 `dv.actionBottom`

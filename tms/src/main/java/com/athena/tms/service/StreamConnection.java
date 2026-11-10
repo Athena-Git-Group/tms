@@ -1,13 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  java.lang.MatchException
- *  org.springframework.web.servlet.mvc.method.annotation.SseEmitter
- *  org.springframework.web.servlet.mvc.method.annotation.SseEmitter$SseEventBuilder
- *  tools.jackson.databind.ObjectMapper
- *  tools.jackson.databind.node.ObjectNode
- */
 package com.athena.tms.service;
 
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
@@ -158,7 +148,6 @@ final class StreamConnection {
             this.emitter.complete();
         }
         catch (Exception exception) {
-            // empty catch block
         }
     }
 

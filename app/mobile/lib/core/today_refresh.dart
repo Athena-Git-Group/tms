@@ -16,6 +16,5 @@ class TodayRefresh extends ChangeNotifier {
 
   static final TodayRefresh instance = TodayRefresh._();
 
-  /// 通知所有在聽的畫面重查今日進度。
   void request() => notifyListeners();
 }

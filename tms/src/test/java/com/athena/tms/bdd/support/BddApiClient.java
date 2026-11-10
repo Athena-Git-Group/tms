@@ -32,7 +32,6 @@ import tools.jackson.databind.ObjectMapper;
  */
 public class BddApiClient {
 
-    /** API 的共同前綴，所有 path 參數都是相對於這個前綴的路徑（例如 "/tasks"）。 */
     private static final String BASE_PATH = "/api/v1";
 
     /** 冪等鍵 header 名稱，定義見 specs/truth/contracts/components/parameters.yaml 的 IdempotencyKey。 */
@@ -83,7 +82,6 @@ public class BddApiClient {
         }
     }
 
-    /** 不帶 body 的 GET，不帶 Idempotency-Key（GET 不是寫入操作）。 */
     public ScenarioWorld.ApiResponse get(String path, Auth auth) {
         return exchange(HttpMethod.GET, path, auth, null, null);
     }
@@ -93,7 +91,6 @@ public class BddApiClient {
         return post(path, auth, body, UUID.randomUUID().toString());
     }
 
-    /** 帶 body 的 POST，使用呼叫端指定的 Idempotency-Key（例如要重送同一個鍵驗證回放）。 */
     public ScenarioWorld.ApiResponse post(String path, Auth auth, Object body, String idempotencyKey) {
         return exchange(HttpMethod.POST, path, auth, body, idempotencyKey);
     }
@@ -103,7 +100,6 @@ public class BddApiClient {
         return patch(path, auth, body, UUID.randomUUID().toString());
     }
 
-    /** 帶 body 的 PATCH，使用呼叫端指定的 Idempotency-Key（例如要重送同一個鍵驗證回放）。 */
     public ScenarioWorld.ApiResponse patch(String path, Auth auth, Object body, String idempotencyKey) {
         return exchange(HttpMethod.PATCH, path, auth, body, idempotencyKey);
     }

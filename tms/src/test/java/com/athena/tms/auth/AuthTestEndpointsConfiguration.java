@@ -1,19 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  com.athena.tms.common.CurrentActor
- *  com.athena.tms.common.TenantContext
- *  com.athena.tms.common.error.NotFoundException
- *  com.athena.tms.dao.RoomRepository
- *  com.athena.tms.entity.Room
- *  org.springframework.boot.test.context.TestConfiguration
- *  org.springframework.jdbc.core.JdbcTemplate
- *  org.springframework.web.bind.annotation.GetMapping
- *  org.springframework.web.bind.annotation.PathVariable
- *  org.springframework.web.bind.annotation.PostMapping
- *  org.springframework.web.bind.annotation.RestController
- */
 package com.athena.tms.auth;
 
 import com.athena.tms.common.CurrentActor;

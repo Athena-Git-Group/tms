@@ -230,7 +230,6 @@ class _PoolScreenState extends State<PoolScreen> {
     ];
   }
 
-  /// 這個部門沒有在職員工時的空狀態全文。
   static const String _noActiveStaffMessage = '這個部門目前沒有在職員工可以搶單';
 
   /// 分類磚列。筆數一律讀後端回的 `counts`，帶 category 查詢時 counts 仍是整池
