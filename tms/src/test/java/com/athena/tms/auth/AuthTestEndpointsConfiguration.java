@@ -15,11 +15,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@TestConfiguration(proxyBeanMethods=false)
+@TestConfiguration(proxyBeanMethods = false)
 public class AuthTestEndpointsConfiguration {
 
     @RestController
     static class ProbeController {
+
         private final RoomRepository roomRepository;
         private final JdbcTemplate jdbcTemplate;
 
@@ -28,66 +29,70 @@ public class AuthTestEndpointsConfiguration {
             this.jdbcTemplate = new JdbcTemplate(dataSource);
         }
 
-        @GetMapping(value={"/staff/probe"})
+        @GetMapping("/staff/probe")
         Map<String, String> staffRead() {
             return Map.of("probe", "staff-read");
         }
 
-        @PostMapping(value={"/staff/probe"})
+        @PostMapping("/staff/probe")
         Map<String, String> staffWrite() {
             return Map.of("probe", "staff-write");
         }
 
-        @GetMapping(value={"/desk/probe"})
+        @GetMapping("/desk/probe")
         Map<String, String> deskRead() {
             return Map.of("probe", "desk-read");
         }
 
-        @PostMapping(value={"/desk/probe"})
+        @PostMapping("/desk/probe")
         Map<String, String> deskWrite() {
             return Map.of("probe", "desk-write");
         }
 
-        @GetMapping(value={"/admin/probe"})
+        @GetMapping("/admin/probe")
         Map<String, String> adminRead() {
             return Map.of("probe", "admin-read");
         }
 
-        @PostMapping(value={"/admin/probe"})
+        @PostMapping("/admin/probe")
         Map<String, String> adminWrite() {
             return Map.of("probe", "admin-write");
         }
 
-        @GetMapping(value={"/owner/probe"})
+        @GetMapping("/owner/probe")
         Map<String, String> ownerRead() {
             return Map.of("probe", "owner-read");
         }
 
-        @PostMapping(value={"/owner/probe"})
+        @PostMapping("/owner/probe")
         Map<String, String> ownerWrite() {
             return Map.of("probe", "owner-write");
         }
 
-        @PostMapping(value={"/guest/probe"})
+        @PostMapping("/guest/probe")
         Map<String, String> guestWrite() {
             return Map.of("probe", "guest-write");
         }
 
-        @GetMapping(value={"/guest/context"})
+        @GetMapping("/guest/context")
         Map<String, Object> guestContext() {
             CurrentActor actor = CurrentActor.require();
-            return Map.of("tenantId", actor.tenantId(), "roomId", String.valueOf(actor.roomId()), "reservationId", String.valueOf(actor.reservationId()));
+            return Map.of(
+                    "tenantId", actor.tenantId(),
+                    "roomId", String.valueOf(actor.roomId()),
+                    "reservationId", String.valueOf(actor.reservationId()));
         }
 
-        @GetMapping(value={"/staff/rooms/{id}"})
+        @GetMapping("/staff/rooms/{id}")
         Map<String, String> room(@PathVariable UUID id) {
-            Room room = (Room)this.roomRepository.findByTenantIdAndId(TenantContext.require(), id).orElseThrow(() -> new NotFoundException("房間不存在"));
+            Room room = roomRepository.findByTenantIdAndId(TenantContext.require(), id)
+                    .orElseThrow(() -> new NotFoundException("房間不存在"));
             return Map.of("id", room.getId().toString(), "roomNo", room.getRoomNo());
         }
 
-        @GetMapping(value={"/staff/rls-room-count"})
+        @GetMapping("/staff/rls-room-count")
         Map<String, Object> rlsRoomCount() {
-            Integer visible = (Integer)this.jdbcTemplate.queryForObject("SELECT count(*) FROM rooms", Integer.class);
+            Integer visible = jdbcTemplate.queryForObject("SELECT count(*) FROM rooms", Integer.class);
             return Map.of("visibleRooms", visible);
         }
     }
