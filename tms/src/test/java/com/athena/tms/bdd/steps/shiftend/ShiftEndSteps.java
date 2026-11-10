@@ -27,6 +27,7 @@ public class ShiftEndSteps {
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
     private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
     private final JobTrigger jobTrigger;
     private final JwtService jwtService;
     private final TenantFixtures tenantFixtures;
@@ -36,6 +37,7 @@ public class ShiftEndSteps {
             ScenarioWorld world,
             BddApiClient apiClient,
             DbProbe dbProbe,
+            LastOperationGuard lastOperationGuard,
             JobTrigger jobTrigger,
             JwtService jwtService,
             TenantFixtures tenantFixtures,
@@ -43,15 +45,15 @@ public class ShiftEndSteps {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
         this.jobTrigger = jobTrigger;
         this.jwtService = jwtService;
         this.tenantFixtures = tenantFixtures;
         this.objectMapper = objectMapper;
     }
 
-    @當("{string} 的班末掃描執行")
-    public void shiftEndScanRunsFor(String staffName) {
-        world.staffId(staffName);
+    @當("班末掃描執行")
+    public void shiftEndScanRuns() {
         jobTrigger.run("shift-end-scan");
     }
 
@@ -62,7 +64,7 @@ public class ShiftEndSteps {
     @當("{string} 以交代 {string} 把 {string} 退回待認領")
     public void managerRequeuesTaskWithHandoverNote(String managerName, String handoverNote, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
         Map<String, Object> body = Map.of("note", handoverNote);
         apiClient.post("/tasks/" + taskId + "/requeue", BddApiClient.Auth.staff(world.jwt(managerName)), body);
     }

@@ -2,7 +2,6 @@ package com.athena.tms.bdd.steps.pool;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
-import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.PmsProbe;
@@ -22,7 +21,7 @@ public class PoolWhenSteps {
     private final PmsProbe pmsProbe;
     private final AutomationRuleService automationRuleService;
     private final TenantFixtures tenantFixtures;
-    private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
 
     public PoolWhenSteps(
             ScenarioWorld world,
@@ -31,14 +30,14 @@ public class PoolWhenSteps {
             PmsProbe pmsProbe,
             AutomationRuleService automationRuleService,
             TenantFixtures tenantFixtures,
-            DbProbe dbProbe) {
+            LastOperationGuard lastOperationGuard) {
         this.world = world;
         this.apiClient = apiClient;
         this.clock = clock;
         this.pmsProbe = pmsProbe;
         this.automationRuleService = automationRuleService;
         this.tenantFixtures = tenantFixtures;
-        this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
     }
 
     @當("{string} 查看待認領")
@@ -60,8 +59,8 @@ public class PoolWhenSteps {
         pmsProbe.pushTodayRoomState(roomNo, List.of(attribute), checkinDate);
     }
 
-    @當("{string} 刪除 {string} 規則")
-    public void managerDeletesRule(String managerName, String ruleName) {
+    @當("{string} 規則已被刪除")
+    public void ruleDeleted(String ruleName) {
         automationRuleService.deleteRule(tenantFixtures.testTenantId(), ruleName);
     }
 
@@ -75,7 +74,7 @@ public class PoolWhenSteps {
         UUID taskId = resolveTaskId(taskKey);
         // 認領可能撞單（任務已被他人認領），接下來的「這次操作被拒絕」Then 句要比對
         // 操作前後的任務列、事件數與 outbox 數有沒有變動，靠的是這裡先留一份快照。
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
         apiClient.post("/tasks/" + taskId + "/claim", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 

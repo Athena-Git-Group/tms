@@ -55,6 +55,8 @@ public class SseSupport {
         private final List<Event> everything = new CopyOnWriteArrayList<Event>();
         private final Stream<String> body;
         private final Thread reader;
+        private volatile boolean closed;
+        private volatile Throwable readerFailure;
 
         SseStreamClient(int port, String path, String bearerToken) throws Exception {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).header("Authorization", "Bearer " + bearerToken).header("Accept", "text/event-stream").GET().build();
@@ -92,6 +94,9 @@ public class SseSupport {
                 }
             }
             catch (Exception exception) {
+                if (!this.closed) {
+                    this.readerFailure = exception;
+                }
             }
         }
 
@@ -100,6 +105,7 @@ public class SseSupport {
             Event event;
             long deadline = System.nanoTime() + timeout.toNanos();
             do {
+                this.failIfReaderDied();
                 if ((remaining = deadline - System.nanoTime()) > 0L) continue;
                 Assertions.fail((String)("\u7b49\u4e0d\u5230 SSE \u4e8b\u4ef6 '" + name + "'\uff1b\u5df2\u6536\u5230: " + this.summary()));
             } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !event.name().equals(name));
@@ -111,6 +117,7 @@ public class SseSupport {
             Event event;
             long deadline = System.nanoTime() + timeout.toNanos();
             do {
+                this.failIfReaderDied();
                 if ((remaining = deadline - System.nanoTime()) > 0L) continue;
                 Assertions.fail((String)("\u7b49\u4e0d\u5230\u4efb\u52d9 " + String.valueOf(taskId) + " \u7684 '" + type + "' \u4e8b\u4ef6\uff1b\u5df2\u6536\u5230: " + this.summary()));
             } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !event.name().equals("task") || !taskId.toString().equals(event.data().get("task_id").asText()) || !type.equals(event.data().get("type").asText()));
@@ -118,15 +125,26 @@ public class SseSupport {
         }
 
         public List<JsonNode> taskEventsFor(UUID taskId) {
+            this.failIfReaderDied();
             return this.everything.stream().filter(e -> e.name().equals("task")).map(Event::data).filter(d -> taskId.toString().equals(d.get("task_id").asText())).toList();
         }
 
         public List<String> eventNames() {
+            this.failIfReaderDied();
             return this.everything.stream().map(Event::name).toList();
         }
 
         public JsonNode resyncData() {
+            this.failIfReaderDied();
             return this.everything.stream().filter(e -> e.name().equals("resync")).map(Event::data).findFirst().orElseThrow(() -> new IllegalStateException("\u9019\u689d\u9023\u7dda\u9084\u6c92\u6536\u5230 resync\uff1a" + this.summary()));
+        }
+
+        /** 讀取執行緒因例外中止（不是測試主動關流）時，讓接下來讀流的斷言直接失敗並帶出原因。 */
+        private void failIfReaderDied() {
+            Throwable failure = this.readerFailure;
+            if (failure != null) {
+                throw new AssertionError("SSE 讀取執行緒已因例外中止；已收到: " + this.summary(), failure);
+            }
         }
 
         private String summary() {
@@ -135,6 +153,7 @@ public class SseSupport {
 
         @Override
         public void close() {
+            this.closed = true;
             this.body.close();
             this.reader.interrupt();
         }

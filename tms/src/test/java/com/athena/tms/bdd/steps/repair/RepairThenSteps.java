@@ -4,6 +4,7 @@ import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.OutboxAwait;
+import com.athena.tms.bdd.support.RepairCountGuard;
 import com.athena.tms.bdd.support.PushPayloadView;
 import com.athena.tms.bdd.support.RoomFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
@@ -29,6 +30,7 @@ public class RepairThenSteps {
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
     private final DbProbe dbProbe;
+    private final RepairCountGuard repairCountGuard;
     private final OutboxAwait outboxAwait;
     private final TenantFixtures tenantFixtures;
     private final RoomFixtures roomFixtures;
@@ -38,6 +40,7 @@ public class RepairThenSteps {
             ScenarioWorld world,
             BddApiClient apiClient,
             DbProbe dbProbe,
+            RepairCountGuard repairCountGuard,
             OutboxAwait outboxAwait,
             TenantFixtures tenantFixtures,
             RoomFixtures roomFixtures,
@@ -45,6 +48,7 @@ public class RepairThenSteps {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
+        this.repairCountGuard = repairCountGuard;
         this.outboxAwait = outboxAwait;
         this.tenantFixtures = tenantFixtures;
         this.roomFixtures = roomFixtures;
@@ -148,7 +152,7 @@ public class RepairThenSteps {
 
     @那麼("系統沒有建立工務單")
     public void noRepairTicketCreated() {
-        RepairCountGuard.Snapshot before = RepairCountGuard.current();
+        RepairCountGuard.Snapshot before = repairCountGuard.current();
         long tenantId = tenantFixtures.testTenantId();
         long ticketCountAfter = dbProbe.count("SELECT count(*) FROM repair_tickets WHERE tenant_id = ?", tenantId);
         long taskCountAfter =
@@ -561,7 +565,7 @@ public class RepairThenSteps {
     }
 
     private void assertNoRepairTicketCreatedSinceGuard() {
-        RepairCountGuard.Snapshot before = RepairCountGuard.current();
+        RepairCountGuard.Snapshot before = repairCountGuard.current();
         long tenantId = tenantFixtures.testTenantId();
         long ticketCountAfter = dbProbe.count("SELECT count(*) FROM repair_tickets WHERE tenant_id = ?", tenantId);
         long taskCountAfter =

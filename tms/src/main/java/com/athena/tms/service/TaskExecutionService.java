@@ -745,7 +745,7 @@ public class TaskExecutionService {
      * 預估剩餘工時＝Σ（accepted、doing、deferred、interrupted）max(0, 預估分鐘 −
      * 已做分鐘），進行中的段落以現在時刻折算。下一間只列 accepted，排序為 redo
      * 次數多的先、非打掃類先於打掃類、最後依房號遞增，讓員工先清掉臨時需求再回
-     * 打掃動線。連續零退回天數的計算定義尚未拍板，先固定回 0。
+     * 打掃動線。
      *
      * <p>首頁任務列（todayTasks）收錄本人今日未取消的全部任務（accepted、doing、
      * deferred、interrupted、done、inspected 六個狀態），已做分鐘沿用
@@ -907,7 +907,6 @@ public class TaskExecutionService {
         result.put("remainingMinutes", (int) Math.max(0, remainingMinutes));
         result.put("todayTasks", todayTasks);
         result.put("nextTasks", nextTasks);
-        result.put("zeroReturnStreakDays", 0);
         Map<String, Object> duty = todayDuty(tenantId, actor.staffId(), today);
         result.put("shift", duty.get("shift"));
         result.put("floors", duty.get("floors"));

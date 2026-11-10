@@ -30,6 +30,7 @@ public class PushManagerActionSteps {
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
     private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
     private final OutboxAwait outboxAwait;
     private final MutableClock clock;
     private final TenantFixtures tenantFixtures;
@@ -41,6 +42,7 @@ public class PushManagerActionSteps {
             ScenarioWorld world,
             BddApiClient apiClient,
             DbProbe dbProbe,
+            LastOperationGuard lastOperationGuard,
             OutboxAwait outboxAwait,
             MutableClock clock,
             TenantFixtures tenantFixtures,
@@ -50,6 +52,7 @@ public class PushManagerActionSteps {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
         this.outboxAwait = outboxAwait;
         this.clock = clock;
         this.tenantFixtures = tenantFixtures;
@@ -65,7 +68,7 @@ public class PushManagerActionSteps {
     @當("{string} 查房 {string}，判定 {string} 不合格")
     public void managerFailsInspectionItem(String managerName, String taskKey, String itemLabel) {
         UUID taskId = UUID.fromString(world.taskId(taskKey));
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
 
         long tenantId = tenantFixtures.testTenantId();
         // V2 seed 只替示範租戶（id=1）種查房項目，測試租戶的查房項目要由 fixture 自己落地。
@@ -101,7 +104,7 @@ public class PushManagerActionSteps {
     @當("{string} 以原因 {string} 作廢 {string}")
     public void managerVoidsTask(String managerName, String reasonNote, String taskKey) {
         UUID taskId = UUID.fromString(world.taskId(taskKey));
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
 
         Map<String, Object> body = Map.of("reason", "manager_void", "note", reasonNote);
         apiClient.post("/tasks/" + taskId + "/cancel", BddApiClient.Auth.staff(world.jwt(managerName)), body);
@@ -118,7 +121,7 @@ public class PushManagerActionSteps {
     @當("{string} 把 {string} 改派給 {string}")
     public void managerReassignsTask(String managerName, String taskKey, String newAssigneeName) {
         UUID taskId = UUID.fromString(resolveTaskId(taskKey));
-        LastOperationGuard.captureFor(dbProbe, taskId);
+        lastOperationGuard.captureFor(taskId);
 
         Map<String, Object> body = Map.of("assigneeId", world.staffId(newAssigneeName));
         apiClient.post("/tasks/" + taskId + "/reassign", BddApiClient.Auth.staff(world.jwt(managerName)), body);

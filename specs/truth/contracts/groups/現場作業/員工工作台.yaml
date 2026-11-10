@@ -15,7 +15,6 @@ getMyToday:
       供首頁任務列與「繼續處理」使用；排序由後端排好，App 依序呈現不再重排。
       下一間推薦（nextTasks）是 todayTasks 中 accepted 那些單的推薦子集，只列 accepted，
       排序為：redo 次數多的先、非打掃類先於打掃類、最後依房號遞增；兩份清單口徑不同，不可互相取代。
-      連續零退回天數的計算定義待 clarify（FR-030）。
       呼叫者是工務（dept=engineering）時另外回傳 engineeringSummary：手上張數（accepted／doing 的工務單數）、
       今天已完修（今天 done 的工務單數）、急件數（手上單中 isUrgent 的數量），
       以及這些單的清單 tickets（accepted／doing 的工務單，加上今天 done 的工務單，讓工務能打開已完修的單看驗收狀態）；
