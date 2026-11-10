@@ -7,6 +7,7 @@ import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.TaskFixtures;
 import com.athena.tms.integration.stepdefs.utils.Tenants;
+import com.athena.tms.integration.stepdefs.utils.TestData;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
 import java.time.Duration;
@@ -65,7 +66,7 @@ public class EntityTableGivenSteps {
                     """,
                     UUID.class,
                     UUID.randomUUID(), tenantOf(row), value(row, "name"), value(row, "login_id"),
-                    "$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW",
+                    TestData.SEED_BCRYPT,
                     value(row, "role"), value(row, "dept"));
             ctx.registerEntity(value(row, "id"), id);
             ctx.registerStaffLogin(value(row, "name"), value(row, "login_id"));
