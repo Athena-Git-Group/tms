@@ -5,6 +5,10 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.Assertions;
 
 public final class Awaits {
+
+    private Awaits() {
+    }
+
     public static void waitUntil(Duration timeout, String what, Supplier<Boolean> condition) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
@@ -12,16 +16,12 @@ public final class Awaits {
                 return;
             }
             try {
-                Thread.sleep(100L);
-            }
-            catch (InterruptedException e) {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                Assertions.fail((String)("等待被中斷: " + what));
+                Assertions.fail("等待被中斷: " + what);
             }
         }
-        Assertions.fail((String)("等待逾時（" + timeout.toSeconds() + "s）: " + what));
-    }
-
-    private Awaits() {
+        Assertions.fail("等待逾時（" + timeout.toSeconds() + "s）: " + what);
     }
 }

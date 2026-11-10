@@ -24,8 +24,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 public class SseSupport {
+
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
+
     private final Environment environment;
 
     public SseSupport(Environment environment) {
@@ -33,35 +35,44 @@ public class SseSupport {
     }
 
     public SseStreamClient open(String path, String bearerToken) throws Exception {
-        SseStreamClient client = new SseStreamClient((Integer)this.environment.getRequiredProperty("local.server.port", Integer.class), path, bearerToken);
-        client.awaitNamed("init", Duration.ofSeconds(10L));
+        int port = environment.getRequiredProperty("local.server.port", Integer.class);
+        SseStreamClient client = new SseStreamClient(port, path, bearerToken);
+        client.awaitNamed("init", Duration.ofSeconds(10));
         return client;
     }
 
     public void produceRaw(long timestamp, String key, String value) throws Exception {
-        Map<String, Object> props = Map.of("bootstrap.servers", CucumberSpringConfiguration.KAFKA.getBootstrapServers(), "key.serializer", StringSerializer.class, "value.serializer", StringSerializer.class);
-        try (KafkaProducer producer = new KafkaProducer(props);){
-            producer.send(new ProducerRecord("tms.task-events", null, Long.valueOf(timestamp), (Object)key, (Object)value)).get(10L, TimeUnit.SECONDS);
+        Map<String, Object> props = Map.of(
+                "bootstrap.servers", CucumberSpringConfiguration.KAFKA.getBootstrapServers(),
+                "key.serializer", StringSerializer.class,
+                "value.serializer", StringSerializer.class);
+        try (KafkaProducer<String, String> producer = new KafkaProducer<>(props)) {
+            producer.send(new ProducerRecord<>("tms.task-events", null, timestamp, key, value)).get(10, TimeUnit.SECONDS);
         }
     }
 
     public static String envelope(long tenantId, UUID taskId, int seq, String type) {
-        return "{\"tenant_id\": " + tenantId + ", \"task_id\": \"" + String.valueOf(taskId) + "\", \"seq\": " + seq + ", \"type\": \"" + type + "\"}";
+        return "{\"tenant_id\": " + tenantId + ", \"task_id\": \"" + taskId + "\", \"seq\": " + seq + ", \"type\": \"" + type + "\"}";
     }
 
-    public static final class SseStreamClient
-    implements AutoCloseable {
-        private final BlockingQueue<Event> pending = new LinkedBlockingQueue<Event>();
-        private final List<Event> everything = new CopyOnWriteArrayList<Event>();
+    public static final class SseStreamClient implements AutoCloseable {
+
+        private final BlockingQueue<Event> pending = new LinkedBlockingQueue<>();
+        private final List<Event> everything = new CopyOnWriteArrayList<>();
         private final Stream<String> body;
         private final Thread reader;
         private volatile boolean closed;
         private volatile Throwable readerFailure;
 
         SseStreamClient(int port, String path, String bearerToken) throws Exception {
-            HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).header("Authorization", "Bearer " + bearerToken).header("Accept", "text/event-stream").GET().build();
-            HttpResponse<Stream<String>> response = HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofLines()).get(10L, TimeUnit.SECONDS);
-            Assertions.assertEquals((int)200, (int)response.statusCode(), (String)("SSE 端點應以 200 開流（" + path + "）"));
+            HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .header("Accept", "text/event-stream")
+                    .GET()
+                    .build();
+            HttpResponse<Stream<String>> response = HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofLines())
+                    .get(10, TimeUnit.SECONDS);
+            Assertions.assertEquals(200, response.statusCode(), "SSE 端點應以 200 開流（" + path + "）");
             this.body = response.body();
             this.reader = new Thread(this::readLoop, "sse-bdd-reader");
             this.reader.setDaemon(true);
@@ -72,90 +83,103 @@ public class SseSupport {
             String name = null;
             StringBuilder data = new StringBuilder();
             try {
-                Iterator lines = this.body.iterator();
+                Iterator<String> lines = body.iterator();
                 while (lines.hasNext()) {
-                    String line = (String)lines.next();
+                    String line = lines.next();
                     if (line.isEmpty()) {
                         if (name != null && !data.isEmpty()) {
                             Event event = new Event(name, JSON.readTree(data.toString()));
-                            this.everything.add(event);
-                            this.pending.add(event);
+                            everything.add(event);
+                            pending.add(event);
                         }
                         name = null;
                         data.setLength(0);
-                        continue;
-                    }
-                    if (line.startsWith("event:")) {
+                    } else if (line.startsWith("event:")) {
                         name = line.substring("event:".length()).trim();
-                        continue;
+                    } else if (line.startsWith("data:")) {
+                        data.append(line.substring("data:".length()).trim());
                     }
-                    if (!line.startsWith("data:")) continue;
-                    data.append(line.substring("data:".length()).trim());
                 }
-            }
-            catch (Exception exception) {
-                if (!this.closed) {
-                    this.readerFailure = exception;
+            } catch (Exception exception) {
+                if (!closed) {
+                    readerFailure = exception;
                 }
             }
         }
 
         public JsonNode awaitNamed(String name, Duration timeout) throws InterruptedException {
-            long remaining;
-            Event event;
             long deadline = System.nanoTime() + timeout.toNanos();
-            do {
-                this.failIfReaderDied();
-                if ((remaining = deadline - System.nanoTime()) > 0L) continue;
-                Assertions.fail((String)("等不到 SSE 事件 '" + name + "'；已收到: " + this.summary()));
-            } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !event.name().equals(name));
-            return event.data();
+            while (true) {
+                failIfReaderDied();
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    Assertions.fail("等不到 SSE 事件 '" + name + "'；已收到: " + summary());
+                }
+                Event event = pending.poll(remaining, TimeUnit.NANOSECONDS);
+                if (event != null && event.name().equals(name)) {
+                    return event.data();
+                }
+            }
         }
 
         public JsonNode awaitTask(UUID taskId, String type, Duration timeout) throws InterruptedException {
-            long remaining;
-            Event event;
             long deadline = System.nanoTime() + timeout.toNanos();
-            do {
-                this.failIfReaderDied();
-                if ((remaining = deadline - System.nanoTime()) > 0L) continue;
-                Assertions.fail((String)("等不到任務 " + String.valueOf(taskId) + " 的 '" + type + "' 事件；已收到: " + this.summary()));
-            } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !event.name().equals("task") || !taskId.toString().equals(event.data().get("task_id").asText()) || !type.equals(event.data().get("type").asText()));
-            return event.data();
+            while (true) {
+                failIfReaderDied();
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    Assertions.fail("等不到任務 " + taskId + " 的 '" + type + "' 事件；已收到: " + summary());
+                }
+                Event event = pending.poll(remaining, TimeUnit.NANOSECONDS);
+                if (event != null
+                        && event.name().equals("task")
+                        && taskId.toString().equals(event.data().get("task_id").asText())
+                        && type.equals(event.data().get("type").asText())) {
+                    return event.data();
+                }
+            }
         }
 
         public List<JsonNode> taskEventsFor(UUID taskId) {
-            this.failIfReaderDied();
-            return this.everything.stream().filter(e -> e.name().equals("task")).map(Event::data).filter(d -> taskId.toString().equals(d.get("task_id").asText())).toList();
+            failIfReaderDied();
+            return everything.stream()
+                    .filter(e -> e.name().equals("task"))
+                    .map(Event::data)
+                    .filter(d -> taskId.toString().equals(d.get("task_id").asText()))
+                    .toList();
         }
 
         public List<String> eventNames() {
-            this.failIfReaderDied();
-            return this.everything.stream().map(Event::name).toList();
+            failIfReaderDied();
+            return everything.stream().map(Event::name).toList();
         }
 
         public JsonNode resyncData() {
-            this.failIfReaderDied();
-            return this.everything.stream().filter(e -> e.name().equals("resync")).map(Event::data).findFirst().orElseThrow(() -> new IllegalStateException("這條連線還沒收到 resync：" + this.summary()));
+            failIfReaderDied();
+            return everything.stream()
+                    .filter(e -> e.name().equals("resync"))
+                    .map(Event::data)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("這條連線還沒收到 resync：" + summary()));
         }
 
         /** 讀取執行緒因例外中止（不是測試主動關流）時，讓接下來讀流的斷言直接失敗並帶出原因。 */
         private void failIfReaderDied() {
-            Throwable failure = this.readerFailure;
+            Throwable failure = readerFailure;
             if (failure != null) {
-                throw new AssertionError("SSE 讀取執行緒已因例外中止；已收到: " + this.summary(), failure);
+                throw new AssertionError("SSE 讀取執行緒已因例外中止；已收到: " + summary(), failure);
             }
         }
 
         private String summary() {
-            return this.everything.stream().map(e -> e.name() + ":" + e.data().toString()).toList().toString();
+            return everything.stream().map(e -> e.name() + ":" + e.data().toString()).toList().toString();
         }
 
         @Override
         public void close() {
-            this.closed = true;
-            this.body.close();
-            this.reader.interrupt();
+            closed = true;
+            body.close();
+            reader.interrupt();
         }
 
         public record Event(String name, JsonNode data) {
