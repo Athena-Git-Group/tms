@@ -153,6 +153,10 @@ class TmsCategoryTile extends StatelessWidget {
       child: badge == null
           ? tile
           : Stack(
+              // 磚要吃滿分類列分給它的那一格。Stack 預設只給子元件寬鬆約束，
+              // 磚會縮成圖示那麼寬，四格就擠在各自格子的左邊、徽章也跟著
+              // 偏位；把外層的約束原樣傳下去，有沒有徽章磚都一樣寬。
+              fit: StackFit.passthrough,
               clipBehavior: Clip.none,
               children: [
                 tile,

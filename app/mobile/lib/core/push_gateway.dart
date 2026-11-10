@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import 'api_client.dart';
 import 'push_target.dart';
-import '../features/pool/pool_screen.dart';
 import '../features/shell/main_shell.dart';
 import '../features/task/task_screen.dart';
 import '../features/ticket/ticket_screen.dart';
@@ -160,12 +159,8 @@ class PushGateway {
 
     switch (dest) {
       case 'pool':
-        navigator.pushAndRemoveUntil(
-          CupertinoPageRoute<void>(
-            builder: (_) => PoolScreen(highlightRoomNo: highlight),
-          ),
-          (route) => route.isFirst,
-        );
+        navigator.popUntil((route) => route.isFirst);
+        MainShellTabRequest.goToPool(highlightRoomNo: highlight);
         break;
       case 'task':
         if (room == null) {

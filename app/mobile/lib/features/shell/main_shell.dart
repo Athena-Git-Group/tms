@@ -20,7 +20,16 @@ abstract final class MainShellTabRequest {
 
   static final ValueNotifier<int?> pending = ValueNotifier<int?>(null);
 
-  static void goToPool() => pending.value = _poolIndex;
+  /// 推播要待認領標亮的房號，待認領分頁自己讀走。
+  static final ValueNotifier<String?> poolHighlightRoomNo =
+      ValueNotifier<String?>(null);
+
+  /// 推播指到待認領也走這裡切分頁，不另推一張待認領：另推的那張頁沒有分頁
+  /// 列，員工回不了首頁。
+  static void goToPool({String? highlightRoomNo}) {
+    poolHighlightRoomNo.value = highlightRoomNo;
+    pending.value = _poolIndex;
+  }
 }
 
 /// 現在停在第幾個分頁，給分頁內容自己讀。

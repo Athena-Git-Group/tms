@@ -9,6 +9,7 @@ import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_content_unavailable.dart';
 import '../../core/widgets/tms_tag.dart';
+import '../shell/main_shell.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
 
@@ -81,9 +82,28 @@ class _PoolScreenState extends State<PoolScreen> {
   String? get _deptQuery =>
       ApiClient.instance.session?.dept == null ? _dept : null;
 
+  String? _highlightRoomNo;
+
   @override
   void initState() {
     super.initState();
+    _highlightRoomNo =
+        widget.highlightRoomNo ?? MainShellTabRequest.poolHighlightRoomNo.value;
+    MainShellTabRequest.poolHighlightRoomNo.addListener(_applyHighlightRequest);
+    _fetch();
+  }
+
+  @override
+  void dispose() {
+    MainShellTabRequest.poolHighlightRoomNo.removeListener(
+      _applyHighlightRequest,
+    );
+    super.dispose();
+  }
+
+  /// 分頁建好後會留在樹上，之後的推播要在這裡接新的標亮房號並重抓一次池。
+  void _applyHighlightRequest() {
+    _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
     _fetch();
   }
 
@@ -222,7 +242,7 @@ class _PoolScreenState extends State<PoolScreen> {
         for (final item in pool.items)
           _HousekeepingPoolCard(
             item: item,
-            isHighlighted: item.roomNo == widget.highlightRoomNo,
+            isHighlighted: item.roomNo == _highlightRoomNo,
             onTap: () => _openTask(item),
             onClaim: () => _claim(item),
           ),

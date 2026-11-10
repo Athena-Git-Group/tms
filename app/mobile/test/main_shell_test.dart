@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/push_gateway.dart';
 import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_tab_bar.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
@@ -86,6 +87,45 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('推播 dest=pool 退回外殼切到待認領、標亮該房，分頁列還在', (tester) async {
+    final handle = tester.ensureSemantics();
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+    ApiClient.instance = _FakeApiClient(
+      pool: const [
+        PoolItem(
+          taskId: 'task-316',
+          roomNo: '316',
+          floor: 3,
+          title: '衣架 x4',
+          category: 'amenity',
+          source: 'system',
+          urgent: false,
+          priorityNotify: false,
+          sameFloor: false,
+          createdAt: '2026-11-05T08:00:00Z',
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      CupertinoApp(navigatorKey: navigatorKey, home: const HousekeepingShell()),
+    );
+    await tester.pumpAndSettle();
+
+    await PushGateway.instance.handlePushPayload(
+      const {'dest': 'pool', 'highlight': '316'},
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('pool.screen'), findsOneWidget);
+    expect(find.bySemanticsIdentifier('pool.card.316--highlighted'), findsOneWidget);
+    await tester.tap(find.text('首頁'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier('home.screen'), findsOneWidget);
+
+    handle.dispose();
+  });
+
   testWidgets('點分頁列的「通知」與「我的」各自切到對應的畫面', (tester) async {
     final handle = tester.ensureSemantics();
     await pumpShell(tester);
@@ -164,6 +204,10 @@ void main() {
 /// 記憶體 fake：首頁、待認領與通知三個畫面開啟時要打的讀取端點都在這裡回
 /// 固定資料，測試不碰網路。
 class _FakeApiClient extends ApiClient {
+  _FakeApiClient({this.pool = const <PoolItem>[]});
+
+  final List<PoolItem> pool;
+
   @override
   Future<MyToday> getMyToday() async {
     return const MyToday(
@@ -220,9 +264,9 @@ class _FakeApiClient extends ApiClient {
     bool? urgent,
     String? source,
   }) async {
-    return const DeptPool(
-      items: <PoolItem>[],
-      counts: {'all': 0},
+    return DeptPool(
+      items: pool,
+      counts: {'all': pool.length},
       activeStaffCount: 1,
     );
   }
