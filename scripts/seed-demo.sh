@@ -399,15 +399,15 @@ INSERT INTO notifications (id, tenant_id, recipient_staff_id, title, body, targe
    '{"kind": "home"}'::jsonb, 'task_cancelled',                                                                                             now() - interval '5 hours',    now() - interval '5 hours'),
 
   ('00000000-0000-7000-8000-00000000e511', 1, '00000000-0000-7000-8000-00000000a002', '305 冷氣滴水是急件', 'VIP 今天 15:00 入住',
-   '{"kind": "task", "taskId": "00000000-0000-7000-8000-00000000d030"}'::jsonb, 'repair_urgent',                                             now() - interval '50 minutes', NULL),
+   '{"kind": "ticket", "taskId": "00000000-0000-7000-8000-00000000d030"}'::jsonb, 'repair_urgent',                                             now() - interval '50 minutes', NULL),
   ('00000000-0000-7000-8000-00000000e512', 1, '00000000-0000-7000-8000-00000000a002', '306 冷氣不冷進了工務待認領', '房務報修',
    '{"kind": "pool", "dept": "engineering", "highlightTaskId": "00000000-0000-7000-8000-00000000d020"}'::jsonb, 'pool_new_request',          now() - interval '8 minutes',  NULL),
   ('00000000-0000-7000-8000-00000000e513', 1, '00000000-0000-7000-8000-00000000a002', '508 房門鎖卡住還沒有人接', '進池 55 分鐘了',
    '{"kind": "pool", "dept": "engineering", "highlightTaskId": "00000000-0000-7000-8000-00000000d022"}'::jsonb, 'unclaimed_reminder_staff',  now() - interval '25 minutes', NULL),
   ('00000000-0000-7000-8000-00000000e514', 1, '00000000-0000-7000-8000-00000000a002', 'W-0109 405 電視遙控器已完修', '主管已驗收',
-   '{"kind": "task", "taskId": "00000000-0000-7000-8000-00000000d033"}'::jsonb, 'repair_completed',                                          now() - interval '40 minutes', now() - interval '35 minutes'),
+   '{"kind": "ticket", "taskId": "00000000-0000-7000-8000-00000000d033"}'::jsonb, 'repair_completed',                                          now() - interval '40 minutes', now() - interval '35 minutes'),
   ('00000000-0000-7000-8000-00000000e515', 1, '00000000-0000-7000-8000-00000000a002', '502 馬桶沖水不停轉到您名下', '阿義今天請假',
-   '{"kind": "task", "taskId": "00000000-0000-7000-8000-00000000d031"}'::jsonb, 'reassigned_to_me',                                          now() - interval '2 hours',    now() - interval '2 hours'),
+   '{"kind": "ticket", "taskId": "00000000-0000-7000-8000-00000000d031"}'::jsonb, 'reassigned_to_me',                                          now() - interval '2 hours',    now() - interval '2 hours'),
   ('00000000-0000-7000-8000-00000000e516', 1, '00000000-0000-7000-8000-00000000a002', '407 洗手台的單已改由他人處理', '純告知，不用動作',
    '{"kind": "home"}'::jsonb, 'reassigned_away',                                                                                            now() - interval '4 hours',    now() - interval '4 hours'),
 
