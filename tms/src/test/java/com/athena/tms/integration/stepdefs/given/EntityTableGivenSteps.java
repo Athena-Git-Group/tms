@@ -20,6 +20,7 @@ import java.util.UUID;
 import org.springframework.boot.convert.DurationStyle;
 
 public class EntityTableGivenSteps {
+
     private final ScenarioContext ctx;
     private final DbSupport db;
     private final TaskFixtures fixtures;
@@ -30,190 +31,333 @@ public class EntityTableGivenSteps {
         this.fixtures = fixtures;
     }
 
-    @Given(value="^系統中存在以下房間:$")
+    @Given("^系統中存在以下房間:$")
     public void roomsExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state,\n                   occupancy, updated_at)\nVALUES (?, ?, ?, ?, ?, ?, ?, now())\nON CONFLICT (tenant_id, room_no) DO UPDATE SET floor = excluded.floor,\n    room_type = excluded.room_type, hk_state = excluded.hk_state,\n    occupancy = excluded.occupancy, updated_at = now()\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), EntityTableGivenSteps.tenantOf(row), EntityTableGivenSteps.value(row, "room_no"), Integer.parseInt(EntityTableGivenSteps.value(row, "floor")), EntityTableGivenSteps.value(row, "room_type"), EntityTableGivenSteps.value(row, "hk_state"), EntityTableGivenSteps.value(row, "occupancy")});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
+        for (Map<String, String> row : table.asMaps()) {
+            UUID id = db.admin().queryForObject("""
+                    INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state,
+                                       occupancy, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, now())
+                    ON CONFLICT (tenant_id, room_no) DO UPDATE SET floor = excluded.floor,
+                        room_type = excluded.room_type, hk_state = excluded.hk_state,
+                        occupancy = excluded.occupancy, updated_at = now()
+                    RETURNING id
+                    """,
+                    UUID.class,
+                    UUID.randomUUID(), tenantOf(row), value(row, "room_no"),
+                    Integer.parseInt(value(row, "floor")), value(row, "room_type"),
+                    value(row, "hk_state"), value(row, "occupancy"));
+            ctx.registerEntity(value(row, "id"), id);
         }
     }
 
-    @Given(value="^系統中存在以下員工:$")
+    @Given("^系統中存在以下員工:$")
     public void staffExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO staff_accounts (id, tenant_id, name, login_id, password_hash,\n                            role, dept, active, created_at, updated_at)\nVALUES (?, ?, ?, ?, ?, ?, ?, true, now(), now())\nON CONFLICT (tenant_id, login_id) DO UPDATE SET name = excluded.name,\n    role = excluded.role, dept = excluded.dept, active = true,\n    updated_at = now()\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), EntityTableGivenSteps.tenantOf(row), EntityTableGivenSteps.value(row, "name"), EntityTableGivenSteps.value(row, "login_id"), "$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW", EntityTableGivenSteps.value(row, "role"), EntityTableGivenSteps.value(row, "dept")});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
-            this.ctx.registerStaffLogin(EntityTableGivenSteps.value(row, "name"), EntityTableGivenSteps.value(row, "login_id"));
+        for (Map<String, String> row : table.asMaps()) {
+            UUID id = db.admin().queryForObject("""
+                    INSERT INTO staff_accounts (id, tenant_id, name, login_id, password_hash,
+                                                role, dept, active, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, true, now(), now())
+                    ON CONFLICT (tenant_id, login_id) DO UPDATE SET name = excluded.name,
+                        role = excluded.role, dept = excluded.dept, active = true,
+                        updated_at = now()
+                    RETURNING id
+                    """,
+                    UUID.class,
+                    UUID.randomUUID(), tenantOf(row), value(row, "name"), value(row, "login_id"),
+                    "$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW",
+                    value(row, "role"), value(row, "dept"));
+            ctx.registerEntity(value(row, "id"), id);
+            ctx.registerStaffLogin(value(row, "name"), value(row, "login_id"));
         }
     }
 
-    @Given(value="^系統中存在以下訂單:$")
+    @Given("^系統中存在以下訂單:$")
     public void reservationsExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            long tenantId = EntityTableGivenSteps.tenantOf(row);
-            UUID roomId = this.ctx.entityId(EntityTableGivenSteps.value(row, "room_id"));
-            String ref = EntityTableGivenSteps.value(row, "reservation_ref");
-            OffsetDateTime checkinAt = OffsetDateTime.parse(EntityTableGivenSteps.value(row, "checkin_at"));
-            OffsetDateTime checkoutAt = OffsetDateTime.parse(EntityTableGivenSteps.value(row, "checkout_at"));
-            this.db.admin().update("UPDATE reservations_cache SET superseded_at = now()\nWHERE tenant_id = ? AND room_id = ? AND reservation_ref <> ?\n  AND superseded_at IS NULL\n  AND tstzrange(checkin_at, checkout_at) && tstzrange(?, ?)\n", new Object[]{tenantId, roomId, ref, checkinAt, checkoutAt});
-            UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO reservations_cache (id, tenant_id, reservation_ref, room_id,\n                                attrs, checkin_at, checkout_at, source,\n                                synced_at, superseded_at)\nVALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, now(), NULL)\nON CONFLICT (tenant_id, reservation_ref) DO UPDATE SET\n    room_id = excluded.room_id, attrs = excluded.attrs,\n    checkin_at = excluded.checkin_at, checkout_at = excluded.checkout_at,\n    source = excluded.source, synced_at = now(), superseded_at = NULL\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), tenantId, ref, roomId, EntityTableGivenSteps.value(row, "attrs"), checkinAt, checkoutAt, EntityTableGivenSteps.value(row, "source")});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
+        for (Map<String, String> row : table.asMaps()) {
+            long tenantId = tenantOf(row);
+            UUID roomId = ctx.entityId(value(row, "room_id"));
+            String ref = value(row, "reservation_ref");
+            OffsetDateTime checkinAt = OffsetDateTime.parse(value(row, "checkin_at"));
+            OffsetDateTime checkoutAt = OffsetDateTime.parse(value(row, "checkout_at"));
+            db.admin().update("""
+                    UPDATE reservations_cache SET superseded_at = now()
+                    WHERE tenant_id = ? AND room_id = ? AND reservation_ref <> ?
+                      AND superseded_at IS NULL
+                      AND tstzrange(checkin_at, checkout_at) && tstzrange(?, ?)
+                    """,
+                    tenantId, roomId, ref, checkinAt, checkoutAt);
+            UUID id = db.admin().queryForObject("""
+                    INSERT INTO reservations_cache (id, tenant_id, reservation_ref, room_id,
+                                                    attrs, checkin_at, checkout_at, source,
+                                                    synced_at, superseded_at)
+                    VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, now(), NULL)
+                    ON CONFLICT (tenant_id, reservation_ref) DO UPDATE SET
+                        room_id = excluded.room_id, attrs = excluded.attrs,
+                        checkin_at = excluded.checkin_at, checkout_at = excluded.checkout_at,
+                        source = excluded.source, synced_at = now(), superseded_at = NULL
+                    RETURNING id
+                    """,
+                    UUID.class,
+                    UUID.randomUUID(), tenantId, ref, roomId, value(row, "attrs"),
+                    checkinAt, checkoutAt, value(row, "source"));
+            ctx.registerEntity(value(row, "id"), id);
         }
     }
 
-    @Given(value="^系統中存在以下房間QR:$")
+    @Given("^系統中存在以下房間QR:$")
     public void qrTokensExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            String revokedAt = EntityTableGivenSteps.value(row, "revoked_at");
-            UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO room_qr_tokens (id, tenant_id, room_id, token, version, status,\n                            created_at, revoked_at)\nVALUES (?, ?, ?, ?, ?, ?, now(), ?)\nON CONFLICT (token) DO UPDATE SET room_id = excluded.room_id,\n    version = excluded.version, status = excluded.status,\n    revoked_at = excluded.revoked_at\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), EntityTableGivenSteps.tenantOf(row), this.ctx.entityId(EntityTableGivenSteps.value(row, "room_id")), EntityTableGivenSteps.value(row, "token"), Integer.parseInt(EntityTableGivenSteps.value(row, "version")), EntityTableGivenSteps.value(row, "status"), revokedAt == null ? null : OffsetDateTime.parse(revokedAt)});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
+        for (Map<String, String> row : table.asMaps()) {
+            String revokedAt = value(row, "revoked_at");
+            UUID id = db.admin().queryForObject("""
+                    INSERT INTO room_qr_tokens (id, tenant_id, room_id, token, version, status,
+                                                created_at, revoked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, now(), ?)
+                    ON CONFLICT (token) DO UPDATE SET room_id = excluded.room_id,
+                        version = excluded.version, status = excluded.status,
+                        revoked_at = excluded.revoked_at
+                    RETURNING id
+                    """,
+                    UUID.class,
+                    UUID.randomUUID(), tenantOf(row), ctx.entityId(value(row, "room_id")),
+                    value(row, "token"), Integer.parseInt(value(row, "version")), value(row, "status"),
+                    revokedAt == null ? null : OffsetDateTime.parse(revokedAt));
+            ctx.registerEntity(value(row, "id"), id);
         }
     }
 
-    @Given(value="^系統中存在以下住客session:$")
+    @Given("^系統中存在以下住客session:$")
     public void guestSessionsExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            long tenantId = EntityTableGivenSteps.tenantOf(row);
-            String token = GuestSessionTokens.issue((long)tenantId);
-            String revokedAt = EntityTableGivenSteps.value(row, "revoked_at");
+        for (Map<String, String> row : table.asMaps()) {
+            long tenantId = tenantOf(row);
+            String token = GuestSessionTokens.issue(tenantId);
+            String revokedAt = value(row, "revoked_at");
             UUID id = UUID.randomUUID();
-            this.db.admin().update("INSERT INTO guest_sessions (id, tenant_id, session_token, room_id,\n                            reservation_id, expires_at, revoked_at, created_at)\nVALUES (?, ?, ?, ?, ?, ?, ?, now())\n", new Object[]{id, tenantId, token, this.ctx.entityId(EntityTableGivenSteps.value(row, "room_id")), this.ctx.entityId(EntityTableGivenSteps.value(row, "reservation_id")), OffsetDateTime.parse(EntityTableGivenSteps.value(row, "expires_at")), revokedAt == null ? null : OffsetDateTime.parse(revokedAt)});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
-            this.ctx.registerGuestSession(EntityTableGivenSteps.value(row, "session_token"), token);
-            this.ctx.put("sessionToken", token);
+            db.admin().update("""
+                    INSERT INTO guest_sessions (id, tenant_id, session_token, room_id,
+                                                reservation_id, expires_at, revoked_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, now())
+                    """,
+                    id, tenantId, token, ctx.entityId(value(row, "room_id")),
+                    ctx.entityId(value(row, "reservation_id")),
+                    OffsetDateTime.parse(value(row, "expires_at")),
+                    revokedAt == null ? null : OffsetDateTime.parse(revokedAt));
+            ctx.registerEntity(value(row, "id"), id);
+            ctx.registerGuestSession(value(row, "session_token"), token);
+            ctx.put("sessionToken", token);
         }
     }
 
-    @Given(value="^系統中存在以下SOP項目:$")
+    @Given("^系統中存在以下SOP項目:$")
     public void sopItemsExist(DataTable table) {
         boolean touchedInspection = false;
-        for (Map row : table.asMaps()) {
-            String appliesTo = EntityTableGivenSteps.value(row, "applies_to");
-            UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label,\n                       sort_order, active, created_at)\nVALUES (?, ?, ?, ?, ?, ?, true, now())\nON CONFLICT (tenant_id, applies_to, item_key) DO UPDATE SET\n    label = excluded.label, sort_order = excluded.sort_order, active = true\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), EntityTableGivenSteps.tenantOf(row), appliesTo, EntityTableGivenSteps.value(row, "item_key"), EntityTableGivenSteps.value(row, "label"), Integer.parseInt(EntityTableGivenSteps.value(row, "sort_order"))});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
-            this.ctx.registerSopItem(EntityTableGivenSteps.value(row, "label"), EntityTableGivenSteps.value(row, "item_key"));
+        for (Map<String, String> row : table.asMaps()) {
+            String appliesTo = value(row, "applies_to");
+            UUID id = db.admin().queryForObject("""
+                    INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label,
+                                           sort_order, active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, true, now())
+                    ON CONFLICT (tenant_id, applies_to, item_key) DO UPDATE SET
+                        label = excluded.label, sort_order = excluded.sort_order, active = true
+                    RETURNING id
+                    """,
+                    UUID.class,
+                    UUID.randomUUID(), tenantOf(row), appliesTo, value(row, "item_key"),
+                    value(row, "label"), Integer.parseInt(value(row, "sort_order")));
+            ctx.registerEntity(value(row, "id"), id);
+            ctx.registerSopItem(value(row, "label"), value(row, "item_key"));
             touchedInspection |= "inspection".equals(appliesTo);
         }
         if (touchedInspection) {
-            this.ctx.put("inspectionKeys", this.db.admin().queryForList("SELECT item_key FROM sop_items WHERE tenant_id = 1 AND applies_to = 'inspection' AND active ORDER BY sort_order", String.class));
+            ctx.put("inspectionKeys", db.admin().queryForList(
+                    "SELECT item_key FROM sop_items WHERE tenant_id = 1 AND applies_to = 'inspection' AND active ORDER BY sort_order",
+                    String.class));
         }
     }
 
-    @Given(value="^系統中存在以下租戶設定:$")
+    @Given("^系統中存在以下租戶設定:$")
     public void tenantConfigExists(DataTable table) {
-        for (Map row : table.asMaps()) {
-            this.db.admin().update("INSERT INTO tenant_config (tenant_id, key, value, updated_at)\nVALUES (?, ?, ?::jsonb, now())\nON CONFLICT (tenant_id, key) DO UPDATE SET value = excluded.value,\n    updated_at = now()\n", new Object[]{EntityTableGivenSteps.tenantOf(row), EntityTableGivenSteps.value(row, "key"), EntityTableGivenSteps.value(row, "value")});
+        for (Map<String, String> row : table.asMaps()) {
+            db.admin().update("""
+                    INSERT INTO tenant_config (tenant_id, key, value, updated_at)
+                    VALUES (?, ?, ?::jsonb, now())
+                    ON CONFLICT (tenant_id, key) DO UPDATE SET value = excluded.value,
+                        updated_at = now()
+                    """,
+                    tenantOf(row), value(row, "key"), value(row, "value"));
         }
     }
 
-    @Given(value="^系統中存在以下請假:$")
+    @Given("^系統中存在以下請假:$")
     public void leavesExist(DataTable table) {
-        for (Map row : table.asMaps()) {
+        for (Map<String, String> row : table.asMaps()) {
             UUID id = UUID.randomUUID();
-            this.db.admin().update("INSERT INTO leaves (id, tenant_id, staff_id, from_at, to_at, created_by,\n                    created_at)\nVALUES (?, ?, ?, ?, ?, ?, now())\n", new Object[]{id, EntityTableGivenSteps.tenantOf(row), this.ctx.entityId(EntityTableGivenSteps.value(row, "staff_id")), OffsetDateTime.parse(EntityTableGivenSteps.value(row, "from_at")), OffsetDateTime.parse(EntityTableGivenSteps.value(row, "to_at")), this.ctx.entityId(EntityTableGivenSteps.value(row, "created_by"))});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
+            db.admin().update("""
+                    INSERT INTO leaves (id, tenant_id, staff_id, from_at, to_at, created_by,
+                                        created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, now())
+                    """,
+                    id, tenantOf(row), ctx.entityId(value(row, "staff_id")),
+                    OffsetDateTime.parse(value(row, "from_at")), OffsetDateTime.parse(value(row, "to_at")),
+                    ctx.entityId(value(row, "created_by")));
+            ctx.registerEntity(value(row, "id"), id);
         }
     }
 
-    @Given(value="^系統中存在以下SOP勾記:$")
+    @Given("^系統中存在以下SOP勾記:$")
     public void sopChecksExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            boolean checked = Boolean.parseBoolean(EntityTableGivenSteps.value(row, "checked"));
+        for (Map<String, String> row : table.asMaps()) {
+            boolean checked = Boolean.parseBoolean(value(row, "checked"));
             UUID id = UUID.randomUUID();
-            this.db.admin().update("INSERT INTO task_sop_checks (id, tenant_id, task_id, item_key, label,\n                             checked, skipped, checked_at)\nVALUES (?, ?, ?, ?, ?, ?, false, ?)\n", new Object[]{id, EntityTableGivenSteps.tenantOf(row), this.ctx.entityId(EntityTableGivenSteps.value(row, "task_id")), EntityTableGivenSteps.value(row, "item_key"), EntityTableGivenSteps.value(row, "label"), checked, checked ? OffsetDateTime.now() : null});
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), id);
+            db.admin().update("""
+                    INSERT INTO task_sop_checks (id, tenant_id, task_id, item_key, label,
+                                                 checked, skipped, checked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, false, ?)
+                    """,
+                    id, tenantOf(row), ctx.entityId(value(row, "task_id")),
+                    value(row, "item_key"), value(row, "label"), checked,
+                    checked ? OffsetDateTime.now() : null);
+            ctx.registerEntity(value(row, "id"), id);
         }
     }
 
-    @Given(value="^系統中存在以下待送匣:$")
+    @Given("^系統中存在以下待送匣:$")
     public void outboxRowsExist(DataTable table) {
-        ArrayList freeIds = new ArrayList();
-        ArrayList<String> blockedKeys = new ArrayList<String>();
-        LinkedHashMap<Long, String> keysById = new LinkedHashMap<Long, String>();
-        for (Map row : table.asMaps()) {
-            String aggregateKey = this.translateAggregateKey(EntityTableGivenSteps.value(row, "aggregate_key"));
-            String nextRetryAt = EntityTableGivenSteps.value(row, "next_retry_at");
-            int attempts = Integer.parseInt(EntityTableGivenSteps.value(row, "attempts"));
-            Long id2 = (Long)this.db.admin().queryForObject("INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key,\n                    status, attempts, next_retry_at, created_at)\nVALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, now())\nRETURNING id\n", Long.class, new Object[]{EntityTableGivenSteps.tenantOf(row), aggregateKey, EntityTableGivenSteps.value(row, "kind"), EntityTableGivenSteps.value(row, "payload"), EntityTableGivenSteps.value(row, "idempotency_key"), EntityTableGivenSteps.value(row, "status"), attempts, nextRetryAt == null ? null : EntityTableGivenSteps.parseRetryTime(nextRetryAt)});
-            keysById.put(id2, aggregateKey);
-            this.ctx.put("outbox:" + EntityTableGivenSteps.value(row, "idempotency_key"), id2);
-            if (attempts <= 0 || nextRetryAt == null) continue;
-            blockedKeys.add(aggregateKey);
+        List<Long> freeIds = new ArrayList<>();
+        List<String> blockedKeys = new ArrayList<>();
+        Map<Long, String> keysById = new LinkedHashMap<>();
+        for (Map<String, String> row : table.asMaps()) {
+            String aggregateKey = translateAggregateKey(value(row, "aggregate_key"));
+            String nextRetryAt = value(row, "next_retry_at");
+            int attempts = Integer.parseInt(value(row, "attempts"));
+            Long id = db.admin().queryForObject("""
+                    INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key,
+                                        status, attempts, next_retry_at, created_at)
+                    VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, now())
+                    RETURNING id
+                    """,
+                    Long.class,
+                    tenantOf(row), aggregateKey, value(row, "kind"), value(row, "payload"),
+                    value(row, "idempotency_key"), value(row, "status"), attempts,
+                    nextRetryAt == null ? null : parseRetryTime(nextRetryAt));
+            keysById.put(id, aggregateKey);
+            ctx.put("outbox:" + value(row, "idempotency_key"), id);
+            if (attempts > 0 && nextRetryAt != null) {
+                blockedKeys.add(aggregateKey);
+            }
         }
         keysById.forEach((id, key) -> {
             if (!blockedKeys.contains(key)) {
                 freeIds.add(id);
             }
         });
-        this.ctx.put("outboxFreeIds", freeIds);
-        this.ctx.put("outboxBlockedKeys", blockedKeys);
+        ctx.put("outboxFreeIds", freeIds);
+        ctx.put("outboxBlockedKeys", blockedKeys);
     }
 
-    @Given(value="^系統中存在以下任務:$")
+    @Given("^系統中存在以下任務:$")
     public void tasksExist(DataTable table) {
-        for (Map row : table.asMaps()) {
-            UUID taskId = this.createTask(row);
-            this.ctx.registerEntity(EntityTableGivenSteps.value(row, "id"), taskId);
-            this.ctx.taskId(taskId);
-            String assigneeSymbol = EntityTableGivenSteps.value(row, "assignee_id");
-            if (assigneeSymbol == null) continue;
-            UUID assignee = this.ctx.entityId(assigneeSymbol);
-            this.ctx.put("cleanerId", assignee);
-            this.ctx.put("cleanerActor", Actor.staff((String)EntityTableGivenSteps.roleFor(EntityTableGivenSteps.value(row, "dept")), (UUID)assignee));
+        for (Map<String, String> row : table.asMaps()) {
+            UUID taskId = createTask(row);
+            ctx.registerEntity(value(row, "id"), taskId);
+            ctx.taskId(taskId);
+            String assigneeSymbol = value(row, "assignee_id");
+            if (assigneeSymbol != null) {
+                UUID assignee = ctx.entityId(assigneeSymbol);
+                ctx.put("cleanerId", assignee);
+                ctx.put("cleanerActor", Actor.staff(roleFor(value(row, "dept")), assignee));
+            }
         }
     }
 
     private UUID createTask(Map<String, String> row) {
-        String initialState;
-        long tenantId = EntityTableGivenSteps.tenantOf(row);
-        String source = EntityTableGivenSteps.value(row, "source");
-        String state = EntityTableGivenSteps.value(row, "state");
-        String dept = EntityTableGivenSteps.value(row, "dept");
-        UUID reservationId = this.optionalEntity(EntityTableGivenSteps.value(row, "reservation_id"));
+        long tenantId = tenantOf(row);
+        String source = value(row, "source");
+        String state = value(row, "state");
+        String dept = value(row, "dept");
+        UUID reservationId = optionalEntity(value(row, "reservation_id"));
         if ("guest".equals(source) && reservationId == null) {
-            return this.insertTaskDirectly(row, tenantId, dept, state);
+            return insertTaskDirectly(row, tenantId, dept, state);
         }
-        UUID roomId = this.ctx.entityId(EntityTableGivenSteps.value(row, "room_id"));
-        String estMin = EntityTableGivenSteps.value(row, "est_min");
-        String workDate = EntityTableGivenSteps.value(row, "work_date");
+        UUID roomId = ctx.entityId(value(row, "room_id"));
+        String estMin = value(row, "est_min");
+        String workDate = value(row, "work_date");
         boolean beyondPool = !"triage".equals(state) && !"pool".equals(state);
-        UUID assigneeId = this.optionalEntity(EntityTableGivenSteps.value(row, "assignee_id"));
+        UUID assigneeId = optionalEntity(value(row, "assignee_id"));
         if (beyondPool && assigneeId == null) {
-            assigneeId = this.anyStaffOfDept(tenantId, dept);
+            assigneeId = anyStaffOfDept(tenantId, dept);
         }
-        String string = initialState = beyondPool ? "accepted" : state;
-        Actor creator = "guest".equals(source) ? Actor.guest() : ("system".equals(source) ? Actor.system() : Actor.staff((String)"frontdesk", (UUID)this.anyStaffOfDept(tenantId, "frontdesk")));
-        TaskCreateCommand command = new TaskCreateCommand(tenantId, EntityTableGivenSteps.value(row, "type"), source, roomId, reservationId, dept, initialState, beyondPool ? assigneeId : null, EntityTableGivenSteps.value(row, "title"), null, estMin == null ? null : Integer.valueOf(Integer.parseInt(estMin)), null, workDate == null ? null : LocalDate.parse(workDate), creator);
-        UUID taskId = Tenants.asTenant(tenantId, () -> this.fixtures.engine().create(command)).getId();
+        String initialState = beyondPool ? "accepted" : state;
+        Actor creator;
+        if ("guest".equals(source)) {
+            creator = Actor.guest();
+        } else if ("system".equals(source)) {
+            creator = Actor.system();
+        } else {
+            creator = Actor.staff("frontdesk", anyStaffOfDept(tenantId, "frontdesk"));
+        }
+        TaskCreateCommand command = new TaskCreateCommand(
+                tenantId, value(row, "type"), source, roomId, reservationId, dept, initialState,
+                beyondPool ? assigneeId : null, value(row, "title"), null,
+                estMin == null ? null : Integer.parseInt(estMin), null,
+                workDate == null ? null : LocalDate.parse(workDate), creator);
+        UUID taskId = Tenants.asTenant(tenantId, () -> fixtures.engine().create(command)).getId();
         if (beyondPool) {
-            Actor worker = Actor.staff((String)EntityTableGivenSteps.roleFor(dept), (UUID)assigneeId);
+            Actor worker = Actor.staff(roleFor(dept), assigneeId);
             Tenants.runAsTenant(tenantId, () -> {
                 if ("doing".equals(state) || "done".equals(state) || "inspected".equals(state)) {
-                    this.fixtures.engine().start(tenantId, taskId, worker);
+                    fixtures.engine().start(tenantId, taskId, worker);
                 }
                 if ("done".equals(state) || "inspected".equals(state)) {
-                    this.fixtures.engine().complete(tenantId, taskId, worker);
+                    fixtures.engine().complete(tenantId, taskId, worker);
                 }
                 if ("inspected".equals(state)) {
-                    this.fixtures.engine().passInspection(tenantId, taskId, Actor.staff((String)"manager", (UUID)this.anyManager(tenantId)));
+                    fixtures.engine().passInspection(tenantId, taskId, Actor.staff("manager", anyManager(tenantId)));
                 }
             });
         }
-        this.applyColumnOverrides(row, taskId);
+        applyColumnOverrides(row, taskId);
         return taskId;
     }
 
     private UUID insertTaskDirectly(Map<String, String> row, long tenantId, String dept, String state) {
         UUID taskId = UUID.randomUUID();
-        UUID roomId = this.ctx.entityId(EntityTableGivenSteps.value(row, "room_id"));
-        UUID assigneeId = this.optionalEntity(EntityTableGivenSteps.value(row, "assignee_id"));
-        List<String> chain = EntityTableGivenSteps.eventChainFor(state);
-        this.db.admin().update("INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,\n                   assignee_id, title, est_min, started_at, done_at, rating,\n                   work_date, created_at, updated_at)\nVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())\n", new Object[]{taskId, tenantId, EntityTableGivenSteps.value(row, "type"), EntityTableGivenSteps.value(row, "source"), roomId, dept, state, chain.size(), assigneeId, EntityTableGivenSteps.value(row, "title"), EntityTableGivenSteps.parseIntOrNull(EntityTableGivenSteps.value(row, "est_min")), EntityTableGivenSteps.parseTimestampOrNull(EntityTableGivenSteps.value(row, "started_at")), EntityTableGivenSteps.parseTimestampOrNull(EntityTableGivenSteps.value(row, "done_at")), EntityTableGivenSteps.parseIntOrNull(EntityTableGivenSteps.value(row, "rating")), EntityTableGivenSteps.value(row, "work_date") == null ? null : LocalDate.parse(EntityTableGivenSteps.value(row, "work_date"))});
-        for (int seq = 1; seq <= chain.size(); ++seq) {
+        UUID roomId = ctx.entityId(value(row, "room_id"));
+        UUID assigneeId = optionalEntity(value(row, "assignee_id"));
+        List<String> chain = eventChainFor(state);
+        db.admin().update("""
+                INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
+                                   assignee_id, title, est_min, started_at, done_at, rating,
+                                   work_date, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
+                """,
+                taskId, tenantId, value(row, "type"), value(row, "source"), roomId, dept, state,
+                chain.size(), assigneeId, value(row, "title"),
+                parseIntOrNull(value(row, "est_min")),
+                parseTimestampOrNull(value(row, "started_at")),
+                parseTimestampOrNull(value(row, "done_at")),
+                parseIntOrNull(value(row, "rating")),
+                value(row, "work_date") == null ? null : LocalDate.parse(value(row, "work_date")));
+        for (int seq = 1; seq <= chain.size(); seq++) {
             String type = chain.get(seq - 1);
             boolean isCreated = "created".equals(type);
-            String payload = isCreated ? this.createdSnapshotJson(row, roomId) : ("claimed".equals(type) && assigneeId != null ? "{\"assignee_id\": \"" + String.valueOf(assigneeId) + "\"}" : null);
-            this.db.admin().update("INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id,\n                         payload, created_at)\nVALUES (?, ?, ?, ?, ?, ?, ?::jsonb, now())\n", new Object[]{tenantId, taskId, seq, type, isCreated ? "guest" : EntityTableGivenSteps.roleFor(dept), isCreated ? null : assigneeId, payload});
+            String payload;
+            if (isCreated) {
+                payload = createdSnapshotJson(row, roomId);
+            } else if ("claimed".equals(type) && assigneeId != null) {
+                payload = "{\"assignee_id\": \"" + assigneeId + "\"}";
+            } else {
+                payload = null;
+            }
+            db.admin().update("""
+                    INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id,
+                                             payload, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, now())
+                    """,
+                    tenantId, taskId, seq, type,
+                    isCreated ? "guest" : roleFor(dept),
+                    isCreated ? null : assigneeId,
+                    payload);
         }
         return taskId;
     }
@@ -231,57 +375,61 @@ public class EntityTableGivenSteps {
 
     private String createdSnapshotJson(Map<String, String> row, UUID roomId) {
         StringBuilder json = new StringBuilder("{");
-        json.append("\"type\": \"").append(EntityTableGivenSteps.value(row, "type")).append("\"");
-        json.append(", \"source\": \"").append(EntityTableGivenSteps.value(row, "source")).append("\"");
+        json.append("\"type\": \"").append(value(row, "type")).append("\"");
+        json.append(", \"source\": \"").append(value(row, "source")).append("\"");
         json.append(", \"room_id\": \"").append(roomId).append("\"");
-        json.append(", \"dept\": \"").append(EntityTableGivenSteps.value(row, "dept")).append("\"");
-        json.append(", \"title\": \"").append(EntityTableGivenSteps.value(row, "title")).append("\"");
+        json.append(", \"dept\": \"").append(value(row, "dept")).append("\"");
+        json.append(", \"title\": \"").append(value(row, "title")).append("\"");
         json.append("}");
         return json.toString();
     }
 
     private void applyColumnOverrides(Map<String, String> row, UUID taskId) {
-        Integer rating;
-        OffsetDateTime doneAt;
-        OffsetDateTime startedAt = EntityTableGivenSteps.parseTimestampOrNull(EntityTableGivenSteps.value(row, "started_at"));
+        OffsetDateTime startedAt = parseTimestampOrNull(value(row, "started_at"));
         if (startedAt != null) {
-            this.db.admin().update("UPDATE tasks SET started_at = ? WHERE id = ?", new Object[]{startedAt, taskId});
+            db.admin().update("UPDATE tasks SET started_at = ? WHERE id = ?", startedAt, taskId);
         }
-        if ((doneAt = EntityTableGivenSteps.parseTimestampOrNull(EntityTableGivenSteps.value(row, "done_at"))) != null) {
-            this.db.admin().update("UPDATE tasks SET done_at = ? WHERE id = ?", new Object[]{doneAt, taskId});
+        OffsetDateTime doneAt = parseTimestampOrNull(value(row, "done_at"));
+        if (doneAt != null) {
+            db.admin().update("UPDATE tasks SET done_at = ? WHERE id = ?", doneAt, taskId);
         }
-        if ((rating = EntityTableGivenSteps.parseIntOrNull(EntityTableGivenSteps.value(row, "rating"))) != null) {
-            this.db.admin().update("UPDATE tasks SET rating = ? WHERE id = ?", new Object[]{rating, taskId});
+        Integer rating = parseIntOrNull(value(row, "rating"));
+        if (rating != null) {
+            db.admin().update("UPDATE tasks SET rating = ? WHERE id = ?", rating, taskId);
         }
     }
 
     private static OffsetDateTime parseRetryTime(String raw) {
         if (raw.startsWith("+") || raw.startsWith("-")) {
-            Duration delta = DurationStyle.detectAndParse((String)raw.substring(1));
+            Duration delta = DurationStyle.detectAndParse(raw.substring(1));
             return raw.startsWith("-") ? OffsetDateTime.now().minus(delta) : OffsetDateTime.now().plus(delta);
         }
         return OffsetDateTime.parse(raw);
     }
 
     private String translateAggregateKey(String key) {
-        int lastColon = key.lastIndexOf(58);
+        int lastColon = key.lastIndexOf(':');
         if (lastColon < 0) {
             return key;
         }
         String tail = key.substring(lastColon + 1);
-        return this.ctx.hasEntity(tail) ? key.substring(0, lastColon + 1) + String.valueOf(this.ctx.entityId(tail)) : key;
+        return ctx.hasEntity(tail) ? key.substring(0, lastColon + 1) + ctx.entityId(tail) : key;
     }
 
     private UUID optionalEntity(String symbol) {
-        return symbol == null ? null : this.ctx.entityId(symbol);
+        return symbol == null ? null : ctx.entityId(symbol);
     }
 
     private UUID anyStaffOfDept(long tenantId, String dept) {
-        return (UUID)this.db.admin().queryForObject("SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active ORDER BY login_id LIMIT 1", UUID.class, new Object[]{tenantId, dept});
+        return db.admin().queryForObject(
+                "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active ORDER BY login_id LIMIT 1",
+                UUID.class, tenantId, dept);
     }
 
     private UUID anyManager(long tenantId) {
-        return (UUID)this.db.admin().queryForObject("SELECT id FROM staff_accounts WHERE tenant_id = ? AND role = 'manager' AND active ORDER BY login_id LIMIT 1", UUID.class, new Object[]{tenantId});
+        return db.admin().queryForObject(
+                "SELECT id FROM staff_accounts WHERE tenant_id = ? AND role = 'manager' AND active ORDER BY login_id LIMIT 1",
+                UUID.class, tenantId);
     }
 
     private static String roleFor(String dept) {
@@ -294,7 +442,7 @@ public class EntityTableGivenSteps {
     }
 
     private static long tenantOf(Map<String, String> row) {
-        return Long.parseLong(EntityTableGivenSteps.value(row, "tenant_id"));
+        return Long.parseLong(value(row, "tenant_id"));
     }
 
     private static Integer parseIntOrNull(String cell) {

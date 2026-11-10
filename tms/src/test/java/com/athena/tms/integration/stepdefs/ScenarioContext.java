@@ -7,47 +7,58 @@ import java.util.Map;
 import java.util.UUID;
 
 public class ScenarioContext {
-    private static final Map<String, String> DEFAULT_STAFF_LOGINS = Map.of("小美", "hk1", "小華", "hk2", "阿強", "mt1", "林櫃檯", "fd1", "櫃檯", "fd1", "王主管", "mg1", "張老闆", "ow1", "老闆", "ow1", "小芳", "fang1");
+
+    private static final Map<String, String> DEFAULT_STAFF_LOGINS = Map.of(
+            "小美", "hk1",
+            "小華", "hk2",
+            "阿強", "mt1",
+            "林櫃檯", "fd1",
+            "櫃檯", "fd1",
+            "王主管", "mg1",
+            "張老闆", "ow1",
+            "老闆", "ow1",
+            "小芳", "fang1");
+
     private UUID taskId;
     private String opId;
-    private final Map<String, UUID> entityIds = new HashMap<String, UUID>();
-    private final Map<String, String> guestSessionTokens = new HashMap<String, String>();
-    private final Map<String, String> staffLogins = new HashMap<String, String>();
-    private final Map<String, String> sopItemKeys = new HashMap<String, String>();
+    private final Map<String, UUID> entityIds = new HashMap<>();
+    private final Map<String, String> guestSessionTokens = new HashMap<>();
+    private final Map<String, String> staffLogins = new HashMap<>();
+    private final Map<String, String> sopItemKeys = new HashMap<>();
     private HttpResult firstResponse;
     private HttpResult lastResponse;
-    private final List<HttpResult> replays = new ArrayList<HttpResult>();
+    private final List<HttpResult> replays = new ArrayList<>();
     private Integer returnedSeq;
-    private final List<String> claimOutcomes = new ArrayList<String>();
-    private final List<String> rejectionCodes = new ArrayList<String>();
-    private final List<Integer> rejectionStatuses = new ArrayList<Integer>();
+    private final List<String> claimOutcomes = new ArrayList<>();
+    private final List<String> rejectionCodes = new ArrayList<>();
+    private final List<Integer> rejectionStatuses = new ArrayList<>();
     private TaskSnapshot taskSnapshot;
-    private final Map<String, Object> data = new HashMap<String, Object>();
+    private final Map<String, Object> data = new HashMap<>();
 
     public void reset() {
-        this.taskId = null;
-        this.opId = null;
-        this.firstResponse = null;
-        this.lastResponse = null;
-        this.replays.clear();
-        this.returnedSeq = null;
-        this.claimOutcomes.clear();
-        this.rejectionCodes.clear();
-        this.rejectionStatuses.clear();
-        this.taskSnapshot = null;
-        this.entityIds.clear();
-        this.guestSessionTokens.clear();
-        this.staffLogins.clear();
-        this.sopItemKeys.clear();
-        this.data.clear();
+        taskId = null;
+        opId = null;
+        firstResponse = null;
+        lastResponse = null;
+        replays.clear();
+        returnedSeq = null;
+        claimOutcomes.clear();
+        rejectionCodes.clear();
+        rejectionStatuses.clear();
+        taskSnapshot = null;
+        entityIds.clear();
+        guestSessionTokens.clear();
+        staffLogins.clear();
+        sopItemKeys.clear();
+        data.clear();
     }
 
     public void registerEntity(String symbol, UUID id) {
-        this.entityIds.put(symbol, id);
+        entityIds.put(symbol, id);
     }
 
     public UUID entityId(String symbol) {
-        UUID id = this.entityIds.get(symbol);
+        UUID id = entityIds.get(symbol);
         if (id == null) {
             throw new IllegalStateException("表格代號「" + symbol + "」沒有對應的 UUID——前置資料漏了");
         }
@@ -55,23 +66,23 @@ public class ScenarioContext {
     }
 
     public boolean hasEntity(String symbol) {
-        return this.entityIds.containsKey(symbol);
+        return entityIds.containsKey(symbol);
     }
 
     public String resolveCell(String cell) {
         if (cell == null || cell.isBlank()) {
             return null;
         }
-        UUID id = this.entityIds.get(cell);
+        UUID id = entityIds.get(cell);
         return id == null ? cell : id.toString();
     }
 
     public void registerGuestSession(String symbol, String realToken) {
-        this.guestSessionTokens.put(symbol, realToken);
+        guestSessionTokens.put(symbol, realToken);
     }
 
     public String guestSession(String symbol) {
-        String token = this.guestSessionTokens.get(symbol);
+        String token = guestSessionTokens.get(symbol);
         if (token == null) {
             throw new IllegalStateException("session 代號「" + symbol + "」沒有對應權杖——前置資料漏了");
         }
@@ -79,11 +90,11 @@ public class ScenarioContext {
     }
 
     public void registerStaffLogin(String name, String loginId) {
-        this.staffLogins.put(name, loginId);
+        staffLogins.put(name, loginId);
     }
 
     public String staffLogin(String name) {
-        String loginId = this.staffLogins.getOrDefault(name, DEFAULT_STAFF_LOGINS.get(name));
+        String loginId = staffLogins.getOrDefault(name, DEFAULT_STAFF_LOGINS.get(name));
         if (loginId == null) {
             throw new IllegalStateException("沒有員工「" + name + "」的 login 對照");
         }
@@ -91,11 +102,11 @@ public class ScenarioContext {
     }
 
     public void registerSopItem(String label, String itemKey) {
-        this.sopItemKeys.put(label, itemKey);
+        sopItemKeys.put(label, itemKey);
     }
 
     public String sopItemKey(String label) {
-        String key = this.sopItemKeys.get(label);
+        String key = sopItemKeys.get(label);
         if (key == null) {
             throw new IllegalStateException("SOP 項目「" + label + "」沒有對應 item_key——前置資料漏了");
         }
@@ -103,84 +114,85 @@ public class ScenarioContext {
     }
 
     public UUID taskId() {
-        if (this.taskId == null) {
+        if (taskId == null) {
             throw new IllegalStateException("場景尚未建立任務——Given 步驟漏了");
         }
-        return this.taskId;
+        return taskId;
     }
 
     public void taskId(UUID value) {
-        this.taskId = value;
+        taskId = value;
     }
 
     public String opId() {
-        return this.opId;
+        return opId;
     }
 
     public void opId(String value) {
-        this.opId = value;
+        opId = value;
     }
 
     public HttpResult firstResponse() {
-        if (this.firstResponse == null) {
+        if (firstResponse == null) {
             throw new IllegalStateException("場景尚未發出第一個 HTTP 請求");
         }
-        return this.firstResponse;
+        return firstResponse;
     }
 
     public void firstResponse(HttpResult value) {
-        this.firstResponse = value;
+        firstResponse = value;
     }
 
     public HttpResult lastResponse() {
-        if (this.lastResponse == null) {
+        if (lastResponse == null) {
             throw new IllegalStateException("場景尚未留下任何 HTTP 回應——When 步驟漏了");
         }
-        return this.lastResponse;
+        return lastResponse;
     }
 
     public void lastResponse(HttpResult value) {
-        this.lastResponse = value;
+        lastResponse = value;
     }
 
     public List<HttpResult> replays() {
-        return this.replays;
+        return replays;
     }
 
     public Integer returnedSeq() {
-        return this.returnedSeq;
+        return returnedSeq;
     }
 
     public void returnedSeq(int value) {
-        this.returnedSeq = value;
+        returnedSeq = value;
     }
 
     public List<String> claimOutcomes() {
-        return this.claimOutcomes;
+        return claimOutcomes;
     }
 
     public List<String> rejectionCodes() {
-        return this.rejectionCodes;
+        return rejectionCodes;
     }
 
     public List<Integer> rejectionStatuses() {
-        return this.rejectionStatuses;
+        return rejectionStatuses;
     }
 
     public TaskSnapshot taskSnapshot() {
-        return this.taskSnapshot;
+        return taskSnapshot;
     }
 
     public void taskSnapshot(TaskSnapshot value) {
-        this.taskSnapshot = value;
+        taskSnapshot = value;
     }
 
     public void put(String key, Object value) {
-        this.data.put(key, value);
+        data.put(key, value);
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T get(String key) {
-        return (T)this.data.get(key);
+        return (T) data.get(key);
     }
 
     public record HttpResult(int status, String body, String replayedHeader) {

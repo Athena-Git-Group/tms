@@ -7,8 +7,13 @@ import org.junit.platform.suite.api.SelectClasspathResource;
 import org.junit.platform.suite.api.Suite;
 
 @Suite
-@IncludeEngines(value={"cucumber"})
-@SelectClasspathResource(value="features")
-@ConfigurationParameters(value={@ConfigurationParameter(key="cucumber.glue", value="com.athena.tms.integration.stepdefs"), @ConfigurationParameter(key="cucumber.plugin", value="pretty, html:target/cucumber-reports/cucumber.html, json:target/cucumber-reports/cucumber.json")})
+@IncludeEngines("cucumber")
+@SelectClasspathResource("features")
+@ConfigurationParameters({
+        @ConfigurationParameter(key = "cucumber.glue", value = "com.athena.tms.integration.stepdefs"),
+        @ConfigurationParameter(
+                key = "cucumber.plugin",
+                value = "pretty, html:target/cucumber-reports/cucumber.html, json:target/cucumber-reports/cucumber.json")
+})
 public class RunCucumberTest {
 }
