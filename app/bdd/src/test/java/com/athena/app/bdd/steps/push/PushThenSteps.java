@@ -135,9 +135,10 @@ public class PushThenSteps {
 
         // 後端權威狀態：當事員工自己的通知裡，同一批標題照 created_at 新到舊排出來
         // 要跟畫面清單一致，而且每一則的 created_at 日期要真的落在這個分組
-        //（今天＝今天的日期、更早＝今天之前）——分組歸屬不能只信畫面。
+        //（今天＝今天的日期、更早＝今天之前）——分組歸屬不能只信畫面。「今天」以裝置
+        // 生效的日期為準，畫面就是照它分組的。
         boolean expectToday = "today".equals(groupKey);
-        LocalDate today = LocalDate.now();
+        LocalDate today = world.deviceNow().toLocalDate();
         List<String> backendOrder = new ArrayList<>();
         for (Map<String, Object> row : world.backend().queryRows(
                 "SELECT title, created_at FROM notifications WHERE tenant_id = ? AND recipient_staff_id = ? "

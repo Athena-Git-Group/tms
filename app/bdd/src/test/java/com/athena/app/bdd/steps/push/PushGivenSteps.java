@@ -121,9 +121,10 @@ public class PushGivenSteps {
     public void notificationCenterHasNotifications(String staffName, DataTable table) {
         var staff = world.staff(staffName);
         world.setNotificationViewer(staff); // 收件人＝通知 Then 權威讀回的當事員工
+        LocalDate today = world.deviceNow().toLocalDate();
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
             String title = requireCell(row, "標題");
-            OffsetDateTime createdAt = parseMoment(requireCell(row, "時刻"));
+            OffsetDateTime createdAt = parseMoment(requireCell(row, "時刻"), today);
             boolean read = "是".equals(row.get("已讀"));
             world.backend().createNotification(
                     staff.id(), eventForTitle(title), title, createdAt, read, targetForTitle(title));
@@ -235,21 +236,21 @@ public class PushGivenSteps {
     /**
      * 把「時刻」參數（{@code 今天 HH:mm} 或 {@code {日期} HH:mm}）解析成通知的
      * {@code created_at}。日期收相對詞（今天／昨天／前天／明天）、「11/02」這種
-     * 月/日省年形式與 ISO 日期；時間一律 24 小時制。
+     * 月/日省年形式與 ISO 日期；時間一律 24 小時制。相對詞與省年形式都以
+     * {@code today}（裝置生效的日期）為基準，畫面的今天／更早分組才跟 fixture 同一天。
      */
-    private static OffsetDateTime parseMoment(String momentExpr) {
+    static OffsetDateTime parseMoment(String momentExpr, LocalDate today) {
         String[] parts = momentExpr.trim().split("\\s+");
         if (parts.length != 2) {
             throw new IllegalArgumentException(
                     "時刻格式須為「今天 HH:mm」或「{日期} HH:mm」，實際=" + momentExpr);
         }
-        LocalDate date = parseDateToken(parts[0]);
+        LocalDate date = parseDateToken(parts[0], today);
         LocalTime time = LocalTime.parse(parts[1]);
         return ZonedDateTime.of(date, time, ZoneId.systemDefault()).toOffsetDateTime();
     }
 
-    private static LocalDate parseDateToken(String token) {
-        LocalDate today = LocalDate.now();
+    static LocalDate parseDateToken(String token, LocalDate today) {
         return switch (token) {
             case "今天" -> today;
             case "昨天" -> today.minusDays(1);
