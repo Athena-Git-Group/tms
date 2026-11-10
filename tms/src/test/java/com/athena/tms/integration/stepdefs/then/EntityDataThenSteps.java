@@ -25,66 +25,66 @@ public class EntityDataThenSteps {
         this.objectMapper = objectMapper;
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u7684\u8cc7\u6599\u61c9\u70ba:$")
+    @Then(value="^任務 \"([^\"]+)\" 的資料應為:$")
     public void taskDataShouldBe(String symbol, DataTable table) {
         UUID taskId = this.ctx.entityId(symbol);
         this.ctx.taskId(taskId);
-        this.assertRowMatches("tasks", taskId, table, "\u4efb\u52d9 " + symbol);
+        this.assertRowMatches("tasks", taskId, table, "任務 " + symbol);
     }
 
-    @Then(value="^\u623f\u9593 \"([^\"]+)\" \u7684\u8cc7\u6599\u61c9\u70ba:$")
+    @Then(value="^房間 \"([^\"]+)\" 的資料應為:$")
     public void roomDataShouldBe(String symbol, DataTable table) {
-        this.assertRowMatches("rooms", this.ctx.entityId(symbol), table, "\u623f\u9593 " + symbol);
+        this.assertRowMatches("rooms", this.ctx.entityId(symbol), table, "房間 " + symbol);
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u7684 ([a-z_]+) \u61c9\u70ba \"([^\"]*)\"$")
+    @Then(value="^任務 \"([^\"]+)\" 的 ([a-z_]+) 應為 \"([^\"]*)\"$")
     public void taskColumnShouldBe(String symbol, String column, String expected) {
         UUID taskId = this.ctx.entityId(symbol);
         this.ctx.taskId(taskId);
-        this.assertRowMatches("tasks", taskId, Map.of(column, expected), "\u4efb\u52d9 " + symbol);
+        this.assertRowMatches("tasks", taskId, Map.of(column, expected), "任務 " + symbol);
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u7684 SOP \u52fe\u8a18\u6578\u61c9\u70ba (\\d+)$")
+    @Then(value="^任務 \"([^\"]+)\" 的 SOP 勾記數應為 (\\d+)$")
     public void taskSopCheckCountShouldBe(String symbol, int expected) {
         UUID taskId = this.ctx.entityId(symbol);
         Integer count = (Integer)this.db.admin().queryForObject("SELECT count(*) FROM task_sop_checks WHERE task_id = ?", Integer.class, new Object[]{taskId});
-        Assertions.assertEquals((int)expected, (int)count, (String)("\u4efb\u52d9 " + symbol + " \u7684 SOP \u52fe\u8a18\u6578"));
+        Assertions.assertEquals((int)expected, (int)count, (String)("任務 " + symbol + " 的 SOP 勾記數"));
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u5df2\u5beb\u5165\u4e8b\u4ef6 \"([^\"]+)\"$")
+    @Then(value="^任務 \"([^\"]+)\" 已寫入事件 \"([^\"]+)\"$")
     public void taskHasEventType(String symbol, String eventType) {
         UUID taskId = this.ctx.entityId(symbol);
-        Assertions.assertTrue((boolean)this.db.eventTypes(taskId).contains(eventType), (String)("\u4efb\u52d9 " + symbol + " \u5df2\u5beb\u5165\u4e8b\u4ef6 " + eventType + ": " + String.valueOf(this.db.eventTypes(taskId))));
+        Assertions.assertTrue((boolean)this.db.eventTypes(taskId).contains(eventType), (String)("任務 " + symbol + " 已寫入事件 " + eventType + ": " + String.valueOf(this.db.eventTypes(taskId))));
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u4ecd\u53ea\u6709 \"([^\"]+)\" \u4e00\u7b46\u4e8b\u4ef6$")
+    @Then(value="^任務 \"([^\"]+)\" 仍只有 \"([^\"]+)\" 一筆事件$")
     public void taskHasOnlyOneEventOfType(String symbol, String eventType) {
         UUID taskId = this.ctx.entityId(symbol);
-        Assertions.assertEquals(List.of(eventType), this.db.eventTypes(taskId), (String)("\u4efb\u52d9 " + symbol + " \u7684\u4e8b\u4ef6\u6e05\u55ae"));
+        Assertions.assertEquals(List.of(eventType), this.db.eventTypes(taskId), (String)("任務 " + symbol + " 的事件清單"));
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u7684\u4e8b\u4ef6 \"([^\"]+)\" \u7684 ([a-z_]+) \u61c9\u70ba \"([^\"]*)\"$")
+    @Then(value="^任務 \"([^\"]+)\" 的事件 \"([^\"]+)\" 的 ([a-z_]+) 應為 \"([^\"]*)\"$")
     public void taskEventFieldShouldBe(String symbol, String eventType, String field, String expected) {
         UUID taskId = this.ctx.entityId(symbol);
         JsonNode payload = this.objectMapper.readTree(this.db.eventPayloadOfType(taskId, eventType));
-        Assertions.assertEquals((Object)expected, (Object)payload.get(field).asText(), (String)("\u4efb\u52d9 " + symbol + " \u7684\u4e8b\u4ef6 " + eventType + " \u7684 " + field));
+        Assertions.assertEquals((Object)expected, (Object)payload.get(field).asText(), (String)("任務 " + symbol + " 的事件 " + eventType + " 的 " + field));
     }
 
-    @Then(value="^\u4efb\u52d9 \"([^\"]+)\" \u7684\u4e8b\u4ef6 \"([^\"]+)\" \u7684\u64cd\u4f5c\u8005\u61c9\u70ba\u300c([^\u300d]+)\u300d$")
+    @Then(value="^任務 \"([^\"]+)\" 的事件 \"([^\"]+)\" 的操作者應為「([^」]+)」$")
     public void taskEventActorShouldBe(String symbol, String eventType, String staffName) {
         UUID taskId = this.ctx.entityId(symbol);
         UUID actor = (UUID)this.db.admin().queryForObject("SELECT actor_id FROM task_events WHERE task_id = ? AND type = ?", UUID.class, new Object[]{taskId, eventType});
         UUID expected = (UUID)this.db.admin().queryForObject("SELECT id FROM staff_accounts WHERE tenant_id = 1 AND login_id = ?", UUID.class, new Object[]{this.ctx.staffLogin(staffName)});
-        Assertions.assertEquals((Object)expected, (Object)actor, (String)("\u4efb\u52d9 " + symbol + " \u7684\u4e8b\u4ef6 " + eventType + " \u7684\u64cd\u4f5c\u8005"));
+        Assertions.assertEquals((Object)expected, (Object)actor, (String)("任務 " + symbol + " 的事件 " + eventType + " 的操作者"));
     }
 
-    @Then(value="^\u7c3d\u767c\u7684 guest session \u7684\u8cc7\u6599\u61c9\u70ba:$")
+    @Then(value="^簽發的 guest session 的資料應為:$")
     public void issuedSessionDataShouldBe(DataTable table) {
         ScenarioContext.HttpResult last = this.ctx.lastResponse();
-        Assertions.assertEquals((int)200, (int)last.status(), (String)("\u6383\u78bc\u8a72\u6210\u529f: " + last.body()));
+        Assertions.assertEquals((int)200, (int)last.status(), (String)("掃碼該成功: " + last.body()));
         String sessionToken = this.objectMapper.readTree(last.body()).get("sessionToken").asText();
         UUID sessionId = (UUID)this.db.admin().queryForObject("SELECT id FROM guest_sessions WHERE session_token = ?", UUID.class, new Object[]{sessionToken});
-        this.assertRowMatches("guest_sessions", sessionId, table, "\u7c3d\u767c\u7684 guest session");
+        this.assertRowMatches("guest_sessions", sessionId, table, "簽發的 guest session");
     }
 
     private void assertRowMatches(String tableName, UUID id, DataTable expectedTable, String subject) {
@@ -96,9 +96,9 @@ public class EntityDataThenSteps {
         expectedRow.forEach((column, rawExpected) -> {
             String expected = this.ctx.resolveCell((String)rawExpected);
             Object actual = actualRow.get(column);
-            String label = subject + " \u7684 " + column;
+            String label = subject + " 的 " + column;
             if (expected == null) {
-                Assertions.assertNull(actual, (String)(label + " \u8a72\u70ba NULL"));
+                Assertions.assertNull(actual, (String)(label + " 該為 NULL"));
                 return;
             }
             Assertions.assertEquals((Object)EntityDataThenSteps.normalize(expected), (Object)EntityDataThenSteps.normalize(actual), (String)label);

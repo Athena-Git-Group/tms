@@ -81,7 +81,7 @@ public class AuthTestEndpointsConfiguration {
 
         @GetMapping(value={"/staff/rooms/{id}"})
         Map<String, String> room(@PathVariable UUID id) {
-            Room room = (Room)this.roomRepository.findByTenantIdAndId(TenantContext.require(), id).orElseThrow(() -> new NotFoundException("\u623f\u9593\u4e0d\u5b58\u5728"));
+            Room room = (Room)this.roomRepository.findByTenantIdAndId(TenantContext.require(), id).orElseThrow(() -> new NotFoundException("房間不存在"));
             return Map.of("id", room.getId().toString(), "roomNo", room.getRoomNo());
         }
 

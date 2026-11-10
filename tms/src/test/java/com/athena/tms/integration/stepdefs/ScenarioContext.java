@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class ScenarioContext {
-    private static final Map<String, String> DEFAULT_STAFF_LOGINS = Map.of("\u5c0f\u7f8e", "hk1", "\u5c0f\u83ef", "hk2", "\u963f\u5f37", "mt1", "\u6797\u6ac3\u6aaf", "fd1", "\u6ac3\u6aaf", "fd1", "\u738b\u4e3b\u7ba1", "mg1", "\u5f35\u8001\u95c6", "ow1", "\u8001\u95c6", "ow1", "\u5c0f\u82b3", "fang1");
+    private static final Map<String, String> DEFAULT_STAFF_LOGINS = Map.of("小美", "hk1", "小華", "hk2", "阿強", "mt1", "林櫃檯", "fd1", "櫃檯", "fd1", "王主管", "mg1", "張老闆", "ow1", "老闆", "ow1", "小芳", "fang1");
     private UUID taskId;
     private String opId;
     private final Map<String, UUID> entityIds = new HashMap<String, UUID>();
@@ -49,7 +49,7 @@ public class ScenarioContext {
     public UUID entityId(String symbol) {
         UUID id = this.entityIds.get(symbol);
         if (id == null) {
-            throw new IllegalStateException("\u8868\u683c\u4ee3\u865f\u300c" + symbol + "\u300d\u6c92\u6709\u5c0d\u61c9\u7684 UUID\u2014\u2014\u524d\u7f6e\u8cc7\u6599\u6f0f\u4e86");
+            throw new IllegalStateException("表格代號「" + symbol + "」沒有對應的 UUID——前置資料漏了");
         }
         return id;
     }
@@ -73,7 +73,7 @@ public class ScenarioContext {
     public String guestSession(String symbol) {
         String token = this.guestSessionTokens.get(symbol);
         if (token == null) {
-            throw new IllegalStateException("session \u4ee3\u865f\u300c" + symbol + "\u300d\u6c92\u6709\u5c0d\u61c9\u6b0a\u6756\u2014\u2014\u524d\u7f6e\u8cc7\u6599\u6f0f\u4e86");
+            throw new IllegalStateException("session 代號「" + symbol + "」沒有對應權杖——前置資料漏了");
         }
         return token;
     }
@@ -85,7 +85,7 @@ public class ScenarioContext {
     public String staffLogin(String name) {
         String loginId = this.staffLogins.getOrDefault(name, DEFAULT_STAFF_LOGINS.get(name));
         if (loginId == null) {
-            throw new IllegalStateException("\u6c92\u6709\u54e1\u5de5\u300c" + name + "\u300d\u7684 login \u5c0d\u7167");
+            throw new IllegalStateException("沒有員工「" + name + "」的 login 對照");
         }
         return loginId;
     }
@@ -97,14 +97,14 @@ public class ScenarioContext {
     public String sopItemKey(String label) {
         String key = this.sopItemKeys.get(label);
         if (key == null) {
-            throw new IllegalStateException("SOP \u9805\u76ee\u300c" + label + "\u300d\u6c92\u6709\u5c0d\u61c9 item_key\u2014\u2014\u524d\u7f6e\u8cc7\u6599\u6f0f\u4e86");
+            throw new IllegalStateException("SOP 項目「" + label + "」沒有對應 item_key——前置資料漏了");
         }
         return key;
     }
 
     public UUID taskId() {
         if (this.taskId == null) {
-            throw new IllegalStateException("\u5834\u666f\u5c1a\u672a\u5efa\u7acb\u4efb\u52d9\u2014\u2014Given \u6b65\u9a5f\u6f0f\u4e86");
+            throw new IllegalStateException("場景尚未建立任務——Given 步驟漏了");
         }
         return this.taskId;
     }
@@ -123,7 +123,7 @@ public class ScenarioContext {
 
     public HttpResult firstResponse() {
         if (this.firstResponse == null) {
-            throw new IllegalStateException("\u5834\u666f\u5c1a\u672a\u767c\u51fa\u7b2c\u4e00\u500b HTTP \u8acb\u6c42");
+            throw new IllegalStateException("場景尚未發出第一個 HTTP 請求");
         }
         return this.firstResponse;
     }
@@ -134,7 +134,7 @@ public class ScenarioContext {
 
     public HttpResult lastResponse() {
         if (this.lastResponse == null) {
-            throw new IllegalStateException("\u5834\u666f\u5c1a\u672a\u7559\u4e0b\u4efb\u4f55 HTTP \u56de\u61c9\u2014\u2014When \u6b65\u9a5f\u6f0f\u4e86");
+            throw new IllegalStateException("場景尚未留下任何 HTTP 回應——When 步驟漏了");
         }
         return this.lastResponse;
     }

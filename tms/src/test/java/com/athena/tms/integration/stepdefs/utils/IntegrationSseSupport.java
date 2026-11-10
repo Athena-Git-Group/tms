@@ -40,7 +40,7 @@ public final class IntegrationSseSupport {
         IntegrationSseClient(int port, String path, String apiKey) throws Exception {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).header("X-API-Key", apiKey).header("Accept", "text/event-stream").GET().build();
             HttpResponse<Stream<String>> response = HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofLines()).get(10L, TimeUnit.SECONDS);
-            Assertions.assertEquals((int)200, (int)response.statusCode(), (String)("\u6574\u5408 SSE \u7aef\u9ede\u61c9\u4ee5 200 \u958b\u6d41\uff08" + path + "\uff09"));
+            Assertions.assertEquals((int)200, (int)response.statusCode(), (String)("整合 SSE 端點應以 200 開流（" + path + "）"));
             this.body = response.body();
             this.reader = new Thread(this::readLoop, "integration-sse-bdd-reader");
             this.reader.setDaemon(true);
@@ -86,11 +86,11 @@ public final class IntegrationSseSupport {
         }
 
         public Event awaitNamed(String name, Duration timeout) throws InterruptedException {
-            return this.await(timeout, event -> event.name().equals(name), "\u540d\u70ba '" + name + "' \u7684\u4e8b\u4ef6");
+            return this.await(timeout, event -> event.name().equals(name), "名為 '" + name + "' 的事件");
         }
 
         public Event awaitRoomStatus(String roomNo, Duration timeout) throws InterruptedException {
-            return this.await(timeout, event -> event.name().equals("room_status") && roomNo.equals(event.data().get("room_no").asText()), "room_no=" + roomNo + " \u7684 room_status \u4e8b\u4ef6");
+            return this.await(timeout, event -> event.name().equals("room_status") && roomNo.equals(event.data().get("room_no").asText()), "room_no=" + roomNo + " 的 room_status 事件");
         }
 
         private Event await(Duration timeout, Predicate<Event> match, String what) throws InterruptedException {
@@ -100,7 +100,7 @@ public final class IntegrationSseSupport {
             do {
                 this.failIfReaderDied();
                 if ((remaining = deadline - System.nanoTime()) > 0L) continue;
-                Assertions.fail((String)("\u6574\u5408\u9023\u7dda\u7b49\u4e0d\u5230" + what + "\uff1b\u5df2\u6536\u5230: " + this.summary()));
+                Assertions.fail((String)("整合連線等不到" + what + "；已收到: " + this.summary()));
             } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !match.test(event));
             return event;
         }

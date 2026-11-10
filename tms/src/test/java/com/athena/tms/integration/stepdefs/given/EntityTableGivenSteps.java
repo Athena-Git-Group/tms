@@ -30,7 +30,7 @@ public class EntityTableGivenSteps {
         this.fixtures = fixtures;
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u623f\u9593:$")
+    @Given(value="^系統中存在以下房間:$")
     public void roomsExist(DataTable table) {
         for (Map row : table.asMaps()) {
             UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state,\n                   occupancy, updated_at)\nVALUES (?, ?, ?, ?, ?, ?, ?, now())\nON CONFLICT (tenant_id, room_no) DO UPDATE SET floor = excluded.floor,\n    room_type = excluded.room_type, hk_state = excluded.hk_state,\n    occupancy = excluded.occupancy, updated_at = now()\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), EntityTableGivenSteps.tenantOf(row), EntityTableGivenSteps.value(row, "room_no"), Integer.parseInt(EntityTableGivenSteps.value(row, "floor")), EntityTableGivenSteps.value(row, "room_type"), EntityTableGivenSteps.value(row, "hk_state"), EntityTableGivenSteps.value(row, "occupancy")});
@@ -38,7 +38,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u54e1\u5de5:$")
+    @Given(value="^系統中存在以下員工:$")
     public void staffExist(DataTable table) {
         for (Map row : table.asMaps()) {
             UUID id = (UUID)this.db.admin().queryForObject("INSERT INTO staff_accounts (id, tenant_id, name, login_id, password_hash,\n                            role, dept, active, created_at, updated_at)\nVALUES (?, ?, ?, ?, ?, ?, ?, true, now(), now())\nON CONFLICT (tenant_id, login_id) DO UPDATE SET name = excluded.name,\n    role = excluded.role, dept = excluded.dept, active = true,\n    updated_at = now()\nRETURNING id\n", UUID.class, new Object[]{UUID.randomUUID(), EntityTableGivenSteps.tenantOf(row), EntityTableGivenSteps.value(row, "name"), EntityTableGivenSteps.value(row, "login_id"), "$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW", EntityTableGivenSteps.value(row, "role"), EntityTableGivenSteps.value(row, "dept")});
@@ -47,7 +47,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u8a02\u55ae:$")
+    @Given(value="^系統中存在以下訂單:$")
     public void reservationsExist(DataTable table) {
         for (Map row : table.asMaps()) {
             long tenantId = EntityTableGivenSteps.tenantOf(row);
@@ -61,7 +61,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u623f\u9593QR:$")
+    @Given(value="^系統中存在以下房間QR:$")
     public void qrTokensExist(DataTable table) {
         for (Map row : table.asMaps()) {
             String revokedAt = EntityTableGivenSteps.value(row, "revoked_at");
@@ -70,7 +70,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u4f4f\u5ba2session:$")
+    @Given(value="^系統中存在以下住客session:$")
     public void guestSessionsExist(DataTable table) {
         for (Map row : table.asMaps()) {
             long tenantId = EntityTableGivenSteps.tenantOf(row);
@@ -84,7 +84,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0bSOP\u9805\u76ee:$")
+    @Given(value="^系統中存在以下SOP項目:$")
     public void sopItemsExist(DataTable table) {
         boolean touchedInspection = false;
         for (Map row : table.asMaps()) {
@@ -99,14 +99,14 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u79df\u6236\u8a2d\u5b9a:$")
+    @Given(value="^系統中存在以下租戶設定:$")
     public void tenantConfigExists(DataTable table) {
         for (Map row : table.asMaps()) {
             this.db.admin().update("INSERT INTO tenant_config (tenant_id, key, value, updated_at)\nVALUES (?, ?, ?::jsonb, now())\nON CONFLICT (tenant_id, key) DO UPDATE SET value = excluded.value,\n    updated_at = now()\n", new Object[]{EntityTableGivenSteps.tenantOf(row), EntityTableGivenSteps.value(row, "key"), EntityTableGivenSteps.value(row, "value")});
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u8acb\u5047:$")
+    @Given(value="^系統中存在以下請假:$")
     public void leavesExist(DataTable table) {
         for (Map row : table.asMaps()) {
             UUID id = UUID.randomUUID();
@@ -115,7 +115,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0bSOP\u52fe\u8a18:$")
+    @Given(value="^系統中存在以下SOP勾記:$")
     public void sopChecksExist(DataTable table) {
         for (Map row : table.asMaps()) {
             boolean checked = Boolean.parseBoolean(EntityTableGivenSteps.value(row, "checked"));
@@ -125,7 +125,7 @@ public class EntityTableGivenSteps {
         }
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u5f85\u9001\u5323:$")
+    @Given(value="^系統中存在以下待送匣:$")
     public void outboxRowsExist(DataTable table) {
         ArrayList freeIds = new ArrayList();
         ArrayList<String> blockedKeys = new ArrayList<String>();
@@ -149,7 +149,7 @@ public class EntityTableGivenSteps {
         this.ctx.put("outboxBlockedKeys", blockedKeys);
     }
 
-    @Given(value="^\u7cfb\u7d71\u4e2d\u5b58\u5728\u4ee5\u4e0b\u4efb\u52d9:$")
+    @Given(value="^系統中存在以下任務:$")
     public void tasksExist(DataTable table) {
         for (Map row : table.asMaps()) {
             UUID taskId = this.createTask(row);
@@ -225,7 +225,7 @@ public class EntityTableGivenSteps {
             case "doing" -> List.of("created", "claimed", "started");
             case "done" -> List.of("created", "claimed", "started", "completed");
             case "inspected" -> List.of("created", "claimed", "started", "completed", "inspection_passed");
-            default -> throw new IllegalArgumentException("\u524d\u7f6e\u4efb\u52d9\u4e0d\u652f\u63f4 state=" + state);
+            default -> throw new IllegalArgumentException("前置任務不支援 state=" + state);
         };
     }
 
@@ -289,7 +289,7 @@ public class EntityTableGivenSteps {
             case "housekeeping" -> "housekeeping";
             case "engineering" -> "engineering";
             case "frontdesk" -> "frontdesk";
-            default -> throw new IllegalArgumentException("\u6c92\u6709\u90e8\u9580 " + dept + " \u7684\u89d2\u8272\u5c0d\u7167");
+            default -> throw new IllegalArgumentException("沒有部門 " + dept + " 的角色對照");
         };
     }
 

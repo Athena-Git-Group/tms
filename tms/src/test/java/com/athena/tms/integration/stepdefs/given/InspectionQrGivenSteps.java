@@ -14,18 +14,18 @@ public class InspectionQrGivenSteps {
         this.db = db;
     }
 
-    @Given(value="^\u79df\u6236 1 \u7684\u73ed\u6b21\u8a2d\u5b9a\u6db5\u84cb\u73fe\u5728\uff0c\u6e05\u623f\u8005\u8996\u70ba\u5728\u73ed$")
+    @Given(value="^租戶 1 的班次設定涵蓋現在，清房者視為在班$")
     public void shiftTimesCoverNow() {
         this.setShiftTimes("00:00", "00:00");
     }
 
-    @Given(value="^\u7167\u79df\u6236\u73ed\u6b21\u8a2d\u5b9a\u300c\u5c0f\u7f8e\u300d\u5df2\u4e0b\u73ed$")
+    @Given(value="^照租戶班次設定「小美」已下班$")
     public void shiftTimesExcludeNow() {
         LocalTime now = LocalTime.now();
         this.setShiftTimes(InspectionQrGivenSteps.hhmm(now.minusHours(3L)), InspectionQrGivenSteps.hhmm(now.minusHours(2L)));
     }
 
-    @Given(value="^\u623f 301 \u5c1a\u7121\u4efb\u4f55 QR token$")
+    @Given(value="^房 301 尚無任何 QR token$")
     public void room301HasNoQrToken() {
         this.db.admin().update("DELETE FROM room_qr_tokens WHERE room_id = ?", new Object[]{this.ctx.entityId("r-301")});
     }

@@ -33,219 +33,219 @@ public class BackboneThenSteps {
         this.objectMapper = objectMapper;
     }
 
-    @Then(value="^\u6bcf\u6b21\u90fd\u6536\u5230\u8207\u7b2c\u4e00\u6b21\u76f8\u540c\u7684\u72c0\u614b\u78bc\u8207\u56de\u61c9$")
+    @Then(value="^每次都收到與第一次相同的狀態碼與回應$")
     public void everyResendMatchesFirstResponse() {
         ScenarioContext.HttpResult first = this.ctx.firstResponse();
-        Assertions.assertFalse((boolean)this.ctx.replays().isEmpty(), (String)"When \u6b65\u9a5f\u8a72\u7559\u4e0b\u91cd\u9001\u7d50\u679c");
+        Assertions.assertFalse((boolean)this.ctx.replays().isEmpty(), (String)"When 步驟該留下重送結果");
         int nth = 1;
         for (ScenarioContext.HttpResult replay : this.ctx.replays()) {
-            Assertions.assertEquals((int)first.status(), (int)replay.status(), (String)("\u91cd\u9001\u7b2c " + nth + " \u6b21\uff1a\u72c0\u614b\u78bc\u4e00\u81f4"));
-            Assertions.assertEquals((Object)first.body(), (Object)replay.body(), (String)("\u91cd\u9001\u7b2c " + nth + " \u6b21\uff1abody \u4e00\u81f4"));
-            Assertions.assertEquals((Object)"true", (Object)replay.replayedHeader(), (String)"\u91cd\u9001\u8d70 processed_ops \u56de\u653e");
+            Assertions.assertEquals((int)first.status(), (int)replay.status(), (String)("重送第 " + nth + " 次：狀態碼一致"));
+            Assertions.assertEquals((Object)first.body(), (Object)replay.body(), (String)("重送第 " + nth + " 次：body 一致"));
+            Assertions.assertEquals((Object)"true", (Object)replay.replayedHeader(), (String)"重送走 processed_ops 回放");
             ++nth;
         }
-        Assertions.assertEquals((int)1, (int)this.db.processedOpsCount(1L, this.ctx.opId()), (String)"\u51aa\u7b49\u7c3f\u6709\u4e14\u53ea\u6709\u9019\u628a\u9375");
+        Assertions.assertEquals((int)1, (int)this.db.processedOpsCount(1L, this.ctx.opId()), (String)"冪等簿有且只有這把鍵");
     }
 
-    @Then(value="^\u4efb\u52d9\u53ea\u88ab\u5b8c\u6210\u4e00\u6b21\u3001\u4e8b\u4ef6\u53ea\u5beb\u4e00\u7b46\u3001\u63a8\u64ad\u53ea\u6392\u4e00\u7b46$")
+    @Then(value="^任務只被完成一次、事件只寫一筆、推播只排一筆$")
     public void completedExactlyOnce() {
         UUID id = this.ctx.taskId();
-        Assertions.assertEquals((int)1, (int)this.db.eventCountOfType(id, "completed"), (String)"completed \u4e8b\u4ef6\u53ea\u5beb\u4e00\u7b46");
+        Assertions.assertEquals((int)1, (int)this.db.eventCountOfType(id, "completed"), (String)"completed 事件只寫一筆");
         Map<String, Object> row = this.db.taskRow(id);
         Assertions.assertEquals((Object)"done", (Object)row.get("state"));
-        Assertions.assertEquals((int)4, (int)((Number)row.get("event_seq")).intValue(), (String)"\u56de\u653e\u4e0d\u4f54 seq");
-        Assertions.assertEquals((int)4, (int)this.db.outboxCount("task:" + String.valueOf(id)), (String)"outbox \u53ea\u6392\u4e00\u8f2a\uff08created..completed \u5404\u4e00\uff0c\u56de\u653e\u5f8c\u96f6\u589e\u91cf\uff09");
+        Assertions.assertEquals((int)4, (int)((Number)row.get("event_seq")).intValue(), (String)"回放不佔 seq");
+        Assertions.assertEquals((int)4, (int)this.db.outboxCount("task:" + String.valueOf(id)), (String)"outbox 只排一輪（created..completed 各一，回放後零增量）");
     }
 
-    @Then(value="^\u8a72\u8f49\u79fb\u4ee5\u55ae\u4e00\u689d\u4ef6\u5f0f UPDATE \u5b8c\u6210\uff0c\u91cd\u8907\u518d\u8f49\u5373\u66f4\u65b0 0 \u5217\u3001\u8a72\u8acb\u6c42\u61c9\u8a72\u5931\u6557\uff0c\u56de\u61c9\u70ba 409$")
+    @Then(value="^該轉移以單一條件式 UPDATE 完成，重複再轉即更新 0 列、該請求應該失敗，回應為 409$")
     public void guardRejectsRepeatWith409() {
-        StateConflictException conflict = (StateConflictException)Assertions.assertThrows(StateConflictException.class, () -> Tenants.runAsTenant(1L, () -> this.fixtures.engine().passInspection(1L, this.ctx.taskId(), TestData.MG1)), (String)"\u540c\u4e00\u8f49\u79fb\u7b2c\u4e8c\u6b21\u8a72\u88ab\u5b88\u885b\u64cb\u4e0b\uff08\u66f4\u65b0 0 \u5217\uff09");
+        StateConflictException conflict = (StateConflictException)Assertions.assertThrows(StateConflictException.class, () -> Tenants.runAsTenant(1L, () -> this.fixtures.engine().passInspection(1L, this.ctx.taskId(), TestData.MG1)), (String)"同一轉移第二次該被守衛擋下（更新 0 列）");
         Assertions.assertEquals((int)409, (int)conflict.getStatus());
         Assertions.assertEquals((Object)"state_conflict", (Object)conflict.getCode());
     }
 
-    @Then(value="^\u4e8b\u4ef6 seq \u53d6\u81ea\u540c\u53e5 UPDATE \u56de\u50b3\u7684 event_seq\uff0c\u56b4\u683c\u905e\u589e\u4e14\u7121\u6d1e$")
+    @Then(value="^事件 seq 取自同句 UPDATE 回傳的 event_seq，嚴格遞增且無洞$")
     public void seqComesFromSameStatement() {
         UUID id = this.ctx.taskId();
-        Assertions.assertEquals(List.of(Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3), Integer.valueOf(4), Integer.valueOf(5)), this.db.eventSeqs(id), (String)"seq \u56b4\u683c\u905e\u589e\u4e14\u7121\u6d1e");
-        Assertions.assertEquals((int)5, (Integer)this.ctx.returnedSeq(), (String)"\u5f15\u64ce\u56de\u50b3\u7684 seq\uff1d\u5b88\u885b\u540c\u53e5 RETURNING \u7684 event_seq");
+        Assertions.assertEquals(List.of(Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3), Integer.valueOf(4), Integer.valueOf(5)), this.db.eventSeqs(id), (String)"seq 嚴格遞增且無洞");
+        Assertions.assertEquals((int)5, (Integer)this.ctx.returnedSeq(), (String)"引擎回傳的 seq＝守衛同句 RETURNING 的 event_seq");
         Assertions.assertEquals((int)5, (int)((Number)this.db.taskRow(id).get("event_seq")).intValue());
     }
 
-    @Then(value="^\u6070\u6709\u4e00\u6b21\u8a8d\u9818\u6210\u529f\u3001\u53e6\u4e00\u6b21\u8acb\u6c42\u61c9\u8a72\u5931\u6557\uff0c\u56de\u61c9\u70ba 409 \u4e14\u539f\u56e0\u662f \"state_conflict\"$")
+    @Then(value="^恰有一次認領成功、另一次請求應該失敗，回應為 409 且原因是 \"state_conflict\"$")
     public void exactlyOneClaimWins() {
         List<String> outcomes = this.ctx.claimOutcomes();
-        Assertions.assertEquals((int)1, (int)Collections.frequency(outcomes, "ok"), (String)("\u6070\u4e00\u6b21\u6210\u529f: " + String.valueOf(outcomes)));
-        Assertions.assertEquals((int)1, (int)Collections.frequency(outcomes, "state_conflict"), (String)("\u53e6\u4e00\u6b21 409: " + String.valueOf(outcomes)));
+        Assertions.assertEquals((int)1, (int)Collections.frequency(outcomes, "ok"), (String)("恰一次成功: " + String.valueOf(outcomes)));
+        Assertions.assertEquals((int)1, (int)Collections.frequency(outcomes, "state_conflict"), (String)("另一次 409: " + String.valueOf(outcomes)));
     }
 
-    @Then(value="^\u4efb\u52d9\u505c\u5728 \"accepted\"\u3001\u4e8b\u4ef6\u53ea\u6709 created \u8207 claimed\u3001\u8f38\u7684\u90a3\u6b21\u4e0d\u4f54 seq$")
+    @Then(value="^任務停在 \"accepted\"、事件只有 created 與 claimed、輸的那次不佔 seq$")
     public void taskAcceptedWithTwoEvents() {
         UUID id = this.ctx.taskId();
         Map<String, Object> row = this.db.taskRow(id);
         Assertions.assertEquals((Object)"accepted", (Object)row.get("state"));
         Assertions.assertEquals((Object)TestData.STAFF_HK1, (Object)row.get("assignee_id"));
-        Assertions.assertEquals((int)2, (int)((Number)row.get("event_seq")).intValue(), (String)"created=1\u3001claimed=2\uff1b\u8f38\u7684\u90a3\u6b21\u4e0d\u4f54\u865f");
-        Assertions.assertEquals(List.of("created", "claimed"), this.db.eventTypes(id), (String)"\u5931\u6557\u7684\u8f49\u79fb\u4e0d\u5f97\u7559\u4e0b\u4e8b\u4ef6");
+        Assertions.assertEquals((int)2, (int)((Number)row.get("event_seq")).intValue(), (String)"created=1、claimed=2；輸的那次不佔號");
+        Assertions.assertEquals(List.of("created", "claimed"), this.db.eventTypes(id), (String)"失敗的轉移不得留下事件");
     }
 
-    @Then(value="^\u4e09\u6b21\u8acb\u6c42\u61c9\u8a72\u90fd\u5931\u6557\uff0c\u56de\u61c9\u7686\u70ba 409 \u4e14\u539f\u56e0\u90fd\u662f \"state_conflict\"$")
+    @Then(value="^三次請求應該都失敗，回應皆為 409 且原因都是 \"state_conflict\"$")
     public void allThreeRejected() {
         Assertions.assertEquals(List.of(Integer.valueOf(409), Integer.valueOf(409), Integer.valueOf(409)), this.ctx.rejectionStatuses());
         Assertions.assertEquals(List.of("state_conflict", "state_conflict", "state_conflict"), this.ctx.rejectionCodes());
     }
 
-    @Then(value="^\u88ab\u64cb\u7684\u8f49\u79fb\u4e0d\u7522\u751f\u4efb\u4f55\u4e8b\u4ef6$")
+    @Then(value="^被擋的轉移不產生任何事件$")
     public void blockedTransitionsLeaveNoEvents() {
-        Assertions.assertEquals(List.of("created", "claimed"), this.db.eventTypes(this.ctx.taskId()), (String)"\u53ea\u6709\u5408\u6cd5\u7684\u5efa\u55ae\u8207\u8a8d\u9818\u7559\u4e8b\u4ef6");
+        Assertions.assertEquals(List.of("created", "claimed"), this.db.eventTypes(this.ctx.taskId()), (String)"只有合法的建單與認領留事件");
     }
 
-    @Then(value="^\u4e8b\u4ef6 seq \u70ba 1 \u5230 8 \u56b4\u683c\u905e\u589e\u4e14\u7121\u6d1e$")
+    @Then(value="^事件 seq 為 1 到 8 嚴格遞增且無洞$")
     public void seqOneToEightNoGaps() {
         Assertions.assertEquals(List.of(Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3), Integer.valueOf(4), Integer.valueOf(5), Integer.valueOf(6), Integer.valueOf(7), Integer.valueOf(8)), this.db.eventSeqs(this.ctx.taskId()));
         Assertions.assertEquals((int)8, (Integer)this.ctx.returnedSeq());
     }
 
-    @Then(value="^created \u5feb\u7167\u4e4b\u7a2e\u985e\u70ba \"([a-z_]+)\"\u3001\u4f86\u6e90\u70ba \"([a-z_]+)\"\u3001\u623f\u865f\u70ba \"(\\d+)\"\u3001\u6a19\u984c\u70ba \"([^\"]+)\"\uff0c\u4e14\u4e0d\u542b\u8a02\u55ae\u9375$")
+    @Then(value="^created 快照之種類為 \"([a-z_]+)\"、來源為 \"([a-z_]+)\"、房號為 \"(\\d+)\"、標題為 \"([^\"]+)\"，且不含訂單鍵$")
     public void createdSnapshotLiteralValues(String type, String source, String roomNo, String title) {
         JsonNode snapshot = this.objectMapper.readTree(this.db.eventPayload(this.ctx.taskId(), 1));
-        Assertions.assertEquals((Object)type, (Object)snapshot.get("type").asText(), (String)"\u7a2e\u985e");
-        Assertions.assertEquals((Object)source, (Object)snapshot.get("source").asText(), (String)"\u4f86\u6e90");
+        Assertions.assertEquals((Object)type, (Object)snapshot.get("type").asText(), (String)"種類");
+        Assertions.assertEquals((Object)source, (Object)snapshot.get("source").asText(), (String)"來源");
         String roomInDb = (String)this.db.admin().queryForObject("SELECT room_no FROM rooms WHERE id = ?", String.class, new Object[]{UUID.fromString(snapshot.get("room_id").asText())});
-        Assertions.assertEquals((Object)roomNo, (Object)roomInDb, (String)"\u623f\u865f");
-        Assertions.assertEquals((Object)title, (Object)snapshot.get("title").asText(), (String)"\u6a19\u984c");
-        Assertions.assertFalse((boolean)snapshot.has("reservation_id"), (String)"\u6c92\u7d81\u8a02\u55ae\u5c31\u4e0d\u843d\u9375");
+        Assertions.assertEquals((Object)roomNo, (Object)roomInDb, (String)"房號");
+        Assertions.assertEquals((Object)title, (Object)snapshot.get("title").asText(), (String)"標題");
+        Assertions.assertFalse((boolean)snapshot.has("reservation_id"), (String)"沒綁訂單就不落鍵");
     }
 
-    @Then(value="^\u4efb\u52d9\u505c\u5728 \"inspected\"\u3001redo_count \u70ba 1\u3001\u4e4b\u5f8c\u4efb\u4f55\u8f49\u79fb\u7684\u8acb\u6c42\u61c9\u8a72\u5931\u6557\uff0c\u56de\u61c9\u70ba 409$")
+    @Then(value="^任務停在 \"inspected\"、redo_count 為 1、之後任何轉移的請求應該失敗，回應為 409$")
     public void terminalInspectedState() {
         UUID id = this.ctx.taskId();
         Map<String, Object> row = this.db.taskRow(id);
         Assertions.assertEquals((Object)"inspected", (Object)row.get("state"));
-        Assertions.assertEquals((int)1, (int)((Number)row.get("redo_count")).intValue(), (String)"\u67e5\u623f\u9000\u56de\u4e00\u6b21");
+        Assertions.assertEquals((int)1, (int)((Number)row.get("redo_count")).intValue(), (String)"查房退回一次");
         Assertions.assertNotNull((Object)row.get("done_at"));
-        Assertions.assertThrows(StateConflictException.class, () -> Tenants.runAsTenant(1L, () -> this.fixtures.engine().passInspection(1L, id, TestData.MG1)), (String)"inspected \u662f\u7d42\u9ede\uff08E-16\uff09");
+        Assertions.assertThrows(StateConflictException.class, () -> Tenants.runAsTenant(1L, () -> this.fixtures.engine().passInspection(1L, id, TestData.MG1)), (String)"inspected 是終點（E-16）");
     }
 
-    @Then(value="^\u4e8b\u4ef6\u4f9d\u5e8f\u70ba created \u8207 assigned\u3001event_seq \u70ba 2$")
+    @Then(value="^事件依序為 created 與 assigned、event_seq 為 2$")
     public void createdThenAssigned() {
-        Assertions.assertEquals(List.of("created", "assigned"), this.db.eventTypes(this.ctx.taskId()), (String)"\u6392\u623f\u8d77\u9ede\uff1dcreated(1)\uff0bassigned(2)\uff0cspec \u00a75.2 \u4e8b\u4ef6\u5f62\u72c0");
+        Assertions.assertEquals(List.of("created", "assigned"), this.db.eventTypes(this.ctx.taskId()), (String)"排房起點＝created(1)＋assigned(2)，spec §5.2 事件形狀");
         Assertions.assertEquals((int)2, (Integer)this.ctx.returnedSeq());
     }
 
-    @Then(value="^\u4efb\u52d9\u505c\u5728 \"accepted\" \u4e14\u53d7\u6d3e\u4eba\u662f\u300c\u5c0f\u7f8e\u300d$")
+    @Then(value="^任務停在 \"accepted\" 且受派人是「小美」$")
     public void acceptedAssignedToHk1() {
         Map<String, Object> row = this.db.taskRow(this.ctx.taskId());
         Assertions.assertEquals((Object)"accepted", (Object)row.get("state"));
         Assertions.assertEquals((Object)TestData.STAFF_HK1, (Object)row.get("assignee_id"));
     }
 
-    @Then(value="^relay \u4e0d\u9001\u51fa \"([^\"]+)\" \u90a3\u7b46\uff0c\u76f4\u5230\u540c aggregate_key \u7684 \"([^\"]+)\" \u90a3\u7b46\u6210\u529f$")
+    @Then(value="^relay 不送出 \"([^\"]+)\" 那筆，直到同 aggregate_key 的 \"([^\"]+)\" 那筆成功$")
     public void blockedKeyStaysPut(String tailKey, String headKey) {
         Long headId = (Long)this.ctx.get("outbox:" + headKey);
         Long tailId = (Long)this.ctx.get("outbox:" + tailKey);
-        Assertions.assertEquals((Object)"pending", (Object)this.db.outboxStatus(headId), (String)"\u7b49\u91cd\u8a66\u7684\u9996\u7b46\u4ecd pending");
-        Assertions.assertEquals((Object)"pending", (Object)this.db.outboxStatus(tailId), (String)"\u540c\u9375\u5f8c\u7e8c\u5217\u5fc5\u9808\u8ddf\u8457\u7b49\uff0c\u4e0d\u5f97\u5148\u9001");
-        Assertions.assertEquals((int)0, (int)this.db.outboxAttempts(tailId), (String)"\u5f8c\u7e8c\u5217\u9023\u8a66\u90fd\u4e0d\u8a72\u8a66");
+        Assertions.assertEquals((Object)"pending", (Object)this.db.outboxStatus(headId), (String)"等重試的首筆仍 pending");
+        Assertions.assertEquals((Object)"pending", (Object)this.db.outboxStatus(tailId), (String)"同鍵後續列必須跟著等，不得先送");
+        Assertions.assertEquals((int)0, (int)this.db.outboxAttempts(tailId), (String)"後續列連試都不該試");
         List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.push", Duration.ofSeconds(3L));
         this.ctx.put("pushRecords", records);
         String blockedKey = this.aggregateKeyOf(headId);
-        Assertions.assertTrue((boolean)records.stream().noneMatch(r -> blockedKey.equals(r.key())), (String)"\u88ab\u5c01\u9396\u9375\u6574\u4e32\u4e0d\u5f97\u5916\u6d41");
+        Assertions.assertTrue((boolean)records.stream().noneMatch(r -> blockedKey.equals(r.key())), (String)"被封鎖鍵整串不得外流");
     }
 
-    @Then(value="^\u5176\u4ed6\u9375\u7684\u4e8b\u4ef6\u7167\u5e38\u8f49\u9001\u3001\u4e0d\u88ab\u64cb$")
+    @Then(value="^其他鍵的事件照常轉送、不被擋$")
     public void otherKeysFlow() {
         List<Long> freeIds = this.ctx.get("outboxFreeIds");
         List<ConsumerRecord<String, String>> records = this.ctx.get("pushRecords");
-        Assertions.assertNotNull((Object)records, (String)"\u524d\u4e00\u500b\u65b7\u8a00\u8a72\u5148\u8b80\u904e push topic");
+        Assertions.assertNotNull((Object)records, (String)"前一個斷言該先讀過 push topic");
         for (Long freeId : freeIds) {
             Assertions.assertEquals((Object)"sent", (Object)this.db.outboxStatus(freeId));
             String freeKey = this.aggregateKeyOf(freeId);
-            Assertions.assertTrue((boolean)records.stream().anyMatch(r -> freeKey.equals(r.key())), (String)("\u5225\u9375\u4e8b\u4ef6\u5df2\u4e0a Kafka: " + freeKey));
+            Assertions.assertTrue((boolean)records.stream().anyMatch(r -> freeKey.equals(r.key())), (String)("別鍵事件已上 Kafka: " + freeKey));
         }
     }
 
-    @Then(value="^\u9019\u7b46 pending \u4e8b\u4ef6\u4ecd\u88ab\u8f49\u9001\u4e0a Kafka\u3001\u4e0d\u6389\u55ae$")
+    @Then(value="^這筆 pending 事件仍被轉送上 Kafka、不掉單$")
     public void pendingEventEventuallyDelivered() {
         List<Long> freeIds = this.ctx.get("outboxFreeIds");
         Long soloId = freeIds.getFirst();
         Assertions.assertEquals((Object)"sent", (Object)this.db.outboxStatus(soloId));
         String soloKey = this.aggregateKeyOf(soloId);
         List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3L));
-        Assertions.assertTrue((boolean)records.stream().anyMatch(r -> soloKey.equals(r.key())), (String)"\u4e8b\u4ef6\u5be6\u969b\u5230\u9054 Kafka");
+        Assertions.assertTrue((boolean)records.stream().anyMatch(r -> soloKey.equals(r.key())), (String)"事件實際到達 Kafka");
     }
 
-    @Then(value="^\u5f85\u9001\u5323 \"([^\"]+)\" \u4ecd\u662f \"([^\"]+)\"\u3001attempts \u4ecd\u662f (\\d+)$")
+    @Then(value="^待送匣 \"([^\"]+)\" 仍是 \"([^\"]+)\"、attempts 仍是 (\\d+)$")
     public void outboxStaysUntouched(String idempotencyKey, String expectedStatus, int expectedAttempts) throws InterruptedException {
         Thread.sleep(3000L);
         Long outboxId = (Long)this.ctx.get("outbox:" + idempotencyKey);
-        Assertions.assertEquals((Object)expectedStatus, (Object)this.db.outboxStatus(outboxId), (String)"\u79df\u7d04\uff0f\u9000\u907f\u9084\u6c92\u5230\u671f\uff0c\u4e0d\u8a72\u88ab\u4efb\u4f55 instance \u52d5\u5230");
-        Assertions.assertEquals((int)expectedAttempts, (int)this.db.outboxAttempts(outboxId), (String)"\u6c92\u6436\u5230\u5c31\u4e0d\u8a72\u7d2f\u52a0 attempts");
+        Assertions.assertEquals((Object)expectedStatus, (Object)this.db.outboxStatus(outboxId), (String)"租約／退避還沒到期，不該被任何 instance 動到");
+        Assertions.assertEquals((int)expectedAttempts, (int)this.db.outboxAttempts(outboxId), (String)"沒搶到就不該累加 attempts");
     }
 
-    @Then(value="^\u5f85\u9001\u5323 \"([^\"]+)\" \u6700\u7d42\u88ab\u6a19\u8a18\u70ba \"([^\"]+)\"\u3001attempts \u70ba (\\d+)$")
+    @Then(value="^待送匣 \"([^\"]+)\" 最終被標記為 \"([^\"]+)\"、attempts 為 (\\d+)$")
     public void outboxReachesStatusWithAttempts(String idempotencyKey, String expectedStatus, int expectedAttempts) {
         Long outboxId = (Long)this.ctx.get("outbox:" + idempotencyKey);
-        Awaits.waitUntil(Duration.ofSeconds(20L), "\u5f85\u9001\u5323 " + idempotencyKey + " \u8a72\u8b8a\u6210 " + expectedStatus, () -> expectedStatus.equals(this.db.outboxStatus(outboxId)));
-        Assertions.assertEquals((int)expectedAttempts, (int)this.db.outboxAttempts(outboxId), (String)"attempts \u8a72\u525b\u597d\u662f\u9019\u4e00\u6b21 claim \u7d2f\u52a0\u7684\u7d50\u679c");
+        Awaits.waitUntil(Duration.ofSeconds(20L), "待送匣 " + idempotencyKey + " 該變成 " + expectedStatus, () -> expectedStatus.equals(this.db.outboxStatus(outboxId)));
+        Assertions.assertEquals((int)expectedAttempts, (int)this.db.outboxAttempts(outboxId), (String)"attempts 該剛好是這一次 claim 累加的結果");
     }
 
-    @Then(value="^\"([^\"]+)\" \u9019\u500b\u9375\u5728 Kafka \u4e0a\u6709 2 \u7b46\u5167\u5bb9\u76f8\u540c\u7684\u8a0a\u606f\u3001\u91cd\u8907\u4ea4\u7531\u4e0b\u6e38\u53bb\u91cd\u5438\u6536$")
+    @Then(value="^\"([^\"]+)\" 這個鍵在 Kafka 上有 2 筆內容相同的訊息、重複交由下游去重吸收$")
     public void duplicateIdenticalRecordsOnKafka(String idempotencyKey) {
         Long outboxId = (Long)this.ctx.get("outbox:" + idempotencyKey);
         String key = this.aggregateKeyOf(outboxId);
         List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3L));
         List<String> values = records.stream().filter(r -> key.equals(r.key())).map(ConsumerRecord::value).toList();
-        Assertions.assertEquals((int)2, (int)values.size(), (String)"\u91cd\u9001\u524d\u6a21\u64ec\u7684\u90a3\u4e00\u7b46\uff0brelay \u9019\u8f2a\u771f\u6b63\u9001\u7684\u90a3\u4e00\u7b46\uff0c\u5171\u5169\u7b46");
-        Assertions.assertEquals((Object)values.get(0), (Object)values.get(1), (String)"\u5169\u7b46\u5167\u5bb9\u5fc5\u9808\u4e00\u81f4\uff0c\u4e0b\u6e38\u624d\u80fd\u55ae\u9760 (task_id, seq) \u53bb\u91cd");
+        Assertions.assertEquals((int)2, (int)values.size(), (String)"重送前模擬的那一筆＋relay 這輪真正送的那一筆，共兩筆");
+        Assertions.assertEquals((Object)values.get(0), (Object)values.get(1), (String)"兩筆內容必須一致，下游才能單靠 (task_id, seq) 去重");
     }
 
     private String aggregateKeyOf(long outboxId) {
         return (String)this.db.admin().queryForObject("SELECT aggregate_key FROM outbox WHERE id = ?", String.class, new Object[]{outboxId});
     }
 
-    @Then(value="^tasks \u5217\u672a\u88ab\u4efb\u4f55\u6d88\u8cbb\u8005\u6539\u52d5\uff0c\u72c0\u614b\u3001event_seq\u3001updated_at \u5747\u4e0d\u8b8a$")
+    @Then(value="^tasks 列未被任何消費者改動，狀態、event_seq、updated_at 均不變$")
     public void taskRowUntouchedByConsumers() {
         ScenarioContext.TaskSnapshot snapshot = this.ctx.taskSnapshot();
-        Assertions.assertNotNull((Object)snapshot, (String)"Given \u6b65\u9a5f\u8a72\u5148\u53d6\u5feb\u7167");
+        Assertions.assertNotNull((Object)snapshot, (String)"Given 步驟該先取快照");
         UUID id = this.ctx.taskId();
         Map<String, Object> row = this.db.taskRow(id);
-        Assertions.assertEquals((Object)snapshot.state(), (Object)row.get("state"), (String)"state \u4e0d\u8b8a");
-        Assertions.assertEquals((int)snapshot.eventSeq(), (int)((Number)row.get("event_seq")).intValue(), (String)"event_seq \u4e0d\u8b8a");
-        Assertions.assertEquals((Object)snapshot.updatedAt(), (Object)row.get("updated_at"), (String)"updated_at \u4e0d\u8b8a\uff1d\u6c92\u6709\u4efb\u4f55 UPDATE");
-        Assertions.assertEquals((int)snapshot.eventCount(), (int)this.db.eventTypes(id).size(), (String)"\u4e8b\u4ef6\u6578\u4e0d\u8b8a");
+        Assertions.assertEquals((Object)snapshot.state(), (Object)row.get("state"), (String)"state 不變");
+        Assertions.assertEquals((int)snapshot.eventSeq(), (int)((Number)row.get("event_seq")).intValue(), (String)"event_seq 不變");
+        Assertions.assertEquals((Object)snapshot.updatedAt(), (Object)row.get("updated_at"), (String)"updated_at 不變＝沒有任何 UPDATE");
+        Assertions.assertEquals((int)snapshot.eventCount(), (int)this.db.eventTypes(id).size(), (String)"事件數不變");
     }
 
-    @Then(value="^\u8a72\u4efb\u52d9\u7684\u56db\u7b46\u4e8b\u4ef6\u4f9d seq 1 \u5230 4 \u4f9d\u5e8f\u5230\u9054\u3001\u5206\u5340\u9375\u70ba task \u52a0\u4efb\u52d9\u7de8\u865f$")
+    @Then(value="^該任務的四筆事件依 seq 1 到 4 依序到達、分區鍵為 task 加任務編號$")
     public void fourEventsInSeqOrderWithTaskKey() {
         UUID id = this.ctx.taskId();
         String key = "task:" + String.valueOf(id);
         List<ConsumerRecord<String, String>> records = this.ctx.get("records");
-        Assertions.assertNotNull((Object)records, (String)"When \u6b65\u9a5f\u8a72\u5148\u8b80 topic");
+        Assertions.assertNotNull((Object)records, (String)"When 步驟該先讀 topic");
         List<ConsumerRecord<String, String>> mine = records.stream().filter(r -> key.equals(r.key())).toList();
-        Assertions.assertEquals((int)4, (int)mine.size(), (String)"created/claimed/started/completed \u5404\u4e00");
+        Assertions.assertEquals((int)4, (int)mine.size(), (String)"created/claimed/started/completed 各一");
         ArrayList<Integer> seqs = new ArrayList<Integer>();
         for (ConsumerRecord record : mine) {
             JsonNode envelope = this.objectMapper.readTree((String)record.value());
             Assertions.assertEquals((Object)id.toString(), (Object)envelope.get("task_id").asText());
             seqs.add(envelope.get("seq").asInt());
         }
-        Assertions.assertEquals(List.of(Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3), Integer.valueOf(4)), seqs, (String)"\u540c\u9375\u540c\u5206\u5340\uff0c\u6d88\u8cbb\u9806\u5e8f\uff1dseq \u9806\u5e8f");
+        Assertions.assertEquals(List.of(Integer.valueOf(1), Integer.valueOf(2), Integer.valueOf(3), Integer.valueOf(4)), seqs, (String)"同鍵同分區，消費順序＝seq 順序");
         this.ctx.put("myRecords", mine);
     }
 
-    @Then(value="^\u6bcf\u7b46\u4e8b\u4ef6 envelope \u90fd\u5e36 tenant_id$")
+    @Then(value="^每筆事件 envelope 都帶 tenant_id$")
     public void everyEnvelopeCarriesTenantId() {
         List<ConsumerRecord<String, String>> mine = this.ctx.get("myRecords");
-        Assertions.assertNotNull((Object)mine, (String)"\u524d\u4e00\u500b\u65b7\u8a00\u8a72\u5148\u904e\u6ffe\u51fa\u672c\u4efb\u52d9\u7684\u4e8b\u4ef6");
+        Assertions.assertNotNull((Object)mine, (String)"前一個斷言該先過濾出本任務的事件");
         for (ConsumerRecord<String, String> record : mine) {
-            Assertions.assertEquals((long)1L, (long)this.objectMapper.readTree((String)record.value()).get("tenant_id").asLong(), (String)"\u4e8b\u4ef6\u5fc5\u5e36 tenant_id\uff08GR-003\uff09");
+            Assertions.assertEquals((long)1L, (long)this.objectMapper.readTree((String)record.value()).get("tenant_id").asLong(), (String)"事件必帶 tenant_id（GR-003）");
         }
     }
 
-    @Then(value="^\u64cd\u4f5c\u88ab\u8cc7\u6599\u5eab\u6b0a\u9650\u62d2\u7d55$")
+    @Then(value="^操作被資料庫權限拒絕$")
     public void mutationsDeniedByDbGrants() {
-        Assertions.assertEquals((Object)"42501", this.ctx.get("updateState"), (String)"UPDATE \u88ab\u6b0a\u9650\u62d2\u7d55\uff0842501\uff09");
-        Assertions.assertEquals((Object)"42501", this.ctx.get("deleteState"), (String)"DELETE \u88ab\u6b0a\u9650\u62d2\u7d55\uff0842501\uff09");
+        Assertions.assertEquals((Object)"42501", this.ctx.get("updateState"), (String)"UPDATE 被權限拒絕（42501）");
+        Assertions.assertEquals((Object)"42501", this.ctx.get("deleteState"), (String)"DELETE 被權限拒絕（42501）");
     }
 }

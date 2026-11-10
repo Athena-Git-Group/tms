@@ -36,7 +36,7 @@ public class ApiClient {
         String body = this.objectMapper.writeValueAsString(Map.of("tenantId", tenantId, "loginId", loginId, "password", "demo1234"));
         ResponseEntity response = this.rest.exchange(this.url("/auth/login"), HttpMethod.POST, new HttpEntity((Object)body, headers), String.class, new Object[0]);
         if (response.getStatusCode().value() != 200) {
-            throw new IllegalStateException("\u767b\u5165\u5931\u6557\uff08" + loginId + "\uff09: " + response.getStatusCode().value() + " " + (String)response.getBody());
+            throw new IllegalStateException("登入失敗（" + loginId + "）: " + response.getStatusCode().value() + " " + (String)response.getBody());
         }
         return this.objectMapper.readTree((String)response.getBody()).get("token").asText();
     }

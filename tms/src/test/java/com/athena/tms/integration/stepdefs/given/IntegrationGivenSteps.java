@@ -39,61 +39,61 @@ public class IntegrationGivenSteps {
         this.environment = environment;
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u5b58\u5728\u6709\u6548\u6574\u5408\u91d1\u9470\uff0c\u5225\u540d \"([^\"]+)\"$")
+    @Given(value="^租戶 (\\d+) 存在有效整合金鑰，別名 \"([^\"]+)\"$")
     public void activeApiKeyExists(long tenantId, String alias) {
         this.issueKey(tenantId, alias, tenantId, null);
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u5b58\u5728\u6574\u5408\u91d1\u9470\uff0c\u5225\u540d \"([^\"]+)\"\uff0crevoked_at \u70ba \"([^\"]+)\"$")
+    @Given(value="^租戶 (\\d+) 存在整合金鑰，別名 \"([^\"]+)\"，revoked_at 為 \"([^\"]+)\"$")
     public void revokedApiKeyExists(long tenantId, String alias, String revokedAt) {
         this.issueKey(tenantId, alias, tenantId, OffsetDateTime.parse(revokedAt));
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u5b58\u5728\u6709\u6548\u6574\u5408\u91d1\u9470\uff0c\u5225\u540d \"([^\"]+)\"\uff0c\u4f46\u5176\u660e\u6587\u7684\u79df\u6236\u6bb5\u88ab\u6539\u5beb\u70ba (\\d+)$")
+    @Given(value="^租戶 (\\d+) 存在有效整合金鑰，別名 \"([^\"]+)\"，但其明文的租戶段被改寫為 (\\d+)$")
     public void tamperedApiKeyExists(long issuerTenantId, String alias, long claimedTenantId) {
         String tampered = this.issueKey(issuerTenantId, alias, claimedTenantId, null);
         this.ctx.put(TAMPERED_KEY, tampered);
     }
 
-    @Given(value="^\u79df\u6236 1 \u5b58\u5728\u5df2\u767b\u5165\u7684 manager \u54e1\u5de5\uff0c\u5225\u540d \"([^\"]+)\"$")
+    @Given(value="^租戶 1 存在已登入的 manager 員工，別名 \"([^\"]+)\"$")
     public void loggedInManagerExists(String alias) {
         Map<String, String> tokens = this.mapIn(STAFF_TOKENS_KEY);
         tokens.put(alias, this.api.staffToken(1L, "mg1"));
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u7684\u623f \"(\\d+)\" \u5df2\u767c\u751f\u67e5\u623f\u901a\u904e\u4e8b\u4ef6$")
+    @Given(value="^租戶 (\\d+) 的房 \"(\\d+)\" 已發生查房通過事件$")
     public void inspectionPassedHappened(long tenantId, String roomNo) {
         this.insertInspectionEvent(tenantId, roomNo, "inspection_passed", 10);
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u7684\u623f \"(\\d+)\" \u5df2\u767c\u751f\u67e5\u623f\u901a\u904e\u4e8b\u4ef6\uff0c\u767c\u751f\u65bc (\\d+) \u79d2\u524d$")
+    @Given(value="^租戶 (\\d+) 的房 \"(\\d+)\" 已發生查房通過事件，發生於 (\\d+) 秒前$")
     public void inspectionPassedHappenedSecondsAgo(long tenantId, String roomNo, int secondsAgo) {
         this.insertInspectionEvent(tenantId, roomNo, "inspection_passed", secondsAgo);
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u7684\u623f \"(\\d+)\" \u5df2\u767c\u751f\u67e5\u623f\u9000\u56de\u4e8b\u4ef6$")
+    @Given(value="^租戶 (\\d+) 的房 \"(\\d+)\" 已發生查房退回事件$")
     public void inspectionFailedHappened(long tenantId, String roomNo) {
         this.insertInspectionEvent(tenantId, roomNo, "inspection_failed", 10);
     }
 
-    @Given(value="^\u79df\u6236 (\\d+) \u7684\u623f \"(\\d+)\"\u3001\"(\\d+)\"\u3001\"(\\d+)\" \u4f9d\u5e8f\u5404\u767c\u751f\u4e00\u7b46\u67e5\u623f\u901a\u904e\u4e8b\u4ef6$")
+    @Given(value="^租戶 (\\d+) 的房 \"(\\d+)\"、\"(\\d+)\"、\"(\\d+)\" 依序各發生一筆查房通過事件$")
     public void threeInspectionsPassedInOrder(long tenantId, String first, String second, String third) {
         this.insertInspectionEvent(tenantId, first, "inspection_passed", 10);
         this.insertInspectionEvent(tenantId, second, "inspection_passed", 10);
         this.insertInspectionEvent(tenantId, third, "inspection_passed", 10);
     }
 
-    @Given(value="^\u79df\u6236 1 \u7684\u623f \"(\\d+)\" \u5df2\u767c\u751f\u67e5\u623f\u901a\u904e\u4e8b\u4ef6\uff0c\u4e14 PMS \u5df2\u53d6\u5f97\u5176 event_id$")
+    @Given(value="^租戶 1 的房 \"(\\d+)\" 已發生查房通過事件，且 PMS 已取得其 event_id$")
     public void inspectionPassedAndEventIdKnown(String roomNo) {
         this.insertInspectionEvent(1L, roomNo, "inspection_passed", 10);
     }
 
-    @Given(value="^\u65b7\u7dda\u671f\u9593\u79df\u6236 1 \u7684\u623f \"(\\d+)\" \u53c8\u767c\u751f\u4e00\u7b46\u67e5\u623f\u901a\u904e\u4e8b\u4ef6$")
+    @Given(value="^斷線期間租戶 1 的房 \"(\\d+)\" 又發生一筆查房通過事件$")
     public void inspectionPassedWhileDisconnected(String roomNo) {
         this.insertInspectionEvent(1L, roomNo, "inspection_passed", 5);
     }
 
-    @Given(value="^PMS \u4ee5\u5225\u540d \"([^\"]+)\" \u7684\u91d1\u9470\u5efa\u7acb\u6574\u5408 SSE \u9023\u7dda$")
+    @Given(value="^PMS 以別名 \"([^\"]+)\" 的金鑰建立整合 SSE 連線$")
     public void pmsOpensIntegrationStream(String alias) throws Exception {
         this.openIntegrationStream("/integration/pms/stream", this.apiKey(alias));
     }
@@ -114,7 +114,7 @@ public class IntegrationGivenSteps {
         Map<String, String> keys = this.mapIn(KEYS_KEY);
         String plaintext = keys.get(alias);
         if (plaintext == null) {
-            throw new IllegalStateException("\u91d1\u9470\u5225\u540d\u300c" + alias + "\u300d\u6c92\u6709\u767b\u8a18\u2014\u2014Given \u6f0f\u4e86");
+            throw new IllegalStateException("金鑰別名「" + alias + "」沒有登記——Given 漏了");
         }
         return plaintext;
     }
@@ -131,7 +131,7 @@ public class IntegrationGivenSteps {
     public void insertInspectionEvent(long tenantId, String roomNo, String eventType, int secondsAgo) {
         UUID roomId = (UUID)this.db.admin().queryForObject("SELECT id FROM rooms WHERE tenant_id = ? AND room_no = ?", UUID.class, new Object[]{tenantId, roomNo});
         UUID taskId = UUID.randomUUID();
-        this.db.admin().update("INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,\n                   title, created_at, updated_at)\nVALUES (?, ?, 'amenity', 'desk', ?, 'housekeeping', ?, 1, ?, now(), now())\n", new Object[]{taskId, tenantId, roomId, "inspection_passed".equals(eventType) ? "inspected" : "accepted", "\u6574\u5408\u6e2c\u8a66\u4f48\u666f\uff08\u623f " + roomNo + "\uff09"});
+        this.db.admin().update("INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,\n                   title, created_at, updated_at)\nVALUES (?, ?, 'amenity', 'desk', ?, 'housekeeping', ?, 1, ?, now(), now())\n", new Object[]{taskId, tenantId, roomId, "inspection_passed".equals(eventType) ? "inspected" : "accepted", "整合測試佈景（房 " + roomNo + "）"});
         Long eventId = (Long)this.db.admin().queryForObject("INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, payload,\n                         created_at)\nVALUES (?, ?, 1, ?, 'manager', NULL, now() - make_interval(secs => ?))\nRETURNING id\n", Long.class, new Object[]{tenantId, taskId, eventType, (double)secondsAgo});
         this.ctx.taskId(taskId);
         this.listIn(EVENT_IDS_KEY).add(Long.toString(eventId));
@@ -162,7 +162,7 @@ public class IntegrationGivenSteps {
             return HexFormat.of().formatHex(digest.digest(plaintext.getBytes(StandardCharsets.UTF_8)));
         }
         catch (Exception e) {
-            throw new IllegalStateException("SHA-256 \u4e0d\u53ef\u7528", e);
+            throw new IllegalStateException("SHA-256 不可用", e);
         }
     }
 }

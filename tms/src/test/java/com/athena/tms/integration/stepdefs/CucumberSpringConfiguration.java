@@ -58,7 +58,7 @@ public class CucumberSpringConfiguration {
             admin.createTopics(List.of(new NewTopic("tms.task-events", 1, (short)1), new NewTopic("tms.push", 1, (short)1))).all().get();
         }
         catch (Exception e) {
-            throw new IllegalStateException("\u5efa\u7acb Kafka topic \u5931\u6557", e);
+            throw new IllegalStateException("建立 Kafka topic 失敗", e);
         }
     }
 

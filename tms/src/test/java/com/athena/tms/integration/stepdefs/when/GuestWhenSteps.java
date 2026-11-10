@@ -25,33 +25,33 @@ public class GuestWhenSteps {
         this.objectMapper = objectMapper;
     }
 
-    @When(value="^\u4ee5 token \"([^\"]+)\" \u547c\u53eb\u6383\u78bc$")
+    @When(value="^以 token \"([^\"]+)\" 呼叫掃碼$")
     public void scanWithToken(String token) {
         this.scanAndSnapshot(token);
     }
 
-    @When(value="^\u4efb\u4f55\u4eba\u4ee5 token \"([^\"]+)\" \u6383\u78bc$")
+    @When(value="^任何人以 token \"([^\"]+)\" 掃碼$")
     public void anyoneScansToken(String token) {
         this.scanAndSnapshot(token);
     }
 
-    @When(value="^\u4ee5 session \"([^\"]+)\" \u67e5\u8a62\u672c\u6b21\u4f4f\u5bbf\u7684\u9700\u6c42$")
+    @When(value="^以 session \"([^\"]+)\" 查詢本次住宿的需求$")
     public void listRequestsWithSession(String sessionSymbol) {
         this.ctx.lastResponse(this.api.get("/guest/requests", this.ctx.guestSession(sessionSymbol)));
     }
 
-    @When(value="^\u65b0\u4f4f\u5ba2\u4ee5 session \"([^\"]+)\" \u67e5\u8a62\u672c\u6b21\u4f4f\u5bbf\u7684\u9700\u6c42$")
+    @When(value="^新住客以 session \"([^\"]+)\" 查詢本次住宿的需求$")
     public void newGuestListsRequests(String sessionSymbol) {
         this.listRequestsWithSession(sessionSymbol);
     }
 
-    @When(value="^\u4ee5 session \"([^\"]+)\" \u8b80\u53d6\u8cc7\u8a0a\u9801$")
+    @When(value="^以 session \"([^\"]+)\" 讀取資訊頁$")
     public void readInfoPages(String sessionSymbol) {
         this.ctx.put("tasksBeforeHome", this.db.countAll("tasks"));
         this.ctx.lastResponse(this.api.get("/guest/home", this.ctx.guestSession(sessionSymbol)));
     }
 
-    @When(value="^\u4f4f\u5ba2\u4ee5 session \"([^\"]+)\" \u7528\u81ea\u7531\u6587\u5b57\u300c([^\u300d]+)\u300d\u9001\u51fa\u9700\u6c42$")
+    @When(value="^住客以 session \"([^\"]+)\" 用自由文字「([^」]+)」送出需求$")
     public void createFreeTextRequest(String sessionSymbol, String text) {
         this.ctx.put("freeText", text);
         ScenarioContext.HttpResult created = this.guest.createRequest(this.ctx.guestSession(sessionSymbol), Map.of("text", text, "lang", "zh-TW"));
@@ -59,9 +59,9 @@ public class GuestWhenSteps {
         this.rememberTaskIdIfCreated(created);
     }
 
-    @When(value="^\u4f4f\u5ba2\u4ee5 session \"([^\"]+)\" \u9001\u51fa (\u9078\u55ae\u9805|\u81ea\u7531\u6587\u5b57)\u300c([^\u300d]+)\u300d$")
+    @When(value="^住客以 session \"([^\"]+)\" 送出 (選單項|自由文字)「([^」]+)」$")
     public void createRequestFromOutline(String sessionSymbol, String kind, String content) {
-        if ("\u9078\u55ae\u9805".equals(kind)) {
+        if ("選單項".equals(kind)) {
             ScenarioContext.HttpResult created = this.guest.createRequest(this.ctx.guestSession(sessionSymbol), Map.of("itemId", GuestFixtures.menuKeyOf(content)));
             this.ctx.lastResponse(created);
             this.rememberTaskIdIfCreated(created);
@@ -70,31 +70,31 @@ public class GuestWhenSteps {
         }
     }
 
-    @When(value="^\u518d\u4ee5 session \"([^\"]+)\" \u9001\u51fa\u7b2c 4 \u7b46\u9700\u6c42$")
+    @When(value="^再以 session \"([^\"]+)\" 送出第 4 筆需求$")
     public void createFourthRequest(String sessionSymbol) {
         this.ctx.lastResponse(this.guest.createRequest(this.ctx.guestSession(sessionSymbol), Map.of("itemId", "towel")));
     }
 
-    @When(value="^\u4f4f\u5ba2\u4ee5 session \"([^\"]+)\" \u5c0d\u4efb\u52d9 \"([^\"]+)\" \u547c\u53eb\u6536\u56de$")
+    @When(value="^住客以 session \"([^\"]+)\" 對任務 \"([^\"]+)\" 呼叫收回$")
     public void cancelTask(String sessionSymbol, String taskSymbol) {
         UUID taskId = this.ctx.entityId(taskSymbol);
         this.ctx.taskId(taskId);
         this.ctx.lastResponse(this.guest.cancelRequest(this.ctx.guestSession(sessionSymbol), taskId));
     }
 
-    @When(value="^\u4f4f\u5ba2\u4ee5 session \"([^\"]+)\" \u5c0d\u4efb\u52d9 \"([^\"]+)\" \u8a55 (\\d+) \u661f$")
+    @When(value="^住客以 session \"([^\"]+)\" 對任務 \"([^\"]+)\" 評 (\\d+) 星$")
     public void rateTask(String sessionSymbol, String taskSymbol, int rating) {
         UUID taskId = this.ctx.entityId(taskSymbol);
         this.ctx.taskId(taskId);
         this.ctx.lastResponse(this.guest.createRating(this.ctx.guestSession(sessionSymbol), taskId, rating));
     }
 
-    @When(value="^\u8a72 IP \u4ee5 token \"([^\"]+)\" \u518d\u6b21\u6383\u78bc$")
+    @When(value="^該 IP 以 token \"([^\"]+)\" 再次掃碼$")
     public void blockedIpScansAgain(String token) {
         this.ctx.lastResponse(this.guest.scan(token, (String)this.ctx.get("attackerIp")));
     }
 
-    @When(value="^\u8a72 IP \u518d\u4ee5\u4e0d\u5b58\u5728\u7684 token \u6383\u78bc$")
+    @When(value="^該 IP 再以不存在的 token 掃碼$")
     public void blockedIpScansUnknownToken() {
         this.ctx.lastResponse(this.guest.scan("NoSuchTokenAnywhere999", (String)this.ctx.get("attackerIp")));
     }

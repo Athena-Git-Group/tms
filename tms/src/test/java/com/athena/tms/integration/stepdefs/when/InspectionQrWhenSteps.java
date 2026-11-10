@@ -29,13 +29,13 @@ public class InspectionQrWhenSteps {
         this.fixtures = fixtures;
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u5c0d\u4efb\u52d9 \"([^\"]+)\" \u9001\u51fa\u5168\u904e\u7684\u67e5\u623f$")
+    @When(value="^王主管對任務 \"([^\"]+)\" 送出全過的查房$")
     public void managerSubmitsAllPassInspection(String taskSymbol) {
         this.ctx.taskId(this.ctx.entityId(taskSymbol));
         this.ctx.lastResponse(this.inspect(this.ctx.taskId(), this.judgeFailing(new String[0])));
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u5c0d\u4efb\u52d9 \"([^\"]+)\" \u53ea\u9001\u51fa ([a-z_]+)\u3001([a-z_]+) \u5169\u9805\u5224\u5b9a$")
+    @When(value="^王主管對任務 \"([^\"]+)\" 只送出 ([a-z_]+)、([a-z_]+) 兩項判定$")
     public void managerSubmitsSubset(String taskSymbol, String first, String second) {
         this.ctx.taskId(this.ctx.entityId(taskSymbol));
         LinkedHashMap<String, Boolean> judgements = new LinkedHashMap<String, Boolean>();
@@ -44,7 +44,7 @@ public class InspectionQrWhenSteps {
         this.ctx.lastResponse(this.inspect(this.ctx.taskId(), this.judgement(judgements)));
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u5c0d\u4efb\u52d9 \"([^\"]+)\" \u9001\u51fa\u5168\u904e\u7684\u67e5\u623f\uff0c\u4f46\u593e\u5e36\u6e05\u55ae\u5916\u7684\u9805\u76ee \"([a-z_]+)\"$")
+    @When(value="^王主管對任務 \"([^\"]+)\" 送出全過的查房，但夾帶清單外的項目 \"([a-z_]+)\"$")
     public void managerSubmitsUnknownKey(String taskSymbol, String unknownKey) {
         this.ctx.taskId(this.ctx.entityId(taskSymbol));
         LinkedHashMap<String, Boolean> judgements = new LinkedHashMap<String, Boolean>();
@@ -53,12 +53,12 @@ public class InspectionQrWhenSteps {
         this.ctx.lastResponse(this.inspect(this.ctx.taskId(), this.judgement(judgements)));
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u5224\u5b9a ([a-z_]+) \u4e0d\u904e\u3001\u5176\u9918\u5168\u904e$")
+    @When(value="^王主管判定 ([a-z_]+) 不過、其餘全過$")
     public void managerFailsOneItem(String failKey) {
         this.ctx.lastResponse(this.inspect(this.ctx.taskId(), this.judgeFailing(failKey)));
     }
 
-    @When(value="^\u539f\u6e05\u623f\u8005\u91cd\u6383\u91cd\u4ea4\u3001\u738b\u4e3b\u7ba1\u518d\u9001\u51fa\u5168\u904e\u7684\u67e5\u623f$")
+    @When(value="^原清房者重掃重交、王主管再送出全過的查房$")
     public void cleanerRedoesThenReinspectionPasses() {
         Actor cleaner = (Actor)this.ctx.get("cleanerActor");
         Tenants.runAsTenant(1L, () -> {
@@ -66,22 +66,22 @@ public class InspectionQrWhenSteps {
             this.fixtures.engine().complete(1L, this.ctx.taskId(), cleaner);
         });
         ScenarioContext.HttpResult reinspected = this.inspect(this.ctx.taskId(), this.judgeFailing(new String[0]));
-        Assertions.assertEquals((int)200, (int)reinspected.status(), (String)("\u91cd\u67e5\u8a72\u6210\u529f: " + reinspected.body()));
+        Assertions.assertEquals((int)200, (int)reinspected.status(), (String)("重查該成功: " + reinspected.body()));
         this.ctx.lastResponse(reinspected);
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u5217\u5370\u623f (\\d+) \u7684 QR$")
+    @When(value="^王主管列印房 (\\d+) 的 QR$")
     public void managerPrintsRoomQr(String roomNo) {
         ScenarioContext.HttpResult print = this.api.get("/admin/rooms/" + roomNo + "/qr", this.managerToken());
         this.ctx.put("printBody", print.body());
         this.ctx.lastResponse(print);
     }
 
-    @When(value="^\u76f4\u63a5\u70ba\u623f 502 \u63d2\u5165\u7b2c\u4e8c\u679a active token$")
+    @When(value="^直接為房 502 插入第二枚 active token$")
     public void insertSecondActiveTokenForRoom502() {
         try {
             this.db.admin().update("INSERT INTO room_qr_tokens (id, tenant_id, room_id, token, version, status, created_at) VALUES (?, 1, ?, 'DupActiveProbe0000000AA', 99, 'active', now())", new Object[]{UUID.randomUUID(), this.ctx.entityId("r-502")});
-            Assertions.fail((String)"\u540c\u623f\u7b2c\u4e8c\u679a active \u8a72\u88ab partial unique \u64cb\u4e0b");
+            Assertions.fail((String)"同房第二枚 active 該被 partial unique 擋下");
         }
         catch (DataAccessException expected) {
             Throwable cause = expected.getMostSpecificCause();
@@ -89,11 +89,11 @@ public class InspectionQrWhenSteps {
                 SQLException sqlException = (SQLException)cause;
                 this.ctx.put("sqlState", sqlException.getSQLState());
             }
-            Assertions.fail((String)("\u8a72\u662f SQLException \u6839\u56e0: " + String.valueOf(cause)));
+            Assertions.fail((String)("該是 SQLException 根因: " + String.valueOf(cause)));
         }
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u5c0d\u623f (\\d+) \u57f7\u884c\u300c\u91cd\u7522\u6b64\u623f QR\u300d$")
+    @When(value="^王主管對房 (\\d+) 執行「重產此房 QR」$")
     public void managerRotatesRoomQr(String roomNo) {
         Map active = this.db.admin().queryForMap("SELECT token, version FROM room_qr_tokens q JOIN rooms r ON r.id = q.room_id WHERE r.tenant_id = 1 AND r.room_no = ? AND q.status = 'active'", new Object[]{roomNo});
         this.ctx.put("oldQrToken", active.get("token"));
@@ -119,7 +119,7 @@ public class InspectionQrWhenSteps {
     private List<String> inspectionKeys() {
         List keys = (List)this.ctx.get("inspectionKeys");
         if (keys == null) {
-            throw new IllegalStateException("\u67e5\u623f\u9805\u76ee\u5168\u96c6\u5c1a\u672a\u5c31\u7dd2\u2014\u2014\u80cc\u666f\u7684 SOP\u9805\u76ee \u8868\u683c\u6f0f\u4e86");
+            throw new IllegalStateException("查房項目全集尚未就緒——背景的 SOP項目 表格漏了");
         }
         return keys;
     }
@@ -130,6 +130,6 @@ public class InspectionQrWhenSteps {
     }
 
     private String managerToken() {
-        return this.api.staffToken(1L, this.ctx.staffLogin("\u738b\u4e3b\u7ba1"));
+        return this.api.staffToken(1L, this.ctx.staffLogin("王主管"));
     }
 }

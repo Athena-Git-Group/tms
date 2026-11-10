@@ -29,7 +29,7 @@ public class StreamGivenSteps {
         this.kafkaListenerEndpointRegistry = kafkaListenerEndpointRegistry;
     }
 
-    @Given(value="^\u4f4f\u5ba2 (A|B) \u4ee5 session \"([^\"]+)\" \u958b\u555f\u4f4f\u5ba2\u4e8b\u4ef6\u4e32\u6d41$")
+    @Given(value="^住客 (A|B) 以 session \"([^\"]+)\" 開啟住客事件串流$")
     public void guestOpensStream(String label, String sessionSymbol) throws Exception {
         this.waitForListenerAssignment();
         String session = this.ctx.guestSession(sessionSymbol);
@@ -40,7 +40,7 @@ public class StreamGivenSteps {
         this.ctx.put("reservation:" + label, reservationId);
     }
 
-    @Given(value="^(?:\u623f\u52d9|\u5de5\u52d9)\u300c(\u5c0f\u7f8e|\u963f\u5f37)\u300d\u958b\u555f\u54e1\u5de5\u4e8b\u4ef6\u4e32\u6d41$")
+    @Given(value="^(?:房務|工務)「(小美|阿強)」開啟員工事件串流$")
     public void staffOpensStream(String name) throws Exception {
         this.waitForListenerAssignment();
         SseSupport.SseStreamClient client = this.sse.open("/staff/stream", this.api.staffToken(1L, this.ctx.staffLogin(name)));
@@ -50,8 +50,8 @@ public class StreamGivenSteps {
 
     private void waitForListenerAssignment() {
         MessageListenerContainer container = this.kafkaListenerEndpointRegistry.getListenerContainer("sse-task-events");
-        Assertions.assertNotNull((Object)container, (String)"sse listener \u5bb9\u5668\u61c9\u5df2\u8a3b\u518a");
-        Awaits.waitUntil(Duration.ofSeconds(30L), "sse consumer \u5206\u5230\u5206\u5340", () -> container.getAssignedPartitions() != null && !container.getAssignedPartitions().isEmpty());
+        Assertions.assertNotNull((Object)container, (String)"sse listener 容器應已註冊");
+        Awaits.waitUntil(Duration.ofSeconds(30L), "sse consumer 分到分區", () -> container.getAssignedPartitions() != null && !container.getAssignedPartitions().isEmpty());
     }
 
     private void register(SseSupport.SseStreamClient client) {

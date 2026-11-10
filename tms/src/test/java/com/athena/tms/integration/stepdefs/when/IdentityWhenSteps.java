@@ -18,7 +18,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 
 public class IdentityWhenSteps {
-    private static final Map<String, String> ROLE_NAMES = Map.of("\u623f\u52d9", "\u5c0f\u7f8e", "\u5de5\u52d9", "\u963f\u5f37", "\u6ac3\u6aaf", "\u6797\u6ac3\u6aaf", "\u4e3b\u7ba1", "\u738b\u4e3b\u7ba1", "\u8001\u95c6", "\u5f35\u8001\u95c6");
+    private static final Map<String, String> ROLE_NAMES = Map.of("房務", "小美", "工務", "阿強", "櫃檯", "林櫃檯", "主管", "王主管", "老闆", "張老闆");
     private final ScenarioContext ctx;
     private final ApiClient api;
 
@@ -27,38 +27,38 @@ public class IdentityWhenSteps {
         this.api = api;
     }
 
-    @When(value="^\u300c\u5c0f\u7f8e\u300d\u4ee5\u6b63\u78ba\u5e33\u5bc6\u81ea\u540c\u4e00\u53f0\u624b\u6a5f\u767b\u5165\u5169\u6b21$")
+    @When(value="^「小美」以正確帳密自同一台手機登入兩次$")
     public void xiaomeiLogsInTwiceFromSameDevice() {
         String fingerprint = "bdd-iphone-" + String.valueOf(UUID.randomUUID());
-        ScenarioContext.HttpResult first = this.api.loginRaw(1L, this.ctx.staffLogin("\u5c0f\u7f8e"), "demo1234", fingerprint, "apns-token-1");
-        Assertions.assertEquals((int)200, (int)first.status(), (String)("\u7b2c\u4e00\u6b21\u767b\u5165\u8a72\u6210\u529f: " + first.body()));
-        ScenarioContext.HttpResult second = this.api.loginRaw(1L, this.ctx.staffLogin("\u5c0f\u7f8e"), "demo1234", fingerprint, "apns-token-2");
+        ScenarioContext.HttpResult first = this.api.loginRaw(1L, this.ctx.staffLogin("小美"), "demo1234", fingerprint, "apns-token-1");
+        Assertions.assertEquals((int)200, (int)first.status(), (String)("第一次登入該成功: " + first.body()));
+        ScenarioContext.HttpResult second = this.api.loginRaw(1L, this.ctx.staffLogin("小美"), "demo1234", fingerprint, "apns-token-2");
         this.ctx.put("fingerprint", fingerprint);
         this.ctx.lastResponse(second);
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u4ee5\u6b63\u78ba\u5e33\u5bc6\u767b\u5165$")
+    @When(value="^王主管以正確帳密登入$")
     public void managerLogsIn() {
-        this.ctx.lastResponse(this.api.loginRaw(1L, this.ctx.staffLogin("\u738b\u4e3b\u7ba1"), "demo1234", null, null));
+        this.ctx.lastResponse(this.api.loginRaw(1L, this.ctx.staffLogin("王主管"), "demo1234", null, null));
     }
 
-    @When(value="^\u4ee5 login_id \"hk1\" \u8207\u932f\u8aa4\u5bc6\u78bc\u767b\u5165$")
+    @When(value="^以 login_id \"hk1\" 與錯誤密碼登入$")
     public void loginWithWrongPassword() {
         this.ctx.lastResponse(this.api.loginRaw(1L, "hk1", "wrong-password", null, null));
     }
 
-    @When(value="^\u5206\u5225\u4ee5 \u932f\u8aa4\u5bc6\u78bc\u3001\u4e0d\u5b58\u5728\u7684\u5e33\u865f\u3001\u4e0d\u5b58\u5728\u7684\u79df\u6236 \u767b\u5165$")
+    @When(value="^分別以 錯誤密碼、不存在的帳號、不存在的租戶 登入$")
     public void threeIndistinguishableLoginFailures() {
         this.ctx.put("loginAttempts", List.of(this.api.loginRaw(1L, "hk1", "wrong-password", null, null), this.api.loginRaw(1L, "no-such-user", "demo1234", null, null), this.api.loginRaw(99L, "hk1", "demo1234", null, null)));
     }
 
-    @When(value="^\u4ed6\u767b\u5165\u4e26\u4ee5\u820a\u6191\u8b49\u547c\u53eb\u54e1\u5de5 API$")
+    @When(value="^他登入並以舊憑證呼叫員工 API$")
     public void deactivatedLoginAndOldTokenCall() {
-        this.ctx.put("reloginResult", this.api.loginRaw(1L, this.ctx.staffLogin("\u963f\u5f37"), "demo1234", null, null));
+        this.ctx.put("reloginResult", this.api.loginRaw(1L, this.ctx.staffLogin("阿強"), "demo1234", null, null));
         this.ctx.put("oldTokenResult", this.api.get("/staff/probe", (String)this.ctx.get("oldToken")));
     }
 
-    @When(value="^\u5206\u5225\u4ee5 \u7121\u6191\u8b49\u3001\u5783\u573e\u5b57\u4e32\u3001\u507d\u9020\u7c3d\u7ae0\u7684 JWT \u547c\u53eb\u54e1\u5de5 API$")
+    @When(value="^分別以 無憑證、垃圾字串、偽造簽章的 JWT 呼叫員工 API$")
     public void anonymousGarbageAndForgedCalls() throws Exception {
         MACSigner forger = new MACSigner("attacker-secret-attacker-secret-attacker!".getBytes());
         SignedJWT forged = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), new JWTClaimsSet.Builder().claim("tenant_id", (Object)1L).claim("staff_id", (Object)TestData.STAFF_MG1.toString()).claim("role", (Object)"manager").expirationTime(new Date(System.currentTimeMillis() + 3600000L)).build());
@@ -66,56 +66,56 @@ public class IdentityWhenSteps {
         this.ctx.put("credentialAttempts", List.of(this.api.get("/staff/probe", null), this.api.get("/staff/probe", "not-a-jwt-at-all"), this.api.get("/staff/probe", forged.serialize())));
     }
 
-    @When(value="^(\u623f\u52d9 \u5c0f\u7f8e|\u8001\u95c6\u5e33\u865f|\u6ac3\u6aaf) \u547c\u53eb (\u4e3b\u7ba1\u67e5\u623f\u63d0\u4ea4|\u4efb\u52d9\u8a8d\u9818|\u623f\u9593 QR \u8f2a\u66ff)$")
+    @When(value="^(房務 小美|老闆帳號|櫃檯) 呼叫 (主管查房提交|任務認領|房間 QR 輪替)$")
     public void semanticOverreach(String actor, String action) {
         String loginId = switch (actor) {
-            case "\u623f\u52d9 \u5c0f\u7f8e" -> this.ctx.staffLogin("\u5c0f\u7f8e");
-            case "\u8001\u95c6\u5e33\u865f" -> this.ctx.staffLogin("\u5f35\u8001\u95c6");
-            default -> this.ctx.staffLogin("\u6797\u6ac3\u6aaf");
+            case "房務 小美" -> this.ctx.staffLogin("小美");
+            case "老闆帳號" -> this.ctx.staffLogin("張老闆");
+            default -> this.ctx.staffLogin("林櫃檯");
         };
         String path = switch (action) {
-            case "\u4e3b\u7ba1\u67e5\u623f\u63d0\u4ea4" -> "/admin/inspections/" + String.valueOf(UUID.randomUUID());
-            case "\u4efb\u52d9\u8a8d\u9818" -> "/staff/tasks/" + String.valueOf(UUID.randomUUID()) + "/claim";
+            case "主管查房提交" -> "/admin/inspections/" + String.valueOf(UUID.randomUUID());
+            case "任務認領" -> "/staff/tasks/" + String.valueOf(UUID.randomUUID()) + "/claim";
             default -> "/admin/rooms/305/qr/rotate";
         };
         this.ctx.lastResponse(this.api.post(path, this.api.staffToken(1L, loginId), null));
     }
 
-    @When(value="^\u8001\u95c6\u5e33\u865f\u8b80\u53d6\u5100\u8868\u677f$")
+    @When(value="^老闆帳號讀取儀表板$")
     public void ownerReadsDashboard() {
-        this.ctx.lastResponse(this.api.get("/owner/probe", this.api.staffToken(1L, this.ctx.staffLogin("\u5f35\u8001\u95c6"))));
+        this.ctx.lastResponse(this.api.get("/owner/probe", this.api.staffToken(1L, this.ctx.staffLogin("張老闆"))));
     }
 
-    @When(value="^(\u623f\u52d9|\u5de5\u52d9|\u6ac3\u6aaf|\u4e3b\u7ba1|\u8001\u95c6) \u4ee5 (GET|POST) \u547c\u53eb (\\S+)$")
+    @When(value="^(房務|工務|櫃檯|主管|老闆) 以 (GET|POST) 呼叫 (\\S+)$")
     public void roleCallsPrefixCell(String role, String method, String path) {
         String token = this.api.staffToken(1L, this.ctx.staffLogin(ROLE_NAMES.get(role)));
         this.ctx.lastResponse("GET".equals(method) ? this.api.get(path, token) : this.api.post(path, token, null));
     }
 
-    @When(value="^\u4ee5 session \"([^\"]+)\" \u8b80\u53d6\u4f4f\u5ba2\u4e0a\u4e0b\u6587$")
+    @When(value="^以 session \"([^\"]+)\" 讀取住客上下文$")
     public void readGuestContextWithSession(String sessionSymbol) {
         String token = this.ctx.guestSession(sessionSymbol);
         this.ctx.put("sessionToken", token);
         this.ctx.lastResponse(this.api.get("/guest/context", token));
     }
 
-    @When(value="^\u4ee5\u4e00\u679a\u683c\u5f0f\u6b63\u78ba\u4f46\u8cc7\u6599\u5eab\u67e5\u7121\u6b64\u5217\u7684 session token \u547c\u53eb\u4f4f\u5ba2 API$")
+    @When(value="^以一枚格式正確但資料庫查無此列的 session token 呼叫住客 API$")
     public void wellFormedButAbsentSession() {
         this.ctx.lastResponse(this.api.get("/guest/context", GuestSessionTokens.issue((long)1L)));
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u4ee5\u81ea\u5bb6\u623f\u9593 \"([^\"]+)\" \u7684 id \u67e5\u8a62\u623f\u9593$")
+    @When(value="^王主管以自家房間 \"([^\"]+)\" 的 id 查詢房間$")
     public void managerReadsOwnRoom(String roomSymbol) {
-        this.ctx.lastResponse(this.api.get("/staff/rooms/" + String.valueOf(this.ctx.entityId(roomSymbol)), this.api.staffToken(1L, this.ctx.staffLogin("\u738b\u4e3b\u7ba1"))));
+        this.ctx.lastResponse(this.api.get("/staff/rooms/" + String.valueOf(this.ctx.entityId(roomSymbol)), this.api.staffToken(1L, this.ctx.staffLogin("王主管"))));
     }
 
-    @When(value="^\u738b\u4e3b\u7ba1\u4ee5\u79df\u6236 2 \u623f\u9593 \"([^\"]+)\" \u7684 id \u67e5\u8a62\u623f\u9593$")
+    @When(value="^王主管以租戶 2 房間 \"([^\"]+)\" 的 id 查詢房間$")
     public void managerReadsOtherTenantsRoom(String roomSymbol) {
-        this.ctx.lastResponse(this.api.get("/staff/rooms/" + String.valueOf(this.ctx.entityId(roomSymbol)), this.api.staffToken(1L, this.ctx.staffLogin("\u738b\u4e3b\u7ba1"))));
+        this.ctx.lastResponse(this.api.get("/staff/rooms/" + String.valueOf(this.ctx.entityId(roomSymbol)), this.api.staffToken(1L, this.ctx.staffLogin("王主管"))));
     }
 
-    @When(value="^\u79df\u6236 2 \u7684\u5c0f\u82b3\u4ee5\u79df\u6236 1 \u623f\u9593 \"([^\"]+)\" \u7684 id \u67e5\u8a62\u623f\u9593$")
+    @When(value="^租戶 2 的小芳以租戶 1 房間 \"([^\"]+)\" 的 id 查詢房間$")
     public void tenant2StaffReadsTenant1Room(String roomSymbol) {
-        this.ctx.lastResponse(this.api.get("/staff/rooms/" + String.valueOf(this.ctx.entityId(roomSymbol)), this.api.staffToken(2L, this.ctx.staffLogin("\u5c0f\u82b3"))));
+        this.ctx.lastResponse(this.api.get("/staff/rooms/" + String.valueOf(this.ctx.entityId(roomSymbol)), this.api.staffToken(2L, this.ctx.staffLogin("小芳"))));
     }
 }

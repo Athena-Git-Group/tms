@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class GuestFixtures {
-    private static final Map<String, String> MENU_KEYS_BY_LABEL = Map.of("\u52a0\u6bdb\u5dfe", "towel", "\u7926\u6cc9\u6c34", "water", "\u7259\u5237\u7d44", "toothbrush", "\u6e05\u6f54\u670d\u52d9", "cleaning");
+    private static final Map<String, String> MENU_KEYS_BY_LABEL = Map.of("加毛巾", "towel", "礦泉水", "water", "牙刷組", "toothbrush", "清潔服務", "cleaning");
     private final ApiClient api;
 
     public GuestFixtures(ApiClient api) {
@@ -16,7 +16,7 @@ public class GuestFixtures {
     public static String menuKeyOf(String label) {
         String key = MENU_KEYS_BY_LABEL.get(label);
         if (key == null) {
-            throw new IllegalArgumentException("\u6e2c\u8a66\u8cc7\u6599\u88e1\u6c92\u6709\u300c" + label + "\u300d");
+            throw new IllegalArgumentException("測試資料裡沒有「" + label + "」");
         }
         return key;
     }

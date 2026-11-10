@@ -16,10 +16,10 @@ public final class Awaits {
             }
             catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                Assertions.fail((String)("\u7b49\u5f85\u88ab\u4e2d\u65b7: " + what));
+                Assertions.fail((String)("等待被中斷: " + what));
             }
         }
-        Assertions.fail((String)("\u7b49\u5f85\u903e\u6642\uff08" + timeout.toSeconds() + "s\uff09: " + what));
+        Assertions.fail((String)("等待逾時（" + timeout.toSeconds() + "s）: " + what));
     }
 
     private Awaits() {

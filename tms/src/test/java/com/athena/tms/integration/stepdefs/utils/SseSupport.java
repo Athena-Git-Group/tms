@@ -61,7 +61,7 @@ public class SseSupport {
         SseStreamClient(int port, String path, String bearerToken) throws Exception {
             HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).header("Authorization", "Bearer " + bearerToken).header("Accept", "text/event-stream").GET().build();
             HttpResponse<Stream<String>> response = HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofLines()).get(10L, TimeUnit.SECONDS);
-            Assertions.assertEquals((int)200, (int)response.statusCode(), (String)("SSE \u7aef\u9ede\u61c9\u4ee5 200 \u958b\u6d41\uff08" + path + "\uff09"));
+            Assertions.assertEquals((int)200, (int)response.statusCode(), (String)("SSE 端點應以 200 開流（" + path + "）"));
             this.body = response.body();
             this.reader = new Thread(this::readLoop, "sse-bdd-reader");
             this.reader.setDaemon(true);
@@ -107,7 +107,7 @@ public class SseSupport {
             do {
                 this.failIfReaderDied();
                 if ((remaining = deadline - System.nanoTime()) > 0L) continue;
-                Assertions.fail((String)("\u7b49\u4e0d\u5230 SSE \u4e8b\u4ef6 '" + name + "'\uff1b\u5df2\u6536\u5230: " + this.summary()));
+                Assertions.fail((String)("等不到 SSE 事件 '" + name + "'；已收到: " + this.summary()));
             } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !event.name().equals(name));
             return event.data();
         }
@@ -119,7 +119,7 @@ public class SseSupport {
             do {
                 this.failIfReaderDied();
                 if ((remaining = deadline - System.nanoTime()) > 0L) continue;
-                Assertions.fail((String)("\u7b49\u4e0d\u5230\u4efb\u52d9 " + String.valueOf(taskId) + " \u7684 '" + type + "' \u4e8b\u4ef6\uff1b\u5df2\u6536\u5230: " + this.summary()));
+                Assertions.fail((String)("等不到任務 " + String.valueOf(taskId) + " 的 '" + type + "' 事件；已收到: " + this.summary()));
             } while ((event = this.pending.poll(remaining, TimeUnit.NANOSECONDS)) == null || !event.name().equals("task") || !taskId.toString().equals(event.data().get("task_id").asText()) || !type.equals(event.data().get("type").asText()));
             return event.data();
         }
@@ -136,7 +136,7 @@ public class SseSupport {
 
         public JsonNode resyncData() {
             this.failIfReaderDied();
-            return this.everything.stream().filter(e -> e.name().equals("resync")).map(Event::data).findFirst().orElseThrow(() -> new IllegalStateException("\u9019\u689d\u9023\u7dda\u9084\u6c92\u6536\u5230 resync\uff1a" + this.summary()));
+            return this.everything.stream().filter(e -> e.name().equals("resync")).map(Event::data).findFirst().orElseThrow(() -> new IllegalStateException("這條連線還沒收到 resync：" + this.summary()));
         }
 
         /** 讀取執行緒因例外中止（不是測試主動關流）時，讓接下來讀流的斷言直接失敗並帶出原因。 */
