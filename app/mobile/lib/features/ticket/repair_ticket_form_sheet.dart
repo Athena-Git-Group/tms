@@ -5,6 +5,7 @@ import '../../core/connection_status.dart';
 import '../../core/repair_photo_capture.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_cell.dart';
@@ -219,6 +220,8 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
             ? null
             : ApiClient.instance.session?.staffId,
       );
+      // 不管這張新單指派給誰，首頁的手上張數與我的任務都可能跟著變。
+      TodayRefresh.instance.request();
       if (mounted) {
         Navigator.of(context).pop(ticket);
       }

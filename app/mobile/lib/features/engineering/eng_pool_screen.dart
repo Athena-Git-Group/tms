@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
+import '../../core/today_refresh.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_category_square.dart';
@@ -119,6 +120,8 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
   Future<void> _claim(PoolItem item) async {
     try {
       await ApiClient.instance.claimTask(item.taskId);
+      // 接到的單立刻就是首頁「我的任務」的一列，首頁那一份今日進度因此變舊了。
+      TodayRefresh.instance.request();
       await _fetch();
     } on ApiException catch (e) {
       // 撞單（409）：這張單已被別人接走。先重取列表讓它從待認領消失，

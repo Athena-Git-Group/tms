@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/repair_photo_capture.dart';
 import '../../core/tms_semantics.dart';
+import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_viewer.dart';
@@ -134,6 +135,8 @@ class _TicketScreenState extends State<TicketScreen> {
       if (mounted) {
         setState(() => _ticket = ticket);
       }
+      // 這張單的狀態變了，首頁那一份今日進度（手上張數、我的任務）因此變舊了。
+      TodayRefresh.instance.request();
     } on ApiException catch (e) {
       _showError(e.errorMessage ?? failureMessage);
     } catch (_) {
@@ -158,6 +161,8 @@ class _TicketScreenState extends State<TicketScreen> {
       _showError(failureMessage);
       return;
     }
+    // 這張單的狀態變了，首頁那一份今日進度因此變舊了。
+    TodayRefresh.instance.request();
     await _load();
   }
 
@@ -202,6 +207,8 @@ class _TicketScreenState extends State<TicketScreen> {
       setState(() {
         _resolutionLabel = submitted;
       });
+      // 完修的單從首頁的進行中變成已完修、已完修張數也要加一。
+      TodayRefresh.instance.request();
       await _load();
     }
   }
