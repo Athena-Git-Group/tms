@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 13 起顯示通知要先取得這個權限；firebase_messaging 的 requestPermission() 會跳系統對話框。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="tms_staff_app"
         android:name="${applicationName}"

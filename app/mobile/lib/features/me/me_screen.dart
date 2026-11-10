@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/navigation.dart';
+import '../../core/push_token_service.dart';
 import '../../core/system_status.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
@@ -179,8 +180,14 @@ class MeScreen extends StatelessWidget {
             label: '登出',
             id: 'me.logout-confirm-alert.confirm-button',
             style: TmsAlertActionStyle.destructive,
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(dialogContext).pop();
+              // 趁憑證還在先把這支手機的推播 token 從帳號名下撤掉，下一位
+              // 用這支手機的同事才不會收到前一位的派單。撤不掉也照樣登出。
+              await PushTokenService.instance?.stop();
+              if (!context.mounted) {
+                return;
+              }
               // 丟掉本機憑證，回登入畫面（replaceAllRoutes 清掉返回堆疊，
               // 登出後滑不回「我的」）。
               ApiClient.instance = ApiClient();

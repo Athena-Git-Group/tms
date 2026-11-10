@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Firebase 設定檔（含金鑰）不進版控，放法見 ios/Runner/README-firebase.md 與 android/app/README-firebase.md
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json

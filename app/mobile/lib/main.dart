@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/semantics.dart';
 
+import 'core/firebase_push_messaging.dart';
 import 'core/push_gateway.dart';
 import 'core/test_backdoor.dart';
 import 'core/theme.dart';
@@ -17,6 +18,10 @@ Future<void> main() async {
   SemanticsBinding.instance.ensureSemantics();
 
   await TestBackdoor.maybeStart();
+
+  // 只組裝、不初始化 Firebase：token 要掛在登入者名下，所以初始化留到第一次
+  // 登入成功才做（見 PushTokenService）。
+  installFirebasePushTokenService();
 
   runApp(const TmsStaffApp());
 }

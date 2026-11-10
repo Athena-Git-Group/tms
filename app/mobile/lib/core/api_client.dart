@@ -17,6 +17,7 @@ import 'dart:math';
 /// - `GET /tasks/{id}`（`TaskDetail`）
 /// - `GET /notifications`、`POST /notifications/{id}/read`、
 ///   `POST /notifications/read-all`（通知中心，`NotificationItem`）
+/// - `PUT /me/push-token`、`DELETE /me/push-token`（推播 token 登記）
 ///
 /// 欄位名全部照抄 `specs/truth/contracts/components/schemas/` 的契約定義，
 /// 不自創欄位。
@@ -524,6 +525,39 @@ class ApiClient {
   Future<List<NotificationItem>> markAllNotificationsRead() async {
     final json = await _requestJson('POST', '/notifications/read-all');
     return _asNotificationList(json);
+  }
+
+  /// `PUT /me/push-token`：把這支手機目前的 FCM token 登記在登入者名下，
+  /// 後端派單時才知道推播要送到哪一支裝置。
+  ///
+  /// [deviceFingerprint] 是 App 第一次啟動時產生、之後一直沿用的裝置識別
+  /// 字串。token 會換（重灌、Firebase 定期輪替），裝置不會；後端靠它把新
+  /// token 蓋掉同一支手機的舊 token，而不是替同一支手機累積一排已失效的
+  /// token，每次派單都多送幾次註定失敗的推播。
+  Future<void> registerPushToken({
+    required String deviceFingerprint,
+    required String pushToken,
+    required String platform,
+  }) async {
+    await _requestJson(
+      'PUT',
+      '/me/push-token',
+      body: {
+        'deviceFingerprint': deviceFingerprint,
+        'pushToken': pushToken,
+        'platform': platform,
+      },
+    );
+  }
+
+  /// `DELETE /me/push-token`：登出前把這支手機從登入者名下拿掉，下一位用
+  /// 這支手機的同事才不會收到前一位的派單推播。
+  Future<void> unregisterPushToken({required String deviceFingerprint}) async {
+    await _requestJson(
+      'DELETE',
+      '/me/push-token',
+      body: {'deviceFingerprint': deviceFingerprint},
+    );
   }
 
   static List<NotificationItem> _asNotificationList(Object? json) {

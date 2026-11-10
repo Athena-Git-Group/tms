@@ -4,6 +4,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// google-services 外掛會在 google-services.json 不存在時讓建置失敗，而這個檔案
+// 刻意不進版控（放法見 app/google-services.json.example 與 README-firebase.md）。
+// 沒有檔案就不套外掛：App 照常建置，只是 Firebase 初始化會失敗、推播停用。
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.athena.tms.tms_staff_app"
     compileSdk = flutter.compileSdkVersion

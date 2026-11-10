@@ -126,6 +126,94 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('契約格式：data.target 帶 kind=task 的 JSON 字串，查出房號後導到任務頁', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+
+    ApiClient.instance = _FakeApiClient(
+      tasksById: {
+        'task-305': const TaskDetail(
+          id: 'task-305',
+          state: 'doing',
+          roomNo: '305',
+          title: '退房清潔',
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        navigatorKey: navigatorKey,
+        home: const MyTodayScope(child: HomeScreen()),
+      ),
+    );
+    await tester.pump();
+
+    // 後端送的 FCM data message：target 是 JSON 字串，其餘欄位（event／
+    // title／body／idempotencyKey）導頁不看。
+    await PushGateway.instance.handlePushPayload(const {
+      'event': 'task_assigned',
+      'title': '新派單',
+      'body': '305 退房清潔',
+      'target': '{"kind":"task","taskId":"task-305"}',
+      'idempotencyKey': 'evt-1',
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('task.screen'), findsOneWidget);
+    expect(find.text('305 · 打掃任務'), findsOneWidget);
+
+    handle.dispose();
+  });
+
+  testWidgets('契約格式：同一則推播（同 idempotencyKey）從兩條管道各轉來一次，只導頁一次', (tester) async {
+    final handle = tester.ensureSemantics();
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+
+    ApiClient.instance = _FakeApiClient(
+      ticketsById: {
+        'task-w0620': const RepairTicketDetail(
+          taskId: 'task-w0620',
+          ticketNo: 'W-0620',
+          roomNo: '202',
+          category: 'other',
+          isUrgent: false,
+          state: 'doing',
+          reporterName: '小葉',
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        navigatorKey: navigatorKey,
+        home: const MyTodayScope(child: HomeScreen()),
+      ),
+    );
+    await tester.pump();
+
+    const payload = {
+      'target': '{"kind":"ticket","taskId":"task-w0620"}',
+      'idempotencyKey': 'evt-2',
+    };
+    await PushGateway.instance.handlePushPayload(payload);
+    await PushGateway.instance.handleRemoteMessageData(payload);
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('ticket.screen'), findsOneWidget);
+    // 第二次被擋下：返回一層後應該直接回到首頁，而不是還有一層工務單。
+    navigatorKey.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier('ticket.screen'), findsNothing);
+    expect(find.bySemanticsIdentifier('home.screen'), findsOneWidget);
+
+    handle.dispose();
+  });
+
   testWidgets('已中斷且停住原因含工務已修好時，任務頁顯示恢復提示列', (tester) async {
     final handle = tester.ensureSemantics();
 
