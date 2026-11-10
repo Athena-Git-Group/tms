@@ -1128,6 +1128,18 @@ public class AppiumWorld {
     }
 
     /**
+     * 裝置目前生效的時間：撥過裝置時鐘就是注入值，沒撥過就是真實當下。
+     *
+     * <p>場景裡凡是以「現在」「今天」為基準算出來、又要和畫面對照的值（相對推撥的
+     * 起點、通知的今天／更早分組、計時的累計秒數），都從這裡取。拿 harness 的
+     * 真實當下算，場景一撥過時鐘，畫面照注入值分組、斷言照真實日期分組，兩邊就對不上。
+     */
+    public OffsetDateTime deviceNow() {
+        OffsetDateTime injected = injectedDeviceClock();
+        return injected != null ? injected : OffsetDateTime.now();
+    }
+
+    /**
      * App 本機待送出佇列目前還有幾筆（測試後門 {@code GET /state} 的
      * {@code pendingSyncCount}）。
      *
