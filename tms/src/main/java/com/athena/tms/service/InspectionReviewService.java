@@ -138,7 +138,7 @@ public class InspectionReviewService {
         ObjectNode payload = PushOutboxWriter.payload(
                 objectMapper, task.getAssigneeId(), "inspection_failed",
                 roomNo + " 查房退回 · " + failedKeysText + "不合格");
-        PushOutboxWriter.targetTask(payload, task.getId());
+        PushOutboxWriter.targetOwnedTask(payload, task.getType(), task.getId());
         pushOutboxWriter.enqueue(
                 tenantId,
                 "task:" + task.getId(),

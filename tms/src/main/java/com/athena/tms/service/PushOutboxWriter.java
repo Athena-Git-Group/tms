@@ -84,7 +84,7 @@ public class PushOutboxWriter {
     /**
      * 給各通知呼叫端組 PushPayload 的共用開頭：收件人、事件、標題三個欄位，
      * 欄位順序照 contracts shared.yaml 的 PushPayload 定義。body 因通知而異，
-     * 由呼叫端自行補上；target 用 {@link #targetTask}、{@link #targetPool}、
+     * 由呼叫端自行補上；target 用 {@link #targetOwnedTask}、{@link #targetPool}、
      * {@link #targetHome} 三個共用組裝補上。
      */
     public static ObjectNode payload(ObjectMapper objectMapper, UUID recipientStaffId, String event, String title) {
@@ -93,13 +93,6 @@ public class PushOutboxWriter {
         payload.put("event", event);
         payload.put("title", title);
         return payload;
-    }
-
-    /** 在 payload 補上「點開直達這張任務」的去處（target.kind=task）。 */
-    public static void targetTask(ObjectNode payload, UUID taskId) {
-        ObjectNode target = payload.putObject("target");
-        target.put("kind", "task");
-        target.put("taskId", taskId.toString());
     }
 
     /**

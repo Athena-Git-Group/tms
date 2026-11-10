@@ -469,7 +469,7 @@ public class TaskExecutionService {
             UUID recipient = UUID.fromString(String.valueOf(assignee));
             ObjectNode payload = PushOutboxWriter.payload(
                     objectMapper, recipient, "task_cancelled", before.get("room_no") + " 已被主管作廢");
-            PushOutboxWriter.targetTask(payload, taskId);
+            PushOutboxWriter.targetOwnedTask(payload, String.valueOf(before.get("type")), taskId);
             pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                     "task_cancelled:" + taskId + ":seq:" + seq + ":" + recipient);
         }

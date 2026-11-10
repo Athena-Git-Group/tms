@@ -188,7 +188,7 @@ public class InspectionService {
             return;
         }
         ObjectNode payload = PushOutboxWriter.payload(this.objectMapper, task.getAssigneeId(), event, title);
-        PushOutboxWriter.targetTask(payload, task.getId());
+        PushOutboxWriter.targetOwnedTask(payload, task.getType(), task.getId());
         this.pushOutboxWriter.enqueue(tenantId, "task:" + task.getId(), payload,
                 event + ":" + task.getId() + ":seq:" + seq + ":" + task.getAssigneeId());
     }

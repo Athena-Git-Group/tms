@@ -401,7 +401,16 @@ public class RepairService {
         UUID reporterId = UUID.fromString(String.valueOf(ticket.get("reporter_id")));
         ObjectNode payload = PushOutboxWriter.payload(
                 objectMapper, reporterId, "repair_completed", roomNo + " " + categoryLabel + "已修好");
-        PushOutboxWriter.targetTask(payload, ticketTaskId);
+        // 報修人點開要回到自己被中斷的那張單，那才是他接下來要做的事；工務或櫃檯
+        // 自行開的單沒有原任務，就回工務單本身。原任務不一定是打掃單（備品任務也
+        // 會報修），類別以該列為準。
+        if (sourceTaskId != null) {
+            UUID sourceId = UUID.fromString(String.valueOf(sourceTaskId));
+            Map<String, Object> sourceTask = taskRowLookup.require(tenantId, sourceId);
+            PushOutboxWriter.targetOwnedTask(payload, String.valueOf(sourceTask.get("type")), sourceId);
+        } else {
+            PushOutboxWriter.targetOwnedTask(payload, "repair", ticketTaskId);
+        }
         pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
                 "repair_resolved:" + ticketTaskId + ":" + reporterId);
 
