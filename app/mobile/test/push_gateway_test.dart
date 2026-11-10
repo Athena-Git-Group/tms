@@ -303,7 +303,6 @@ class _FakeApiClient extends ApiClient {
       remainingMinutes: 0,
       todayTasks: <TodayTask>[],
       nextTasks: <NextTask>[],
-      zeroReturnStreakDays: 0,
     );
   }
 

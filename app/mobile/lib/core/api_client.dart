@@ -719,7 +719,6 @@ class MyToday {
     required this.remainingMinutes,
     required this.todayTasks,
     required this.nextTasks,
-    required this.zeroReturnStreakDays,
     this.engineeringSummary,
     this.shift,
     this.floors,
@@ -741,7 +740,6 @@ class MyToday {
 
   /// 待開始的單的推薦子集，只用於首頁「下一間」卡，不是今日任務的全部。
   final List<NextTask> nextTasks;
-  final int zeroReturnStreakDays;
 
   /// 工務視角今日進度；只有工務部門（dept=engineering）的呼叫者有值。
   final EngineeringSummary? engineeringSummary;
@@ -781,7 +779,6 @@ class MyToday {
       nextTasks: nextTasksJson
           .map((entry) => NextTask.fromJson(entry as Map<String, dynamic>))
           .toList(),
-      zeroReturnStreakDays: json['zeroReturnStreakDays'] as int,
       engineeringSummary: engineeringJson == null
           ? null
           : EngineeringSummary.fromJson(engineeringJson),

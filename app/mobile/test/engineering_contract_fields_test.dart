@@ -285,7 +285,6 @@ MyToday _engToday({
     completedCount: 2,
     adHocCompleted: 0,
     remainingMinutes: 0,
-    zeroReturnStreakDays: 0,
     todayTasks: const <TodayTask>[],
     nextTasks: const <NextTask>[],
     engineeringSummary: EngineeringSummary(

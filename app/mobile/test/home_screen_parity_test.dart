@@ -367,7 +367,6 @@ MyToday _today({
     completedCount: 2,
     adHocCompleted: 3,
     remainingMinutes: 135,
-    zeroReturnStreakDays: 5,
     todayTasks: todayTasks,
     nextTasks: nextTasks,
     shift: shift,

@@ -173,7 +173,6 @@ class _FakeApiClient extends ApiClient {
       completedCount: 2,
       adHocCompleted: 3,
       remainingMinutes: 135,
-      zeroReturnStreakDays: 5,
       todayTasks: [
         TodayTask(
           taskId: 'task-305',

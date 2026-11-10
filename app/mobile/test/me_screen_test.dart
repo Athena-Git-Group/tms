@@ -43,7 +43,6 @@ void main() {
         completedCount: 0,
         adHocCompleted: 0,
         remainingMinutes: 30 * states.length,
-        zeroReturnStreakDays: 0,
         nextTasks: const [],
         shift: shift,
         floors: floors,

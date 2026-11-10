@@ -92,7 +92,6 @@ void main() {
       'completedCount': 2,
       'adHocCompleted': 3,
       'remainingMinutes': 135,
-      'zeroReturnStreakDays': 5,
     });
 
     expect(today.shift, isNull);
@@ -109,7 +108,6 @@ void main() {
       'completedCount': 2,
       'adHocCompleted': 3,
       'remainingMinutes': 135,
-      'zeroReturnStreakDays': 5,
       'shift': '早班',
       'floors': [3, 4],
       'poolBadgeCount': 5,
@@ -136,7 +134,6 @@ MyToday _today({
     completedCount: 2,
     adHocCompleted: 3,
     remainingMinutes: 135,
-    zeroReturnStreakDays: 5,
     todayTasks: const <TodayTask>[],
     nextTasks: const <NextTask>[],
     shift: shift,

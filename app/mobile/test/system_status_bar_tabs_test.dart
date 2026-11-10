@@ -53,7 +53,6 @@ class _FakeApiClient extends ApiClient {
     completedCount: 0,
     adHocCompleted: 0,
     remainingMinutes: 0,
-    zeroReturnStreakDays: 0,
     todayTasks: [],
     nextTasks: [],
   );
