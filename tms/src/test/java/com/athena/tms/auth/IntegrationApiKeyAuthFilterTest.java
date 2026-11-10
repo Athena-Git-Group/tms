@@ -108,7 +108,7 @@ class IntegrationApiKeyAuthFilterTest {
     void nonIntegrationPathStillAuthenticates() throws Exception {
         stubActiveKey(VALID_PLAINTEXT, 1L, null);
         MockFilterChain chain = new MockFilterChain();
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/staff/tasks");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tasks");
         request.addHeader("X-API-Key", VALID_PLAINTEXT);
         filter.doFilter(request, new MockHttpServletResponse(), chain);
         Assertions.assertNotNull(chain.getRequest(), "驗證通過應放行進授權層");

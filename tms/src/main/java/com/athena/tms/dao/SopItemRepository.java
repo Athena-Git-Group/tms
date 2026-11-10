@@ -2,7 +2,6 @@ package com.athena.tms.dao;
 
 import com.athena.tms.entity.SopItem;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -20,6 +19,4 @@ extends JpaRepository<SopItem, UUID> {
      * 讓同一份資料每次回來的順序固定。
      */
     public List<SopItem> findByTenantIdOrderByAppliesToAscSortOrderAscItemKeyAsc(Long var1);
-
-    public Optional<SopItem> findByTenantIdAndAppliesToAndItemKey(Long var1, String var2, String var3);
 }

@@ -113,11 +113,11 @@
       並且 每次勾選與跳過都寫入事件 "sop_checked"
 
     @error @boundary
-    場景: 勾選與跳過互斥
+    場景: result 只收 checked 或 skipped
       假設 系統中存在以下任務:
         | id      | tenant_id | type     | source | room_id | dept         | state    | title    | assignee_id | est_min | work_date  |
         | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | accepted | 退房清潔 | s-hk1       | 30      | 2026-10-19 |
-      當 「小美」對任務 "t-301-1" 的「床鋪」同時送出勾選與跳過
+      當 「小美」對任務 "t-301-1" 的「床鋪」送出 result "both"
       那麼請求應該失敗，回應為 422
 
     @error @boundary
@@ -129,11 +129,11 @@
       那麼請求應該失敗，回應為 422
 
     @error @boundary
-    場景: 未知項目鍵 404
+    場景: 未知 SOP 項 404
       假設 系統中存在以下任務:
         | id      | tenant_id | type     | source | room_id | dept         | state    | title    | assignee_id | est_min | work_date  |
         | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | accepted | 退房清潔 | s-hk1       | 30      | 2026-10-19 |
-      當 「小美」對任務 "t-301-1" 的未知項目 "qr_sticker" 送出勾選
+      當 「小美」對任務 "t-301-1" 的未知 SOP 項送出勾選
       那麼請求應該失敗，回應為 404 且原因是 "not_found"
 
   Rule: 待認領只回本部門

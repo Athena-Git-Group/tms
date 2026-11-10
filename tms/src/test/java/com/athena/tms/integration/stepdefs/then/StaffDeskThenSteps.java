@@ -54,10 +54,7 @@ public class StaffDeskThenSteps {
 
     @Then("^started_at 與 done_at 被記錄$")
     public void timestampsRecordedWithoutDerivedColumn() {
-        JsonNode doing = json(ctx.get("startedResponse"));
-        assertFalse(doing.get("startedAt").isNull(), "start 記 started_at");
         JsonNode done = json(ctx.get("completedResponse"));
-        assertFalse(done.get("doneAt").isNull(), "complete 記 done_at");
         assertFalse(done.has("actualMinutes"), "實際分鐘不落欄、不另外填（FR-012）");
         Map<String, Object> row = db.admin().queryForMap("SELECT started_at, done_at FROM tasks WHERE id = ?", ctx.taskId());
         Timestamp startedAt = (Timestamp) row.get("started_at");
@@ -102,22 +99,26 @@ public class StaffDeskThenSteps {
 
     @Then("^清單含「([^」]+)」但不含「([^」]+)」且全是 pool 狀態的房務單$")
     public void hk1PoolFiltered(String expectedTitle, String excludedTitle) {
-        JsonNode pool = objectMapper.readTree((String) ctx.get("poolBody:小美"));
-        assertTrue(containsId(pool, taskIdByTitle(expectedTitle)), "房務看得到「" + expectedTitle + "」");
-        assertFalse(containsId(pool, taskIdByTitle(excludedTitle)), "房務看不到工務的單");
-        for (JsonNode task : pool) {
-            assertEquals("pool", task.get("state").asText(), "池清單只含 pool 狀態");
-            assertEquals("housekeeping", task.get("dept").asText(), "池清單只含本部門");
+        JsonNode items = poolItems(objectMapper.readTree((String) ctx.get("poolBody:小美")));
+        assertTrue(containsTaskId(items, taskIdByTitle(expectedTitle)), "房務看得到「" + expectedTitle + "」");
+        assertFalse(containsTaskId(items, taskIdByTitle(excludedTitle)), "房務看不到工務的單");
+        // 單卡本身不帶 state 與 dept，所以回頭比對權威狀態：端點真的只回本部門還在池裡的單，
+        // 才不會是「回應長得對」但其實漏了過濾。
+        for (JsonNode item : items) {
+            Map<String, Object> row = db.admin().queryForMap(
+                    "SELECT state, dept FROM tasks WHERE id = ?", UUID.fromString(item.get("taskId").asText()));
+            assertEquals("pool", row.get("state"), "池清單只含 pool 狀態");
+            assertEquals("housekeeping", row.get("dept"), "池清單只含本部門");
         }
     }
 
     @Then("^「阿強」查詢待認領時清單含「([^」]+)」但不含「([^」]+)」$")
     public void mt1PoolFiltered(String expectedTitle, String excludedTitle) {
-        ScenarioContext.HttpResult pool = api.get("/staff/pool", api.staffToken(1L, ctx.staffLogin("阿強")));
+        ScenarioContext.HttpResult pool = api.get("/api/v1/pool", api.staffToken(1L, ctx.staffLogin("阿強")));
         assertEquals(200, pool.status(), pool.body());
-        JsonNode body = objectMapper.readTree(pool.body());
-        assertTrue(containsId(body, taskIdByTitle(expectedTitle)), "工務看得到修繕單");
-        assertFalse(containsId(body, taskIdByTitle(excludedTitle)), "工務看不到房務的單");
+        JsonNode items = poolItems(objectMapper.readTree(pool.body()));
+        assertTrue(containsTaskId(items, taskIdByTitle(expectedTitle)), "工務看得到修繕單");
+        assertFalse(containsTaskId(items, taskIdByTitle(excludedTitle)), "工務看不到房務的單");
     }
 
     @Then("^該任務仍停在 \"triage\"$")
@@ -127,9 +128,10 @@ public class StaffDeskThenSteps {
 
     @Then("^房務「小美」的待認領立刻看得到這單$")
     public void housekeepingPoolSeesTaskImmediately() {
-        ScenarioContext.HttpResult pool = api.get("/staff/pool", api.staffToken(1L, ctx.staffLogin("小美")));
+        ScenarioContext.HttpResult pool = api.get("/api/v1/pool", api.staffToken(1L, ctx.staffLogin("小美")));
         assertEquals(200, pool.status(), pool.body());
-        assertTrue(containsId(objectMapper.readTree(pool.body()), ctx.taskId()), "判讀後房務池立刻看得到這單");
+        assertTrue(containsTaskId(poolItems(objectMapper.readTree(pool.body())), ctx.taskId()),
+                "判讀後房務池立刻看得到這單");
     }
 
     @Then("^回應的任務 \"([^\"]+)\" 的 doneAt 應有值$")
@@ -174,6 +176,21 @@ public class StaffDeskThenSteps {
 
     private JsonNode json(ScenarioContext.HttpResult result) {
         return objectMapper.readTree(result.body());
+    }
+
+    private static JsonNode poolItems(JsonNode body) {
+        JsonNode items = body.get("items");
+        assertNotNull(items, "待認領回應該有 items: " + body);
+        return items;
+    }
+
+    private static boolean containsTaskId(JsonNode items, UUID id) {
+        for (JsonNode item : items) {
+            if (id.toString().equals(item.get("taskId").asText())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean containsId(JsonNode array, UUID id) {

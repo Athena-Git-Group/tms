@@ -56,7 +56,7 @@ public class StaffDeskWhenSteps {
             for (String token : tokens) {
                 futures.add(pool.submit(() -> {
                     go.await();
-                    return api.post("/staff/tasks/" + taskId + "/claim", token, newIdempotencyKey()).status();
+                    return api.post("/api/v1/tasks/" + taskId + "/claim", token, newIdempotencyKey()).status();
                 }));
             }
             go.countDown();
@@ -73,17 +73,17 @@ public class StaffDeskWhenSteps {
     public void staffPerformsAction(String name, String taskSymbol, String action) {
         UUID taskId = ctx.entityId(taskSymbol);
         ctx.taskId(taskId);
-        ctx.lastResponse(api.post("/staff/tasks/" + taskId + "/" + action,
+        ctx.lastResponse(api.post("/api/v1/tasks/" + taskId + "/" + action,
                 api.staffToken(1L, ctx.staffLogin(name)), newIdempotencyKey()));
     }
 
     @When("^「小美」按「開始」再按「完成」$")
     public void startsThenCompletes() {
         String token = api.staffToken(1L, ctx.staffLogin("小美"));
-        ScenarioContext.HttpResult started = api.post("/staff/tasks/" + ctx.taskId() + "/start", token, newIdempotencyKey());
+        ScenarioContext.HttpResult started = api.post("/api/v1/tasks/" + ctx.taskId() + "/start", token, newIdempotencyKey());
         Assertions.assertEquals(200, started.status(), "開始該成功: " + started.body());
         ctx.put("startedResponse", started);
-        ScenarioContext.HttpResult completed = api.post("/staff/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey());
+        ScenarioContext.HttpResult completed = api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey());
         ctx.put("completedResponse", completed);
         ctx.lastResponse(completed);
     }
@@ -93,36 +93,39 @@ public class StaffDeskWhenSteps {
         String token = api.staffToken(1L, ctx.staffLogin("小美"));
         ctx.put("sopActorId", staffIdOf(ctx.staffLogin("小美")));
         for (String label : List.of(first, second, third)) {
-            ScenarioContext.HttpResult checked = sop(ctx.taskId(), ctx.sopItemKey(label), Map.of("checked", true), token);
+            ScenarioContext.HttpResult checked = sop(ctx.taskId(), Map.of("sopItemId", ctx.sopItemId(label), "result", "checked"), token);
             Assertions.assertEquals(200, checked.status(), "勾選「" + label + "」該成功: " + checked.body());
         }
-        ScenarioContext.HttpResult skippedResult = sop(ctx.taskId(), ctx.sopItemKey(skipped), Map.of("skipped", true), token);
+        ScenarioContext.HttpResult skippedResult =
+                sop(ctx.taskId(), Map.of("sopItemId", ctx.sopItemId(skipped), "result", "skipped"), token);
         Assertions.assertEquals(200, skippedResult.status(), "跳過「" + skipped + "」該成功: " + skippedResult.body());
         ctx.put("skippedLabel", skipped);
-        ctx.lastResponse(api.post("/staff/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey()));
+        ctx.lastResponse(api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey()));
     }
 
-    @When("^「小美」對任務 \"([^\"]+)\" 的「([^」]+)」同時送出勾選與跳過$")
-    public void bothCheckedAndSkipped(String taskSymbol, String label) {
-        ctx.lastResponse(sop(ctx.entityId(taskSymbol), ctx.sopItemKey(label),
-                Map.of("checked", true, "skipped", true), api.staffToken(1L, ctx.staffLogin("小美"))));
+    @When("^「小美」對任務 \"([^\"]+)\" 的「([^」]+)」送出 result \"([^\"]+)\"$")
+    public void sopCheckWithResult(String taskSymbol, String label, String result) {
+        ctx.lastResponse(sop(ctx.entityId(taskSymbol),
+                Map.of("sopItemId", ctx.sopItemId(label), "result", result),
+                api.staffToken(1L, ctx.staffLogin("小美"))));
     }
 
     @When("^「小美」對任務 \"([^\"]+)\" 的「([^」]+)」送出空白動作$")
     public void neitherCheckedNorSkipped(String taskSymbol, String label) {
-        ctx.lastResponse(sop(ctx.entityId(taskSymbol), ctx.sopItemKey(label),
-                Map.of(), api.staffToken(1L, ctx.staffLogin("小美"))));
+        ctx.lastResponse(sop(ctx.entityId(taskSymbol),
+                Map.of("sopItemId", ctx.sopItemId(label)), api.staffToken(1L, ctx.staffLogin("小美"))));
     }
 
-    @When("^「小美」對任務 \"([^\"]+)\" 的未知項目 \"([^\"]+)\" 送出勾選$")
-    public void unknownSopItemKey(String taskSymbol, String itemKey) {
-        ctx.lastResponse(sop(ctx.entityId(taskSymbol), itemKey,
-                Map.of("checked", true), api.staffToken(1L, ctx.staffLogin("小美"))));
+    @When("^「小美」對任務 \"([^\"]+)\" 的未知 SOP 項送出勾選$")
+    public void unknownSopItem(String taskSymbol) {
+        ctx.lastResponse(sop(ctx.entityId(taskSymbol),
+                Map.of("sopItemId", UUID.randomUUID(), "result", "checked"),
+                api.staffToken(1L, ctx.staffLogin("小美"))));
     }
 
     @When("^「(小美|阿強)」查詢待認領$")
     public void staffListsPool(String name) {
-        ScenarioContext.HttpResult pool = api.get("/staff/pool", api.staffToken(1L, ctx.staffLogin(name)));
+        ScenarioContext.HttpResult pool = api.get("/api/v1/pool", api.staffToken(1L, ctx.staffLogin(name)));
         Assertions.assertEquals(200, pool.status(), "查池該成功: " + pool.body());
         ctx.put("poolBody:" + name, pool.body());
         ctx.lastResponse(pool);
@@ -135,7 +138,9 @@ public class StaffDeskWhenSteps {
 
     @When("^「小美」對不存在的任務勾選 SOP 項目$")
     public void sopCheckUnknownTask() {
-        ctx.lastResponse(sop(UUID.randomUUID(), "bed", Map.of("checked", true), api.staffToken(1L, ctx.staffLogin("小美"))));
+        ctx.lastResponse(sop(UUID.randomUUID(),
+                Map.of("sopItemId", ctx.sopItemId("床鋪"), "result", "checked"),
+                api.staffToken(1L, ctx.staffLogin("小美"))));
     }
 
     @When("^櫃檯以 dept \"([a-z_]+)\" 判讀任務 \"([^\"]+)\"$")
@@ -184,11 +189,11 @@ public class StaffDeskWhenSteps {
     }
 
     private ScenarioContext.HttpResult claim(UUID taskId, String loginId) {
-        return api.post("/staff/tasks/" + taskId + "/claim", api.staffToken(1L, loginId), newIdempotencyKey());
+        return api.post("/api/v1/tasks/" + taskId + "/claim", api.staffToken(1L, loginId), newIdempotencyKey());
     }
 
-    private ScenarioContext.HttpResult sop(UUID taskId, String itemKey, Map<String, Object> body, String token) {
-        return api.postJson("/staff/tasks/" + taskId + "/sop/" + itemKey, token, body, null);
+    private ScenarioContext.HttpResult sop(UUID taskId, Map<String, Object> body, String token) {
+        return api.postJson("/api/v1/tasks/" + taskId + "/sop-check", token, body, null);
     }
 
     private ScenarioContext.HttpResult decide(UUID taskId, Map<String, Object> body) {

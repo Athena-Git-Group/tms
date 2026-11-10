@@ -166,7 +166,7 @@ public class EntityTableGivenSteps {
                     UUID.randomUUID(), tenantOf(row), appliesTo, value(row, "item_key"),
                     value(row, "label"), Integer.parseInt(value(row, "sort_order")));
             ctx.registerEntity(value(row, "id"), id);
-            ctx.registerSopItem(value(row, "label"), value(row, "item_key"));
+            ctx.registerSopItem(value(row, "label"), value(row, "item_key"), id);
             touchedInspection |= "inspection".equals(appliesTo);
         }
         if (touchedInspection) {

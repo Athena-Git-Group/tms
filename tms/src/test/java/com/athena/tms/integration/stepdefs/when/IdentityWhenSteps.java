@@ -94,7 +94,7 @@ public class IdentityWhenSteps {
         };
         String path = switch (action) {
             case "主管查房提交" -> "/admin/inspections/" + UUID.randomUUID();
-            case "任務認領" -> "/staff/tasks/" + UUID.randomUUID() + "/claim";
+            case "任務認領" -> "/api/v1/tasks/" + UUID.randomUUID() + "/claim";
             default -> "/admin/rooms/305/qr/rotate";
         };
         ctx.lastResponse(api.post(path, api.staffToken(1L, loginId), null));

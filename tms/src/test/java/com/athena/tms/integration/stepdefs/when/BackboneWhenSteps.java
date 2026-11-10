@@ -45,7 +45,7 @@ public class BackboneWhenSteps {
     public void resendWithSameKey(int times) {
         String token = api.staffToken(1L, "hk1");
         for (int i = 0; i < times; i++) {
-            ctx.replays().add(api.post("/staff/tasks/" + ctx.taskId() + "/complete", token, ctx.opId()));
+            ctx.replays().add(api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, ctx.opId()));
         }
     }
 

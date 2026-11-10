@@ -34,7 +34,7 @@ public class BackboneGivenSteps {
     public void completesWithIdempotencyKey(String taskSymbol, String opId) {
         UUID taskId = ctx.entityId(taskSymbol);
         String token = api.staffToken(1L, ctx.staffLogin("小美"));
-        ScenarioContext.HttpResult first = api.post("/staff/tasks/" + taskId + "/complete", token, opId);
+        ScenarioContext.HttpResult first = api.post("/api/v1/tasks/" + taskId + "/complete", token, opId);
         ctx.taskId(taskId);
         ctx.opId(opId);
         ctx.firstResponse(first);

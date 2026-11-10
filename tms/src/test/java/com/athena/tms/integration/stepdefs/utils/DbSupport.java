@@ -32,6 +32,7 @@ public class DbSupport {
         adminJdbc.update("DELETE FROM task_sop_checks");
         adminJdbc.update("DELETE FROM inspections");
         adminJdbc.update("DELETE FROM task_events");
+        adminJdbc.update("DELETE FROM handover_reads");
         deleteOutboxRetryingOnDeadlock();
         adminJdbc.update("DELETE FROM processed_ops");
         adminJdbc.update("DELETE FROM tasks");

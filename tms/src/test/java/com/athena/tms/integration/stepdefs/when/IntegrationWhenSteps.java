@@ -65,7 +65,7 @@ public class IntegrationWhenSteps {
 
     @When("^PMS 以別名 \"([^\"]+)\" 的金鑰查詢員工任務列表$")
     public void queryStaffPoolWithApiKey(String alias) {
-        ctx.lastResponse(api.getWithHeaders("/staff/pool", apiKeyHeader(alias)));
+        ctx.lastResponse(api.getWithHeaders("/api/v1/pool", apiKeyHeader(alias)));
     }
 
     @When("^員工 \"([^\"]+)\" 以自己的憑證查詢整合事件$")

@@ -25,6 +25,7 @@ public class ScenarioContext {
     private final Map<String, String> guestSessionTokens = new HashMap<>();
     private final Map<String, String> staffLogins = new HashMap<>();
     private final Map<String, String> sopItemKeys = new HashMap<>();
+    private final Map<String, UUID> sopItemIds = new HashMap<>();
     private HttpResult firstResponse;
     private HttpResult lastResponse;
     private final List<HttpResult> replays = new ArrayList<>();
@@ -50,6 +51,7 @@ public class ScenarioContext {
         guestSessionTokens.clear();
         staffLogins.clear();
         sopItemKeys.clear();
+        sopItemIds.clear();
         data.clear();
     }
 
@@ -101,8 +103,9 @@ public class ScenarioContext {
         return loginId;
     }
 
-    public void registerSopItem(String label, String itemKey) {
+    public void registerSopItem(String label, String itemKey, UUID id) {
         sopItemKeys.put(label, itemKey);
+        sopItemIds.put(label, id);
     }
 
     public String sopItemKey(String label) {
@@ -111,6 +114,14 @@ public class ScenarioContext {
             throw new IllegalStateException("SOP 項目「" + label + "」沒有對應 item_key——前置資料漏了");
         }
         return key;
+    }
+
+    public UUID sopItemId(String label) {
+        UUID id = sopItemIds.get(label);
+        if (id == null) {
+            throw new IllegalStateException("SOP 項目「" + label + "」沒有對應 id——前置資料漏了");
+        }
+        return id;
     }
 
     public UUID taskId() {

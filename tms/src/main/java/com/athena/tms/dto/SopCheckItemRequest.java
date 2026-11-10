@@ -4,8 +4,7 @@ import java.util.UUID;
 
 /**
  * 員工 App 勾記或跳過一個 SOP 項時送的請求（contracts tasksSopCheck）。
- * 既有的 {@link SopCheckRequest} 是舊 /staff 路由以 itemKey 定位的形狀，
- * contracts 拍板的新介面改以 SOP 項的 id 定位，所以另立一個 DTO，不動舊路由。
+ * 以 SOP 項的 id 定位，而不是 item_key——id 是 {@code sop_items} 的主鍵，
+ * item_key 只在同一個 applies_to 裡唯一，單靠它定位還要再帶一個種類才夠。
  */
-public record SopCheckItemRequest(UUID sopItemId, String result) {
-}
+public record SopCheckItemRequest(UUID sopItemId, String result) {}

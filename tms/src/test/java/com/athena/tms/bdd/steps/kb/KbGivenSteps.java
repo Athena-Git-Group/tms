@@ -90,14 +90,14 @@ public class KbGivenSteps {
     @假設("{string} 在 {string} 剛跳過 SOP 項 {string}")
     public void staffJustSkippedSopItem(String staffName, String taskKey, String itemLabel) {
         UUID taskId = UUID.fromString(world.taskId(taskKey));
-        String itemKey = createSopItem(itemLabel);
+        UUID sopItemId = createSopItem(itemLabel);
 
         // 不在這裡擋失敗狀態碼：這句只負責建立權威狀態，「必查」留給 KbThenSteps，
         // 跟 common 套件其餘 Given（例如 CommonGivenSteps）的分工一致。
         apiClient.post(
-                "/staff/tasks/" + taskId + "/sop/" + itemKey,
+                "/tasks/" + taskId + "/sop-check",
                 BddApiClient.Auth.staff(world.jwt(staffName)),
-                Map.of("skipped", true));
+                Map.of("sopItemId", sopItemId, "result", "skipped"));
     }
 
     @假設("{string} 是今天的 VIP 房")
@@ -184,18 +184,18 @@ public class KbGivenSteps {
                         + "以問題開頭的房號推定任務，但沒有命中）");
     }
 
-    private String createSopItem(String label) {
+    private UUID createSopItem(String label) {
         long tenantId = tenantFixtures.testTenantId();
-        String itemKey = "kb-sop-" + UuidV7.generate();
+        UUID id = UuidV7.generate();
         jdbcClient
                 .sql(
                         """
                         INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at)
                         VALUES (?, ?, 'cleaning', ?, ?, 1, true, ?)
                         """)
-                .params(UuidV7.generate(), tenantId, itemKey, label, OffsetDateTime.now())
+                .params(id, tenantId, "kb-sop-" + UuidV7.generate(), label, OffsetDateTime.now())
                 .update();
-        return itemKey;
+        return id;
     }
 
     private LocalDate parseMonthDay(String mmdd) {

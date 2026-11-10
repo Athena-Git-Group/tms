@@ -77,7 +77,7 @@ final class StreamConnection {
     synchronized boolean sendResync(ObjectMapper mapper) {
         ObjectNode data = mapper.createObjectNode();
         data.put("reason", "connected");
-        data.put("refetch", this.audience == Audience.GUEST ? "/guest/home" : "/staff/pool");
+        data.put("refetch", this.audience == Audience.GUEST ? "/guest/home" : "/api/v1/pool");
         return this.write("resync", data.toString());
     }
 

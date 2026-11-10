@@ -34,7 +34,7 @@
     場景: 員工連線依序收到 init、resync，resync 指向待認領端點
       假設 房務「小美」開啟員工事件串流
       那麼 「小美」的連線依序收到 "init"、"resync"
-      並且 「小美」的 resync 的 refetch 指向 "/staff/pool"
+      並且 「小美」的 resync 的 refetch 指向 "/api/v1/pool"
 
   Rule: 住客串流只推本 session 綁定訂單的任務變化
 

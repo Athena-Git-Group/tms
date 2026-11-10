@@ -588,7 +588,7 @@ public class BackendChannel {
 
     /**
      * 以員工本人身分把某個 SOP 項標成跳過，走正式端點
-     * {@code POST /staff/tasks/{taskId}/sop/{itemKey}}（body {@code {"skipped": true}}）。
+     * {@code POST /api/v1/tasks/{taskId}/sop-check}（body {@code {"sopItemId": …, "result": "skipped"}}）。
      *
      * <p>情境點名的項目不一定在租戶的打掃 SOP 項裡——每個情境開場會 TRUNCATE 全部業務表
      * （{@link #resetBusinessData}），{@code sop_items} 也在其中，所以這裡現場補一筆再跳過；
@@ -596,15 +596,17 @@ public class BackendChannel {
      * （作法與 {@link #failInspection} 的查房項目同一套）。
      */
     public void skipSopItem(UUID taskId, CreatedStaff staff, String label) {
-        String itemKey = ensureCleaningSopItem(ensureTenant(), label);
+        UUID sopItemId = ensureCleaningSopItemId(label);
         HttpResponse<String> response = send(
-                request("POST", "/staff/tasks/" + taskId + "/sop/" + itemKey, jwt(staff))
+                request("POST", "/tasks/" + taskId + "/sop-check", jwt(staff))
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(
-                                toJson(Map.of("skipped", true)), StandardCharsets.UTF_8)));
+                                toJson(Map.of("sopItemId", sopItemId, "result", "skipped")),
+                                StandardCharsets.UTF_8)));
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("fixture 跳過 SOP 項失敗：POST /staff/tasks/" + taskId
-                    + "/sop/" + itemKey + " -> HTTP " + response.statusCode() + "，body=" + response.body());
+            throw new IllegalStateException("fixture 跳過 SOP 項失敗：POST /api/v1/tasks/" + taskId
+                    + "/sop-check（sopItemId=" + sopItemId + "） -> HTTP " + response.statusCode()
+                    + "，body=" + response.body());
         }
     }
 
