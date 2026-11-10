@@ -103,7 +103,7 @@ public class PushManagerActionSteps {
 
     @當("{string} 以原因 {string} 作廢 {string}")
     public void managerVoidsTask(String managerName, String reasonNote, String taskKey) {
-        UUID taskId = UUID.fromString(world.taskId(taskKey));
+        UUID taskId = UUID.fromString(resolveTaskId(taskKey));
         lastOperationGuard.captureFor(taskId);
 
         Map<String, Object> body = Map.of("reason", "manager_void", "note", reasonNote);
