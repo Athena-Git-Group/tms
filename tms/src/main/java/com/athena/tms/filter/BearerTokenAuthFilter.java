@@ -44,9 +44,6 @@ extends OncePerRequestFilter {
         this.clock = clock;
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         try {
             String header = request.getHeader("Authorization");

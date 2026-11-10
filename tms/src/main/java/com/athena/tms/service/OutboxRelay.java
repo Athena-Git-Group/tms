@@ -1,21 +1,9 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  org.slf4j.Logger
- *  org.slf4j.LoggerFactory
- *  org.springframework.beans.factory.annotation.Value
- *  org.springframework.boot.convert.DurationStyle
- *  org.springframework.jdbc.core.JdbcTemplate
- *  org.springframework.jdbc.core.RowMapper
- *  org.springframework.kafka.core.KafkaTemplate
- *  org.springframework.scheduling.annotation.Scheduled
- *  org.springframework.stereotype.Component
- */
 package com.athena.tms.service;
 
+import com.athena.tms.common.OutboxKafkaHeaders;
 import com.athena.tms.config.KafkaTopicsProperties;
 import com.athena.tms.service.TenantScopedExecutor;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -23,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.internals.RecordHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,7 +27,7 @@ import org.springframework.stereotype.Component;
 public class OutboxRelay {
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
     private static final int MAX_BACKOFF_SHIFT = 10;
-    private static final RowMapper<PendingMessage> PENDING_MAPPER = (rs, rowNum) -> new PendingMessage(rs.getLong("id"), rs.getLong("tenant_id"), rs.getString("aggregate_key"), rs.getString("kind"), rs.getString("payload"), rs.getInt("attempts"), rs.getObject("next_retry_at", OffsetDateTime.class));
+    private static final RowMapper<PendingMessage> PENDING_MAPPER = (rs, rowNum) -> new PendingMessage(rs.getLong("id"), rs.getLong("tenant_id"), rs.getString("aggregate_key"), rs.getString("kind"), rs.getString("payload"), rs.getString("idempotency_key"), rs.getInt("attempts"), rs.getObject("next_retry_at", OffsetDateTime.class));
     private static final RowMapper<ClaimResult> CLAIM_MAPPER = (rs, rowNum) -> {
         boolean exhausted = "failed".equals(rs.getString("status"));
         return new ClaimResult(!exhausted, exhausted, rs.getInt("attempts"));
@@ -102,7 +92,7 @@ public class OutboxRelay {
     }
 
     private List<PendingMessage> fetchPending(long tenantId) {
-        return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.jdbcTemplate.query("SELECT o.id, o.tenant_id, o.aggregate_key, o.kind, o.payload, o.attempts, o.next_retry_at\n  FROM outbox o\n WHERE o.status = 'pending'\n   AND NOT EXISTS (\n       SELECT 1 FROM outbox f\n        WHERE f.aggregate_key = o.aggregate_key AND f.status = 'failed'\n   )\n ORDER BY o.aggregate_key, o.id\n", PENDING_MAPPER));
+        return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.jdbcTemplate.query("SELECT o.id, o.tenant_id, o.aggregate_key, o.kind, o.payload, o.idempotency_key, o.attempts, o.next_retry_at\n  FROM outbox o\n WHERE o.status = 'pending'\n   AND NOT EXISTS (\n       SELECT 1 FROM outbox f\n        WHERE f.aggregate_key = o.aggregate_key AND f.status = 'failed'\n   )\n ORDER BY o.aggregate_key, o.id\n", PENDING_MAPPER));
     }
 
     private ClaimResult claim(long tenantId, PendingMessage message) {
@@ -113,7 +103,7 @@ public class OutboxRelay {
 
     private boolean sendOne(long tenantId, PendingMessage message, int attempts) {
         try {
-            this.kafkaTemplate.send(this.topics.topicFor(message.kind()), message.aggregateKey(), message.payload()).get(this.sendTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            this.kafkaTemplate.send(this.toProducerRecord(message)).get(this.sendTimeout.toMillis(), TimeUnit.MILLISECONDS);
         }
         catch (Exception e) {
             if (e instanceof InterruptedException) {
@@ -134,6 +124,20 @@ public class OutboxRelay {
         return true;
     }
 
+    /**
+     * key 用 aggregate_key 讓同鍵訊息落在同一個 partition；租戶 id 與冪等鍵放 header
+     * （名稱見 {@link OutboxKafkaHeaders}），消費者靠它們去重與套用租戶範圍。
+     * 沒有冪等鍵的訊息就不附那個 header，消費者自行決定如何處理。
+     */
+    private ProducerRecord<String, String> toProducerRecord(PendingMessage message) {
+        ProducerRecord<String, String> record = new ProducerRecord<>(this.topics.topicFor(message.kind()), message.aggregateKey(), message.payload());
+        record.headers().add(new RecordHeader(OutboxKafkaHeaders.TENANT_ID, Long.toString(message.tenantId()).getBytes(StandardCharsets.UTF_8)));
+        if (message.idempotencyKey() != null) {
+            record.headers().add(new RecordHeader(OutboxKafkaHeaders.IDEMPOTENCY_KEY, message.idempotencyKey().getBytes(StandardCharsets.UTF_8)));
+        }
+        return record;
+    }
+
     private Duration backoff(int attempts) {
         return this.backoffBase.multipliedBy(1L << Math.min(attempts - 1, 10));
     }
@@ -146,7 +150,7 @@ public class OutboxRelay {
         return byKey;
     }
 
-    private record PendingMessage(long id, long tenantId, String aggregateKey, String kind, String payload, int attempts, OffsetDateTime nextRetryAt) {
+    private record PendingMessage(long id, long tenantId, String aggregateKey, String kind, String payload, String idempotencyKey, int attempts, OffsetDateTime nextRetryAt) {
     }
 
     private record ClaimResult(boolean claimed, boolean exhausted, int attempts) {

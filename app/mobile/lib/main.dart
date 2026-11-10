@@ -53,9 +53,6 @@ class _TmsStaffAppState extends State<TmsStaffApp> {
         // Theme.of(context)，所以在這裡補一層 Material 主題當底。
         return Theme(data: theme, child: child!);
       },
-      // 起始畫面一律是登入（帳號與登入 feature 落地後，測試建置不再跳過
-      // 登入殼）。推播點開的導頁（PushGateway）用 pushAndRemoveUntil／push
-      // 直接換頁，不依賴起始畫面是誰。
       home: const LoginScreen(),
     );
   }

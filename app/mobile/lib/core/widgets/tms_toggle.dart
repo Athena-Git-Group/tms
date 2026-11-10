@@ -27,22 +27,16 @@ class TmsToggle extends StatelessWidget {
   /// 自動化測試用來點到這個開關的 accessibility id。
   final String? id;
 
-  /// 軌道尺寸。`Main.dc.html:470`。
   static const double _trackWidth = 51;
   static const double _trackHeight = 31;
 
-  /// 旋鈕直徑與它與軌道邊緣的距離。`Main.dc.html:470`。
   static const double _knobSize = 27;
   static const double _knobInset = 2;
 
-  /// 關閉時的軌道底色 `#E9E9EA`。`Main.dc.html:4666`。開啟時是
-  /// [TmsColors.systemGreen]。
   static const Color _trackOff = Color(0xFFE9E9EA);
 
-  /// 旋鈕陰影 `0 2px 4px rgba(0,0,0,.2)`。`Main.dc.html:470`。
   static const Color _knobShadow = Color(0x33000000);
 
-  /// 切換時軌道變色與旋鈕滑動的時間。`Main.dc.html:470` 的 `transition .2s`。
   static const Duration _duration = Duration(milliseconds: 200);
 
   @override

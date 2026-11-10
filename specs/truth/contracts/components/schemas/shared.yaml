@@ -753,7 +753,11 @@ RepairTicketSummary:
 PushPayload:
   type: object
   description: >-
-    非同步契約：outbox kind=push 的內容，由推播消費者送到裝置（MVP 只寫日誌與資料列，不接 APNS/FCM）。
+    非同步契約：outbox kind=push 的內容。推播消費者從 Kafka 讀到後，查收件人在 staff_devices 登記的手機
+    （registerPushToken），透過 Firebase Cloud Messaging（FCM）逐台送出，並在 push_deliveries 以 outbox 的
+    idempotency_key 留一列送達紀錄（sent／skipped_no_token／failed），同一把鍵重送只送一次。
+    FCM 訊息是 data message，data 欄位為 event、title、body（有才帶）、target（PushTarget 的 JSON 字串）、
+    idempotencyKey；iOS 另附 APNS alert（title／body）與 content-available 讓鎖屏也顯示。
     沒有對應的 HTTP 端點，這裡列出它的形狀，作為 App 解析推播與後端 E2E 斷言的依據。
     unclaimed_reminder_staff／unclaimed_reminder_manager 是待認領未接超時兩段提醒（一般單與急件門檻各自可設定，
     各段只發一次，認領後不再發）；標題例如「319 退房清潔 已等 10 分，還沒人接」、「319 退房清潔 已通知主管」。

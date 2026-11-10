@@ -444,16 +444,6 @@ public class AppiumWorld {
     }
 
     /**
-     * 確保 App 已以這位員工的身分登入，並停在該房號的任務頁（{@code task.screen}）。
-     * 進任務頁的 App 路徑只有一條：首頁的今日任務列表點該房的卡
-     * （{@code home.task.{roomNo}.card}）；已經停在那間房的任務頁上就不重複點。
-     *
-     * <p>首頁的清單來自 {@code GET /me/today} 的 {@code nextTasks}，後端只收
-     * {@code accepted}，所以進行中／已中斷的單在首頁上沒有卡可點，這裡會以
-     * 「等不到 {@code home.task.{roomNo}.card}」失敗——那是上游缺口 #12
-     * （App 無端點可列舉進行中的任務），不是這一層可以繞過的。
-     */
-    /**
      * 點一個會換頁／開面板的元素，並確認目標畫面真的出現；沒出現就再點一次。
      *
      * <p>有些入口（待認領的「開工單」FAB）在列表還在重排時點下去會整個落空：Appium 回報
@@ -591,17 +581,6 @@ public class AppiumWorld {
     private record DeferredStart(BackendChannel.CreatedStaff staff) {
     }
 
-    /**
-     * 量離線視窗開場基準時，花多久找離線列。
-     *
-     * <p>這是短探測，不是在等離線列非出現不可。離線列只掛在少數幾個頁面，停在登入畫面
-     * 或報修面板上切離線時，等再久也不會冒出那一列；等不到就記成「沒量到」，交給斷言
-     * 那一側噴錯，不在這裡拖長每個離線情境的時間。
-     *
-     * <p>探測短還順帶壓低一個風險：切離線這一步插在「在 App 按過開始」與離線動作之間，
-     * 等多久就把那張單的已做秒數（{@code tasks.worked_sec}）往前推多久。目前沒有離線
-     * 場景在斷言已做分鐘數，但等待越短，日後加這種斷言時越不容易被推歪。
-     */
     /**
      * 把裝置切到無網路，並記下這個離線視窗的開場基準。
      *
@@ -742,7 +721,6 @@ public class AppiumWorld {
         return currentTaskRoomNo;
     }
 
-    /** 記下通知中心情境的當事員工（由通知的 Given 句呼叫）。 */
     public void setNotificationViewer(BackendChannel.CreatedStaff staff) {
         this.notificationViewer = staff;
     }
@@ -1431,11 +1409,6 @@ public class AppiumWorld {
     }
 
     /**
-     * 把目前畫面的元素樹寫到檔案，給定位失敗時回頭看畫面上到底有什麼用。
-     *
-     * <p>寫檔本身失敗就放著不管：這只是輔助資訊，為了它再丟一個例外會蓋掉真正的失敗原因。
-     */
-    /**
      * 給 stepdef 在組斷言訊息時留下當下的元素樹，檔名帶標籤與時間戳，整輪跑下來多個失敗
      * 各留各的一份，不會互相覆蓋；回傳的路徑放進斷言訊息，看 log 的人才知道去哪裡翻現場。
      */
@@ -1463,6 +1436,11 @@ public class AppiumWorld {
         return described;
     }
 
+    /**
+     * 把目前畫面的元素樹寫到檔案，給定位失敗時回頭看畫面上到底有什麼用。
+     *
+     * <p>寫檔本身失敗就放著不管：這只是輔助資訊，為了它再丟一個例外會蓋掉真正的失敗原因。
+     */
     private void dumpPageSource(String path) {
         try {
             Files.writeString(Path.of(path), driver().getPageSource(), StandardCharsets.UTF_8);
@@ -1670,7 +1648,6 @@ public class AppiumWorld {
         return process.exitValue();
     }
 
-    /** 單筆任務 fixture，欄位對應 feature 檔「名下有以下任務」data table（狀態存中文原詞）。 */
     /**
      * 「名下有以下任務」一列的 fixture。類別／預估分鐘／重做次數是選填欄：沒給時
      * 類別預設打掃（多數情境的表只有房號內容狀態），預估分鐘與重做次數不落地。

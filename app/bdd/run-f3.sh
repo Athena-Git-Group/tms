@@ -24,9 +24,6 @@ log "3/5 起 Appium server"
 start_appium
 
 log "4/5 跑 F3 的 Cucumber 情境（RunF3PushFeatureTest，只選 specs/truth/features/ios-app/推播/）"
-# -Dtest 只跑這一個 Suite class，不要連 RunTruthFeaturesTest 一起跑——後者選的是
-# 全部 truth feature，裡面十個模組的 step 都還是 PendingException 的 stub，若跟
-# F3 共用 AppiumWorld 的 @Before／@After，會逼每個 pending 情境都重開一次模擬器。
 set +e
 JAVA_HOME="$(/usr/libexec/java_home -v 25)" \
   mvn -f "$BDD_DIR/pom.xml" test \

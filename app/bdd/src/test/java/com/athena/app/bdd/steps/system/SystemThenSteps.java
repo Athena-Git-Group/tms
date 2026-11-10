@@ -6,7 +6,6 @@ import io.cucumber.java.zh_tw.那麼;
 import java.time.Duration;
 import java.util.Map;
 
-/** 系統層模組的 Then。 */
 public class SystemThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -58,10 +57,6 @@ public class SystemThenSteps {
         assertLabel("system.offline-bar.pending-count", String.valueOf(pendingCount));
     }
 
-    /**
-     * 必查：畫面頂部連線異常列顯示該文案。accessibility id：
-     * {@code system.connection-issue-bar}。
-     */
     @那麼("連線異常列顯示 {string}")
     public void connectionIssueBarShowsText(String text) {
         assertLabel("system.connection-issue-bar", text);

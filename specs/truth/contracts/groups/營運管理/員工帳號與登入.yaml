@@ -85,3 +85,53 @@ changeOwnPassword:
         $ref: '../../components/responses.yaml#/Forbidden'
       '422':
         $ref: '../../components/responses.yaml#/UnprocessableEntity'
+registerPushTokenAndRevokePushToken:
+  put:
+    operationId: registerPushToken
+    summary: 登記本人這台手機的推播地址
+    description: >-
+      App 向 FCM 取得推播地址（token）後回報給後端，之後 outbox 的推播事件由推播消費者送到這台手機。
+      身分取自登入憑證，請求不帶員工 id。以 deviceFingerprint 認「哪一台手機」：同一台重複登記只更新
+      pushToken 與 platform、並清掉 revoked_at，不新增列（staff_devices 一台手機一列）。
+      地址會因為 App 重裝、FCM 輪替而變，App 每次啟動與 token 更新時都應呼叫一次，
+      登出時呼叫 DELETE 解除。缺 deviceFingerprint、pushToken 或 platform，或 platform 不是 ios／android，回 422。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/PushTokenRegisterRequest'
+    responses:
+      '204':
+        description: 已登記
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+  delete:
+    operationId: revokePushToken
+    summary: 解除本人這台手機的推播
+    description: >-
+      App 登出時呼叫：把 staff_devices 該列的 revoked_at 標上，之後的推播不再送這台手機。
+      只標記不刪列，之後同一台重新登入再 PUT 一次即恢復。沒有這台手機的登記也回 204。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/PushTokenRevokeRequest'
+    responses:
+      '204':
+        description: 已解除
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'

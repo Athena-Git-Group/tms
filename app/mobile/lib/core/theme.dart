@@ -20,7 +20,6 @@ import 'package:flutter/material.dart';
 /// `onXxxContainer` 是放在那個淡底上的文字與圖示色。兩者永遠成對使用，不要把
 /// 淡底配到別組的文字色——對比度是成對調過的。
 abstract final class TmsColors {
-  // ── 品牌色 ──────────────────────────────────────────────────────────
 
   /// 主色。主按鈕底、進行中狀態底、可點的文字與圖示、進度環、未讀點、勾選
   /// 框、步驟條已達色。
@@ -35,8 +34,6 @@ abstract final class TmsColors {
   /// [brandContainer] 上的文字色。
   static const Color brandOnContainerStrong = Color(0xFF2F5357);
 
-  /// Material 側的 on-secondary-container。畫面目前沒用到，留著是因為它在原型
-  /// token 裡成對存在，拿掉會讓下次比對原型的人以為這裡抄漏了。
   static const Color brandOnContainer = Color(0xFF4C696D);
 
   /// 強調／注意力淡底（橘）。頭像底、待認領與已延後狀態、備品類別、警告語氣。
@@ -56,7 +53,6 @@ abstract final class TmsColors {
   /// 深底上才讀得出來。
   static const Color brandAccentSoft = Color(0xFFFFB783);
 
-  // ── 狀態與類別色 ────────────────────────────────────────────────────
 
   /// 成功淡底。查房通過、已簽收。
   static const Color successContainer = Color(0xFFDDF3E4);
@@ -161,13 +157,11 @@ abstract final class TmsColors {
   /// 近黑但不是純黑的文字：類別磚標籤、池內「做到哪」備註。
   static const Color labelSoft = Color(0xFF1C1C1E);
 
-  // ── 連線狀態列 ──────────────────────────────────────────────────────
 
   /// 離線列底色。刻意用深色跟白底的「即時連線異常」列區隔：兩列會出現在同一
   /// 個位置，底色一樣的話員工看不出狀態已經換了一種。
   static const Color offlineBarBackground = Color(0xFF2C2C2E);
 
-  /// 離線列上的主文色。
   static const Color offlineBarLabel = Color(0xFFFFFFFF);
 
   /// 離線列上的次要文字（說明與待同步筆數）。
@@ -253,18 +247,13 @@ abstract final class TmsColors {
   /// Main.dc.html:1759 — rgba(0,0,0,.08)
   static const Color plainNavButtonShadow = Color(0x14000000);
 
-  // ── 疊層 ────────────────────────────────────────────────────────────
 
-  /// 慶祝頁遮罩。
   static const Color scrimCelebrate = Color(0x73000000);
 
-  /// 底部面板遮罩。
   static const Color scrimSheet = Color(0x52000000);
 
-  /// iOS Alert 遮罩。
   static const Color scrimAlert = Color(0x33000000);
 
-  /// 按下時疊在元件上的壓色。
   static const Color pressedOverlay = Color(0x1A000000);
 }
 
@@ -714,7 +703,6 @@ abstract final class TmsSize {
   /// iOS 的最小觸控目標。任何可點的東西不得低於這個高度。
   static const double minTouchTarget = 44;
 
-  /// 導覽列高度。
   static const double navBarHeight = 44;
 
   /// 凍結導覽列從它自己的頂端到底緣的高度：44 的項目列再加 8 的下內距。
@@ -735,7 +723,6 @@ abstract final class TmsSize {
   /// 導覽列右側項目裡那個圖示的邊長。Main.dc.html:1157
   static const double navBarItemIcon = 22;
 
-  /// 分隔線粗細。
   static const double hairline = 0.5;
 
   /// 狀態列、分組列、一般列的最小高度。
@@ -786,7 +773,6 @@ abstract final class TmsSize {
   /// 狀態摘要卡左側那顆圓形圖示（`Main.dc.html:1771`）。
   static const double statusSummaryIcon = 36;
 
-  /// 未讀點的直徑。
   static const double unreadDot = 8;
 
   /// 「這間房的資訊」列左側那顆未讀點的直徑（`Main.dc.html:1290`）。比
@@ -808,7 +794,6 @@ abstract final class TmsSize {
   /// 空狀態的描邊圖示邊長。
   static const double emptyStateIcon = 56;
 
-  /// 浮動分頁列的高度。
   static const double floatingTabBarHeight = 62;
 
   /// 浮動分頁列的圓角，剛好是高度的一半，所以兩端是半圓。
@@ -870,6 +855,4 @@ ThemeData buildTmsTheme() {
   );
 }
 
-/// 舊名保留：`main.dart` 與既有畫面還用這個常數指品牌主色。新程式碼請直接用
-/// [TmsColors.brandPrimary]。
 const Color tmsBrandColor = TmsColors.brandPrimary;

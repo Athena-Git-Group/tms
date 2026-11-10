@@ -62,13 +62,31 @@ Table staff_devices {
   tenant_id          bigint      [not null, ref: > tenants.id]
   staff_id           uuid        [not null]
   device_fingerprint text        [not null, note: '只做去重，不做綁定（docs/11 不在範圍內）']
-  push_token         text        [note: 'APNS/FCM 地址；權限被關即空']
+  push_token         text        [note: 'FCM 推播地址（iOS 也經 FCM 轉 APNS）；由 registerPushToken 回報，權限被關即空']
+  platform           text        [note: 'CHECK: ios|android；登入時順手登記、還沒帶平台的舊列為 NULL。iOS 送出時額外附 APNS alert 與 content-available']
   registered_at      timestamptz [not null]
-  revoked_at         timestamptz [note: '登出或推播服務回報失效時標記']
+  revoked_at         timestamptz [note: '登出（revokePushToken）或推播服務回報地址失效（FCM UNREGISTERED／INVALID_ARGUMENT）時標記']
   Indexes {
     (tenant_id, staff_id, device_fingerprint) [unique]
   }
   Note: '推播地址簿：一列=一台裝置。登入不驗裝置、多機合法。'
+}
+
+Table push_deliveries {
+  id                 bigserial   [pk]
+  tenant_id          bigint      [not null, ref: > tenants.id]
+  idempotency_key    text        [not null, note: '與 outbox.idempotency_key 同一把鍵；推播消費者處理前先查，已是 sent 或 skipped_no_token 就跳過']
+  recipient_staff_id uuid        [not null]
+  status             text        [not null, note: 'CHECK: sent|skipped_no_token|failed。sent＝至少一台手機送出成功；skipped_no_token＝收件人沒有未撤銷且有地址的手機；failed＝每台都失敗（含暫時性錯誤等待重試中、重試用盡）']
+  attempts           int         [not null, default: 0, note: '消費者處理這把鍵的次數，含暫時性錯誤後的重試']
+  last_error         text        [note: '最後一次失敗的原因']
+  created_at         timestamptz [not null]
+  sent_at            timestamptz [note: '第一台手機送出成功的時間']
+  Indexes {
+    (tenant_id, idempotency_key) [unique]
+    (tenant_id, recipient_staff_id, created_at)
+  }
+  Note: '推播送達紀錄：一列＝一把冪等鍵（outbox 的一筆 push）。讓消費者認出 relay／Kafka 重送、也讓人查得到為什麼沒送到。'
 }
 
 Table rooms {
@@ -510,6 +528,7 @@ Table phrase_counter {
 
 // ===== 複合外鍵（(tenant_id, xxx_id) → 對方 (tenant_id, id)；外鍵檢查不經 RLS，擋跨租戶關聯）=====
 Ref: staff_devices.(tenant_id, staff_id) > staff_accounts.(tenant_id, id)
+Ref: push_deliveries.(tenant_id, recipient_staff_id) > staff_accounts.(tenant_id, id)
 Ref: room_qr_tokens.(tenant_id, room_id) > rooms.(tenant_id, id)
 Ref: guest_sessions.(tenant_id, room_id) > rooms.(tenant_id, id)
 Ref: guest_sessions.(tenant_id, reservation_id) > reservations_cache.(tenant_id, id)

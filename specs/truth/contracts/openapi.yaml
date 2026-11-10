@@ -124,6 +124,8 @@ paths:
     $ref: './groups/營運管理/員工帳號與登入.yaml#/staffAccountsLogin'
   /staff-accounts/change-password:
     $ref: './groups/營運管理/員工帳號與登入.yaml#/changeOwnPassword'
+  /me/push-token:
+    $ref: './groups/營運管理/員工帳號與登入.yaml#/registerPushTokenAndRevokePushToken'
   /task-events:
     $ref: './groups/知識與通知/任務事件流水帳.yaml#/listTaskEvents'
   /tasks:

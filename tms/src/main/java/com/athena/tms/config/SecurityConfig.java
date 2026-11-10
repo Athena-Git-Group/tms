@@ -62,6 +62,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/change-password")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner")
                         // 住客需求操作走 X-Guest-Session 憑證（contracts createGuestRequest 等）
+                        // 推播地址登記與解除（contracts registerPushToken／revokePushToken）：每個會登入 App 的
+                        // 角色都要能收推播，所以不套下面「/api/v1 寫入限現場執行部門」的通則。
+                        .requestMatchers("/api/v1/me/push-token")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner")
                         .requestMatchers("/api/v1/guest-requests/**").hasRole("guest")
                         // 櫃檯備註由櫃檯建立（contracts createDeskNote），不套下面
                         // 「/api/v1 寫入限現場執行部門」的通則，否則櫃檯一律 403。

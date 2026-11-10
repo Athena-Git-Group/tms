@@ -1,6 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- */
 package com.athena.tms.integration.stepdefs.utils;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;

@@ -32,18 +32,18 @@ void main() {
     // Main.dc.html:139（進度環的 stroke-dasharray transition）與
     // Main.dc.html:1308（進度條的 width transition）。
     const expected = <String, (int, Curve)>{
-      'tmsFlash': (350, Curves.easeOut), // proto:31 .35s ease-out
-      'tmsUp': (260, Curves.easeOut), // proto:32 .26s ease-out
-      'tmsPop': (420, Curves.easeOut), // proto:33 .42s ease-out
-      'tmsDrop': (280, Curves.easeOut), // proto:34 .28s ease-out
-      'tmsSlide': (240, Curves.easeOut), // proto:35 .24s ease-out
-      'tmsFloat': (1600, Curves.easeOut), // proto:36 1.6s ease-out infinite
+      'tmsFlash': (350, Curves.easeOut),
+      'tmsUp': (260, Curves.easeOut),
+      'tmsPop': (420, Curves.easeOut),
+      'tmsDrop': (280, Curves.easeOut),
+      'tmsSlide': (240, Curves.easeOut),
+      'tmsFloat': (1600, Curves.easeOut),
       'tmsPulse': (
         1400,
         Curves.easeInOut,
-      ), // proto:37 1.4s ease-in-out infinite
-      'ringSweep': (500, Curves.easeOut), // proto:139 .5s ease-out
-      'barSweep': (300, Curves.easeOut), // proto:1308 .3s ease-out
+      ),
+      'ringSweep': (500, Curves.easeOut),
+      'barSweep': (300, Curves.easeOut),
     };
 
     test('九條都在，沒有多也沒有少', () {

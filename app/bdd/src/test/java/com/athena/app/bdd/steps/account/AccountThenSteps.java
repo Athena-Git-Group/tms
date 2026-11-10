@@ -47,7 +47,6 @@ public class AccountThenSteps {
         assertAbsent("login.shared-device.staff-id-field");
     }
 
-    /** 必查：{@code login.shared-device.staff-id-field}、{@code login.password-field} 都存在且可輸入。 */
     @那麼("登入畫面顯示員工編號與密碼兩個欄位")
     public void loginShowsSharedDeviceFields() {
         WebElement staffIdField = world.waitForTestId("login.shared-device.staff-id-field", SCREEN_TIMEOUT);
@@ -141,14 +140,9 @@ public class AccountThenSteps {
         }
     }
 
-    /**
-     * 必查：App 停在首頁，顯示該員工的今日進度。後端半邊：登入成功即把該員工的
-     * {@code failed_login_count} 清零、{@code locked_until} 保持未鎖定。
-     */
     @那麼("{string} 登入成功，進入首頁")
     public void loginSucceeds(String staffName) {
         world.waitForTestId("home.screen", SCREEN_TIMEOUT);
-        // 今日進度（進度環卡）的第一格，id 對照 ui-plan.md 的 F1 R1。
         world.waitForTestId("home.progress.cleaned-ratio", SCREEN_TIMEOUT);
 
         BackendChannel.CreatedStaff staff = world.staff(staffName);

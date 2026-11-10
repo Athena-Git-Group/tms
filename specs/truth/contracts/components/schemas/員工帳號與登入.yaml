@@ -157,3 +157,31 @@ LoginResponse:
     mustChangePassword:
       type: boolean
       description: true 表示這是臨時密碼登入，必須先設定新密碼才能繼續使用；完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
+PushTokenRegisterRequest:
+  type: object
+  description: registerPushToken（PUT /me/push-token）的請求：App 回報這台手機的推播地址。
+  required:
+  - deviceFingerprint
+  - pushToken
+  - platform
+  properties:
+    deviceFingerprint:
+      type: string
+      description: App 自行產生並保存的裝置識別碼，對應 staff_devices.device_fingerprint；同一台手機每次都送同一個值。
+    pushToken:
+      type: string
+      description: FCM 給的推播地址（iOS 也經 FCM 轉 APNS，一律送 FCM token），對應 staff_devices.push_token。
+    platform:
+      type: string
+      enum:
+      - ios
+      - android
+      description: 對應 staff_devices.platform；iOS 的推播會額外附 APNS 的 alert 與 content-available。
+PushTokenRevokeRequest:
+  type: object
+  description: revokePushToken（DELETE /me/push-token）的請求：登出時解除這台手機。
+  required:
+  - deviceFingerprint
+  properties:
+    deviceFingerprint:
+      type: string

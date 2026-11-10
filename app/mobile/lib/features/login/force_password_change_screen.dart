@@ -133,7 +133,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
       if (!mounted) {
         return;
       }
-      // 改密完成就離開登入流程，首頁依部門分流（與登入成功後同一套判斷）。
       replaceAllRoutes(
         context,
         result.dept == 'engineering'
@@ -158,7 +157,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     }
   }
 
-  /// 兩格新密碼欄：新密碼與確認密碼，各帶一顆眼睛鈕。
   Widget _passwordFields(NewPasswordCheck check) {
     return LoginFormCard(
       children: <Widget>[

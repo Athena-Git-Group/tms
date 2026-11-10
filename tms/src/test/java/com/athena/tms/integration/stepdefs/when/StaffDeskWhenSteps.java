@@ -1,11 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  io.cucumber.java.en.Given
- *  io.cucumber.java.en.When
- *  org.junit.jupiter.api.Assertions
- */
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
@@ -50,9 +42,6 @@ public class StaffDeskWhenSteps {
         this.ctx.lastResponse(this.claim(taskId, this.ctx.staffLogin(name)));
     }
 
-    /*
-     * WARNING - Removed try catching itself - possible behaviour change.
-     */
     @When(value="^\u300c\u5c0f\u7f8e\u300d\u8207\u300c\u5c0f\u83ef\u300d\u540c\u79d2\u5c0d\u4efb\u52d9 \"([^\"]+)\" \u9001\u51fa\u8a8d\u9818$")
     public void concurrentClaims(String taskSymbol) throws Exception {
         UUID taskId = this.ctx.entityId(taskSymbol);

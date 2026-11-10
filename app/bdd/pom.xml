@@ -20,7 +20,6 @@
 		<cucumber.version>7.22.1</cucumber.version>
 		<!-- 與 tms/pom.xml 透過 spring-boot-starter-parent 4.1.1 鎖定的 junit-jupiter.version 對齊 -->
 		<junit-bom.version>6.0.3</junit-bom.version>
-		<!-- io.appium:java-client 最新 9.x（10.x／11.x 另有 breaking change，本輪只要 9.x） -->
 		<appium-java-client.version>9.5.0</appium-java-client.version>
 		<!-- java-client 9.5.0 與 Selenium >=4.34.0 不相容（org.openqa.selenium.html5.* 被移除），
 			釘在最後一個相容版（spike 實測驗證，見 research.md 殘餘風險） -->
@@ -103,7 +102,6 @@
 			<version>42.7.13</version>
 			<scope>test</scope>
 		</dependency>
-		<!-- 解析登入回應與工作台詳情的 JSON（harness 原本只發不收，T300 起要讀回斷言） -->
 		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>

@@ -50,10 +50,8 @@ class TmsFab extends StatelessWidget {
 
   final VoidCallback onPressed;
 
-  /// 按鈕直徑。`Main.dc.html:1030` — width/height 56px
   static const double diameter = 56;
 
-  /// 按鈕離畫面右邊的距離。`Main.dc.html:1030` — right: 16px
   static const double sideInset = 16;
 
   /// 浮在分頁列上方時，按鈕下緣離畫面底的距離。
@@ -138,13 +136,10 @@ class TmsFab extends StatelessWidget {
   }
 }
 
-/// `Main.dc.html:4056` — blur(16px)
 const double _glassBlur = 16;
 
-/// `Main.dc.html:4056` — saturate(180%)
 const double _glassSaturation = 180;
 
-/// `Main.dc.html:4056` — inset 0 1px 0
 const double _highlightThickness = 1;
 
 class _TmsFabGlyphIcon extends StatelessWidget {
@@ -181,16 +176,13 @@ class TmsFabGlyphPainter extends CustomPainter {
 
   final TmsFabGlyph glyph;
 
-  /// `Main.dc.html:5029` — iOS 26 的前景色 #0C7680
   static const Color strokeColor = TmsColors.brandPrimary;
 
   /// 原型 SVG 的 viewBox 邊長。
   static const double _viewBox = 24;
 
-  /// 加號的筆畫。`Main.dc.html:1031` — stroke-width 2.4
   static const double plusStrokeWidth = 2.4;
 
-  /// 問號泡泡的筆畫。`Main.dc.html:1346` — stroke-width 2
   static const double askStrokeWidth = 2;
 
   @override
@@ -214,7 +206,6 @@ class TmsFabGlyphPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// `Main.dc.html:1031` — M12 5v14 M5 12h14
   Path _plusPath() {
     return Path()
       ..moveTo(12, 5)

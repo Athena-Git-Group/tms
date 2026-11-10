@@ -49,10 +49,8 @@ class TmsScrollNavBar extends StatelessWidget {
   /// 靜止時的文字與圖示色，取呼叫端標題區的前景色。
   final Color restingForeground;
 
-  /// 還沒捲動時的標題。
   final String restingTitle;
 
-  /// 捲過門檻之後的標題。
   final String scrolledTitle;
 
   /// 接在標題後面的那一小段紅字，例如超時提示。捲動後才顯示，不給就不畫。
@@ -80,10 +78,8 @@ class TmsScrollNavBar extends StatelessWidget {
   /// 這個位置剛好整個鑽進導覽列底下。`Main.dc.html:5044`
   static const double scrollThreshold = 72;
 
-  /// 毛玻璃的高斯模糊標準差。`Main.dc.html:5040`
   static const double glassBlur = 12;
 
-  /// 毛玻璃的飽和度百分比。`Main.dc.html:5040`
   static const double glassSaturation = 160;
 
   @override
@@ -263,10 +259,8 @@ class TmsNavBarButton extends StatelessWidget {
 
   final Widget child;
 
-  /// 圓底的高斯模糊標準差。`Main.dc.html:4457`
   static const double glassBlur = 12;
 
-  /// 圓底的飽和度百分比。`Main.dc.html:4457`
   static const double glassSaturation = 180;
 
   @override
@@ -389,7 +383,6 @@ class TmsNavBarBackButton extends StatelessWidget {
     );
   }
 
-  /// `Main.dc.html:1759` 的 11 × 18 箭頭。
   static const double _plainChevronWidth = 11;
   static const double _plainChevronHeight = 18;
 }

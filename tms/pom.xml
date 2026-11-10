@@ -96,6 +96,13 @@
 			<version>9.37.3</version>
 		</dependency>
 
+		<!-- 推播：Firebase Cloud Messaging（FCM）的 Admin SDK，由 PushSenderConfig 依憑證設定決定是否啟用 -->
+		<dependency>
+			<groupId>com.google.firebase</groupId>
+			<artifactId>firebase-admin</artifactId>
+			<version>9.9.0</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>

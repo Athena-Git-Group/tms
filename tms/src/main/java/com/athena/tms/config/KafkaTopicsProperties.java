@@ -1,11 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  lombok.Generated
- *  org.springframework.boot.context.properties.ConfigurationProperties
- *  org.springframework.stereotype.Component
- */
 package com.athena.tms.config;
 
 import lombok.Generated;
@@ -18,6 +10,8 @@ public class KafkaTopicsProperties {
     private String taskEvents = "tms.task-events";
     private String push = "tms.push";
     private String pmsStatus = "tms.pms-status";
+    /** 推播消費者重試用盡後把訊息改送到這裡，等人工查看，不再卡住後面的訊息。 */
+    private String pushDeadLetter = "tms.push.DLT";
 
     public String topicFor(String kind) {
         return switch (kind) {
@@ -26,6 +20,14 @@ public class KafkaTopicsProperties {
             case "pms_status" -> this.pmsStatus;
             default -> throw new IllegalArgumentException("未知 outbox kind: " + kind);
         };
+    }
+
+    public String getPushDeadLetter() {
+        return this.pushDeadLetter;
+    }
+
+    public void setPushDeadLetter(String pushDeadLetter) {
+        this.pushDeadLetter = pushDeadLetter;
     }
 
     public String getPmsStatus() {

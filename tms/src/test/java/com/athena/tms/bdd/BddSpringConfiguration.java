@@ -4,6 +4,9 @@ import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.HandoverFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
+import com.athena.tms.bdd.support.KafkaGroupAwait;
+import com.athena.tms.bdd.support.RecordingPushSender;
+import com.athena.tms.push.PushSender;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.OutboxAwait;
 import com.athena.tms.bdd.support.PmsProbe;
@@ -109,6 +112,21 @@ public class BddSpringConfiguration {
             return new MutableClock();
         }
 
+        /**
+         * 推播服務替身，蓋過 {@code PushSenderConfig} 依設定選出來的實作（測試不設 FCM 憑證，
+         * 那邊會是只寫日誌的版本）。單例：消費者執行緒與情境執行緒共用同一份紀錄。
+         */
+        @Bean
+        @Primary
+        RecordingPushSender recordingPushSender() {
+            return new RecordingPushSender();
+        }
+
+        @Bean(destroyMethod = "close")
+        KafkaGroupAwait kafkaGroupAwait() {
+            return new KafkaGroupAwait(KAFKA.getBootstrapServers());
+        }
+
         /** 依名稱同步觸發排程 job（不用等 {@code @Scheduled} 的真實間隔），見 {@link JobTrigger}。 */
         @Bean
         JobTrigger jobTrigger(ApplicationContext applicationContext) {
@@ -191,7 +209,8 @@ public class BddSpringConfiguration {
                 Map.of("bootstrap.servers", KAFKA.getBootstrapServers()))) {
             admin.createTopics(List.of(
                     new NewTopic("tms.task-events", 1, (short) 1),
-                    new NewTopic("tms.push", 1, (short) 1))).all().get();
+                    new NewTopic("tms.push", 1, (short) 1),
+                    new NewTopic("tms.push.DLT", 1, (short) 1))).all().get();
         } catch (Exception e) {
             throw new IllegalStateException("建立 Kafka topic 失敗", e);
         }

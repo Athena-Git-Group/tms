@@ -139,7 +139,6 @@ class PushGateway {
         );
         break;
       case 'ticket':
-        // 修繕任務（工務單）的推播：靠 task id 直取工務單詳情，跟房號無關。
         if (taskId == null) {
           return;
         }
@@ -165,7 +164,6 @@ class PushGateway {
         );
         break;
       default:
-        // 不認得的去處：不導頁，留在原畫面，也不讓整個流程炸掉。
         break;
     }
   }

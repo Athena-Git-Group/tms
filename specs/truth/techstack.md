@@ -23,7 +23,7 @@
 | 即時推送 | SSE（`SseEmitter`） | 住客與後台即時更新 |
 | 訊息佇列 | `Apache Kafka 3.9`（outbox → relay → Kafka） | 事件分發給 SSE、投影、推播消費者、PMS 回寫消費者 |
 | 排程 | `Quartz`（租戶感知）＋ Spring 排程 | 班前排房、班末掃描、到期提醒、清理；relay 輪詢用 Spring 排程 |
-| 推播 | 推播消費者（MVP 只寫日誌與資料列） | 員工推播事件；不接真的 APNS/FCM |
+| 推播 | 推播消費者（Kafka `tms.push` → Firebase Cloud Messaging，`firebase-admin` SDK） | 員工推播事件送到登記的手機（iOS 經 FCM 轉 APNS）；以 outbox 冪等鍵去重並寫 `push_deliveries` 送達紀錄；暫時性錯誤指數退避重試 3 次後進 `tms.push.DLT`；未設定 `tms.push.fcm.credentials-path` 時只寫日誌與送達紀錄 |
 | 時間來源 | 注入的 `java.time.Clock` | 計時、排序、提醒都以同一個可替換時鐘為準 |
 
 ### 資料與媒體處理
@@ -49,7 +49,7 @@
 
 - H2 或其他記憶體資料庫替代 PostgreSQL 做驗收
 - 記憶體或 embedded Kafka 替代品做驗收
-- 真實 APNS/FCM 推播投遞（後端 MVP 只寫日誌與資料列）
+- 直接對接 APNS：iOS 推播一律經 FCM 轉送，後端只維護一種推播地址
 - LLM 問答（查一下只做關鍵字比對與出處，介面留椿）
 - 後端影像處理函式庫（照片壓縮與浮水印由 App 端處理）
 - iOS 專屬 BDD runner（XCUITest ＋ Cucumberish）與 Maestro：雙平台改採 Appium ＋ Cucumber-JVM，不另建平台專屬測試線

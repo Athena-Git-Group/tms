@@ -7,7 +7,6 @@ import io.cucumber.java.zh_tw.假設;
 import java.time.Duration;
 import java.util.List;
 
-/** 帳號與登入模組的 Given。 */
 public class AccountGivenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(6);
@@ -89,19 +88,11 @@ public class AccountGivenSteps {
         world.waitForTestId("login.force-password-change.new-password-field", SCREEN_TIMEOUT);
     }
 
-    /**
-     * 怎麼做：透過後端測試資料把該員工帳號累計到指定的登入失敗次數
-     * （{@code staff_accounts.failed_login_count}，T240 建的欄位）。
-     */
     @假設("{string} 已連續輸入錯誤密碼 {int} 次")
     public void staffHasConsecutiveFailedLogins(String staffName, int count) {
         world.backend().setFailedLoginCount(world.staff(staffName).id(), count);
     }
 
-    /**
-     * 怎麼做：透過後端測試資料把該員工帳號標記為需要強制改密
-     * （{@code staff_accounts.must_change_password}，T240 建的欄位）。
-     */
     @假設("{string} 的帳號是臨時密碼")
     public void staffAccountHasTemporaryPassword(String staffName) {
         world.backend().markMustChangePassword(world.staff(staffName).id());

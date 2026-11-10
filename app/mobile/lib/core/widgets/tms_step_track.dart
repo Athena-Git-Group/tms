@@ -54,13 +54,12 @@ class TmsStepTrack extends StatelessWidget {
   /// 步驟圖示的邊長。連接線的上緣留白要對齊它的圓心，見 [_connector]。
   static const double _nodeSize = 28;
 
-  /// 圖示（已達／未達）的顏色。
   Color _iconColor(TmsStepStatus status) {
     final reached = status != TmsStepStatus.pending;
     if (onDark) {
       return reached
           ? TmsColors.brandOnPrimary
-          : const Color(0x99FFFFFF); // 白 60%
+          : const Color(0x99FFFFFF);
     }
     return reached ? TmsColors.brandPrimary : TmsColors.systemGray2;
   }
@@ -69,13 +68,12 @@ class TmsStepTrack extends StatelessWidget {
   Color get _checkColor =>
       onDark ? TmsColors.brandPrimary : TmsColors.brandOnPrimary;
 
-  /// 標籤文字的顏色。
   Color _textColor(TmsStepStatus status) {
     final reached = status != TmsStepStatus.pending;
     if (onDark) {
       return reached
           ? TmsColors.brandOnPrimary
-          : const Color(0xB8FFFFFF); // 白 72%
+          : const Color(0xB8FFFFFF);
     }
     return reached ? TmsColors.label : TmsColors.tertiaryLabel;
   }
@@ -85,7 +83,7 @@ class TmsStepTrack extends StatelessWidget {
     if (onDark) {
       return reached
           ? TmsColors.brandOnPrimary
-          : const Color(0x4DFFFFFF); // 白 30%
+          : const Color(0x4DFFFFFF);
     }
     return reached ? TmsColors.brandPrimary : TmsColors.separator;
   }

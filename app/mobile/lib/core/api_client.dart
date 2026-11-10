@@ -1243,7 +1243,6 @@ class DeptPool {
   }
 }
 
-/// `PoolItem`：池中一張單卡需要的欄位。
 class PoolItem {
   const PoolItem({
     required this.taskId,
@@ -1297,7 +1296,6 @@ class PoolItem {
   /// 同 [RepairTicketDetail.isPublicArea]）。
   static const String publicAreaRoomNo = '公共區域';
 
-  /// 這張單開給公共區域、沒有房號。
   bool get isPublicArea => roomNo == publicAreaRoomNo;
 
   factory PoolItem.fromJson(Map<String, dynamic> json) {
@@ -1386,10 +1384,8 @@ class HandoverEntry {
   /// 來源，照契約 enum：shift_handover｜desk_note｜requeue_progress｜manager_note。
   final String kind;
 
-  /// 寫下這則交辦的人。
   final String author;
 
-  /// 交辦內容。
   final String content;
 
   /// 寫下的時刻；交班單以外的來源不一定有。
@@ -1515,8 +1511,6 @@ class ReturnInfo {
   }
 }
 
-/// `TaskDetail`：任務頁需要的最小欄位集（契約還有 SOP 勾記等欄位，等對應畫面
-/// 實作時再補進來，不預先鋪沒人讀的欄位）。
 class TaskDetail {
   const TaskDetail({
     required this.id,

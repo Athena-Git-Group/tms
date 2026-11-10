@@ -183,7 +183,6 @@ public class BackendChannel {
         this.dbPassword = System.getProperty("backend.db.password", "tms");
     }
 
-    /** 任務狀態中文 → 權威 tasks.state；查不到就噴錯帶原詞，不猜（對齊 tms Terms 的行為）。 */
     public static String taskState(String chinese) {
         String value = TASK_STATE.get(chinese);
         if (value == null) {
@@ -192,7 +191,6 @@ public class BackendChannel {
         return value;
     }
 
-    /** 部門中文 → 權威 staff_accounts.dept；查不到就噴錯帶原詞，不猜（對齊 tms Terms.dept）。 */
     public static String dept(String chinese) {
         String value = DEPT.get(chinese);
         if (value == null) {
@@ -201,7 +199,6 @@ public class BackendChannel {
         return value;
     }
 
-    /** 角色中文 → 權威 role（manager|duty_manager）；查不到就噴錯帶原詞（對齊 tms Terms.role）。 */
     public static String role(String chinese) {
         String value = ROLE.get(chinese);
         if (value == null) {
@@ -210,7 +207,6 @@ public class BackendChannel {
         return value;
     }
 
-    /** 任務類別中文 → 權威 tasks.type（＝契約 PoolCategory）；查不到就噴錯帶原詞。 */
     public static String taskType(String chinese) {
         String value = TASK_TYPE.get(chinese);
         if (value == null) {
@@ -219,7 +215,6 @@ public class BackendChannel {
         return value;
     }
 
-    /** 待認領來源中文 → 權威 tasks.pool_source（＝契約 PoolSource）；查不到就噴錯帶原詞。 */
     public static String poolSource(String chinese) {
         String value = POOL_SOURCE.get(chinese);
         if (value == null) {
@@ -228,7 +223,6 @@ public class BackendChannel {
         return value;
     }
 
-    /** 未接提醒階段中文 → 權威 tasks.reminder_stage；查不到就噴錯帶原詞。 */
     public static String reminderStage(String chinese) {
         String value = REMINDER_STAGE.get(chinese);
         if (value == null) {

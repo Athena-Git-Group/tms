@@ -590,7 +590,6 @@ class _WorkTile extends StatelessWidget {
   }
 }
 
-/// 工作磚左上角的兩種圖示。
 enum _WorkGlyph { clipboard, box }
 
 /// 畫工作磚的圖示。

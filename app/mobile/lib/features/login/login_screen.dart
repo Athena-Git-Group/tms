@@ -110,6 +110,9 @@ class _LoginScreenState extends State<LoginScreen> {
       // 登入成功即離開登入流程（見 replaceAllRoutes 的返回堆疊保證）。
       // 首頁依部門分流（ui-plan：同一 App 用部門切換呈現工務視角）：
       // 工務落在工務首頁，其他部門維持房務首頁。
+      // 登入成功才把這支手機的推播 token 掛到這個帳號名下；不等它完成，
+      // 要權限、取 token 都是慢動作，不該擋住進首頁。
+      unawaited(PushTokenService.instance?.start());
       final Widget landing;
       if (result.mustChangePassword) {
         // 強制改密畫面要拿這兩個值比對「和臨時密碼不同」「不能是員工編號」

@@ -47,6 +47,11 @@ public final class OutboxAwait {
         return new OutboxAwait(dbProbe, objectMapper, pollInterval, timeout);
     }
 
+    /** 等待任意單列查詢有結果（例如推播消費者寫出的送達紀錄），回傳那一列整欄。 */
+    public Map<String, Object> waitForRow(String what, String sql, Object... params) {
+        return pollUntilFound(() -> dbProbe.queryOne(sql, params), what);
+    }
+
     /** 等待某種 kind 的 outbox 列出現且符合 predicate，回傳那一列整欄。 */
     public Map<String, Object> waitForOutboxRow(String kind, Predicate<Map<String, Object>> predicate, String what) {
         return pollUntilFound(
