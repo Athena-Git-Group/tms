@@ -375,6 +375,7 @@ public class AppiumWorld {
         typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
         typeInto("login.password-field", timeout, staff.password());
         for (int attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
+            dismissForgotPasswordAlert();
             tapTestId("login.submit-button", timeout);
             if (waitForTestIdQuietly(landing, timeout) != null) {
                 loggedInStaff = staff;
@@ -386,6 +387,24 @@ public class AppiumWorld {
         }
         waitForTestId(landing, timeout);
         loggedInStaff = staff;
+    }
+
+    /**
+     * 關掉蓋在登入頁上的「忘記密碼」提示。
+     *
+     * <p>「忘記密碼？」就排在送出鍵下面一點，送出那一下偶爾會落在它上面（機器負載高時
+     * 比較容易中）。它一彈出來就是 modal，Flutter 會把底下整頁的 semantics 擋掉，於是送出
+     * 鍵連找都找不到，重送那一輪必然無效，最後空等一個登入逾時，紅成「等不到首頁」。
+     * 先關掉它，重送才真的有機會成功。
+     */
+    private void dismissForgotPasswordAlert() {
+        if (driver().findElements(byTestId("login.forgot-password-alert")).isEmpty()) {
+            return;
+        }
+        for (WebElement dismiss
+                : driver().findElements(byTestId("login.forgot-password-alert.dismiss-button"))) {
+            dismiss.click();
+        }
     }
 
     /**

@@ -407,6 +407,7 @@ class _LoginScreenState extends State<LoginScreen> {
           actions: <TmsAlertAction>[
             TmsAlertAction(
               label: '好',
+              id: 'login.forgot-password-alert.dismiss-button',
               style: TmsAlertActionStyle.primary,
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
@@ -430,6 +431,7 @@ class _LoginScreenState extends State<LoginScreen> {
           actions: <TmsAlertAction>[
             TmsAlertAction(
               label: '好',
+              id: 'login.forgot-password-alert.dismiss-button',
               style: TmsAlertActionStyle.primary,
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
