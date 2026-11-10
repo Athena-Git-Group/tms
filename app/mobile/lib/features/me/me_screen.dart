@@ -13,6 +13,7 @@ import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../login/login_screen.dart';
 import '../task/task_screen.dart';
+import '../ticket/ticket_screen.dart';
 import '../today/my_today_scope.dart';
 
 /// 「我的」畫面（ui-plan 畫面 10）：員工在這裡確認自己是用誰的帳號在用這支
@@ -116,8 +117,12 @@ class MeScreen extends StatelessWidget {
 
   /// 名下還有一間在做時攔住登出，並給一條直接過去的路。
   ///
-  /// 「前往」那一顆會把那張單的任務頁推上來。少了它，員工得自己關掉對話框、
+  /// 「前往」那一顆會把那張單的畫面推上來。少了它，員工得自己關掉對話框、
   /// 切回首頁、再從清單裡找出是哪一間，而他剛剛被告知的就是那一間。
+  ///
+  /// 修繕單開工務單詳情而不是任務頁，和推播去處同一條規則：任務頁沒有完修
+  /// 回報的入口，工務員工被帶去那裡會被完修照片的檢核擋下卻無處補照片。
+  /// 名下的修繕單只會在修的人手上，所以固定用工務那一面。
   ///
   /// 關掉對話框那一顆沿用 `me.logout-blocked-alert.confirm-button`：兩個攔阻
   /// 對話框的按鈕數不同，但驗收要做的事都是「把它關掉，確認人還在登入狀
@@ -143,8 +148,12 @@ class MeScreen extends StatelessWidget {
               Navigator.of(dialogContext).pop();
               Navigator.of(context).push(
                 CupertinoPageRoute<void>(
-                  builder: (_) =>
-                      TaskScreen(roomNo: task.roomNo, taskId: task.taskId),
+                  builder: (_) => task.type == 'repair'
+                      ? TicketScreen(
+                          view: TicketView.engineering,
+                          taskId: task.taskId,
+                        )
+                      : TaskScreen(roomNo: task.roomNo, taskId: task.taskId),
                 ),
               );
             },

@@ -6,6 +6,7 @@ import 'package:tms_staff_app/core/connection_status.dart';
 import 'package:tms_staff_app/core/widgets/tms_toggle.dart';
 import 'package:tms_staff_app/features/me/me_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
+import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
 /// 驗「我的」這一頁上員工自己的東西：身分卡、兩張工作磚、設定列，以及登出
@@ -35,7 +36,12 @@ void main() {
     mustChangePassword: false,
   );
 
-  MyToday todayWith(List<String> states, {String? shift, List<int>? floors}) =>
+  MyToday todayWith(
+    List<String> states, {
+    String? shift,
+    List<int>? floors,
+    String type = 'cleaning',
+  }) =>
       MyToday(
         cleaningDone: 0,
         cleaningTotal: states.length,
@@ -52,7 +58,7 @@ void main() {
               taskId: 'task-$i',
               roomNo: '30${i + 1}',
               title: '退房打掃',
-              type: 'cleaning',
+              type: type,
               state: states[i],
               redoCount: 0,
               estMin: 30,
@@ -225,6 +231,27 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(TaskScreen), findsOneWidget);
+
+    handle.dispose();
+  });
+
+  testWidgets('名下進行中的是修繕單時，前往開的是工務單詳情而不是任務頁', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pumpScreen(
+      tester,
+      session: session,
+      today: todayWith(const ['doing'], type: 'repair'),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier('me.logout-button'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier('me.logout-blocked-alert.open-task-button'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TicketScreen), findsOneWidget);
+    expect(find.byType(TaskScreen), findsNothing);
 
     handle.dispose();
   });
