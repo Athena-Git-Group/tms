@@ -150,9 +150,12 @@ RepairTicket:
     required:
     - photoCount
     - urgentJudgement
+    - origin
     properties:
       description:
         type: string
+        nullable: true
+        description: 報修說明，報修人沒填為 null；定期保養單是保養說明。
       photos:
         type: array
         items:
@@ -175,6 +178,40 @@ RepairTicket:
       resolutionNote:
         type: string
         nullable: true
+        description: 工務的處理說明，例如「更換四顆三號電池，刷卡測試三次正常」；尚未完修或沒填為 null。
+      resolutionType:
+        type: string
+        nullable: true
+        enum:
+        - fixed
+        - temporary
+        - cannot_fix
+        description: >-
+          完修結果三選一，與 CompleteTaskRequest.resolutionType 同一套值：fixed 已修好、temporary 暫時處理
+          （系統已另建追蹤單）、cannot_fix 無法修復（該房 hk_state 已轉 out_of_order）。
+          來源 repair_tickets.resolution_type；null 等價於尚未完修，done 後必有值（完修時同交易寫入，省略送出的寫 fixed）。
+          待驗收清單與主管視角的狀態列都顯示它。
+      doneAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: 完修時間（tasks.done_at），也是待驗收清單的排序鍵；尚未完修為 null。
+      reviewRequestedAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: >-
+          最近一次進入等主管審核的時間：第一次送出（建單即進 pending_review）或補資料再送出（rejected 回到 pending_review），
+          取自任務事件中最後一筆 created 或 repair_resubmitted 的時間，不是建單時間也不是最後更新時間。
+          待審核清單的排序鍵與主管視角狀態列「<報修人> <時間> 送出」用它。不經審核的單（急件、工務自開、櫃檯交辦、定期保養）為 null。
+      origin:
+        type: string
+        enum:
+        - reported
+        - scheduled
+        description: >-
+          來源：reported 是有人報修（房務報修、工務自開、櫃檯交辦三條路徑都算），scheduled 是每日排程建出的定期保養。
+          定期保養不經主管審核直接進工務待認領，但完修後一樣要驗收，待驗收清單要能看出它是保養單。
       urgentJudgement:
         allOf:
         - $ref: '#/UrgentJudgement'
@@ -189,23 +226,22 @@ RepairTicket:
         nullable: true
         description: >-
           主管退回一般件（state=rejected）時附的原因，例如「照片看不清楚，請補拍」；房務補資料重新送出
-          （回到 pending_review）後清空。非 rejected 狀態為 null。本 plan 新增，待 /data-plan 補對應欄位。
+          （回到 pending_review）後清空。非 rejected 狀態為 null。
       verifiedBy:
         type: string
         nullable: true
-        description: 驗收通過的主管顯示名稱；尚未驗收為 null。本 plan 新增，待 /data-plan 補驗收人欄位。
+        description: 驗收通過的主管顯示名稱（repair_tickets.verified_by JOIN staff_accounts）；尚未驗收為 null。工務端狀態列「已驗收 · <主管>」與主管視角都顯示它。
       verifiedAt:
         type: string
         format: date-time
         nullable: true
-        description: 主管驗收通過的時間；尚未驗收為 null。本 plan 新增，待 /data-plan 補驗收時間欄位。
+        description: 主管驗收通過的時間；尚未驗收為 null。待驗收的判定就是 state=done 且這個值為 null。
       originTicketNo:
         type: string
         pattern: ^W-\d{4}$
         nullable: true
         description: >-
           若本單是完修回報「暫時處理」時系統自動建立的追蹤單，這裡是原單的單號；非追蹤單為 null。
-          本 plan 新增，待 /data-plan 補原單關聯欄位。
 DowngradeRepairTicketUrgencyRequest:
   type: object
   required:

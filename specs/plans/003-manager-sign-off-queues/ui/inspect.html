@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>查房</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+  <div class="navbar"><button class="back" onclick="go('queue.html?kind=inspection')">待查房</button><span id="title"></span></div>
+  <div class="content">
+    <div class="summary">
+      <div class="room" id="room"></div>
+      <div class="title" id="stitle"></div>
+      <div class="sub" id="ssub"></div>
+    </div>
+    <div class="offlinebar"><span>目前離線</span><span>待同步 0 筆</span></div>
+    <div class="notice" id="notice">查房項目剛更新，請重新判定</div>
+    <div class="sectionlabel"><span>查房項目</span><span id="count"></span></div>
+    <div id="items"></div>
+  </div>
+  <div class="actionbar">
+    <div class="progress" id="progress"></div>
+    <div class="actions"><button class="pill" id="submit" disabled onclick="submit()">送出查房結果</button></div>
+  </div>
+
+  <div class="scrim" id="offlineDialog"><div class="dialog"><div class="t">目前離線，只能完成進行中的單</div><div class="s">查房結果不會留在手機上補送，恢復連線後請再送一次。</div><button class="ok" onclick="hideDialog('offlineDialog')">知道了</button></div></div>
+  <div class="scrim" id="handledDialog"><div class="dialog"><div class="t">這張單已被處理</div><div class="s">可能是另一位主管剛查過這間房，或這張單被改派了。</div><button class="ok" onclick="go('queue.html?kind=inspection')">知道了</button></div></div>
+</div>
+<script src="manager.js"></script>
+<script>
+if (isOffline()) document.getElementById('phone').classList.add('offline');
+function go(url) { location.href = carryOffline(url); }
+const room = Q.get('room') || '301';
+const task = QUEUE.inspection.find(r => r.room === room) || QUEUE.inspection[1];
+const BASE_ITEMS = ['床鋪平整', '浴室無水痕', '備品齊全', '地面乾淨', '無異味'];
+const CHANGED_ITEMS = BASE_ITEMS.concat(['窗戶玻璃乾淨']);
+/* 303 是「送出時飯店剛新增了項目」的那一張；小林今天已下班 */
+const scenario = { '303': { changeOnFirstSubmit: true, cleanerOffShift: true } }[room] || {};
+let items = Q.get('items') === '0' ? [] : BASE_ITEMS.slice();
+let verdict = {};
+let submittedOnce = false;
+
+document.getElementById('title').textContent = `查房 · ${room}`;
+document.title = `查房 · ${room}`;
+document.getElementById('room').textContent = room;
+document.getElementById('stitle').textContent = `${room} ${task.title}`;
+document.getElementById('ssub').textContent = `${task.cleaner} 清的 · ${task.date === TODAY ? '' : task.date + ' '}${task.time} 完成`;
+
+function render() {
+  const box = document.getElementById('items');
+  document.getElementById('count').textContent = items.length ? `${items.length} 項` : '';
+  if (!items.length) {
+    box.innerHTML = '<div class="empty"><div class="t">這家飯店目前沒有設定查房項目</div><div class="s">送出即視為全部通過</div></div>';
+  } else {
+    box.innerHTML = '<div class="items">' + items.map((name, i) => {
+      const v = verdict[name];
+      return `<div class="item ${v === true ? 'pass' : v === false ? 'fail' : ''}">
+        <span class="name">${name}</span>
+        <span class="seg">
+          <button class="${v === true ? 'on-pass' : ''}" onclick="judge('${name}', true)">通過</button>
+          <button class="${v === false ? 'on-fail' : ''}" onclick="judge('${name}', false)">不通過</button>
+        </span></div>`;
+    }).join('') + '</div>';
+  }
+  const judged = items.filter(n => verdict[n] !== undefined).length;
+  document.getElementById('progress').textContent = items.length ? `已判 ${judged} / ${items.length} 項` : '沒有項目要判，可以直接送出';
+  document.getElementById('submit').disabled = judged !== items.length;
+}
+function judge(name, pass) { verdict[name] = pass; render(); }
+function submit() {
+  if (isOffline()) { showDialog('offlineDialog'); return; }
+  if (scenario.changeOnFirstSubmit && !submittedOnce) {
+    submittedOnce = true;
+    items = CHANGED_ITEMS.slice(); verdict = {};
+    document.getElementById('notice').classList.add('show');
+    render();
+    document.querySelector('.content').scrollTop = 0;
+    return;
+  }
+  const fails = items.filter(n => verdict[n] === false);
+  Done.add(task.id);
+  const outcome = !fails.length ? 'passed' : (scenario.cleanerOffShift ? 'pool' : 'returned');
+  go(`inspect-result.html?room=${room}&outcome=${outcome}&fails=${encodeURIComponent(fails.join('、'))}&cleaner=${encodeURIComponent(task.cleaner)}`);
+}
+render();
+</script>
+</body>
+</html>

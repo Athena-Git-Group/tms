@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>查房結果</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+  <div class="result">
+    <div class="mark" id="mark"></div>
+    <div class="room" id="room"></div>
+    <div class="headline" id="headline"></div>
+    <div class="sub" id="sub"></div>
+    <div class="fails" id="fails"></div>
+  </div>
+  <div class="actionbar"><div class="actions"><button class="pill" onclick="go('queue.html?kind=inspection')">回到待查房</button></div></div>
+</div>
+<script src="manager.js"></script>
+<script>
+function go(url) { location.href = carryOffline(url); }
+const room = Q.get('room') || '301', outcome = Q.get('outcome') || 'passed';
+const cleaner = Q.get('cleaner') || '小美', fails = (Q.get('fails') || '').split('、').filter(Boolean);
+document.getElementById('room').textContent = room;
+const mark = document.getElementById('mark'), h = document.getElementById('headline'), s = document.getElementById('sub');
+if (outcome === 'passed') {
+  mark.className = 'mark ok'; mark.textContent = '✓';
+  h.textContent = '查房通過，已結案'; s.textContent = `${cleaner} 會收到通知`;
+} else {
+  mark.className = 'mark back'; mark.textContent = '↺';
+  h.textContent = '退回重做';
+  s.textContent = outcome === 'pool' ? `${cleaner} 已下班，這張單回到了房務待認領` : `回到 ${cleaner} 名下`;
+  document.getElementById('fails').innerHTML = fails.map(f => `<span class="chip cannot">不合格：${f}</span>`).join('');
+}
+</script>
+</body>
+</html>

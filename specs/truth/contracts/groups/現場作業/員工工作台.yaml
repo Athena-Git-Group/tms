@@ -19,6 +19,12 @@ getMyToday:
       今天已完修（今天 done 的工務單數）、急件數（手上單中 isUrgent 的數量），
       以及這些單的清單 tickets（accepted／doing 的工務單，加上今天 done 的工務單，讓工務能打開已完修的單看驗收狀態）；
       非工務呼叫者這個欄位為 null。
+      呼叫者是主管（role=manager）時：todayTasks 與 nextTasks 照常回本人名下今天的單（主管首頁「我名下的單」只讀 todayTasks）；
+      打掃進度六個數字（cleaningDone、cleaningTotal、inspectedCount、completedCount、adHocCompleted、remainingMinutes）
+      依同一套公式對本人名下的單計算，主管沒有名下的單時都是 0，主管首頁不顯示這些數字；
+      poolBadgeCount 一律為 0（主管不屬於任何部門池、搶不到單，待認領徽章不顯示）；
+      unreadNotificationBadgeCount 照常；shift 與 floors 為 null（排班只存在房務的排房計畫）；engineeringSummary 為 null。
+      主管的三格待辦不在這支端點，走 getManagerQueues。
     tags:
     - 員工工作台 API
     responses:

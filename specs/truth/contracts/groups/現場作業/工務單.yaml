@@ -152,7 +152,11 @@ readRepairTicket:
   get:
     operationId: readRepairTicket
     summary: 查看工務單詳情
-    description: 回傳照片、類別、說明、處理進度、完修照片與處理說明。報修人、原任務負責人與工務都可以查看。
+    description: >-
+      回傳照片、類別、說明、處理進度、完修照片、完修結果與處理說明。報修人、原任務負責人、工務，以及主管都可以查看；
+      主管不論從待審核、待驗收、推播或其他畫面進來，任何狀態的工務單都能打開（FR-032），主管動作只在
+      pending_review（核准／退回）與 done 且尚未驗收（驗收）兩種狀態出現，其他狀態沒有主管動作。
+      公共區域的單 roomNo 為 null、isPublicArea 為 true，地點說明在 title 或 description 裡。
     tags:
     - 工務單 API
     parameters:
@@ -288,7 +292,8 @@ rejectRepairTicket:
     summary: 主管退回等審核中的一般件工務單，須附原因
     description: >-
       只有 pending_review（等主管審核）的工務單能被退回；退回後轉為 rejected，寫入 rejectReason，
-      不進入工務待認領。原因空白回 422 reject_reason_required；其他狀態回 409 state_conflict；
+      不進入工務待認領。同一交易推播報修人（PushPayload.event=repair_rejected，body 帶退回原因，去處為這張工務單詳情）。
+      原因空白回 422 reject_reason_required；其他狀態回 409 state_conflict；
       非主管呼叫回 403。
     tags:
     - 工務單 API

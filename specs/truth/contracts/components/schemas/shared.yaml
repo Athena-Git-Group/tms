@@ -22,8 +22,12 @@ Error:
     current_password_invalid（401，「目前密碼不正確」）；
     new_password_invalid（422，新密碼與目前密碼相同）；
     dept_required（422，主管或老闆呼叫 listDeptPool 沒有帶 dept，無法判斷要看哪一池）；
-    forbidden_dept_pool（403，現場員工帶了自己部門以外的 dept 查待認領）。
-    違反狀態機守衛時沿用 state_conflict（409）。
+    forbidden_dept_pool（403，現場員工帶了自己部門以外的 dept 查待認領）；
+    inspection_items_mismatch（422，createInspections 送出的項目集合與飯店現行啟用的查房項目全集不符，少項或多項都算；
+    context 帶 missing（少的鍵）、unexpected（多的鍵）與 currentItems（現行集合，每筆 key、label、sortOrder），
+    App 用 currentItems 換掉畫面上的項目讓主管重判）。
+    違反狀態機守衛時沿用 state_conflict（409）：工務單的核准、退回、驗收與查房送出撞到單已不在預期狀態
+    （另一位主管先處理、報修人撤回、單被改派或作廢）都回這一個 code，App 顯示「這張單已被處理」並刷新清單。
   required:
   - code
   - message
@@ -708,6 +712,7 @@ RepairTicketSummary:
   - taskId
   - ticketNo
   - roomNo
+  - isPublicArea
   - category
   - isUrgent
   - state
@@ -723,6 +728,14 @@ RepairTicketSummary:
       example: W-0410
     roomNo:
       type: string
+      nullable: true
+      description: >-
+        客房單的房號。開給公共區域的單（工務直開 isPublicArea=true，或定期保養排在公共區域）沒有房號，為 null，
+        此時 isPublicArea 為 true、地點說明在標題或說明裡；與 EngineeringTicket.roomNo 同一套做法。
+        資料側公共區域的單掛在佔位房上，那個佔位房號不會出現在這裡。
+    isPublicArea:
+      type: boolean
+      description: true 表示這張單開給公共區域（沒有房號），此時 roomNo 為 null。
     category:
       $ref: './工務單.yaml#/RepairCategory'
     isUrgent:
@@ -747,6 +760,8 @@ RepairTicketSummary:
         不新增獨立狀態值。
     reporterName:
       type: string
+      nullable: true
+      description: 報修人顯示名稱；定期保養單由排程建立、沒有報修人時為 null。
     createdAt:
       type: string
       format: date-time
@@ -761,6 +776,10 @@ PushPayload:
     沒有對應的 HTTP 端點，這裡列出它的形狀，作為 App 解析推播與後端 E2E 斷言的依據。
     unclaimed_reminder_staff／unclaimed_reminder_manager 是待認領未接超時兩段提醒（一般單與急件門檻各自可設定，
     各段只發一次，認領後不再發）；標題例如「319 退房清潔 已等 10 分，還沒人接」、「319 退房清潔 已通知主管」。
+    repair_rejected 是主管退回等審核中（pending_review）的房務報修工務單時發給報修人（repair_tickets.reporter_id）的一封：
+    title 帶房號、單號與「主管未核准」，body 帶退回原因（RepairTicket.rejectReason），例如 title「202 W-0201 主管未核准」、
+    body「照片看不出哪裡鬆」；target 的 kind=ticket、taskId 為該工務單的任務 id，點開進工務單詳情（那裡有「補資料再送出」）。
+    與 task_events.type 的 repair_rejected 同名、同一交易寫入 outbox；主管核准與驗收不另發推播。
   required:
   - recipientStaffId
   - event
@@ -790,6 +809,7 @@ PushPayload:
       - shift_end_still_interrupted
       - unclaimed_reminder_staff
       - unclaimed_reminder_manager
+      - repair_rejected
     title:
       type: string
       description: 推播標題全文，例如「305 水電已修好」。

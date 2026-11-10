@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>等主管處理的單</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+  <div class="navbar"><button class="back" onclick="go('index.html')">首頁</button><span id="title"></span></div>
+  <div class="content">
+    <div class="offlinebar"><span>目前離線</span><span>待同步 0 筆</span></div>
+    <div class="sectionlabel"><span id="caption"></span><span>最早開始等的在最上面</span></div>
+    <div id="list"></div>
+  </div>
+  <div class="tabbar">
+    <a class="tab active" href="index.html"><span class="glyph"></span>首頁</a>
+    <a class="tab" href="pool.html"><span class="glyph"></span>待認領</a>
+    <a class="tab" href="#"><span class="glyph"></span>通知<span class="badge">2</span></a>
+    <a class="tab" href="#"><span class="glyph"></span>我的</a>
+  </div>
+</div>
+<script src="manager.js"></script>
+<script>
+if (isOffline()) document.getElementById('phone').classList.add('offline');
+function go(url) { location.href = carryOffline(url); }
+const kind = ['inspection', 'review', 'verify'].includes(Q.get('kind')) ? Q.get('kind') : 'inspection';
+const META = {
+  inspection: { title: '待查房', caption: '別人清好、等你查的房', empty: '目前沒有等你查的房', open: r => `inspect.html?room=${r.room}` },
+  review: { title: '待審核', caption: '房務報修的一般件', empty: '目前沒有等你審核的報修', open: r => `ticket.html?no=${r.no}` },
+  verify: { title: '待驗收', caption: '已完修、還沒有人簽收', empty: '目前沒有等你驗收的工務單', open: r => `ticket.html?no=${r.no}` },
+};
+const m = META[kind];
+document.getElementById('title').textContent = m.title;
+document.title = m.title;
+const rows = remaining(kind);
+document.getElementById('caption').textContent = rows.length ? `${m.caption} · ${rows.length} 張` : m.caption;
+const list = document.getElementById('list');
+if (!rows.length) {
+  list.innerHTML = `<div class="empty"><div class="t">${m.empty}</div><div class="s">有新的單進來時會出現在這裡</div></div>`;
+} else {
+  list.innerHTML = '<div class="rows">' + rows.map(r => {
+    const w = whenParts(r.date, r.time);
+    let sub = '';
+    if (kind === 'inspection') sub = `<span>${r.cleaner} 清的</span>${r.redo ? '<span class="chip redo">重做後再查</span>' : ''}`;
+    if (kind === 'review') sub = `<span>${r.category}</span><span>·</span><span>${r.reporter} 報修</span><span>·</span><span>${r.photos} 張照片</span>`;
+    if (kind === 'verify') sub = `<span class="chip ${r.result === '無法修復' ? 'cannot' : ''}">${r.result}</span>${r.scheduled ? '<span class="chip scheduled">定期保養</span>' : ''}<span>${r.fixer} 完修</span>`;
+    return `<button class="row" onclick="go('${m.open(r)}')">
+      <span class="main">
+        ${r.no ? `<div class="ticketno">${r.no}</div>` : ''}
+        <div class="room">${r.room}<small>${r.title}</small></div>
+        <div class="sub">${sub}</div>
+      </span>
+      <span class="when">${w.date ? `<div class="date">${w.date}</div>` : ''}<div class="time">${w.time}</div><div class="wait">${w.date ? '昨天開始等' : '開始等'}</div></span>
+    </button>`;
+  }).join('') + '</div>';
+}
+</script>
+</body>
+</html>

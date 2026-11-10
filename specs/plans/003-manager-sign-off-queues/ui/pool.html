@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>待認領</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+  <div class="content">
+    <div class="largetitle">待認領</div>
+    <div class="offlinebar"><span>目前離線</span><span>待同步 0 筆</span></div>
+    <div class="seg wide" id="deptseg">
+      <button id="seg-housekeeping" onclick="setDept('housekeeping')">房務</button>
+      <button id="seg-engineering" onclick="setDept('engineering')">工務</button>
+    </div>
+    <div class="catchips" id="chips"></div>
+    <div id="cards"></div>
+  </div>
+  <div class="tabbar">
+    <a class="tab" href="index.html"><span class="glyph"></span>首頁</a>
+    <a class="tab active" href="pool.html"><span class="glyph"></span>待認領</a>
+    <a class="tab" href="#"><span class="glyph"></span>通知<span class="badge">2</span></a>
+    <a class="tab" href="#"><span class="glyph"></span>我的</a>
+  </div>
+</div>
+<script src="manager.js"></script>
+<script>
+if (isOffline()) document.getElementById('phone').classList.add('offline');
+const KEY = 'managerPoolDept';
+/* 推播帶部門時先寫入這台手機的選擇，再呈現；沒有紀錄視為房務 */
+let dept = Q.get('dept');
+if (dept === 'housekeeping' || dept === 'engineering') { try { localStorage.setItem(KEY, dept); } catch (e) {} }
+else { try { dept = localStorage.getItem(KEY) || 'housekeeping'; } catch (e) { dept = 'housekeeping'; } }
+const highlight = Q.get('highlight') || '';
+let category = '全部';
+const DATA = {
+  housekeeping: {
+    cats: ['全部', '備品', '打掃', '其他'],
+    items: [
+      { key: '317', room: '317', title: '續住整理（接手）', cat: '打掃', source: '請假退回', reason: '小陳請假', progress: '浴室已刷完，還沒換床單', tags: ['優先通知', '同樓層'] },
+      { key: '203', room: '203', title: '加派打掃', cat: '打掃', source: '櫃檯轉單', reason: '', progress: '', tags: ['未接 · 已通知主管'] },
+      { key: '215', room: '215', title: '嬰兒床', cat: '備品', source: '櫃檯轉單', reason: '', progress: '', tags: [] },
+    ],
+  },
+  engineering: {
+    cats: ['全部', '急件', '房務報修', '櫃檯'],
+    items: [
+      { key: '306', no: 'W-0202', room: '306', title: '冷氣不冷', cat: '急件', source: '房務報修', reporter: '阿芳', category: '冷氣', tags: ['急件', '1 張照片'] },
+      { key: '213', no: 'W-0205', room: '213', title: '吹風機沒電', cat: '房務報修', source: '房務報修', reporter: '小林', category: '水電', tags: ['1 張照片'] },
+      { key: '大廳', no: 'W-0206', room: '大廳', title: '自動門感應遲鈍', cat: '櫃檯', source: '櫃檯', reporter: '小葉', category: '其他', tags: ['公共區域', '2 張照片'] },
+    ],
+  },
+};
+function setDept(d) { dept = d; try { localStorage.setItem(KEY, d); } catch (e) {} category = '全部'; render(); }
+function setCat(c) { category = c; render(); }
+function render() {
+  document.getElementById('seg-housekeeping').className = dept === 'housekeeping' ? 'on' : '';
+  document.getElementById('seg-engineering').className = dept === 'engineering' ? 'on' : '';
+  const d = DATA[dept];
+  const counts = Object.fromEntries(d.cats.map(c => [c, c === '全部' ? d.items.length : d.items.filter(i => i.cat === c || (dept === 'engineering' && c === i.source && c !== '急件')).length]));
+  document.getElementById('chips').innerHTML = d.cats.map(c => `<button class="catchip ${c === category ? 'on' : ''}" onclick="setCat('${c}')">${c} ${counts[c]}</button>`).join('');
+  const shown = d.items.filter(i => category === '全部' || i.cat === category || (dept === 'engineering' && category === i.source && category !== '急件'));
+  document.getElementById('cards').innerHTML = shown.length ? shown.map(i => `
+    <div class="poolcard ${i.key === highlight ? 'hl' : ''}">
+      <div class="top"><span class="room">${i.room}</span>${i.no ? `<span class="ticketno" style="font-size:12px;font-weight:700;color:var(--tertiary-label)">${i.no}</span>` : `<span class="chip">${i.cat}</span>`}</div>
+      <div class="title">${i.room} ${i.title}</div>
+      <div class="sub">${dept === 'housekeeping'
+        ? `來源：${i.source}${i.reason ? ` · ${i.reason}` : ''}${i.progress ? `<br>接手進度：${i.progress}` : ''}`
+        : `${i.source} · ${i.reporter} 報修 · ${i.category}`}</div>
+      <div class="tags">${i.tags.map(x => `<span class="chip ${x === '急件' ? 'urgent' : ''}">${x}</span>`).join('')}</div>
+    </div>`).join('') : '<div class="empty"><div class="t">這個部門目前沒有在職員工可以搶單</div></div>';
+}
+render();
+</script>
+</body>
+</html>

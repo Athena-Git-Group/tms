@@ -32,31 +32,97 @@ inspections:
   - result
   - items
   - createdAt
-inspectionsRequest:
+InspectionItemJudgement:
   type: object
+  description: 一個查房項目的判定。key 是 sop_items.item_key，pass 為 true 通過、false 不通過；沒有備註欄。
+  required:
+  - key
+  - pass
   properties:
-    tenantId:
-      type: integer
-      format: int64
+    key:
+      type: string
+    pass:
+      type: boolean
+CreateInspectionRequest:
+  type: object
+  description: >-
+    createInspections 的請求。只帶任務 id 與逐項判定；租戶與查房者由登入權杖推導，通過或退回由後端依 items 算，
+    請求不接受 tenantId、inspectorId 與 result。items 的鍵集必須等於飯店目前啟用的查房項目全集，缺項或多項都回
+    422 inspection_items_mismatch；飯店沒有任何啟用項目時送空陣列。
+  required:
+  - taskId
+  - items
+  properties:
     taskId:
       type: string
       format: uuid
-    inspectorId:
+      description: 要查的打掃單，必須停在 done（待查房）。
+    items:
+      type: array
+      minItems: 0
+      description: 每個啟用的查房項目一筆，鍵不得重複。
+      items:
+        $ref: '#/InspectionItemJudgement'
+InspectionOutcome:
+  type: object
+  description: >-
+    createInspections 的回應：這次查房的結果與單的去向，供結果畫面三種說法使用。
+    result 與 destination 一起看：passed 時 destination 一定是 closed；failed 時是 cleaner（回到原清房者名下）
+    或 pool（原清房者已下班或請假，回到房務待認領）。退回的原因就是 failedItems，沒有另外的備註。
+  required:
+  - inspectionId
+  - taskId
+  - roomNo
+  - result
+  - destination
+  - failedItems
+  - createdAt
+  properties:
+    inspectionId:
       type: string
       format: uuid
-      description: 守衛：inspector ≠ 原清房者（403）
+      description: 這次查房紀錄的 id（inspections 一列）。
+    taskId:
+      type: string
+      format: uuid
+    roomNo:
+      type: string
     result:
       type: string
-      description: 'CHECK: passed|failed'
-    items:
+      enum:
+      - passed
+      - failed
+      description: 全部通過為 passed，任一項不通過為 failed。
+    destination:
       type: string
-      description: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）'
-  required:
-  - tenantId
-  - taskId
-  - inspectorId
-  - result
-  - items
+      enum:
+      - closed
+      - cleaner
+      - pool
+      description: >-
+        單的去向。closed：已結案（任務 inspected）。cleaner：退回原清房者名下重做（任務 accepted、負責人不變）。
+        pool：原清房者已下班或請假，依既有換人規則退回房務待認領（任務 pool）。
+    cleanerName:
+      type: string
+      nullable: true
+      description: 原清房者顯示名稱，供結果畫面「回到小美名下」「小美會收到通知」「小美已下班」三種說法使用。
+    failedItems:
+      type: array
+      description: 被判不通過的項目，依飯店設定的排序；passed 時為空陣列。
+      items:
+        type: object
+        required:
+        - key
+        - label
+        properties:
+          key:
+            type: string
+          label:
+            type: string
+            description: 項目顯示名稱，例如「浴室無水痕」。
+    createdAt:
+      type: string
+      format: date-time
 SpotCheckRequest:
   type: object
   required:

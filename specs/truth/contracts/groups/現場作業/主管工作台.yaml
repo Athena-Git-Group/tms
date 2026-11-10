@@ -1,0 +1,36 @@
+getManagerQueues:
+  get:
+    operationId: getManagerQueues
+    summary: 查看等主管處理的三類待辦：待查房、待審核、待驗收
+    description: >-
+      回傳正在呼叫的這位主管目前要處理的三類待辦，三格數字與三份清單在同一次往返內給完：
+      counts 的三個數字就是三個陣列的長度，由同一條查詢算出，不會出現「格子寫 2、點進去 3 張」。
+      只開放主管角色（staff_accounts.role=manager）；其他角色回 403。
+      三類都只看單目前的狀態、不帶任何日期條件，判定公式與資料側 tasks 表的 Note 同一份：
+      待查房（inspection）＝type=cleaning 且 state=done 且負責人不是呼叫者本人。主管不能查自己清的房，
+      自己清的房不出現在他的清單與數字裡，另一位主管看得到；免查房的單完成時直接落在 inspected，本來就不在這裡。
+      待審核（review）＝type=repair 且 state=pending_review，只會有房務報修的一般件；急件、工務自開、櫃檯交辦與定期保養都不經審核。
+      待驗收（verify）＝type=repair 且 state=done 且尚未驗收（RepairTicket.verifiedAt 為 null），
+      含完修結果為暫時處理（temporary）、無法修復（cannot_fix）的單與定期保養單（origin=scheduled）；維修中與已驗收的單不在內。
+      每一類都依 waitingSince（開始等主管的時間）由舊到新排好，最舊的在最前面，App 直接依序呈現不再重排；
+      同一時刻的單依房號遞增，再依單號遞增。waitingSince 的來源三類不同：待查房是最近一次完成的時間（退回重做後再完成會重寫），
+      待審核是最近一次進入等主管審核的時間（第一次送出或補資料再送出，取自任務事件，不是建單時間也不是最後更新時間），
+      待驗收是完修時間。
+      「是不是今天開始等」由後端在 waitingSinceIsToday 直接給布林：日界線沿用後端注入的 Clock 時區，與首頁 todayTasks 的「今天」同一把尺；
+      系統目前沒有每家飯店各自的時區設定，App 拿不到飯店時區，所以不由 App 比對。App 顯示時刻時直接用 waitingSince 字串裡的時區位移，不轉成手機時區。
+      不是今天的列在時間前面標出日期（FR-028）。
+      這支是主管待辦的唯一來源。listInspections 回的是查房紀錄（一次查房一列），待查房的單還沒有任何紀錄，不能從那裡算；
+      listRepairTickets 是任務頁同房工務單的唯一來源，roomId 必填，兩支的既有語意都不因本端點而改變。
+      主管完成一次查房、核准、退回或驗收後重新呼叫本端點刷新三格與清單；收到 409 state_conflict（單已被別人處理）時也重新呼叫。
+      本輪不為「有單在等主管」另立推播或即時推送。
+    tags:
+    - 主管工作台 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/主管工作台.yaml#/ManagerQueues'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'

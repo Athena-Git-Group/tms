@@ -1,0 +1,183 @@
+ManagerQueues:
+  type: object
+  description: >-
+    主管首頁三格與三份清單的同一份回應。counts 的每個數字等於對應陣列的長度，由同一條查詢算出；
+    App 以 counts 畫三格、以三個陣列畫清單，不自己數陣列長度覆寫格子，也不為三格另打端點。
+  required:
+  - counts
+  - inspection
+  - review
+  - verify
+  properties:
+    counts:
+      type: object
+      description: 三格數字。某一類為 0 時仍回 0，App 顯示 0 而不是隱藏格子。
+      required:
+      - inspection
+      - review
+      - verify
+      properties:
+        inspection:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 待查房張數，等於 inspection 陣列長度。
+        review:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 待審核張數，等於 review 陣列長度。
+        verify:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 待驗收張數，等於 verify 陣列長度。
+    inspection:
+      type: array
+      description: 待查房清單，已依 waitingSince 由舊到新排好。
+      items:
+        $ref: '#/InspectionQueueItem'
+    review:
+      type: array
+      description: 待審核清單，已依 waitingSince 由舊到新排好。
+      items:
+        $ref: '#/ReviewQueueItem'
+    verify:
+      type: array
+      description: 待驗收清單，已依 waitingSince 由舊到新排好。
+      items:
+        $ref: '#/VerifyQueueItem'
+QueueItemBase:
+  type: object
+  description: >-
+    三類清單每一列共用的欄位：識別、房號或地點、內容、開始等主管的時間與是否今天。
+    清單列的目標是讓主管不點開就認得這是哪一張單、在等多久。
+  required:
+  - taskId
+  - isPublicArea
+  - title
+  - waitingSince
+  - waitingSinceIsToday
+  properties:
+    taskId:
+      type: string
+      format: uuid
+      description: 任務 id。打掃單拿它開任務相關端點；工務單本身就是修繕任務，同一個 id 可直接用在 readRepairTicket 與主管的四個動作端點。
+    roomNo:
+      type: string
+      nullable: true
+      description: >-
+        房號，清單列的主角。開給公共區域的工務單（例如定期保養的「5 樓製冰機」）沒有房號，為 null，
+        此時 isPublicArea 為 true、地點說明在 title 裡；與 EngineeringTicket.roomNo 同一套做法。
+        資料側公共區域的單掛在佔位房上，那個佔位房號不會出現在這裡。
+    isPublicArea:
+      type: boolean
+      description: true 表示這張單開給公共區域（沒有房號），此時 roomNo 為 null。打掃單一律為 false。
+    title:
+      type: string
+      description: 任務標題。打掃單是「退房打掃」「續住整理」這類內容；工務單是報修說明或保養說明，公共區域的單標題含地點。
+    waitingSince:
+      type: string
+      format: date-time
+      description: >-
+        開始等主管的時間，也是這一類清單的排序鍵。待查房是最近一次完成的時間；
+        待審核是最近一次進入等主管審核的時間（第一次送出或補資料再送出，取自任務事件）；待驗收是完修時間。
+        字串帶後端 Clock 的時區位移，App 顯示時直接用這個位移取時與分，不轉成手機時區。
+    waitingSinceIsToday:
+      type: boolean
+      description: >-
+        waitingSince 是否落在今天。日界線沿用後端注入的 Clock 時區，與 getMyToday 的 todayTasks 同一把尺；
+        由後端判定而不是 App 比對，是因為系統沒有每家飯店各自的時區設定，App 拿不到那把尺。
+        false 時 App 在時刻前面多標日期（例如「11/09 17:40」），true 時只顯示時刻。
+InspectionQueueItem:
+  description: 待查房清單的一列：別人清好、停在 done 等查房的打掃單。
+  allOf:
+  - $ref: '#/QueueItemBase'
+  - type: object
+    required:
+    - cleanerName
+    - redoCount
+    properties:
+      cleanerName:
+        type: string
+        description: 原清房者（這張單的負責人）顯示名稱。主管要知道退回會回到誰名下；也用來理解為什麼自己清的房不在這裡。
+      redoCount:
+        type: integer
+        format: int32
+        minimum: 0
+        description: 被查房退回重做的次數，與 TodayTask.redoCount 同一個值；大於 0 時清單列可標「重做後再查」。
+ReviewQueueItem:
+  description: 待審核清單的一列：房務報修、停在等主管審核的一般件工務單。
+  allOf:
+  - $ref: '#/QueueItemBase'
+  - type: object
+    required:
+    - ticketNo
+    - category
+    - reporterName
+    properties:
+      ticketNo:
+        type: string
+        pattern: ^W-\d{4}$
+        example: W-0201
+        description: 工務單號，顯示在房號前面的小字。
+      category:
+        $ref: './工務單.yaml#/RepairCategory'
+      description:
+        type: string
+        nullable: true
+        description: 報修說明；報修人沒填時為 null，畫面只顯示標題。
+      reporterName:
+        type: string
+        description: 報修人顯示名稱。
+      photoCount:
+        type: integer
+        format: int32
+        minimum: 0
+        description: 報修照片張數，供清單列標「N 張照片」；照片本體打開詳情（readRepairTicket）才取。
+VerifyQueueItem:
+  description: 待驗收清單的一列：已完修、尚未有主管驗收的工務單，含暫時處理、無法修復與定期保養的單。
+  allOf:
+  - $ref: '#/QueueItemBase'
+  - type: object
+    required:
+    - ticketNo
+    - category
+    - origin
+    - resolutionType
+    properties:
+      ticketNo:
+        type: string
+        pattern: ^W-\d{4}$
+        example: W-0108
+        description: 工務單號，顯示在房號前面的小字。
+      category:
+        $ref: './工務單.yaml#/RepairCategory'
+      description:
+        type: string
+        nullable: true
+        description: 報修說明或保養說明；沒有時為 null。
+      reporterName:
+        type: string
+        nullable: true
+        description: 報修人顯示名稱；定期保養單由排程建立、沒有報修人時為 null。
+      assigneeName:
+        type: string
+        nullable: true
+        description: 完修人（處理人）顯示名稱，與 RepairTicket.assigneeName 同一個值。
+      origin:
+        type: string
+        enum:
+        - reported
+        - scheduled
+        description: 來源，與 RepairTicket.origin 同一套值：reported 是有人報修，scheduled 是定期保養。scheduled 時清單列標「定期保養」。
+      resolutionType:
+        type: string
+        enum:
+        - fixed
+        - temporary
+        - cannot_fix
+        description: >-
+          完修結果三選一，與 RepairTicket.resolutionType 同一套值（來源 repair_tickets.resolution_type）：
+          fixed 已修好、temporary 暫時處理、cannot_fix 無法修復。待驗收的單一定已完修，所以必填且不為 null；
+          cannot_fix 的列在畫面上用警示色，主管得看出哪些是無法修復。

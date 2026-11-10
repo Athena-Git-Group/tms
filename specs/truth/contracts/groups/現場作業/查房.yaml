@@ -15,24 +15,48 @@ listInspectionsAndcreateInspections:
                 $ref: '../../components/schemas/查房.yaml#/inspections'
   post:
     operationId: createInspections
-    summary: create inspections
+    summary: 主管送出一次查房判定
+    description: >-
+      主管對一張停在 done（待查房）的打掃單逐項判定後送出。租戶與查房者一律由登入權杖推導，
+      通過或退回由後端依 items 自己算，請求不帶 tenantId、inspectorId 與 result。
+      items 必須與飯店目前啟用的查房項目全集（sop_items 中 applies_to=inspection 且 active=true）一一對上：
+      少一項或多一項都回 422 inspection_items_mismatch，context 帶 missing、unexpected 與 currentItems（現行項目集合），
+      App 用 currentItems 直接換掉畫面上的項目清單、清空判定讓主管重判，不必再打 listSopItems；
+      飯店沒有任何啟用的查房項目時 items 送空陣列即可，視為全部通過。
+      單已不是待查房（另一位主管先送出、單被改派或作廢、狀態不是 done）回 409 state_conflict，
+      與工務單四個主管動作的 409 同一類語意，App 顯示「這張單已被處理」並刷新清單；
+      兩位主管同時送出時只有先到的那一次成立，後到的拿到這個 409。
+      查房者是這張單的清房者本人回 403（自清自查，E-07）；沒有查房判定權限的角色回 403。
+      全部通過：任務轉 inspected、inspection=passed，排 PMS 回寫，推播清房者「<房號> 查房通過」。
+      任一項不通過：任務退回 accepted、redo 加 1、清空計時與 SOP 勾記、inspection=failed，推播清房者
+      「<房號> 查房退回 · <項目>不合格」；原清房者已下班或請假時改退回房務待認領（pool）。
+      回應 InspectionOutcome 直接說明這次是結案還是退回、退回時單去了哪裡，App 不自己判斷班表。
+      必須帶 Idempotency-Key；訊號不穩重送時回放第一次的回應，不會判兩次。
     tags:
     - 查房 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
     requestBody:
       required: true
       content:
         application/json:
           schema:
-            $ref: '../../components/schemas/查房.yaml#/inspectionsRequest'
+            $ref: '../../components/schemas/查房.yaml#/CreateInspectionRequest'
     responses:
       '201':
-        description: 成功
+        description: 已記錄這次查房，回應說明結果與單的去向。
         content:
           application/json:
             schema:
-              $ref: '../../components/schemas/查房.yaml#/inspections'
-      '400':
-        $ref: '../../components/responses.yaml#/BadRequest'
+              $ref: '../../components/schemas/查房.yaml#/InspectionOutcome'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
 createSpotCheck:
   post:
     operationId: createSpotCheck

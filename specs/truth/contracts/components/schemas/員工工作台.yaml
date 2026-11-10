@@ -85,7 +85,7 @@ MyToday:
         分頁列「待認領」那一格的紅色數量徽章要顯示的數字：呼叫者**現在搶得到**的待認領單數，
         口徑與 listDeptPool 不帶篩選時回的 items 筆數一致。
         放在這支端點而不是另開一支，是因為外殼層只為了畫兩個徽章不該多打讀取端點。
-        為 0 時畫面不顯示徽章。
+        為 0 時畫面不顯示徽章。主管與老闆不屬於任何部門池、搶不到單，一律為 0。
     unreadNotificationBadgeCount:
       type: integer
       format: int32

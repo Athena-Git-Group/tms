@@ -4,7 +4,7 @@
 
 本模組負責觸發動作屬於基線既有行為的推播事件（例如住客掃碼、查房、作廢、改派、住客撤回、請假），以及待認領未接提醒（提醒同仁、通知主管兩段）、自動化規則建單、住客節流與收件人資格（待開通、停用不收推播）。其他推播在觸發它的模組驗證：
 - 班末退池、班末仍中斷：`班末掃描`
-- 工務完修、急件：`工務單`
+- 工務完修、急件、主管退回報修單：`工務單`
 - 抽查退回：`查房`
 - 問主管回覆：`查一下`
 
@@ -31,7 +31,7 @@
 | `"{員工}" 查看通知中心` | `員工`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分查詢通知列表。待 `/api-plan`：目前沒有 `GET /notifications`，本句型假設該端點依時間新到舊回傳每筆的標題、送達時間與已讀狀態。`回寫`：通知清單。 |
 | `"{員工}" 將 "{標題}" 的通知標為已讀` | `員工`：字串。<br>`標題`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分標記該筆通知已讀。待 `/api-plan`：目前沒有對應端點。`權威狀態落地`：該筆通知的 `read_at` 已寫入。 |
 | `"{員工}" 將所有通知標為已讀` | `員工`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫批次已讀端點。待 `/api-plan`：目前沒有 `POST /notifications/read-all`。`權威狀態落地`：該員工所有通知的 `read_at` 都已寫入。 |
-| `"{主管}" 查房 "{任務}"，判定 "{項目}" 不合格` | `主管`：字串。<br>`任務`：字串；待查房的房號。<br>`項目`：字串；查房項目的顯示名稱。 | 不支援 | 無 | `怎麼做`：`{項目}` 即租戶查房項目（`sop_items`，applies_to=inspection）的顯示名稱 label，先解析成對應的 item key，再以主管身分呼叫 `createInspections`（`POST /inspections`），該項 pass=false。`權威狀態落地`：依基線查房退回規則，任務轉為 accepted，redo 加 1，inspection `failed`；寫入負責人的 push outbox，推播標題原樣引用該 label（「{房號} 查房退回 · {項目}不合格」）。`回寫`：回應。 |
+| `"{主管}" 查房 "{任務}"，判定 "{項目}" 不合格` | `主管`：字串。<br>`任務`：字串；待查房的房號。<br>`項目`：字串；查房項目的顯示名稱。 | 不支援 | 無 | `怎麼做`：`{項目}` 即租戶查房項目（`sop_items`，applies_to=inspection）的顯示名稱 label，先解析成對應的 item key，再以主管身分呼叫 `createInspections`（`POST /inspections`，body `CreateInspectionRequest{taskId, items}`，items 涵蓋現行全集，該項 pass=false，其餘 pass=true，帶新的 `Idempotency-Key`）。`權威狀態落地`：依基線查房退回規則，任務轉為 accepted，redo 加 1，inspection `failed`；寫入負責人的 push outbox，推播標題原樣引用該 label（「{房號} 查房退回 · {項目}不合格」）。`回寫`：回應。 |
 | `"{主管}" 以原因 "{原因}" 作廢 "{任務}"` | `主管`：字串。<br>`原因`：字串；作廢說明。<br>`任務`：字串；房號，修繕任務（工務單）用單號。 | 不支援 | `作廢原因代碼`：`manager_void`。 | `怎麼做`：以主管身分呼叫 `tasksCancel`（`POST /tasks/{id}/cancel`，body 為 `CancelTaskRequest`，note 為原因文字）。`權威狀態落地`：任務轉為 cancelled，並寫入負責人的 push outbox；去處依任務類別決定——打掃／備品為 `kind`=task、修繕為 `kind`=ticket。`回寫`：回應。 |
 | `"{主管}" 把 "{任務}" 改派給 "{員工}"` | `主管`：字串。<br>`任務`：字串；房號，修繕任務（工務單）用單號。<br>`員工`：字串；新負責人。 | 不支援 | 無 | `怎麼做`：以主管身分呼叫 `tasksReassign`（`POST /tasks/{id}/reassign`）。`權威狀態落地`：負責人改為新員工，並寫入原負責人與新負責人的 push outbox；新負責人那封的去處依任務類別決定——打掃／備品為 `kind`=task、修繕為 `kind`=ticket。`回寫`：回應。 |
 | `住客撤回 "{房號}" 的需求` | `房號`：字串。 | 不支援 | 無 | `怎麼做`：以該房的住客 session 呼叫 `cancelGuestRequest`（`POST /guest-requests/{id}/cancel`）撤回其在待認領的需求。`權威狀態落地`：任務轉為 cancelled，`cancel_reason`=guest_withdrew，並寫入本部門的 push outbox（`PushPayload.event`=guest_withdrew）。`回寫`：回應。 |

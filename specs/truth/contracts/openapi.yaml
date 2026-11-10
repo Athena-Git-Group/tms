@@ -55,6 +55,10 @@ tags:
   description: >-
     本 plan 新增。每位員工可查詢、可標記已讀的持久通知清單，承接所有推播事件（outbox 展開一人一封後落地），
     不是只有通知板（公告）的已讀。
+- name: 主管工作台 API
+  description: >-
+    主管首頁的三類待辦（待查房、待審核、待驗收）：三格數字與三份清單同一次往返、由舊到新排好、排除主管本人清的房。
+    主管動作本身沿用查房 API 與工務單 API 既有端點。
 paths:
   /alerts:
     $ref: './groups/營運管理/主管手動上報.yaml#/createAlerts'
@@ -202,6 +206,8 @@ paths:
     $ref: './groups/現場作業/員工工作台.yaml#/getMyToday'
   /pool:
     $ref: './groups/現場作業/員工工作台.yaml#/listDeptPool'
+  /me/manager-queues:
+    $ref: './groups/現場作業/主管工作台.yaml#/getManagerQueues'
   /desk-notes:
     $ref: './groups/現場作業/房間交辦.yaml#/createDeskNote'
   /inspections/spot-checks:
@@ -315,8 +321,12 @@ components:
       $ref: './components/schemas/shared.yaml#/task_sop_checksRequest'
     inspections:
       $ref: './components/schemas/查房.yaml#/inspections'
-    inspectionsRequest:
-      $ref: './components/schemas/查房.yaml#/inspectionsRequest'
+    InspectionItemJudgement:
+      $ref: './components/schemas/查房.yaml#/InspectionItemJudgement'
+    CreateInspectionRequest:
+      $ref: './components/schemas/查房.yaml#/CreateInspectionRequest'
+    InspectionOutcome:
+      $ref: './components/schemas/查房.yaml#/InspectionOutcome'
     handovers:
       $ref: './components/schemas/交班單.yaml#/handovers'
     handoversRequest:
@@ -425,6 +435,16 @@ components:
       $ref: './components/schemas/員工工作台.yaml#/PoolItem'
     DeptPool:
       $ref: './components/schemas/員工工作台.yaml#/DeptPool'
+    ManagerQueues:
+      $ref: './components/schemas/主管工作台.yaml#/ManagerQueues'
+    QueueItemBase:
+      $ref: './components/schemas/主管工作台.yaml#/QueueItemBase'
+    InspectionQueueItem:
+      $ref: './components/schemas/主管工作台.yaml#/InspectionQueueItem'
+    ReviewQueueItem:
+      $ref: './components/schemas/主管工作台.yaml#/ReviewQueueItem'
+    VerifyQueueItem:
+      $ref: './components/schemas/主管工作台.yaml#/VerifyQueueItem'
     CreateDeskNoteRequest:
       $ref: './components/schemas/房間交辦.yaml#/CreateDeskNoteRequest'
     DeskNote:
