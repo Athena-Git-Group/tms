@@ -31,6 +31,7 @@ public class Task {
     private Integer rating;
     private UUID planId;
     private LocalDate workDate;
+    private boolean urgent;
     private Integer slaMin;
     private Integer escLevel;
     private OffsetDateTime createdAt;
@@ -119,6 +120,11 @@ public class Task {
     @Generated
     public Integer getRating() {
         return this.rating;
+    }
+
+    @Generated
+    public boolean isUrgent() {
+        return this.urgent;
     }
 
     @Generated
@@ -244,6 +250,11 @@ public class Task {
     @Generated
     public void setWorkDate(LocalDate workDate) {
         this.workDate = workDate;
+    }
+
+    @Generated
+    public void setUrgent(boolean urgent) {
+        this.urgent = urgent;
     }
 
     @Generated

@@ -71,7 +71,7 @@ public class TaskEngine {
         if (assigned != "accepted".equals(command.initialState())) {
             throw new UnprocessableEntityException("accepted 起點（排房發佈）必須同時帶 assignee；triage/pool 起點不得帶");
         }
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(this.clock);
         Task task = new Task();
         task.setId(UuidV7.generate());
         task.setTenantId(command.tenantId());
@@ -87,6 +87,7 @@ public class TaskEngine {
         task.setEstMin(command.estMin());
         task.setPlanId(command.planId());
         task.setWorkDate(command.workDate());
+        task.setUrgent(command.urgent());
         task.setEventSeq(assigned ? 2 : 1);
         task.setCreatedAt(now);
         task.setUpdatedAt(now);
@@ -368,7 +369,7 @@ public class TaskEngine {
 
     @Transactional
     public int cancelByGuest(long tenantId, UUID taskId) {
-        int seq = this.guard("收回", "UPDATE tasks\n   SET state = 'cancelled', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('triage', 'pool')\nRETURNING event_seq\n", tenantId, taskId);
+        int seq = this.guard("收回", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = 'guest_withdrew', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('triage', 'pool')\nRETURNING event_seq\n", tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "cancelled", Actor.guest(), TaskEngine.payload("reason", "guest_withdrew"));
     }
 
@@ -377,7 +378,7 @@ public class TaskEngine {
         if (reason == null || !TaskCancelReason.ALL.contains(reason)) {
             throw new UnprocessableEntityException("取消必附原因 enum（" + String.join((CharSequence)"/", TaskCancelReason.ALL) + "），收到: " + reason);
         }
-        int seq = this.guard("取消", "UPDATE tasks\n   SET state = 'cancelled', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\n   AND state IN ('triage', 'pool', 'accepted', 'doing', 'deferred', 'interrupted')\nRETURNING event_seq\n", tenantId, taskId);
+        int seq = this.guard("取消", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\n   AND state IN ('triage', 'pool', 'accepted', 'doing', 'deferred', 'interrupted')\nRETURNING event_seq\n", reason, tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "cancelled", actor, TaskEngine.payload("reason", reason));
     }
 

@@ -1141,21 +1141,6 @@ public class BackendChannel {
     }
 
     /**
-     * 測試資料補欄：把 tasks.cancel_reason 落成指定值。
-     *
-     * <p>作廢端點（{@code POST /tasks/{id}/cancel}）目前只把 reason 記進
-     * task_events 的 payload，tasks 列的 cancel_reason 欄位沒有一起更新
-     * （{@code TaskEngine.cancel} 的 UPDATE 沒寫這一欄；員工自行撤回那條路
-     * 有寫 staff_withdrew）。DSL 宣告主管作廢落地後 cancel_reason 要是
-     * manager_void，所以走完端點後用這裡把欄位補上。後端補寫這一欄之後，
-     * 這個方法就該刪掉——這是已回報上游的後端缺口，不是長期設計。
-     */
-    public void supplementCancelReason(UUID taskId, String reason) {
-        execute("UPDATE tasks SET cancel_reason = ? WHERE tenant_id = ? AND id = ?",
-                reason, ensureTenant(), taskId);
-    }
-
-    /**
      * 以某員工身分重送一次任務動作，預期後端以 4xx 拒絕，回傳解析後的錯誤 body
      * （contracts 的 Error：{@code {code, message, …}}）。預期之外的狀態碼
      * （2xx 成功、5xx 掛掉）直接噴錯。
