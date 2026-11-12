@@ -897,8 +897,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature`
 
-- [ ] T143 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T144 [BDD-REFACTOR] 在綠燈下確認房務版、工務版、主管版的摘要卡文案出自同一張三視角對照
+- [X] T143 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T144 [BDD-REFACTOR] 在綠燈下確認房務版、工務版、主管版的摘要卡文案出自同一張三視角對照
 
 ## Phase 4R: MODIFY Feature File - ios-app/推播/點開推播的去處.feature
 
