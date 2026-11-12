@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  *
  * <p>{@code states} 為空集合代表不限狀態。
  */
-public record DeskTaskFilter(Optional<UUID> assigneeId, Set<String> states, LocalDate from, LocalDate to) {
+public record DeskTaskFilter(Optional<UUID> assigneeId, Set<String> states, LocalDate from, LocalDate to, LocalDate today) {
     public static final int MAX_RANGE_DAYS = 31;
 
     public static DeskTaskFilter parse(UUID assigneeId, List<String> states, LocalDate from, LocalDate to, LocalDate today) {
@@ -36,10 +36,14 @@ public record DeskTaskFilter(Optional<UUID> assigneeId, Set<String> states, Loca
         if (!unknown.isEmpty()) {
             throw new BadRequestException("未知的任務狀態: " + String.join(", ", unknown));
         }
-        return new DeskTaskFilter(Optional.ofNullable(assigneeId), wanted, start, end);
+        return new DeskTaskFilter(Optional.ofNullable(assigneeId), wanted, start, end, today);
     }
 
-    public boolean covers(LocalDate day) {
-        return !day.isBefore(this.from) && !day.isAfter(this.to);
+    /**
+     * 範圍是否包含解析請求時的今天。預設範圍與這個判斷要用同一個「今天」，
+     * 否則請求剛好跨過午夜時，預設查的是前一天、判斷卻用後一天，沒有工作日的未結束單就會整批消失。
+     */
+    public boolean coversToday() {
+        return !this.today.isBefore(this.from) && !this.today.isAfter(this.to);
     }
 }

@@ -14,7 +14,6 @@ import com.athena.tms.service.TaskEngine;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -75,7 +74,7 @@ public class DeskService {
                  OR (t.work_date IS NULL AND t.state IN (:endedStates)
                      AND COALESCE(t.done_at, t.updated_at) >= :rangeStart
                      AND COALESCE(t.done_at, t.updated_at) < :rangeEnd)""");
-        if (filter.covers(LocalDate.now(this.clock))) {
+        if (filter.coversToday()) {
             workDay.append("\n OR (t.work_date IS NULL AND t.state IN (:openStates))");
             params.put("openStates", OPEN_STATES);
         }
