@@ -42,7 +42,7 @@
         | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
         | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
       當 王主管對任務 "t-301-1" 只送出 bed、bathroom 兩項判定
-      那麼請求應該失敗，回應為 422 且原因是 "validation_failed"
+      那麼請求應該失敗，回應為 422 且原因是 "inspection_items_mismatch"
       並且 查房不留記錄、任務狀態不變
 
     @error @boundary
@@ -51,7 +51,7 @@
         | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
         | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
       當 王主管對任務 "t-301-1" 送出全過的查房，但夾帶清單外的項目 "window"
-      那麼請求應該失敗，回應為 422 且原因是 "validation_failed"
+      那麼請求應該失敗，回應為 422 且原因是 "inspection_items_mismatch"
       並且 查房不留記錄、任務狀態不變
 
     @error @boundary

@@ -1,8 +1,5 @@
 package com.athena.tms.controller;
 
-import com.athena.tms.common.CurrentActor;
-import com.athena.tms.common.codes.RolePermissions;
-import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.error.UnprocessableEntityException;
 import com.athena.tms.dto.InspectionRequest;
 import com.athena.tms.dto.InspectionOutcome;
@@ -20,9 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 員工 App 的查房判定 API，對應 contracts 的 createInspections（POST /inspections）。
- * 進業務邏輯前先過角色×動作矩陣：沒有查房判定（inspect_submit）權限的角色一律 403，
- * 權威狀態不得有任何改動。判定本體（涵蓋全集驗證、通過／退回的狀態轉移、PMS 回寫）
- * 委派既有 {@link InspectionService}。
+ * 誰可以查房（三種 403）與判定本體（涵蓋全集驗證、通過／退回的狀態轉移、PMS 回寫）
+ * 都在 {@link InspectionService}，這裡只轉請求與回應。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -50,7 +46,6 @@ public class InspectionApiController {
     public InspectionOutcome create(
             @RequestHeader(value = IdempotencyFilter.IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
             @RequestBody CreateInspectionRequest request) {
-        requireInspectSubmit();
         if (request == null || request.taskId() == null) {
             throw new UnprocessableEntityException("taskId 必填");
         }
@@ -58,12 +53,5 @@ public class InspectionApiController {
         return new InspectionOutcome(judged.inspectionId(), judged.taskId(), judged.roomNo(),
                 judged.passed() ? "passed" : "failed", judged.destination(), judged.cleanerName(),
                 judged.failedItems(), judged.createdAt());
-    }
-
-    private void requireInspectSubmit() {
-        CurrentActor actor = CurrentActor.require();
-        if (!RolePermissions.canInspectSubmit(actor.role())) {
-            throw new ForbiddenException("此角色沒有查房判定（inspect_submit）權限");
-        }
     }
 }

@@ -1,8 +1,10 @@
 package com.athena.tms.service;
 
 import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.ManagerKind;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.UuidV7;
+import com.athena.tms.common.codes.RolePermissions;
 import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.error.NotFoundException;
 import com.athena.tms.common.error.UnprocessableEntityException;
@@ -76,14 +78,32 @@ public class InspectionService {
             OffsetDateTime createdAt,
             int redoCount) {}
 
+    /**
+     * 誰可以送出這張單的查房，全部在這裡判定，三種不行都回 403 forbidden，只有 message 不同，App 直接顯示 message。
+     *
+     * <p>不行的三種：角色沒有查房判定權限、呼叫者是工務主管、呼叫者就是這張單的清房者。
+     * 工務主管的角色有查房判定權限，所以要另看主管種類；種類的判定與主管待辦共用 {@link ManagerKind}。
+     * 判定放在任何寫入之前，被拒時單不變、不寫查房紀錄、不推播。
+     * 三種條件分散在不同層時，新增一個入口就可能漏掉其中一種，例如工務主管從另一支端點照樣送得出查房。
+     */
+    private static void requireMayInspect(CurrentActor inspector, Task task) {
+        if (!RolePermissions.canInspectSubmit(inspector.role())) {
+            throw new ForbiddenException("此角色沒有查房判定（inspect_submit）權限");
+        }
+        if (ManagerKind.of(inspector).filter(kind -> !kind.inspects()).isPresent()) {
+            throw new ForbiddenException("你沒有查房的權限");
+        }
+        if (inspector.staffId() != null && inspector.staffId().equals(task.getAssigneeId())) {
+            throw new ForbiddenException("查房者不得為原清房者");
+        }
+    }
+
     @Transactional
     public Judged inspect(UUID taskId, InspectionRequest request) {
         long tenantId = TenantContext.require();
         CurrentActor inspector = CurrentActor.require();
         Task task = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("查無此任務"));
-        if (inspector.staffId() != null && inspector.staffId().equals(task.getAssigneeId())) {
-            throw new ForbiddenException("查房者不得為原清房者（E-07）");
-        }
+        requireMayInspect(inspector, task);
         if (!"cleaning".equals(task.getType())) {
             throw new UnprocessableEntityException("查房只適用打掃任務，此單種類為 " + task.getType());
         }

@@ -7,9 +7,7 @@ import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.dto.ManagerQueues;
 import com.athena.tms.dto.ManagerQueues.InspectionQueueItem;
-import com.athena.tms.dto.ManagerQueues.ReviewQueueItem;
 import com.athena.tms.dto.ManagerQueues.VerifyQueueItem;
-import com.athena.tms.repair.RepairService;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -86,49 +84,6 @@ public class ManagerQueueService {
                             base.waitingSince(), base.today(),
                             (String) row.get("cleaner_name"),
                             ((Number) row.get("redo_count")).intValue());
-                })
-                .toList();
-    }
-
-    /**
-     * 待審核＝修繕任務停在 pending_review，只會有房務報修的一般件；急件、工務自開、櫃檯
-     * 交辦與定期保養都不經審核，開單時就不會進這個狀態。
-     *
-     * <p>開始等主管的時間取最近一次進入等主管審核的事件（第一次送出的 created，或補資料
-     * 再送出的 repair_resubmitted），不是建單時間也不是最後更新時間：被退回後補資料再送出
-     * 的單，等待是從再送出那一刻重新起算，拿建單時間會讓它插到更早送出的單前面；
-     * updated_at 則會被任何一次改動蓋掉。
-     */
-    private List<ReviewQueueItem> reviewQueue(long tenantId, LocalDate today) {
-        return jdbcTemplate.queryForList(
-                """
-                SELECT * FROM (
-                    SELECT t.id, t.title, r.room_no,
-                           rt.ticket_no, rt.category, rt.description, rep.name AS reporter_name,
-                           (SELECT count(*) FROM repair_photos p
-                             WHERE p.tenant_id = rt.tenant_id AND p.ticket_task_id = rt.task_id
-                               AND p.purpose = 'report') AS photo_count,
-                           """ + RepairService.LAST_REVIEW_SUBMISSION_AT + """
-                           AS waiting_since
-                      FROM tasks t
-                      JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
-                      JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
-                      JOIN staff_accounts rep ON rep.tenant_id = rt.tenant_id AND rep.id = rt.reporter_id
-                     WHERE t.tenant_id = ? AND t.type = 'repair' AND t.state = 'pending_review'
-                ) q
-                ORDER BY q.waiting_since, q.room_no, q.ticket_no
-                """,
-                tenantId).stream()
-                .map(row -> {
-                    Base base = base(row, today);
-                    return new ReviewQueueItem(
-                            base.taskId(), base.roomNo(), base.publicArea(), base.title(),
-                            base.waitingSince(), base.today(),
-                            (String) row.get("ticket_no"),
-                            (String) row.get("category"),
-                            (String) row.get("description"),
-                            (String) row.get("reporter_name"),
-                            ((Number) row.get("photo_count")).intValue());
                 })
                 .toList();
     }

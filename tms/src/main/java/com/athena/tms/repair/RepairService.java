@@ -9,7 +9,6 @@ import com.athena.tms.common.error.NotFoundException;
 import com.athena.tms.common.error.StateConflictException;
 import com.athena.tms.common.error.UnprocessableEntityException;
 import com.athena.tms.common.codes.ErrorCode;
-import com.athena.tms.common.codes.StaffRole;
 import com.athena.tms.common.codes.TaskState;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.RepairVerificationOutcome;
@@ -30,7 +29,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -63,20 +61,8 @@ public class RepairService {
             "door_lock", "門鎖",
             "other", "其他");
 
-    /**
-     * 最近一次進入等主管審核的時間（SQL 純量子查詢，外層須以 t 為 tasks 別名）：該單任務事件中
-     * 最後一筆 created（第一次送出）或 repair_resubmitted（補資料再送出）的時間。待審核清單的
-     * waitingSince 與工務單詳情的 reviewRequestedAt 共用這一段，兩邊對同一張單說的是同一個時間。
-     */
-    public static final String LAST_REVIEW_SUBMISSION_AT = """
-            (SELECT te.created_at FROM task_events te
-              WHERE te.tenant_id = t.tenant_id AND te.task_id = t.id
-                AND te.type IN ('created', 'repair_resubmitted')
-              ORDER BY te.seq DESC LIMIT 1)""";
-
     private static final String VERIFY_PASSED = "passed";
     private static final String VERIFY_FAILED = "failed";
-    private static final Set<String> RESOLUTION_TYPES = Set.of("fixed", "temporary", "cannot_fix", "no_action_needed");
     private static final DateTimeFormatter CHECKIN_TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final JdbcTemplate jdbcTemplate;
@@ -265,9 +251,8 @@ public class RepairService {
     /**
      * 列出同房的工務單（contracts listRepairTickets）：給原任務頁的工務單區使用。
      * 收錄該房間所有未撤回的單——撤回是 tasks.state=cancelled，報修人撤回後那張
-     * 單就不該再出現在任務頁，所以這裡是唯一被排除的狀態；其餘六個狀態
-     * （pending_review／rejected／pool／accepted／doing／done）全收，房務才看得到
-     * 自己報的單現在走到哪一關。
+     * 單就不該再出現在任務頁，所以這裡是唯一被排除的狀態；其餘狀態（待認領、
+     * 處理中、已完修、已結案）全收，房務才看得到自己報的單現在走到哪一關。
      *
      * <p>欄位與 {@link #ticketView} 共用 {@link #summaryFromRow}，查詢的欄位別名
      * 刻意跟詳情那段一致，同一張單在列表與詳情不會出現兩套命名。契約沒有規定
@@ -357,10 +342,8 @@ public class RepairService {
 
     /**
      * 撤回工務單（contracts withdrawRepairTicket）：工務認領前報錯房、報錯類別
-     * 的單可以收回，等主管審核中（pending_review）還沒進池的單也可以撤回；
-     * 認領後工務已經安排工作，不能再憑空消失。狀態轉移交給
-     * {@link TaskEngine#withdrawFromPool}（只允許 pool／pending_review 轉
-     * cancelled 的條件式更新）；轉移被拒而且這張單已有人認領時，把一般的狀態
+     * 的單可以收回；認領後工務已經安排工作，不能再憑空消失。狀態轉移交給
+     * {@link TaskEngine#withdrawFromPool}（只允許 pool 轉 cancelled 的條件式更新）；轉移被拒而且這張單已有人認領時，把一般的狀態
      * 衝突換成契約規定的 already_claimed 與「已被工務認領」，App 才能直接告訴
      * 報修人原因。
      */
@@ -393,15 +376,14 @@ public class RepairService {
      * 「單＋這次完成的事件序號＋收件人」組冪等鍵，請求重試時同一位報修人不會收到兩次，
      * 驗收不通過後重修再完修則會再收到一次。
      *
-     * <p>完修四選一（contracts CompleteTaskRequest.resolutionType，省略視為 fixed）：
-     * fixed 不另外動作（既有行為）；temporary 另建一張房號／類別都相同的追蹤單進工務
-     * 待認領（{@link #createFollowUpTicket}）；cannot_fix 把該房 {@code rooms.hk_state}
-     * 轉為 out_of_order（停用待確認）；no_action_needed 不附照片、不建追蹤單、不改房況，
-     * 單在完成那一步已直接結案。四者都把結果寫進 repair_tickets.resolution_type，
+     * <p>完修四選一（contracts CompleteTaskRequest.resolutionType，省略視為 fixed），
+     * 每一種結果之後要不要建追蹤單（{@link #createFollowUpTicket}）或把房間轉停用，
+     * 照 {@link RepairResolution} 的對照。四者都把結果寫進 repair_tickets.resolution_type，
      * 與 completed 事件 payload 的 resolutionType 同一交易、同一個值，詳情與待驗收清單只讀這一欄。
      */
     @Transactional
-    public void resolveOnComplete(UUID ticketTaskId, List<UUID> photoIds, String resolutionNote, String resolutionType) {
+    public void resolveOnComplete(
+            UUID ticketTaskId, List<UUID> photoIds, String resolutionNote, RepairResolution resolution) {
         long tenantId = TenantContext.require();
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
         if (photoIds != null) {
@@ -443,46 +425,21 @@ public class RepairService {
                 roomNoOf(tenantId, ticket) + " " + categoryLabel + "已修好", null,
                 targetType, targetTaskId, "repair_resolved:" + ticketTaskId + ":" + completedSeq);
 
-        String effectiveResolution = effectiveResolutionType(resolutionType);
         jdbcTemplate.update(
                 "UPDATE repair_tickets SET resolution_type = ? WHERE tenant_id = ? AND task_id = ?",
-                effectiveResolution, tenantId, ticketTaskId);
-        if ("temporary".equals(effectiveResolution)) {
-            createFollowUpTicket(tenantId, ticketTaskId, ticket);
-        } else if ("cannot_fix".equals(effectiveResolution)) {
-            jdbcTemplate.update(
+                resolution.code(), tenantId, ticketTaskId);
+        switch (resolution.afterComplete()) {
+            case FOLLOW_UP_TICKET -> createFollowUpTicket(tenantId, ticketTaskId, ticket);
+            case ROOM_OUT_OF_ORDER -> jdbcTemplate.update(
                     "UPDATE rooms SET hk_state = 'out_of_order' WHERE tenant_id = ? AND id = ?",
                     tenantId, ticket.get("room_id"));
+            case NOTHING -> { }
         }
-    }
-
-    /** 這個完修結果完成時是否必須附完修照片：只有不需處理不用，沒有東西可拍。 */
-    public static boolean requiresCompletionPhotos(String resolutionType) {
-        return !"no_action_needed".equals(effectiveResolutionType(resolutionType));
-    }
-
-    /** 這個完修結果完成時是否直接結案：不需處理不進待驗收，其餘落在 done 等主管驗收。 */
-    public static boolean closesOnComplete(String resolutionType) {
-        return "no_action_needed".equals(effectiveResolutionType(resolutionType));
-    }
-
-    /**
-     * 完修結果四選一的實際落地值：省略送出視為 fixed；不在 fixed／temporary／cannot_fix／
-     * no_action_needed 之內的值整個完修請求拒絕（422），不讓一個看不懂的結果寫進單與事件。
-     */
-    public static String effectiveResolutionType(String resolutionType) {
-        if (resolutionType == null) {
-            return "fixed";
-        }
-        if (!RESOLUTION_TYPES.contains(resolutionType)) {
-            throw new UnprocessableEntityException("resolutionType 必須是 fixed、temporary、cannot_fix 或 no_action_needed");
-        }
-        return resolutionType;
     }
 
     /**
      * 暫時處理（resolutionType=temporary）自動建立的追蹤單：房號、類別都與原單相同，
-     * 狀態固定 pool（進工務待認領，不經審核——追蹤單本身就是原單已審核過的延伸）、
+     * 狀態固定 pool（進工務待認領）、
      * {@code origin_ticket_task_id} 指回原單供追溯；報修人沿用原單報修人，維持同一個
      * 故障的追蹤脈絡。{@code tasks.source} 標 system——這張單不是任何人報修或交辦的，
      * 是系統因應「先暫時處理」自動補開的。
@@ -667,12 +624,9 @@ public class RepairService {
      * 房務不能更改；判定結果同一交易內寫入 repair_tickets.is_urgent／urgent_rule，並同步
      * tasks.urgent（待認領池排序看這欄）。
      *
-     * <p>開單去向（主管審核／退回／重送翻案）：{@code assigneeId} 有值時 accepted，略過
-     * 工務待認領與審核；急件、或路徑②③（工務自開／櫃檯交辦）一律直接進 pool，不經審核
-     * ——急件要工務馬上處理，自開／交辦的單也不是房務一線報修，不必多一層審核；只有路徑①
-     * （房務報修）且非急件時先進 {@code pending_review}（等主管審核），主管用 {@link #approve}
-     * 核准後才轉 pool，{@link #reject} 退回則轉 {@code rejected} 等報修人用 {@link #resubmit}
-     * 補資料重送。
+     * <p>開單去向三條路徑共用同一個判定：{@code assigneeId} 有值時直接 accepted 給該人，
+     * 其餘一律進工務待認領（pool），不分一般件與急件。工務單沒有主管審核這一關，
+     * 報修送出後不會出現在任何主管的待辦，主管只在完修後驗收。
      */
     @Transactional
     public Map<String, Object> create(
@@ -714,21 +668,12 @@ public class RepairService {
 
         String categoryLabel = CATEGORY_LABELS.getOrDefault(category, category);
 
-        // 急件判定要在決定開單去向之前先算出來：路徑①（房務報修，sourceTaskId 有值）
-        // 的一般件要先進 pending_review 等主管審核，急件則不論來源一律直接進 pool，
-        // 兩者的差別就在這個判定結果，不能等建完任務才知道。
+        // 急件判定要在建任務之前先算出來，tasks.urgent 建立時就要寫入，待認領池才排得對。
         Map<String, Object> urgentJudgement = judgeUrgent(tenantId, effectiveRoomId);
         boolean isUrgent = Boolean.TRUE.equals(urgentJudgement.get("suggested"));
         String urgentRule = (String) urgentJudgement.get("rule");
 
-        String initialState;
-        if (assigneeId != null) {
-            initialState = "accepted";
-        } else if (sourceTaskId != null && !isUrgent) {
-            initialState = "pending_review";
-        } else {
-            initialState = "pool";
-        }
+        String initialState = assigneeId != null ? "accepted" : "pool";
 
         String ticketNo = nextTicketNo(tenantId);
         Task ticketTask = taskEngine.create(new TaskCreateCommand(
@@ -838,75 +783,6 @@ public class RepairService {
         }
         taskEngine.releaseToPool(tenantId, ticketTaskId, Actor.staff(actor.role(), actor.staffId()));
         return ticketView(tenantId, ticketTaskId);
-    }
-
-    /**
-     * 主管核准等審核中的一般件工務單（contracts approveRepairTicket）：pending_review→pool。
-     * 只有主管能核准，否則房務報修的審核等於沒有把關；狀態轉移本身委派
-     * {@link TaskEngine#approveRepairTicket}（條件式更新，單不在 pending_review 時回 409）。
-     */
-    @Transactional
-    public Map<String, Object> approve(UUID ticketTaskId) {
-        long tenantId = TenantContext.require();
-        CurrentActor actor = CurrentActor.require();
-        requireManager(actor);
-        requireTicket(tenantId, ticketTaskId);
-        taskEngine.approveRepairTicket(tenantId, ticketTaskId, Actor.staff(actor.role(), actor.staffId()));
-        return ticketView(tenantId, ticketTaskId);
-    }
-
-    /**
-     * 主管退回等審核中的一般件工務單，須附原因（contracts rejectRepairTicket）：
-     * pending_review→rejected。原因空白時整個請求拒絕，不讓報修人收到一張不知道哪裡
-     * 該補的退回單。reject_reason 與狀態轉移在同一交易內落地，查單與查事件歷程會對得上。
-     */
-    @Transactional
-    public Map<String, Object> reject(UUID ticketTaskId, String reason) {
-        long tenantId = TenantContext.require();
-        CurrentActor actor = CurrentActor.require();
-        requireManager(actor);
-        Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
-        if (reason == null || reason.isBlank()) {
-            throw new UnprocessableEntityException("reject_reason_required", "退回必須附原因");
-        }
-        int seq = taskEngine.rejectRepairTicket(tenantId, ticketTaskId, reason, Actor.staff(actor.role(), actor.staffId()));
-        jdbcTemplate.update(
-                "UPDATE repair_tickets SET reject_reason = ? WHERE tenant_id = ? AND task_id = ?",
-                reason, tenantId, ticketTaskId);
-        // 同一張單可能退回、補送、再退回，冪等鍵帶這次退回的事件序號，第二次退回才不會被當成重複而略過。
-        pushToReporter(tenantId, ticketTaskId, ticket, "repair_rejected",
-                roomNoOf(tenantId, ticket) + " " + ticket.get("ticket_no") + " 主管未核准", reason,
-                "repair", ticketTaskId, "repair_rejected:" + ticketTaskId + ":" + seq);
-        return ticketView(tenantId, ticketTaskId);
-    }
-
-    /**
-     * 報修人補資料後重新送出被退回的工務單（contracts resubmitRepairTicket）：
-     * rejected→pending_review。只有原報修人能送出——退回原因是主管對他說的，別人不能代他
-     * 補；重送後清空 reject_reason，避免讀者以為上一輪的退回理由還適用於這次送出的內容。
-     */
-    @Transactional
-    public Map<String, Object> resubmit(UUID ticketTaskId) {
-        long tenantId = TenantContext.require();
-        CurrentActor actor = CurrentActor.require();
-        Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
-        boolean isReporter =
-                actor.staffId().toString().equalsIgnoreCase(String.valueOf(ticket.get("reporter_id")));
-        if (!isReporter) {
-            throw new ForbiddenException("只有報修人可以補資料再送出");
-        }
-        taskEngine.resubmitRepairTicket(tenantId, ticketTaskId, Actor.staff(actor.role(), actor.staffId()));
-        jdbcTemplate.update(
-                "UPDATE repair_tickets SET reject_reason = NULL WHERE tenant_id = ? AND task_id = ?",
-                tenantId, ticketTaskId);
-        return ticketView(tenantId, ticketTaskId);
-    }
-
-    /** 核准／退回限主管呼叫；不是主管時這張單的審核等於房務自己說了算。 */
-    private void requireManager(CurrentActor actor) {
-        if (!StaffRole.MANAGER.equals(actor.role())) {
-            throw new ForbiddenException("只有主管可以核准或退回工務單");
-        }
     }
 
     /**

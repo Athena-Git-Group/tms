@@ -46,20 +46,6 @@ public record ManagerQueues(
             String cleanerName,
             int redoCount) {}
 
-    /** 待審核：房務報修、停在等主管審核的一般件工務單。 */
-    public record ReviewQueueItem(
-            UUID taskId,
-            String roomNo,
-            boolean isPublicArea,
-            String title,
-            OffsetDateTime waitingSince,
-            boolean waitingSinceIsToday,
-            String ticketNo,
-            String category,
-            String description,
-            String reporterName,
-            int photoCount) {}
-
     /** 待驗收：已完修、等主管驗收的工務單，含暫時處理、無法修復與定期保養的單。 */
     public record VerifyQueueItem(
             UUID taskId,

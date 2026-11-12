@@ -158,25 +158,6 @@ public class RepairController {
         return repairService.releaseToPool(ticketId);
     }
 
-    @PostMapping("/repair-tickets/{ticketId}/approve")
-    public Map<String, Object> approveRepairTicket(@PathVariable UUID ticketId) {
-        return repairService.approve(ticketId);
-    }
-
-    public record RejectRepairTicketRequest(String reason) {
-    }
-
-    @PostMapping("/repair-tickets/{ticketId}/reject")
-    public Map<String, Object> rejectRepairTicket(
-            @PathVariable UUID ticketId, @RequestBody RejectRepairTicketRequest request) {
-        return repairService.reject(ticketId, request == null ? null : request.reason());
-    }
-
-    @PostMapping("/repair-tickets/{ticketId}/resubmit")
-    public Map<String, Object> resubmitRepairTicket(@PathVariable UUID ticketId) {
-        return repairService.resubmit(ticketId);
-    }
-
     @PostMapping("/repair-tickets/{ticketId}/verify")
     public RepairVerificationOutcome verifyRepairTicket(
             @PathVariable UUID ticketId, @RequestBody VerifyRepairTicketRequest request) {

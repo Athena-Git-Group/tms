@@ -14,6 +14,7 @@ import com.athena.tms.dto.HoldReasonRequest;
 import com.athena.tms.dto.RequeueRequest;
 import com.athena.tms.dto.SopCheckItemRequest;
 import com.athena.tms.handover.HandoverService;
+import com.athena.tms.repair.RepairResolution;
 import com.athena.tms.repair.RepairService;
 import java.time.Clock;
 import java.time.Duration;
@@ -235,15 +236,25 @@ public class TaskExecutionService {
     public Map<String, Object> complete(UUID taskId, CompleteTaskRequest request) {
         long tenantId = TenantContext.require();
         Map<String, Object> task = taskRowLookup.require(tenantId, taskId);
-        requireCompletionPhotosForRepair(tenantId, taskId, task, request);
-        Map<String, Object> completedPayload = completedPayloadFor(task, request);
-        boolean closeRepair = isRepair(task) && RepairService.closesOnComplete(resolutionTypeOf(request));
-        Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
-                (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef, completedPayload, closeRepair));
-        if (isRepair(task)) {
-            repairService.resolveOnComplete(
-                    taskId, request.photoIds(), request.resolutionNote(), request.resolutionType());
+        if (!"repair".equals(String.valueOf(task.get("type")))) {
+            Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
+                    (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef, null));
+            return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
         }
+        RepairResolution resolution = RepairResolution.of(request == null ? null : request.resolutionType());
+        if (resolution.requiresPhotos()) {
+            requireCompletionPhotos(tenantId, taskId, request);
+        }
+        // completed 事件帶的完修結果與 resolveOnComplete 寫進 repair_tickets.resolution_type 的值相同。
+        Map<String, Object> completedPayload = Map.of("resolutionType", resolution.code());
+        Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
+                (actorRef) -> taskEngine.complete(
+                        tenantId, taskId, actorRef, completedPayload, resolution.closesOnComplete()));
+        repairService.resolveOnComplete(
+                taskId,
+                request == null ? null : request.photoIds(),
+                request == null ? null : request.resolutionNote(),
+                resolution);
         return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
     }
 
@@ -393,40 +404,16 @@ public class TaskExecutionService {
     }
 
     /**
-     * 修繕任務的 completed 事件要帶完修結果（省略送出視為 fixed），與
-     * {@link RepairService#resolveOnComplete} 寫進 repair_tickets.resolution_type 的值相同；
-     * 其他任務不加欄位。
-     */
-    private static Map<String, Object> completedPayloadFor(Map<String, Object> task, CompleteTaskRequest request) {
-        if (!"repair".equals(String.valueOf(task.get("type")))) {
-            return null;
-        }
-        return Map.of("resolutionType", RepairService.effectiveResolutionType(resolutionTypeOf(request)));
-    }
-
-    private static boolean isRepair(Map<String, Object> task) {
-        return "repair".equals(String.valueOf(task.get("type")));
-    }
-
-    private static String resolutionTypeOf(CompleteTaskRequest request) {
-        return request == null ? null : request.resolutionType();
-    }
-
-    /**
-     * 完成前的完修照片驗證：修繕任務（工務單）除了判斷不需處理（no_action_needed）之外，
-     * 都必須附至少 1 張這一次的完修照片才能完成，缺照片時回 422 completion_photo_required，
+     * 完成前的完修照片驗證：完修結果要附照片時（哪幾種要附見 {@link RepairResolution}），
+     * 必須附至少 1 張這一次的完修照片才能完成，缺照片時回 422 completion_photo_required，
      * 不進任何狀態轉移。放行的話，工務單會在沒有完修證據的情況下進待驗收，主管就無從確認
-     * 真的修好了。不需處理沒有東西可拍，打掃與一般任務不需要照片，都直接放行。
+     * 真的修好了。
      *
      * <p>驗收不通過退回重修的單，上一輪已綁在這張單上的完修照片不能拿來抵用：這次送來的照片
      * 全都是不通過之前就綁好的舊照片時，同樣視為沒附照片。驗收不通過不解綁舊照片，
      * 區分輪次看照片上傳時間與 repair_tickets.last_verify_failed_at。
      */
-    private void requireCompletionPhotosForRepair(
-            long tenantId, UUID taskId, Map<String, Object> task, CompleteTaskRequest request) {
-        if (!isRepair(task) || !RepairService.requiresCompletionPhotos(resolutionTypeOf(request))) {
-            return;
-        }
+    private void requireCompletionPhotos(long tenantId, UUID taskId, CompleteTaskRequest request) {
         if (request == null || request.photoIds() == null || request.photoIds().isEmpty()) {
             throw new UnprocessableEntityException("completion_photo_required", "需要完修照片");
         }
@@ -838,13 +825,14 @@ public class TaskExecutionService {
         int adHocCompleted = 0;
         long remainingMinutes = 0;
         // 工務視角今日進度（engineeringSummary）：手上張數（accepted／doing 的工務單）、
-        // 今天已完修（今天 done 的工務單）、急件數（手上單中 isUrgent 的數量）。與上面
+        // 今天已完修（今天完修、已結束的工務單，等驗收的 done 與驗收過的 closed 都算）、
+        // 急件數（手上單中 isUrgent 的數量）。與上面
         // 幾個既有統計共用同一次 rows 查詢，不為了這三個數字另開一次查表。
         int engineeringOpenCount = 0;
         int engineeringCompletedToday = 0;
         int engineeringUrgentCount = 0;
         // 工務首頁單列（engineeringSummary.tickets）：與上面三個計數欄位用同一組判定——
-        // 手上單（accepted／doing）加上今天 done 的工務單——所以陣列筆數與 openCount／
+        // 手上單（accepted／doing）加上今天完修、已結束的工務單——所以陣列筆數與 openCount／
         // completedToday 不會各算各的。排序鍵用到開單時間，不是回應欄位，比照
         // todayTasks 的做法排資料列、排完再組回應。
         List<Map<String, Object>> engineeringTicketRows = new ArrayList<>();
@@ -1064,7 +1052,7 @@ public class TaskExecutionService {
      *
      * <p>所以沒有工作日的單改看狀態：還沒結束（accepted、doing、deferred、
      * interrupted）就是手上今天要處理的——這與 nextTasks、remainingMinutes 的口徑
-     * 一致；已結束的（done、inspected）則看完成時間是否落在今天，與今日完成單數同一
+     * 一致；已結束的（{@link TaskState#FINISHED}）則看完成時間是否落在今天，與今日完成單數同一
      * 把尺。有工作日的單維持比對工作日，打掃類的行為不變。
      */
     private static boolean belongsToToday(LocalDate workDate, String state, LocalDate today, boolean doneToday) {
@@ -1075,12 +1063,13 @@ public class TaskExecutionService {
     }
 
     /**
-     * 組 contracts 的 engineeringSummary.tickets：本人手上（accepted／doing）與今天完修
-     * （done）的工務單。收錄判定在 {@link #myToday} 的統計迴圈內就做完，這裡只負責排序
+     * 組 contracts 的 engineeringSummary.tickets：本人手上（accepted／doing）與今天完修、
+     * 已結束（done 或 closed）的工務單。收錄判定在 {@link #myToday} 的統計迴圈內就做完，這裡只負責排序
      * 與逐欄組裝，所以陣列筆數與 openCount／completedToday 必然對得上。
      *
-     * <p>排序（contracts）：急件在前，其次未結案（accepted、doing）在已完修（done）之前，
-     * 同組內依開單時間由舊到新。
+     * <p>排序（contracts）：急件在前，其次未結束（accepted、doing）在已結束（done、closed）之前，
+     * 同組內依開單時間由舊到新。已結束與今天已完修用同一個 {@link TaskState#isFinished} 判斷，
+     * 兩邊各寫一份狀態清單的話，驗收結案的單會被算進已完修卻排在手上單之間。
      *
      * <p>公共區域的判定沿用既有的公共區域佔位房口徑（房號等於
      * {@link AutomationRuleService#PUBLIC_AREA_ROOM_NO}，與
