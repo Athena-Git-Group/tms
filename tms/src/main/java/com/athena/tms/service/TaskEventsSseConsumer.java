@@ -103,6 +103,11 @@ public class TaskEventsSseConsumer {
         if (this.alreadyDelivered(task, eventSeq = seq.asInt())) {
             return;
         }
+        // 每個 instance 都讀全部分區的事件，但只推給連在自己身上的客戶端；
+        // 這個租戶沒有人連在這裡，就不必查資料庫找推送對象。
+        if (!this.registry.hasConnection(tenantId.asLong())) {
+            return;
+        }
         JsonNode occurredAt = envelope.get("occurred_at");
         TaskChange change = this.loadRouting(tenantId.asLong(), task, eventSeq, type.asText(), occurredAt == null ? null : occurredAt.asText());
         if (change == null) {
@@ -115,7 +120,7 @@ public class TaskEventsSseConsumer {
 
     private void pushIntegration(long tenantId, UUID taskId, int seq, String type) {
         String hkState = IntegrationRoomStatusWhitelist.hkStateFor(type);
-        if (hkState == null) {
+        if (hkState == null || !this.registry.hasIntegrationConnection(tenantId)) {
             return;
         }
         try {
