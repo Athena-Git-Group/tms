@@ -92,6 +92,16 @@ public class StaffDeskThenSteps {
         assertEquals(skippedLabel, skipped.get("label"), "label 用 sop_items 快照");
     }
 
+    @Then("^事件流水帳有 \"sop_checked\"，但待送匣的任務事件有 \"completed\"、沒有 \"sop_checked\"$")
+    public void sopCheckedStaysOffTheLiveStream() {
+        assertTrue(db.eventCountOfType(ctx.taskId(), "sop_checked") > 0, "SOP 勾記照樣寫入事件流水帳");
+        List<String> streamedTypes = db.admin().queryForList(
+                "SELECT payload->>'type' FROM outbox WHERE kind = 'task_event' AND aggregate_key = ? ORDER BY id",
+                String.class, "task:" + ctx.taskId());
+        assertTrue(streamedTypes.contains("completed"), "其他事件照常送上即時事件流，實際: " + streamedTypes);
+        assertFalse(streamedTypes.contains("sop_checked"), "SOP 勾記不送上即時事件流，實際: " + streamedTypes);
+    }
+
     @Then("^每次勾選與跳過都寫入事件 \"sop_checked\"$")
     public void everySopActionWritesEvent() {
         assertEquals(4, db.eventCountOfType(ctx.taskId(), "sop_checked"), "每次勾選與跳過都要寫入事件 sop_checked（FR-013）");

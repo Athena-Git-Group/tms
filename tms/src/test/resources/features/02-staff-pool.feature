@@ -112,6 +112,14 @@
       並且 勾記共 4 筆且「備品」留痕為跳過，記錄操作者、時間與 label 快照
       並且 每次勾選與跳過都寫入事件 "sop_checked"
 
+    @boundary
+    場景: SOP 勾記只進事件流水帳，不送上即時事件流
+      假設 系統中存在以下任務:
+        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | est_min | started_at           | work_date  |
+        | t-502-1 | 1         | cleaning | system | r-502   | housekeeping | doing | 退房清潔 | s-hk1       | 30      | 2026-10-19T09:00:00Z | 2026-10-19 |
+      當 「小美」勾選「床鋪」「浴室」「地板」並跳過「備品」再按完成
+      那麼 事件流水帳有 "sop_checked"，但待送匣的任務事件有 "completed"、沒有 "sop_checked"
+
     @error @boundary
     場景: result 只收 checked 或 skipped
       假設 系統中存在以下任務:
