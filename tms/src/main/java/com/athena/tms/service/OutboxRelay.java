@@ -185,8 +185,9 @@ public class OutboxRelay {
                 nextWave.add(sending.key());
             }
         }
-        this.markSent(tenantId, sentIds);
-        return nextWave;
+        // 標記失敗時這一波的訊息仍是 pending，租約到期後會重送；若繼續送同鍵的下一筆，
+        // 重送的那一筆就會排到它後面，所以這一輪到此為止。
+        return this.markSent(tenantId, sentIds) ? nextWave : List.of();
     }
 
     private List<PendingMessage> fetchPending(long tenantId) {
@@ -215,15 +216,17 @@ public class OutboxRelay {
         log.warn("outbox {} 送出失敗（第 {} 次），{} 後重試: {}", new Object[]{message.id(), attempts, retryDelay, cause.getMessage()});
     }
 
-    private void markSent(long tenantId, List<Long> ids) {
+    private boolean markSent(long tenantId, List<Long> ids) {
         if (ids.isEmpty()) {
-            return;
+            return true;
         }
         try {
             this.tenantScopedExecutor.runAsTenant(tenantId, () -> this.jdbcTemplate.update("UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = ANY(?::bigint[])", new Object[]{ids.toArray(Long[]::new)}));
+            return true;
         }
         catch (Exception e) {
             log.error("outbox {} 已經送達 Kafka，但標記 sent 失敗；維持 pending，租約到期後會自動重送、由下游去重收尾: {}", new Object[]{ids, e.getMessage(), e});
+            return false;
         }
     }
 

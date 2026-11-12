@@ -1,5 +1,6 @@
 package com.athena.tms.config;
 
+import java.util.Optional;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -18,21 +19,28 @@ import org.springframework.kafka.core.KafkaAdmin;
  * <p>分區數只能加不能減，而且加了以後同一個訊息鍵可能落到新的分區。
  * 調大分區數的那一次部署，同一個鍵在調整前後的訊息分別在新舊分區，
  * 兩邊的消費進度不同步，短時間內可能不照順序到達。
+ *
+ * <p>複本數讓維運人員依 Kafka 叢集的大小決定，因為單機開發環境只能放一份，正式叢集需要多份。
+ * 沒有設定時，系統沿用 broker 的 {@code default.replication.factor}。
+ * Kafka 不會替已經存在的 topic 補複本，所以程式不寫死 1：寫死的話，正式環境只要漏設一次，
+ * topic 就永遠只有一份資料，那台 broker 壞掉時訊息會全部遺失。
  */
 @Configuration(proxyBeanMethods = false)
 public class KafkaTopicsConfig {
 
     private final KafkaTopicsProperties topics;
     private final int partitions;
-    private final short replicationFactor;
+    private final Optional<Short> replicationFactor;
 
     public KafkaTopicsConfig(
             KafkaTopicsProperties topics,
             @Value("${tms.kafka.partitions:12}") int partitions,
-            @Value("${tms.kafka.replication-factor:1}") short replicationFactor) {
+            @Value("${tms.kafka.replication-factor:}") String replicationFactor) {
         this.topics = topics;
         this.partitions = partitions;
-        this.replicationFactor = replicationFactor;
+        this.replicationFactor = replicationFactor.isBlank()
+                ? Optional.empty()
+                : Optional.of(Short.parseShort(replicationFactor.trim()));
     }
 
     @Bean
@@ -40,11 +48,12 @@ public class KafkaTopicsConfig {
         return new KafkaAdmin.NewTopics(
                 topic(topics.getTaskEvents()),
                 topic(topics.getPush()),
-                topic(topics.getPmsStatus()),
                 topic(topics.getPushDeadLetter()));
     }
 
     private NewTopic topic(String name) {
-        return TopicBuilder.name(name).partitions(partitions).replicas(replicationFactor).build();
+        TopicBuilder builder = TopicBuilder.name(name).partitions(partitions);
+        replicationFactor.ifPresent(builder::replicas);
+        return builder.build();
     }
 }
