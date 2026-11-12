@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -31,5 +32,14 @@ public final class KafkaProbe {
             }
         }
         return records;
+    }
+
+    public static int partitionCount(String topic) {
+        try (AdminClient admin = AdminClient.create(
+                Map.of("bootstrap.servers", CucumberSpringConfiguration.KAFKA.getBootstrapServers()))) {
+            return admin.describeTopics(List.of(topic)).allTopicNames().get().get(topic).partitions().size();
+        } catch (Exception e) {
+            throw new IllegalStateException("查 topic " + topic + " 的分區數失敗", e);
+        }
     }
 }

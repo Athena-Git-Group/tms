@@ -212,6 +212,13 @@ public class BackboneThenSteps {
         assertEquals(values.get(0), values.get(1), "兩筆內容必須一致，下游才能單靠 (task_id, seq) 去重");
     }
 
+    @Then("^topic \"([^\"]+)\"、\"([^\"]+)\"、\"([^\"]+)\" 各有 (\\d+) 個分區$")
+    public void topicsHavePartitions(String first, String second, String third, int expected) {
+        for (String topic : List.of(first, second, third)) {
+            assertEquals(expected, KafkaProbe.partitionCount(topic), "topic " + topic + " 的分區數");
+        }
+    }
+
     private String aggregateKeyOf(long outboxId) {
         return db.admin().queryForObject("SELECT aggregate_key FROM outbox WHERE id = ?", String.class, outboxId);
     }

@@ -139,6 +139,12 @@
       那麼 該任務的四筆事件依 seq 1 到 4 依序到達、分區鍵為 task 加任務編號
       並且 每筆事件 envelope 都帶 tenant_id
 
+  Rule: Kafka topic 啟動時就有多個分區，訊息不擠在同一列
+
+    @boundary
+    場景: 既有的單分區 topic 啟動後被加到設定的分區數
+      那麼 topic "tms.task-events"、"tms.push"、"tms.push.DLT" 各有 12 個分區
+
   Rule: 事件流唯一真相——事件列不可改不可刪
 
     @error @boundary

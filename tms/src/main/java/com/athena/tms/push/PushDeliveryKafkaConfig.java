@@ -51,6 +51,7 @@ public class PushDeliveryKafkaConfig {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(config));
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+        factory.setConcurrency(pushProperties.getConsumerConcurrency());
 
         DeadLetterPublishingRecoverer deadLetter = new DeadLetterPublishingRecoverer(
                 kafkaTemplate, (record, ex) -> new TopicPartition(topics.getPushDeadLetter(), -1));
