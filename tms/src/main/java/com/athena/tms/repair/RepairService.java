@@ -365,27 +365,34 @@ public class RepairService {
     }
 
     /**
-     * 工務完修結案時，保證報修那一側同步知道「修好了」：推播報修人，並把因這張單
-     * 而中斷的原任務停住原因改成「工務已修好：<類別>」。工務單任務本身的 doing→done
-     * （不需處理是 doing→closed）轉移已由 TaskEngine 處理，這裡只補工務單的延伸資料——完修照片綁定與處理說明
-     * （工務判斷不需維修時，結案理由也記在處理說明裡）。少了這段連動，報修人只能
-     * 自己反覆去查單，原任務上也仍顯示「等工務」，員工不知道可以回去把房間做完。
+     * 工務完修時，保證報修那一側同步知道「修好了」：推播報修人，並把因這張單而中斷的
+     * 原任務停住原因改成「工務已修好：<類別>」。少了這段連動，報修人只能自己反覆去查單，
+     * 原任務上也仍顯示「等工務」，員工不知道可以回去把房間做完。
      *
-     * <p>原任務不自動恢復，何時回去做由負責人自己決定，所以只改停住原因、不動狀態；
-     * 用條件式更新限定 interrupted，原任務已被恢復或退池時一列也不改。推播以
-     * 「單＋這次完成的事件序號＋收件人」組冪等鍵，請求重試時同一位報修人不會收到兩次，
-     * 驗收不通過後重修再完修則會再收到一次。
+     * <p>工務單任務本身的狀態轉移已由 TaskEngine 處理，這裡補的是工務單的延伸資料：
+     * 完修照片、處理說明與完修結果。工務判斷不需維修時，結案理由也記在處理說明裡。
      *
-     * <p>完修四選一（contracts CompleteTaskRequest.resolutionType，省略視為 fixed），
-     * 每一種結果之後要不要建追蹤單（{@link #createFollowUpTicket}）或把房間轉停用，
-     * 照 {@link RepairResolution} 的對照。四者都把結果寫進 repair_tickets.resolution_type，
-     * 與 completed 事件 payload 的 resolutionType 同一交易、同一個值，詳情與待驗收清單只讀這一欄。
+     * <p>完修結果寫進 repair_tickets.resolution_type，與 completed 事件 payload 的
+     * resolutionType 同一交易、同一個值，詳情與待驗收清單只讀這一欄。有些結果之後還要
+     * 另建追蹤單或把房間轉停用，見 {@link #applyResolution}。
      */
     @Transactional
     public void resolveOnComplete(
             UUID ticketTaskId, List<UUID> photoIds, String resolutionNote, RepairResolution resolution) {
         long tenantId = TenantContext.require();
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
+        recordCompletionEvidence(tenantId, ticketTaskId, photoIds, resolutionNote);
+
+        String categoryLabel = CATEGORY_LABELS.getOrDefault(
+                String.valueOf(ticket.get("category")), String.valueOf(ticket.get("category")));
+        markSourceTaskRepaired(tenantId, ticket, categoryLabel);
+        notifyReporterRepaired(tenantId, ticketTaskId, ticket, categoryLabel);
+        applyResolution(tenantId, ticketTaskId, ticket, resolution);
+    }
+
+    /** 把這次完修附的照片與處理說明記到工務單上，沒附的那一項不動。 */
+    private void recordCompletionEvidence(
+            long tenantId, UUID ticketTaskId, List<UUID> photoIds, String resolutionNote) {
         if (photoIds != null) {
             bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
         }
@@ -394,10 +401,14 @@ public class RepairService {
                     "UPDATE repair_tickets SET resolution_note = ? WHERE tenant_id = ? AND task_id = ?",
                     resolutionNote, tenantId, ticketTaskId);
         }
+    }
 
-        String categoryLabel = CATEGORY_LABELS.getOrDefault(
-                String.valueOf(ticket.get("category")), String.valueOf(ticket.get("category")));
-
+    /**
+     * 讓因這張單而中斷的原任務顯示「工務已修好」。原任務不自動恢復，何時回去做由負責人
+     * 自己決定，所以只改停住原因、不動狀態。用條件式更新限定 interrupted，原任務已被恢復
+     * 或退池時一列也不改。
+     */
+    private void markSourceTaskRepaired(long tenantId, Map<String, Object> ticket, String categoryLabel) {
         Object sourceTaskId = ticket.get("source_task_id");
         if (sourceTaskId != null) {
             jdbcTemplate.update(
@@ -407,24 +418,38 @@ public class RepairService {
                     """,
                     "工務已修好：" + categoryLabel, tenantId, sourceTaskId);
         }
+    }
 
-        // 報修人點開要回到自己被中斷的那張單，那才是他接下來要做的事；工務或櫃檯
-        // 自行開的單沒有原任務，就回工務單本身。原任務不一定是打掃單（備品任務也
-        // 會報修），類別以該列為準。
+    /**
+     * 推播報修人「修好了」，每一次完修各通知一次。冪等鍵帶這次完成的事件序號，也就是
+     * 同一交易內剛遞增的 tasks.event_seq：請求重試時同一位報修人不會收到兩次，驗收不通過後
+     * 重修再完修則會再收到一次。
+     *
+     * <p>報修人點開要回到自己被中斷的那張單，那才是他接下來要做的事。工務或櫃檯自行開的單
+     * 沒有原任務，就回工務單本身。原任務不一定是打掃單，備品任務也會報修，任務類型以該列為準。
+     */
+    private void notifyReporterRepaired(
+            long tenantId, UUID ticketTaskId, Map<String, Object> ticket, String categoryLabel) {
+        Object sourceTaskId = ticket.get("source_task_id");
         String targetType = "repair";
         UUID targetTaskId = ticketTaskId;
         if (sourceTaskId != null) {
             targetTaskId = UUID.fromString(String.valueOf(sourceTaskId));
             targetType = String.valueOf(taskRowLookup.require(tenantId, targetTaskId).get("type"));
         }
-        // 退回重修後再完修也要再通知報修人一次，冪等鍵帶這次完成的事件序號（同一交易內剛遞增的
-        // tasks.event_seq），每一次完修各算一封，同一次請求重試則不重複。
         Integer completedSeq = jdbcTemplate.queryForObject(
                 "SELECT event_seq FROM tasks WHERE tenant_id = ? AND id = ?", Integer.class, tenantId, ticketTaskId);
         pushToReporter(tenantId, ticketTaskId, ticket, "repair_completed",
                 roomNoOf(tenantId, ticket) + " " + categoryLabel + "已修好", null,
                 targetType, targetTaskId, "repair_resolved:" + ticketTaskId + ":" + completedSeq);
+    }
 
+    /**
+     * 記下完修結果，並做該結果之後的後續：建追蹤單（{@link #createFollowUpTicket}）或
+     * 把房間轉停用，照 {@link RepairResolution} 的對照。
+     */
+    private void applyResolution(
+            long tenantId, UUID ticketTaskId, Map<String, Object> ticket, RepairResolution resolution) {
         jdbcTemplate.update(
                 "UPDATE repair_tickets SET resolution_type = ? WHERE tenant_id = ? AND task_id = ?",
                 resolution.code(), tenantId, ticketTaskId);
@@ -673,7 +698,7 @@ public class RepairService {
         boolean isUrgent = Boolean.TRUE.equals(urgentJudgement.get("suggested"));
         String urgentRule = (String) urgentJudgement.get("rule");
 
-        String initialState = assigneeId != null ? "accepted" : "pool";
+        String initialState = assigneeId != null ? TaskState.ACCEPTED : TaskState.POOL;
 
         String ticketNo = nextTicketNo(tenantId);
         Task ticketTask = taskEngine.create(new TaskCreateCommand(
@@ -681,7 +706,7 @@ public class RepairService {
                 categoryLabel + " 工務單", null, null, null, null, staffActor, isUrgent));
         UUID ticketTaskId = ticketTask.getId();
 
-        if (poolSource != null && "pool".equals(initialState)) {
+        if (poolSource != null && TaskState.POOL.equals(initialState)) {
             jdbcTemplate.update(
                     "UPDATE tasks SET pool_source = ? WHERE tenant_id = ? AND id = ?",
                     poolSource, tenantId, ticketTaskId);

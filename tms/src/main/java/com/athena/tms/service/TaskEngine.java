@@ -156,23 +156,14 @@ public class TaskEngine {
      */
     @Transactional
     public int complete(long tenantId, UUID taskId, Actor actor) {
-        return this.complete(tenantId, taskId, actor, null);
+        return this.complete(tenantId, taskId, actor, null, false);
     }
 
     /**
-     * 同 {@link #complete(long, UUID, Actor)}，另把呼叫端給的欄位併進 completed 事件的
-     * payload。修繕任務用它帶完修結果 resolutionType：事件與 repair_tickets.resolution_type
-     * 由同一交易寫入，查事件歷程與查單看到的是同一個結果。
-     */
-    @Transactional
-    public int complete(long tenantId, UUID taskId, Actor actor, Map<String, Object> extraPayload) {
-        return this.complete(tenantId, taskId, actor, extraPayload, false);
-    }
-
-    /**
-     * 同 {@link #complete(long, UUID, Actor, Map)}，{@code closeRepair} 為 true 時修繕任務
-     * 一步落在 closed（已結案），不經 done 等主管驗收。工務判斷不需處理的單用它：
-     * 完成事件本身就是結案事件，不另記驗收。
+     * 修繕任務的完成，在 {@link #complete(long, UUID, Actor)} 之上多兩件事。
+     * {@code extraPayload} 的欄位會併進 completed 事件的 payload，修繕任務用它帶完修結果
+     * resolutionType。{@code closeRepair} 為 true 時任務一步落在 closed（已結案），不經 done
+     * 等主管驗收。工務判斷不需處理的單用它：完成事件本身就是結案事件，不另記驗收。
      */
     @Transactional
     public int complete(long tenantId, UUID taskId, Actor actor, Map<String, Object> extraPayload, boolean closeRepair) {

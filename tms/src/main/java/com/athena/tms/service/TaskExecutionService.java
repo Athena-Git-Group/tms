@@ -1,6 +1,7 @@
 package com.athena.tms.service;
 
 import com.athena.tms.common.codes.TaskState;
+import com.athena.tms.common.codes.TaskType;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
@@ -226,35 +227,40 @@ public class TaskExecutionService {
     }
 
     /**
-     * 負責人完成自己進行中的任務（contracts tasksComplete）。修繕任務（工務單）以不需處理
-     * 完成時直接結案（closed），其餘完修結果落在 done 等主管驗收；狀態轉移成功後，由
-     * {@link RepairService#resolveOnComplete} 做完修收尾——照片綁定、處理說明、推播報修人
-     * 與原任務的停住原因連動。整個方法包在同一個交易裡，
-     * 不會出現「單已結案但報修人沒收到通知」的中間態。
+     * 負責人完成自己進行中的任務（contracts tasksComplete）。完成與完成後的連動包在同一個
+     * 交易裡，不會出現「單已結案但報修人沒收到通知」的中間態。修繕任務（工務單）的完成
+     * 另外帶完修結果與完修收尾，見 {@link #completeRepair}。
      */
     @Transactional
     public Map<String, Object> complete(UUID taskId, CompleteTaskRequest request) {
         long tenantId = TenantContext.require();
         Map<String, Object> task = taskRowLookup.require(tenantId, taskId);
-        if (!"repair".equals(String.valueOf(task.get("type")))) {
-            Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
-                    (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef, null));
-            return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
+        if (TaskType.REPAIR.equals(String.valueOf(task.get("type")))) {
+            CompleteTaskRequest repairRequest =
+                    request == null ? new CompleteTaskRequest(null, null, null) : request;
+            return completeRepair(tenantId, taskId, task, repairRequest);
         }
-        RepairResolution resolution = RepairResolution.of(request == null ? null : request.resolutionType());
+        Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
+                (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef));
+        return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
+    }
+
+    /**
+     * 工務完成一張工務單。完修結果決定兩件事：要不要附這一次的完修照片，以及單是落在 done
+     * 等主管驗收、還是直接結案（closed）。兩者都照 {@link RepairResolution} 的對照。
+     * 狀態轉移成功後，完修收尾交給 {@link RepairService#resolveOnComplete}。
+     */
+    private Map<String, Object> completeRepair(
+            long tenantId, UUID taskId, Map<String, Object> task, CompleteTaskRequest request) {
+        RepairResolution resolution = RepairResolution.of(request.resolutionType());
         if (resolution.requiresPhotos()) {
             requireCompletionPhotos(tenantId, taskId, request);
         }
-        // completed 事件帶的完修結果與 resolveOnComplete 寫進 repair_tickets.resolution_type 的值相同。
         Map<String, Object> completedPayload = Map.of("resolutionType", resolution.code());
         Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
                 (actorRef) -> taskEngine.complete(
                         tenantId, taskId, actorRef, completedPayload, resolution.closesOnComplete()));
-        repairService.resolveOnComplete(
-                taskId,
-                request == null ? null : request.photoIds(),
-                request == null ? null : request.resolutionNote(),
-                resolution);
+        repairService.resolveOnComplete(taskId, request.photoIds(), request.resolutionNote(), resolution);
         return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
     }
 
@@ -414,7 +420,7 @@ public class TaskExecutionService {
      * 區分輪次看照片上傳時間與 repair_tickets.last_verify_failed_at。
      */
     private void requireCompletionPhotos(long tenantId, UUID taskId, CompleteTaskRequest request) {
-        if (request == null || request.photoIds() == null || request.photoIds().isEmpty()) {
+        if (request.photoIds() == null || request.photoIds().isEmpty()) {
             throw new UnprocessableEntityException("completion_photo_required", "需要完修照片");
         }
         String placeholders = String.join(", ", Collections.nCopies(request.photoIds().size(), "?"));
