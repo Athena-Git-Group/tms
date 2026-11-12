@@ -23,15 +23,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 抽查與查房合格率（contracts 查房.yaml 的 createSpotCheck、getInspectionPassRate）。
- *
- * <p>抽查和一般查房（{@link InspectionService}）是兩條路：一般查房對還沒結案的
- * done 任務逐項判定全集，抽查對已免查結案的任務挑幾項複驗，不要求涵蓋項目全集。
- * 任一項不合格時整張單退回原負責人重做（狀態轉移見
- * {@link TaskEngine#failSpotCheck}），同時清空 SOP 勾記、把房間標回待整理，
- * 並推播原負責人；全部合格時任務維持原狀，只留一筆抽查紀錄。
- */
 @Service
 public class InspectionReviewService {
 
@@ -60,7 +51,6 @@ public class InspectionReviewService {
         this.clock = clock;
     }
 
-    /** 合格率回應形狀（contracts PassRate）：分母為 0 時 rate 為 null。 */
     public record PassRate(int passed, int failed, Double rate) {}
 
     @Transactional
@@ -87,11 +77,9 @@ public class InspectionReviewService {
                 .map(InspectionRequest.Item::key)
                 .toList();
         if (!failedKeys.isEmpty()) {
-            // 不合格項以項目 key 直接串接呈現：抽查請求只帶 key，沒有租戶 SOP 項目的顯示名稱可查。
             String failedKeysText = String.join("、", failedKeys);
             Actor actor = Actor.staff(inspector.role(), inspector.staffId());
             int seq = taskEngine.failSpotCheck(tenantId, taskId, failedKeysText, actor);
-            // 重做要從乾淨狀態開始：上一輪的勾記若留著，重做時清單會呈現已完成。
             jdbcTemplate.update(
                     "DELETE FROM task_sop_checks WHERE tenant_id = ? AND task_id = ?", tenantId, taskId);
             String roomNo = markRoomDirty(tenantId, task.getRoomId());
@@ -100,7 +88,6 @@ public class InspectionReviewService {
         return recordSpotCheck(tenantId, taskId, inspector.staffId(), failedKeys.isEmpty(), items);
     }
 
-    /** 合格率只計通過與退回重做：passed 是分子，passed＋failed 是分母，免查（waived）不計入。 */
     public PassRate passRate(LocalDate date) {
         long tenantId = TenantContext.require();
         LocalDate workDate = date != null ? date : LocalDate.ofInstant(clock.instant(), clock.getZone());
@@ -120,17 +107,12 @@ public class InspectionReviewService {
         return count == null ? 0 : count;
     }
 
-    /** 把任務綁定房間的 hk_state 標回 dirty（退回重做代表這間房還不能算整理完），回傳房號。 */
     private String markRoomDirty(long tenantId, UUID roomId) {
         return jdbcTemplate.queryForObject(
                 "UPDATE rooms SET hk_state = 'dirty', updated_at = now() WHERE tenant_id = ? AND id = ? RETURNING room_no",
                 String.class, tenantId, roomId);
     }
 
-    /**
-     * 推播原負責人任務被退回。冪等鍵綁「任務＋這次退回的事件序號」，請求重試或
-     * 掃描重放時同一次退回不會對負責人重複推播。
-     */
     private void notifyAssignee(long tenantId, Task task, int seq, String roomNo, String failedKeysText) {
         if (task.getAssigneeId() == null) {
             return;
@@ -146,7 +128,6 @@ public class InspectionReviewService {
                 "spot_check_failed:" + task.getId() + ":seq:" + seq);
     }
 
-    /** 抽查一次留一筆查房紀錄（inspections 是 history，退回重查會有多列）。 */
     private Inspection recordSpotCheck(
             long tenantId, UUID taskId, UUID inspectorId, boolean allPass, List<InspectionRequest.Item> items) {
         ArrayNode itemsJson = objectMapper.createArrayNode();

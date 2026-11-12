@@ -115,7 +115,6 @@ public final class IntegrationSseSupport {
             return everything.stream().filter(e -> e.name().equals("room_status")).toList();
         }
 
-        /** 讀取執行緒因例外中止（不是測試主動關流）時，讓接下來讀流的斷言直接失敗並帶出原因。 */
         private void failIfReaderDied() {
             Throwable failure = readerFailure;
             if (failure != null) {

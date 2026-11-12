@@ -4,9 +4,7 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// google-services 外掛會在 google-services.json 不存在時讓建置失敗，而這個檔案
-// 刻意不進版控（放法見 app/google-services.json.example 與 README-firebase.md）。
-// 沒有檔案就不套外掛：App 照常建置，只是 Firebase 初始化會失敗、推播停用。
+// google-services 外掛在 google-services.json 不存在時會讓建置失敗，而這個檔案不進版控。
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
@@ -22,24 +20,15 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.athena.tms.tms_staff_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

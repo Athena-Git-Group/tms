@@ -18,15 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * 主管工作台模組的 Then（主管工作台 dsl.md Then 句型區的「必查」）：格子數字、清單順序與
- * 每一列的內容、「我名下的單」、分頁外殼、查房畫面的項目與送出鈕、查房結果畫面的三種說法。
- *
- * <p>每一句都兩面查：畫面（accessibility id 照
- * {@code app/mobile/lib/features/manager/manager_ids.dart}）與權威狀態（{@code getManagerQueues}、
- * {@code getMyToday} 或直接讀表）。只驗畫面不算數——App 自己湊出對的數字也會過關；只驗後端
- * 則完全沒驗到主管看見的東西。
- */
 public class ManagerThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
@@ -43,37 +34,29 @@ public class ManagerThenSteps {
     private static final String TICKET_SCREEN = "ticket.screen";
     private static final String TICKET_WHERE = "ticket.hero.where";
 
-    /** 底部分頁 → 切過去之後那一頁一定在的節點 id（主管的待認領是帶部門切換的那一頁）。 */
     private static final Map<String, String> TAB_SCREEN_BY_LABEL = Map.of(
             "待認領", "pool.dept-switch",
             "通知", "notification.screen",
             "我的", "me.screen");
 
-    /** 房務首頁任務卡的 id 前綴與尾段；「我名下的單」用的是同一個元件。 */
     private static final String HOME_TASK_PREFIX = "home.task.";
     private static final String HOME_TASK_SUFFIX = ".card";
 
-    /** 工務首頁「手上」單卡的 id 前綴與尾段；工務主管的「我名下的單」用的是同一個元件。 */
     private static final String ENG_CARD_PREFIX = "engHome.in-hand.";
     private static final String ENG_CARD_SUFFIX = ".card";
 
-    /** 主管首頁的磚 id 前綴；後面接 ManagerQueues 的鍵。 */
     private static final String TILE_PREFIX = "manager.home.tile.";
 
-    /** 主管格子可能出現的所有類別（房務主管兩格都有，工務主管只有 verify）。 */
     private static final List<String> ALL_QUEUES = List.of("inspection", "verify");
 
-    /** 格子中文 → 契約 {@code ManagerQueues} 的鍵（也是 {@code manager.home.tile.{queue}} 的尾段）。 */
     private static final Map<String, String> QUEUE_KEY_BY_LABEL = Map.of(
             "待查房", "inspection",
             "待驗收", "verify");
 
-    /** 兩類清單的空狀態主文（dsl「清單說明目前沒有等他處理的單」那一列）。 */
     private static final Map<String, String> EMPTY_TITLE_BY_QUEUE = Map.of(
             "inspection", "目前沒有等你查的房",
             "verify", "目前沒有等你驗收的工務單");
 
-    /** 待驗收列的標籤 → 它對應的欄位與值（dsl「那一列標示」那一列）。 */
     private static final Map<String, Map.Entry<String, String>> TAG_FIELD_BY_LABEL = Map.of(
             "已修好", Map.entry("resolutionType", "fixed"),
             "暫時處理", Map.entry("resolutionType", "temporary"),
@@ -81,20 +64,17 @@ public class ManagerThenSteps {
             "定期保養", Map.entry("origin", "scheduled"),
             "重修後再驗", Map.entry("wasVerificationFailed", "true"));
 
-    /** 完修結果 → 待驗收列上的結果標籤文字（dsl「每一列都看得到工務單號與完修結果」那一列）。 */
     private static final Map<String, String> RESOLUTION_LABEL_BY_TYPE = Map.of(
             "fixed", "已修好",
             "temporary", "暫時處理",
             "cannot_fix", "無法修復");
 
-    /** 工務單狀態 → 工務首頁單卡的狀態標籤文字（急件另外加「急件」）。 */
     private static final Map<String, String> ENG_CARD_STATUS_BY_STATE = Map.of(
             "accepted", "待開始",
             "doing", "維修中",
             "paused", "已暫停",
             "done", "已完修");
 
-    /** 兩格的 y 差在這個點數以內就算排在同一列。 */
     private static final int SAME_ROW_TOLERANCE = 8;
 
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
@@ -110,14 +90,6 @@ public class ManagerThenSteps {
         this.context = context;
     }
 
-    /**
-     * 必查：主管首頁最上方的磚剛好是表格列出的這幾格、依表格順序
-     * （{@code manager.home.tile.{inspection|verify}.count}），沒有多出的格子，數字逐格等於表格，
-     * 並等於 {@code getManagerQueues} 回應的 {@code counts} 與各陣列長度。進首頁後不需任何點按就看得到。
-     *
-     * <p>Data Table 欄：{@code 格}（待查房、待驗收）、{@code 數字}。表格列出的順序就是磚的順序；
-     * 格子有幾格由表格決定，不在這裡寫死。
-     */
     @那麼("首頁的格子依序顯示：")
     public void tilesShowInOrder(DataTable table) {
         List<Map<String, String>> rows = table.asMaps();
@@ -131,11 +103,6 @@ public class ManagerThenSteps {
         assertTilesOnScreenExactly(keysInTable);
     }
 
-    /**
-     * 必查：主管首頁最上方只有一條寬磚 {@code manager.home.tile.verify}，左側只有「待驗收」、沒有副文，
-     * 右側大數字等於值，並等於 {@code getManagerQueues.counts.verify} 與
-     * {@code verify} 陣列長度；畫面上沒有 {@code manager.home.tile.inspection}。用於工務主管。
-     */
     @那麼("首頁只有待驗收一格，數字為 {int}")
     public void onlyVerifyTileShows(int expected) {
         JsonNode queues = managerQueues();
@@ -153,13 +120,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：主管首頁沒有 {@code manager.home.tile.inspection}；四個分頁、「我名下的單」與通知中心
-     * 都沒有通往待查房清單或查房畫面的操作；{@code getManagerQueues} 回應沒有 {@code inspection} 鍵。
-     *
-     * <p>畫面上逐一切過四個分頁，每一頁都不能有待查房的磚、清單、查房畫面或「待查房」字樣，
-     * 最後切回首頁。
-     */
     @那麼("首頁沒有待查房格，也沒有任何進待查房清單的入口")
     public void noInspectionEntryAnywhere() {
         JsonNode queues = managerQueues();
@@ -178,20 +138,12 @@ public class ManagerThenSteps {
         world.waitForTestId(HOME, SCREEN_TIMEOUT);
     }
 
-    /** 必查：該格的數字等於值（0 時顯示 0，磚不隱藏），與 {@code getManagerQueues.counts} 一致。 */
     @那麼("{string} 格顯示 {int}")
     public void tileShows(String tileLabel, int expected) {
         world.waitForTestId(HOME, SCREEN_TIMEOUT);
         assertTile(managerQueues(), queueKey(tileLabel), expected);
     }
 
-    /**
-     * 必查：主管首頁格子下方「我名下的單」區（{@code manager.home.mine}）列出的任務卡房號順序
-     * 等於清單，與 {@code getMyToday.todayTasks} 一致；每張卡片用的是房務首頁的任務卡元件
-     * （同一組 accessibility id 前綴 {@code home.task.{房號}}），顯示內容、狀態與主按鈕文字與
-     * 房務首頁相同——這裡以卡片節點的 label（房務首頁任務卡固定是「房號 標題」）對照
-     * {@code todayTasks} 的 {@code roomNo}／{@code title}。
-     */
     @那麼("^「我名下的單」依序列出 (.+)，卡片與房務首頁的任務卡一致$")
     public void mineListsInOrder(String roomListText) {
         List<String> expected = splitList(roomListText);
@@ -222,15 +174,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：工務主管首頁「我名下的單」區（{@code manager.home.mine}）有該單的卡片，與
-     * {@code getMyToday.engineeringSummary.tickets} 一致；卡片用的是工務首頁手上的單的工務單卡元件
-     * （同一個 id {@code engHome.in-hand.{單號}.card}），顯示房號、工務單號、說明與狀態標籤，
-     * 急件與驗收退回各有標籤，與工務首頁相同。
-     *
-     * <p>工務單卡把內文併成一個節點，label 固定是「單號 地點 狀態」（急件時狀態前多「急件 · 」），
-     * 說明文字在節點內的文字子節點；這裡兩處合起來比對。
-     */
     @那麼("「我名下的單」列出 {string}，卡片與工務首頁的工務單卡一致")
     public void mineListsEngineeringTicket(String ticketNo) {
         JsonNode ticket = null;
@@ -271,14 +214,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：畫面是該單的工務單詳情（以房號與後端 {@code readRepairTicket} 對上），底部動作列與工務員工
-     * 看自己名下同狀態的單相同（待開始為「開始維修」，維修中為完修回報），沒有通過或不通過；
-     * {@code RepairTicket.viewerIsAssignee}=true。
-     *
-     * <p>工務員工看自己名下的單時底部動作只看狀態與是不是公共區域（公共區域多一顆「放回待認領」），
-     * 這裡照同一張表比對；主管專屬的通過、不通過與認領鈕都不能出現。
-     */
     @那麼("App 開啟 {string} 的工務單詳情，底部動作與工務員工相同")
     public void ticketDetailActionsSameAsEngineer(String ticketNo) {
         Map<String, Object> row = backend.repairTicketRow(ticketNo);
@@ -315,13 +250,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：主管首頁上沒有房務首頁的問候列、進度環與「下一間」卡（對應的 accessibility id 不存在）。
-     * 房務首頁的殼是 {@code home.screen}，進度環是 {@code home.progress.*}，主卡的位置是「下一間」
-     * 卡或 {@code home.empty-state}；問候列沒有 id，用它的文字（早安／辛苦了）查。也沒有工務首頁的
-     * 問候列、三格進度與急件、保養區：工務首頁的殼是 {@code engHome.screen}，三格進度是
-     * {@code engHome.progress.*}，保養格沒有 id，用「今日保養」字樣查。
-     */
     @那麼("主管首頁沒有問候列與今日進度")
     public void homeHasNoGreetingNorProgress() {
         world.waitForTestId(HOME, SCREEN_TIMEOUT);
@@ -338,11 +266,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：「我名下的單」區顯示「今天沒有名下的單」與一行副文，沒有任何卡片；房務主管的
-     * {@code getMyToday.todayTasks} 為空，工務主管的 {@code engineeringSummary.tickets} 為空。
-     * 主管種類照 {@link ManagerHomeWait} 同一條口徑（後端員工資料的 dept）。
-     */
     @那麼("「我名下的單」說明目前沒有名下的單")
     public void mineIsEmpty() {
         boolean engineeringManager = ManagerHomeWait.queuesFor(world.loggedInStaff()).equals(List.of("verify"));
@@ -363,11 +286,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：房務或工務員工的首頁上沒有 {@code manager.home.tile.*} 任何一個磚，也沒有任何通往
-     * 待查房或待驗收清單的入口（主管首頁殼、清單畫面、格子的文字都不在）。工務員工的首頁是
-     * 工務首頁（{@code engHome.screen}），房務員工是房務首頁（{@code home.screen}）。
-     */
     @那麼("首頁沒有主管的格子")
     public void homeHasNoManagerTiles() {
         if ("engineering".equals(world.loggedInStaff().dept())) {
@@ -390,11 +308,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：Tab bar 的分頁標題順序等於清單；通知與我的兩個分頁可切換，切過去的畫面分別是
-     * 員工也在用的通知中心（{@code notification.screen}）與「我的」（{@code me.screen}）。
-     * 分頁格沒有 accessibility id（整格併成一個帶 label 的按鈕節點），用 label 認、依 x 座標排序。
-     */
     @那麼("^底部分頁依序是 (.+)$")
     public void tabBarOrder(String tabListText) {
         List<String> expected = splitList(tabListText);
@@ -413,10 +326,6 @@ public class ManagerThenSteps {
         tapTab(expected.get(0));
     }
 
-    /**
-     * 必查：目前清單畫面的列順序剛好等於清單，沒有多也沒有少，與 {@code getManagerQueues}
-     * 對應陣列的順序一致（App 不重排）。哪一類清單由 {@link ManagerContext#openedQueue()} 決定。
-     */
     @那麼("^清單依序為 (.+)$")
     public void queueOrder(String listText) {
         List<String> expected = splitList(listText);
@@ -437,7 +346,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 必查：目前清單畫面沒有該單那一列，且 {@code getManagerQueues} 對應陣列也沒有它。 */
     @那麼("清單上沒有 {string}")
     public void queueLacks(String key) {
         String queue = openedQueue();
@@ -452,12 +360,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：該列右欄顯示日期與時刻（{@code manager.queue.row.{單}.waiting-since}），對應的
-     * {@code waitingSinceIsToday}=false；日期與時刻直接取自 {@code waitingSince} 字串的時區位移，
-     * 不是手機時區換算。日期寫「昨天」時，與後端時鐘的前一天相符（以 {@code waitingSince}
-     * 自帶的位移算「今天」）。
-     */
     @那麼("{string} 那一列標出日期 {string} 與時刻 {string}")
     public void rowShowsDateAndTime(String key, String date, String time) {
         JsonNode item = queueItem(managerQueues(), openedQueue(), key);
@@ -487,7 +389,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 必查：該列右欄只有時刻、沒有日期，對應的 {@code waitingSinceIsToday}=true。 */
     @那麼("{string} 那一列只顯示時刻 {string}")
     public void rowShowsTimeOnly(String key, String time) {
         JsonNode item = queueItem(managerQueues(), openedQueue(), key);
@@ -506,10 +407,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：清單每一列都顯示房號（公共區域的單顯示地點說明）與內容文字，分別與
-     * {@code roomNo}／{@code title} 一致。列節點的 label 要同時含這兩段。
-     */
     @那麼("每一列都看得到房號與內容")
     public void everyRowShowsRoomAndTitle() {
         String queue = openedQueue();
@@ -529,10 +426,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：待驗收清單每一列都顯示 {@code ticketNo} 與完修結果標籤（已修好、暫時處理、無法修復，
-     * 對照 {@code resolutionType}；舊單 {@code resolutionType} 為 null 時不畫結果標籤）。
-     */
     @那麼("每一列都看得到工務單號與完修結果")
     public void everyRowShowsTicketNoAndResolution() {
         String queue = openedQueue();
@@ -568,11 +461,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：待驗收清單該列顯示該標籤文字，與 {@code resolutionType}（已修好＝fixed、暫時處理＝temporary、
-     * 無法修復＝cannot_fix）、{@code origin}（定期保養＝scheduled）或 {@code wasVerificationFailed}
-     * （重修後再驗＝true）一致。
-     */
     @那麼("{string} 那一列標示 {string}")
     public void rowShowsTag(String ticketNo, String tag) {
         Map.Entry<String, String> field = TAG_FIELD_BY_LABEL.get(tag);
@@ -591,11 +479,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：清單畫面顯示該類的空狀態說明（{@code manager.queue.empty}；待查房「目前沒有等你查的房」、
-     * 待驗收「目前沒有等你驗收的工務單」）與副文，沒有任何列；
-     * {@code getManagerQueues} 對應陣列為空。
-     */
     @那麼("清單說明目前沒有等他處理的單，畫面不是空白")
     public void queueIsEmptyWithExplanation() {
         String queue = openedQueue();
@@ -619,20 +502,12 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：查房畫面的項目列（{@code inspect.item.{key}}）依序等於表格，每一列的「通過」與「不通過」
-     * 都未選；與 {@code listSopItems} 篩 applies_to=inspection 且啟用的集合一致。
-     */
     @那麼("查房畫面列出以下項目，每一項都還沒判：")
     public void inspectionListsUntouched(DataTable table) {
         List<String> expectedLabels = table.asMaps().stream().map(row -> requireCell(row, "查房項目")).toList();
         assertInspectionItemsUnjudged(expectedLabels);
     }
 
-    /**
-     * 必查：{@code inspect.submit-button} 的可互動狀態符合；禁用時無法真的觸發送出、後端沒有收到
-     * 查房（與「完修回報的送出鈕為」同一套語意：真的按下去，再驗畫面沒走、後端沒多一筆查房）。
-     */
     @那麼("查房送出鈕為 {string}")
     public void inspectionSubmitButtonState(String enabledOrDisabled) {
         boolean expectedEnabled = switch (enabledOrDisabled) {
@@ -653,7 +528,6 @@ public class ManagerThenSteps {
             try {
                 submit.click();
             } catch (RuntimeException ignored) {
-                // 禁用鈕拒絕點擊而拋例外，正是「送出沒有發生」的一種表現。
             }
             world.waitForTestId(INSPECT_SUBMIT_BUTTON, SCREEN_TIMEOUT);
             assertAbsent(INSPECT_RESULT, "送出鈕禁用時按下去不該走到結果畫面");
@@ -664,7 +538,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 必查：查房畫面上沒有任何可輸入文字的欄位，也沒有拍照入口。 */
     @那麼("查房畫面沒有備註欄")
     public void inspectionHasNoNoteField() {
         world.waitForTestId(INSPECT, SCREEN_TIMEOUT);
@@ -679,10 +552,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：項目清單的位置顯示「這家飯店目前沒有設定查房項目，送出即視為全部通過」，沒有任何項目列；
-     * 後端現行啟用集合也是空的。
-     */
     @那麼("查房畫面說明目前沒有查房項目，送出即視為全部通過")
     public void inspectionExplainsNoItems() {
         List<String> active = activeInspectionItemKeys();
@@ -697,14 +566,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：後端這次回 422 {@code inspection_items_mismatch}；App 留在查房畫面，頂部出現
-     * 「查房項目剛更新，請重新判定」，項目列換成表格列出的集合（取自回應的 {@code currentItems}），
-     * 所有判定清空，送出鈕禁用；後端該單仍為待查房。
-     *
-     * <p>422 本身在 App 與後端之間，測試看不到那次往返；以它的後果驗：單沒變、沒有新的查房紀錄、
-     * 畫面換成現行集合（表格＝後端現行啟用集合）且判定全清。
-     */
     @那麼("查房畫面重新載入以下項目並清空判定：")
     public void inspectionReloadedAndCleared(DataTable table) {
         List<String> expectedLabels = table.asMaps().stream().map(row -> requireCell(row, "查房項目")).toList();
@@ -728,10 +589,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：結果畫面（{@code inspect.result}）標題含該房號與「查房通過」，副文說明清房者會收到通知；
-     * 對應 {@code InspectionOutcome.result}=passed、{@code destination}=closed；後端該單為查房通過。
-     */
     @那麼("查房結果畫面說明 {string} 查房通過、已結案")
     public void resultSaysPassed(String roomNo) {
         Map<String, Object> task = world.taskRowByRoomNo(roomNo);
@@ -751,11 +608,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：結果畫面標題含該房號與「退回重做」，副文含「回到{員工}名下」與不合格項目清單；
-     * 對應 {@code result}=failed、{@code destination}=cleaner、{@code failedItems} 的 label 等於項目；
-     * 後端該單為待開始、負責人不變。
-     */
     @那麼("查房結果畫面說明 {string} 退回重做，回到 {string} 名下，不合格項為 {string}")
     public void resultSaysReturnedToCleaner(String roomNo, String cleanerName, String itemsText) {
         List<String> failedLabels = splitList(itemsText);
@@ -779,10 +631,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 必查：結果畫面標題含該房號與「退回重做」，副文含「{員工}已下班」與「回到了房務待認領」；
-     * 對應 {@code destination}=pool；後端該單為待認領、沒有負責人。App 不自己判斷班表，只照回應呈現。
-     */
     @那麼("查房結果畫面說明 {string} 退回重做，{string} 已下班，回到房務待認領")
     public void resultSaysReturnedToPool(String roomNo, String cleanerName) {
         world.staff(cleanerName);
@@ -805,7 +653,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 該格畫面數字等於期待值，且等於後端 counts 與對應陣列長度。 */
     private void assertTile(JsonNode queues, String queue, int expected) {
         int count = queues.path("counts").path(queue).asInt(-1);
         int size = queues.path(queue).size();
@@ -820,10 +667,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 畫面上的磚剛好是這幾格（{@code manager.home.tile.{queue}} 這一層，不收 {@code .count}），
-     * 且由上而下（同列時由左而右）的順序等於給定順序。
-     */
     private void assertTilesOnScreenExactly(List<String> expectedOrder) {
         List<String> present = world.findTestIdsWithPrefix(TILE_PREFIX).stream()
                 .map(id -> id.substring(TILE_PREFIX.length()))
@@ -840,8 +683,6 @@ public class ManagerThenSteps {
             org.openqa.selenium.Rectangle rect = tile.getRect();
             placed.add(Map.entry(new int[] {rect.getY(), rect.getX()}, queue));
         }
-        // 同一列的格子讀出來的 y 可能差 1pt（讀兩次之間畫面還在收尾），差距在
-        // SAME_ROW_TOLERANCE 以內就算同一列，改比 x。
         placed.sort((a, b) -> Math.abs(a.getKey()[0] - b.getKey()[0]) > SAME_ROW_TOLERANCE
                 ? Integer.compare(a.getKey()[0], b.getKey()[0])
                 : Integer.compare(a.getKey()[1], b.getKey()[1]));
@@ -851,7 +692,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 後端 {@code getManagerQueues.counts} 的鍵剛好是這幾類，沒有多出的類別（例如已收回的 review）。 */
     private static void assertCountsKeysExactly(JsonNode queues, List<String> expected) {
         List<String> keys = new ArrayList<>();
         queues.path("counts").fieldNames().forEachRemaining(keys::add);
@@ -860,14 +700,12 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 磚節點的 label；殼節點沒併 label 時退而收它底下所有文字節點。 */
     private String tileLabel(String queue) {
         WebElement tile = world.waitForTestId(TILE_PREFIX + queue, SCREEN_TIMEOUT);
         String label = tile.getAttribute("label");
         return (label == null ? "" : label) + "\n" + textsUnder(tile);
     }
 
-    /** 節點底下所有文字節點的 label，以換行串起來。 */
     private static String textsUnder(WebElement element) {
         StringBuilder joined = new StringBuilder();
         for (WebElement text : element.findElements(By.className("XCUIElementTypeStaticText"))) {
@@ -876,7 +714,6 @@ public class ManagerThenSteps {
         return joined.toString();
     }
 
-    /** 目前分頁上沒有任何通往待查房清單或查房畫面的東西：磚、清單、查房畫面、「待查房」字樣。 */
     private void assertNoInspectionEntry(String where) {
         String why = "工務主管的" + where + "不該有通往待查房清單或查房畫面的入口";
         assertAbsent(TILE_PREFIX + "inspection", why);
@@ -886,7 +723,6 @@ public class ManagerThenSteps {
         assertNoLabelContaining("待查房", why);
     }
 
-    /** 畫面上工務單卡的單號；只收 {@code engHome.in-hand.{單號}.card}。 */
     private List<String> engCardTicketNosOnScreen() {
         return world.findTestIdsWithPrefix(ENG_CARD_PREFIX).stream()
                 .filter(id -> id.endsWith(ENG_CARD_SUFFIX))
@@ -903,7 +739,6 @@ public class ManagerThenSteps {
         return queue;
     }
 
-    /** 該類清單列的識別鍵：待查房用房號，待驗收用工務單號（同畫面列 id 的尾段）。 */
     private static String rowKey(String queue, JsonNode item) {
         return "inspection".equals(queue) ? item.path("roomNo").asText() : item.path("ticketNo").asText();
     }
@@ -923,7 +758,6 @@ public class ManagerThenSteps {
         throw new AssertionError("後端 getManagerQueues." + queue + " 裡沒有「" + key + "」：" + queueKeys(queues, queue));
     }
 
-    /** 畫面上清單列的鍵，由上而下；只收 {@code manager.queue.row.{key}} 這一層，不收列內子節點。 */
     private List<String> queueRowKeysOnScreen() {
         return world.findTestIdsWithPrefix(QUEUE_ROW_PREFIX).stream()
                 .map(id -> id.substring(QUEUE_ROW_PREFIX.length()))
@@ -949,7 +783,6 @@ public class ManagerThenSteps {
                 .toList();
     }
 
-    /** 畫面上 label 剛好是這些分頁名的按鈕，依 x 座標由左而右。 */
     private List<String> tabLabelsLeftToRight(List<String> labels) {
         List<Map.Entry<Integer, String>> found = new ArrayList<>();
         for (String label : labels) {
@@ -972,7 +805,6 @@ public class ManagerThenSteps {
                 AppiumBy.iOSNsPredicateString("type == 'XCUIElementTypeButton' AND label == " + quote(label))).click();
     }
 
-    /** 畫面項目列依序等於這些顯示名稱，每一列的「通過」與「不通過」都未選；且等於後端現行啟用集合。 */
     private void assertInspectionItemsUnjudged(List<String> expectedLabels) {
         List<Map<String, Object>> active = backend.queryRows(
                 "SELECT item_key, label FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection'"
@@ -1016,7 +848,6 @@ public class ManagerThenSteps {
                 .stream().map(row -> String.valueOf(row.get("item_key"))).toList();
     }
 
-    /** 查房畫面目前開著的那間房在後端的任務 id。 */
     private UUID inspectingTaskId() {
         String roomNo = context.inspectingRoomNo();
         if (roomNo == null) {
@@ -1040,7 +871,6 @@ public class ManagerThenSteps {
         return rows.get(0);
     }
 
-    /** 最新一筆查房 result=failed，且 items 裡 pass=false 的鍵對應的 label 剛好等於這些項目。 */
     private void assertLatestInspectionFailedWith(UUID taskId, String roomNo, List<String> failedLabels) {
         Map<String, Object> inspection = latestInspection(taskId);
         if (!"failed".equals(inspection.get("result"))) {
@@ -1060,10 +890,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /**
-     * 結果畫面整個節點的 label（標題＋副文）。殼節點沒併 label 時退而收它底下所有文字節點，
-     * 三種說法的斷言都只看「含不含某段字」，不綁定排版。
-     */
     private String resultLabel() {
         WebElement result = world.waitForTestId(INSPECT_RESULT, SCREEN_TIMEOUT);
         String label = result.getAttribute("label");
@@ -1077,14 +903,12 @@ public class ManagerThenSteps {
         return label;
     }
 
-    /** 切換是否已選：iOS 走 selected 屬性，拿不到時退而看 value。 */
     private static boolean isSelected(WebElement element) {
         try {
             if (element.isSelected()) {
                 return true;
             }
         } catch (RuntimeException ignored) {
-            // 見方法說明。
         }
         String value = element.getAttribute("value");
         return value != null && ("1".equals(value) || "selected".equalsIgnoreCase(value) || "true".equalsIgnoreCase(value));
@@ -1104,7 +928,6 @@ public class ManagerThenSteps {
         }
     }
 
-    /** 畫面上沒有任何（有高度的）元素 label 含這段字；0×0 的節點是捲出畫面的殘影，不算。 */
     private void assertNoLabelContaining(String text, String why) {
         List<WebElement> found = world.driver().findElements(
                 AppiumBy.iOSNsPredicateString("label CONTAINS " + quote(text)));

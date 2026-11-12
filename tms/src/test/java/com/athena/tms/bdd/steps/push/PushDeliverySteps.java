@@ -26,11 +26,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 推播送達手機的句型（dsl.md 推播送達段落）：手機登記／解除、送達紀錄、推播服務替身的斷言。
- * 手機的推播地址由本類別依「手機識別碼＋第幾次登記」自己編，每次登記換一個新地址，
- * 情境才分得出「地址為最新一次」。
- */
 public class PushDeliverySteps {
 
     private static final Map<String, String> STATUS_TERMS = Map.of(
@@ -49,7 +44,6 @@ public class PushDeliverySteps {
     private final KafkaGroupAwait kafkaGroupAwait;
     private final ObjectMapper objectMapper;
 
-    /** (員工, 手機) → 目前登記的推播地址；同一組每登記一次換一個地址。 */
     private final Map<String, String> tokens = new HashMap<>();
     private final Map<String, Integer> registrations = new HashMap<>();
 
@@ -96,16 +90,11 @@ public class PushDeliverySteps {
         }
     }
 
-    /** 讓推播服務替身對這台手機目前的地址回報「已失效」（模擬 FCM 的 UNREGISTERED）。 */
     @假設("推播服務會回報 {string} 手機 {string} 的地址已失效")
     public void pushServiceRejectsDevice(String staffName, String fingerprint) {
         pushSender.markTokenInvalid(currentToken(staffName, fingerprint));
     }
 
-    /**
-     * 模擬 Kafka 重投遞：把 outbox 裡那筆推播原樣（同 key、同 header、同 payload）再送上 topic
-     * 一次，然後等消費者把它讀掉，後面的斷言才有意義。
-     */
     @當("{string} 的推播 {string} 被重送一次")
     public void pushRedelivered(String staffName, String title) throws Exception {
         Map<String, Object> outbox = outboxRowFor(staffName, title);
@@ -123,10 +112,6 @@ public class PushDeliverySteps {
         }
     }
 
-    /**
-     * dsl.md 必查：權威狀態——push_deliveries 有這把冪等鍵的一列，status 等於指定狀態。
-     * 冪等鍵從 outbox 那筆推播取（收件人＋標題找出那一列）。消費者是非同步的，用輪詢等待。
-     */
     @那麼("{string} 的推播 {string} 送達紀錄為 {string}")
     public void deliveryRecordStatus(String staffName, String title, String statusTerm) {
         String expected = STATUS_TERMS.get(statusTerm);
@@ -232,10 +217,6 @@ public class PushDeliverySteps {
                 tenantFixtures.testTenantId(), UUID.fromString(world.staffId(staffName)), fingerprint);
     }
 
-    /**
-     * 等 outbox 出現送給該員工、該標題的那筆推播，回傳整列（含 idempotency_key）。
-     * payload 由資料庫以 jsonb 吐回，欄位間的空白不固定，所以解析成 JSON 再比對，不做字串比對。
-     */
     private Map<String, Object> outboxRowFor(String staffName, String title) {
         String staffId = world.staffId(staffName);
         return outboxAwait.waitForOutboxRow(

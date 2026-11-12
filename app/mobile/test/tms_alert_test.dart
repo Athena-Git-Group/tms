@@ -4,11 +4,6 @@ import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_alert.dart';
 import 'package:tms_staff_app/core/widgets/tms_glass.dart';
 
-/// Alert 對話框與設計原型 `Claude Design/Main.dc.html` 的對帳測試。
-///
-/// 每一條斷言的數字都抄自原型，行號寫在該條旁邊。原型是這些值的唯一出處，
-/// 所以斷言裡寫實際數字而不引用 token 本身：比對 token 和它自己永遠會過，
-/// 讀不出值有沒有跟著原型走。
 void main() {
   Future<void> pumpAlert(WidgetTester tester, TmsAlert alert) {
     return tester.pumpWidget(CupertinoApp(home: alert));
@@ -33,8 +28,6 @@ void main() {
     testWidgets('寬 300、圓角 34、半透明白底、模糊 30 飽和 180', (tester) async {
       await pumpAlert(tester, sampleAlert());
 
-      // Main.dc.html:4860 — w: 300, r: 34, bg: rgba(255,255,255,.82)
-      // Main.dc.html:2399 — backdrop-filter: blur(30px) saturate(180%)
       expect(tester.getSize(find.byType(TmsGlass)).width, 300);
       final glass = tester.widget<TmsGlass>(find.byType(TmsGlass));
       expect(glass.borderRadius, BorderRadius.circular(34));
@@ -46,7 +39,6 @@ void main() {
     testWidgets('對話框陰影照原型', (tester) async {
       await pumpAlert(tester, sampleAlert());
 
-      // Main.dc.html:4861 — box-shadow: 0 20px 50px rgba(0,0,0,.25)
       final glass = tester.widget<TmsGlass>(find.byType(TmsGlass));
       expect(glass.boxShadow, [
         const BoxShadow(
@@ -60,8 +52,6 @@ void main() {
     testWidgets('文字區內距 22/22/22/6，按鈕區 16/14/16/16', (tester) async {
       await pumpAlert(tester, sampleAlert(title: '無法登出'));
 
-      // Main.dc.html:4861 — pad: '22px 22px 6px'
-      // Main.dc.html:4862 — btnPad: '14px 16px 16px'
       final insets = tester
           .widgetList<Padding>(find.byType(Padding))
           .map((p) => p.padding)
@@ -73,8 +63,6 @@ void main() {
     testWidgets('標題 17/600、內文 15 行高 1.4，兩段都靠左', (tester) async {
       await pumpAlert(tester, sampleAlert(title: '無法登出'));
 
-      // Main.dc.html:2401-2402 — 標題 17px/600；內文 msgSize 15、line-height 1.4
-      // Main.dc.html:4861 — align: 'left'
       final title = tester.widget<Text>(find.text('無法登出'));
       expect(title.style!.fontSize, 17);
       expect(title.style!.fontWeight, FontWeight.w600);
@@ -111,7 +99,6 @@ void main() {
         ),
       );
 
-      // Main.dc.html:4862 — btnH: 48, btnR: 999, btnGap: 10
       final buttons = tester.widgetList<CupertinoButton>(
         find.byType(CupertinoButton),
       );
@@ -129,7 +116,6 @@ void main() {
     testWidgets('次要鈕半透明灰底品牌色字 400', (tester) async {
       await pumpAlert(tester, sampleAlert());
 
-      // Main.dc.html:4865-4867 — weight 400、fg #0C7680、bg rgba(120,120,128,.16)
       final button = tester.widget<CupertinoButton>(
         find.byType(CupertinoButton),
       );
@@ -154,7 +140,6 @@ void main() {
         ),
       );
 
-      // Main.dc.html:4864-4867 — primary：weight 600、fg #FFFFFF、bg #0C7680
       final button = tester.widget<CupertinoButton>(
         find.byType(CupertinoButton),
       );
@@ -178,8 +163,6 @@ void main() {
         ),
       );
 
-      // Main.dc.html:4865-4867 — destructive：weight 600、fg #FF3B30、
-      // 非 primary 所以底色仍是 rgba(120,120,128,.16)
       final button = tester.widget<CupertinoButton>(
         find.byType(CupertinoButton),
       );
@@ -246,9 +229,7 @@ void main() {
 
   group('圓角 token', () {
     test('Alert 與整頁對話卡各有自己的圓角', () {
-      // Main.dc.html:4860 — al.r: 34
       expect(TmsRadius.alert, 34);
-      // Main.dc.html:4463 — ui.dialogR: 36
       expect(TmsRadius.dialog, 36);
     });
   });

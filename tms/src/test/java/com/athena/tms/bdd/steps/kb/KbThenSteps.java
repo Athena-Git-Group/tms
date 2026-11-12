@@ -17,11 +17,6 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 查一下模組的 Then（dsl.md Then 句型區）。「必查」除了回應本身（呈現結果），
- * 有權威狀態落地的句子也另外查 kb_audit_logs／kb_escalations／outbox 核對；
- * listKbEscalations 的跨視角檢查見 {@link #managerReceivesQuestion}。
- */
 public class KbThenSteps {
 
     private final ScenarioWorld world;

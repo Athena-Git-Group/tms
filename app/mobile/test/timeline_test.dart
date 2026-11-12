@@ -8,10 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_timeline.dart';
 
-/// 直列時間軸是工務單詳情與遺失物物品詳情共用的進度元件（`Main.dc.html:1777-1812`
-/// 與 `Main.dc.html:669`）。這組測試盯的是三件肉眼要很仔細才看得出來、但一壞
-/// 整張單就被讀錯的事：貫穿中線哪一段該是綠的、還沒走到的步驟不能帶時間、
-/// 沒通過的那一步要紅字。
 void main() {
   const boundaryKey = Key('timeline-boundary');
   const width = 375.0;
@@ -42,7 +38,6 @@ void main() {
     );
   }
 
-  /// 中線上某個高度實際畫出來的顏色。中線跨在圖示圓心上，圓心在 x = 28。
   Future<Color> lineColorAt(WidgetTester tester, double y) async {
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find.byKey(boundaryKey),
@@ -69,8 +64,6 @@ void main() {
           time: '09:12',
         ),
         step('工務處理', TmsTimelineStatus.current, time: '09:30'),
-        // 還沒發生的步驟即使呼叫端給了時刻也不能畫出來：那會被讀成「排定在
-        // 這個時間」。
         step('完修', TmsTimelineStatus.pending, time: '11:00'),
       ]),
     );
@@ -115,10 +108,8 @@ void main() {
       ]),
     );
 
-    // 每列 44 高，列與列之間的中線落在 44 的整數倍附近。
     expect(await lineColorAt(tester, 40), TmsColors.systemGreen);
     expect(await lineColorAt(tester, 84), TmsColors.systemGreen);
-    // 第三步還在進行、第四步還沒開始，這一段不能亮綠。
     expect(await lineColorAt(tester, 128), TmsColors.separator);
   });
 

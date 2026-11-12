@@ -12,31 +12,15 @@ import 'manager_conflict_alert.dart';
 import 'manager_ids.dart';
 import 'manager_queue_row.dart';
 
-/// 查房畫面（ui-plan 畫面 3）：主管從待查房清單點一列進來，逐項判通過或不通過，
-/// 全部判完才能送出。
-///
-/// 項目來自 `GET /sop-items` 裡 appliesTo=inspection 且啟用的那些，依飯店排序；
-/// 一項都沒有時清單位置換成一句說明，送出鈕直接可按（後端視為全部通過）。沒有
-/// 備註欄、沒有照片。
-///
-/// 送出後的三種去向：
-/// - 成功：換成結果畫面，結案還是退回、退回去哪裡全照後端回的
-///   [InspectionOutcome]，App 不看班表。
-/// - 422 `inspection_items_mismatch`：飯店剛調整過查房項目。留在原畫面，項目換成
-///   回應裡的現行集合、判定清空、頂部提示重新判定，不再另外打一次 `/sop-items`。
-/// - 409 `state_conflict`：這張單已被別的主管處理。彈出「這張單已被處理」，按下
-///   後退回清單，清單由開這一頁的那一端重取。
 class InspectionScreen extends StatefulWidget {
   const InspectionScreen({super.key, required this.item});
 
-  /// 待查房清單上被點的那一列。
   final InspectionQueueItem item;
 
   @override
   State<InspectionScreen> createState() => _InspectionScreenState();
 }
 
-/// 查房畫面上的一個項目：送出用的鍵與畫面上的名稱。
 class _Item {
   const _Item(this.key, this.label);
 
@@ -47,20 +31,15 @@ class _Item {
 class _InspectionScreenState extends State<InspectionScreen> {
   List<_Item>? _items;
 
-  /// 項目鍵 → true 通過、false 不通過；還沒判的不在表裡。
   final Map<String, bool> _verdicts = {};
 
   bool _loadFailed = false;
   bool _submitting = false;
 
-  /// 送出時查房項目剛被調整、畫面已換成現行項目時為 true，頂部顯示提示。
   bool _itemsChanged = false;
 
   String? _error;
 
-  /// 這一輪判定的 Idempotency-Key。同一輪判定重送（例如沒收到回應再按一次）
-  /// 帶同一把，後端才認得出是同一次查房；項目換過、判定清空之後是新的一輪，
-  /// 換一把新的。
   String? _idempotencyKey;
 
   @override
@@ -410,8 +389,6 @@ class _InspectionScreenState extends State<InspectionScreen> {
       ),
       primary: TmsSemantics(
         id: ManagerIds.inspectSubmitButton,
-        // CupertinoButton 的 onPressed 為 null 時框架不會把 disabled 曝露到
-        // accessibility tree，可否送出要顯式標出來。
         enabled: canSubmit,
         child: TmsPillButton(
           label: '送出查房結果',

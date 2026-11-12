@@ -7,14 +7,6 @@ import 'tms_category_square.dart';
 import 'tms_home_cards.dart';
 import 'tms_status_chip.dart';
 
-/// 任務清單裡的一列：房號方塊、標題與狀態副標、狀態標籤。房務首頁「我的任務」
-/// 與主管首頁「我名下的單」共用這一個元件，兩邊的卡片因此長得一樣。
-///
-/// 房號放在左邊的彩色方塊裡（`Main.dc.html:233`），主文只留任務標題：員工在
-/// 清單上是先用位置找單，房號跟著顏色一起被掃到比夾在標題裡快。
-///
-/// 掛 id 的節點顯式帶「房號 標題」當 label，列裡的文字因此怎麼排版都不影響
-/// 讀值；點整列進那間房的任務頁。
 class TmsTaskRow extends StatelessWidget {
   const TmsTaskRow({
     super.key,
@@ -26,7 +18,6 @@ class TmsTaskRow extends StatelessWidget {
   final TodayTask task;
   final bool showSeparator;
 
-  /// 點整列要做的事；房務首頁與主管首頁都是進那間房的任務頁。
   final VoidCallback onTap;
 
   @override
@@ -102,14 +93,6 @@ class TmsTaskRow extends StatelessWidget {
     );
   }
 
-  /// 列的第二行：這張單現在卡在哪裡，一句話講完（`Main.dc.html:4215-4224`）。
-  ///
-  /// 每個狀態想讓員工看到的東西不同：還沒開始的只需要知道要做多久，停住的要
-  /// 知道為什麼停，做完的要看得到實際花了多久跟當初的預估差多少。所以這裡是
-  /// 依狀態挑段落，而不是一套文字套用到所有狀態。
-  ///
-  /// 段落用「 · 」串起來，取不到值的段落整段不放進去（`RULINGS.md` R11）；全部
-  /// 都取不到就回 null，列只有一行主文，不留一行空白。
   static String? _subtitle(TodayTask task) {
     final segments = <String>[];
     switch (task.state) {
@@ -128,7 +111,6 @@ class TmsTaskRow extends StatelessWidget {
       case 'deferred':
         _addIfPresent(segments, task.holdReason);
       case 'cancelled':
-        // 作廢的人與作廢原因契約還沒有欄位，這一列就只剩狀態標籤。
         break;
       case 'done':
       case 'inspected':
@@ -150,7 +132,6 @@ class TmsTaskRow extends StatelessWidget {
     return segments.isEmpty ? null : segments.join(' · ');
   }
 
-  /// 還沒開工的單講的是「要做多久」：打掃給預估分鐘，其餘的單標成臨時需求。
   static List<String> _plannedSegments(TodayTask task) {
     if (task.type != 'cleaning') {
       return const ['臨時需求'];

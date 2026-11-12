@@ -16,34 +16,6 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 推播消費者：讀 Kafka 的 push topic，把每一筆推播送到收件人的每一台裝置，並寫一列送達紀錄。
- *
- * <h2>要保證什麼</h2>
- * <ol>
- *   <li><b>同一筆推播最多讓裝置響一次。</b>relay 可能在「送達 Kafka 但沒標 sent」時重送，
- *       Kafka 也可能因為 rebalance 重投遞；手機因此響兩次會讓員工不信任推播。</li>
- *   <li><b>同一位收件人的推播照 outbox 寫入順序送。</b>Kafka 用 aggregate_key 分 partition，
- *       這裡用固定 consumer group、每筆處理完才提交 offset，重試時停在原地不跳過。</li>
- *   <li><b>一筆壞訊息不能卡死整個 topic。</b>暫時性錯誤退避重試幾次後改送 dead letter topic，
- *       後面的訊息繼續。</li>
- * </ol>
- *
- * <h2>怎麼做</h2>
- * 冪等鍵與租戶 id 從 relay 附的 header 取（{@link OutboxKafkaHeaders}）。處理前先查
- * push_deliveries：已經是 sent 或 skipped_no_token 就跳過；failed（上一次暫時性錯誤後重試）
- * 或沒有紀錄才真的送。送完一次寫一列，狀態依裝置結果彙總：有任何一台成功＝sent；沒有可用
- * 裝置＝skipped_no_token；全部永久失敗＝failed。任何一台遇到暫時性錯誤就先把紀錄寫成 failed
- * 再把例外丟出去，交給容器的錯誤處理器重試；重試成功後同一列會被覆寫成 sent。
- * 推播服務回報地址失效的裝置當場標撤銷，下一筆推播就不會再送它。
- *
- * <p>沒有 header、或 payload 不是 PushPayload 形狀的訊息（例如 relay 改版前送出的、或測試
- * 直接塞的假資料）記 warn 後略過，不重試也不送 dead letter，因為重試不會讓它變得可解析。
- *
- * <h2>刻意不做的</h2>
- * 送出與寫紀錄不在同一個交易：推播服務的網路呼叫不該佔著資料庫連線。代價是「送出成功但寫紀錄
- * 前當機」會在重啟後再送一次，屬於 at-least-once，由第一條保證的去重把機率壓到只剩這個窗口。
- */
 @Component
 public class PushDeliveryConsumer {
 
@@ -86,11 +58,6 @@ public class PushDeliveryConsumer {
         deliver(tenantId, message);
     }
 
-    /**
-     * 每一句資料庫讀寫各自一個交易，不把兩張表的鎖抓在同一個交易裡：這條執行緒和別的交易
-     * （例如測試在情境之間整批清表）同時動 staff_devices 與 push_deliveries 時才不會互相等成死結。
-     * 送出本身在任何交易之外。
-     */
     private void deliver(long tenantId, PushMessage message) {
         Optional<String> status = tenantScopedExecutor.callAsTenant(
                 tenantId, () -> recorder.statusOf(tenantId, message.idempotencyKey()));

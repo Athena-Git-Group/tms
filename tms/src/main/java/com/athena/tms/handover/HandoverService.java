@@ -16,15 +16,6 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-/**
- * 房間交辦（FR-037、FR-038）：櫃檯備註的建立、交辦已讀的記錄，與任務詳情的
- * 交辦合併查詢。交辦不是另一張表，而是把三個已存在的權威來源在讀取時合併——
- * 交班單凍結快照（handovers.snapshot 中該房的項目）、櫃檯備註（desk_notes）、
- * 接手進度（tasks.requeue_note，作者與時間取自 returned_to_pool 事件）。
- *
- * <p>已讀模型是 handover_reads 的「員工 × 任務」一列：第一次已讀寫入 read_at，
- * 之後同一個人再展開就撞主鍵、ON CONFLICT DO NOTHING 不重記（dbml 的設計註記）。
- */
 @Service
 public class HandoverService {
 
@@ -38,10 +29,6 @@ public class HandoverService {
         this.clock = clock;
     }
 
-    /**
-     * 櫃檯為房間留備註（contracts createDeskNote）。房間不存在要回 404：
-     * 備註是掛在房間上的，收下一筆掛在不存在房間的備註，之後任何任務都撈不到它。
-     */
     public Map<String, Object> createDeskNote(UUID roomId, String content) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
@@ -67,11 +54,6 @@ public class HandoverService {
         return body;
     }
 
-    /**
-     * 員工展開任務的交辦（contracts markHandoverRead）。先確認任務存在（404），
-     * 再記已讀；回應永遠是這個人對這張任務的第一筆已讀時間——重送或重複展開
-     * 都回放同一筆，不新增。
-     */
     public Map<String, Object> markRead(UUID taskId) {
         long tenantId = TenantContext.require();
         UUID staffId = CurrentActor.require().staffId();
@@ -84,11 +66,6 @@ public class HandoverService {
         return body;
     }
 
-    /**
-     * 記一筆交辦已讀並回傳第一次已讀的時間。主鍵（tenant × 任務 × 員工）就是
-     * 冪等鍵：已有資料列時 ON CONFLICT DO NOTHING 一列也不動，之後讀回的
-     * read_at 仍是第一次的。開工（tasksStart）也走這裡自動記已讀。
-     */
     public OffsetDateTime recordRead(long tenantId, UUID taskId, UUID staffId) {
         jdbcTemplate.update(
                 """
@@ -109,20 +86,6 @@ public class HandoverService {
         return count != null && count > 0;
     }
 
-    /**
-     * 任務詳情的合併交辦清單（TaskDetail.handovers，形狀對應 contracts 的
-     * HandoverEntry：kind、author、at、content）。三個來源依序併入：
-     *
-     * <ul>
-     * <li>交班單（shift_handover）：同部門交班單凍結快照中「對象＝這間房」的項目；
-     *     樓層層級的項目（如 3F）不併入——那是整層的話，不該擠進單一房的任務。
-     *     作者取快照裡定格的撰寫人名，時間取交班單凍結時間。</li>
-     * <li>櫃檯備註（desk_note）：同房間的 desk_notes，作者由 author_id 還原成顯示名。</li>
-     * <li>接手進度（requeue_progress）：tasks.requeue_note 有交代時併入一則，
-     *     作者與時間取最近一次 returned_to_pool 事件的操作者——交代是那次退池
-     *     留下的，不是現任負責人寫的。</li>
-     * </ul>
-     */
     public List<Map<String, Object>> handoversOf(Map<String, Object> taskRow) {
         long tenantId = ((Number) taskRow.get("tenant_id")).longValue();
         UUID taskId = UUID.fromString(String.valueOf(taskRow.get("id")));
@@ -166,20 +129,6 @@ public class HandoverService {
         return entries;
     }
 
-    /**
-     * 任務詳情的查房退回資訊（TaskDetail.returnInfo，形狀對應 contracts 的
-     * ReturnInfo）。讀取時合併三個權威來源，不另存一張表：
-     *
-     * <ul>
-     * <li>不合格項（failedItems）：最近一次查房紀錄（inspections）中 pass=false 的
-     *     項目，還原成 sop_items 的顯示名。最近一次不是 failed（或根本沒查過房）
-     *     就回 null——任務不在退回重做中，沒有退回資訊可言。</li>
-     * <li>重做次數（redoCount）：tasks.redo_count。</li>
-     * <li>換人原因（reassignReason）：任務被班末掃描退池（pool_source=shift_end_return）
-     *     時記 original_cleaner_off_shift，原清房者取最近一次 completed 事件的操作者。
-     *     換人原因併在這裡成一句，不另列為主管交代（manager_note）。</li>
-     * </ul>
-     */
     public Map<String, Object> returnInfoOf(Map<String, Object> taskRow) {
         long tenantId = ((Number) taskRow.get("tenant_id")).longValue();
         UUID taskId = UUID.fromString(String.valueOf(taskRow.get("id")));
@@ -235,11 +184,6 @@ public class HandoverService {
         return returnInfo;
     }
 
-    /**
-     * 任務最近一次指定類型事件的操作者顯示名（author）與發生時間（created_at）。
-     * 查無該類型事件時回 null。交辦與退回資訊都要回答「這件事是誰做的」，
-     * 共用同一條「取最近一筆事件並還原操作者名」的查詢。
-     */
     private Map<String, Object> latestEventActor(long tenantId, UUID taskId, String eventType) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """

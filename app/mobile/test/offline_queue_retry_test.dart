@@ -6,13 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/connection_status.dart';
 
-/// 對應「恢復連線後自動送出，網路不穩重送也只建立一張」：員工在電梯裡送出的
-/// 工務單，回到有訊號的地方會自己送出去；中間就算送了幾次沒收到回應，後端也
-/// 只會有一張單。
-///
-/// 這裡起一個真的 HTTP server 當後端，而不是換掉 [ApiClient]：要驗的是請求
-/// 確實送到後端、後端也處理了，只是 App 收不到回應。把 [ApiClient] 整個換成
-/// fake 的話，請求根本沒離開過 App，重送幾次後端都是乾淨的，驗不出來。
 void main() {
   late _FakeBackend backend;
 
@@ -98,8 +91,6 @@ void main() {
   });
 }
 
-/// 照 `features/task/repair_sheet.dart` 的送出動線：同一筆動作裡先替照片建立
-/// 上傳位置，再開單。已經拿到位置的照片重送時不再建立一次。
 Future<bool> _submitAcTicketWithPhoto() {
   String? photoId;
   return OfflineQueue.instance.submit(
@@ -130,8 +121,6 @@ Future<bool> _submitAcTicket() {
   );
 }
 
-/// 等某件事成立。恢復連線是由 [ConnectionStatus] 自己把佇列送出去的，呼叫端
-/// 拿不到那個 Future，只能看待送出筆數歸零。
 Future<void> _waitUntil(
   bool Function() condition, {
   Duration timeout = const Duration(seconds: 10),
@@ -145,8 +134,6 @@ Future<void> _waitUntil(
   }
 }
 
-/// 只認得本測試用到的那幾個端點的假後端，開單走 `Idempotency-Key` 去重：同一把
-/// 鍵再送一次回同一張單，不會多建一張。
 class _FakeBackend {
   _FakeBackend._(this._server);
 
@@ -159,7 +146,6 @@ class _FakeBackend {
 
   final HttpServer _server;
 
-  /// 每一次開單請求帶的 `Idempotency-Key`，照收到的順序。
   final List<String> ticketKeys = <String>[];
 
   final List<Map<String, dynamic>> ticketRequests = <Map<String, dynamic>>[];
@@ -168,7 +154,6 @@ class _FakeBackend {
 
   final List<String> photoUploads = <String>[];
 
-  /// 每一次「建立照片上傳位置」請求帶的 `Idempotency-Key`，照收到的順序。
   final List<String> photoCreates = <String>[];
 
   final Map<String, String> _ticketIdByKey = <String, String>{};

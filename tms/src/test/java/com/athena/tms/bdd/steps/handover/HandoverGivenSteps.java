@@ -25,10 +25,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 房間交辦模組的 Given（dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言——
- * 「必查」清單在 {@link HandoverThenSteps}。
- */
 public class HandoverGivenSteps {
 
     private final ScenarioWorld world;
@@ -75,8 +71,6 @@ public class HandoverGivenSteps {
                 .queryOne("SELECT dept FROM staff_accounts WHERE id = ?", staffId)
                 .orElseThrow(() -> new IllegalStateException("staff_accounts 查無此員工：" + staffId))
                 .get("dept");
-        // dsl.md 的 Given 只給「員工」與「時刻」，沒有「班別」參數；用時刻本身的上下午
-        // 粗略決定一個 shift 標籤即可——handovers.shift 之後沒有任何「必查」句會比對這個值。
         String shift = LocalTime.parse(hhmm).isBefore(LocalTime.NOON) ? "morning" : "evening";
         LocalDate today = clock.instant().atZone(clock.getZone()).toLocalDate();
         OffsetDateTime frozenAt = ZonedDateTime.of(today, LocalTime.parse(hhmm), clock.getZone()).toOffsetDateTime();
@@ -114,10 +108,6 @@ public class HandoverGivenSteps {
                 .assignee(priorStaffId)
                 .create();
 
-        // 「{分鐘} 分鐘前留下交代」：退池當下把時鐘撥回去，認領完再還原，
-        // 讓這句的時間語意盡量貼近 dsl.md 原文（TaskEngine 的事件時間本身用 DB now()，
-        // 不是這個測試時鐘，見 TaskFixtures 的類別註解；本 feature 目前也沒有任何
-        // 「必查」句比對這段時間差，這裡純粹是語意對齊，不是斷言依賴）。
         Instant original = clock.instant();
         clock.setInstant(original.minusSeconds(minutesAgo * 60L));
         apiClient.post(
@@ -222,11 +212,6 @@ public class HandoverGivenSteps {
         return items;
     }
 
-    /**
-     * 租戶種子資料的查房項目（見 V2__seed_dev.sql）不見得涵蓋情境要用的項目標籤
-     * （例如「換床單鋪床」），這裡現場補一筆，讓 {@code items} 的鍵集與標籤對得起來——
-     * 權威來源仍是 {@code sop_items}，不是繞過它直接竄改 inspections 的結果。
-     */
     private String insertAdHocInspectionItem(long tenantId, String label) {
         String itemKey = "adhoc_" + UuidV7.generate().toString().replace("-", "").substring(0, 8);
         jdbcClient

@@ -13,11 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 查一下 API：推薦問題、提問、回饋、問主管與主管回覆。路由對照
- * {@code specs/truth/contracts/groups/知識與通知/房間記憶與問一下.yaml}，
- * 掛在 {@code /api/v1} 前綴下。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class KbController {

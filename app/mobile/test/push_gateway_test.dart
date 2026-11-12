@@ -8,12 +8,6 @@ import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
-/// 對應「F3 點開推播的去處」：這三條各驗一個骨架環節——
-/// 待認領畫面能標亮指定房號、推播 payload 能把 App 導到正確畫面、
-/// 任務頁能認出「工務已修好」並露出恢復提示列。
-///
-/// 畫面資料來源是 [ApiClient]（真後端），測試裡換成記憶體 fake，
-/// 不再透過測試後門灌 fixture。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();
@@ -64,8 +58,6 @@ void main() {
     await tester.pumpWidget(
       CupertinoApp(
         navigatorKey: navigatorKey,
-        // 今日進度取在外殼那一層，首頁自己不再建 scope；這個測試單獨渲染
-        // 首頁，所以要自己補上外殼平常提供的那一層。
         home: const MyTodayScope(child: HomeScreen()),
       ),
     );
@@ -77,8 +69,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier('task.screen'), findsOneWidget);
-    // 導覽列靜止時寫房號與任務類別（Main.dc.html:5036），進行中的單才把房號
-    // 接在前面。
     expect(find.text('305 · 打掃任務'), findsOneWidget);
 
     handle.dispose();
@@ -90,9 +80,6 @@ void main() {
     final navigatorKey = GlobalKey<NavigatorState>();
     PushGateway.instance.attach(navigatorKey);
 
-    // 修繕任務的推播帶 kind=ticket＋該修繕任務的 task id（contracts PushTarget），
-    // App 照 kind 機械導頁，不先打 GET /tasks/{id} 查類別——所以 fake 的
-    // tasksById 刻意不給這張單，getTask 被呼叫會 404 讓導頁壞掉、測試變紅。
     ApiClient.instance = _FakeApiClient(
       ticketsById: {
         'task-w0620': const RepairTicketDetail(
@@ -151,8 +138,6 @@ void main() {
     );
     await tester.pump();
 
-    // 後端送的 FCM data message：target 是 JSON 字串，其餘欄位（event／
-    // title／body／idempotencyKey）導頁不看。
     await PushGateway.instance.handlePushPayload(const {
       'event': 'task_assigned',
       'title': '新派單',
@@ -205,7 +190,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsIdentifier('ticket.screen'), findsOneWidget);
-    // 第二次被擋下：返回一層後應該直接回到首頁，而不是還有一層工務單。
     navigatorKey.currentState!.pop();
     await tester.pumpAndSettle();
     expect(find.bySemanticsIdentifier('ticket.screen'), findsNothing);
@@ -239,8 +223,6 @@ void main() {
     expect(find.bySemanticsIdentifier('task.resume-banner'), findsOneWidget);
     expect(find.bySemanticsIdentifier('task.status-row.resume-button'), findsOneWidget);
     expect(find.textContaining('305'), findsWidgets);
-    // 標題直接寫後端記下的停住原因（`Main.dc.html:4318`）：恢復提示現在是停住
-    // 狀態列的一部分，不再是另一塊自己湊一句話的卡片。
     expect(find.text('工務已修好：水電'), findsOneWidget);
 
     handle.dispose();
@@ -266,7 +248,6 @@ PoolItem _poolItem({
   );
 }
 
-/// 記憶體 fake：讀取端點回傳建構時給的資料，不碰網路。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient({
     this.pool = const <PoolItem>[],

@@ -19,10 +19,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpMethod;
 
-/**
- * 介面根共通句的 Given（dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言——
- * 「必查」清單在 {@link CommonThenSteps}。
- */
 public class CommonGivenSteps {
 
     private final ScenarioWorld world;
@@ -61,8 +57,6 @@ public class CommonGivenSteps {
             Integer floor = parseIntOrNull(row.get("負責樓層"));
             String shiftEnd = blankToNull(row.get("班次結束"));
             String stateCode = Terms.staffState(row.getOrDefault("狀態", "在職"));
-            // dsl.md 選填 `角色`（主管／員工）：部門寫主管或值班經理時角色一定是主管；部門寫
-            // 房務／工務而角色寫主管，代表這位主管帳號被設了部門（role=manager、dept 照表）。
             String roleChinese = blankToNull(row.get("角色"));
             boolean managerLikeDept = "主管".equals(deptChinese) || "值班經理".equals(deptChinese);
             if (managerLikeDept && "員工".equals(roleChinese)) {
@@ -92,8 +86,6 @@ public class CommonGivenSteps {
     @假設("{string} 名下有以下任務：")
     public void staffHasTasks(String staffName, DataTable table) {
         UUID assigneeId = UUID.fromString(world.staffId(staffName));
-        // 最終停在 doing 的列最後建：其他列（如 已中斷）重演時會暫時經過 doing，
-        // 若 doing 列先建會撞 uq_tasks_one_doing_per_staff
         java.util.List<Map<String, String>> rows = new java.util.ArrayList<>(table.asMaps(String.class, String.class));
         rows.sort(java.util.Comparator.comparingInt(r -> "進行中".equals(r.get("狀態")) ? 1 : 0));
         for (Map<String, String> row : rows) {
@@ -136,14 +128,10 @@ public class CommonGivenSteps {
                 builder.deferredBySelf(true);
             }
             if ("inspected".equals(state) && "完成 · 免查房".equals(stateChinese)) {
-                // 「查房通過」與「完成 · 免查房」都對應 tasks.state=inspected，差別只在
-                // tasks.inspection（passed｜waived），見 Terms.taskState 的說明。
                 builder.inspectionWaived(true);
             }
             String doneAtChinese = blankToNull(row.get("完成時間"));
             if (doneAtChinese != null) {
-                // dsl.md「完成時間」：`今天 HH:mm`／`昨天 HH:mm`，只用於已完成的狀態；寫入
-                // tasks.done_at 與 completed 事件時間，「昨天」時 work_date 也落在昨天。
                 if (!"done".equals(state) && !"inspected".equals(state)) {
                     throw new IllegalArgumentException(
                             "「完成時間」只用於待查房／已送達／查房通過／完成 · 免查房，收到狀態「" + stateChinese + "」：" + row);
@@ -232,13 +220,6 @@ public class CommonGivenSteps {
         staffFixtures.deactivate(UUID.fromString(world.staffId(staffName)));
     }
 
-    /**
-     * dsl.md「飯店的未接提醒門檻如下：」：一般單與急件各自獨立的「提醒同仁」「通知主管」
-     * 分鐘數，寫進單一 tenant_config 鍵 {@code unclaimed_reminder_minutes}（value 為
-     * {"cleaning":{"staffReminded":n,"managerNotified":n},"urgent":{"staffReminded":n,"managerNotified":n}}，
-     * 見 V12__unclaimed_reminder_thresholds.sql 與 data-model.dbml 的鍵集註解）。Data Table 沒列到的
-     * 項目用「預設參數」欄的值：一般單提醒同仁 10、通知主管 20；急件提醒同仁 3、通知主管 8。
-     */
     @假設("飯店的未接提醒門檻如下：")
     public void unclaimedReminderThresholds(DataTable table) {
         StaffFixtures.CreatedStaff manager = staffFixtures.createManagerLikeStaff(

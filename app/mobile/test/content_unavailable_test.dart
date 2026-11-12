@@ -5,11 +5,6 @@ import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_card.dart';
 import 'package:tms_staff_app/core/widgets/tms_content_unavailable.dart';
 
-/// 空狀態在原型裡有兩套版型：待認領、通知、遺失物不包卡片，整塊在剩下的空間
-/// 裡置中（`Main.dc.html:296-306`）；首頁因為上下都是卡片，改成包一張圓角 20
-/// 的白卡（`Main.dc.html:212-219`）。這組測試盯的是兩件看圖不一定看得出、但
-/// 一錯就讓員工誤判現場狀況的事：首頁那張卡的圖示只有在「都做完了」時才是
-/// 綠的，以及待認領在「有篩選」與「整池空」時講的是兩句不同的話。
 void main() {
   Widget host(Widget child) {
     return CupertinoApp(home: CupertinoPageScaffold(child: child));

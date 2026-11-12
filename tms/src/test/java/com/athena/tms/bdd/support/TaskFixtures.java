@@ -17,23 +17,6 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 任務測試資料入口（{@code tasks}／{@code task_events}，欄位依 data-model.dbml
- * {@code Table tasks}、{@code Table task_events}）。
- *
- * <p>任務的狀態轉移一律透過 {@link TaskEngine} 執行，不直接寫 tasks.state：
- * 這樣每個目標狀態背後都會留下對應的 task_events 歷程（created/claimed/started/…），
- * 跟正式流程產生的資料形狀一致，之後查 task_events 斷言事件歷程時不會因為是測試資料
- * 而多出例外分支。只有 tasks.redo_count 這類「只是一個計數器、本身不代表任何事件」
- * 的欄位，才在狀態轉移跑完之後用 UPDATE 直接灌值。
- *
- * <p>{@link TaskEngine} 的每一句 UPDATE 都用資料庫的 {@code now()}，不是注入的
- * {@link MutableClock}，所以狀態轉移一結束，時間還停在測試執行當下的真實時刻。
- * {@link Builder#create()} 跑完整個狀態轉移之後，會把這個任務的 task_events.created_at
- * 與 tasks 對應欄位整批改寫成以 {@link MutableClock} 目前讀數回推出來的時間，
- * 讓「已做 N 分鐘」這類相對於測試時鐘的斷言在 V1 schema（還沒有 tasks.worked_sec）下
- * 也能成立：此時「已做分鐘」等於 {@code 目前時鐘 − tasks.started_at}。
- */
 public class TaskFixtures {
 
     private static final Set<String> SUPPORTED_SOURCES = Set.of("guest", "desk", "system", "staff");
@@ -132,18 +115,11 @@ public class TaskFixtures {
             return this;
         }
 
-        /**
-         * 只在 state=inspected 時有意義：是否以「開工當下鎖定免查」收尾（對應「完成 ·
-         * 免查房」，tasks.inspection=waived），而不是主管查房通過（tasks.inspection=passed）。
-         * 兩者在 {@code 狀態用語對照} 都對應同一個 tasks.state=inspected，差別只在
-         * tasks.inspection，見 {@link com.athena.tms.bdd.support.Terms#taskState}。
-         */
         public Builder inspectionWaived(boolean v) {
             this.inspectionWaived = v;
             return this;
         }
 
-        /** 只在 state=doing 時有意義：backdate 成「目前時鐘往前推這麼多分鐘」開工。 */
         public Builder workedMinutes(Integer v) {
             this.workedMinutes = v;
             return this;
@@ -169,11 +145,6 @@ public class TaskFixtures {
             return this;
         }
 
-        /**
-         * dsl.md「完成時間」：已完成狀態（done／inspected／closed）的 {@code tasks.done_at} 與
-         * {@code completed} 事件時間。事件歷程以這個時刻為錨點重排：completed 之前的事件往前
-         * 每筆 60 秒，之後的（inspection_passed／inspection_waived）往後每筆 60 秒。
-         */
         public Builder doneAt(Instant v) {
             this.doneAt = v;
             return this;
@@ -189,25 +160,21 @@ public class TaskFixtures {
             return this;
         }
 
-        /** 最近一次進池的來源標籤（tasks.pool_source 本 plan 新增衍生欄位）。 */
         public Builder poolSource(String v) {
             this.poolSource = v;
             return this;
         }
 
-        /** 待認領排序第二鍵（tasks.priority_notify 本 plan 新增衍生欄位）。 */
         public Builder priorityNotify(boolean v) {
             this.priorityNotify = v;
             return this;
         }
 
-        /** 最近一次退池的原因（tasks.return_reason 本 plan 新增衍生欄位）。 */
         public Builder returnReason(String v) {
             this.returnReason = v;
             return this;
         }
 
-        /** 接手進度交代（tasks.requeue_note 本 plan 新增衍生欄位；PII 去識別化範圍）。 */
         public Builder requeueNote(String v) {
             this.requeueNote = v;
             return this;
@@ -228,16 +195,6 @@ public class TaskFixtures {
             return this;
         }
 
-        /**
-         * 直接把待認領任務 staging 到未接提醒的某個階段（dsl.md「提醒狀態」欄：
-         * {@code staff_reminded}＝已提醒同仁、{@code manager_notified}＝已通知主管），
-         * 補寫到該階段為止的 push outbox 紀錄，不需要真的把 {@link MutableClock} 推進到
-         * 門檻分鐘數。只在 state=pool 時有意義（tasks.reminder_stage 的設計只在池中才有意義，
-         * 見 data-model.dbml Table tasks 的 reminder_stage note）。
-         *
-         * <p>只負責「staging 到某個階段」這個資料落地動作，不判斷任何門檻比對規則
-         * （一般單/急件各自的分鐘數門檻由 Phase 2 的排程掃描 stepdef 負責）。
-         */
         public Builder reminderStage(String stage) {
             this.reminderStage = stage;
             return this;
@@ -283,8 +240,6 @@ public class TaskFixtures {
             }
 
             if (redoCount > 0) {
-                // redo_count 只是一個計數器，這裡直接灌值而不是真的跑 N 次查房退回／重做循環；
-                // 需要驗證「第 N 次退回」事件歷程本身的情境，應該改呼叫 TaskEngine.failInspection。
                 jdbcClient
                         .sql("UPDATE tasks SET redo_count = ? WHERE tenant_id = ? AND id = ?")
                         .params(redoCount, tenantId, taskId)
@@ -294,9 +249,6 @@ public class TaskFixtures {
             if (holdReason != null || poolSource != null || priorityNotify != null
                     || returnReason != null || requeueNote != null || ruleHit != null
                     || dueAtHHmm != null || deferredBySelf != null) {
-                // 這些都是本 plan／SLA 增補新增的衍生欄位，TaskEngine 的狀態轉移不寫它們；
-                // COALESCE 只覆寫呼叫端有給值的欄位，沒給的維持 NULL／預設值，不假裝幫情境
-                // 決定沒要求的值。
                 jdbcClient
                         .sql(
                                 """
@@ -326,14 +278,11 @@ public class TaskFixtures {
             return taskId;
         }
 
-        /** 只在 state=doing／interrupted 時落地 worked_sec／segment_started_at（見 workedMinutes）。 */
         private void applyWorkedSeconds(long tenantId, UUID taskId) {
             if (workedMinutes == null) {
                 return;
             }
             if ("doing".equals(state)) {
-                // doing：已做分鐘＝目前這段 now－segment_started_at（worked_sec 保持 0，
-                // 代表這是唯一一段、還沒有任何已結束的段落）。
                 Instant segmentStart = clock.instant().minusSeconds(workedMinutes * 60L);
                 jdbcClient
                         .sql(
@@ -341,7 +290,6 @@ public class TaskFixtures {
                         .params(OffsetDateTime.ofInstant(segmentStart, clock.getZone()), tenantId, taskId)
                         .update();
             } else if ("interrupted".equals(state)) {
-                // interrupted：沒有進行中的段落，已做分鐘全部落在 worked_sec。
                 jdbcClient
                         .sql(
                                 "UPDATE tasks SET worked_sec = ?, segment_started_at = NULL WHERE tenant_id = ? AND id = ?")
@@ -383,8 +331,6 @@ public class TaskFixtures {
                     return task;
                 }
                 case "closed": {
-                    // 工務單「已結案」：重演到 done（完修）後把 tasks.state 收到 closed。結案事件由呼叫端
-                    // 依結案方式補：驗收通過補 repair_verified；不需處理時 completed 事件本身就是結案事件。
                     Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
@@ -402,10 +348,6 @@ public class TaskFixtures {
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
                     if (inspectionWaived) {
-                        // 「完成 · 免查房」：比照正式流程在開工當下鎖定免查（tasks.inspection_waived），
-                        // 這裡用 UPDATE 直接補這個衍生欄位（不是事件本身，本身也不代表任何事件），
-                        // 讓接下來的 complete() 照正式的 CASE 邏輯把狀態收在 inspected、
-                        // inspection 記為 waived，事件歷程跟正式流程一致。
                         jdbcClient
                                 .sql("UPDATE tasks SET inspection_waived = true WHERE tenant_id = ? AND id = ?")
                                 .params(tenantId, task.getId())
@@ -439,7 +381,6 @@ public class TaskFixtures {
                     return task;
                 }
                 default:
-                    // tasks.state 的 CHECK 見 V23（10 個值），對照 data-model.dbml Table tasks 的 Note。
                     throw new IllegalArgumentException("不支援的任務狀態代碼: " + state);
             }
         }
@@ -485,8 +426,6 @@ public class TaskFixtures {
             Instant lastEventTime = workedMinutes != null ? now.minusSeconds(workedMinutes * 60L) : now;
             int n = events.size();
             Instant[] times = new Instant[n];
-            // 錨點預設是最後一筆事件＝目前 Clock；有給「完成時間」時錨點改成 completed 事件，
-            // 之後的查房事件往後排，讓 done_at 與 completed 事件時間都落在指定時刻。
             int anchor = n - 1;
             Instant anchorTime = lastEventTime;
             if (doneAt != null) {
@@ -500,7 +439,6 @@ public class TaskFixtures {
             }
             times[anchor] = anchorTime;
             for (int i = anchor - 1; i >= 0; i--) {
-                // 只需要嚴格遞增、維持事件先後順序；精確間距對任何斷言都不重要。
                 times[i] = times[i + 1].minusSeconds(60);
             }
             for (int i = anchor + 1; i < n; i++) {
@@ -545,14 +483,6 @@ public class TaskFixtures {
             return null;
         }
 
-        /**
-         * dsl.md「提醒狀態」欄：補寫到 {@code targetStage} 為止的未接提醒 push outbox 紀錄，
-         * 最後把 tasks.reminder_stage 寫到 {@code targetStage}。「已通知主管」隱含「已提醒同仁」
-         * 已經先發生過，所以兩段都在門檻之內的情境會補兩筆推播，不是只補最終那一段。
-         *
-         * <p>收件人慣例：提醒同仁＝接單人（有 assignee 時）或部門在職成員；通知主管＝在職的
-         * manager。兩段都只各發一次（冪等鍵帶 stage）。
-         */
         private void stageReminder(
                 long tenantId, UUID taskId, String targetStage, UUID assigneeId, String dept, String roomNo,
                 String title) {

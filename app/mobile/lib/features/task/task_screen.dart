@@ -30,23 +30,11 @@ import 'hold_sheet.dart';
 import 'repair_sheet.dart';
 import 'room_info_screen.dart';
 
-/// 任務頁骨架畫面：顯示單一房號的任務內容。
-///
-/// 資料來源是 [ApiClient.getTask]（`GET /tasks/{id}`）。從待認領池點進來時
-/// 會帶 [taskId] 直接查詳情；推播導頁只帶房號，這時先用
-/// `GET /pool`、`GET /me/today` 兩個讀取端點反查該房的任務 id——契約目前
-/// 沒有「用房號查任務」的端點，進行中或已中斷的任務查不到時，畫面誠實顯示
-/// 找不到，等後續 feature 補上正式的查法。
-///
-/// 當任務狀態是「已中斷」（契約 state 的 `interrupted`）且停住原因
-/// （`holdReason`）含「工務已修好」時，顯示恢復提示列（`task.resume-banner`）
-/// ——這是 Rule「工務單完修的推播提示可以回去恢復原任務」要驗的畫面狀態。
 class TaskScreen extends StatefulWidget {
   const TaskScreen({super.key, required this.roomNo, this.taskId});
 
   final String roomNo;
 
-  /// 任務 id；池卡點進來會帶，推播導頁只帶房號時為 null、由畫面反查。
   final String? taskId;
 
   @override
@@ -56,58 +44,28 @@ class TaskScreen extends StatefulWidget {
 class _TaskScreenState extends State<TaskScreen> {
   late Future<TaskDetail?> _taskFuture;
 
-  /// 這一間的完成已經留在手機上、還沒送到後端。
-  ///
-  /// 離線完成在畫面上既不是成功也不是失敗，員工需要知道「做完了，但還沒
-  /// 送出去」，否則他會以為單子已經結了，或以為剛才白做了。
   bool _completionPendingSync = false;
 
-  /// 報修面板是不是正貼在這一頁上。面板不另開路由（理由見 [RepairSheet]），
-  /// 所以開關它就是任務頁自己的一個狀態。
   bool _repairSheetOpen = false;
 
-  /// 完成慶祝那張卡要顯示的內容；沒在顯示時為 null。
-  ///
-  /// 跟報修面板一樣疊在這一頁上而不另開路由：Flutter 的 `ModalBarrier` 一律把
-  /// 自己包在 `BlockSemantics` 裡，所以用路由推上來的覆蓋層會連帶把底下那一頁
-  /// 的 accessibility 節點整批擋掉，遮罩底下是哪一間房就讀不到了。原型也是把
-  /// 它畫在任務頁裡（`Main.dc.html:1370-1371`）。
+  /// Flutter 的 `ModalBarrier` 把自己包在 `BlockSemantics` 裡，用路由推上來的
+  /// 覆蓋層會擋掉底下那一頁的 accessibility 節點。這張卡因此疊在這一頁上。
   _CelebrateContent? _celebrate;
 
-  /// 報修面板開啟時的原任務 id（契約的 sourceTaskId）。
   String? _openRepairSheetTaskId;
 
-  /// 這次的報修是從中斷面板的「需要工務協助」轉過來的，送出時要同時把原任務
-  /// 轉為已中斷。從導覽列的報修圖示進來時是 false，原任務照常進行。
   bool _repairInterruptsSourceTask = false;
 
-  /// 這一間房未撤回的工務單，順序照後端給的順序。
   List<RepairTicketSummary> _repairTickets = const <RepairTicketSummary>[];
 
-  /// 這個租戶的打掃 SOP 項，順序照後端給的 `sortOrder`。只有打掃類任務要用。
   List<SopItem> _sopItems = const <SopItem>[];
 
-  /// 員工已經按過交辦的「知道了」。
-  ///
-  /// 後端的 `handoverRead` 要等開工那一刻才會翻成已讀，但員工在這一頁按了
-  /// 「知道了」之後就不該再看到那一塊升在頁面上。契約沒有「標記交辦已讀」的
-  /// 端點，所以這一下先記在畫面上。
   bool _handoverAcked = false;
 
-  /// 開工前的固定教學已經被關掉。
-  ///
-  /// 原型記的是「顯示過一次就不再出現」，跨工作階段保留。App 這一側沒有本機
-  /// 偏好設定可以寫，所以目前只記到離開這一頁為止。
   bool _teachingDismissed = false;
 
-  /// 「查一下」的說明泡泡已經看過。按 ×、按下「查一下」或離開這一頁都算看過。
   bool _askTipSeen = false;
 
-  /// 目前畫面上這一筆任務。
-  ///
-  /// 報修面板是在員工按下報修鍵的那一刻才開，當下讀不到 `FutureBuilder`
-  /// builder 參數裡的那一筆，但報修要帶原任務 id 才接得回這張單，所以載到
-  /// 之後在這裡留一份。
   TaskDetail? _loadedTask;
 
   @override
@@ -128,11 +86,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return task;
   }
 
-  /// 打掃 SOP 項清單。任務詳情只給已勾／已跳過的 id，項目名稱與全集都在
-  /// `GET /sop-items`，所以兩邊都要拿到才畫得出清單與 `x / y` 進度。
-  ///
-  /// 只有打掃類任務有 SOP 清單；取不到時當成沒有清單（整區不畫），不讓一個
-  /// 附帶區塊把整張任務頁擋在載入失敗上。
   Future<List<SopItem>> _loadSopItems(TaskDetail task) async {
     if (task.type != 'cleaning') {
       return const <SopItem>[];
@@ -148,8 +101,6 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 這一間房未撤回的工務單（FR-021 的同房工務單區）。取不到時當成沒有：
-  /// 工務單區是任務頁的附帶資訊，不該因為它讀不到就讓整張任務頁打不開。
   Future<List<RepairTicketSummary>> _loadRepairTickets(TaskDetail task) async {
     final roomId = task.roomId;
     if (roomId == null) {
@@ -162,10 +113,6 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 用房號反查任務 id：先找待認領池，再找今天自己名下的單。
-  ///
-  /// 今天自己的單走 todayTasks（今日全部，含進行中與已延後的），不是只收
-  /// 待開始的 nextTasks——否則被推播叫回一張進行中的單時會反查不到。
   Future<String?> _resolveTaskIdByRoomNo() async {
     final pool = await ApiClient.instance.getPool();
     for (final item in pool.items) {
@@ -193,15 +140,9 @@ class _TaskScreenState extends State<TaskScreen> {
       id: 'task.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
-        // 整頁不包 SafeArea：標題區與凍結導覽列的品牌色要一路鋪到螢幕頂
-        // （`Main.dc.html:1149`），置底操作列也自己吃掉底部安全區。包一層
-        // SafeArea 會在上下各切出一條白邊。
         child: Stack(
           children: [
             _buildPage(),
-            // 面板升起時背後那一頁要壓暗，點暗掉的地方要能把面板收回去。
-            // 壓暗只是一塊疊上去的顏色，不是 modal barrier，底下那一頁的
-            // 離線列與待同步筆數仍然讀得到（理由見 [RepairSheet]）。
             if (_repairSheetOpen)
               Positioned.fill(
                 child: GestureDetector(
@@ -248,11 +189,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 連線狀態列佔不佔高度，決定頂部安全區由誰讓開。
-  ///
-  /// 連線正常時那一列不佔高度，安全區交給凍結導覽列吃掉，品牌色才鋪得到螢幕
-  /// 頂；真的有連線狀況要講時那一列升到最上面，安全區換它讓開，導覽列不必再
-  /// 讓一次。兩者都讓的話，離線時標題區上方會多出一條空白。
   Widget _buildPage() {
     return ValueListenableBuilder<bool>(
       valueListenable: ConnectionStatus.instance.offline,
@@ -293,7 +229,6 @@ class _TaskScreenState extends State<TaskScreen> {
                 } else {
                   content = _buildTask(snapshot.data, topInset: navTopInset);
                 }
-                // 導覽列在載入中與載入失敗時也要在，員工才隨時回得去上一頁。
                 return Stack(
                   children: [
                     content,
@@ -317,8 +252,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 打開報修面板。離線時擋在入口：表單要先有照片才送得出去，而照片得上傳到
-  /// 後端才有 id，離線時連第一張都加不進去。
   void _openRepairSheet() {
     if (ConnectionStatus.instance.isOffline) {
       showOfflineBlockedAlert(context);
@@ -339,11 +272,6 @@ class _TaskScreenState extends State<TaskScreen> {
     });
   }
 
-  /// 從「需要工務協助」轉過來的報修表單，左上角那顆鈕要走回中斷原因清單。
-  ///
-  /// 這兩層在畫面上是同一個面板換了內容（`Main.dc.html:1455`），在程式裡是兩
-  /// 層：報修表單貼在任務頁上（理由見 [RepairSheet]），而中斷面板是一條路由。
-  /// 回到上一步因此是「收掉表單、重新開中斷面板」，而不是把表單退回去。
   void _backToInterruptReasons() {
     final task = _loadedTask;
     _closeRepairSheet();
@@ -352,11 +280,7 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 開工：成功就把畫面換成後端回的新狀態；後端用 409 擋下「一次一間」時
-  /// 跳提示，任務狀態一個字都不動（被擋下的那一間仍然是待開始）。
   Future<void> _start(TaskDetail task) async {
-    // 離線時開工一律擋在這裡，不送請求：開工要由後端判定「一次只做一間」，
-    // 離線時沒有人能做這個判定，先放行會讓同一位員工手上出現兩筆進行中。
     if (ConnectionStatus.instance.isOffline) {
       await showOfflineBlockedAlert(context);
       return;
@@ -373,10 +297,6 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 把已中斷的這一間接回來繼續做。
-  ///
-  /// 離線時擋在這裡的理由同 [_start]：回到進行中要由後端判定「一次只做一
-  /// 間」，離線時沒有人能做這個判定，先放行會讓同一位員工手上出現兩筆進行中。
   Future<void> _resume(TaskDetail task) async {
     if (ConnectionStatus.instance.isOffline) {
       await showOfflineBlockedAlert(
@@ -397,11 +317,6 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 完成這一間：連線正常時直接送給後端，離線時留在手機上等連線恢復。
-  ///
-  /// 離線時唯一還能做的事就是把手上進行中的這間做完，所以這裡不擋，改交給
-  /// [OfflineQueue]。它會在連線恢復時用同一把 `Idempotency-Key` 送出去，員工
-  /// 不必記得回頭再按一次完成。
   Future<void> _complete(TaskDetail task) async {
     final bool sent;
     TaskCompletion? completion;
@@ -416,9 +331,6 @@ class _TaskScreenState extends State<TaskScreen> {
         },
       );
     } on ApiException catch (e) {
-      // 連線正常時佇列把後端的拒絕原樣往上拋（例如這張單剛被主管作廢）。
-      // 這裡不接住的話，員工按下完成只會看到畫面毫無反應——被拒不能無聲，
-      // 原因是後端說了算，App 不自己湊話。
       await _showBusyAlert(e, fallback: '完成沒有成功，請稍後再試');
       return;
     }
@@ -426,8 +338,6 @@ class _TaskScreenState extends State<TaskScreen> {
       return;
     }
     if (!sent) {
-      // 離線時後端還沒收到這一筆，所以去向與今日進度改用手機上最後一次拿到
-      // 的今日進度推算。員工該拿到的回饋不欠，卡上那一行說這一筆還押在手機上。
       setState(() {
         _completionPendingSync = true;
         _celebrate = _showsCelebrate(task)
@@ -460,21 +370,9 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 這一類任務完成之後要不要給那張慶祝卡。
-  ///
-  /// 打掃與備品才給，依 truth 的 `工務單/dsl.md:50`「那張卡是房務打掃與備品完成
-  /// 才走的」。備品只是不帶今日進度那一塊（契約 `TaskCompletion.cleaningDoneToday`
-  /// 只有打掃類會帶）。工務單有自己的完修回報與驗收流程，那張卡講的是「一間房
-  /// 交出去了」，接在完修後面會讓員工以為這張單已經結案。
   bool _showsCelebrate(TaskDetail task) =>
       task.type == 'cleaning' || task.type == 'amenity';
 
-  /// 離線完成時那張卡的內容。
-  ///
-  /// 去向與今日進度都由手機上最後一次 `GET /me/today` 的結果推算，口徑跟後端
-  /// 的 `nextStep` 一致（待開始優先、重做次數多的先、同組內打掃排後面再按房號）
-  /// ——兩邊分岔的話，同一位員工離線完成與連線完成會被指向不同的房間。
-  /// 手機上連一份今日進度都還沒有時去向算不出來，那一段整段不出現。
   _CelebrateContent _offlineCelebrate(TaskDetail task) {
     final today = ApiClient.instance.lastKnownToday;
     final others = (today?.todayTasks ?? const <TodayTask>[])
@@ -528,16 +426,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 從完成畫面接著走：還有下一間就直接開那一間的任務頁，都清完了就回到
-  /// 待認領。
-  ///
-  /// 兩種去向都先把完成畫面與剛做完的那一頁關掉，員工按返回才不會退回一張
-  /// 已經做完的單。
-  ///
-  /// 去向是後端在完成那一刻算出來的，而員工看著完成畫面的這段時間裡主管可能
-  /// 已經把那一間改派給別人。開頁之前先問一次那張單現在的負責人：`GET /tasks`
-  /// 對同租戶的任何一筆都回 200，不問的話畫面會把別人的單畫出來，員工做完才
-  /// 發現白做。
   Future<void> _goToNextStep(TaskNextStep step) async {
     final navigator = Navigator.of(context);
     if (step.kind == TaskNextStepKind.allClear) {
@@ -555,7 +443,6 @@ class _TaskScreenState extends State<TaskScreen> {
     try {
       next = await ApiClient.instance.getTask(taskId);
     } on ApiException {
-      // 讀不到那一筆就當它不在名下了：這一步只負責決定要不要帶員工過去。
       if (!mounted) {
         return;
       }
@@ -579,10 +466,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 接力的那一間在按下之前被改派走了。
-  ///
-  /// 誠實說它已經不在名下，而不是默默開一張別人的單或什麼都不做：兩者都會讓
-  /// 員工以為自己按錯了。
   Future<void> _showReassignedAlert() {
     return showCupertinoDialog<void>(
       context: context,
@@ -601,9 +484,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 任務停在哪個狀態、停住原因記成什麼，一律以後端送出後回傳的那一筆為準。
-  /// 畫面若自己先改成「已延後」再送出，後端拒收時員工會看著一個不存在的狀態
-  /// 繼續操作下去。
   Future<void> _openHoldSheet(TaskDetail task, HoldSheetMode mode) async {
     final result = await HoldSheet.show(context, mode: mode, taskId: task.id);
     if (result == null || !mounted) {
@@ -622,12 +502,8 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 把畫面換成指定的那一筆任務。
-  ///
-  /// 畫面讀的是一個 `Future`，所以換內容等於換掉那個 `Future`。這個指派不能
-  /// 寫成 `setState(() => _taskFuture = ...)`：箭頭函式會把指派的結果（也就是
-  /// 那個 `Future`）當成回傳值交給 `setState`，Flutter 在 debug 版會直接拒絕
-  /// 這種回呼，畫面一次也不會更新。
+  /// 指派不能寫成 `setState(() => _taskFuture = ...)`。箭頭函式會把那個
+  /// `Future` 當成回傳值，Flutter 在 debug 版會拒絕回傳 `Future` 的回呼。
   void _showTask(TaskDetail task) {
     setState(() {
       _loadedTask = task;
@@ -635,10 +511,6 @@ class _TaskScreenState extends State<TaskScreen> {
     });
   }
 
-  /// 後端拒絕開工、恢復或完成時的提示（ui-plan F2-R1 的 `task.busy-alert`）。
-  /// 訊息直接用後端回應的 message——被拒的原因是後端說了算，App 不自己湊這
-  /// 句話；後端沒給 message 時才退回呼叫端給的 `fallback` 文案。畫面已被移除
-  /// 時直接不彈，不然對話框會掛在一個已經不存在的畫面上。
   Future<void> _showBusyAlert(ApiException e, {required String fallback}) async {
     if (!mounted) {
       return;
@@ -646,8 +518,6 @@ class _TaskScreenState extends State<TaskScreen> {
     final message = e.errorMessage ?? fallback;
     return showCupertinoDialog<void>(
       context: context,
-      // `task.busy-alert` 掛在內文那一行上：驗收要一字不差讀到後端回的拒絕
-      // 原因，而對話框層的節點除了內文還含標題與按鈕的文字，讀出來會多出東西。
       builder: (dialogContext) => TmsAlert(
         message: message,
         messageId: 'task.busy-alert',
@@ -663,14 +533,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 任務頁頂端那條凍結導覽列。
-  ///
-  /// 標題寫這張單的身分，讓員工在任何捲動位置都認得出自己停在哪一間房。還
-  /// 沒捲動時標題區自己就寫著房號，導覽列不重複，只寫任務類別；標題區捲走
-  /// 之後房號補回標題，進行中的單再把類別換成正在走的計時，員工不必捲回去
-  /// 就看得到還剩多少時間。
-  ///
-  /// 任務還沒載回來時只寫得出房號，那是這一頁唯一不必等後端就確定的事。
   Widget _buildNavBar(
     bool scrolled,
     TaskDetail? task, {
@@ -683,8 +545,6 @@ class _TaskScreenState extends State<TaskScreen> {
     final withRoom = kindLabel == null
         ? widget.roomNo
         : '${widget.roomNo} · $kindLabel';
-    // 計時只在進行中與已中斷的單上有意義。已延後的單還沒開工，寫一個停著
-    // 的計時會讓員工以為時間正在走。
     final showTimer = task != null && (doing || task.state == 'interrupted');
     return TmsSemantics(
       id: 'task.nav.${widget.roomNo}',
@@ -709,9 +569,6 @@ class _TaskScreenState extends State<TaskScreen> {
             ? null
             : TmsSemantics(
                 id: 'task.repair-button',
-                // 報修在導覽列右側，不在底部動作列：底部一次只留一主一次兩顆，
-                // 報修是「做到一半發現房間壞了」的旁支，擺進那一列會讓員工每
-                // 次都要先讀完三顆才找得到往下走的那一顆。
                 child: TmsNavBarButton(
                   semanticsLabel: '報修',
                   onPressed: _openRepairSheet,
@@ -725,19 +582,9 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 這張單現在能不能報修（`Main.dc.html:4373` 的 `dt.mine && state !== 'cancelled'`）。
-  ///
-  /// 已經作廢的單不必再報修。還躺在待認領池裡的單也不給：報修要掛回原任務，
-  /// 沒有負責人的單掛不上去。契約目前沒有「這張單是不是我的」這一欄，所以用
-  /// 「不在池裡」當作有負責人。
   static bool _canRepair(TaskDetail task) =>
       task.state != 'cancelled' && task.state != 'pool';
 
-  /// 目前狀態的主按鈕：按鈕上寫什麼、按下去做什麼。沒有主要動作時回 null。
-  ///
-  /// 對照表出自 `Main.dc.html:4331-4334`：待開始是「開始」，已延後是「開始打掃」
-  /// 或「開始處理」（延後的單按一下直接開工，不必先回到待開始），進行中是
-  /// 「完成」，已中斷是「恢復處理」。延後／中斷是次要按鈕，不走這裡。
   ({String label, VoidCallback onPressed})? _primaryAction(TaskDetail task) {
     switch (task.state) {
       case 'accepted':
@@ -761,28 +608,18 @@ class _TaskScreenState extends State<TaskScreen> {
       );
     }
 
-    // 「查一下」讓開操作列的依據是有沒有主按鈕（`Main.dc.html:5027`）。次要按鈕
-    // 只出現在待開始與進行中，那兩種狀態一定也有主按鈕。
     final fabBottom = TmsFab.bottomAboveActionBar(
       hasActionBar: _primaryAction(task) != null,
       bottomSafeAreaInset: MediaQuery.paddingOf(context).bottom,
     );
-    // 作廢的單沒有東西好查（`Main.dc.html:4372`）。
     final canAsk = task.state != 'cancelled';
     return Column(
       children: [
         Expanded(
-          // 說明泡泡的箭頭尖是從卡片下緣凸出去的，預設的裁切會把它削掉。
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // 整頁可捲動。任務頁上從標題區、提示、同房工務單到 SOP 清單，
-              // 一屏放不下是常態；捲不動的版面會讓最下面那幾項永遠點不到。
-              // 用 SingleChildScrollView 而不是 ListView：ListView 只建視窗內
-              // 的那幾列，捲到之前它們不在畫面上，驗收也定位不到。
               SingleChildScrollView(
-                // 導覽列疊在內容上面，所以內容自己要讓開導覽列那麼高，否則
-                // 標題區最上面那一行永遠鑽在導覽列底下讀不到。
                 padding: EdgeInsets.only(
                   top: topInset + TmsSize.frozenNavBarHeight,
                 ),
@@ -795,8 +632,6 @@ class _TaskScreenState extends State<TaskScreen> {
                         TmsSpacing.screenEdge,
                         TmsSpacing.md2,
                         TmsSpacing.screenEdge,
-                        // 「查一下」浮在內容上面，捲到底時最後一列要能整列
-                        // 離開它底下（`Main.dc.html:5028`）。
                         TmsFab.scrollPadBottom(fabBottom),
                       ),
                       child: Column(
@@ -832,13 +667,8 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 「查一下」的說明泡泡寬度。`Main.dc.html:1332` — width: 264px
   static const double _askTipWidth = 264;
 
-  /// 第一次進任務頁的說明泡泡要不要出現（`Main.dc.html:4436`）。
-  ///
-  /// 一次只給員工一個提示：這一頁已經有固定教學、或有出事了要處理的狀態列時，
-  /// 泡泡讓位，等下次再說。
   bool _showsAskTip(TaskDetail task) {
     if (_askTipSeen) {
       return false;
@@ -850,8 +680,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return !(spec is TmsStatusCallout && spec.tone == TmsCalloutTone.error);
   }
 
-  /// 把各區塊之間插上固定間距。區塊本身只管自己的內容，誰在誰上面、中間空多
-  /// 少由這裡決定，各區塊自己帶 margin 的話間距會隨著區塊出現與否忽大忽小。
   static List<Widget> _spaced(List<Widget> sections) {
     final spaced = <Widget>[];
     for (var i = 0; i < sections.length; i++) {
@@ -863,7 +691,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return spaced;
   }
 
-  /// 標題區底下的各個區塊，由上到下。沒有內容的區塊整塊不出現。
   List<Widget> _buildSections(TaskDetail task) {
     final sections = <Widget>[];
     final candidates = _calloutCandidates(task);
@@ -894,13 +721,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return sections;
   }
 
-  /// 這張單當下成立的每一條狀態列規則，成立就給一則候選。
-  ///
-  /// 一頁只畫其中名次最前的一則，名次由 [TmsCalloutKind] 的宣告順序決定，這
-  /// 裡只負責說「現在成立的是哪幾條」。文案出自 `Main.dc.html:4306-4324`。
-  ///
-  /// 後端沒給的欄位那一段整段不寫，也不填佔位字：畫殼填假值會讓驗收分不出
-  /// 「做好了」和「資料還沒來」。
   List<TmsCalloutSpec?> _calloutCandidates(TaskDetail task) {
     final isClean = task.type == 'cleaning';
     final waived =
@@ -915,9 +735,6 @@ class _TaskScreenState extends State<TaskScreen> {
           tone: TmsCalloutTone.error,
           title: returnInfo.title,
           reason: returnInfo.reason.isEmpty ? null : returnInfo.reason,
-          // 原型這一句前面還有「請重做「床鋪」相關項目。」，那是後端給的不合格
-          // 項名稱（`Main.dc.html:4309` 的 `dt.failed`）。契約目前沒有這一欄，
-          // 所以那一句整句不寫。
           body: '計時與 SOP 勾記已重設，第一次的紀錄仍保留在任務歷程。',
           idPrefix: 'task.status-row.return-info',
           wrap: (node) => TmsSemantics(
@@ -983,11 +800,6 @@ class _TaskScreenState extends State<TaskScreen> {
     ];
   }
 
-  /// 已延後或已中斷的狀態列（`Main.dc.html:4311-4318`）。
-  ///
-  /// 標題直接寫後端記下的停住原因，說明才講「所以現在能做什麼」。停在工務單
-  /// 上的那幾種說法要工務單的階段、主管批註與照片張數才寫得出來，契約的
-  /// `RepairTicketSummary` 沒有這些欄位，所以一律用沒有工務單的那一句。
   TmsCalloutSpec _heldCallout(TaskDetail task, String holdReason) {
     final repaired = holdReason.contains('工務已修好');
     final ticket = _repairTickets.length == 1 ? _repairTickets.single : null;
@@ -1019,10 +831,7 @@ class _TaskScreenState extends State<TaskScreen> {
             ),
           ),
       ],
-      // 前綴給了，標題與說明才各自成為獨立節點。不給的話那兩段是裸 Text，
-      // 會被併進外層節點的 label，讀停住原因的一方拿到的是三段接起來的字。
       idPrefix: 'task.status-row.hold-reason',
-      // 停住原因那一段文字要被原樣讀到，所以顯式掛在節點的 label 上。
       wrap: (node) {
         final reasonNode = TmsSemantics(
           id: 'task.status-row.hold-reason',
@@ -1036,10 +845,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 開工前還沒看過的交辦，升到頁面上一次（`Main.dc.html:1268`、`4338`）。
-  ///
-  /// 看過之後就收回「這間房的資訊」那一列，不再佔整頁的高度：交辦是開工前要
-  /// 讀的東西，不是做到一半還要一直看見的東西。
   Widget? _buildHandoverQuote(TaskDetail task) {
     if (!_memoPromo(task)) {
       return null;
@@ -1070,11 +875,6 @@ class _TaskScreenState extends State<TaskScreen> {
 
   bool _handoverRead(TaskDetail task) => task.handoverRead || _handoverAcked;
 
-  /// 「這間房的資訊」：交辦與工務單各一列，點了推整頁。
-  ///
-  /// 最多兩列，一類一列（`Main.dc.html:4340-4349`）。頁面的高度因此不隨這間房
-  /// 的工務單張數變長，員工要的那一步也不會被一串旁支推到螢幕外。兩列都沒有
-  /// 內容時整區不畫。
   Widget? _buildInfoSection(TaskDetail task) {
     final rows = <Widget>[];
     if (task.handovers.isNotEmpty && !_memoPromo(task)) {
@@ -1115,8 +915,6 @@ class _TaskScreenState extends State<TaskScreen> {
                 ? TmsColors.onErrorContainer
                 : TmsColors.quaternaryLabel,
             onTap: () {
-              // 只有一張就直接開那一張：中間再隔一層只有一列的清單，員工要多
-              // 點一次才看得到內容。
               if (_repairTickets.length == 1) {
                 _openTicket(_repairTickets.single.taskId);
                 return;
@@ -1140,8 +938,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return TmsGroupedSection(header: '這間房的資訊', children: rows);
   }
 
-  /// 工務單那一列右側的值（`Main.dc.html:4346`）：一張寫單號、類別與目前階段，
-  /// 多張只寫張數與還有幾張沒結案。
   String _repairTicketsValue() {
     if (_repairTickets.length == 1) {
       final ticket = _repairTickets.single;
@@ -1153,7 +949,6 @@ class _TaskScreenState extends State<TaskScreen> {
         '${open > 0 ? '$open 張未結案' : '都已結案'}';
   }
 
-  /// 這張工務單還沒結案：已完修與已撤回以外都算。
   static bool _isOpenTicket(RepairTicketSummary ticket) =>
       ticket.state != 'done' && ticket.state != 'cancelled';
 
@@ -1166,10 +961,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 浮在內容右下角的「查一下」。
-  ///
-  /// 它不在底部動作列裡：查 SOP 或查這間房的記錄是員工做到一半隨時會想做的
-  /// 事，壓在動作列裡會跟「往下走」的那一顆混在一起。
   Widget _buildAskButton(TaskDetail task) {
     return TmsSemantics(
       id: 'task.ask-button',
@@ -1177,7 +968,6 @@ class _TaskScreenState extends State<TaskScreen> {
         glyph: TmsFabGlyph.ask,
         semanticsLabel: '查一下：查 SOP 或這間房的記錄',
         onPressed: () {
-          // 按過這一顆就等於知道它是做什麼的，說明泡泡不必再出現。
           setState(() => _askTipSeen = true);
           AskSheet.show(context, taskId: task.id, roomNo: widget.roomNo);
         },
@@ -1185,11 +975,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 置底動作列。
-  ///
-  /// 一個狀態最多只露出兩顆。主按鈕由 [_primaryAction] 的狀態對照表決定，次要
-  /// 按鈕是待開始的「延後」與進行中的「中斷」。打掃到一半按完成前，上面再補
-  /// 一行還有幾項沒勾。
   Widget _buildActionBar(TaskDetail task) {
     final primary = _primaryAction(task);
     return TmsActionBar(
@@ -1197,8 +982,6 @@ class _TaskScreenState extends State<TaskScreen> {
       secondary: _buildSecondaryButton(task),
       primary: primary == null
           ? null
-          // 不另外給 label：按鈕文字本身就是子節點的 label，顯式再給一次
-          // 會被 Flutter 接成「開始\n開始」。
           : TmsSemantics(
               id: 'task.primary-button',
               child: TmsPillButton(
@@ -1209,10 +992,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 按完成之前那一行提醒（`Main.dc.html:1354`、`4379`）。
-  ///
-  /// 沒勾的項目在完成那一刻會被記成跳過，員工按下去之前要先知道這件事。只在
-  /// 打掃類的進行中單上出現，而且真的還有沒勾的才出現。
   Widget? _buildUncheckedHint(TaskDetail task) {
     if (task.state != 'doing' || task.type != 'cleaning' || _sopItems.isEmpty) {
       return null;
@@ -1238,10 +1017,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 這個狀態的次要按鈕；沒有次要動作時回 null。
-  ///
-  /// 待開始的單能延後（還沒開工，整張單往後挪），進行中的單能中斷（已經開
-  /// 工，停在一半）。其餘狀態兩者都做不了：已經停住的單沒有東西可以再停。
   Widget? _buildSecondaryButton(TaskDetail task) {
     switch (task.state) {
       case 'accepted':
@@ -1267,26 +1042,8 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 任務頁最上面的標題區：進行中是品牌色深底，其餘狀態是白底，下緣兩個角
-  /// 切成大圓角把它和底下的內容分開。
-  ///
-  /// 誰當主角依狀態換：進行中時最大的字是計時，房號退到任務名稱前面——這時
-  /// 員工早就站在房間裡，要看的是「做多久了」；開始前與停住後換回房號當主
-  /// 角，因為那時要確認的是「這是哪一間」。
-  ///
-  /// 進行中的計時在 App 端逐秒跳動，但起算點一律由後端給（契約的
-  /// `segmentStartedAt`），App 只負責把「現在時間減起算點」加上去。畫面不自
-  /// 己累加秒數：同一張單可能在別的裝置上被推進，自己累加會和後端的已做時
-  /// 間愈走愈遠。後端還沒回起算點時退回只顯示分鐘。
-  ///
-  /// 標題區放計時或房號、任務名，再一行來源與預估工時，狀態標籤不放這裡：
-  /// 這張單走到哪一步由底下的步驟條表達，同一件事在同一屏講兩次，員工會先
-  /// 讀標籤再讀步驟條，反而慢。狀態標籤改放在標題區底下的提示區。
   Widget _buildHeader(TaskDetail task) {
     final doing = task.state == 'doing';
-    // 已延後的單還沒開工，右側不寫計時（`Main.dc.html:4350` 的
-    // `timed = doing || paused`，原型的 paused 就是契約的 interrupted）。寫一個
-    // 停著的計時會讓員工以為時間正在走。
     final interrupted = task.state == 'interrupted';
     final foreground = doing ? TmsColors.brandOnPrimary : TmsColors.label;
     final secondary = doing
@@ -1348,11 +1105,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 標題底下那一行（`Main.dc.html:4351`）：這張單是誰開的、估多久、是不是免
-  /// 查房、停住期間有沒有人留話。
-  ///
-  /// 計時正在走或停在一半時，預估已經寫在計時那一側，這裡不再寫一次。契約沒
-  /// 有原型那個房間標記欄位（`dt.tag`，例如 VIP），所以那一段不寫。
   String? _metaLine(TaskDetail task) {
     final isClean = task.type == 'cleaning';
     final timed = task.state == 'doing' || task.state == 'interrupted';
@@ -1371,7 +1123,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
-  /// 開始前與停住後的主角：56pt 的房號，停在一半的單在右邊接已做時間。
   Widget _buildRoomHero(TaskDetail task, {required bool showTimer}) {
     final overtimeMinutes = _overtimeMinutes(task);
     final timerText = taskTimerText(task);
@@ -1429,8 +1180,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 計時數字底下那一行（`Main.dc.html:4367`）：停在一半的單先講它停住了，再講
-  /// 原本估多久。沒有預估值時只講停住。
   String? _timerSubText(TaskDetail task) {
     final held = task.state == 'interrupted';
     final est = task.estMin;
@@ -1440,16 +1189,10 @@ class _TaskScreenState extends State<TaskScreen> {
     return '${held ? '已暫停 · ' : ''}預估 $est 分';
   }
 
-  /// 步驟條：打掃類有四段，依序是已接、進行中、完成、查房或免查房；其餘類別
-  /// 有三段，依序是已接、進行中、送達。
-  ///
-  /// 目前停在哪一步由後端回的 state 與 inspection 推導。畫面另外記一份進度的
-  /// 話，別的裝置把任務推進之後，這份進度就是舊的。
   Widget _buildStepTrack(TaskDetail task, {required bool onDark}) {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
     final currentIndex = steps.indexOf(current);
-    // 查房通過代表整張單結案，沒有哪一步還「停在那裡」，四步一律畫成完成。
     final allDone = task.state == 'inspected';
     return Padding(
       padding: const EdgeInsets.only(top: TmsSpacing.md2),
@@ -1473,7 +1216,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 步驟條上的一步：走到哪一步決定圖示形態，id 與讀值用步驟名當識別段。
   static TmsStepTrackStep _trackStep(
     int index,
     int currentIndex,
@@ -1499,10 +1241,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 這張任務的步驟條有哪幾段。
-  ///
-  /// 打掃類的最後一段依免查房旗標分成兩種寫法。鎖定免查的單完成後直接結案，
-  /// 不會經過查房這一站，所以最後一段寫「免查房」。
   static List<String> _stepsOf(TaskDetail task) {
     if (task.type != 'cleaning') {
       return const <String>['已接', '進行中', '送達'];
@@ -1511,10 +1249,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return <String>['已接', '進行中', '完成', waived ? '免查房' : '查房'];
   }
 
-  /// 目前停在哪一步。
-  ///
-  /// 待開始與已延後都還沒開工，算在「已接」。已中斷是開工之後停住的，仍然算
-  /// 在「進行中」這一段。
   static String _currentStep(TaskDetail task) {
     final steps = _stepsOf(task);
     switch (task.state) {
@@ -1530,15 +1264,6 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 清潔 SOP 清單：每一項可以勾選，也可以跳過，上方的進度文字寫成
-  /// 「x / y · 跳過不擋流程」。
-  ///
-  /// 分子只數勾選的（`Main.dc.html:4291`）。跳過的意思是這一項這次不做，不是
-  /// 做完了，把它算進分子會讓進度條講出一個沒做過的數字。跳過不擋完成：後端
-  /// 在完成那一步會把沒勾也沒跳過的項目一律記成跳過。
-  ///
-  /// 租戶沒有設定任何打掃 SOP 項、這不是打掃類任務，或這張單已經查房通過或
-  /// 作廢時，整區不畫（`Main.dc.html:4369`）。
   Widget? _buildSopChecklist(TaskDetail task) {
     if (_sopItems.isEmpty ||
         task.type != 'cleaning' ||
@@ -1583,16 +1308,12 @@ class _TaskScreenState extends State<TaskScreen> {
           ),
         ),
         const SizedBox(height: TmsSpacing.sm),
-        // 進度條是給員工掃一眼用的：同一個進度在上面已經有「3 / 8」這個精確
-        // 的說法，條狀只負責讓他不必讀數字就知道還剩多少。
         ClipRRect(
           borderRadius: BorderRadius.circular(TmsRadius.pill),
           child: SizedBox(
             height: TmsSpacing.sm,
             child: ColoredBox(
               color: TmsColors.neutralContainer,
-              // 勾掉一項之後條子滑過去，不是直接跳到新寬度：跳一下會讓員工
-              // 來不及看出剛才那一下算進去了沒有（`Main.dc.html:1308`）。
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: ratio),
                 duration: TmsMotion.barSweep.durationIn(context),
@@ -1608,8 +1329,6 @@ class _TaskScreenState extends State<TaskScreen> {
         ),
         const SizedBox(height: TmsSpacing.sm),
         TmsGroupedSection(
-          // 最後一列也畫一條底線：這一組底下還接著置底操作列，那條線是在說
-          // 清單到這裡為止（`Main.dc.html:1312`）。
           trailingDivider: true,
           children: [
             for (final item in _sopItems)
@@ -1625,11 +1344,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// SOP 清單的一列：左邊是勾選框與項目名稱，右邊是跳過鈕。
-  ///
-  /// 不是進行中就整列點不動（`Main.dc.html:4285`）：還沒開工或已經停住的單上
-  /// 勾一項，後端記下的時刻會對不上實際動手的時刻。已經勾起來的項目不給跳過
-  /// 鈕——那一項已經做完了，跳過它沒有意義。
   Widget _buildSopRow({
     required TaskDetail task,
     required SopItem item,
@@ -1715,9 +1429,6 @@ class _TaskScreenState extends State<TaskScreen> {
     );
   }
 
-  /// 勾選或跳過一項 SOP，畫面換成後端回的那一筆任務。
-  ///
-  /// 畫面先改再送出的話，送失敗的那一下員工看到的勾記就不是後端記下的勾記。
   Future<void> _sopCheck(TaskDetail task, SopItem item, String result) async {
     final updated = await ApiClient.instance.sopCheck(
       task.id,
@@ -1733,10 +1444,6 @@ class _TaskScreenState extends State<TaskScreen> {
 
 const String _reassignedMessage = '這一間已經不在你名下了';
 
-/// 完成慶祝那張卡要顯示的內容。
-///
-/// 讀不到的欄位一律是 null 而不是湊出來的值：沒有去向就不畫接續鍵、沒有今日
-/// 進度就不畫那一塊，驗收才分得出「做好了」和「資料還沒來」。
 class _CelebrateContent {
   const _CelebrateContent({
     required this.roomNo,
@@ -1759,11 +1466,6 @@ class _CelebrateContent {
   final bool celebrationEnabled;
 }
 
-/// 完成畫面上那一句「這一間接下來會怎樣」。
-///
-/// 三種說法由剛完成的那張單決定，不是由完成畫面自己挑：免查房是開工當下依
-/// 租戶設定鎖在任務上的，之後設定變更不影響，所以這裡讀的是任務上的鎖定值，
-/// 不是租戶設定。
 String _celebrateSubline(TaskDetail task) {
   if (task.type != 'cleaning') {
     return '住客會收到完成通知';
@@ -1772,13 +1474,6 @@ String _celebrateSubline(TaskDetail task) {
   return waived ? '免查房，直接完成' : '已通知主管查房';
 }
 
-/// 超時膠囊：深底上是深橘底深褐字，白底上是橘淡底棕字。
-///
-/// 超時只是提醒，不擋任何操作，所以不用錯誤紅——紅色會讓員工以為這張單出
-/// 了什麼事。
-///
-/// [compact] 是房號當主角時的那一顆：計時字級小一級，膠囊跟著收一級
-/// （`Main.dc.html:1189` 的 `2px 8px` 與 12pt，對上 `1172` 的 `3px 10px` 與 13pt）。
 Widget _buildOvertimeChip(
   int overtimeMinutes, {
   required bool onDark,
@@ -1817,23 +1512,12 @@ Widget _buildOvertimeChip(
   );
 }
 
-/// 目前已做秒數：契約的走秒公式 `accumulatedSeconds + (現在 − segmentStartedAt)`。
-///
-/// 兩個欄位缺一就回 null——沒有基準或沒有起算點都走不了秒，呼叫端各自退回
-/// 分鐘層級的顯示。基準不能拿 [TaskDetail.elapsedMinutes] 代打：它在進行中
-/// 已含正在跑的這一段，再加一次本段會把本段重複累計，顯示約兩倍。
-///
-/// 「現在」沒給時讀 [deviceNow]，不直接叫 `DateTime.now()`：自動化測試把裝
-/// 置時間往前撥時，計時與超時才會跟著撥過去的時刻走。手機時間比起算時刻早
-/// （時鐘沒對準）時當本段還沒開始算，不讓計時倒退。
 int? _workedSecondsNow(TaskDetail task, DateTime? now) {
   final base = task.accumulatedSeconds;
   if (base == null) {
     return null;
   }
   final startedAt = task.segmentStartedAt;
-  // 停住的單沒有正在跑的段落，累計秒數本身就是已做秒數；拿它寫成「分:秒」
-  // 才和原型的暫停計時一樣精確到秒（`Main.dc.html:3154`）。
   if (startedAt == null) {
     return base;
   }
@@ -1841,26 +1525,6 @@ int? _workedSecondsNow(TaskDetail task, DateTime? now) {
   return base + (segment > 0 ? segment : 0);
 }
 
-/// 超時幾分鐘；沒超過預估就回 null。
-///
-/// 出現條件照原型的 `overInfo`（`Main.dc.html:3153-3156`）：已做秒數超過預估秒
-/// 數就算超時，而且至少寫 1 分，剛跨過預估的那一秒寫的是「超時 1 分」不是 0。
-///
-/// 分鐘數刻意不照原型的無條件進位，改成「已做分鐘減預估分鐘」。原型同一支
-/// 檔案裡計時用捨去、超時用進位，於是 40:30 的計時旁邊會寫「超時 6 分」——同
-/// 一塊畫面上兩個數字各用一套口徑，而進位那一邊多報了一分鐘沒做的工。超時分
-/// 鐘數的定義在 `specs/truth/features/ios-app/任務執行/dsl.md:46`（已做分鐘減
-/// 預估分鐘），而已做分鐘是捨去的（契約 `任務.yaml:341-343` 寫明分鐘層級以
-/// `elapsedMinutes` 為準）。首頁那張進行中的卡用的是同一條式子，兩個畫面才不
-/// 會對同一張單講出差一分鐘的兩個數字。
-///
-/// 不分狀態都算：停在一半的單也要看得出它停住前已經超時了。已做秒數跟著計時
-/// 同一條走秒公式逐秒重算（見 [_workedSecondsNow]），所以畫面開著不操作，超時
-/// 也會隨時間變大；又因為只有跨過整分值才會變，秒數跳動不會讓膠囊忽隱忽現。
-/// 走不了秒時退回後端給的已做分鐘。
-///
-/// 超時在這個畫面上只是提示。算出超時不會呼叫任何後端端點，也不會讓員工
-/// 收到推播。
 int? _overtimeMinutes(TaskDetail task, {DateTime? now}) {
   final estMin = task.estMin;
   if (estMin == null || estMin <= 0) {
@@ -1873,18 +1537,6 @@ int? _overtimeMinutes(TaskDetail task, {DateTime? now}) {
   return math.max(1, seconds ~/ 60 - estMin);
 }
 
-/// 進行中那張單的計時主角：56pt 的計時，右邊接超時膠囊或預估工時。
-///
-/// 進行中的單只要後端給了本段的起算時刻（契約的 `segmentStartedAt`），計時
-/// 就走到秒並每秒重畫一次，員工看得出時間正在走；起算時刻沒有值時——其餘
-/// 狀態一律沒有，後端還沒補上這一欄時也沒有——退回只顯示已做分鐘。
-///
-/// 畫面不自己累加秒數，每次都拿現在時間減後端給的起算點重算。自己累加的
-/// 話，手機睡著或同一張單在別的裝置上被推進之後，秒數會和後端的已做時間
-/// 愈走愈遠。
-///
-/// 超時與計時讀同一個逐秒重算的已做秒數，但超時換成整分才進位：秒數跨過
-/// 整分前後膠囊不會忽隱忽現，整分一到才加一分。
 class TaskTimerHero extends StatefulWidget {
   const TaskTimerHero({
     super.key,
@@ -1895,15 +1547,8 @@ class TaskTimerHero extends StatefulWidget {
 
   final TaskDetail task;
 
-  /// 讀「現在幾點」的方法。平常不給，計時就讀手機的時鐘；widget 測試給一個
-  /// 自己說了算的時鐘，才能在不真的等一秒的情況下驗計時有往前跳。
   final DateTime Function()? clock;
 
-  /// 每秒重算一次之後通知擺放的畫面。
-  ///
-  /// 導覽列捲動後也寫同一串計時，它和這個元件是兄弟節點，自己重畫不會帶到
-  /// 它。整頁只留這一支每秒醒來的計時器，導覽列跟著這一下一起重畫；導覽列
-  /// 另外掛一支的話，兩串字會在不同的時刻各自進位，同一幀上讀到差一秒。
   final VoidCallback? onTick;
 
   @override
@@ -1932,9 +1577,6 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
     super.dispose();
   }
 
-  /// 只有真的要逐秒重畫時才留著計時器。走不了秒的單（起算時刻或累計秒數還
-  /// 沒給）上留一支每秒醒來的計時器，會白白把畫面重畫一次又一次，電池也跟
-  /// 著耗。
   void _syncTicker() {
     final wanted = widget.task.segmentStartedAt != null &&
         widget.task.accumulatedSeconds != null;
@@ -1954,9 +1596,6 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
-    // 「現在」整個 frame 只讀一次，計時字串與超時膠囊拿同一個時刻去算。
-    // 各讀各的時刻時，兩次讀取可能跨在整秒或整分的交界兩側，同一幀上
-    // 計時已進位、超時卻還沒跟上。
     final now = widget.clock?.call() ?? deviceNow();
     final overtimeMinutes = _overtimeMinutes(task, now: now);
     final timerText = taskTimerText(task, now: now);
@@ -1978,8 +1617,6 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
           ),
         ),
         const SizedBox(width: TmsSpacing.sm2),
-        // 膠囊比旁邊那行字高，所以它離底線遠一點，兩者的視覺中線才對得上
-        // 計時的字身（`Main.dc.html:1172`、`1175`）。
         overtimeMinutes != null
             ? Padding(
                 padding: const EdgeInsets.only(bottom: TmsSpacing.sm),
@@ -1999,11 +1636,6 @@ class _TaskTimerHeroState extends State<TaskTimerHero> {
   }
 }
 
-/// 計時主角上的那串字。
-///
-/// 走得了秒時寫成「分:秒」，超過一小時才補上小時那一段；走不了秒（契約的
-/// `accumulatedSeconds` 或 `segmentStartedAt` 還沒給）時只講已做分鐘。公式
-/// 與退回條件見 [_workedSecondsNow]。
 String taskTimerText(TaskDetail task, {DateTime? now}) {
   final total = _workedSecondsNow(task, now);
   if (total == null) {
@@ -2019,9 +1651,6 @@ String taskTimerText(TaskDetail task, {DateTime? now}) {
   return '${minutes.toString().padLeft(2, '0')}:$paddedSeconds';
 }
 
-/// 任務來源（契約 `tasks.source`）在畫面上的說法。用語跟待認領池的來源標籤
-/// 同一套，讓同一張單在兩個畫面上被講成同一件事。認不得的值原樣回傳，不猜
-/// 一個說法。
 String taskSourceText(String source) {
   switch (source) {
     case 'guest':
@@ -2038,24 +1667,15 @@ String taskSourceText(String source) {
 }
 
 
-/// 任務頁開工鈕上的字（`Main.dc.html:3199`）。打掃類講「開始打掃」，其餘類別
-/// 講「開始處理」——備品與雜項送的是東西，說「打掃」會對不上員工正在做的事。
 String taskStartLabel(TaskDetail task) =>
     task.type == 'cleaning' ? '開始打掃' : '開始處理';
 
-/// 標題區與導覽列上的任務名稱。
-///
-/// 後端的 `title` 目前帶著房號（例如「302 退房打掃」），而房號在它上面那一行
-/// 已經是整頁最大的字，照原樣印會寫成「302 · 302 退房打掃」。房號開頭的那一段
-/// 去掉，原型的標題只寫任務名（`Main.dc.html:1193`）。
 String taskTitleText(TaskDetail task, String roomNo) {
   final title = task.title ?? '';
   final prefix = '$roomNo ';
   return title.startsWith(prefix) ? title.substring(prefix.length) : title;
 }
 
-/// 交辦來源的畫面用詞。對照表出自 `房間交辦/dsl.md` 的「來源」欄，與後端
-/// `HandoverEntry.kind` 的 enum 一對一。
 String taskHandoverSourceText(String kind) {
   switch (kind) {
     case 'shift_handover':
@@ -2071,8 +1691,6 @@ String taskHandoverSourceText(String kind) {
   }
 }
 
-/// 一則交辦的出處那一行：來源、誰寫的、幾點寫的，以 ` · ` 串起來。時間只有
-/// 交班單這類來源帶得出來，沒有就不佔位。
 String taskHandoverMeta(HandoverEntry entry) {
   final at = entry.at;
   return <String>[
@@ -2084,11 +1702,6 @@ String taskHandoverMeta(HandoverEntry entry) {
   ].join(' · ');
 }
 
-/// 「這間房的資訊」裡的一列（`Main.dc.html:1288`）：左邊可能有一顆未讀點，接
-/// 著標籤，右邊是這一類目前的摘要，列尾一個 chevron。
-///
-/// 不走 [TmsGroupedRow]：這裡的值是 15pt 而且顏色會隨語意換（有工務單被退回
-/// 時轉紅），左邊還多一顆未讀點，和設定列那種「標籤加目前設定值」不是同一種列。
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
     required this.label,
@@ -2105,10 +1718,8 @@ class _InfoRow extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  /// 這一類還有沒看過的東西。未讀在畫面上只有左側那顆點，不寫「未讀」兩個字。
   final bool unread;
 
-  /// 未讀點的 accessibility id，給自動化驗收定位用。
   final String? unreadId;
 
   final Color valueColor;
@@ -2161,10 +1772,6 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-/// SOP 每一列左邊那個 26pt 的圓形勾選框（`Main.dc.html:1314`）。
-///
-/// 勾起來時整顆填成品牌色、裡面是白勾；沒勾是白底加一圈灰框。用文字打勾代替
-/// 的話，點擊目標會縮成一個字那麼小，戴著手套的人點不到。
 class _SopCheckBox extends StatelessWidget {
   const _SopCheckBox({required this.checked});
 
@@ -2197,14 +1804,9 @@ class _SopCheckBox extends StatelessWidget {
   }
 }
 
-/// 勾選框裡那個白勾。
-///
-/// 自己畫而不取 [CupertinoIcons] 的字形：勾的筆畫粗細由字型決定，調不到設計
-/// 定下來的 3，26pt 的圓框裡差一截看得出來。
 class _SopCheckGlyphPainter extends CustomPainter {
   const _SopCheckGlyphPainter();
 
-  /// 原型 SVG 的 viewBox 邊長。
   static const double _viewBox = 24;
 
   @override
@@ -2218,7 +1820,6 @@ class _SopCheckGlyphPainter extends CustomPainter {
       ..strokeWidth = TmsSize.sopCheckGlyphStroke * scale;
     canvas.save();
     canvas.scale(scale);
-    // `Main.dc.html:1315` — M5 12.5l4.5 4.5L19 7.5
     canvas.drawPath(
       Path()
         ..moveTo(5, 12.5)

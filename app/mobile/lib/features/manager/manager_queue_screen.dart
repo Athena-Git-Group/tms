@@ -11,13 +11,6 @@ import 'manager_ids.dart';
 import 'manager_queue_row.dart';
 import 'manager_queues_store.dart';
 
-/// 等主管處理的單（ui-plan 畫面 2）：一個清單元件吃待查房與待驗收兩類。
-///
-/// 內容就是 [ManagerQueuesStore] 裡那一份 `GET /me/manager-queues` 回應的對應
-/// 陣列，與首頁格子同源；重取後兩邊一起更新。某一類沒有單時是一句說明，不是空白。
-///
-/// 工務主管沒有待查房：首頁本來就不畫那一格，萬一還是以待查房開進來，這裡
-/// 直接退回首頁，不畫任何一列。
 class ManagerQueueScreen extends StatelessWidget {
   const ManagerQueueScreen({
     super.key,
@@ -26,13 +19,10 @@ class ManagerQueueScreen extends StatelessWidget {
     required this.store,
   });
 
-  /// 打開清單的是哪種主管。
   final ManagerKind kind;
 
-  /// inspection 或 verify。
   final String queue;
 
-  /// 與主管首頁共用的那一份主管待辦。
   final ManagerQueuesStore store;
 
   static const Map<String, String> _titles = {
@@ -45,7 +35,6 @@ class ManagerQueueScreen extends StatelessWidget {
     'verify': '目前沒有等你驗收的工務單',
   };
 
-  /// 這種主管能不能看這一類清單；工務主管不能看待查房。
   bool get _allowed => kind.queues.contains(queue);
 
   @override
@@ -89,8 +78,6 @@ class ManagerQueueScreen extends StatelessWidget {
     );
   }
 
-  /// 這一類清單的每一列與點下去要開的畫面，都由 item 型別一次決定：待查房
-  /// 進查房畫面，待驗收進工務單詳情（主管版）。
   static List<({ManagerQueueRowData data, Widget Function() page})> _entries(
     String queue,
     ManagerQueues? queues,
@@ -117,8 +104,6 @@ class ManagerQueueScreen extends StatelessWidget {
     };
   }
 
-  /// 點一列進它的畫面。查房送出、驗收送出或遇到單已被處理，都會讓那張單的
-  /// 去向變了；不管怎麼回到清單，回來時一律重取一次，清單與首頁格子一起更新。
   Future<void> _open(BuildContext context, Widget page) async {
     await Navigator.of(context)
         .push(CupertinoPageRoute<void>(builder: (_) => page));

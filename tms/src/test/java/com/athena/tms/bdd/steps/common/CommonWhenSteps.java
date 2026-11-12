@@ -51,7 +51,6 @@ public class CommonWhenSteps {
     @當("{string} 開始 {string}")
     public void staffStartsTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
-        // 後面可能接「這次操作被拒絕」，需要操作前的任務列快照才比得出「沒有被改動」。
         lastOperationGuard.captureFor(taskId);
         apiClient.post("/tasks/" + taskId + "/start", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
@@ -86,21 +85,14 @@ public class CommonWhenSteps {
                 .map(key -> Map.<String, Object>of("key", key, "pass", true))
                 .toList();
 
-        // dsl.md：body 只帶 taskId 與 items（租戶與查房者由權杖推導、結果由後端算），帶新的
-        // Idempotency-Key；回應 InspectionOutcome 存進 ScenarioWorld，讓「這次操作被拒絕，錯誤碼為」
-        // 與「這次查房的結果為」讀得到。
         ScenarioWorld.ApiResponse response = inspectionFixtures.submit(world, staffName, taskId, items);
         world.setLastInspectionResponse(response);
-        // 送出的 items 也留一份，查房組的 Then 句拿它算 missing／unexpected。
         world.setLastInspectionItems(items);
     }
 
     @當("時間來到 {string}")
     public void timeAdvancesTo(String hhmm) {
         clock.setTodayAt(hhmm);
-        // 時間推進後，所有依賴時間的週期工作都該有機會跑一輪：排程建單、待認領
-        // 未接提醒（兩段：先提醒同仁，逾更久再通知主管）在正式環境各自定時掃描，
-        // 測試裡同步觸發，情境才不用等真實排程間隔。
         jobTrigger.run("unclaimed-reminder-scan");
         jobTrigger.run("schedule-rule-scan");
         registerRuleCreatedTasks();
@@ -112,11 +104,6 @@ public class CommonWhenSteps {
         pmsProbe.pushTodayRoomState(roomNo, List.of(attribute), checkinDate);
     }
 
-    /**
-     * 把排程規則剛建出的工單登記進 {@link ScenarioWorld}：後續 Then 句以房號（公共
-     * 區域的單以內容）取任務 id，規則引擎建的單沒有任何 Given 登記過，不補登記
-     * 就找不到。鍵相同時重複登記的是同一張單，覆寫無害。
-     */
     private void registerRuleCreatedTasks() {
         long tenantId = tenantFixtures.testTenantId();
         List<Map<String, Object>> rows = jdbcClient

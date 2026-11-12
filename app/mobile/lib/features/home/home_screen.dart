@@ -15,14 +15,6 @@ import '../task/task_screen.dart';
 import '../today/my_today_scope.dart';
 import '../today/progress_value.dart';
 
-/// 房務首頁：今日進度、手上或下一間要做的房，以及今天的任務清單。
-///
-/// 畫面上的每一個數字與任務卡的順序都直接取自 `GET /me/today`（由外殼上的
-/// [MyTodayScope] 取一次、整個外殼共用），App 不自己算也不自己排。
-/// 算法的真相在後端，兩邊各算一次就會有兩種答案。
-///
-/// 整頁可捲動。員工手上的任務多到一屏放不下是常態，不能捲的版面會讓後面
-/// 幾間房永遠沒辦法點到。
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -32,8 +24,6 @@ class HomeScreen extends StatelessWidget {
       id: 'home.screen',
       child: CupertinoPageScaffold(
         backgroundColor: TmsColors.groupedBackground,
-        // 底部不讓 SafeArea 收邊：內容要從浮動分頁列底下捲過去，讓開分頁列
-        // 的那段留白由捲動內容自己帶。
         child: SafeArea(
           bottom: false,
           child: ListView(
@@ -44,8 +34,6 @@ class HomeScreen extends StatelessWidget {
               TmsSpacing.scrollPadBottom(MediaQuery.paddingOf(context).bottom),
             ),
             children: const [
-              // 連線狀態列固定在內容最上方，員工在首頁一眼就知道現在是離線
-              // 還是連線不穩定，不必等某個操作失敗才發現。
               SystemStatusBar(),
               _GreetingRow(),
               SizedBox(height: TmsSpacing.lg),
@@ -62,21 +50,9 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// 日期、班別與負責樓層在上，問候語在下，右邊一顆圓形頭像。
-///
-/// 日期列在上、問候語在下（`Main.dc.html:128-129`）：員工一早開 App 第一眼要
-/// 確認的是「今天是哪一班、顧哪幾層」，這兩件事錯了後面整天的任務都對不上，
-/// 問候語則是讀完這一行之後的招呼。班別與樓層來自 `GET /me/today`，後端還沒
-/// 給、或今天根本沒排班時是 null，該段就整段不出現。
-///
-/// 問候語依手上還有沒有未完成的單分兩種說法（`Main.dc.html:5108`），不看時鐘：
-/// 「辛苦了」是一天收尾的回饋，在只剩已完成的單時才成立，而這件事跟現在幾點
-/// 沒有關係——早上八點把手上的單全做完，同樣該收到「辛苦了」。
 class _GreetingRow extends StatelessWidget {
   const _GreetingRow();
 
-  /// 日期列裡班別那一段的字重與顏色（`Main.dc.html:128`）。整列是 15pt 灰字，
-  /// 只有班別加粗轉黑，員工掃一眼就能從日期列裡先讀到班別。
   static const TextStyle _shiftStyle = TextStyle(
     fontWeight: FontWeight.w600,
     color: TmsColors.label,
@@ -137,18 +113,11 @@ class _GreetingRow extends StatelessWidget {
     );
   }
 
-  /// `週一 10/19`（`Main.dc.html:128`）。星期在前，員工排班是按星期記的。
   static String _dateText(DateTime now) {
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     return '週${weekdays[now.weekday - 1]} ${now.month}/${now.day}';
   }
 
-  /// 班別的白話說法。
-  ///
-  /// 後端回的是租戶設定 `shift_times` 的鍵（`morning`／`afternoon`），不是中文
-  /// 名稱——系統裡沒有任何地方存班別的中文說法。翻成白話在這裡做，跟來源
-  /// （`住客掃碼`）、工務單類別（`冷氣`）走同一套做法：enum 值不露在畫面上。
-  /// 認不得的鍵原樣顯示，不猜一個說法。
   static String _shiftText(String shift) {
     switch (shift) {
       case 'morning':
@@ -160,11 +129,6 @@ class _GreetingRow extends StatelessWidget {
     }
   }
 
-  /// 手上還有沒做完的單就是「早安」，全部做完才換成「辛苦了」。
-  ///
-  /// 今日進度還沒回來時當成還有單在手上：問候語是進場第一眼看到的字，先說
-  /// 「辛苦了」再因為資料回來改口會讓員工以為自己看錯。登入身分沒有姓名時
-  /// 只留招呼，不補一個稱呼。
   static String _greeting(MyToday? today, String? name) {
     final tasks = today?.todayTasks ?? const <TodayTask>[];
     final open = tasks.where((task) => _openStates.contains(task.state)).length;
@@ -174,17 +138,10 @@ class _GreetingRow extends StatelessWidget {
   }
 }
 
-/// 還在手上、今天得做完的狀態（`Main.dc.html:5108`）。
 const _openStates = {'accepted', 'doing', 'deferred', 'interrupted'};
 
-/// 今天已經結束的狀態。
 const _doneStates = {'done', 'inspected'};
 
-/// 今日進度卡：左邊一個打掃完成度的環，右邊三個數字。
-///
-/// 環的中央是「已清完／總數」，和右邊三格一樣直接顯示後端算好的值。載入中
-/// 或載入失敗時整張卡不出現：首頁的錯誤提示還沒有畫面規格，在拿到規格之前
-/// 不自行發明一種說法。
 class _TodayProgressCard extends StatelessWidget {
   const _TodayProgressCard();
 
@@ -207,8 +164,6 @@ class _TodayProgressCard extends StatelessWidget {
             value: '${today.cleaningDone}',
             style: TmsText.displayMetric,
             unit: '/ ${today.cleaningTotal}',
-            // 分母降到 16pt 並轉灰（`Main.dc.html:143`）：分子是今天長出來的
-            // 數字，分母一整天不變，兩個同字級會讓人要讀兩次才知道進度。
             unitStyle: TmsText.callout.copyWith(
               fontWeight: FontWeight.w600,
               color: TmsColors.tertiaryLabel,
@@ -227,8 +182,6 @@ class _TodayProgressCard extends StatelessWidget {
       details: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 「預估剩餘工時」獨佔一行、字級也比下排大（`Main.dc.html:148-162`）：
-          // 它回答「今天還要多久」，是這一欄裡員工最常看的一格。
           _ProgressStat(
             id: 'home.progress.remaining-minutes',
             caption: '預估剩餘工時',
@@ -264,9 +217,6 @@ class _TodayProgressCard extends StatelessWidget {
   }
 }
 
-/// 進度卡右欄的一格：數字在上、說明在下。
-///
-/// 說明文字放在掛 id 的節點外面，讀值的一方拿到的才是數字本身，不含說明。
 class _ProgressStat extends StatelessWidget {
   const _ProgressStat({
     required this.id,
@@ -281,7 +231,6 @@ class _ProgressStat extends StatelessWidget {
   final String value;
   final TextStyle valueStyle;
 
-  /// 數字後面那個降一級的單位字；null 代表這一格只有數字。
   final String? unit;
 
   @override
@@ -299,11 +248,6 @@ class _ProgressStat extends StatelessWidget {
   }
 }
 
-/// 首頁的主卡：手上有進行中的房就顯示那一間，沒有就顯示下一間要做的房，
-/// 兩者都沒有時這個位置換成空狀態卡。
-///
-/// 主卡的位置一定有東西（`Main.dc.html:213`）。讓它消失的話，手上沒事的那天
-/// 首頁只剩一張全是 0 的進度卡，員工看不出來是沒派到單、還是 App 壞了。
 class _FocusCard extends StatelessWidget {
   const _FocusCard();
 
@@ -327,11 +271,6 @@ class _FocusCard extends StatelessWidget {
     return _EmptyCard(today: today);
   }
 
-  /// 下一間那張卡要顯示的預估分鐘。
-  ///
-  /// `NextTask` 本身沒有這一欄，但同一張單也在 `todayTasks` 裡，那裡有
-  /// `estMin`。兩份講的是同一張單，所以照 taskId 取回來的就是這張單的預估，
-  /// 不是另算一個數字。對不到就回 null，那一段文字整段不出現。
   static int? _estMinOf(MyToday today, String taskId) {
     for (final task in today.todayTasks) {
       if (task.taskId == taskId) {
@@ -342,11 +281,6 @@ class _FocusCard extends StatelessWidget {
   }
 }
 
-/// 手上沒有進行中、也沒有下一間時主卡的位置（`Main.dc.html:213-219`）。
-///
-/// 三種說法分別對應「只剩延後的單」「今天都做完了」「真的沒事」，由
-/// [TmsEmptyStates.housekeepingHome] 依當下的數字挑。卡上不放按鈕，下一步交給
-/// 分頁列的「待認領」。
 class _EmptyCard extends StatelessWidget {
   const _EmptyCard({required this.today});
 
@@ -370,17 +304,11 @@ class _EmptyCard extends StatelessWidget {
   }
 }
 
-/// 進行中那一間：品牌色底、白字，房號是整張卡最大的東西。
-///
-/// 房號、任務名與計時同一列並且底部對齊（`Main.dc.html:174-183`）：三者講的是
-/// 同一張單的「哪一間、做什麼、做多久」，拆成兩列會讓計時看起來像另一段資訊。
 class _DoingCard extends StatelessWidget {
   const _DoingCard({required this.task});
 
   final TodayTask task;
 
-  /// 任務名那一段的下沉量（`Main.dc.html:176`）。15pt 的字跟 44pt 的房號底部
-  /// 對齊時會貼著基線，壓低 5 讓它落在房號的字腰上。
   static const double _titleDrop = 5;
 
   @override
@@ -431,16 +359,13 @@ class _DoingCard extends StatelessWidget {
   }
 }
 
-/// 下一間要做的房：白底卡，版型與進行中那一張對齊，只有配色與按鈕文字不同。
 class _NextRoomCard extends StatelessWidget {
   const _NextRoomCard({required this.task, this.estMin});
 
   final NextTask task;
 
-  /// 這張單的預估分鐘；沒有就不顯示副標那一段。
   final int? estMin;
 
-  /// 主按鈕左邊那顆播放三角的邊長（`Main.dc.html:207`）。
   static const double _playIconSize = 18;
 
   @override
@@ -478,8 +403,6 @@ class _NextRoomCard extends StatelessWidget {
           label: buttonLabel,
           height: 50,
           onPressed: () => _openTask(context, task.taskId, task.roomNo),
-          // 按鈕上帶房號，員工按下去之前最後一次確認開的是哪一間
-          // （`Main.dc.html:206-208`）。
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -507,11 +430,6 @@ class _NextRoomCard extends StatelessWidget {
   }
 }
 
-/// 今天的任務清單：白底群組，一間房一列。
-///
-/// 清單的順序照後端給的 todayTasks，App 不重排。用 todayTasks 而不是
-/// nextTasks，是因為 nextTasks 只收待開始（accepted）的單，進行中、延後、
-/// 中斷與今天已完成的單都不在裡面，員工就回不到自己手上那張。
 class _TodayTaskList extends StatelessWidget {
   const _TodayTaskList();
 
@@ -526,8 +444,6 @@ class _TodayTaskList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          // 標題列比底下的群組卡往內縮 4（`Main.dc.html:226`），讓標題的視覺
-          // 左緣對上卡內那一欄文字，而不是對上卡的邊。
           padding: const EdgeInsets.fromLTRB(
             TmsSpacing.xs,
             0,
@@ -540,8 +456,6 @@ class _TodayTaskList extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('我的任務', style: TmsText.title3),
-              // 排序規則由後端定，寫在標題旁邊是為了讓員工知道「找不到某一間」
-              // 要往哪個方向捲，而不是以為清單漏了那張單。
               Text(
                 '依樓層排序',
                 style: TmsText.subheadline.copyWith(

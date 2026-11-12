@@ -6,8 +6,6 @@ import 'package:tms_staff_app/features/manager/inspection_item_row.dart';
 import 'package:tms_staff_app/features/manager/inspection_result_screen.dart';
 import 'package:tms_staff_app/features/manager/manager_conflict_alert.dart';
 
-/// 查房結果畫面三種說法只看後端回的 result 與 destination；項目列兩段切換
-/// 回報判定；「這張單已被處理」對話框按知道了才結束。
 void main() {
   InspectionOutcome outcome({
     required String result,

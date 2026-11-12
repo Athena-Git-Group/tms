@@ -28,11 +28,6 @@ import java.util.Objects;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
-/**
- * 工務單模組的 Then（dsl.md Then 句型區）。「{string} 的狀態為 {string}」等任務通用句型
- * 已由 {@code steps.common.CommonThenSteps} 定義（會用 {@code Terms.taskState} 查狀態，
- * 查不到工務單專屬用語時噴 IllegalArgumentException——那是合法的 RED 訊號，不在本類別重複定義）。
- */
 public class RepairThenSteps {
 
     private final ScenarioWorld world;
@@ -111,8 +106,6 @@ public class RepairThenSteps {
                 dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此工務單對應任務 id=" + taskId));
         check("tasks.type", "repair", taskRow.get("type"));
         check("tasks.dept", "engineering", taskRow.get("dept"));
-        // 來源由開單者部門決定（truth：櫃檯交辦標 desk，房務報修與工務自開標 staff），
-        // 不能寫死 staff——本句被房務報修、工務自開、櫃檯交辦三種場景共用。
         String reporterDept = dbProbe
                 .queryOne("SELECT dept FROM staff_accounts WHERE id = ?", expectedReporter)
                 .map(row -> String.valueOf(row.get("dept")))
@@ -200,8 +193,6 @@ public class RepairThenSteps {
                 }
             }
         }
-        // 已認領（非 pool）的單不會出現在 listDeptPool，PoolItem.source 比對只在找得到該單時才做；
-        // 找不到不代表失敗，tasks.source 的權威狀態已在上面驗過。
         if (actualPoolSource != null && !expectedPoolSource.equals(actualPoolSource)) {
             throw new AssertionError(
                     "預期 PoolItem.source=" + expectedPoolSource + "，實際 " + actualPoolSource + "（status="
@@ -229,8 +220,6 @@ public class RepairThenSteps {
     @那麼("工務待認領不包含 {string}")
     public void poolDoesNotContainTicket(String ticketNo) {
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
-        // 純負向斷言會假綠：listDeptPool 回 403／500 或 items 空陣列也「不包含」。
-        // 先斷言這次讀取本身成功，再驗不包含。
         if (resp.status() != 200 || resp.json() == null) {
             throw new AssertionError(
                     "listDeptPool 預期 200，實際 status=" + resp.status() + "，body=" + resp.body());
@@ -240,16 +229,10 @@ public class RepairThenSteps {
         }
     }
 
-    // dsl.md「工務待認領順序為 {單號清單}」在 Gherkin 裡不加引號（以「、」分隔的裸文字），
-    // {string} 無法匹配沒有引號的文字；用 ^...$ 讓 Cucumber 當成 Regular Expression 編譯。
+    // 單號清單在 Gherkin 裡不加引號，{string} 配不到沒有引號的文字；用 ^...$ 讓 Cucumber 當成 Regular Expression 編譯。
     @那麼("^工務待認領順序為 (.+)$")
     public void poolOrderIs(String rawList) {
         List<String> expected = Arrays.asList(rawList.split("、"));
-        // 這句被兩種前置 When 用到：①「只看…的工務待認領」已經帶著 urgent／source 篩選查過
-        // listDeptPool，這裡要沿用那次的回應，不能另外重查一次不帶篩選的池，否則篩選條件
-        // 就被洗掉；②開單類 When（例如「開立以下工務單」）沒有查過池，這裡才需要重新查。
-        // 用「上次回應有沒有 items 欄位」區分這兩種前置，而不是看 Gherkin 文字本身——
-        // DeptPool 是唯一會有這個欄位的回應形狀。
         ScenarioWorld.ApiResponse lastResp = world.lastResponse();
         boolean lastResponseIsPoolListing = lastResp.json() != null && lastResp.json().has("items");
         ScenarioWorld.ApiResponse resp = lastResponseIsPoolListing
@@ -339,8 +322,6 @@ public class RepairThenSteps {
                             + actualCount + " 張");
         }
 
-        // 跨視角：待認領只收 state='pool' 的單，所以池中應出現的是未結案單裡仍在 pool 的那些；
-        // 比對鍵用 ticketNo（池 item 的 category 是 PoolCategory（repair），不是工務類別）。
         List<String> expectedPoolTicketNos = dbProbe.queryMaps(
                 """
                 SELECT rt.ticket_no FROM repair_tickets rt
@@ -420,11 +401,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「{單號} 已由 {主管} 驗收」：權威狀態 tasks.state=closed、repair_tickets.verified_by 是該主管、
-     * verified_at 已寫入、task_events 有一筆 repair_verified；再讀確認 readRepairTicket 的
-     * state、verifiedBy、verifiedAt 一致。
-     */
     @那麼("{string} 已由 {string} 驗收")
     public void ticketVerifiedBy(String ticketNo, String managerName) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -458,10 +434,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「{單號} 尚未驗收」：verified_by 與 verified_at 為空、沒有 repair_verified 事件、
-     * tasks.state 若為 closed 只能是不需處理結案；readRepairTicket 的 verifiedBy 也為空。
-     */
     @那麼("{string} 尚未驗收")
     public void ticketNotYetVerified(String ticketNo) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -497,10 +469,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「{單號} 的驗收時間為現在」：權威狀態 repair_tickets.verified_at 等於目前 Clock；
-     * 再讀確認 readRepairTicket 的 verifiedAt 一致。時間比到微秒（timestamptz 的精度）。
-     */
     @那麼("{string} 的驗收時間為現在")
     public void verifiedAtIsNow(String ticketNo) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -523,11 +491,6 @@ public class RepairThenSteps {
         check("readRepairTicket.verifiedAt", now, OffsetDateTime.parse(actualVerifiedAt).toInstant().truncatedTo(ChronoUnit.MICROS));
     }
 
-    /**
-     * dsl.md「{單號} 的驗收人只有 {主管} 一人，驗收只記下一次」：權威狀態 repair_tickets.verified_by
-     * 等於該主管、沒有被後到的驗收改寫，tasks.state=closed；task_events 中該單的 repair_verified 事件剛好一筆、
-     * repair_verification_failed 一筆都沒有。用於兩位主管撞單。
-     */
     @那麼("{string} 的驗收人只有 {string} 一人，驗收只記下一次")
     public void verifiedOnlyOnceBy(String ticketNo, String managerName) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -549,11 +512,6 @@ public class RepairThenSteps {
                 countEvents(taskId, "repair_verification_failed"));
     }
 
-    /**
-     * dsl.md「{單號} 的驗收不通過只記下一次」：task_events 中該單的 repair_verification_failed 剛好一筆、
-     * repair_verified 一筆都沒有；outbox 裡 event=repair_verification_failed、指向這張單的 push 至多一筆。
-     * 用於先送出不通過、後到的被拒。
-     */
     @那麼("{string} 的驗收不通過只記下一次")
     public void verificationFailedRecordedOnce(String ticketNo) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -574,16 +532,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「這次驗收的結果為 {結果}，去處為 {去處}」：呈現結果是上一次 verifyRepairTicket 的回應
-     * （200、result／destination 等於對照值、decidedBy 是判定的主管；不通過時 reason 等於最近一次不通過原因、
-     * assigneeName 是原處理人）；權威狀態依 destination 分辨：closed＝任務 closed，assignee＝任務 accepted 且
-     * 處理人不變，pool＝任務 pool 且處理人清空。
-     *
-     * <p>送出的主管與原因由 When 記在 {@link ScenarioWorld#setLastVerifyRequest}，回應與權威欄位
-     * （通過看 verified_by、不通過看 last_verify_failed_by）都要等於它；原處理人取送出前
-     * {@link LastOperationGuard#captureFor} 快照裡的 assignee_id。
-     */
     @那麼("這次驗收的結果為 {string}，去處為 {string}")
     public void lastVerificationOutcomeIs(String resultChinese, String destinationChinese) {
         String expectedResult = verificationResult(resultChinese);
@@ -647,11 +595,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「{單號} 最近一次驗收不通過的原因為 {原因}，判定人為 {主管}」：last_verify_failed_reason、
-     * last_verify_failed_by、last_verify_failed_at（等於目前 Clock）寫入，tasks.done_at、resolution_type、
-     * resolution_note 已清空；readRepairTicket 的 lastVerifyFailed* 三欄一致。
-     */
     @那麼("{string} 最近一次驗收不通過的原因為 {string}，判定人為 {string}")
     public void lastVerificationFailureIs(String ticketNo, String reason, String managerName) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -698,10 +641,6 @@ public class RepairThenSteps {
                 OffsetDateTime.parse(actualAt).toInstant().truncatedTo(ChronoUnit.MICROS));
     }
 
-    /**
-     * dsl.md「{單號} 的完修結果為 {結果}」：repair_tickets.resolution_type 等於對照值；
-     * 再讀確認 readRepairTicket 的 resolutionType 一致。
-     */
     @那麼("{string} 的完修結果為 {string}")
     public void resolutionTypeIs(String ticketNo, String resultChinese) {
         String expected = Terms.resolutionType(resultChinese);
@@ -719,10 +658,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「系統沒有為 {單號} 建立追蹤單」：觸發動作前後 type=repair 的 tasks 與 repair_tickets
-     * 筆數不變，也沒有任何工務單的 origin_ticket_task_id 指回原單。
-     */
     @那麼("系統沒有為 {string} 建立追蹤單")
     public void noFollowUpTicketCreated(String ticketNo) {
         assertNoRepairTicketCreatedSinceGuard();
@@ -733,11 +668,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「{房號} 的房況沒有改變」：rooms.hk_state 等於觸發動作前的快照
-     * （When 送出前呼叫 {@link LastOperationGuard#captureRoom}）；outbox 沒有這次動作造成的該房 pms_status。
-     * 「這次動作造成的」指 id 大於快照當時 outbox 最大 id 的列。
-     */
     @那麼("{string} 的房況沒有改變")
     public void roomHkStateUnchanged(String roomNo) {
         LastOperationGuard.RoomSnapshot before = lastOperationGuard.currentRoom();
@@ -761,11 +691,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「工務待認領中 {單號} 帶驗收退回原因 {原因}」：工務員工 listDeptPool 時該單的
-     * PoolItem.verificationReturnReason 等於原因；權威狀態該單 pool、pool_source=verification_return、
-     * last_verify_failed_reason 相等。
-     */
     @那麼("工務待認領中 {string} 帶驗收退回原因 {string}")
     public void poolItemHasVerificationReturnReason(String ticketNo, String reason) {
         ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
@@ -792,10 +717,6 @@ public class RepairThenSteps {
         check("repair_tickets.last_verify_failed_reason", reason, ticketRow.get("last_verify_failed_reason"));
     }
 
-    /**
-     * dsl.md「主管待辦的任何一類都不包含 {單號}」：每一位在職主管呼叫 getManagerQueues，回應裡每一個清單陣列
-     * 都沒有這張單（taskId 或 ticketNo 比對），counts 的每一格等於同名陣列長度；權威狀態該單不是 done。
-     */
     @那麼("主管待辦的任何一類都不包含 {string}")
     public void noManagerQueueContainsTicket(String ticketNo) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -804,8 +725,6 @@ public class RepairThenSteps {
                 "SELECT id, name FROM staff_accounts WHERE tenant_id = ? AND role = 'manager' AND active = true",
                 tenantId);
         if (managers.isEmpty()) {
-            // 劇本背景沒有主管時，補一位房務主管與一位工務主管當觀察者，讓兩種主管的待辦都被查到；
-            // 否則「每一位在職主管」是空集合，這一句什麼都沒驗就通過。
             staffFixtures.createManagerLikeStaff("待辦觀察房務主管", "manager", "active");
             staffFixtures.createDeptManager("待辦觀察工務主管", "engineering", null, null, "active");
             managers = dbProbe.queryMaps(
@@ -846,11 +765,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「系統為 {單號} 自動建立一張追蹤單，進工務待認領」：權威狀態查 repair_tickets
-     * 有一張新單的 origin_ticket_task_id 指回原單、房號與類別相同、狀態為 pool；
-     * 跨視角再查 listDeptPool 看得到這張追蹤單（用 ticketNo 比對，而非 task_id）。
-     */
     @那麼("系統為 {string} 自動建立一張追蹤單，進工務待認領")
     public void systemAutoCreatesFollowUpTicket(String ticketNo) {
         UUID originTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -884,11 +798,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「"{房號}" 的房況轉為停用待確認」：權威狀態是 {@code rooms.hk_state}=out_of_order
-     * （既有 CHECK 值，只是目前沒有任何操作會寫入它）；再讀確認用 {@code GET /rooms/{id}}
-     * （contract readRooms）查 {@code hkState} 一致，代表該房在房況查詢中顯示停用待確認。
-     */
     @那麼("{string} 的房況轉為停用待確認")
     public void roomHkStateBecomesOutOfOrder(String roomNo) {
         UUID roomId = roomFixtures.roomId(roomNo);
@@ -905,12 +814,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * dsl.md「"{工務}" 的工務視角今日進度為：」：呈現結果查 {@code GET /me/today} 的
-     * engineeringSummary（手上張數→openCount、今天已完修→completedToday、急件數→urgentCount）；
-     * 權威狀態再從資料庫重算一次同一組數字：手上張數＝名下 accepted／doing 的工務單，
-     * 今天已完修＝名下今天完修、現在為 done 或 closed 的工務單，急件數＝手上單中 is_urgent 的筆數。
-     */
     @那麼("{string} 的工務視角今日進度為：")
     public void engineeringTodaySummaryIs(String staffName, DataTable table) {
         ScenarioWorld.ApiResponse resp =
@@ -934,7 +837,6 @@ public class RepairThenSteps {
         }
     }
 
-    /** 權威狀態重算工務視角今日進度的單一項目，口徑見 dsl.md 該列。 */
     private long engineeringSummaryFromDb(UUID staffId, String item) {
         long tenantId = tenantFixtures.testTenantId();
         return switch (item) {
@@ -970,7 +872,6 @@ public class RepairThenSteps {
         };
     }
 
-    /** dsl.md 工務視角今日進度表格的「項目」中文 → {@code MyToday.engineeringSummary} 欄位名。 */
     private static String engineeringSummaryField(String item) {
         return switch (item) {
             case "手上張數" -> "openCount";
@@ -1005,7 +906,6 @@ public class RepairThenSteps {
         return false;
     }
 
-    /** 待認領查詢需要「工務員工」的身分，dsl.md 這幾句本身沒有指名是哪一位，就取任一在職工務員工。 */
     private String engineeringStaffJwt() {
         long tenantId = tenantFixtures.testTenantId();
         UUID staffId = dbProbe
@@ -1027,7 +927,6 @@ public class RepairThenSteps {
                 .orElseThrow(() -> new AssertionError("staff_accounts 找不到 id=" + staffId));
     }
 
-    /** dsl.md「這次驗收的結果為…」的結果中文 → {@code RepairVerificationOutcome.result}。 */
     private static String verificationResult(String chinese) {
         return switch (chinese) {
             case "通過" -> "passed";
@@ -1036,7 +935,6 @@ public class RepairThenSteps {
         };
     }
 
-    /** dsl.md「這次驗收的結果為…」的去處中文 → {@code RepairVerificationOutcome.destination}。 */
     private static String verificationDestination(String chinese) {
         return switch (chinese) {
             case "結案" -> "closed";
@@ -1056,7 +954,6 @@ public class RepairThenSteps {
                 .token();
     }
 
-    /** dsl.md「{單號} 的來源為 {來源}」的來源中文 → 權威 {@code tasks.source}（staff|desk）。 */
     private static String repairTicketSource(String chinese) {
         return switch (chinese) {
             case "房務報修" -> "staff";
@@ -1065,7 +962,6 @@ public class RepairThenSteps {
         };
     }
 
-    /** 同一個中文來源對照 {@code PoolItem.source}（staff_report|desk_forward），供跨視角比對。 */
     private static String repairTicketPoolSource(String chinese) {
         return switch (chinese) {
             case "房務報修" -> "staff_report";

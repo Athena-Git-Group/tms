@@ -12,10 +12,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 房間查詢 API（contracts readRooms）。目前只有這一個讀取端點——其他房況異動
- * （查房、完修轉停用待確認等）都是現場動作的副作用，不走這裡另開寫入路徑。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class RoomController {

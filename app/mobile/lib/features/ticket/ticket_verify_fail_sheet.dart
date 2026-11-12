@@ -6,11 +6,6 @@ import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_sheet.dart';
 import '../manager/manager_ids.dart';
 
-/// 主管在工務單詳情按「不通過」後升起的原因面板。
-///
-/// 原因必填，去掉頭尾空白後是空的就不能送出。送出交給 [onSubmit]：它回 null
-/// 代表這一次已經有結論（成功，或單已被別人處理），面板自己收起；回一句話代表
-/// 沒送成（例如離線），話寫在面板上、原因留著，主管不必重打。
 class TicketVerifyFailSheet extends StatefulWidget {
   const TicketVerifyFailSheet({
     super.key,
@@ -18,10 +13,8 @@ class TicketVerifyFailSheet extends StatefulWidget {
     required this.onSubmit,
   });
 
-  /// 標題帶單號，主管才確定自己退的是哪一張。
   final String ticketNo;
 
-  /// 帶著去掉頭尾空白的原因送出驗收不通過。
   final Future<String?> Function(String reason) onSubmit;
 
   @override
@@ -77,8 +70,6 @@ class _TicketVerifyFailSheetState extends State<TicketVerifyFailSheet> {
       onLeadingTap: () => Navigator.of(context).pop(),
       bottomAction: TmsSemantics(
         id: ManagerIds.ticketFailSheetSubmitButton,
-        // CupertinoButton 的 onPressed 為 null 時，框架不會把 disabled 曝露到
-        // accessibility tree，所以可否送出要顯式標出來。
         enabled: canSubmit,
         child: TmsSheetButton(
           label: '送出不通過',

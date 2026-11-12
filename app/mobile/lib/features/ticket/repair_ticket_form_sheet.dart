@@ -14,41 +14,13 @@ import '../../core/widgets/tms_sheet.dart';
 import 'repair_labels.dart';
 import 'ticket_screen.dart';
 
-/// 這張單要開給客房還是公共區域（`Main.dc.html:4002`）。
-///
-/// 兩者不是同一個欄位的兩個值，而是兩條互斥的開單路徑：客房要帶房間 id、公共
-/// 區域帶 `isPublicArea`，契約明寫兩者同時帶會被擋下。用一個 enum 表示，就不
-/// 會出現「房號填了一半又切到公共區域」這種兩邊都有值的狀態。
 enum _PlaceType { room, area }
 
-/// 公共區域的單開完之後誰接手（`Main.dc.html:4007`）。
 enum _Who { me, pool }
 
-/// 工務自己開一張工務單的底部面板（`Main.dc.html:2197`）。
-///
-/// 工務巡場時發現問題，從工務首頁右下角的浮動按鈕升起這個面板開單，不必先有
-/// 一張房務任務。它蓋在首頁上而不是推走首頁，因為關掉它之後員工要接著看剛剛
-/// 在看的那一屏，首頁重新載入一次的話那一屏就回不來了。
-///
-/// ## 客房與公共區域是兩條路
-///
-/// 客房要把員工打的房號換成房間 id 才送得出去，所以面板一開就取一次房間主檔
-/// （`GET /rooms`），打進去的房號對不上主檔就不讓送。對不上時後端只會回一個
-/// 422，員工看到的是「開工單失敗」而不是「沒有這個房號」。公共區域沒有房號，
-/// 契約也只有一個 `isPublicArea` 布林值，所以沒有東西要查。
-///
-/// ## 原型的區域選擇沒有落地
-///
-/// 原型在公共區域那一段有一排區域膠囊（大廳、健身房…），但契約的開單請求只有
-/// `isPublicArea`，沒有任何欄位放得下選到的區域，`/tenant-configs` 也沒有區域
-/// 清單。選了存不住，所以整段不顯示，缺口回交上游。
 class RepairTicketFormSheet extends StatefulWidget {
   const RepairTicketFormSheet({super.key});
 
-  /// 升起這個面板，開成了就接著打開那張單的詳情。
-  ///
-  /// 導頁放在這裡而不是面板內部：開完要去哪裡是叫它的畫面在決定，而且面板自己
-  /// pop 之後就沒有可用的 context 了。
   static Future<void> show(BuildContext context) async {
     final ticket = await TmsSheetRoute.show<RepairTicketDetail>(
       context,
@@ -73,13 +45,10 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
   final TextEditingController _roomController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  /// 契約 CreateRepairTicketRequest.photoIds 的上下限：1-3 張。
   static const int _maxPhotos = 3;
 
-  /// 狀況說明的字數上限（`Main.dc.html:2286`）。
   static const int _maxDescriptionLength = 60;
 
-  /// 房號欄的字數上限。`Main.dc.html:2207` — maxLength 4
   static const int _maxRoomNoLength = 4;
 
   _PlaceType _placeType = _PlaceType.room;
@@ -89,8 +58,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
   bool _submitting = false;
   String? _error;
 
-  /// 房間主檔。還沒回來是 null，取失敗是空清單——兩者都讓客房送不出去，但只有
-  /// 後者要在畫面上說一句，否則員工會以為是自己的房號打錯。
   List<RoomSummary>? _rooms;
   bool _roomsFailed = false;
 
@@ -123,7 +90,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     }
   }
 
-  /// 員工打的房號對應的房間 id；主檔還沒回來或房號不存在時是 null。
   String? get _roomId {
     final rooms = _rooms;
     final roomNo = _roomController.text.trim();
@@ -138,7 +104,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     return null;
   }
 
-  /// 地點填齊了沒有（`Main.dc.html:4000` 的 `okPlace`）。
   bool get _placeReady => _placeType == _PlaceType.area || _roomId != null;
 
   List<String> get _uploadedPhotoIds => [
@@ -172,10 +137,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     await _upload(photo);
   }
 
-  /// 把這一張送上去，並把結果記在它自己身上。
-  ///
-  /// 逐張記錄而不是整批記一個成功或失敗，員工才能只重傳失敗的那一張。整批
-  /// 重傳會讓已經傳好的照片在後端多出一份。
   Future<void> _upload(RepairPhoto photo) async {
     setState(() => photo.uploading = true);
     try {
@@ -214,13 +175,10 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
         category: category,
         description: _descriptionController.text.trim(),
         photoIds: _uploadedPhotoIds,
-        // 客房的單一律由開單的人自己處理（`Main.dc.html:4008`），那一段沒有
-        // 「放進待認領」可選，所以客房不看 `_who`。
         assigneeId: isArea && _who == _Who.pool
             ? null
             : ApiClient.instance.session?.staffId,
       );
-      // 不管這張新單指派給誰，首頁的手上張數與我的任務都可能跟著變。
       TodayRefresh.instance.request();
       if (mounted) {
         Navigator.of(context).pop(ticket);
@@ -249,7 +207,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
       _uploadedPhotoIds.length == _photos.length &&
       !_submitting;
 
-  /// 置底鈕此刻的文案（`Main.dc.html:4010`）。
   String get _submitLabel {
     if (_anyPhotoFailed) {
       return '有照片上傳失敗，點縮圖重試';
@@ -270,8 +227,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
         onLeadingTap: () => Navigator.of(context).pop(),
         bottomAction: TmsSemantics(
           id: 'repair.submit-button',
-          // 可否送出要顯式標出來：CupertinoButton 的 onPressed 為 null 時，
-          // 框架不會把 disabled 曝露到 accessibility tree。
           enabled: _canSubmit,
           child: TmsSheetButton(
             label: _submitLabel,
@@ -299,7 +254,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 地點類型分段控制。切過去就把另一條路的輸入清掉，不留一個看不見的舊值。
   Widget _placeTypeControl() {
     return TmsSegmentedControl<_PlaceType>(
       value: _placeType,
@@ -327,9 +281,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 房號：一張白卡，左邊欄名、右邊一個大字輸入框。
-  ///
-  /// 數字鍵盤配 20pt 粗體：這個欄位只收三到四位數，而員工多半戴著手套單手打。
   Widget _roomCard() {
     return TmsCard(
       style: TmsCardStyle.inSheet,
@@ -425,9 +376,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 一張照片的縮圖。序號從 1 算起，與 dsl 的句型一致。
-  ///
-  /// 這個面板加一張就傳一張，所以同一列裡每一格的上傳狀態各自獨立。
   Widget _thumbnail(int index) {
     final photo = _photos[index];
     final statusText = photo.uploadFailed
@@ -456,8 +404,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 一張都還沒拍時，把「為什麼非拍不可」與「沒有相機權限怎麼辦」寫在送出鈕
-  /// 上方。只說「送出鈕不能按」的話，員工會以為是當掉了。
   Widget _needPhotoNote() {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: TmsSpacing.xs),
@@ -491,11 +437,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 類別：一排膠囊，不是清單。
-  ///
-  /// 和房務報修面板相反（那裡是清單）。開工單的員工是工務自己，五個類別是他
-  /// 每天在用的詞，認得出來不必逐列讀；膠囊排成兩行也只佔清單三分之一的高度，
-  /// 下面的狀況說明與誰來處理才不用捲才看得到。
   Widget _categoryChips() {
     return _LabelledBlock(
       label: '類別',
@@ -517,7 +458,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 狀況說明：工務自己寫一句話，接手與驗收的人不用看照片猜。
   Widget _descriptionCard() {
     return TmsCard(
       style: TmsCardStyle.inSheet,
@@ -561,7 +501,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     );
   }
 
-  /// 誰來處理：只有公共區域的單有這個選擇，因為只有它放得進待認領。
   Widget _whoControl() {
     return _LabelledBlock(
       label: '誰來處理',
@@ -601,7 +540,6 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
   }
 }
 
-/// 面板裡「一行小標配一塊內容」的組合（`Main.dc.html:2276`）。
 class _LabelledBlock extends StatelessWidget {
   const _LabelledBlock({
     required this.label,
@@ -646,11 +584,6 @@ class _LabelledBlock extends StatelessWidget {
   }
 }
 
-/// 開工單面板的膠囊（`Main.dc.html:2279`）。
-///
-/// 不走 [TmsSelectionChip]：那一顆沒選中時是灰底無框，這裡的原型是白底加一圈
-/// 灰框，高度也是 40 不是 44。那一顆同時用在待認領的篩選磚與房務報修，動它會
-/// 連帶動到那些畫面；這裡只有類別一處要用，所以放在用它的檔案裡。
 class _FormChip extends StatelessWidget {
   const _FormChip({
     required this.label,
@@ -662,10 +595,8 @@ class _FormChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  /// `Main.dc.html:2279` — min-height 40px
   static const double _height = 40;
 
-  /// `Main.dc.html:2279` — padding 0 14px
   static const double _horizontalPadding = 14;
 
   @override

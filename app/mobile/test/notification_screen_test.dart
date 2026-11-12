@@ -5,12 +5,6 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/push_gateway.dart';
 import 'package:tms_staff_app/features/notification/notification_screen.dart';
 
-/// 驗通知中心改版之後，驗收用的節點全部還在、還讀得到同樣的值：分組節點、
-/// 每一則的標題節點、未讀點、全部已讀按鈕與空狀態。
-///
-/// 版面大改時最容易掉的就是這幾個節點——分組從 `Padding` 換成白底群組、列從
-/// 兩個元素變成五個，任何一步把節點包錯層，模擬器上的驗收才會紅，但那要跑
-/// 二十分鐘。這組測試在十秒內先說。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();
@@ -59,7 +53,6 @@ void main() {
     expect(labelOf(tester, 'notification.item.n-1.title'), '305 指派給你');
     expect(labelOf(tester, 'notification.item.n-2.title'), '306 查房退回');
 
-    // 未讀＝節點存在，已讀＝節點不存在；驗收的「不存在或不可見」靠這個成立。
     expect(
       find.bySemanticsIdentifier('notification.item.n-1.unread-dot'),
       findsOneWidget,
@@ -69,21 +62,17 @@ void main() {
       findsNothing,
     );
 
-    // 還有未讀，按鈕在，文案是原型的全句（Main.dc.html:344）。
     expect(
       find.bySemanticsIdentifier('notification.mark-all-read-button'),
       findsOneWidget,
     );
     expect(find.text('全部標為已讀'), findsOneWidget);
-    // 內文有就顯示，沒有就整段不畫。
     expect(find.text('退房清潔，預估 30 分鐘。'), findsOneWidget);
     expect(find.text('5 分鐘前'), findsOneWidget);
 
     handle.dispose();
   });
 
-  // Main.dc.html:344 的 `<sc-if value="{{nt.hasUnread}}">`：沒有未讀時整顆按鈕
-  // 不畫。按了不會改變任何東西的按鈕留在畫面上，會讓人以為還有事情沒做。
   testWidgets('全部通知都已讀時，標題列不畫「全部標為已讀」', (tester) async {
     final handle = tester.ensureSemantics();
     final now = DateTime.now();
@@ -132,10 +121,6 @@ void main() {
     final handle = tester.ensureSemantics();
     final now = DateTime.now();
 
-    // 通知帶的 target 是契約 PushTarget：kind=ticket＋該修繕任務的 task id。
-    // 導頁交給 PushGateway.openTarget，走的是跟推播點開同一段對照——fake 的
-    // tasksById 概念上不存在（getTask 一律 404），若畫面層另寫對照先查任務，
-    // 這條測試會紅。
     ApiClient.instance = _FakeApiClient(
       [
         NotificationItem(
@@ -184,14 +169,11 @@ void main() {
     expect(at(const Duration(seconds: 20)), '剛剛');
     expect(at(const Duration(minutes: 5)), '5 分鐘前');
     expect(at(const Duration(hours: 3)), '3 小時前');
-    // 一天以上一律「昨天 HH:mm」，不改寫成日期（Main.dc.html:4553 的 ago()）。
     expect(at(const Duration(hours: 30)), '昨天 04:30');
     expect(at(const Duration(days: 5)), '昨天 10:30');
   });
 }
 
-/// 記憶體 fake：通知中心開啟時只打 `listNotifications`，回測試指定的清單；
-/// 點通知項會再打標已讀與（target 是工務單時）工務單詳情兩個端點。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient(
     this.items, {
@@ -220,7 +202,6 @@ class _FakeApiClient extends ApiClient {
 
   @override
   Future<TaskDetail> getTask(String taskId) async {
-    // 工務單通知的導頁不查任務：打到這裡就是畫面層又長出自己的對照。
     throw const ApiException(statusCode: 404, body: '');
   }
 

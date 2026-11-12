@@ -9,9 +9,6 @@ import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 
-/// 工務待認領對設計原型的幾處結構差異：單卡哪一行放什麼、分流磚的順序、大標
-/// 在哪一層、公共區域的單多一顆標籤、卡的上半可不可點。這些都是「讀列表的人
-/// 第一眼看到什麼」，不是數值微調，所以各自釘一條。
 void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
@@ -40,8 +37,6 @@ void main() {
     expect(title.style?.fontWeight, TmsText.headline.fontWeight);
     expect(title.style?.fontSize, TmsText.headline.fontSize);
 
-    // 來源從一顆膠囊標籤換成副標那一行，但 dsl 要讀的
-    // `engPool.item.{單號}.source-label` 還是落在同一個節點上。
     final subtitle = find.ancestor(
       of: find.text('房務報修'),
       matching: find.byType(PoolCardSubtitle),
@@ -75,8 +70,6 @@ void main() {
         .toList();
     expect(labels, ['全部', '急件', '櫃檯', '房務報修']);
 
-    // 急件是閃電、來源那兩格是人像與扳手，四格都是描邊字形不是 `_fill` 實心
-    // 變體（原型 `Main.dc.html:981` 的 `fill="none" stroke-width="1.9"`）。
     final icons = tester
         .widgetList<TmsCategoryTile>(find.byType(TmsCategoryTile))
         .map((tile) => tile.icon)

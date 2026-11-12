@@ -43,16 +43,6 @@ public class JwtService {
         return this.issue(tenantId, staffId, role, dept, null);
     }
 
-    /**
-     * 給「密碼換掉之後，其他裝置上還拿著舊權杖的人要立刻被擋下來」的呼叫端用：
-     * 簽入 credentialFingerprint，{@code BearerTokenAuthFilter} 每次請求都拿它跟帳號
-     * 當下的密碼雜湊比對，對不上就判憑證失效。
-     *
-     * <p>credentialFingerprint 傳 null 時不簽這個 claim，權杖只受簽章與到期時間約束。
-     *
-     * <p>JWT 內容任何持有者都讀得出來，所以呼叫端要傳密碼雜湊的指紋（見
-     * {@code StaffAccountLoginService.credentialFingerprint}），不要傳雜湊本身。
-     */
     public IssuedToken issue(long tenantId, UUID staffId, String role, String dept, String credentialFingerprint) {
         Instant now = Instant.now();
         Instant expiresAt = now.plus(this.ttl);
@@ -99,7 +89,6 @@ public class JwtService {
     public record IssuedToken(String token, OffsetDateTime expiresAt) {
     }
 
-    /** credentialFingerprint 為 null 代表這張權杖沒簽指紋，持有者不受密碼變更影響。 */
     public record StaffClaims(long tenantId, UUID staffId, String role, String dept, String credentialFingerprint) {
     }
 }

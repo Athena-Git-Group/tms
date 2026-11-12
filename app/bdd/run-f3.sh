@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 #
-# 跑 F3（點開推播的去處）端到端：先確認後端就緒（docker-compose＋tms 要先起好，
-# 這裡只檢查不啟動），再建置 TEST_BACKDOOR=true 的 Flutter App、灌進 simulator、
-# 起 Appium server，只跑 specs/truth/features/ios-app/推播/ 底下的 feature，
-# 跑完清理（kill appium、shutdown simulator）。
-#
+# 只跑推播模組的 Cucumber 情境。
 # 用法： app/bdd/run-f3.sh
 # 要先裝好： flutter、xcrun（Xcode command line tools）、appium 3.x（含 xcuitest driver）。
-# 環境準備片段與可覆寫的環境變數（UDID、BACKEND_URL……）見 app/bdd/lib/env.sh。
+# 可覆寫的環境變數見 app/bdd/lib/env.sh。
 
 set -euo pipefail
 

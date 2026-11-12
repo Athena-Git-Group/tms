@@ -6,15 +6,6 @@ import 'package:tms_staff_app/core/widgets/tms_status_chip.dart';
 import 'package:tms_staff_app/core/widgets/tms_tag.dart';
 import 'package:tms_staff_app/features/ticket/repair_labels.dart';
 
-/// 狀態標籤的用詞是驗收的斷言目標：首頁的任務列與待認領單卡都拿它說明一張
-/// 單現在的狀態，所以這些字不能隨版面調整一起被改掉。這組測試把每一種狀態的
-/// 字面值釘在測試裡，改動用詞時會先在這裡紅掉，而不是等模擬器跑完整套 BDD
-/// 才發現。
-///
-/// 配色和用詞一起釘。設計稿的狀態色表（房務在 `Main.dc.html:3544-3555`、
-/// 工務在 `Main.dc.html:2868` 與 `Main.dc.html:3835`）是員工在清單上分辨狀態
-/// 的唯一線索，換一組色就等於換了一套視覺語言，所以每一組底色與字色都比對到
-/// 色票常數。
 void main() {
   test('每一種任務狀態對到固定的中文說法', () {
     expect(tmsStatusAppearance(state: 'pool').text, '待認領');
@@ -49,7 +40,6 @@ void main() {
         'brand-new-state');
   });
 
-  // 設計稿 Main.dc.html:3547。
   test('還沒開工又被退回重做的單，標籤改說退回重做並配紅色系', () {
     final appearance = tmsStatusAppearance(state: 'accepted', redoCount: 1);
     expect(appearance.text, '退回重做');
@@ -57,7 +47,6 @@ void main() {
     expect(appearance.foreground, TmsColors.onErrorContainer);
   });
 
-  // 設計稿 Main.dc.html:3547：退回次數只影響還沒開工的單。
   test('已經開工的單不論退回幾次都照原狀態上色', () {
     expect(tmsStatusAppearance(state: 'doing', redoCount: 2).text, '進行中');
     expect(
@@ -66,7 +55,6 @@ void main() {
     );
   });
 
-  // 設計稿 Main.dc.html:3544-3555。
   test('房務每一種狀態的底色與字色成對固定', () {
     void expectColors(
       TmsStatusAppearance appearance,
@@ -124,7 +112,6 @@ void main() {
     );
   });
 
-  // 設計稿 Main.dc.html:2868。
   test('工務單六種狀態各自的說法與配色', () {
     void expectChip(
       String state,
@@ -176,7 +163,6 @@ void main() {
     );
   });
 
-  // 設計稿 Main.dc.html:3835。
   test('急件在還沒動工與已暫停時併進狀態標籤，成為一顆紅標籤', () {
     for (final state in ['accepted', 'paused']) {
       final appearance = repairStatusAppearance(state: state, isUrgent: true);
@@ -189,7 +175,6 @@ void main() {
     }
   });
 
-  // 設計稿 Main.dc.html:3835：併顆只發生在 accepted 與 paused 兩種狀態。
   test('急件在審核中、待認領、維修中與已完修時不併進狀態標籤', () {
     for (final state in ['pending_review', 'pool', 'doing', 'done']) {
       final urgent = repairStatusAppearance(state: state, isUrgent: true);
@@ -213,9 +198,6 @@ void main() {
     expect(repairCategoryShortText('door_lock'), '門鎖');
   });
 
-  // 設計稿 Main.dc.html:961（狀態標籤）與 Main.dc.html:281（小標籤）。狀態標籤
-  // 和小標籤是兩種角色、兩個尺寸，把小標籤調成狀態標籤的內距會讓待認領單卡上
-  // 並排的那幾顆標籤撐開卡片。
   testWidgets('狀態標籤的內距是 4/10，小標籤的內距是 3/8', (tester) async {
     await tester.pumpWidget(
       Directionality(

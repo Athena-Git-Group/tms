@@ -15,28 +15,6 @@ import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_sheet.dart';
 import '../ticket/repair_labels.dart';
 
-/// 報修面板（ui-plan 畫面 6 的 `repairSheet`，即工務單表單）：房務在任務頁
-/// 點報修圖示進來，選類別、寫一段狀況說明、拍 1–3 張照片，送出一張工務單。
-///
-/// <h2>為什麼是貼在任務頁上的面板，不是蓋住整頁的 modal</h2>
-///
-/// 報修途中員工仍要看得到原任務目前的狀態（照片上傳失敗時工務單不算送出，
-/// 那一間還是進行中），離線時也要看得到頂部的離線列與待同步筆數。Flutter 的
-/// modal 路由會把底下整頁的 semantics 擋掉，那些資訊就連畫面上都讀不到了，
-/// 所以這個面板是任務頁自己的一層，不另開路由。
-///
-/// <h2>會不會中斷原任務，由進來的路徑決定</h2>
-///
-/// 從任務頁導覽列的報修圖示進來的單，原任務照常進行；從中斷面板選「需要工務
-/// 協助」轉過來的，送出時同時把原任務轉為已中斷。表單上不放切換開關：兩條路
-/// 徑的員工在進來之前就已經決定了要不要停下手邊的工作，表單再問一次只會讓他
-/// 有機會把自己剛做的決定推翻掉，而且推翻了也沒有任何提示。
-///
-/// <h2>浮水印為什麼要另外掛一個節點</h2>
-///
-/// 照片的浮水印（房號與拍攝時間）除了畫進圖片，還要在縮圖上渲染一個帶同樣
-/// 字串的可及節點（`repair.photo.{index}.watermark-label`）：浮水印若只燒進
-/// 像素，自動化測試讀不到那段文字，也就沒有任何機制保證它真的被打上去。
 class RepairSheet extends StatefulWidget {
   const RepairSheet({
     super.key,
@@ -47,32 +25,20 @@ class RepairSheet extends StatefulWidget {
     this.onBack,
   });
 
-  /// 這張單要報修的房號；浮水印與開單都用它。
   final String roomNo;
 
-  /// 報修是從哪一筆原任務進來的（契約 CreateRepairTicketRequest.sourceTaskId）。
   final String? sourceTaskId;
 
-  /// 送出成功或員工取消時收起面板。
   final VoidCallback onClose;
 
-  /// 送出時是否同時把原任務轉為已中斷（契約的 interruptSourceTask）。
   final bool interruptSourceTask;
 
-  /// 回到上一步。從中斷面板轉過來時給值，左上角那顆鈕就變成返回；不給值代表
-  /// 這是報修的第一步，左上角是關閉。
   final VoidCallback? onBack;
 
   @override
   State<RepairSheet> createState() => _RepairSheetState();
 }
 
-/// 置底那顆鈕此刻的長相與能不能按。
-///
-/// 原型把文案、可按與底色三件事各自寫成一條三元運算式，三條都從同一組狀態
-/// 推導（`Main.dc.html:4938`、`:4940`、`:4941`）。拆成三條之後，改了其中一
-/// 條的條件而忘了另外兩條，畫面上就會出現一顆寫著「上傳照片中」卻按得下去
-/// 的紅底按鈕。這裡一次算出三個欄位，三者只有一個來源。
 class _SubmitAction {
   const _SubmitAction({
     required this.label,
@@ -86,11 +52,8 @@ class _SubmitAction {
 }
 
 class _RepairSheetState extends State<RepairSheet> {
-  /// 契約 CreateRepairTicketRequest.photoIds 的上下限：1–3 張。
   static const int _maxPhotos = 3;
 
-  /// 狀況說明的字數上限。延後原因與完修說明也是這個數，員工在三個地方看到
-  /// 的輸入上限才一致。
   static const int _maxDescriptionLength = 60;
 
   final List<RepairPhoto> _photos = [];
@@ -99,21 +62,15 @@ class _RepairSheetState extends State<RepairSheet> {
 
   String? _category;
 
-  /// 開單前檢查的結果：同房同類別還沒結案的那張單，以及系統的急件判定。
-  /// 兩者都由後端算，App 只呈現。
   RepairTicketPrecheck? _precheck;
 
   bool _submitting = false;
 
-  /// 員工已經試過加第 4 張。加入按鈕要到這一刻才收起來（ui-plan 畫面 6 的
-  /// 失敗回饋「第 4 張 → 加入按鈕消失」）：張數還在上限內就先留著按鈕，
-  /// 員工才不會在沒有任何動作的情況下看著按鈕自己不見。
   bool _photoLimitHit = false;
 
   @override
   void initState() {
     super.initState();
-    // 字數提示要跟著每一個字更新，所以監聽欄位本身，不等到送出才讀一次。
     _descriptionController.addListener(() => setState(() {}));
   }
 
@@ -123,8 +80,6 @@ class _RepairSheetState extends State<RepairSheet> {
     super.dispose();
   }
 
-  /// 選類別時向後端要開單前檢查。判定與重複提示都是後端的結論，選到別的
-  /// 類別就再問一次——同一間房不同類別的重複單與急件規則本來就不同。
   Future<void> _pickCategory(String categoryKey) async {
     setState(() {
       _category = categoryKey;
@@ -143,8 +98,6 @@ class _RepairSheetState extends State<RepairSheet> {
         setState(() => _precheck = precheck);
       }
     } catch (_) {
-      // 檢查失敗不擋開單：重複提示與急件判定都是提示性的，後端在真正建立
-      // 工務單時會再判一次。
     }
   }
 
@@ -174,13 +127,6 @@ class _RepairSheetState extends State<RepairSheet> {
     });
   }
 
-  /// 把還沒上傳成功的照片逐張送上去，並把每一張的結果記在它自己身上。
-  ///
-  /// 已經有照片 id 的不重送：送出失敗後員工只該重試失敗的那一張，整批重傳
-  /// 會讓已經上傳好的照片在後端多出一份。
-  ///
-  /// [rethrowFailure] 給離線佇列重送用：那條路徑要的是「這一筆還沒送成」的
-  /// 訊號，好把動作留在佇列裡下次再來。
   Future<void> _uploadPhotos({bool rethrowFailure = false}) async {
     for (var i = 0; i < _photos.length; i++) {
       final photo = _photos[i];
@@ -205,7 +151,6 @@ class _RepairSheetState extends State<RepairSheet> {
     }
   }
 
-  /// 只重試這一張。其他照片的上傳結果原封不動。
   Future<void> _retryPhoto(int index) async {
     final photo = _photos[index];
     try {
@@ -222,12 +167,6 @@ class _RepairSheetState extends State<RepairSheet> {
     }
   }
 
-  /// 送出這張工務單。
-  ///
-  /// 只有每張照片都上傳成功、而且裝置在線上時，才會真的送開單請求；有任何一張
-  /// 沒上傳成功就停在面板上讓員工重試那一張，後端不會收到半成品的單。離線時
-  /// 整個動作（上傳照片＋開單）交給 [OfflineQueue]，它在連線恢復時用同一把
-  /// `Idempotency-Key` 送出去，所以網路不穩重送幾次，後端也只會有一張單。
   Future<void> _submit() async {
     final category = _category;
     if (category == null || _photos.isEmpty || _submitting) {
@@ -277,7 +216,6 @@ class _RepairSheetState extends State<RepairSheet> {
     widget.onClose();
   }
 
-  /// 系統把這張單判為急件了沒有。還沒選類別、或檢查還沒回來時都不算。
   bool get _urgent => _precheck?.urgent ?? false;
 
   _SubmitAction get _submitAction {
@@ -321,8 +259,6 @@ class _RepairSheetState extends State<RepairSheet> {
         onLeadingTap: onBack ?? widget.onClose,
         bottomAction: TmsSemantics(
           id: 'repair.submit-button',
-          // 可否送出要顯式標出來：CupertinoButton 的 onPressed 為
-          // null 時，框架不會把 disabled 曝露到 accessibility tree。
           enabled: action.enabled,
           child: TmsSheetButton(
             label: action.label,
@@ -345,7 +281,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 狀況說明：選填，員工寫一句話讓主管與工務在看到照片之前就知道發生什麼事。
   Widget _descriptionCard() {
     return TmsCard(
       style: TmsCardStyle.inSheet,
@@ -447,8 +382,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 一張都還沒拍時，把「為什麼非拍不可」與「沒有相機權限怎麼辦」寫在送出鈕
-  /// 上方。只說「送出鈕不能按」的話，員工會以為是當掉了。
   Widget _needPhotoNote() {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: TmsSpacing.xs),
@@ -462,14 +395,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 照片與離線的處理說明。
-  ///
-  /// 兩段文字共用一行：離線時先說這張單會先留在手機，有照片時再說照片被怎麼
-  /// 處理過。兩段都沒有時整行不出現。
-  ///
-  /// 待送出的可及節點掛在離線那一段上，而不是另外畫一行「待送出」。原型沒有
-  /// 那一行，而離線這一段講的就是同一件事；畫兩行的話，恢復連線後員工會看到
-  /// 其中一行消失、另一行還在。
   Widget _photoNote() {
     return ValueListenableBuilder<bool>(
       valueListenable: ConnectionStatus.instance.offline,
@@ -498,9 +423,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 問題類別：一組分組列表，選中的那一列尾端打勾。原型在這裡用的是清單不是
-  /// 膠囊——類別有五種，膠囊排成兩行之後，哪一顆被選起來要靠顏色分辨；清單一列
-  /// 一個，選中的那一列右邊直接有勾。
   Widget _categoryList() {
     return TmsGroupedSection(
       header: '問題類別',
@@ -520,11 +442,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 重複提示：同房同類別已經有一張沒結案的單時，先告訴員工那張單的單號與
-  /// 目前狀態，並給他一條「把照片補到那張單」的路，而不是再開一張重複的。
-  ///
-  /// 用白卡加一顆資訊圓圖示，不用紅底——這不是錯誤，是一個「其實有更省事的
-  /// 做法」的提醒；紅底會讓員工以為自己做錯了什麼。
   Widget _duplicateCallout(RepairTicketSummary duplicate) {
     final text = '已有 ${duplicate.ticketNo} '
         '${repairCategoryText(duplicate.category)}'
@@ -584,7 +501,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 把這次拍的照片補到既有那張單上（契約 appendRepairTicketPhotos）。
   Future<void> _appendPhotosToDuplicate(RepairTicketSummary duplicate) async {
     await _uploadPhotos();
     final photoIds = [
@@ -599,12 +515,9 @@ class _RepairSheetState extends State<RepairSheet> {
           .appendRepairTicketPhotos(duplicate.taskId, photoIds: photoIds);
       widget.onClose();
     } catch (_) {
-      // 補照片失敗時留在面板上，員工可以再試一次。
     }
   }
 
-  /// 還沒選類別時，先說一句判定要等什麼。急件與否決定這張單走不走主管審核，
-  /// 畫面上一直空著的話，員工會以為這張單沒有急件這回事。
   Widget _urgentPendingNote() {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
@@ -615,15 +528,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 急件判定：一張卡加一行卡外的說明。
-  ///
-  /// 卡上刻意沒有任何可點的切換元件——判定改不改得了不能只靠一句說明，畫面上
-  /// 根本不給入口才算數。說明那一行放在卡外，因為它講的不是這一張單被判成什
-  /// 麼，而是整套判定規則歸誰管；放進卡裡會跟判定結果讀成同一件事。
-  ///
-  /// 卡與說明包在同一個可及節點裡。讀螢幕的人與自動化測試要的是「這張單被判
-  /// 成什麼，以及我能不能改」這一個完整結論，拆成兩個節點的話，讀到卡的人不
-  /// 會知道下面還有一行限制。
   Widget _urgentJudgementBlock(RepairTicketPrecheck precheck) {
     final urgent = precheck.urgent;
     final rule = precheck.urgentRule;
@@ -696,14 +600,8 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 急件判定卡左邊那顆圖示的邊長（`Main.dc.html:1489`）。
   static const double _judgementIconSize = 22;
 
-  /// 一張照片的縮圖。序號從 1 算起，與 dsl 的句型一致。
-  ///
-  /// 上傳狀態與浮水印都不畫成文字，改成兩層可及節點掛在同一格上。原型的格子
-  /// 下面沒有任何文字，狀態靠遮罩的長相表達，而浮水印是燒進像素的；自動化
-  /// 測試與讀螢幕的人讀不到像素，所以那兩段文字仍要有節點。
   Widget _thumbnail(int index) {
     final photo = _photos[index];
     final statusText = photo.uploadFailed
@@ -738,8 +636,6 @@ class _RepairSheetState extends State<RepairSheet> {
     );
   }
 
-  /// 上傳失敗時整格就是重試鈕，所以重試的可及節點只在失敗時存在。平常也掛著
-  /// 的話，自動化測試會在一張都沒失敗的畫面上找到三顆重試鈕。
   Widget _retryWrapper(
     int index, {
     required bool failed,

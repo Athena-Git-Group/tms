@@ -7,15 +7,8 @@ import 'package:tms_staff_app/features/today/my_today_scope.dart';
 import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 
-/// 工務首頁與兩個待認領畫面要顯示的幾個數字（今天預計要修幾張、今日保養、
-/// 這張單已做幾分鐘、在池裡等了幾分鐘、各分流還有幾張）都是後端之後才會開始
-/// 回的欄位。在那之前每一筆都會缺席，所以每一個欄位都要有兩種畫法，這組測試
-/// 一次釘住兩邊：欄位缺席時畫面要跟現在一模一樣，欄位齊全時新的內容要出現在
-/// 該出現的位置。
 void main() {
-  // 這組測試一律用 `pumpAndSettle` 等畫面不再有下一幀。工務首頁維修中那張卡
-  // 的圓點是無限循環的呼吸動畫，動態開著就永遠排得出下一幀，`pumpAndSettle`
-  // 會等到逾時而不是等到畫面靜止。
+  // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
@@ -32,8 +25,6 @@ void main() {
 
   Future<void> pumpEngHome(WidgetTester tester, MyToday today) async {
     ApiClient.instance = _FakeApiClient(today: today);
-    // 今日進度取在外殼那一層（main_shell），工務首頁自己不再建 scope；
-    // 這個測試單獨渲染工務首頁，所以要補上外殼平常提供的那一層。
     await tester.pumpWidget(
       const CupertinoApp(home: MyTodayScope(child: EngHomeScreen())),
     );
@@ -56,11 +47,9 @@ void main() {
     testWidgets('三個欄位都缺席時，進度環分母退回相加、保養那格與計時都不畫', (tester) async {
       await pumpEngHome(tester, _engToday());
 
-      // 今天已完修 2 張、手上還有 3 張，分母是這兩個數字相加。
       expect(find.text(' / 5'), findsOneWidget);
       expect(find.text('今日保養'), findsNothing);
       expect(find.text('42 分'), findsNothing);
-      // 維修中那張主卡其餘的內容照舊。
       expect(find.text('維修中'), findsWidgets);
       expect(find.text('401'), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -106,11 +95,9 @@ void main() {
 
       expect(find.textContaining('等 '), findsNothing);
       expect(find.text('剛進來'), findsNothing);
-      // 徽章上的數字一顆都沒有；磚上的文字照舊。
       for (final label in const ['全部', '急件', '房務報修', '櫃檯']) {
         expect(find.text(label), findsWidgets);
       }
-      // 主標是工單標題、副標是來源（`Main.dc.html:998-999`）。
       expect(find.text('冷氣不冷'), findsOneWidget);
       expect(find.text('房務報修'), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -134,7 +121,6 @@ void main() {
       expect(find.text('4'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
-      // 「全部」那格沒有徽章，所以整池的 9 不會出現在磚上。
       expect(find.text('9'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -165,7 +151,6 @@ void main() {
 
       expect(find.textContaining('等 '), findsNothing);
       expect(find.text('剛進來'), findsNothing);
-      // 筆數 0 的分類連徽章節點都不存在（Main.dc.html:4232 的 `hasCount`）。
       expect(
         find.bySemanticsIdentifier('pool.category.cleaning.count'),
         findsNothing,
@@ -270,8 +255,6 @@ void main() {
   });
 }
 
-/// 工務今日進度：今天已完修 2 張、手上 3 張（其中一張維修中）。
-/// 每個參數都是後端之後才會開始回的欄位，不給就是缺席。
 MyToday _engToday({
   int? plannedToday,
   int? maintenanceDone,
@@ -357,8 +340,6 @@ DeptPool _housekeepingPool({int? waitedMinutes, String? reminderStage}) {
   );
 }
 
-/// 記憶體 fake：這幾個畫面開啟時要打的讀取端點都在這裡回固定資料，測試不碰
-/// 網路。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient({this.today, this.pool});
 

@@ -6,9 +6,6 @@ import org.junit.platform.suite.api.IncludeEngines;
 import org.junit.platform.suite.api.SelectDirectories;
 import org.junit.platform.suite.api.Suite;
 
-/**
- * 只跑 {@code specs/truth/features/ios-app/推播/}（F3：點開推播的去處）。
- */
 @Suite
 @IncludeEngines("cucumber")
 @SelectDirectories("../../specs/truth/features/ios-app/推播")

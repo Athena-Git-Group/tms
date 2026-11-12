@@ -6,11 +6,6 @@ import 'package:tms_staff_app/core/widgets/tms_category_tile.dart';
 import 'package:tms_staff_app/core/widgets/tms_glass.dart';
 import 'package:tms_staff_app/core/widgets/tms_tab_bar.dart';
 
-/// 驗浮動分頁列畫出來的是原型 iOS 26 那一版：玻璃底板、選中膠囊、線稿圖示、
-/// 10pt 標籤，以及底下那層 soft scroll edge。
-///
-/// 這些值在原型裡是 inline style，改錯了螢幕上看得出來但沒有人會紅，所以在
-/// 這裡逐項釘住。
 void main() {
   const barWidth = 362.0;
 
@@ -48,7 +43,6 @@ void main() {
   }
 
   testWidgets('玻璃底板的模糊、飽和度、底色、邊框與陰影照原型', (tester) async {
-    // Main.dc.html:1126
     await pumpBar(tester);
 
     final glass = tester.widget<TmsGlass>(find.byType(TmsGlass));
@@ -70,7 +64,6 @@ void main() {
   });
 
   testWidgets('分頁列高 62，上緣疊著一條 1pt 的白色高光', (tester) async {
-    // Main.dc.html:1126 — height: 62px、inset 0 1px 0 rgba(255,255,255,.8)
     await pumpBar(tester);
 
     expect(tester.getSize(find.byType(TmsTabBar)).height, 62);
@@ -86,7 +79,6 @@ void main() {
   });
 
   testWidgets('只有選中那一格有膠囊底，圓角 27', (tester) async {
-    // Main.dc.html:1128 — border-radius: 27px、rgba(118,118,128,.16)
     await pumpBar(tester, currentIndex: 2);
 
     final pills = tester
@@ -101,7 +93,6 @@ void main() {
   });
 
   testWidgets('選中那格走品牌色，其餘三格是 #1C1C1E 而不是 #8E8E93', (tester) async {
-    // Main.dc.html:4396 — color: 選中 '#0C7680'，iOS 26 未選中 '#1C1C1E'
     await pumpBar(tester, currentIndex: 1);
 
     TextStyle styleOf(String label) =>
@@ -114,8 +105,6 @@ void main() {
   });
 
   testWidgets('分頁名是 10pt/600，圖示是 24 見方', (tester) async {
-    // Main.dc.html:1134 — font-size: 10px; font-weight: 600
-    // Main.dc.html:1129 — width="24" height="24"
     await pumpBar(tester);
 
     final style = tester.widget<Text>(find.text('首頁')).style!;
@@ -133,7 +122,6 @@ void main() {
   });
 
   testWidgets('四格平分扣掉內距與格間之後的寬度', (tester) async {
-    // Main.dc.html:1126 — padding: 4; gap: 2
     await pumpBar(tester);
 
     final bar = tester.getRect(find.byType(TmsTabBar));
@@ -146,9 +134,6 @@ void main() {
   });
 
   testWidgets('徽章落在該格左緣的 56%、按鈕上緣下方 3，且高 18', (tester) async {
-    // Main.dc.html:1136 — top: 3px; left: 56%; height: 18px
-    // 402pt 螢幕上每格寬 (402 - 20 * 2 - 4 * 2 - 2 * 3) / 4 = 87，
-    // 56% 換算成距該格左緣 48.72；按鈕高 62 - 4 * 2 = 54，top 從它的上緣算。
     await pumpBar(
       tester,
       items: const [
@@ -177,7 +162,6 @@ void main() {
   });
 
   testWidgets('計數是 0 的那幾格不畫徽章', (tester) async {
-    // RULINGS.md R1 — 數量 0 不畫徽章
     await pumpBar(
       tester,
       items: const [
@@ -198,7 +182,6 @@ void main() {
     const cellWidth = (barWidth - 4 * 2 - 2 * 3) / 4;
 
     await tester.tap(find.text('通知'));
-    // 第四格的左上角，離文字與圖示都還有一段距離。
     await tester.tapAt(
       Offset(bar.left + 4 + (cellWidth + 2) * 3 + 2, bar.top + 6),
     );
@@ -207,8 +190,6 @@ void main() {
   });
 
   testWidgets('soft scroll edge 的模糊與飽和度照原型，上緣淡出', (tester) async {
-    // Main.dc.html:1122 — blur(12px) saturate(160%)、rgba(242,242,247,.72)、
-    // mask-image: linear-gradient(to top, #000 0%, #000 40%, transparent)
     await tester.pumpWidget(
       const CupertinoApp(
         home: Align(

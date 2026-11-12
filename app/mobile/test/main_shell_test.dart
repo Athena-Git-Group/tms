@@ -7,15 +7,8 @@ import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_tab_bar.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
-/// 驗分頁外殼把四個畫面接對了，而且首頁上每一個要被讀值的節點都還在。
-///
-/// 驗收用的工具靠分頁列上的文字切分頁、靠 accessibility id 定位與讀值。
-/// 這組測試走同一條路，所以分頁列的文字或首頁的 id 一旦被改掉就會先在這裡
-/// 紅掉，不必等整套模擬器驗收跑完才發現。
 void main() {
-  // 這組測試一律用 `pumpAndSettle` 等畫面不再有下一幀。首頁進行中卡那顆圓點
-  // 是無限循環的呼吸動畫，動態開著就永遠排得出下一幀，`pumpAndSettle` 會等到
-  // 逾時而不是等到畫面靜止。
+  // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
@@ -49,7 +42,6 @@ void main() {
     expect(labelOf(tester, 'home.progress.ad-hoc-count'), '3 單');
     expect(labelOf(tester, 'home.progress.remaining-minutes'), '135 分鐘');
 
-    // 任務清單在進度卡與主卡底下，測試視窗一屏放不完，先捲到清單再讀。
     await tester.drag(find.byType(ListView), const Offset(0, -400));
     await tester.pumpAndSettle();
 
@@ -81,7 +73,6 @@ void main() {
 
     expect(find.bySemanticsIdentifier('pool.screen'), findsOneWidget);
     expect(find.bySemanticsIdentifier('home.screen'), findsNothing);
-    // 要求讀走就清掉，下一次外殼重建不會又被彈回待認領。
     expect(MainShellTabRequest.pending.value, isNull);
 
     handle.dispose();
@@ -142,8 +133,6 @@ void main() {
   });
 
   testWidgets('分頁列浮在內容上：左右各內縮 20，下緣離安全區 21', (tester) async {
-    // Main.dc.html:1126,4441-4442 — left/right: tabSide 20、
-    // bottom: Math.max(safeBottom - 13, 10)，安全區 34 時是 21
     ApiClient.instance = _FakeApiClient();
     await tester.pumpWidget(
       const CupertinoApp(
@@ -166,14 +155,12 @@ void main() {
     expect(screen.bottom - bar.bottom, 21);
     expect(bar.height, 62);
 
-    // soft scroll edge 蓋住分頁列佔到的那一整段。
     final edge = tester.getRect(find.byType(TmsBottomScrollEdge));
     expect(edge.bottom, screen.bottom);
     expect(edge.height, 62 + 21);
   });
 
   testWidgets('首頁清單的底部留白讓開整條分頁列', (tester) async {
-    // Main.dc.html:4449 — scrollPadBottom: 62 + tab26Bottom + 20
     ApiClient.instance = _FakeApiClient();
     await tester.pumpWidget(
       const CupertinoApp(
@@ -201,8 +188,6 @@ void main() {
   });
 }
 
-/// 記憶體 fake：首頁、待認領與通知三個畫面開啟時要打的讀取端點都在這裡回
-/// 固定資料，測試不碰網路。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient({this.pool = const <PoolItem>[]});
 

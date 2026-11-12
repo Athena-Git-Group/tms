@@ -14,15 +14,6 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 判斷一位員工此刻還接不接得了退回給他的單。查房退回（原清房者）與工務單驗收不通過
- * （原處理人）都用這一支決定單要回到本人名下，還是退回部門待認領，兩邊對「人已經不在」
- * 才會是同一個口徑。
- *
- * <p>接不了的情況有三種：請假中、此刻落在飯店所有班別時段之外、已過他自己排班的下班時間。
- * 第三項看的是排房計畫的班次，只有房務有；工務沒有個人排班，實際上只看前兩項。
- * 「此刻」一律取自注入的 {@link Clock}，和任務狀態轉移用同一個時間來源。
- */
 @Component
 public class StaffAvailability {
 
@@ -41,7 +32,6 @@ public class StaffAvailability {
         this.clock = clock;
     }
 
-    /** 這位員工此刻接不了退回的單時回 true。 */
     public boolean unavailable(long tenantId, UUID staffId) {
         OffsetDateTime now = OffsetDateTime.now(this.clock);
         boolean onLeave = this.leaveRepository.existsByTenantIdAndStaffIdAndFromAtLessThanEqualAndToAtGreaterThan(tenantId, staffId, now, now);
@@ -56,7 +46,6 @@ public class StaffAvailability {
         return this.pastOwnShiftEnd(tenantId, staffId, shiftTimes, at);
     }
 
-    /** 以這位員工最近一份排班表上的班次判斷是否已過下班時間；沒有排班或解析不出下班時間時視為還在班。 */
     private boolean pastOwnShiftEnd(long tenantId, UUID staffId, JsonNode shiftTimes, LocalTime at) {
         List<String> shifts = this.jdbcTemplate.queryForList("""
                 SELECT cp.shift

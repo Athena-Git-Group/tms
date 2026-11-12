@@ -8,19 +8,14 @@ import 'core/test_backdoor.dart';
 import 'core/theme.dart';
 import 'features/login/login_screen.dart';
 
-/// 推播導頁要用的全域 navigator key，交給 [PushGateway] 操作導頁。
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
-  // 一定要先完成 binding 初始化，才能呼叫 ensureSemantics()；順序顛倒會讓
-  // App 啟動時卡在白屏（spike 已驗證過這個順序問題）。
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
 
   await TestBackdoor.maybeStart();
 
-  // 只組裝、不初始化 Firebase：token 要掛在登入者名下，所以初始化留到第一次
-  // 登入成功才做（見 PushTokenService）。
   installFirebasePushTokenService();
 
   runApp(const TmsStaffApp());
@@ -38,9 +33,6 @@ class _TmsStaffAppState extends State<TmsStaffApp> {
   void initState() {
     super.initState();
     PushGateway.instance.attach(rootNavigatorKey);
-    // 冷啟動點開推播時，原生側收到「使用者點開通知」事件的時間點比
-    // Flutter 引擎、Navigator 準備好還早，所以要等第一幀畫完才問原生側
-    // 「啟動時是不是帶了推播」，不能在 initState 當下就問。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       PushGateway.instance.consumeInitialPush();
     });
@@ -54,8 +46,6 @@ class _TmsStaffAppState extends State<TmsStaffApp> {
       navigatorKey: rootNavigatorKey,
       theme: buildTmsCupertinoTheme(),
       builder: (context, child) {
-        // CupertinoApp 本身不帶 Material 主題，部分共用元件仍可能依賴
-        // Theme.of(context)，所以在這裡補一層 Material 主題當底。
         return Theme(data: theme, child: child!);
       },
       home: const LoginScreen(),

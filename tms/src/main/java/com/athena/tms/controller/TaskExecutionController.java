@@ -99,7 +99,6 @@ public class TaskExecutionController {
         return taskExecutionService.deptPool(dept, category, urgent, source);
     }
 
-    /** 查看呼叫者的今日進度與下一間；統計口徑與排序規則在 {@link TaskExecutionService#myToday()}。 */
     @GetMapping("/me/today")
     public Map<String, Object> myToday() {
         return taskExecutionService.myToday();

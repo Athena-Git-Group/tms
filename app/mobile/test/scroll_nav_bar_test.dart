@@ -125,7 +125,6 @@ void main() {
 
       expect(find.text('返回'), findsNothing);
       expect(find.bySemanticsLabel('返回'), findsOneWidget);
-      // 每一支詳情頁共用這個 id，自動化測試退回首頁時不必先判斷自己在哪。
       expect(find.bySemanticsIdentifier('nav.back-button'), findsOneWidget);
       handle.dispose();
     });

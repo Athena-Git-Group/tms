@@ -6,10 +6,6 @@ import 'package:tms_staff_app/core/widgets/tms_alert.dart';
 import 'package:tms_staff_app/features/login/login_screen.dart';
 import 'package:tms_staff_app/features/login/login_widgets.dart';
 
-/// 驗登入頁的三種模式各自顯示什麼，以及語言鈕、眼睛鈕與送出鈕的啟用條件。
-///
-/// 三種模式的差別只在幾句話與有沒有某一列，肉眼比對最容易看漏；模式一旦判錯，
-/// 員工會在共用手機上看到別人的名字，或是在自己的手機上被要求重打員工編號。
 void main() {
   tearDown(() {
     TestHooks.instance.reset();
@@ -30,7 +26,6 @@ void main() {
     expect(find.text('輸入密碼就能開始今天的班。'), findsOneWidget);
     expect(find.widgetWithText(LoginIdentityRow, '阿美'), findsOneWidget);
     expect(find.widgetWithText(LoginIdentityRow, 'H-0532'), findsOneWidget);
-    // 頭像取名字的最後一個字（Main.dc.html:4504 的 acct.initial）。
     expect(find.text('美'), findsOneWidget);
     expect(find.text('員工編號'), findsNothing);
     expect(find.text('不是阿美？用其他帳號登入'), findsOneWidget);
@@ -83,7 +78,6 @@ void main() {
       'Passw0rd!',
     );
     await tester.pump();
-    // 共用手機模式還缺員工編號，光有密碼送不出去。
     expect(submit().onPressed, isNull);
 
     await tester.enterText(
@@ -93,8 +87,6 @@ void main() {
     await tester.pump();
     expect(submit().onPressed, isNotNull);
 
-    // 不轉大寫：原型的員工編號是 H-0532 這種格式，這套系統的是 hk1、mt1，
-    // 而後端是精確比對。轉大寫會讓現有帳號一律登不進去（實機確認過）。
     expect(find.text('h-0532'), findsOneWidget);
 
     handle.dispose();

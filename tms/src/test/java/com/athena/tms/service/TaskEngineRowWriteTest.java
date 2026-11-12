@@ -28,14 +28,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/**
- * 任務引擎寫進 tasks 列的欄位，必須在建立與取消那一步就寫齊，
- * 呼叫端不需要再補第二道 UPDATE。
- *
- * <p>建立時刻取自注入的 {@link Clock}：測試把時鐘固定在一個與牆上時鐘明顯不同的
- * 時刻，建出來的 created_at 必須等於那個時刻。急件旗標隨建立指令一起寫入。
- * 取消時 cancel_reason 與事件 payload 的 reason 同值，主管作廢與住客收回兩條路都是。
- */
 @SpringBootTest
 @ActiveProfiles("test")
 @Testcontainers

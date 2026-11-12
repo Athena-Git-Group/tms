@@ -4,9 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/push_token_service.dart';
 
-/// 推播 token 的生命週期：登入後取到 token 就上傳、底層換 token 再上傳、
-/// Firebase 初始化失敗時整個服務安靜退成停用。三個依賴都換成記憶體 fake，
-/// 不碰 Firebase 也不碰網路。
 void main() {
   late _FakeMessaging messaging;
   late _FakeUploader uploader;

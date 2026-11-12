@@ -6,11 +6,6 @@ import 'package:tms_staff_app/features/login/force_password_change_screen.dart';
 import 'package:tms_staff_app/features/login/login_widgets.dart';
 import 'package:tms_staff_app/features/login/password_rules.dart';
 
-/// 驗強制改密頁的四條規則清單、相符綠勾、眼睛鈕與送出前的確認對話框。
-///
-/// 這一頁是員工拿到臨時密碼後唯一能走的路，走不過去就整個 App 都進不去。規則
-/// 清單的打勾與送出鈕的啟用條件連動，算錯一條就會讓一組後端其實會收的密碼按
-/// 不下去。
 void main() {
   NewPasswordCheck check(String newPassword, [String confirmPassword = '']) =>
       NewPasswordCheck.of(
@@ -58,7 +53,6 @@ void main() {
     test('員工編號當密碼時第三條以外那一條不符合，大小寫與分隔符號都算同一組', () {
       expect(check('H-0532').rules[3].satisfied, isFalse);
       expect(check('h0532').rules[3].satisfied, isFalse);
-      // 原型連去掉開頭字母的 0532 也擋（Main.dc.html:4621）。
       expect(check('0532').rules[3].satisfied, isFalse);
       expect(check('Passw0rd!').rules[3].satisfied, isTrue);
     });
@@ -153,7 +147,6 @@ void main() {
     );
     await tester.pump();
 
-    // 四條規則各一顆，確認欄再一顆。
     expect(find.byType(LoginCheckBadge), findsNWidgets(5));
   });
 
@@ -200,7 +193,6 @@ void main() {
 
     expect(submit().onPressed, isNull);
 
-    // 只有英文、長度也不夠，兩條規則沒過。
     await tester.enterText(
       find.bySemanticsIdentifier(
         'login.force-password-change.new-password-field',
@@ -223,7 +215,6 @@ void main() {
       'Passw0rd!',
     );
     await tester.pump();
-    // 新密碼改了，確認欄還停在舊的字，兩次不相符。
     expect(submit().onPressed, isNull);
 
     await tester.enterText(

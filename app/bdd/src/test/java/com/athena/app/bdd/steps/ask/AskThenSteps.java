@@ -44,13 +44,6 @@ public class AskThenSteps {
         }
     }
 
-    /**
-     * 必查：回答區全文相等，並與後端回應一致。accessibility id：{@code ask.answer.text}。
-     *
-     * <p>「與後端回應一致」的權威讀回走稽核紀錄：每次提問後端都寫一筆
-     * {@code kb_audit_logs}，裡面的 {@code answer} 就是它回給 App 的那段文字。比對它
-     * 才證明得了畫面上的字是後端給的、不是 App 自己生的。
-     */
     @那麼("查一下畫面顯示回答 {string}")
     public void askShowsAnswer(String answer) {
         String shown = world.waitForLabelOf("ask.answer.text", answer, TIMEOUT);
@@ -102,14 +95,6 @@ public class AskThenSteps {
         }
     }
 
-    /**
-     * 必查：畫面顯示該訊息，回答區與出處卡都是空的。accessibility id：{@code ask.not-found-message}。
-     *
-     * <p>訊息比對用「含有」：查不到時畫面上那句由兩段組成——「查不到 {房號} 的相關記錄」
-     * 加上「系統不會用猜的回答」（ui-plan 畫面 8 的失敗回饋），truth 點名的是前一段。
-     * 「沒有任何回答內容」則是逐字照字面驗：回答區與出處卡兩種節點一個都不能在畫面上，
-     * 不是存在但內容為空。
-     */
     @那麼("查一下畫面顯示 {string}，沒有任何回答內容")
     public void askShowsMessageWithNoAnswer(String message) {
         world.waitForTestId("ask.not-found-message", TIMEOUT);

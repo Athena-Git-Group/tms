@@ -7,12 +7,7 @@ import 'package:tms_staff_app/core/widgets/tms_home_cards.dart';
 import 'package:tms_staff_app/features/engineering/eng_home_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
-/// 工務首頁與房務首頁是同一套版型（`Main.dc.html:856-968`）。這組測試釘的是
-/// 工務獨有的那幾處：問候列、進度卡的文案與單位、兩張主卡、空狀態，以及單列
-/// 的主文與副標。
 void main() {
-  // 維修中那張卡的脈動圓點是無限循環動畫，動態開著 `pumpAndSettle` 就永遠等
-  // 不到靜止。
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
@@ -120,7 +115,6 @@ void main() {
         ),
       );
 
-      // 眉標一顆、清單列的狀態 chip 一顆。
       expect(find.text('維修中'), findsNWidgets(2));
       expect(
         tester.widget<Text>(find.text('42 分')).style?.fontSize,
@@ -167,7 +161,6 @@ void main() {
         ),
         findsOneWidget,
       );
-      // 清單列那一顆才是併起來的（`Main.dc.html:3835`）。
       expect(find.text('急件 · 待開始'), findsOneWidget);
     });
 
@@ -235,8 +228,6 @@ void main() {
         ),
       );
 
-      // 主卡的副標是「冷氣不冷 · 房務報修」，所以單獨一段「冷氣不冷」只會出現
-      // 在清單列上。
       expect(find.text('冷氣不冷'), findsOneWidget);
       expect(find.text('房務報修'), findsOneWidget);
       expect(find.text('W-0412 · 401'), findsNothing);

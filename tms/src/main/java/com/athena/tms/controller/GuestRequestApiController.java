@@ -22,12 +22,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 契約的住客需求 API（住客掃碼.yaml）：註冊 session（guestSessionsScan）、建立需求
- * （createGuestRequest）、查看本次住宿需求（listGuestRequests）、撤回（cancelGuestRequest）。
- * 需求操作的住客身分一律由 X-Guest-Session 憑證解析（BearerTokenAuthFilter），
- * 業務本體委派既有 {@link GuestRequestService}。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class GuestRequestApiController {
@@ -43,7 +37,6 @@ public class GuestRequestApiController {
         this.clock = clock;
     }
 
-    /** 請求形狀對應 contracts 住客掃碼.yaml 的 guest_sessionsRequest（整列欄位，token 由呼叫端產生）。 */
     public record GuestSessionScanRequest(
             Long tenantId, String sessionToken, UUID roomId, UUID reservationId, OffsetDateTime expiresAt) {}
 

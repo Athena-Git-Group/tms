@@ -20,12 +20,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 抽查與查房合格率 API，對應 contracts 查房.yaml 的 createSpotCheck
- * （POST /inspections/spot-checks）與 getInspectionPassRate（GET /inspections/pass-rate）。
- * 抽查和一般查房（{@link InspectionApiController}）同屬查房判定，進業務邏輯前
- * 先過同一套角色×動作矩陣：沒有查房判定（inspect_submit）權限的角色一律 403。
- */
 @RestController
 @RequestMapping("/api/v1/inspections")
 public class InspectionReviewController {

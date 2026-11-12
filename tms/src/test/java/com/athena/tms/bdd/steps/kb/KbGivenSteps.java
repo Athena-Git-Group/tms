@@ -19,16 +19,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 查一下模組的 Given（dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言——
- * 「必查」清單在 {@link KbThenSteps}。
- *
- * <p>sop_items／task_sop_checks 沒有對應的 fixture 入口（{@link RoomFixtures}／
- * {@link com.athena.tms.bdd.support.TaskFixtures} 都沒有），依派工指示直接用
- * {@link JdbcClient} 寫；tasksSopCheck／roomMemoryAsk／escalateKbQuestion 則透過
- * {@link BddApiClient} 呼叫既有或新增的 API，不直接竄改 task_sop_checks／
- * kb_audit_logs／kb_escalations 權威表。
- */
 public class KbGivenSteps {
 
     private final ScenarioWorld world;
@@ -92,8 +82,6 @@ public class KbGivenSteps {
         UUID taskId = UUID.fromString(world.taskId(taskKey));
         UUID sopItemId = createSopItem(itemLabel);
 
-        // 不在這裡擋失敗狀態碼：這句只負責建立權威狀態，「必查」留給 KbThenSteps，
-        // 跟 common 套件其餘 Given（例如 CommonGivenSteps）的分工一致。
         apiClient.post(
                 "/tasks/" + taskId + "/sop-check",
                 BddApiClient.Auth.staff(world.jwt(staffName)),
@@ -107,11 +95,6 @@ public class KbGivenSteps {
         reservationFixtures.upsertReservation(roomNo, List.of("vip"), today, null);
     }
 
-    /**
-     * sop_items 只有單一 {@code label} 欄、沒有獨立「內容」欄——比照
-     * {@link RoomFixtures#addRoomMemory} 對 room_memory.summary 的合併慣例，
-     * 落地成 {@code "{標題}：{內容}"}。
-     */
     @假設("SOP {string} 的內容為 {string}")
     public void sopHasContent(String title, String content) {
         String label = title + "：" + content;
@@ -131,12 +114,6 @@ public class KbGivenSteps {
         askAndRememberAnswerId(staffName, taskId, question);
     }
 
-    /**
-     * 這句 dsl.md 沒有顯式「任務」參數（只有員工／問題／主管），但「怎麼做」要求先呼叫
-     * roomMemoryAsk，需要 taskId。三份 kb feature 的問題文字都以房號開頭
-     * （例如「308 最近修過什麼？」），因此用問題開頭的房號反查已建立的任務；
-     * 查不到就直接噴錯，不替呼叫端瞎猜任務。
-     */
     @假設("{string} 已把 {string} 轉問 {string}")
     public void staffAlreadyEscalated(String staffName, String question, String managerName) {
         UUID taskId = resolveTaskIdFromQuestion(question);
@@ -151,8 +128,6 @@ public class KbGivenSteps {
                 BddApiClient.Auth.staff(world.jwt(staffName)),
                 null);
         rememberEscalationId(resp);
-        // managerName 只是情境文件化之後誰該收到這則提問（見 KbThenSteps 的驗證），
-        // escalateKbQuestion 本身不指定收件主管——問主管沒有挑哪位主管的概念。
     }
 
     private void askAndRememberAnswerId(String staffName, UUID taskId, String question) {

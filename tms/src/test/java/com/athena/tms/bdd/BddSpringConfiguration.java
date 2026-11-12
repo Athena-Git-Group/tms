@@ -44,11 +44,6 @@ import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * truth suite（glue com.athena.tms.bdd）的 Spring 環境：
- * 整個應用程式以 RANDOM_PORT 啟動，PostgreSQL 16 與 Kafka 用 Testcontainers，
- * Flyway 照常對容器執行。只開環境，不含任何 stepdef。
- */
 @CucumberContextConfiguration
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -57,7 +52,6 @@ public class BddSpringConfiguration {
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
-    // Boot 4.1 沒有對 org.testcontainers.kafka.KafkaContainer 的 ConnectionDetails factory，改走 DynamicPropertySource
     static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka:4.0.0"));
 
     static {
@@ -89,7 +83,6 @@ public class BddSpringConfiguration {
             return new BddApiClient(environment, objectMapper, scenarioWorld);
         }
 
-        /** 操作前快照是場景各自的狀態，所以和 ScenarioWorld 一樣每個場景各開一份。 */
         @Bean
         @ScenarioScope
         LastOperationGuard lastOperationGuard(DbProbe dbProbe) {
@@ -102,37 +95,22 @@ public class BddSpringConfiguration {
             return new RepairCountGuard(dbProbe, tenantFixtures);
         }
 
-        /**
-         * 查「權威狀態」只讀資料庫、不帶任何 scenario 專屬狀態，所以用單例即可，
-         * 不用像 ScenarioWorld 那樣每個 scenario 各開一份。
-         */
         @Bean
         DbProbe dbProbe(JdbcClient jdbcClient) {
             return new DbProbe(jdbcClient);
         }
 
-        /** 同 dbProbe：輪詢邏輯本身無狀態，調整逾時走 {@code withTimeout}/{@code withPollInterval} 回傳的新實例即可。 */
         @Bean
         OutboxAwait outboxAwait(DbProbe dbProbe, ObjectMapper objectMapper) {
             return new OutboxAwait(dbProbe, objectMapper);
         }
 
-        /**
-         * 可調測試時鐘，單例、蓋過 {@code ClockConfig} 的 {@code Clock.systemDefaultZone()}。
-         * 預設固定在 {@link MutableClock#DEFAULT_TEST_DATE} 中午（{@link MutableClock#DEFAULT_ZONE}）；
-         * 情境要操控時間就直接注入 {@code MutableClock}（而不是 {@code Clock}）呼叫
-         * {@code setInstant}/{@code setTodayAt}/{@code advanceMinutes}。
-         */
         @Bean
         @Primary
         MutableClock mutableClock() {
             return new MutableClock();
         }
 
-        /**
-         * 推播服務替身，蓋過 {@code PushSenderConfig} 依設定選出來的實作（測試不設 FCM 憑證，
-         * 那邊會是只寫日誌的版本）。單例：消費者執行緒與情境執行緒共用同一份紀錄。
-         */
         @Bean
         @Primary
         RecordingPushSender recordingPushSender() {
@@ -149,10 +127,6 @@ public class BddSpringConfiguration {
             return new JobTrigger(applicationContext);
         }
 
-        /**
-         * 以下是測試資料入口（見 com.athena.tms.bdd.support 各類別 Javadoc）。單例即可：
-         * 每個方法本身無狀態，建出來的資料才是情境各自的狀態。
-         */
         @Bean
         TenantFixtures tenantFixtures(JdbcClient jdbcClient) {
             return new TenantFixtures(jdbcClient);
@@ -199,25 +173,18 @@ public class BddSpringConfiguration {
             return new HandoverFixtures(jdbcClient, tenantFixtures, objectMapper);
         }
 
-        /** 走 {@link BddApiClient} 送請求，而 apiClient 是 scenario 一份，所以跟著掛 {@code @ScenarioScope}。 */
         @Bean
         @ScenarioScope
         InspectionFixtures inspectionFixtures(BddApiClient bddApiClient) {
             return new InspectionFixtures(bddApiClient);
         }
 
-        /** 跟 {@link InspectionFixtures} 一樣走 scenario 一份的 {@link BddApiClient}，所以也掛 {@code @ScenarioScope}。 */
         @Bean
         @ScenarioScope
         VerifyFixtures verifyFixtures(BddApiClient bddApiClient) {
             return new VerifyFixtures(bddApiClient);
         }
 
-        /**
-         * 需要 {@link ScenarioWorld} 登記建出的任務 id，而 world 是 scenario 一份的
-         * 代理 bean，所以 PmsProbe 也跟著掛 {@code @ScenarioScope}，避免 singleton
-         * 抓住第一個 scenario 的 world 不放。
-         */
         @Bean
         @ScenarioScope
         PmsProbe pmsProbe(

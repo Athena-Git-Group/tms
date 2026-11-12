@@ -21,42 +21,22 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * 工務單模組的 Then。依共通實作約定，每句除了查畫面（accessibility id 經
- * {@link AppiumWorld#byTestId}）還要讀回後端權威狀態（{@code repair_tickets} 連
- * {@code tasks}），兩邊一致才算過。
- */
 public class RepairThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(6);
 
-    /** 來源標示文字 → 權威 {@code tasks.source}（對照工務單契約 PoolItem.source 的對照說明）。 */
     private static final Map<String, String> SOURCE_BY_LABEL = Map.of(
             "房務報修", "staff",
             "櫃檯", "desk");
 
-    /** 急件判定理由裡的入住時刻格式，與後端組理由時用的格式同一套。 */
     private static final DateTimeFormatter CHECKIN_TIME = DateTimeFormatter.ofPattern("HH:mm");
 
-    /** 等後端收到離線期間保存的開單的上限：每一筆都是一次 HTTP 來回，比畫面轉場久。 */
     private static final Duration QUEUE_DRAIN_TIMEOUT = Duration.ofSeconds(20);
 
-    /** 完成畫面那一層覆蓋層的 accessibility id（產品端 {@code celebrate_screen.dart} 的根節點）。 */
     private static final String CELEBRATE_OVERLAY_ID = "celebrate.screen";
 
-    /**
-     * 等完修回報送出真的做完的上限。這段要涵蓋帶完修照片的一次網路來回，
-     * 所以取和等離線開單送完的 {@link #QUEUE_DRAIN_TIMEOUT} 同一個量級，
-     * 不是 {@link #SCREEN_TIMEOUT} 那種單純畫面轉場的量級。模擬器慢一點就逾時的話，
-     * 紅的是環境不是產品。
-     */
     private static final Duration COMPLETION_SUBMIT_TIMEOUT = Duration.ofSeconds(20);
 
-    /**
-     * 完修送出做完之後繼續盯覆蓋層的長度，給畫面時間把覆蓋層畫出來。
-     * 這段在確認送出做完的那一刻重新起算，不受等送出用掉多少時間影響，
-     * 否則送出慢的場次會把盯的時間無聲砍短，漏看的反而不會失敗。
-     */
     private static final Duration CELEBRATE_SETTLE = Duration.ofSeconds(3);
 
     private final AppiumWorld world;
@@ -73,12 +53,6 @@ public class RepairThenSteps {
         assertLabelContains("repair.photo.1.watermark-label", watermark, "照片浮水印");
     }
 
-    /**
-     * 必查：後端沒有新的修繕任務，也沒有對應的開單請求紀錄。
-     *
-     * <p>用到這句的情境都沒有事先鋪任何工務單，所以「沒收到」等於整個租戶一張都沒有。
-     * 以總筆數驗而不是只驗某一張，連「建成了另一張單」這種走偏也會被抓到。
-     */
     @那麼("後端沒有收到這張工務單")
     public void backendHasNoTicket() {
         List<Map<String, Object>> rows = ticketRows("1 = 1");
@@ -101,26 +75,15 @@ public class RepairThenSteps {
                     + (submit.isEnabled() ? "啟用" : "禁用") + "」");
         }
         if (!expectedEnabled) {
-            // dsl 的「禁用時無法真的觸發送出動作，不是事後才報錯」：按下去要什麼都不發生。
-            // 只讀 enabled 屬性的話，一顆畫成灰色但照樣送得出去的按鈕也會過關。
             try {
                 submit.click();
             } catch (RuntimeException ignored) {
-                // 點不動本來就是這句要的結果。
             }
             world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
             backendHasNoTicket();
         }
     }
 
-    /**
-     * 必查：完修回報面板送出鈕（{@code completeSheet.submit-button}）的可互動狀態
-     * （enabled/disabled）符合；禁用時無法真的觸發送出動作，不是事後才報錯。
-     *
-     * <p>與報修面板的「送出鈕為」是不同面板的不同句型，各自獨立：這裡定位的是完修回報
-     * 面板的送出鈕，「無法觸發」的權威佐證是後端該單仍維修中（{@code tasks.state = 'doing'}），
-     * 不是「沒有建新單」。
-     */
     @那麼("完修回報的送出鈕為 {string}")
     public void completeSheetSubmitButtonState(String enabledOrDisabled) {
         boolean expectedEnabled = switch (enabledOrDisabled) {
@@ -135,15 +98,10 @@ public class RepairThenSteps {
                     + (submit.isEnabled() ? "啟用" : "禁用") + "」");
         }
         if (!expectedEnabled) {
-            // 只讀 enabled 屬性的話，一顆畫成灰色但照樣送得出去的按鈕也會過關；
-            // 所以禁用時要真的按下去，再驗送出沒有發生。
             try {
                 submit.click();
             } catch (RuntimeException ignored) {
-                // 這句要驗的是「送出沒有發生」；禁用鈕拒絕點擊而拋例外，
-                // 正是沒有發生的一種表現，不能當成測試失敗。
             }
-            // 面板本身沒有 accessibility id，以送出鈕仍在畫面上代表面板沒有因送出而關掉。
             world.waitForTestId("completeSheet.submit-button", SCREEN_TIMEOUT);
             Map<String, Object> row = singleTicketRow("1 = 1", "本情境唯一的工務單");
             if (!"doing".equals(row.get("state"))) {
@@ -158,11 +116,6 @@ public class RepairThenSteps {
         assertLabelContains("repair.photo.count-label", hint, "照片欄位標題");
     }
 
-    /**
-     * 必查：報修畫面的照片縮圖數等於張數。縮圖以它自己的浮水印標籤
-     * （{@code repair.photo.{index}.watermark-label}，每張照片各一個）計數——報修面板上
-     * 只有照片格帶這個 id，數它就是數縮圖。
-     */
     @那麼("報修畫面仍只有 {int} 張照片")
     public void repairScreenStillHasPhotos(int photoCount) {
         List<String> thumbnails = world.findTestIdsWithPrefix("repair.photo.").stream()
@@ -176,7 +129,6 @@ public class RepairThenSteps {
 
     @那麼("加入照片的按鈕已消失")
     public void addPhotoButtonGone() {
-        // 先等報修面板本身在畫面上，否則面板還沒畫出來時的「找不到」會誤判為通過。
         world.waitForTestId("repair.sheet", SCREEN_TIMEOUT);
         if (!world.driver().findElements(world.byTestId("repair.photo.add-button")).isEmpty()) {
             throw new AssertionError("已附滿 3 張時不應再有加入照片的按鈕，但畫面上找得到");
@@ -192,7 +144,6 @@ public class RepairThenSteps {
             throw new AssertionError("第 " + photoIndex + " 張照片的重試按鈕在畫面上，但不可點");
         }
 
-        // 「只重試這一張」的另一半：其他照片不能跟著被標成失敗，否則員工會整批重傳。
         for (String id : world.findTestIdsWithPrefix("repair.photo.")) {
             if (!id.endsWith(".upload-status") || id.contains("." + photoIndex + ".")) {
                 continue;
@@ -208,8 +159,6 @@ public class RepairThenSteps {
     @那麼("工務單與照片保存在手機，畫面標示待送出")
     public void ticketAndPhotosSavedOffline() {
         world.waitForTestId("ticket.summary.offline-queued-label", SCREEN_TIMEOUT);
-        // 畫面上的待送出標示與離線列的筆數講的是同一條佇列；只看標示的話，一個
-        // 根本沒進佇列的標示也會過關，而那正是這條 Rule 最在意的失敗方式。
         assertLabelContains("system.offline-bar.pending-count", "1", "離線列的待同步筆數");
         backendHasNoTicket();
     }
@@ -229,23 +178,12 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：待送出標示消失，App 本機佇列是空的。
-     *
-     * <p>佇列空了的判準是問 App 自己還剩幾筆（{@link AppiumWorld#waitForPendingSyncDrained}），
-     * 不是畫面頂部的離線列不見：看那一列的話這一句什麼都沒驗到，理由見那一支。
-     */
     @那麼("畫面不再標示待送出")
     public void noLongerMarkedPendingSync() {
         world.waitForTestIdGone("ticket.summary.offline-queued-label", QUEUE_DRAIN_TIMEOUT);
         world.waitForPendingSyncDrained(QUEUE_DRAIN_TIMEOUT);
     }
 
-    /**
-     * 必查：重複提示（{@code repair.duplicate-ticket.banner}）指的就是那張單，上面有可點的
-     * 補照片入口（{@code repair.duplicate-ticket.add-photo-button}）；後端那張單確實還沒
-     * 結案，才會被開單前檢查當成重複。
-     */
     @那麼("畫面提供補充照片到 {string} 的選項")
     public void offersAddPhotoOptionToTicket(String ticketNo) {
         assertLabelContains("repair.duplicate-ticket.banner", ticketNo, "重複提示");
@@ -263,14 +201,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：報修畫面的急件判定卡顯示「系統判定：急件 · {理由}」，與後端 {@code urgentSuggestion}
-     * 的判定結果與 {@code rule} 一致；沒有輸入可以更改這個判定。
-     * accessibility id：{@code repair.urgent-judgement.card}。
-     *
-     * <p>判定與理由合成一句讀，不是分兩句讀。理由是判定的一部分，分開驗的話
-     * 「急件」與理由之間漏接成「系統判定：急件VIP · 15:00 入住」也會過。
-     */
     @那麼("畫面顯示系統判定為急件，理由 {string}")
     public void showsSystemUrgentJudgement(String reason) {
         assertLabelContains("repair.urgent-judgement.card", "系統判定：急件 · " + reason, "急件判定卡");
@@ -303,7 +233,6 @@ public class RepairThenSteps {
         assertLabelContains("repair.urgent-judgement.card", "依飯店設定的規則判定", "急件判定卡");
         assertLabelContains("repair.urgent-judgement.card", "房務不能更改", "急件判定卡");
 
-        // 說明文字只是寫給人看的；真正保證房務改不了的是判定卡上沒有任何可點的元件。
         List<String> controls = world.findTestIdsWithPrefix("repair.urgent-judgement.").stream()
                 .filter(id -> id.endsWith("-button") || id.endsWith("-toggle") || id.endsWith(".chip"))
                 .toList();
@@ -312,24 +241,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情的狀態摘要卡或狀態列（{@code ticket.status-summary-card}）顯示該文案，
-     * 而且與後端的工務單狀態對照表一致。房務端的文案多半還帶著工務的名字與一句補充，
-     * 工務端與主管視角的狀態列在已完修時後面另接完修結果，所以比對的是「文案包含這一段」
-     * 而不是整句相等。
-     *
-     * <p>固定文案查 {@link #STATE_BY_SUMMARY}；帶欄位的四種文案各自多比後端欄位
-     * （{@code readRepairTicket} 的回應比 JDBC 多了姓名的 JOIN）：
-     * <ul>
-     *   <li>「已結案 · 不需處理」：closed、{@code resolution_type}=no_action_needed、沒有驗收人。</li>
-     *   <li>「已結案 · {驗收人}驗收」：closed，驗收人就是文案上那一位（{@code verified_by} 與
-     *       {@code verifiedBy} 兩邊都比）——不比驗收人的話畫面顯示別人的名字也算過。</li>
-     *   <li>「退回重修中 · {處理人} 處理中」（房務端）：退回重修中，處理人是文案上那一位。</li>
-     *   <li>「退回重修 · {判定人} 判定不通過」（工務端與主管視角）：退回重修中，最近一次判
-     *       不通過的是文案上那一位（{@code last_verify_failed_by} 與 {@code lastVerifyFailedBy}）。</li>
-     * </ul>
-     * 退回重修中＝accepted 或 doing、{@code last_verify_failed_at} 有值、{@code tasks.done_at} 為空。
-     */
     @那麼("工務單詳情顯示狀態摘要卡 {string}")
     public void ticketDetailShowsStatusSummary(String summaryText) {
         assertLabelContains("ticket.status-summary-card", summaryText, "狀態摘要卡");
@@ -400,10 +311,6 @@ public class RepairThenSteps {
         requireState(summaryText, state, STATE_BY_SUMMARY.get(summaryText));
     }
 
-    /**
-     * 退回重修中的權威狀態：accepted 或 doing、最近一次不通過的時間有值、完修時間為空
-     * （不通過會清空 {@code tasks.done_at}；再完修後才又有值，那時已不是重修中）。
-     */
     private static void requireReworkInProgress(String summaryText, Map<String, Object> row) {
         String state = String.valueOf(row.get("state"));
         if (!"accepted".equals(state) && !"doing".equals(state)) {
@@ -418,11 +325,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情沒有可點的撤回操作入口（{@code ticket.withdraw-button} 不存在）；
-     * {@code already_claimed} 語意直接表現為按鈕不存在，不是先顯示再點擊才報 409。
-     * 先等詳情頁出現再查按鈕不存在，否則畫面還沒載入時的「找不到」會誤判為通過。
-     */
     @那麼("工務單詳情沒有撤回按鈕")
     public void ticketDetailHasNoWithdrawButton() {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -431,15 +333,8 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：詳情顯示該降級原因文字；後端
-     * {@code repair_tickets.urgent_downgrade_reason} 等於該原因，而且這張單已經不是急件
-     * ——只留下原因卻還掛著急件，代表降級只做了一半。
-     */
     @那麼("工務單詳情顯示急件降級原因 {string}")
     public void ticketDetailShowsUrgentDowngradeReason(String reason) {
-        // 降級原因寫在審核進度時間軸那一步的註腳（`Main.dc.html:4782` 的
-        // `'主管改為一般件：' + w.downgrade`），畫面上沒有獨立的降級原因節點。
         assertLabelContains("ticket.timeline", reason, "急件降級原因");
 
         Map<String, Object> row = singleTicketRow(
@@ -450,14 +345,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：以 {@code engHome.progress.in-hand-count}／{@code engHome.progress.repaired-count}／
-     * {@code engHome.progress.urgent-count} 定位的三格數字等於期望值，並與後端工務視角
-     * 今日進度一致。依 {@code specs/truth/contracts/components/schemas/員工工作台.yaml} 的
-     * {@code engineeringSummary}：手上（openCount）＝本人 accepted／doing 的工務單筆數、
-     * 已完修（completedToday）＝今天 done 的筆數、急件（urgentCount）＝手上單
-     * （accepted／doing）中 isUrgent=true 的筆數。
-     */
     @那麼("工務首頁顯示手上 {int} 張、今天已完修 {int} 張、急件 {int} 張")
     public void engHomeProgressShows(int inHandCount, int repairedCount, int urgentCount) {
         assertScreenNumber("engHome.progress.in-hand-count", inHandCount);
@@ -547,11 +434,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情沒有可點的「放回待認領」操作入口（{@code ticket.release-to-pool-button}
-     * 不存在）；客房工務單只能用「暫停」處理。先等到詳情頁（{@code ticket.screen}）出現
-     * 再查按鈕不存在，否則畫面還沒載入時的「找不到」會誤判為通過。
-     */
     @那麼("工務單詳情沒有「放回待認領」按鈕")
     public void ticketDetailHasNoReleaseToPoolButton() {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -593,7 +475,7 @@ public class RepairThenSteps {
 
         Map<String, Object> done = singleTicketRow("t.state = 'done'", "已完修的工務單");
         switch (resolutionLabel) {
-            case "已修好" -> { /* 權威狀態只需 done，沒有額外連動 */ }
+            case "已修好" -> { }
             case "暫時處理" -> {
                 List<Map<String, Object>> followUps = ticketRows(
                         "rt.origin_ticket_task_id = ?", done.get("task_id"));
@@ -614,15 +496,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：後端該工務單狀態仍是維修中，沒有新的完修事件、完修照片與完修結果。
-     *
-     * <p>「完修事件」與「完修結果」在後端是同一筆真相——{@code task_events.type = 'completed'}
-     * （結果 {@code resolutionType} 放在它的 payload 裡；{@code repair_tickets} 沒有獨立的
-     * 結果欄），所以查無 completed 事件就同時排除了兩者。「完修照片」另查
-     * {@code repair_photos.purpose = 'completion'}——照片走獨立的兩段式上傳，就算完修
-     * 請求本身沒送出去，先建出 completion 照片列也算走漏，要分開驗。
-     */
     @那麼("後端沒有收到這次完修")
     public void backendHasNotReceivedCompletion() {
         Map<String, Object> row = singleTicketRow("1 = 1", "本情境唯一的工務單");
@@ -651,23 +524,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：畫面上沒有完成畫面那一層覆蓋層（accessibility id
-     * {@code celebrate.screen} 不存在），員工留在工務單自己的回報流程上。
-     * 用於工務單的完修回報——那張卡是房務打掃與備品完成才走的，工務單有
-     * 自己的回報與驗收流程。
-     *
-     * <p>只檢查「有沒有跳走」不夠，要確認那一層根本沒出現，所以這裡不是最後看一眼
-     * 停在哪一頁，而是從送出完修那一刻起就每一輪檢查覆蓋層在不在，檢查的方式見
-     * {@link #requireNoCelebrateOverlay()}。
-     *
-     * <p>盯的範圍分成兩段各自計時。第一段用 {@link #COMPLETION_SUBMIT_TIMEOUT} 輪詢等
-     * 完修回報面板關閉（{@code completeSheet.submit-button} 不在了）且畫面停在工務單詳情
-     * （{@code ticket.screen} 還在），確認送出真的做完；等不到就失敗，否則沒跑完的場次會
-     * 偽裝成通過。第二段在確認送出做完的那一刻重新起算整段 {@link #CELEBRATE_SETTLE}，
-     * 讓畫面有機會把覆蓋層畫出來。兩段分開計時，是因為合用一份預算時送出愈慢、
-     * 盯的時間愈短，而那種場次已經算通過，不會有人發現少盯了。
-     */
     @那麼("不出現完成畫面")
     public void noCompletionCelebrationOverlay() {
         long submitDeadline = System.nanoTime() + COMPLETION_SUBMIT_TIMEOUT.toNanos();
@@ -693,16 +549,9 @@ public class RepairThenSteps {
             requireNoCelebrateOverlay();
             pause(200);
         }
-        // 迴圈是先查再睡，最後那次睡之後還沒查過，補一次才算盯滿整段。
         requireNoCelebrateOverlay();
     }
 
-    /**
-     * 這一輪畫面上不能有完成畫面那一層覆蓋層，查到就當場失敗。以 {@code findElements}
-     * 回傳的空清單判定不存在：找不到就是空清單、不必等逾時，所以能密集輪詢。
-     * 覆蓋層是疊在任務頁上的一層，可以出現一下再自己收掉，只在最後抓一張畫面
-     * 會整個漏掉，所以要每一輪都查。
-     */
     private void requireNoCelebrateOverlay() {
         List<WebElement> overlay = world.driver().findElements(world.byTestId(CELEBRATE_OVERLAY_ID));
         if (!overlay.isEmpty()) {
@@ -712,13 +561,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情頂部步驟條（{@code ticket.stepper.{n}}）固定顯示這四步，目前那一步掛
-     * {@code ticket.stepper.{n}--current}，之前的步驟為已完成（{@code ticket.stepper.{n}--done}）、
-     * 之後的未到（沒有 {@code --done}）；與後端狀態對照一致：待開始＝等工務接單、已接單或退回
-     * 重修中的待開始（pool、accepted），維修中＝doing，驗收＝已完修等主管驗收（done）。
-     * 已結案四步全部完成、沒有目前步驟，由「第四步」那一句負責；「完修」沒有對應的停留狀態。
-     */
     @那麼("工務單詳情的步驟條依序為 {string}，目前在 {string}")
     public void ticketDetailStepperIs(String stepListText, String currentStep) {
         List<String> steps = List.of(stepListText.split("、"));
@@ -762,11 +604,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：步驟條第四步「驗收」的完成樣式（{@code ticket.stepper.4--done}）符合；已完成只在
-     * 後端 {@code tasks.state}=closed（驗收通過或不需處理結案）時成立，已完修等驗收與退回重修中
-     * 都是尚未完成。
-     */
     @那麼("工務單詳情的步驟條第四步「驗收」為 {string}")
     public void ticketDetailFourthStepIs(String completion) {
         boolean expectedDone = switch (completion) {
@@ -794,16 +631,10 @@ public class RepairThenSteps {
         }
     }
 
-    /** 步驟條第 [step] 步已完成的標記（產品端 {@code ManagerIds.ticketStepperDone}）。 */
     private static String stepperDoneId(int step) {
         return "ticket.stepper." + step + "--done";
     }
 
-    /**
-     * 必查：送出成功後導向剛建立那張工務單的詳情頁（{@code ticket.screen}），後端確實
-     * 已建立對應工務單（本情境唯一的一張，單號已配發）。表單內容與後端欄位的逐項比對
-     * 屬於開工單 When 句的權威語意，這裡驗「單真的建立且畫面停在它的詳情」。
-     */
     @那麼("App 停在新建工務單的詳情")
     public void appStaysOnNewTicketDetail() {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -815,15 +646,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情狀態列或摘要卡下方的琥珀提示卡顯示最近一次不通過的原因與判定人姓名
-     * （只顯示最近一次），與後端 {@code RepairTicket.lastVerifyFailedReason}、
-     * {@code lastVerifyFailedBy}（JDBC 的 {@code last_verify_failed_reason}／{@code _by}）一致。
-     * 報修人、處理人與主管三種視角共用。
-     *
-     * <p>提示卡沒有專屬 accessibility id，以「畫面上有含原因的元素」定位；判定人姓名同時出現在
-     * 狀態列上，所以先找同一個元素同時含原因與姓名，找不到才退一步要求姓名也在畫面上。
-     */
     @那麼("工務單詳情顯示最近一次不通過的原因 {string} 與判定人 {string}")
     public void ticketDetailShowsLastVerifyFailure(String reason, String managerName) {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -853,11 +675,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：工務單詳情上沒有「等主管審核」「主管未核准」字樣，也沒有核准、退回或補資料再送出的
-     * 按鈕或面板；後端 {@code RepairTicket.state} 屬於契約現行值集。房務、工務與主管三種視角共用。
-     * 先等詳情頁出現再查「沒有」，否則畫面還沒載入時的「找不到」會誤判為通過。
-     */
     @那麼("工務單詳情沒有任何主管審核的狀態或動作")
     public void ticketDetailHasNoManagerReview() {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -890,14 +707,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：員工（報修人或處理人）的工務單詳情上沒有 {@code managerTicket.pass-button}、
-     * {@code managerTicket.fail-button}，也沒有任何「通過」「不通過」字樣的按鈕；後端以該員工
-     * 身分呼叫 {@code verifyRepairTicket} 會回 403。
-     *
-     * <p>403 以目前登入 App 的那位員工重送一次驗收通過來驗；回 2xx 的話單就真的被驗收了，
-     * 但那正是這句要抓的走漏，斷言照樣失敗。
-     */
     @那麼("工務單詳情沒有通過或不通過的動作")
     public void ticketDetailHasNoVerifyActions() {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -923,10 +732,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：以 {@code engPool.item.{單號}.verification-return-label} 定位的琥珀標籤顯示「驗收退回」，
-     * 副文等於原因，與後端工務待認領 {@code PoolItem.verificationReturnReason} 一致。
-     */
     @那麼("工務待認領中 {string} 標示驗收退回，原因 {string}")
     public void engPoolItemShowsVerificationReturn(String ticketNo, String reason) {
         String id = "engPool.item." + ticketNo + ".verification-return-label";
@@ -959,23 +764,15 @@ public class RepairThenSteps {
         }
     }
 
-    // ---- 主管視角工務單詳情（managerTicket）的 Then。畫面 id 照 RepairContext 的常數
-    //      （來源 app/mobile/lib/features/manager/manager_ids.dart）。 ----
-
-    /** 「驗收時間為現在」的容差：App BDD 沒有可注入的後端 Clock，只能以「幾秒內」收斂。 */
     private static final Duration NOW_TOLERANCE = Duration.ofSeconds(60);
 
-    /** 主管視角的驗收鈕：實心「通過」與描邊「不通過」（產品端 {@code ManagerIds.ticketPassButton}／{@code ticketFailButton}）。 */
     private static final String MANAGER_PASS_BUTTON = "managerTicket.pass-button";
     private static final String MANAGER_FAIL_BUTTON = "managerTicket.fail-button";
 
-    /** 不通過面板的送出鈕（{@code ManagerIds.ticketFailSheetSubmitButton}）。 */
     private static final String MANAGER_FAIL_SUBMIT_BUTTON = "managerTicket.fail-sheet.submit-button";
 
-    /** 不通過送出後覆蓋的驗收結果卡（{@code ManagerIds.ticketResult}）。 */
     private static final String MANAGER_RESULT_CARD = "managerTicket.result";
 
-    /** 已收回的主管審核入口：核准、退回、退回面板、補資料再送出。畫面上一個都不該出現。 */
     private static final List<String> LEGACY_REVIEW_IDS = List.of(
             "managerTicket.approve-button",
             "managerTicket.reject-button",
@@ -983,19 +780,11 @@ public class RepairThenSteps {
             "managerTicket.reject-sheet.submit-button",
             "ticket.resubmit-button");
 
-    /** 契約 {@code RepairTicket.state} 的現行值集。 */
     private static final Set<String> CONTRACT_TICKET_STATES =
             Set.of("pool", "accepted", "doing", "done", "closed", "cancelled");
 
-    /** 主管視角完修回報區的完修照片縮圖 id 前綴（{@code ticket.completion-photo.{n}}）。 */
     private static final String COMPLETION_PHOTO_PREFIX = "ticket.completion-photo.";
 
-    /**
-     * 必查：主管視角詳情的底部動作列剛好只有列出的按鈕：「通過、不通過」＝
-     * {@code managerTicket.pass-button} 與 {@code managerTicket.fail-button} 都存在且可按；
-     * 「無」＝兩顆都不存在。與後端 {@code RepairTicket.state} 對照：done 是通過、不通過，
-     * 其他一律無（只看狀態，不看驗收欄位）。
-     */
     @那麼("工務單詳情的主管動作為 {string}")
     public void managerActionsAre(String actionsText) {
         Set<String> expected = switch (actionsText) {
@@ -1030,15 +819,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：主管視角詳情的資訊卡逐項顯示表格中的值（照片張數比對縮圖數
-     * {@code ticket.photo.{n}}），與後端 {@code readRepairTicket} 回應的 {@code photoCount}、
-     * {@code category}、{@code description}、{@code reporterName} 一致。
-     *
-     * <p>類別、說明、報修人在詳情頁沒有獨立的 accessibility id（標題區的描述行與資訊卡的
-     * 列都是裸 Text），以「畫面上有含該文字的元素」定位；照片張數數縮圖。
-     * Data Table 欄：{@code 項目}（照片張數、類別、說明、報修人）、{@code 值}。
-     */
     @那麼("工務單詳情顯示報修內容：")
     public void ticketDetailShowsReportedContent(DataTable table) {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -1092,12 +872,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：主管視角詳情的完修回報區顯示該張數的完修照片縮圖（{@code ticket.completion-photo.{n}}）
-     * 與該處理說明（{@code ticket.resolution-label} 的「說明：{說明}」），與後端
-     * {@code RepairTicket.resolutionNote} 及 purpose=completion 的照片
-     * （{@code completionPhotos}、{@code repair_photos.purpose='completion'}）一致。
-     */
     @那麼("工務單詳情顯示完修照片 {int} 張與處理說明 {string}")
     public void ticketDetailShowsCompletionReport(int photoCount, String note) {
         world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
@@ -1127,12 +901,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：{@code managerTicket.fail-sheet.submit-button} 的可互動狀態符合；禁用時無法真的
-     * 送出，後端沒有收到不通過請求（原因去掉前後空白後為空就是禁用）。
-     * 與報修面板、完修回報的同名句型各自獨立；禁用時真的按下去再驗「不通過沒有發生」，
-     * 只讀 enabled 屬性的話一顆畫成灰色但照樣送得出去的按鈕也會過關。
-     */
     @那麼("不通過面板的送出鈕為 {string}")
     public void failSheetSubmitButtonState(String enabledOrDisabled) {
         boolean expectedEnabled = switch (enabledOrDisabled) {
@@ -1150,23 +918,12 @@ public class RepairThenSteps {
             try {
                 submit.click();
             } catch (RuntimeException ignored) {
-                // 禁用鈕拒絕點擊而拋例外，正是「送出沒有發生」的一種表現。
             }
-            // 面板沒有因送出而關掉：送出鈕仍在畫面上。
             world.waitForTestId(MANAGER_FAIL_SUBMIT_BUTTON, SCREEN_TIMEOUT);
             backendHasNotReceivedVerificationFailure();
         }
     }
 
-    /**
-     * 必查：後端該工務單仍為已完修（done），{@code last_verify_failed_*} 沒有改變，沒有新的
-     * {@code repair_verification_failed} 事件，原處理人沒有收到推播。
-     *
-     * <p>「沒有改變」與「新的」以這一輪完修時間（{@code tasks.done_at}）為界：不通過會清空
-     * {@code done_at}，所以單還是 done 且 {@code done_at} 有值，本身就排除了完修之後的不通過；
-     * 再要求 {@code last_verify_failed_at} 為空或早於完修、完修之後沒有不通過事件與推播，
-     * 前一輪留下的不通過紀錄（重修後再驗的單）不會被誤判。
-     */
     @那麼("後端沒有收到這次驗收不通過")
     public void backendHasNotReceivedVerificationFailure() {
         Map<String, Object> row = singleTicketRow("1 = 1", "本情境唯一的工務單");
@@ -1215,15 +972,8 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：驗收結果卡（{@code managerTicket.result}）標題含該單號與「退回重修」，副文含
-     * 「回到{處理人}名下」與「會收到推播」，下方列出這次寫的原因；後端該單為待開始（accepted）、
-     * 負責人不變，最近一筆不通過事件的去處是 assignee、原處理人是這一位
-     * （{@code RepairVerificationOutcome.destination}／{@code assigneeName} 的權威來源）。
-     */
     @那麼("驗收結果卡說明 {string} 退回重修，回到 {string} 名下")
     public void verificationResultBackToAssignee(String ticketNo, String assigneeName) {
-        // 先等結果卡出現再讀後端：送出後到後端落地之間有一段往返，先讀會讀到送出前的單。
         world.waitForTestId(MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
         Map<String, Object> row = singleTicketRow("rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
         String reason = requireLastVerifyFailure(ticketNo, row);
@@ -1240,14 +990,8 @@ public class RepairThenSteps {
         requireLastFailureDestination(ticketNo, row, "assignee", assigneeId);
     }
 
-    /**
-     * 必查：驗收結果卡標題含該單號與「退回重修」，副文含「{處理人}已下班」與「回到了工務待認領」；
-     * 後端該單為待認領（pool）、沒有負責人，最近一筆不通過事件的去處是 pool、原處理人是這一位。
-     * App 不自己判斷班表，只照回應呈現，所以這裡也只比對後端給的去處。
-     */
     @那麼("驗收結果卡說明 {string} 退回重修，{string} 已下班，回到工務待認領")
     public void verificationResultBackToPool(String ticketNo, String assigneeName) {
-        // 先等結果卡出現再讀後端：送出後到後端落地之間有一段往返，先讀會讀到送出前的單。
         world.waitForTestId(MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
         Map<String, Object> row = singleTicketRow("rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
         requireLastVerifyFailure(ticketNo, row);
@@ -1262,7 +1006,6 @@ public class RepairThenSteps {
         requireLastFailureDestination(ticketNo, row, "pool", world.staff(assigneeName).id());
     }
 
-    /** 這張單後端有最近一次不通過的原因；回傳原因給結果卡比對。 */
     private static String requireLastVerifyFailure(String ticketNo, Map<String, Object> row) {
         Object reason = row.get("last_verify_failed_reason");
         if (reason == null || row.get("last_verify_failed_at") == null) {
@@ -1271,11 +1014,6 @@ public class RepairThenSteps {
         return String.valueOf(reason);
     }
 
-    /**
-     * 最近一筆 {@code repair_verification_failed} 事件的 payload：{@code destination} 是去處、
-     * {@code assigneeId} 是原處理人。這是驗收回應 {@code RepairVerificationOutcome} 的權威來源，
-     * App 收到的那份回應事後讀不到，以事件比對。
-     */
     private void requireLastFailureDestination(
             String ticketNo, Map<String, Object> row, String destination, UUID assigneeId) {
         List<Map<String, Object>> events = world.backend().queryRows("""
@@ -1299,10 +1037,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 驗收結果卡（{@code managerTicket.result}）在畫面上，且單號與每一段文字都看得到：先看結果卡
-     * 自己的 label，結果卡的子節點各自成一個無障礙元素時，退一步找畫面上含該段文字的元素。
-     */
     private void assertResultCardMentions(String ticketNo, String... fragments) {
         world.waitForTestId(MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
         String cardLabel = world.labelOf(MANAGER_RESULT_CARD);
@@ -1325,12 +1059,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 必查：透過後端測試資料查核，{@code tasks.state}=closed（已結案），
-     * {@code repair_tickets.verified_by} 是該主管、{@code verified_at} 等於現在（App BDD 沒有
-     * 可注入的後端 Clock，以 {@link #NOW_TOLERANCE} 內收斂）；{@code readRepairTicket} 的
-     * {@code state}、{@code verifiedBy}、{@code verifiedAt} 一致。
-     */
     @那麼("{string} 已由 {string} 驗收，驗收時間為現在")
     public void ticketVerifiedByManagerNow(String ticketNo, String managerName) {
         Map<String, Object> row = singleTicketRow("rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
@@ -1370,7 +1098,6 @@ public class RepairThenSteps {
         }
     }
 
-    /** 類別中文 → 契約 {@code RepairCategory}（與 Given／When 的對照表同一套權威值）。 */
     private static final Map<String, String> CATEGORY_CODE_BY_LABEL = Map.of(
             "冷氣", "air_conditioning",
             "水電", "plumbing_electrical",
@@ -1378,16 +1105,10 @@ public class RepairThenSteps {
             "門鎖", "door_lock",
             "其他", "other");
 
-    /**
-     * 權威讀回：{@code readRepairTicket}（{@code GET /repair-tickets/{taskId}}）的回應，以目前
-     * 登入 App 的人（主管／工務／房務都看得到自己該看的單）的身分讀。比 JDBC 多了姓名的
-     * JOIN（reporterName、verifiedBy）與事件推出來的時間（reviewRequestedAt）。
-     */
     private JsonNode readTicket(Map<String, Object> row) {
         return world.backend().getJson("/repair-tickets/" + row.get("task_id"), world.loggedInStaff());
     }
 
-    /** 數畫面上 id 以某前綴開頭且整個 id 符合 regex 的元素（排除同前綴的子節點，例如 add-button）。 */
     private int countIdsMatching(String prefix, String regex) {
         return (int) world.findTestIdsWithPrefix(prefix).stream().filter(id -> id.matches(regex)).count();
     }
@@ -1402,7 +1123,6 @@ public class RepairThenSteps {
         return OffsetDateTime.parse(String.valueOf(value)).toInstant();
     }
 
-    /** 把文字包成 iOS NSPredicate 的字串常值（跳脫反斜線與單引號）。 */
     private static String nsQuote(String text) {
         return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'";
     }
@@ -1415,12 +1135,6 @@ public class RepairThenSteps {
         return value.trim();
     }
 
-    /**
-     * 固定的狀態摘要卡文案 → 權威 {@code tasks.state}（對照 dsl 的狀態用語表）。房務端的
-     * 「已修好 · 等主管驗收」與工務端、主管視角的「已完修 · 等主管驗收」在後端是同一個 done。
-     * 帶姓名的已結案、退回重修與不需處理結案由 {@link #ticketDetailShowsStatusSummary}
-     * 另外比對欄位，不放進這張表。
-     */
     private static final Map<String, String> STATE_BY_SUMMARY = Map.of(
             "等工務接單", "pool",
             "已接單", "accepted",
@@ -1428,19 +1142,14 @@ public class RepairThenSteps {
             "已修好 · 等主管驗收", "done",
             "已完修 · 等主管驗收", "done");
 
-    /** 「已結案 · 不需處理」：完修結果選不需處理，直接結案、不經主管驗收。 */
     private static final String NO_ACTION_CLOSED_SUMMARY = "已結案 · 不需處理";
 
-    /** 「已結案 · {驗收人}驗收」的前段。 */
     private static final String CLOSED_PREFIX = "已結案 · ";
 
-    /** 房務端「退回重修中 · {處理人} 處理中」的前段。 */
     private static final String REWORK_REPORTER_PREFIX = "退回重修中 · ";
 
-    /** 工務端與主管視角「退回重修 · {判定人} 判定不通過」的前段。 */
     private static final String REWORK_PREFIX = "退回重修 · ";
 
-    /** 輪詢畫面時的間隔；被中斷就不再裝作沒事，否則盯不到覆蓋層會被誤讀成通過。 */
     private static void pause(long millis) {
         try {
             Thread.sleep(millis);
@@ -1469,10 +1178,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 本情境報修面板那一間房今天還有效的訂房列。急件判定的真相只有這張表
-     * （後端 {@code RepairService.judgeUrgent} 查的就是它），畫面判定對不對一律跟它比。
-     */
     private List<Map<String, Object>> todayReservationsForRepairRoom() {
         return world.backend().queryRows("""
                 SELECT rc.checkin_at, (rc.attrs ->> 'vip') = 'true' AS vip
@@ -1509,10 +1214,6 @@ public class RepairThenSteps {
         }
     }
 
-    /**
-     * 讀回符合條件的工務單（repair_tickets 連 tasks），給權威狀態斷言用。
-     * {@code condition} 內可用別名 rt（repair_tickets）與 t（tasks）。
-     */
     private List<Map<String, Object>> ticketRows(String condition, Object... params) {
         Object[] all = new Object[params.length + 1];
         all[0] = world.backend().ensureTenant();

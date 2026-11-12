@@ -5,9 +5,6 @@ import 'package:tms_staff_app/core/widgets/tms_option_row.dart';
 import 'package:tms_staff_app/core/widgets/tms_sheet.dart';
 import 'package:tms_staff_app/features/ticket/ticket_complete_sheet.dart';
 
-/// 完修回報是工務一天裡按最多次的那個面板（`Main.dc.html:2122`）。這組測試盯的
-/// 是三件只要壞掉員工就選錯或按不出去的事：面板外框與其他面板一致、三個處理結
-/// 果連同「送出後系統會做什麼」一起看得到、送不出去時按鈕講得出卡在哪。
 void main() {
   Widget host() {
     return const CupertinoApp(

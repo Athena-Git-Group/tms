@@ -19,11 +19,6 @@ import org.mockito.Mockito;
 import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * contracts listDeptPool 的 dept 參數分流與 DeptPool.activeStaffCount。
- * 待接池本身的排序與篩選由 specs/truth 的場景覆蓋，這裡只測「誰能看哪一池」
- * 這條判斷，所以資料庫查詢用假的，回傳固定一個空池。
- */
 class DeptPoolDeptParamTest {
 
     private static final long TENANT_ID = 1L;

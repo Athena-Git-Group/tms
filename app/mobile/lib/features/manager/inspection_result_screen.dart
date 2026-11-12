@@ -8,15 +8,6 @@ import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_tag.dart';
 import 'manager_ids.dart';
 
-/// 查房結果（ui-plan 畫面 4）：送出查房之後換上來的那一頁。
-///
-/// 說法只有三種，全照後端回的 [InspectionOutcome]（`result` 加 `destination`），
-/// App 不自己看班表判斷原清房者在不在班：
-/// - passed／closed：查房通過，已結案；原清房者會收到通知。
-/// - failed／cleaner：退回重做，回到原清房者名下，列出不合格項。
-/// - failed／pool：退回重做，原清房者已下班，這張單回到了房務待認領。
-///
-/// 底部只有一顆「回到待查房」。清單的重取由開查房畫面的那一端負責。
 class InspectionResultScreen extends StatelessWidget {
   const InspectionResultScreen({
     super.key,
@@ -26,7 +17,6 @@ class InspectionResultScreen extends StatelessWidget {
 
   final InspectionOutcome outcome;
 
-  /// 回應沒帶原清房者姓名時，用清單列上的姓名。
   final String cleanerName;
 
   bool get _passed => outcome.result == 'passed';
@@ -51,7 +41,6 @@ class InspectionResultScreen extends StatelessWidget {
     for (final item in outcome.failedItems) '不合格：${item.label}',
   ];
 
-  /// 整個結果節點的讀值：房號、標題、副文與不合格項。
   String get _label =>
       [outcome.roomNo, _headline, _subtitle, ..._failedLabels].join(' ');
 
@@ -59,7 +48,6 @@ class InspectionResultScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return TmsSemantics(
       id: ManagerIds.inspectResult,
-      // 測試直接讀這個節點的 label 驗三種說法；子節點只留返回鈕。
       label: _label,
       explicitChildNodes: true,
       child: CupertinoPageScaffold(

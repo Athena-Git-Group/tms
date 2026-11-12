@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/widgets/tms_repair_ticket_row.dart';
 
-/// 工務首頁與工務主管首頁共用的工務單卡：label 帶單號、地點、說明與狀態，
-/// 驗收退回的單另外帶「驗收退回」標籤與原因。
 void main() {
   EngineeringTicket ticket({String? returnReason}) => EngineeringTicket(
     ticketNo: 'W-0115',

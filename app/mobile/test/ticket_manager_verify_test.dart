@@ -8,8 +8,6 @@ import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 import 'package:tms_staff_app/features/ticket/ticket_verify_fail_sheet.dart';
 import 'package:tms_staff_app/features/ticket/ticket_verify_result_card.dart';
 
-/// 主管視角工務單詳情的驗收元件：動作列只在已完修出現、不通過面板原因空白
-/// 不能送、結果卡照後端去處說明。
 void main() {
   RepairVerificationOutcome outcome(String destination) =>
       RepairVerificationOutcome.fromJson({

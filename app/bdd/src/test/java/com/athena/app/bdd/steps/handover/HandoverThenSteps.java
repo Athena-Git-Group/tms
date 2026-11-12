@@ -19,14 +19,6 @@ public class HandoverThenSteps {
         this.world = world;
     }
 
-    /**
-     * 必查：任務頁交辦區的項目剛好等於表格，沒有多也沒有少。
-     * accessibility id：{@code task.handover.{index}.meta}、{@code task.handover.{index}.content}。
-     *
-     * <p>「來源／作者／時間」合在 meta 一行上（畫面以 {@code · } 串接），內容另一行，
-     * 所以逐欄比對是：meta 等於表格那幾欄接起來的字串（表格沒給時間時只比前綴），
-     * content 等於內容欄。表格沒有規定順序，所以逐列去找一個還沒被配走的項目。
-     */
     @那麼("交辦區顯示以下項目：")
     public void handoverShowsItems(DataTable table) {
         List<Map<String, String>> expectedRows = table.asMaps(String.class, String.class);
@@ -61,15 +53,6 @@ public class HandoverThenSteps {
         }
     }
 
-    /**
-     * 必查：任務頁上看得出這間房還有沒看過的交辦，而且不用文字「未讀／已讀」斷言。
-     * 與後端 {@code handover_reads} 一致。
-     *
-     * <p>設計原型用兩種方式表達同一件事（`Main.dc.html:1268`、`4341`）：開工前還沒看過
-     * 的交辦整塊升到頁面上（{@code task.handover.callout}），其餘情況收進「這間房的
-     * 資訊」那一列、左邊掛一顆圓點（{@code task.handover.unread-dot}）。所以「顯示」
-     * 是兩者任一成立，「隱藏」是兩者都不在。
-     */
     @那麼("交辦區的未讀標示為 {string}")
     public void handoverUnreadDotVisibility(String visibleOrHidden) {
         world.waitForTestId("task.screen", TIMEOUT);
@@ -127,12 +110,6 @@ public class HandoverThenSteps {
         }
     }
 
-    /**
-     * 掃出交辦區目前有哪幾則，逐則回傳 {@code [meta, content]}。
-     *
-     * <p>項目數是執行期才知道的，所以先用 id 前綴掃出有哪幾個 {@code .meta} 節點，再按
-     * 它們的索引去讀同一則的內容——交辦區一則也沒有時掃出來就是空的，呼叫端自己判讀。
-     */
     private List<String[]> readHandoverRows() {
         List<String[]> rows = new ArrayList<>();
         for (String metaId : world.findTestIdsWithPrefix("task.handover.")) {

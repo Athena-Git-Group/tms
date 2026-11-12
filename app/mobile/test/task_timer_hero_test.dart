@@ -5,9 +5,6 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/test_backdoor.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 
-/// 驗任務頁的計時主角：後端給了本段起算時刻時計時走到秒並真的每秒往前跳，
-/// 沒給時退回只顯示已做分鐘，而且員工離開畫面之後那支每秒醒來的計時器要停
-/// 掉——沒停的話 flutter test 會在測試結束時報「有計時器還活著」。
 void main() {
   TaskDetail task({
     required String state,
@@ -57,13 +54,11 @@ void main() {
 
     expect(heroText(tester), '12 分');
 
-    // 時間過去一秒，字仍然不動：沒有起算時刻就沒有要逐秒重算的東西。
     await tester.pump(const Duration(seconds: 1));
     expect(heroText(tester), '12 分');
   });
 
   testWidgets('有起算時刻時，計時走到秒而且每秒往前跳', (tester) async {
-    // 進入本段之前已累計 12 分鐘（720 秒），本段剛走 5 秒。
     final startedAt = DateTime(2026, 11, 8, 9);
     var now = startedAt.add(const Duration(seconds: 5));
 
@@ -91,9 +86,6 @@ void main() {
   });
 
   testWidgets('超時膠囊跟著計時同一套捨去，不因為秒數跳動忽隱忽現', (tester) async {
-    // 超時分鐘數是已做分鐘減預估分鐘（`specs/truth/features/ios-app/任務執行/
-    // dsl.md:46`），跟它旁邊那支計時共用捨去的口徑：本段已走 40 分 10 秒、
-    // 預估 35 分，所以是 40 − 35 ＝ 5。首頁那張進行中的卡用的是同一條式子。
     final startedAt = DateTime(2026, 11, 8, 9);
     var now = startedAt.add(const Duration(minutes: 40, seconds: 10));
 
@@ -111,13 +103,11 @@ void main() {
 
     expect(find.text('超時 5 分'), findsOneWidget);
 
-    // 同一分鐘內秒數再怎麼跳，超時那句話不變也不消失。
     now = now.add(const Duration(seconds: 20));
     await tester.pump(const Duration(seconds: 1));
     expect(heroText(tester), '40:30');
     expect(find.text('超時 5 分'), findsOneWidget);
 
-    // 已做時間跨過下一個整分，超時才跟著加一分，膠囊始終都在。
     now = now.add(const Duration(seconds: 31));
     await tester.pump(const Duration(seconds: 1));
     expect(heroText(tester), '41:01');
@@ -143,8 +133,6 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 2));
 
-    // 計時器沒取消的話，這個測試會在結束時被 flutter test 判定有未取消的
-    // Timer 而失敗。
     expect(find.text('別的畫面'), findsOneWidget);
   });
 
@@ -156,9 +144,6 @@ void main() {
   });
 
   testWidgets('計時以 accumulatedSeconds 當基準，正在跑的這一段只算一次', (tester) async {
-    // 契約的走秒公式是 accumulatedSeconds + (現在 − segmentStartedAt)。進行中
-    // 的單 elapsedMinutes 已含本段，拿它當基準再加本段會把本段算兩次：這個
-    // 情境（本段之前累計 0 秒、本段已走 25 分鐘）就會顯示約兩倍的 50:00。
     final startedAt = DateTime(2026, 11, 9, 9);
     final now = startedAt.add(const Duration(minutes: 25));
     final detail = TaskDetail.fromJson(<String, dynamic>{
@@ -176,9 +161,6 @@ void main() {
   });
 
   testWidgets('超時提示跟著目前已做時間走，不停在上次取資料那一刻', (tester) async {
-    // 後端回資料那一刻已做 40 分、預估 35 分，之後畫面開著不再向後端取資料。
-    // 時間再走 10 分鐘，超時要跟著變成 15 分；停在取資料當下 elapsedMinutes
-    // 算出來的 5 分就是這次要抓的凍結。
     final startedAt = DateTime(2026, 11, 9, 9);
     var now = startedAt.add(const Duration(minutes: 40));
     final detail = TaskDetail.fromJson(<String, dynamic>{
@@ -199,8 +181,6 @@ void main() {
   });
 
   testWidgets('沒有外掛時鐘時，計時讀裝置生效的時間，測試注入的時刻也算數', (tester) async {
-    // 自動化測試靠後門把裝置時間撥到指定那一刻（deviceNow）。計時若直接讀
-    // DateTime.now()，撥快的那一段就不會反映在畫面上。
     addTearDown(TestHooks.instance.reset);
     final startedAt = DateTime(2026, 11, 9, 9);
     TestHooks.instance.injectedClockIso =

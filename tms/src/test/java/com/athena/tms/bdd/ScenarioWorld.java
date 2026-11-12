@@ -3,30 +3,19 @@ package com.athena.tms.bdd;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * 情境上下文：一個 scenario 一份，記錄名稱到識別碼的對照與最後一次互動結果。
- * 只做資料持有，不含任何 Given/When/Then 語意。
- */
 public class ScenarioWorld {
 
     private final Map<String, String> staffIds = new HashMap<>();
     private final Map<String, String> staffJwts = new HashMap<>();
-    /** 房號（或無房號時的內容） -> task id */
     private final Map<String, String> taskIds = new HashMap<>();
-    /** 工務單號（W-NNNN） -> task id */
     private final Map<String, String> repairTicketTaskIds = new HashMap<>();
     private final java.util.List<String> photoIds = new java.util.ArrayList<>();
 
     private ApiResponse lastResponse;
-    /** 上一次主管待辦查詢（getManagerQueues）的回應；主管工作台的 Then 句只看這一份，不受後續呼叫覆蓋。 */
     private ApiResponse lastManagerQueuesResponse;
-    /** 上一次查房送出（createInspections）的回應；查房結果與去向的 Then 句看這一份。 */
     private ApiResponse lastInspectionResponse;
-    /** 上一次查房送出實際送的 items（[{key, pass}]）；項目集合不符的 Then 句用它算少送／多送的 key。 */
     private java.util.List<Map<String, Object>> lastInspectionItems;
-    /** 上一次驗收送出（verifyRepairTicket）的回應；驗收結果與去處的 Then 句看這一份。 */
     private ApiResponse lastVerifyResponse;
-    /** 上一次驗收是誰送的、送了什麼原因（通過時為 null）；驗收結果的 Then 句拿它比對 decidedBy 與 reason。 */
     private String lastVerifyManagerName;
     private String lastVerifyReason;
     private String lastAnswerId;
@@ -122,7 +111,6 @@ public class ScenarioWorld {
         this.lastVerifyResponse = response;
     }
 
-    /** 記下上一次驗收送出的主管姓名與原因，與 {@link #setLastVerifyResponse} 成對呼叫。 */
     public void setLastVerifyRequest(String managerName, String reason) {
         this.lastVerifyManagerName = managerName;
         this.lastVerifyReason = reason;

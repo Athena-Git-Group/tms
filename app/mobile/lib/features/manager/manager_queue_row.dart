@@ -7,7 +7,6 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_tag.dart';
 import 'manager_ids.dart';
 
-/// 列上的一顆標籤。
 class ManagerQueueTag {
   const ManagerQueueTag(this.label, this.tone);
 
@@ -15,7 +14,6 @@ class ManagerQueueTag {
   final TmsTagTone tone;
 }
 
-/// 清單一列要畫的東西，由兩種 item 各自換算；畫法只有 [ManagerQueueRow] 一套。
 class ManagerQueueRowData {
   const ManagerQueueRowData({
     required this.taskId,
@@ -29,7 +27,6 @@ class ManagerQueueRowData {
     required this.waitingSinceIsToday,
   });
 
-  /// 待查房：房號、任務標題、誰清的；被退回重做過的標「重做後再查」。
   factory ManagerQueueRowData.inspection(InspectionQueueItem item) {
     final where = _where(item.roomNo, item.isPublicArea, item.title);
     return ManagerQueueRowData(
@@ -47,8 +44,6 @@ class ManagerQueueRowData {
     );
   }
 
-  /// 待驗收：單號、房號或地點、說明；標籤是完修結果（無法修復用琥珀色）、
-  /// 定期保養與重修後再驗，次要字是完修人。
   factory ManagerQueueRowData.verify(VerifyQueueItem item) {
     return ManagerQueueRowData(
       taskId: item.taskId,
@@ -58,7 +53,6 @@ class ManagerQueueRowData {
       title: item.title,
       details: [if (item.assigneeName != null) '${item.assigneeName} 完修'],
       tags: [
-        // 完修結果欄位出現之前就完修的舊單沒有值，這顆標籤就不畫。
         if (item.resolutionType case final resolutionType?)
           ManagerQueueTag(
             _resolutionText[resolutionType] ?? resolutionType,
@@ -76,26 +70,20 @@ class ManagerQueueRowData {
     );
   }
 
-  /// 這一列那張單的任務 id；點進去的畫面拿它向後端取單或送出動作。
   final String taskId;
 
-  /// 列 id 的尾段：待查房是房號，工務單是單號。
   final String key;
 
-  /// 工務單號；待查房沒有。
   final String? ticketNo;
 
-  /// 列的主角：房號；公共區域的單沒有房號，地點說明在標題裡，就用標題。
   final String where;
   final String title;
 
-  /// 第三行的次要字，畫面上以「 · 」串起來。
   final List<String> details;
   final List<ManagerQueueTag> tags;
   final String waitingSince;
   final bool waitingSinceIsToday;
 
-  /// 整列節點的讀值：單號、房號或地點、內容、標籤、次要字。
   String get label => [
     ?ticketNo,
     where,
@@ -107,7 +95,6 @@ class ManagerQueueRowData {
   static String _where(String? roomNo, bool isPublicArea, String title) =>
       isPublicArea || roomNo == null ? title : roomNo;
 
-  /// 完修結果的契約值 → 列上標籤的短說法。
   static const Map<String, String> _resolutionText = {
     'fixed': '已修好',
     'temporary': '暫時處理',
@@ -115,12 +102,6 @@ class ManagerQueueRowData {
   };
 }
 
-/// 主管清單的一列：左邊單號（工務單才有）、房號或地點、內容、標籤與次要字，
-/// 右邊開始等主管的時間。待查房與待驗收都是這一個元件，差別只在 [ManagerQueueRowData]
-/// 依 item 型別填了哪些標籤與次要字。
-///
-/// 整列節點顯式帶 [ManagerQueueRowData.label]；右欄另掛一個節點，讀值是
-/// [waitingSinceText] 的 label，驗收讀時間不必理會列上其他文字。
 class ManagerQueueRow extends StatelessWidget {
   const ManagerQueueRow({
     super.key,
@@ -132,7 +113,6 @@ class ManagerQueueRow extends StatelessWidget {
   final ManagerQueueRowData data;
   final bool showSeparator;
 
-  /// 點這一列要做的事；null 時這一列只看不點。
   final VoidCallback? onTap;
 
   @override
@@ -240,13 +220,6 @@ class ManagerQueueRow extends StatelessWidget {
   }
 }
 
-/// 右欄「開始等主管的時間」要顯示的字。
-///
-/// 時與分直接取 [waitingSince] 字串本身（帶後端時區位移），不轉成手機時區；
-/// 要不要標日期只看後端給的 [isToday]。不是今天時，「昨天」或「N 天前」是拿
-/// [now] 換算到同一個時區位移後的日期去比，跟後端的日界線同一把尺。
-///
-/// [label] 是給右欄節點的讀值：今天只有時刻；不是今天是「日期 時刻 幾天前開始等」。
 ({String? date, String time, String caption, String label}) waitingSinceText(
   String waitingSince, {
   required bool isToday,

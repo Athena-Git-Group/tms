@@ -16,7 +16,6 @@ public class StaffDevice {
     private UUID staffId;
     private String deviceFingerprint;
     private String pushToken;
-    /** ios 或 android；登入時順手登記、還沒帶平台的舊列為 null。 */
     private String platform;
     private OffsetDateTime registeredAt;
     private OffsetDateTime revokedAt;

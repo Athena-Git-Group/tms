@@ -5,17 +5,6 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 import 'tms_motion.dart';
 
-/// 首頁進度環：一圈灰色軌道，上面疊一段品牌色的弧表示已完成的比例。
-///
-/// 環的中央留給呼叫端放數字與說明（[child]），環本身不畫任何文字。數字是
-/// 要被讀值的節點，留在外面才能由畫面決定掛哪一個 accessibility id。
-///
-/// [progress] 是 0 到 1 之間的比例，超出範圍的值會被夾回範圍內；分母為 0
-/// 時傳 0 進來，環會只剩軌道。弧從正上方開始順時針長，和員工對「進度」的
-/// 直覺一致。
-///
-/// 比例變動時弧長會依 [TmsMotion.ringSweep] 補間過去，不是直接跳。清完一間房
-/// 回到首頁時，看得見那一段弧長出來，員工才知道數字為什麼變了。
 class TmsProgressRing extends StatelessWidget {
   const TmsProgressRing({
     super.key,

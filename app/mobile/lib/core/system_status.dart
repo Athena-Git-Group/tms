@@ -5,60 +5,26 @@ import 'theme.dart';
 import 'tms_semantics.dart';
 import 'widgets/tms_alert.dart';
 
-/// 離線時唯一還能做的事是把手上進行中的那間房做完，其餘動作被擋下來時都用
-/// 這一句話告訴員工原因。
-///
-/// 每個被擋的入口各寫一句的話，同一個限制會出現四種說法，員工得自己猜這些
-/// 是不是同一回事。
 const String offlineOnlyCompleteMessage = '目前離線，只能完成進行中的單';
 
-/// 離線時被擋下的「恢復處理」用這一句。原型的離線提示標題是逐動作組出來的
-/// （`Main.dc.html:3039` 的 `'目前離線，無法' + what`），恢復是其中唯一有
-/// 專屬文案的入口。
 const String offlineCannotResumeMessage = '目前離線，無法恢復處理';
 
-/// 離線完成任務或離線開立工務單之後，畫面用這一句告訴員工東西還在手機上。
 const String pendingSyncMessage = '已離線暫存，連線後自動同步';
 
-/// 連線不穩定時畫面頂部那一列的文字。秒數直接取自降級輪詢的間隔，畫面承諾
-/// 的時間就不會跟實際重查的時間各走各的。
 final String connectionIssueMessage =
     '資料可能延遲，每 ${degradedPollInterval.inSeconds} 秒自動更新';
 
-/// 連線不穩定那一列的標題。狀態列的第一行講「現在是什麼狀況」，第二行才講
-/// 「所以會怎樣」；只留一行的話員工得自己從「資料可能延遲」反推連線出問題了。
 const String connectionIssueTitle = '即時連線異常';
 
 const String offlineTitle = '目前離線';
 
 const String offlineDescription = '只能完成進行中的單';
 
-/// 畫面頂部的連線狀態列，離線與連線不穩定兩種情況各顯示一列。
-///
-/// 這兩種狀態是跨畫面的，每個畫面各自判斷與各自排版的話，同一個狀態在不同
-/// 畫面上會長得不一樣，而且新畫面很容易漏掉其中一種。需要呈現連線狀態的畫
-/// 面把這個元件放在內容最上方即可。
-///
-/// 連線正常時這個元件不佔任何高度。
 class SystemStatusBar extends StatelessWidget {
   const SystemStatusBar({super.key, this.padding = EdgeInsets.zero});
 
-  /// 狀態列上方與左右的留白，只在真的有一列要顯示時才生效。
-  ///
-  /// 擺進沒有左右內距的版面時（分頁的 `Column` 直接貼著螢幕邊），狀態列得自
-  /// 己補上畫面邊距，否則它會比底下每一塊內容都寬一圈。留白寫在這裡而不是讓
-  /// 呼叫端包一層 `Padding`：包在外面的那層在連線正常時仍然佔著高度，畫面頂
-  /// 端會空出一條沒有東西的縫。
-  ///
-  /// 下緣留白不吃這個值，見 [contentGap]。
   final EdgeInsets padding;
 
-  /// 狀態列與它下面那一塊內容的距離（`Main.dc.html:76`）。
-  ///
-  /// 這段留白由元件自己帶，不由各畫面傳進來。原型的捲動容器用 `gap: 16px`
-  /// 一視同仁地撐開每一塊內容，所以這個值是狀態列在版面裡的位置決定的，不是
-  /// 各畫面的選擇。交給呼叫端去加的話，七個掛點就會長出七個值，而且新畫面掛
-  /// 上狀態列時最容易漏掉的就是這一段。
   static const double contentGap = TmsSpacing.lg;
 
   @override
@@ -100,10 +66,6 @@ class SystemStatusBar extends StatelessWidget {
   }
 }
 
-/// 離線列：左邊是「目前離線」，右邊是還沒送出去的筆數。
-///
-/// 兩段文字各自掛一個 accessibility id，因為驗收要分別讀得到文案與數字；
-/// 合成一個節點時兩者會被接成一串，讀的一方得自己剝字串才拿得到數字。
 class _OfflineBar extends StatelessWidget {
   const _OfflineBar();
 
@@ -152,8 +114,6 @@ class _OfflineBar extends StatelessWidget {
   }
 }
 
-/// 白底的狀態列（目前只有「即時連線異常」用）：標題講狀況、說明講影響，左邊
-/// 一個圖示標語氣。
 class _StatusStrip extends StatelessWidget {
   const _StatusStrip({
     required this.id,
@@ -171,8 +131,6 @@ class _StatusStrip extends StatelessWidget {
   final Color iconColor;
   final String title;
 
-  /// 整列的 accessibility label 就是這一句：驗收讀的是「所以會怎樣」，不是
-  /// 標題那四個字。
   final String description;
   final Color tint;
   final Color titleColor;
@@ -202,11 +160,6 @@ class _StatusStrip extends StatelessWidget {
   }
 }
 
-/// 連線狀態列共用的版型：圓角方塊、左圖示、中間兩行文字、右側補充。
-///
-/// 離線與連線異常兩列只差底色、圖示與文字，版型抽在這裡，兩列才不會隨著各自
-/// 改動慢慢長成兩個高度不一樣的東西——它們出現在同一個位置，差一點點就看得
-/// 出來。
 class _StatusBarFrame extends StatelessWidget {
   const _StatusBarFrame({
     required this.tint,
@@ -262,11 +215,6 @@ class _StatusBarFrame extends StatelessWidget {
   }
 }
 
-/// 離線時員工點了不能做的動作，用這個提示告訴他為什麼沒有反應。
-///
-/// 呼叫端必須在呼叫後端之前就先問 [ConnectionStatus.isOffline] 並改走這裡，不要
-/// 讓請求送出去再靠失敗回應補救：離線時那個請求根本到不了後端，員工只會看到
-/// 轉圈到逾時。
 Future<void> showOfflineBlockedAlert(
   BuildContext context, {
   String message = offlineOnlyCompleteMessage,

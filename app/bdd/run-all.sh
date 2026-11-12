@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 #
-# 跑 specs/truth/features/ios-app 底下**全部**模組的 truth feature（全量回歸）：
-# 流程與 run-f3.sh／run-module.sh 相同（後端就緒檢查 → build ＋安裝 App → 起 Appium
-# → 跑 Cucumber → 清理），差別只在跑的是 RunTruthFeaturesTest，而且不帶
-# -Dcucumber.features——那個 runner 自己用 @SelectDirectories 選定整個 ios-app 目錄，
-# 再給一次 cucumber.features 反而會讓 Surefire 頂層 launcher 重複發現同一批場景。
-#
+# 跑 ios-app 全部模組的 Cucumber 情境，一次約 60–90 分鐘。
 # 用法： app/bdd/run-all.sh
-# 一次跑完約 60–90 分鐘，建議背景執行並輪詢 log。
 # 要先裝好： flutter、xcrun（Xcode command line tools）、appium 3.x（含 xcuitest driver）。
-# 環境準備片段與可覆寫的環境變數（UDID、BACKEND_URL……）見 app/bdd/lib/env.sh。
+# 可覆寫的環境變數見 app/bdd/lib/env.sh。
 
 set -euo pipefail
 

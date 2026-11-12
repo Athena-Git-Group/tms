@@ -10,16 +10,6 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 「通知整個部門」類推播的共用組裝：新需求進待接池、住客撤回待接池需求。
- * 這兩種事件的收件人都是「該部門的在職成員」——收件人查詢共用
- * {@link PushOutboxWriter#activeDeptStaffIds}（其他未接提醒等排程事件也共用
- * 同一個查詢），之後改「誰收得到」的規則不會出現各事件各自為政。新需求
- * 另外要對每個收件人標示是否與該房同樓層（樓層以收件人本班排房 plan_rooms
- * 的負責樓層為準，口徑與待接池排序的「同樓層」一致）。
- *
- * <p>冪等鍵一律「事件:任務:收件人」，請求重試或掃描重放不會對同一個人重複插入。
- */
 @Component
 public class PushNotifier {
 
@@ -33,10 +23,6 @@ public class PushNotifier {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * 新需求進待接池：推播該部門在職成員，標題「新需求 · {房號} {內容}」，
-     * 與收件人同樓層時加註「（同樓層）」；去處為待接池並標亮這張單。
-     */
     public void notifyPoolNewRequest(long tenantId, UUID taskId) {
         Map<String, Object> task = taskRow(tenantId, taskId);
         if (task == null) {
@@ -55,7 +41,6 @@ public class PushNotifier {
         }
     }
 
-    /** 住客撤回待接池中的需求：推播該部門在職成員，去處為待接池。 */
     public void notifyGuestWithdrew(long tenantId, UUID taskId) {
         Map<String, Object> task = taskRow(tenantId, taskId);
         if (task == null) {
@@ -83,7 +68,6 @@ public class PushNotifier {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    /** 收件人本班排房負責的樓層集合（plan_rooms 綁定房間的樓層）。 */
     private Set<Integer> staffFloors(long tenantId, UUID staffId) {
         return jdbcTemplate
                 .queryForList(

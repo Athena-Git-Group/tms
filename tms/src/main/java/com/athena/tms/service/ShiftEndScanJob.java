@@ -16,24 +16,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 班末掃描的週期工作：員工班次結束時，把名下還沒開始的單退回待接池交給下一班，
- * 不讓任何一間房因為下班而無聲消失。
- *
- * <p>名下任務依狀態分三路（規則見 data-model.dbml Table tasks 的 Note）：
- * 待開始（accepted）與本人延後（deferred 且 deferred_by_self）的單退回待接池，
- * 來源標示班末退池（pool_source=shift_end_return）並記 returned_to_pool 事件；
- * 進行中（doing）的單留給本人完成；已中斷（interrupted）的單維持中斷、負責人不變，
- * 改推播主管請他決定是否附交代退池（tasksRequeue）。退了幾單會推播告知員工本人。
- *
- * <p>班次結束時刻從 plan_rooms 連到 cleaning_plans.shift 取得。shift 的值域由各租戶
- * 的 shift_times 設定決定、每家飯店不同，所以同時接受 HH:mm 與班別名稱兩種寫法；
- * 解析不出結束時刻的員工不退池——寧可這輪漏掃，也不能在猜錯時把還在上班的人的單退走。
- *
- * <p>退池用條件式 UPDATE（WHERE 帶負責人與狀態），兩次掃描重疊時第二次一列也改
- * 不到；推播以「事件＋日期＋收件人」組冪等鍵，重跑不會重複插入。時間一律用注入的
- * {@link Clock}，測試能以可調時鐘直接把「現在」設到班次結束時刻。
- */
 @Component
 public class ShiftEndScanJob {
 
@@ -77,7 +59,6 @@ public class ShiftEndScanJob {
                 tenantId);
         for (Map<String, Object> row : rows) {
             LocalTime shiftEnd = ShiftTimes.endOf(String.valueOf(row.get("shift")), shiftTimes);
-            // 解析不出下班時間就這輪不掃：寧可漏掃一輪，也不能猜一個時間把還在上班的人的單退走。
             if (shiftEnd == null || now.isBefore(shiftEnd)) {
                 continue;
             }
@@ -88,10 +69,6 @@ public class ShiftEndScanJob {
         }
     }
 
-    /**
-     * 待開始與本人延後的單退回待接池：條件式 UPDATE 整批轉 pool、清負責人與停住資訊，
-     * 每一筆記一則 returned_to_pool 事件；退了幾單推播告知員工本人（0 單就不吵人）。
-     */
     private void requeueNotStarted(long tenantId, UUID staffId, String dept) {
         OffsetDateTime now = OffsetDateTime.now(clock);
         List<Map.Entry<UUID, Integer>> returned = jdbcTemplate.query(
@@ -128,7 +105,6 @@ public class ShiftEndScanJob {
                 "shift-end-return:" + LocalDate.ofInstant(clock.instant(), clock.getZone()) + ":" + staffId);
     }
 
-    /** 已中斷的單不動（負責人、狀態都保留），逐單推播主管請他決定是否附交代退池。 */
     private void notifyManagersOfInterrupted(long tenantId, UUID staffId) {
         List<Map<String, Object>> interrupted = jdbcTemplate.queryForList(
                 """

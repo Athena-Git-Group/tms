@@ -56,11 +56,6 @@ public class RepairController {
                 .body(repairService.createPhoto(request.purpose(), request.takenAt()));
     }
 
-    /**
-     * 照片內容本體在 App 端已完成壓縮與浮水印、後端不做影像處理（contracts
-     * createRepairPhoto 的 description），所以這裡不解讀 request body，只把
-     * 這張照片標成已上傳。
-     */
     @PutMapping("/repair-photos/{photoId}/content")
     public Map<String, Object> uploadRepairPhotoContent(@PathVariable UUID photoId) {
         return repairService.markUploaded(photoId);
@@ -74,13 +69,6 @@ public class RepairController {
         return repairService.precheck(request.sourceTaskId(), request.category());
     }
 
-    /**
-     * 三種開單路徑擇一（contracts CreateRepairTicketRequest）：①帶 sourceTaskId（房務
-     * 從自己未取消的任務開單）；②③不帶 sourceTaskId，改帶 roomId 或 isPublicArea=true
-     * （工務自開或櫃檯交辦）。兩組互斥——同時帶回 422 repair_source_conflict，
-     * 都沒帶回 422 repair_source_missing；interruptSourceTask／assigneeId 只在對應路徑
-     * 才有意義，省略視為 false／null。
-     */
     @PostMapping("/repair-tickets")
     public ResponseEntity<Map<String, Object>> createRepairTicket(@RequestBody CreateTicketRequest request) {
         if (request == null || request.category() == null) {
@@ -109,11 +97,6 @@ public class RepairController {
                         interrupt));
     }
 
-    /**
-     * 列出同房未撤回的工務單（contracts listRepairTickets）。{@code roomId} 是契約
-     * 唯一的查詢參數而且必填——缺了就沒有「哪一間房」可問，回 422 而不是回整個
-     * 租戶的單。契約沒有「我報的工務單」這種本人視角參數，這裡也不自己加。
-     */
     @GetMapping("/repair-tickets")
     public List<Map<String, Object>> listRepairTickets(@RequestParam(required = false) UUID roomId) {
         if (roomId == null) {

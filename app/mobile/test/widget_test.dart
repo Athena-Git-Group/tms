@@ -8,7 +8,6 @@ void main() {
     await tester.pumpWidget(const TmsStaffApp());
     await tester.pump();
 
-    // 沒有記住帳號（共用手機模式）時，登入畫面要有員工編號與密碼兩個輸入欄。
     expect(find.text('員工編號'), findsOneWidget);
     expect(find.text('密碼'), findsOneWidget);
     expect(find.text('登入'), findsWidgets);

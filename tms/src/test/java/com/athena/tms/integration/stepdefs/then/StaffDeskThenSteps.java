@@ -102,8 +102,6 @@ public class StaffDeskThenSteps {
         JsonNode items = poolItems(objectMapper.readTree((String) ctx.get("poolBody:小美")));
         assertTrue(containsTaskId(items, taskIdByTitle(expectedTitle)), "房務看得到「" + expectedTitle + "」");
         assertFalse(containsTaskId(items, taskIdByTitle(excludedTitle)), "房務看不到工務的單");
-        // 單卡本身不帶 state 與 dept，所以回頭比對權威狀態：端點真的只回本部門還在池裡的單，
-        // 才不會是「回應長得對」但其實漏了過濾。
         for (JsonNode item : items) {
             Map<String, Object> row = db.admin().queryForMap(
                     "SELECT state, dept FROM tasks WHERE id = ?", UUID.fromString(item.get("taskId").asText()));

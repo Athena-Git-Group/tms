@@ -10,7 +10,6 @@ public class SystemThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
 
-    /** 等後端把離線期間保存的動作落地的上限。 */
     private static final Duration SYNC_TIMEOUT = Duration.ofSeconds(15);
 
     private final AppiumWorld world;
@@ -19,15 +18,6 @@ public class SystemThenSteps {
         this.world = world;
     }
 
-    /**
-     * 必查：任務頁有待同步標示；後端該任務狀態還沒改變；恢復連線後這筆完成會自己送出去。
-     *
-     * <p>最後一項要真的把連線切回來才驗得到。只看畫面上的標示的話，一個永遠不送出的
-     * 佇列也會過關，而那正是這條 Rule 最在意的失敗方式：員工以為做完了，後端卻一直
-     * 不知道。
-     *
-     * <p>accessibility id：{@code task.pending-sync-label}。
-     */
     @那麼("{string} 的完成已保存在手機，畫面標示待同步")
     public void completionSavedOnPhonePendingSync(String task) {
         world.waitForLabelOf("task.pending-sync-label", "已離線暫存，連線後自動同步", SCREEN_TIMEOUT);

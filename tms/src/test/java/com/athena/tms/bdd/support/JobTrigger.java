@@ -9,11 +9,6 @@ import com.athena.tms.service.StreamHeartbeat;
 import java.util.Set;
 import org.springframework.context.ApplicationContext;
 
-/**
- * BDD 情境用的排程觸發器：不等 {@code @Scheduled} 真正的排程間隔跑到，而是依名稱
- * 同步呼叫對應 job 的方法。因為呼叫是同步的，{@link #run(String)} 回傳時該次執行
- * 就已完成，不需要額外等待或輪詢。
- */
 public class JobTrigger {
 
     private static final Set<String> KNOWN_JOBS = Set.of(

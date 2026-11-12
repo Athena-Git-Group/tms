@@ -7,14 +7,6 @@ import 'package:tms_staff_app/core/widgets/tms_category_square.dart';
 import 'package:tms_staff_app/features/home/home_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
-/// 房務首頁的版面順序與文案要跟設計原型 `Main.dc.html:123-245` 一致。
-///
-/// 怎麼做到：拿假的今日進度把首頁會遇到的每一種資料狀態各餵一次，再斷言畫面
-/// 上哪一行在上面、數字旁邊有沒有單位、副標講的是哪一段話。
-///
-/// 首頁最容易壞在「看起來還是有東西」的地方：問候語與日期列對調、單位字掉
-/// 了、任務列的副標退回成所有狀態共用一句話。這些都不會讓畫面壞掉，員工卻會
-/// 讀到錯的資訊，所以得逐項釘住。
 void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
@@ -42,7 +34,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// 今天的日期列應該長的樣子（Main.dc.html:128）。
   String dateText() {
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     final now = DateTime.now();
@@ -244,7 +235,6 @@ void main() {
       );
 
       expect(find.text('進行中 · 打掃'), findsOneWidget);
-      // 主卡的房號是 44pt，任務列那一顆在方塊裡只有 16pt。
       final heroRoomNo = find.byWidgetPredicate(
         (widget) =>
             widget is Text &&
@@ -375,10 +365,6 @@ MyToday _today({
   );
 }
 
-/// 記憶體 fake：今日進度回固定一份，登入身分的姓名由呼叫端指定。
-///
-/// 問候語與頭像讀的是 [ApiClient.session] 的姓名，所以測試得連同登入身分一起
-/// 假造，否則那兩個斷言驗到的是「沒有登入」那條分支。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient(this.today, this.staffName);
 

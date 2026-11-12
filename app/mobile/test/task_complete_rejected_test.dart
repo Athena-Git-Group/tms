@@ -5,12 +5,6 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/celebrate/celebrate_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 
-/// 驗「完成被後端拒收時顯示後端的原因，不會無聲」：按完成、後端回 4xx 時，
-/// 畫面要跳出提示且文字就是後端的 message，不進完成畫面。
-///
-/// 為什麼重要：完成的送出走 OfflineQueue，連線正常時它把後端的拒絕原樣往上
-/// 拋。這裡沒接住的話，員工按下完成只會看到畫面毫無反應——單子其實剛被主管
-/// 作廢了，他卻以為做完了。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();
@@ -28,10 +22,8 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier('task.primary-button'));
     await tester.pumpAndSettle();
 
-    // 禁止無聲：提示要出現，上面的字就是後端的 message，App 不自己湊文案。
     expect(find.bySemanticsIdentifier('task.busy-alert'), findsOneWidget);
     expect(find.text(backendMessage), findsOneWidget);
-    // 被拒的完成不該慶祝，也不該標成待同步。
     expect(find.byType(CelebrateScreen), findsNothing);
     expect(find.bySemanticsIdentifier('task.pending-sync-label'), findsNothing);
 
@@ -40,8 +32,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 關掉提示後還停在任務頁，主按鈕仍是「完成」——任務沒被當成做完。
-    // 不能用 find.text：打掃步驟條上也有一段叫「完成」。
     expect(find.bySemanticsIdentifier('task.busy-alert'), findsNothing);
     expect(
       find.descendant(
@@ -54,7 +44,6 @@ void main() {
   });
 }
 
-/// 完成一律被後端拒收的 fake：completeTask 丟 409，其餘讀取端點回固定資料。
 class _RejectingApiClient extends ApiClient {
   _RejectingApiClient(this.message);
 

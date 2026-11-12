@@ -4,9 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/widgets/tms_motion.dart';
 import 'package:tms_staff_app/core/widgets/tms_progress_ring.dart';
 
-/// 這組測試盯的是動畫的秒數與曲線有沒有偏離設計原型 `Claude Design/Main.dc.html`，
-/// 以及系統開啟減少動態時該停的有沒有停。這兩件事壞掉時畫面照樣跑得起來、
-/// 也不會有任何錯誤訊息，只有拿原型逐幀比對才看得出來。
 void main() {
   Widget host(Widget child, {bool disableAnimations = false}) {
     return MediaQuery(
@@ -28,9 +25,6 @@ void main() {
   }
 
   group('原型的九條動畫規則', () {
-    // 原型的宣告在 Main.dc.html:31-37（七組 keyframes 的 animation 速記）、
-    // Main.dc.html:139（進度環的 stroke-dasharray transition）與
-    // Main.dc.html:1308（進度條的 width transition）。
     const expected = <String, (int, Curve)>{
       'tmsFlash': (350, Curves.easeOut),
       'tmsUp': (260, Curves.easeOut),

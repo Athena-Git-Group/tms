@@ -7,14 +7,6 @@ import '../../core/widgets/tms_action_bar.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../manager/manager_ids.dart';
 
-/// 驗收不通過送出後，蓋掉整張工務單詳情的結果卡。
-///
-/// 說法只有兩種，全照後端回的 [outcome]（`destination` 加 `assigneeName`），App
-/// 不自己看班表判斷原處理人在不在班：
-/// - assignee：回到原處理人名下，原處理人會收到推播。
-/// - pool：原處理人已下班或請假，這張單回到了工務待認領。
-///
-/// 底部只有一顆「回到待驗收」，交給 [onBack]。
 class TicketVerifyResultCard extends StatelessWidget {
   const TicketVerifyResultCard({
     super.key,
@@ -24,7 +16,6 @@ class TicketVerifyResultCard extends StatelessWidget {
 
   final RepairVerificationOutcome outcome;
 
-  /// 回到待驗收清單。
   final VoidCallback onBack;
 
   static const String _headline = '退回重修';
@@ -41,7 +32,6 @@ class TicketVerifyResultCard extends StatelessWidget {
     return reason == null ? null : '不通過原因：$reason';
   }
 
-  /// 整個結果節點的讀值：單號、標題、去處與原因。
   String get _label =>
       [outcome.ticketNo, _headline, _subtitle, ?_reasonText].join(' ');
 
@@ -50,7 +40,6 @@ class TicketVerifyResultCard extends StatelessWidget {
     final reasonText = _reasonText;
     return TmsSemantics(
       id: ManagerIds.ticketResult,
-      // 讀這個節點的 label 就拿得到整段說法；子節點只留回清單鈕。
       label: _label,
       explicitChildNodes: true,
       child: CupertinoPageScaffold(

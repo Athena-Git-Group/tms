@@ -9,20 +9,14 @@ import 'package:tms_staff_app/features/task/task_screen.dart';
 import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
-/// 驗「我的」這一頁上員工自己的東西：身分卡、兩張工作磚、設定列，以及登出
-/// 的三段流程。版面對照 `Main.dc.html:410-491`，登出對照
-/// `Main.dc.html:4671-4674`。
 void main() {
-  /// 驗收機種 iPhone 17 的邏輯尺寸。測試預設的 800 × 600 比手機矮，整頁會有
-  /// 一截捲在畫面外，而 `ListView` 不會建出捲到畫面外的列，登出與版本那兩列
-  /// 就定位不到。
+  /// Flutter 測試預設的畫面是 800 × 600，而 `ListView` 不會建出捲到畫面外的
+  /// 列，所以改用手機的邏輯尺寸。
   const deviceSize = Size(402, 874);
 
   tearDown(() async {
     ApiClient.instance = ApiClient();
     ConnectionStatus.instance.reset();
-    // 測項押進佇列的動作要在這裡送掉，否則待同步筆數會漏到下一個測項，
-    // 讓它莫名其妙被登出攔阻擋住。
     await OfflineQueue.instance.flush();
   });
 
@@ -93,7 +87,6 @@ void main() {
 
     expect(find.bySemanticsIdentifier('me.screen'), findsOneWidget);
     expect(find.text('陳小美'), findsOneWidget);
-    // 頭像取名字的最後一個字，不是姓。
     expect(find.text('美'), findsOneWidget);
     expect(find.text('房務 · 3、4 樓'), findsOneWidget);
     expect(find.text('早班'), findsOneWidget);
@@ -135,8 +128,6 @@ void main() {
       find.bySemanticsIdentifier('me.work.lost-and-found-tile'),
       findsOneWidget,
     );
-    // 磚上只有名稱一段文字：原型右上角那個數字與名稱底下那行說明，後端都還
-    // 給不出來，填不出來就整段不畫。
     expect(
       find.descendant(of: handoverTile, matching: find.byType(Text)),
       findsOneWidget,
@@ -257,8 +248,6 @@ void main() {
   });
 
   testWidgets('單都是待開始、延後、中斷、待查房（沒有 doing）時，確認後才登出', (tester) async {
-    // 回歸：以前拿「今天還沒全做完／剩餘工時 > 0」當進行中，名下掛著延後單
-    // 的人永遠登不出。
     final handle = tester.ensureSemantics();
     await pumpScreen(
       tester,
@@ -316,8 +305,6 @@ void main() {
   });
 }
 
-/// 記憶體 fake：「我的」只讀登入時留下的身分；身分卡的班別樓層與登出要問的
-/// 今日工作台由測項餵進來，沒餵時表示測項不走這兩條路。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient(this._session, {this._today});
 

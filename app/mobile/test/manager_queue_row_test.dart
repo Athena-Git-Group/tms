@@ -4,10 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/manager/manager_queue_row.dart';
 
-/// 主管清單的列：右欄時間照後端字串的時區位移取時分、只看 waitingSinceIsToday
-/// 決定標不標日期；兩種 item 換成同一份列資料，公共區域用標題當地點。
 void main() {
-  // 台北時間 2026-11-10 11:30。
   final now = DateTime.utc(2026, 11, 10, 3, 30);
 
   group('waitingSinceText', () {

@@ -10,12 +10,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 房間交辦 API（FR-037、FR-038），路由對應 contracts 的 createDeskNote 與
- * markHandoverRead。寫入的冪等由全域的 Idempotency-Key 回放
- * （{@link com.athena.tms.filter.IdempotencyFilter}）加上 handover_reads 的
- * 主鍵衝突不重記雙層把關。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class HandoverController {

@@ -8,10 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_callout.dart';
 
-/// 狀態列是任務頁與工務單詳情共用的提示元件（`Main.dc.html:1221-1245` 與
-/// `Main.dc.html:1980-1991`）。這組測試盯的是三件事：一個畫面只會出現一條狀態
-/// 列而且是最該管的那一條、六種語氣的顏色沒有串位、人手打的原因不會被當成系統
-/// 說明。
 void main() {
   const boundaryKey = Key('callout-boundary');
   const width = 375.0;
@@ -64,15 +60,12 @@ void main() {
     return Color.fromARGB(rgba[3], rgba[0], rgba[1], rgba[2]);
   }
 
-  /// 狀態列左側那顆圓形圖示。`CustomPaint` 在 `CupertinoApp` 底下還有別的，
-  /// 所以照尺寸認。
   final toneIcon = find.byWidgetPredicate(
     (widget) =>
         widget is CustomPaint &&
         widget.size == const Size(TmsSize.calloutIcon, TmsSize.calloutIcon),
   );
 
-  /// 狀態列裡自己畫的圖形，由上而下：圓形圖示，以及文字鍵後面的箭頭。
   final paintedShapes = find.descendant(
     of: find.byType(TmsCalloutSlot),
     matching: find.byType(CustomPaint),
@@ -133,8 +126,6 @@ void main() {
     );
   });
 
-  /// 語氣對照表出自 `Main.dc.html:4299-4305`。底色是語氣的淡底，圖示那顆實心圓
-  /// 是同色系的飽和色，兩者成對；串位的話同一種嚴重度在兩個畫面會是不同顏色。
   final tones = <TmsCalloutTone, List<Color>>{
     TmsCalloutTone.error: [TmsColors.errorContainer, TmsColors.systemRed],
     TmsCalloutTone.warn: [
@@ -170,8 +161,6 @@ void main() {
       final decoration = box.decoration! as BoxDecoration;
       expect(decoration.color, entry.value[0]);
 
-      // 圓心左邊 9.5 點還在圓內（半徑約 11.9），也離中間的白色符號夠遠，不會
-      // 取到符號邊緣的混色。
       final inCircle = await colorAt(
         tester,
         iconCenter(tester) + const Offset(-9.5, 0),
@@ -250,7 +239,6 @@ void main() {
     await tester.tap(find.text('查看工務單'));
     expect(resubmitted, 1);
     expect(opened, 1);
-    // 狀態列的圓形圖示一顆，「查看工務單」後面的箭頭一顆。
     expect(paintedShapes, findsNWidgets(2));
   });
 
@@ -313,7 +301,6 @@ void main() {
       await colorAt(tester, Offset(card.left + 2, card.center.dy)),
       TmsColors.brandPrimary,
     );
-    // 色條只有 4 點寬，右邊就是白底。
     expect(
       await colorAt(tester, Offset(card.left + 6, card.center.dy)),
       TmsColors.brandOnPrimary,

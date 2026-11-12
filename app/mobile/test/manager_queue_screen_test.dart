@@ -6,7 +6,6 @@ import 'package:tms_staff_app/core/landing.dart';
 import 'package:tms_staff_app/features/manager/manager_queue_screen.dart';
 import 'package:tms_staff_app/features/manager/manager_queues_store.dart';
 
-/// 主管清單：兩類清單照後端順序畫列；工務主管沒有待查房清單。
 void main() {
   ManagerQueuesStore storeWith(Map<String, dynamic> json) =>
       ManagerQueuesStore()..value = ManagerQueues.fromJson(json);

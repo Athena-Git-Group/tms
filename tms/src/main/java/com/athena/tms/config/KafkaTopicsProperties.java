@@ -10,7 +10,6 @@ public class KafkaTopicsProperties {
     private String taskEvents = "tms.task-events";
     private String push = "tms.push";
     private String pmsStatus = "tms.pms-status";
-    /** 推播消費者重試用盡後把訊息改送到這裡，等人工查看，不再卡住後面的訊息。 */
     private String pushDeadLetter = "tms.push.DLT";
 
     public String topicFor(String kind) {

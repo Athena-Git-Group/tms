@@ -1,9 +1,5 @@
 package com.athena.tms.push;
 
-/**
- * 把一筆推播送到一台裝置。實作有兩個：{@link FcmPushSender}（真的打 Firebase Cloud Messaging）
- * 與 {@link LoggingPushSender}（沒有憑證時只寫日誌）。由 {@link PushSenderConfig} 依設定擇一。
- */
 public interface PushSender {
 
     /**

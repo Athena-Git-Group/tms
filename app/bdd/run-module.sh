@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 #
-# 只跑單一模組的 truth feature 端到端：流程與 run-f3.sh 相同（後端就緒檢查 → build
-# ＋安裝 App → 起 Appium → 跑 Cucumber → 清理），差別只在跑的是 RunModuleFeatureTest，
-# 要跑的目錄由第一個參數指定（specs/truth/features/ios-app/ 底下的模組目錄名）。
-#
+# 只跑單一模組的 Cucumber 情境。
 # 用法： app/bdd/run-module.sh <模組目錄名>
-#   例： app/bdd/run-module.sh 查一下
 # 要先裝好： flutter、xcrun（Xcode command line tools）、appium 3.x（含 xcuitest driver）。
-# 環境準備片段與可覆寫的環境變數（UDID、BACKEND_URL……）見 app/bdd/lib/env.sh。
+# 可覆寫的環境變數見 app/bdd/lib/env.sh。
 
 set -euo pipefail
 
@@ -32,10 +28,8 @@ log "3/5 起 Appium server"
 start_appium
 
 log "4/5 跑模組「${MODULE}」的 Cucumber 情境（RunModuleFeatureTest）"
-# cucumber.features 路徑相對 Maven module 工作目錄（app/bdd/），比照 runner 的
-# @SelectDirectories 寫法。-Dsurefire.excludeJUnit5Engines=cucumber 是必要的：
-# cucumber.features 會讓 Cucumber 引擎無視 selector，Surefire 頂層 launcher 會再
-# 直接發現一次同一批 feature，場景被跑兩遍——排除頂層引擎，只留 Suite 內嵌那份。
+# cucumber.features 讓 Cucumber 引擎忽略 selector，Surefire 頂層 launcher 會再發現一次同一批
+# feature；排除頂層的 cucumber 引擎，場景才不會跑兩遍。
 set +e
 JAVA_HOME="$(/usr/libexec/java_home -v 25)" \
   mvn -f "$BDD_DIR/pom.xml" test \

@@ -5,27 +5,17 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/widgets/tms_category_tile.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
-/// 驗「班別／負責樓層／兩顆分頁徽章」這四個後端分批落地的欄位，在落地前與
-/// 落地後都呈現正確。
-///
-/// 為什麼這組測試重要：四個欄位目前後端一個都還沒回，回應裡連鍵都不會出現。
-/// 缺席時畫面必須跟現在一模一樣（日期後面不多出分隔點、分頁列不多出徽章），
-/// 否則整個房務端在後端補完之前都是壞的；而欄位補上之後，同一份程式碼要自己
-/// 長出內容，不能再改一次 App。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();
   });
 
-  /// 今天的日期字串，與首頁問候列用的是同一個算法（Main.dc.html:128）。
   String todayLabel() {
     const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     final now = DateTime.now();
     return '週${weekdays[now.weekday - 1]} ${now.month}/${now.day}';
   }
 
-  /// 只在徽章裡面找這個數字。首頁上別處也有數字（例如進度卡那幾格），直接用
-  /// `find.text` 會找到不是徽章的那一個。
   Finder badgeText(String text) => find.descendant(
     of: find.byType(TmsCountBadge),
     matching: find.text(text),
@@ -143,14 +133,11 @@ MyToday _today({
   );
 }
 
-/// 記憶體 fake：只回今日進度，其餘讀取端點回空，測試不碰網路。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient(this.today);
 
   final MyToday today;
 
-  /// 這支端點被打了幾次。分頁列的徽章與首頁的數字必須出自同一次請求，
-  /// 這個計數就是那件事的證據。
   int myTodayCalls = 0;
 
   @override

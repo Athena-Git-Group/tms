@@ -38,14 +38,11 @@ public class GuestTenantConfigReader {
             items.add(item);
         }
         if (items.isEmpty()) {
-            // 租戶還沒設定勾選單時用出廠內建品項（比照自動化規則的出廠內建）：
-            // 常見備品預先對應到房務部，租戶一旦存了自己的 request_menu 就以租戶的為準。
             return FACTORY_REQUEST_MENU;
         }
         return items;
     }
 
-    /** 出廠內建勾選單：key＝顯示名稱，全部對應房務備品。 */
     private static final List<MenuItem> FACTORY_REQUEST_MENU = List.of(
             new MenuItem("衣架", "衣架", "housekeeping", "amenity"),
             new MenuItem("毛巾", "毛巾", "housekeeping", "amenity"),

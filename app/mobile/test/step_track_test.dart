@@ -3,10 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/widgets/tms_step_track.dart';
 
-/// 步驟條是房務任務頁與工務單詳情共用的同一個元件，但兩邊掛 accessibility id
-/// 的方式不一樣（一個用步驟名、一個用序號，而且工務還多一層 `--current`）。
-/// 這組測試盯的是元件有沒有把包裝交回給呼叫端、以及四步在一般手機寬度下排不
-/// 排得開——這兩件事壞掉時畫面不會報錯，要等模擬器跑完整套 BDD 才看得到。
 void main() {
   Widget host(Widget child, {double width = 375}) {
     return CupertinoApp(

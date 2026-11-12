@@ -20,15 +20,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpMethod;
 
-/**
- * 工務單模組的 When（dsl.md When 句型區）。每句呼叫 {@link BddApiClient}，不含任何斷言——
- * 「必查」清單在 {@link RepairThenSteps}。
- *
- * <p>destructive 操作（可能接 common「這次操作被拒絕」）前都呼叫
- * {@link LastOperationGuard#captureFor}；會接 {@link RepairThenSteps} 的
- * 「系統沒有建立工務單」「不該發生：沒有建立工務單」的操作，另外呼叫
- * {@link RepairCountGuard#capture}（全租戶筆數快照，見其 Javadoc）。
- */
 public class RepairWhenSteps {
 
     private final ScenarioWorld world;
@@ -74,9 +65,6 @@ public class RepairWhenSteps {
 
     @當("{string} 從 {string} 開立以下工務單，同一請求共送出 {int} 次：")
     public void openTicketRepeatedly(String staffName, String taskKey, int times, DataTable table) {
-        // dsl.md：同一個 Idempotency-Key 連續呼叫，第二次起由 processed_ops 回放第一次的回應；
-        // key 必須在回合外先固定一次，否則每次呼叫都會各自拿到 BddApiClient 自動產生的新 key，
-        // 就驗不到冪等回放。
         String idempotencyKey = UUID.randomUUID().toString();
         for (int i = 0; i < times; i++) {
             createTicket(staffName, taskKey, table, false, idempotencyKey);
@@ -105,10 +93,6 @@ public class RepairWhenSteps {
         }
     }
 
-    /**
-     * dsl.md：工務不經過任何房務任務直接開單（`sourceTaskId` 留空，改帶 `roomId`／`isPublicArea`）。
-     * 「處理人」留空則進工務待認領（pool），有填時直接 accepted 給該人。
-     */
     @當("{string} 為 {string} 開立以下工務單，不經過任何房務任務：")
     public void engineeringStaffOpensTicketDirectly(String engineerName, String roomNo, DataTable table) {
         Map<String, String> row = table.asMaps(String.class, String.class).get(0);
@@ -147,12 +131,6 @@ public class RepairWhenSteps {
         }
     }
 
-    /**
-     * dsl.md：櫃檯交辦工務部門走同一個 {@code createRepairTicket} 路徑，`sourceTaskId` 留空，
-     * 改帶 `roomId`／`isPublicArea`；「處理人」留空則進工務待認領，有填時直接 accepted 給該人。
-     * 請求不帶急件欄位——急件沿用既有 {@code UrgentJudgement} 系統判定。來源（`tasks.source`=desk）
-     * 由後端依呼叫者（櫃檯員工）部門決定，這裡不需要另外傳欄位。
-     */
     @當("{string} 為 {string} 交辦工務部門，開立以下工務單：")
     public void deskStaffForwardsTicketToEngineering(String deskStaffName, String roomNo, DataTable table) {
         Map<String, String> row = table.asMaps(String.class, String.class).get(0);
@@ -192,10 +170,6 @@ public class RepairWhenSteps {
         }
     }
 
-    /**
-     * dsl.md：以該工務身分查詢今日進度統計，沿用 {@code GET /me/today}（呼叫者是
-     * dept=engineering 時回應另外帶 engineeringSummary）；不是獨立端點。
-     */
     @當("{string} 查看工務視角今日進度")
     public void engineeringStaffViewsToday(String staffName) {
         apiClient.get("/me/today", BddApiClient.Auth.staff(world.jwt(staffName)));
@@ -216,7 +190,6 @@ public class RepairWhenSteps {
     @當("{string} 對 {string} 選擇工務單類別 {string}")
     public void selectCategoryForPrecheck(String staffName, String roomNo, String categoryChinese) {
         UUID sourceTaskId = UUID.fromString(world.taskId(roomNo));
-        // precheck 本身不建單；T6／T8 要驗「不該發生：沒有建立工務單」，在這裡先留一份筆數快照。
         repairCountGuard.capture();
 
         Map<String, Object> body =
@@ -236,13 +209,6 @@ public class RepairWhenSteps {
         apiClient.post("/repair-tickets/" + ticketTaskId + "/photos", BddApiClient.Auth.staff(jwt), body);
     }
 
-    /**
-     * dsl.md：以主管身分呼叫 {@code verifyRepairTicket}（{@code POST /repair-tickets/{ticketId}/verify}），
-     * body {@code VerifyRepairTicketRequest{result: passed}}，帶新的 {@code Idempotency-Key}。只有已完修
-     * （done）的單能被驗收，成功時轉為已結案（closed）並寫入驗收人、驗收時間與 repair_verified 事件；
-     * 單不是 done 回 409 state_conflict、呼叫者不是主管回 403 forbidden，都不改權威資料。
-     * 回應另存進 {@link ScenarioWorld#lastVerifyResponse()}，供「這次驗收的結果為…，去處為…」讀取。
-     */
     @當("{string} 驗收通過 {string}")
     public void verifyTicket(String managerName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -251,11 +217,6 @@ public class RepairWhenSteps {
         world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "passed", null));
     }
 
-    /**
-     * dsl.md：以主管身分呼叫 {@code verifyRepairTicket}，body
-     * {@code VerifyRepairTicketRequest{result: failed, reason: 原因}}，帶新的 {@code Idempotency-Key}。
-     * 去處（退回原處理人或工務待認領）、最近一次不通過紀錄與推播都由後接的 Then 驗，這句不斷言。
-     */
     @當("{string} 以原因 {string} 判定 {string} 驗收不通過")
     public void failVerification(String managerName, String reason, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -264,11 +225,6 @@ public class RepairWhenSteps {
         world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "failed", reason));
     }
 
-    /**
-     * dsl.md：同 {@link #failVerification}，但 {@code reason} 是空字串。預期回 422
-     * verification_reason_required，單仍為 done、沒有寫入最近一次不通過、沒有事件、沒有推播，
-     * 都由後接的 Then 驗。
-     */
     @當("{string} 判定 {string} 驗收不通過但沒有寫原因")
     public void failVerificationWithoutReason(String managerName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -294,12 +250,6 @@ public class RepairWhenSteps {
                 BddApiClient.Auth.staff(world.jwt(staffName)));
     }
 
-    /**
-     * dsl.md「只看…的工務待認領」的分流對照 listDeptPool 的 urgent／source 篩選參數（見
-     * specs/truth/contracts/groups/現場作業/員工工作台.yaml）：全部＝不加篩選；急件＝
-     * urgent=true；房務報修＝source=staff_report；櫃檯＝source=desk_forward。「住客」分流磚是
-     * dsl.md 點名的過時敘述，不建 truth，不收進這個對照。
-     */
     private static String triageQueryString(String triageChinese) {
         return switch (triageChinese) {
             case "全部" -> "";
@@ -318,10 +268,6 @@ public class RepairWhenSteps {
                 "/repair-tickets/" + ticketTaskId + "/withdraw", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
-    /**
-     * dsl.md：以工務身分上傳這一次的完修照片（purpose=completion），再呼叫 {@code tasksComplete}，
-     * body {@code CompleteTaskRequest{resolutionType: fixed, resolutionNote, photoIds}}。
-     */
     @當("{string} 附 {int} 張完修照片、處理說明 {string} 完成 {string}")
     public void completeWithPhotosAndNote(String staffName, int photoCount, String note, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -368,13 +314,6 @@ public class RepairWhenSteps {
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
     }
 
-    /**
-     * dsl.md：以工務身分呼叫 {@code tasksComplete}，body
-     * {@code CompleteTaskRequest{resolutionType, resolutionNote}}、{@code photoIds} 為空陣列。
-     * 不需處理時單直接結案、不建追蹤單、不改房況；其他三種結果回 422 completion_photo_required。
-     * 送出前先記下全租戶工務單筆數與這張單所在房的房況，供「系統沒有為…建立追蹤單」
-     * 「…的房況沒有改變」比對；公共區域的單沒有房間，不記房況。
-     */
     @當("{string} 以完修結果 {string} 完成 {string}，處理說明 {string}，不附照片")
     public void completeWithResolutionWithoutPhotos(
             String staffName, String resolutionChinese, String ticketNo, String note) {
@@ -431,11 +370,6 @@ public class RepairWhenSteps {
         }
     }
 
-    /**
-     * 「有照片沒上傳成功時不建立工務單」這條規則，靠的是送到 createRepairTicket／
-     * appendRepairTicketPhotos／tasksComplete 的 photoIds 數量天然就比預期少（上傳失敗的 id
-     * 不放進清單），不是在這裡先做業務驗證搶著擋下來——驗證與拒絕的語意屬於產品，不屬於測試準備。
-     */
     private List<String> uploadPhotos(String jwt, String purpose, int count) {
         List<String> ids = new ArrayList<>();
         for (int i = 0; i < count; i++) {

@@ -24,14 +24,6 @@ import java.util.Set;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
-/**
- * 待認領模組的 Then（待認領/dsl.md Then 句型區）。
- *
- * <p>「待認領順序為」「標示同樓層的單為」「待認領中…資訊如下」「待認領分類筆數如下」
- * 這四句都接在前一句「查看待認領」之後，斷言的是那次呼叫留在 {@link ScenarioWorld#lastResponse()}
- * 的 {@code DeptPool} JSON，不另外重打一次 API（比照 dsl.md 根目錄 Then 句型的既有模式）。
- * 其餘幾句是獨立的權威狀態斷言，各自視需要另外呼叫一次 API 核對「跨視角」。
- */
 public class PoolThenSteps {
 
     private final ScenarioWorld world;
@@ -58,10 +50,6 @@ public class PoolThenSteps {
 
     @那麼("^待認領順序為 (.+)$")
     public void poolOrderIs(String roomNoList) {
-        // dsl.md（待認領/dsl.md）：呈現結果只核對 DeptPool.items[].roomNo 的最終順序與
-        // 房號清單完全一致（不多不少）。排序條件本身（未接超時的單排最前、彼此間依房號，
-        // 其餘依優先通知、同樓層、房號）是產品碼（PoolService）的職責，這裡不重新實作
-        // 排序規則，只核對呈現結果。
         List<String> expected = splitList(roomNoList);
         List<String> actual = poolItems().stream().map(item -> textOrNull(item, "roomNo")).toList();
         if (!expected.equals(actual)) {
@@ -106,9 +94,6 @@ public class PoolThenSteps {
                     check("tasks.requeue_note", expected, taskRow.get("requeue_note"));
                 }
                 case "說明" -> {
-                    // PoolItem 的 contracts schema 沒有承載「規則引擎命中：…」這句話的欄位
-                    // （只有 taskId/roomNo/.../returnReason/handoverNote），呈現結果這半沒有
-                    // 對應欄位可核對；只核對 dsl.md 點名的權威狀態 tasks.rule_hit。
                     String rulePrefix = "規則引擎命中：";
                     String expectedRuleHit = expected.startsWith(rulePrefix)
                             ? expected.substring(rulePrefix.length())
@@ -128,8 +113,6 @@ public class PoolThenSteps {
             throw new AssertionError("PoolItem.roomNo 預期顯示「公共區域」，實際 " + roomNo);
         }
 
-        // dsl.md：權威狀態是 tasks.room_id 指向公共區域佔位房（rooms.room_no＝公共區域、floor＝0），
-        // 不屬於任何客房。
         Map<String, Object> taskRow = requireTaskRow(UUID.fromString(world.taskId(taskKey)));
         Map<String, Object> roomRow =
                 dbProbe.queryOne("SELECT room_no, floor FROM rooms WHERE id = ?", taskRow.get("room_id"))
@@ -256,14 +239,9 @@ public class PoolThenSteps {
         if (actual == null || actual.toInstant().compareTo(expected.toInstant()) != 0) {
             throw new AssertionError("tasks.due_at 預期 " + expected + "，實際 " + actual);
         }
-        // dsl.md 的「再讀確認」要呼叫 readTasks，但待認領任務沒有負責人，沒有自然對應的
-        // 身分可用（比照 CommonThenSteps.withAssigneeReadTasks 同樣的理由），這裡跳過，
-        // 不杜撰一個不存在的操作者。
     }
 
     private List<JsonNode> poolItems() {
-        // JsonNode 本身就是 Iterable<JsonNode>（比照 CommonThenSteps 既有的
-        // for-each 用法），先收集成 List 讓呼叫端能用 stream／多次走訪。
         List<JsonNode> result = new java.util.ArrayList<>();
         for (JsonNode item : world.lastResponse().json().path("items")) {
             result.add(item);

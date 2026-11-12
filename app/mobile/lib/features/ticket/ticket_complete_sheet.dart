@@ -12,11 +12,6 @@ import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_sheet.dart';
 import 'repair_labels.dart';
 
-/// 完修回報面板（`Main.dc.html:2122`）：拍完修照片、選處理結果、寫說明、送出。
-///
-/// 送出走 `POST /tasks/{id}/complete`，成功時把選到的處理結果文字回傳給詳情
-/// 頁，詳情頁用它補上狀態列裡那句結果——後端的工務單詳情沒有回傳
-/// resolutionType，離開這個面板之後就再也問不到員工剛才選了什麼。
 class TicketCompleteSheet extends StatefulWidget {
   const TicketCompleteSheet({
     super.key,
@@ -26,8 +21,6 @@ class TicketCompleteSheet extends StatefulWidget {
 
   final String taskId;
 
-  /// 這張單的地點。標題帶著它，員工同時開著好幾張單時才分得出自己在回報哪一
-  /// 張；完修照片的浮水印也用它。
   final String roomNo;
 
   @override
@@ -35,11 +28,8 @@ class TicketCompleteSheet extends StatefulWidget {
 }
 
 class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
-  /// 契約 CompleteTaskRequest.photoIds 的上下限：1-3 張。
   static const int _maxPhotos = 3;
 
-  /// 處理說明擋在 60 字，是因為它只要寫得下「換了什麼零件」這種一句話的交代；
-  /// 真正的過程留給處理歷程，不是靠這一欄撐起來（`Main.dc.html:2190`）。
   static const int _maxNoteLength = 60;
 
   final List<RepairPhoto> _photos = [];
@@ -62,8 +52,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
   bool get _allPhotosUploaded =>
       _photos.isNotEmpty && _uploadedPhotoIds.length == _photos.length;
 
-  /// 照片這一關過了沒：不需處理可以不附照片，但附了的話也要等它們傳完；
-  /// 其他結果至少一張且全部傳完。
   bool get _photosReady => repairResolutionNeedsPhoto(_selectedResolution)
       ? _allPhotosUploaded
       : _uploadedPhotoIds.length == _photos.length;
@@ -89,7 +77,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     await _upload(photo);
   }
 
-  /// 把這一張送上去，並把結果記在它自己身上，讓員工只重傳失敗的那一張。
   Future<void> _upload(RepairPhoto photo) async {
     setState(() => photo.uploading = true);
     try {
@@ -145,8 +132,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     });
   }
 
-  /// 置底鈕上的字。上傳還沒結束或有一張失敗時改寫成當下的狀況，否則員工按不
-  /// 動又不知道卡在哪（`Main.dc.html:3995`）。
   String get _submitLabel {
     if (_photos.any((photo) => photo.uploadFailed)) {
       return '有照片上傳失敗，點縮圖重試';
@@ -169,8 +154,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
         onLeadingTap: () => Navigator.of(context).pop(),
         bottomAction: TmsSemantics(
           id: 'completeSheet.submit-button',
-          // 可否送出要顯式標出來：CupertinoButton 的 onPressed 為 null 時，
-          // 框架不會把 disabled 曝露到 accessibility tree。
           enabled: canSubmit,
           child: TmsSheetButton(
             label: _submitLabel,
@@ -207,8 +190,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     );
   }
 
-  /// 選好結果之後才出現的那一句，講的是「按下送出之後系統會替你做什麼」。
-  /// 還沒拍照就不講：那時候送不出去，先講後果只是雜訊（`Main.dc.html:3994`）。
   String? _resolutionHint() {
     final resolution = _selectedResolution;
     if (resolution == null ||
@@ -218,10 +199,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     return repairResolutionOf(resolution)?.hint;
   }
 
-  /// 處理結果：一張白卡三列，每列兩行字。
-  ///
-  /// 不用膠囊而用清單，是因為三個結果的差別寫在副標那一行；膠囊只放得下主標，
-  /// 員工得先知道飯店流程才選得對。
   Widget _resultList() {
     return TmsGroupedSection(
       header: '處理結果',
@@ -282,8 +259,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     );
   }
 
-  /// 一張照片都還沒有時，卡片下面多一行說明，告訴員工沒有相機權限時還可以
-  /// 從相簿挑。不說的話，相機被關掉的人會以為自己回報不了完修。
   Widget _photoCard() {
     final label = repairCompletionPhotoLabel(_selectedResolution);
     return Column(
@@ -359,7 +334,6 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     );
   }
 
-  /// 一張完修照片的縮圖。序號從 1 算起，與 dsl 的句型一致。
   Widget _thumbnail(int index) {
     final photo = _photos[index];
     final statusText = photo.uploadFailed

@@ -6,14 +6,6 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * BDD 情境查「權威狀態」用的唯讀共用元件：把對 tasks / task_events / outbox
- * 的查詢集中在一處，讓 stepdef 只需要描述業務語意，不用各自組 SQL。
- *
- * <p>欄位名稱依 specs/truth/data/data-model.dbml 的 {@code Table tasks}、
- * {@code Table task_events}、{@code Table outbox}。只做唯讀查詢，不含任何
- * 斷言語意（「必查」清單是後續 Phase 的事）。
- */
 public class DbProbe {
 
     private final JdbcClient jdbcClient;
@@ -26,7 +18,6 @@ public class DbProbe {
         return jdbcClient.sql(sql).params(params).query().listOfRows();
     }
 
-    /** 泛用查詢：預期至多一列，沒有列回傳空 Optional；超過一列視為呼叫端 SQL 寫錯。 */
     public Optional<Map<String, Object>> queryOne(String sql, Object... params) {
         List<Map<String, Object>> rows = queryMaps(sql, params);
         if (rows.isEmpty()) {
@@ -52,7 +43,6 @@ public class DbProbe {
         return queryMaps("SELECT * FROM task_events WHERE task_id = ? ORDER BY seq", taskId);
     }
 
-    /** 待送匣中某種 kind 的所有列，依 id 排序（outbox 表，kind：task_event|push|pms_status）。 */
     public List<Map<String, Object>> outboxRows(String kind) {
         return queryMaps("SELECT * FROM outbox WHERE kind = ? ORDER BY id", kind);
     }

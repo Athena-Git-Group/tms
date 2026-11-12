@@ -21,11 +21,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/**
- * 開了 {@code tms.test-clock.enabled=true} 的後端，要能從 HTTP 撥動全系統共用的那一個
- * {@link Clock}：撥了之後注入給各服務的時鐘就停在該時刻，回復之後又跟著系統時間走。
- * 不帶權杖也要打得到，因為測試工具在建立任何員工之前就要先把時間撥好。
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "tms.test-clock.enabled=true")
 @ActiveProfiles("test")

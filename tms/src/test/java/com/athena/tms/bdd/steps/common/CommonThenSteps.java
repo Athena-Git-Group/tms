@@ -22,14 +22,6 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 介面根共通句的 Then（dsl.md Then 句型區）。每句除了查 tasks／task_events／outbox
- * 這些權威資料，還要在能自然決定「用誰的身分」時另外呼叫一次對應的員工 API 驗證
- * dsl.md 點名的「跨視角／再讀確認」——這份身分不是 Gherkin 參數給的，因此直接用
- * {@link JwtService} 現場幫該任務的負責人簽一張新權杖，不透過 {@code StaffFixtures}
- * （那個入口只服務「Given 建的員工」，跨視角驗證要用的是「DB 裡任務當下的負責人」，
- * 兩者不必是同一人，例如改派後的情境）。
- */
 public class CommonThenSteps {
 
     private final ScenarioWorld world;
@@ -79,12 +71,6 @@ public class CommonThenSteps {
         assertAuthoritativeStateUnchanged();
     }
 
-    /**
-     * dsl.md「這次操作被拒絕，錯誤碼為 "{錯誤碼}"」：與「這次操作被拒絕」共用保存的回應與
-     * 「權威狀態沒被改動」的檢查，另外必查 contracts {@code Error.code} 等於該錯誤碼，且 HTTP
-     * 狀態碼與 shared.yaml 的 Error 說明一致（對照表只收錄 shared.yaml 已寫明狀態碼的 code，
-     * 沒列到的 code 只驗 4xx）。
-     */
     @那麼("這次操作被拒絕，錯誤碼為 {string}")
     public void operationRejectedWithCode(String errorCode) {
         assertRejectedResponse();
@@ -101,7 +87,6 @@ public class CommonThenSteps {
         assertAuthoritativeStateUnchanged();
     }
 
-    // 來源：specs/truth/contracts/components/schemas/shared.yaml Error.description 列出的 code 與狀態碼。
     private static final Map<String, Integer> ERROR_CODE_HTTP_STATUS = Map.ofEntries(
             Map.entry("state_conflict", 409),
             Map.entry("doing_task_exists", 409),
@@ -127,17 +112,11 @@ public class CommonThenSteps {
             Map.entry("forbidden_dept_pool", 403),
             Map.entry("account_locked", 429));
 
-    // 來源：dsl.md「"{房號}" 的房況為 "{房況}"」列的對照（rooms.hk_state）。
     private static final Map<String, String> HK_STATE = Map.of(
             "還沒打掃好", "dirty",
             "已查房", "inspected",
             "停用", "out_of_order");
 
-    /**
-     * dsl.md「"{房號}" 的房況為 "{房況}"」：權威狀態是 {@code rooms.hk_state}；再讀確認走
-     * {@code readRooms}（GET /rooms/{id}）的 {@code hkState}。這句沒有自然對應的操作者身分，
-     * 用租戶任一在職員工的權杖再讀（房況查詢不分角色）；找不到在職員工時只驗權威狀態。
-     */
     @那麼("{string} 的房況為 {string}")
     public void roomHkStateIs(String roomNo, String hkStateChinese) {
         String expected = HK_STATE.get(hkStateChinese);
@@ -181,12 +160,6 @@ public class CommonThenSteps {
                 taskId, row, json -> check("readTasks.state", expected.state(), textOrNull(json, "state")));
     }
 
-    /**
-     * dsl.md「{任務} 的狀態為 {狀態}」必查的不只 tasks.state：狀態用語對照裡
-     * 「查房通過」「完成 · 免查房」還規定了 tasks.inspection（passed／waived），
-     * 工務單「已撤回」還規定了 tasks.cancel_reason（staff_withdrew）；沒有附帶
-     * 子欄位的用語，對應欄位為 null 表示不必查。
-     */
     private record ExpectedTaskState(String state, String inspection, String cancelReason) {}
 
     private static ExpectedTaskState resolveExpectedState(String stateChinese) {
@@ -199,7 +172,6 @@ public class CommonThenSteps {
         try {
             return new ExpectedTaskState(Terms.taskState(stateChinese), null, null);
         } catch (IllegalArgumentException notPlainTaskState) {
-            // 工務單專屬狀態詞（已接單/維修中/已完修/已結案/已撤回）走工務單對照
             String cancelReason = "已撤回".equals(stateChinese) ? Terms.repairTicketWithdrawnReason() : null;
             return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason);
         }
@@ -262,8 +234,6 @@ public class CommonThenSteps {
                 v -> staffId.equals(v.recipientStaffId()) && title.equals(v.title()),
                 staffName + " 收到標題「" + title + "」的推播");
 
-        // dsl.md 必查「不該發生：同一事件不會對該員工推播兩次」——同收件人、同標題的
-        // kind push outbox 必須恰好一筆。
         long count = dbProbe.outboxRows("push").stream()
                 .map(this::parsePush)
                 .filter(v -> staffId.equals(v.recipientStaffId()) && title.equals(v.title()))
@@ -281,8 +251,6 @@ public class CommonThenSteps {
             String title = blankToNull(row.get("標題"));
             String body = blankToNull(row.get("內容"));
             String destination = blankToNull(row.get("去處"));
-            // dsl.md：有給標題時標題必須相等、有給 `內容` 時 PushPayload.body 必須相等；兩者都納入挑選條件，
-            // 同一人有多筆同標題推播（例如每次完修都推播報修人）時才挑得到內容相符的那一筆。
             PushPayloadView push = outboxAwait.waitForPush(
                     v -> staffId.equals(v.recipientStaffId())
                             && (title == null || title.equals(v.title()))
@@ -335,8 +303,6 @@ public class CommonThenSteps {
             throw new AssertionError("操作被拒絕後仍新增了 outbox：操作前 " + before.outboxCount() + " 筆，操作後 "
                     + afterOutbox + " 筆");
         }
-        // 工務單的退回原因、驗收人、處理結果，與查房紀錄筆數，也是這個任務的權威資料：
-        // 退回沒寫原因、撞單驗收、撞單查房被拒之後，這些都不能被動到。
         Map<String, Object> afterTicket = dbProbe
                 .queryOne("SELECT * FROM repair_tickets WHERE task_id = ?", before.taskId())
                 .orElse(null);
@@ -351,10 +317,6 @@ public class CommonThenSteps {
         }
     }
 
-    /**
-     * 待認領等沒有負責人的任務，dsl.md「以負責人或主管身分」沒有自然對應的身分可用；
-     * 跳過跨視角檢查，不杜撰一個不存在的操作者。
-     */
     private void withAssigneeReadTasks(
             UUID taskId, Map<String, Object> taskRow, java.util.function.Consumer<JsonNode> check) {
         Object assigneeId = taskRow.get("assignee_id");
@@ -403,7 +365,6 @@ public class CommonThenSteps {
                 requireUuidEquals("taskId", target.taskId(), UUID.fromString(world.taskId(label)));
             }
         } else if (destination.endsWith(" 的工務單詳情")) {
-            // dsl.md：工務單詳情為 kind=ticket 並帶該修繕任務的 taskId（本人的修繕任務一律用這種，不用 task）。
             requireKind(target, "ticket");
             String ticketNo = destination.substring(0, destination.length() - " 的工務單詳情".length());
             if (world.hasRepairTicket(ticketNo)) {
@@ -414,7 +375,6 @@ public class CommonThenSteps {
         }
     }
 
-    /** dsl.md：去處為待認領時 target 除了 kind=pool 還要帶 dept（housekeeping 或 engineering）。 */
     private static void requirePoolDept(PushPayloadView.Target target) {
         if (!"housekeeping".equals(target.dept()) && !"engineering".equals(target.dept())) {
             throw new AssertionError("去處為待認領的推播 target.dept 應為 housekeeping 或 engineering，實際 "

@@ -37,11 +37,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * contracts changeOwnPassword（{@code POST /staff-accounts/change-password}）的分支驗證：
- * 強制改密與自願變更兩種情境、三個錯誤碼、改密後舊權杖失效，以及
- * {@link BearerTokenAuthFilter} 對這條路徑的放行。
- */
 class ChangeOwnPasswordTest {
 
     private static final long TENANT_ID = 1L;
@@ -186,7 +181,6 @@ class ChangeOwnPasswordTest {
         Assertions.assertEquals(401, response.getStatus());
     }
 
-    /** filter 與 service 共用同一個 account 物件，service 改掉雜湊後 filter 查到的就是改後的狀態。 */
     private StaffAccount stubAccount(boolean mustChangePassword) {
         StaffAccount account = new StaffAccount();
         account.setId(UUID.randomUUID());
@@ -207,7 +201,6 @@ class ChangeOwnPasswordTest {
         return account;
     }
 
-    /** 比照登入換發的權杖：帶密碼雜湊指紋，改密之後就對不上。 */
     private String tokenFor(StaffAccount account) {
         return jwtService
                 .issue(

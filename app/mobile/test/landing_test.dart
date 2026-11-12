@@ -4,8 +4,6 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/landing.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
-/// 釘住首頁分流的三條判定順序：先看角色再看部門。登入、強制改密、推播開首頁
-/// 三個入口都只問 `landingShellFor`，所以分流錯了會先在這裡紅掉。
 void main() {
   group('landingShellFor', () {
     test('主管一律進主管外殼，不看有沒有部門', () {

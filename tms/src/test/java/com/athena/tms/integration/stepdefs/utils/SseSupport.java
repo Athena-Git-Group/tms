@@ -163,7 +163,6 @@ public class SseSupport {
                     .orElseThrow(() -> new IllegalStateException("這條連線還沒收到 resync：" + summary()));
         }
 
-        /** 讀取執行緒因例外中止（不是測試主動關流）時，讓接下來讀流的斷言直接失敗並帶出原因。 */
         private void failIfReaderDied() {
             Throwable failure = readerFailure;
             if (failure != null) {

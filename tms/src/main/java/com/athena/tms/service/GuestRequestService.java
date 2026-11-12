@@ -113,8 +113,6 @@ public class GuestRequestService {
     private TaskCreateCommand menuCommand(long tenantId, CurrentActor actor, String itemId, Integer quantity) {
         GuestTenantConfigReader.MenuItem item = this.configReader.requestMenu(tenantId).stream().filter(candidate -> candidate.key().equals(itemId)).findFirst().orElse(null);
         if (item == null) {
-            // 不在勾選單上的品項當自由文字處理：走規則引擎，沒命中就進 triage 由櫃檯分流，
-            // 不因為 App 與勾選單版本不同步就直接拒絕住客。
             return this.freeTextCommand(tenantId, actor, itemId, null);
         }
         int effectiveQuantity = quantity != null && quantity > 0 ? quantity : 1;
@@ -145,7 +143,6 @@ public class GuestRequestService {
         return new TaskCreateCommand(tenantId, routing.type(), "guest", actor.roomId(), actor.reservationId(), routing.dept(), routing.initialState(), null, title, this.noteJson(noteFields), null, null, this.workDateFor(routing.type()), Actor.guest());
     }
 
-    /** 住客要求的清潔歸在「今天」的工作日，「今天」以注入的時鐘為準，與班別、跨日判定同一個來源。 */
     private LocalDate workDateFor(String type) {
         return "cleaning".equals(type) ? LocalDate.now(this.clock) : null;
     }
@@ -156,8 +153,6 @@ public class GuestRequestService {
         if (actor.reservationId().equals(task.getReservationId())) {
             return;
         }
-        // 櫃檯代住客轉的單沒有綁訂單（reservation_id 為空）：這種單以「同一間房」認定
-        // 歸屬——session 綁定的房間跟任務的房間一致就視為這位住客的需求。
         if (task.getReservationId() == null && actor.roomId() != null && actor.roomId().equals(task.getRoomId())) {
             return;
         }

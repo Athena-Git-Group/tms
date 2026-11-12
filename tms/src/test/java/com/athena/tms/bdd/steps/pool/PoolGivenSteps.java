@@ -9,15 +9,6 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 待認領模組的 Given（待認領/dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言。
- *
- * <p>自動化規則直接用 {@link JdbcClient} 寫 {@code automation_rules} 表
- * （欄位依 {@code V6__automation_rules_and_due_at.sql}），比照 {@code RoomFixtures}／
- * {@code StaffFixtures} 的慣例：純資料落地不經任何 production 服務，不需要
- * {@code TenantContext}（RLS 在測試連線為資料庫 superuser 時本就不生效，
- * {@code TenantContext} 只有呼叫 production 服務碼時才需要）。
- */
 public class PoolGivenSteps {
 
     private final JdbcClient jdbcClient;
@@ -68,9 +59,6 @@ public class PoolGivenSteps {
 
     @假設("系統從 {string} 停機到 {string}")
     public void systemDownFromTo(String startHHmm, String endHHmm) {
-        // 怎麼做：直接把時鐘從開始時刻跳到結束時刻，期間不執行任何排程掃描（不呼叫 JobTrigger），
-        // 也不寫資料庫；只有結束時刻之後的狀態對後續步驟有意義，因此 startHHmm 只作為句型參數，
-        // 不需要額外落地。
         clock.setTodayAt(endHHmm);
     }
 
@@ -82,8 +70,6 @@ public class PoolGivenSteps {
         };
     }
 
-    // 來源：specs/truth/contracts/components/schemas/員工工作台.yaml 的 PoolCategory enum，
-    // 與 automation_rules.category 的 CHECK（cleaning|amenity|other）交集。
     private static String poolCategory(String chinese) {
         return switch (chinese) {
             case "打掃" -> "cleaning";

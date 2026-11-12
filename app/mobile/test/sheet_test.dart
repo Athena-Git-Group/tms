@@ -7,13 +7,7 @@ import 'package:tms_staff_app/core/widgets/tms_option_row.dart';
 import 'package:tms_staff_app/core/widgets/tms_photo_cell.dart';
 import 'package:tms_staff_app/core/widgets/tms_sheet.dart';
 
-/// 面板外框與面板裡那兩個零件的行為測試。
-///
-/// 這三個東西被三個面板共用，壞掉的話是三個畫面一起壞，而面板只有在模擬器上
-/// 跑整個流程才看得到，所以在這裡先釘住幾件一看就知道有沒有壞的事。
 void main() {
-  /// 面板貼在畫面底部，底部安全區照 iPhone 的 34pt 算：底部留白的算式只有在
-  /// 安全區不是 0 的機型上才看得出算錯。
   const safeBottom = 34.0;
 
   Widget host(Widget child) {
@@ -45,7 +39,6 @@ void main() {
 
     expect(find.text('延後原因'), findsOneWidget);
     expect(find.text('確認'), findsOneWidget);
-    // 抓柄是 36 × 5 的小圓條，面板上只有它這一個尺寸。
     expect(
       find.byWidgetPredicate(
         (widget) =>
@@ -55,7 +48,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    // 左上角是 44pt 圓形玻璃鈕，裡面畫 ✕，不是一顆文字鈕（`Main.dc.html:1428`）。
     expect(find.text('關閉'), findsNothing);
     expect(find.byIcon(CupertinoIcons.xmark), findsOneWidget);
     expect(tester.getSize(find.byType(TmsGlass)), const Size(44, 44));
@@ -68,7 +60,6 @@ void main() {
       ),
     );
 
-    // 面板本體是整支外框唯一有上緣陰影的那一層（`Main.dc.html:4932`）。
     final decoration = tester
         .widgetList<Container>(find.byType(Container))
         .map((container) => container.decoration)
@@ -107,8 +98,6 @@ void main() {
       ),
     );
 
-    // 安全區之外再加一次 16 的話，有瀏海的機型會比設計稿多留 16pt
-    //（`Main.dc.html:4935`）。
     final sheetBottom = tester.getRect(find.byType(TmsSheet)).bottom;
     final contentBottom = tester.getRect(find.text('這間房有什麼要注意的？')).bottom;
     expect(sheetBottom - contentBottom, safeBottom);
@@ -129,8 +118,6 @@ void main() {
     final buttonBottom = tester.getRect(find.byType(TmsSheetButton)).bottom;
     expect(sheetBottom - buttonBottom, safeBottom);
 
-    // 捲到按鈕後面的內容要淡掉而不是被硬切，所以按鈕列的底是上緣透明的漸層
-    //（`Main.dc.html:1562`）。
     final gradient = tester
         .widgetList<Container>(find.byType(Container))
         .map((container) => container.decoration)
@@ -153,8 +140,6 @@ void main() {
       ),
     );
 
-    // 不能按的時候底色是固定的中灰（`Main.dc.html:4941`），框架自己的停用淡色
-    // 跟設計稿對不上。底色由膠囊按鈕內層畫，不假設它落在哪一層 decoration。
     final fills = tester
         .widgetList<DecoratedBox>(
           find.descendant(
@@ -180,8 +165,6 @@ void main() {
       builder: (_) => const TmsSheet(title: '查一下', children: []),
     );
 
-    // 框架預設的遮罩比設計稿淡（`Main.dc.html:1414`），升起也比設計稿慢
-    //（`Main.dc.html:29`）。
     expect(route.barrierColor, const Color(0x52000000));
     expect(route.barrierDismissible, isTrue);
     expect(route.transitionDuration, TmsMotion.up.duration);
@@ -211,8 +194,6 @@ void main() {
     expect(find.byType(TmsOptionCheck), findsOneWidget);
   });
 
-  // 原型 Main.dc.html:1450：原因列點一下就送出，沒有「選好了但還沒送」的
-  // 中間狀態，所以這一種列畫不出勾。
   testWidgets('原因列畫不出勾', (tester) async {
     await tester.pumpWidget(
       host(
@@ -223,7 +204,6 @@ void main() {
     expect(find.byType(TmsOptionCheck), findsNothing);
   });
 
-  // 原型 Main.dc.html:1509-1533。
   testWidgets('照片格四態各畫各的，失敗時整格變成重試', (tester) async {
     await tester.pumpWidget(
       host(
@@ -247,11 +227,9 @@ void main() {
     expect(find.text('19 KB'), findsOneWidget);
     expect(find.text('20%'), findsOneWidget);
     expect(find.byType(CupertinoActivityIndicator), findsNothing);
-    // 完成態的綠角標。
     expect(find.byIcon(CupertinoIcons.check_mark), findsOneWidget);
   });
 
-  // 原型 Main.dc.html:1513-1516：移除鈕只在呼叫端准許移除時出現。
   testWidgets('照片格在不准移除時不畫移除鈕', (tester) async {
     await tester.pumpWidget(
       host(

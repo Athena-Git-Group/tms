@@ -21,14 +21,6 @@ public class AskGivenSteps {
         this.world = world;
     }
 
-    /**
-     * 怎麼做：透過後端測試資料寫入該房的 {@code room_memory}。記錄內容為 feature 中的裸字
-     * （無引號，含日期、標題與原文的業務描述），用 regex 形式的 step definition 擷取。
-     *
-     * <p>記錄種類（{@code room_memory.kind}）由標題判讀：工務單是修繕記錄（repair）。
-     * 這張表的三種 kind 決定查一下的哪一類問題查得到它，猜錯等於把記錄藏起來，所以
-     * 對不上已知標題時直接噴錯，不預設一個種類。日期只給月日，補上今年。
-     */
     @假設("^後端 \"([^\"]+)\" 的房間記錄有 (.+)$")
     public void backendRoomMemoryHas(String roomNo, String record) {
         Matcher matcher = RECORD.matcher(record.trim());

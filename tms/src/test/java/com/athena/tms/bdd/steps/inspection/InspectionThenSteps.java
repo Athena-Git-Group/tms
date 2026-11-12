@@ -26,18 +26,10 @@ import java.util.regex.Pattern;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 查房模組的 Then（查房/dsl.md Then 句型區）。查 tasks／task_events／outbox 這些權威資料，
- * 並在 dsl.md 點名「跨視角／再讀確認」之處另外驗證。
- */
 public class InspectionThenSteps {
 
-    // 查房/dsl.md「查房結果用語」表只收錄查房「結果」的中譯，「房況」是另一組詞彙
-    // （root dsl.md「判定查房全部項目通過」列：pms_status=inspected（已整理）），
-    // Terms 共用對照表尚未收錄，這裡只收本模組用得到的這一個值，查不到一律噴錯。
     private static final Map<String, String> ROOM_STATUS = Map.of("已整理（Inspected）", "inspected");
 
-    // 查房/dsl.md「這次查房的結果為 … 去向為 …」列：去向中文 → InspectionOutcome.destination。
     private static final Map<String, String> DESTINATION = Map.of(
             "結案", "closed",
             "原清房者", "cleaner",
@@ -77,13 +69,11 @@ public class InspectionThenSteps {
         this.lastOperationGuard = lastOperationGuard;
     }
 
-    /** dsl.md「項目清單」：以頓號分隔、不加引號的顯示名稱清單，例如 床鋪平整、浴室無水痕。 */
     @ParameterType(name = "項目清單", value = "[^、\\s]+(?:、[^、\\s]+)*")
     public List<String> 項目清單(String raw) {
         return List.of(raw.split("、"));
     }
 
-    /** dsl.md「事件清單」：以頓號分隔、各自加引號的 task_events.type 清單，例如 "a"、"b"。 */
     @ParameterType(name = "事件清單", value = "\"[^\"]*\"(?:、\"[^\"]*\")*")
     public List<String> 事件清單(String raw) {
         List<String> items = new ArrayList<>();
@@ -239,12 +229,6 @@ public class InspectionThenSteps {
         assertStaffActive(staffName, false);
     }
 
-    /**
-     * 查房/dsl.md「這次查房的結果為 "{結果}"，去向為 "{去向}"」。呈現結果看上一次 createInspections
-     * 的回應（201＋InspectionOutcome），權威狀態依 destination 分辨三種落點——不拿 assignee
-     * 是不是 null 反推去向。退回時 failedItems 要剛好是被判不通過的項目、依飯店排序，
-     * 哪些被判不通過以這次實際送出的 items 為準。
-     */
     @那麼("這次查房的結果為 {string}，去向為 {string}")
     public void thisInspectionResultAndDestinationAre(String resultChinese, String destinationChinese) {
         String expectedResult = Terms.inspection(resultChinese);
@@ -297,12 +281,6 @@ public class InspectionThenSteps {
         }
     }
 
-    /**
-     * 查房/dsl.md「這次查房被拒絕，原因是項目集合不符，回應帶現行項目 {項目清單}」。
-     * 422 inspection_items_mismatch；currentItems 的 label 順序剛好等於清單；missing／unexpected
-     * 以「現行啟用集合」對「這次實際送出的 key」算出來比。單仍 done、事件與 inspections 列沒增加、
-     * 清房者沒有因這次送出收到任何推播（task 的 push outbox 筆數與送出前相同）。
-     */
     @那麼("這次查房被拒絕，原因是項目集合不符，回應帶現行項目 {項目清單}")
     public void thisInspectionRejectedForItemsMismatch(List<String> expectedLabels) {
         ScenarioWorld.ApiResponse resp = world.lastInspectionResponse();
@@ -346,7 +324,6 @@ public class InspectionThenSteps {
         check("outbox 筆數（清房者不該因這次送出收到推播）", before.outboxCount(), outboxNow);
     }
 
-    /** 查房/dsl.md「"{任務}" 在房務待認領」：pool／housekeeping／assignee 空／pool_source=inspection_return，房務員看 GET /pool 看得到。 */
     @那麼("{string} 在房務待認領")
     public void taskIsInHousekeepingPool(String roomNo) {
         UUID taskId = UUID.fromString(world.taskId(roomNo));
@@ -373,7 +350,6 @@ public class InspectionThenSteps {
         }
     }
 
-    /** 查房/dsl.md「"{任務}" 的查房紀錄只有 {筆數} 筆」：inspections 列數與 inspection_passed＋inspection_failed 事件數都等於筆數。 */
     @那麼("{string} 的查房紀錄只有 {int} 筆")
     public void taskHasExactlyInspectionRecords(String roomNo, int expected) {
         UUID taskId = UUID.fromString(world.taskId(roomNo));
@@ -385,7 +361,6 @@ public class InspectionThenSteps {
         check("task_events 中 inspection_passed＋inspection_failed 筆數", (long) expected, resultEvents);
     }
 
-    /** 查房/dsl.md「"{員工}" 沒有收到查房退回的推播」：該員工的 kind push outbox 沒有任何 event=inspection_failed。 */
     @那麼("{string} 沒有收到查房退回的推播")
     public void staffReceivedNoInspectionFailedPush(String staffName) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
@@ -407,7 +382,6 @@ public class InspectionThenSteps {
                 .toList();
     }
 
-    /** 把 key 清單換成「key=label」字串、依飯店 sort_order 排序，供 failedItems 比對。 */
     private List<String> labelsInHotelOrder(List<String> keys) {
         return dbProbe.queryMaps(
                         "SELECT item_key, label FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' ORDER BY sort_order",

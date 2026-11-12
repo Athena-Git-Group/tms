@@ -6,10 +6,6 @@ import 'package:tms_staff_app/core/widgets/tms_action_bar.dart';
 import 'package:tms_staff_app/core/widgets/tms_pill_button.dart';
 import 'package:tms_staff_app/core/widgets/tms_sheet.dart';
 
-/// 置底操作列與膠囊按鈕的可量測外觀。
-///
-/// 這些值在網頁原型裡散在四支畫面的 inline style 與 logic script 兩處，照抄
-/// 時很容易只改一支。每一條都寫出原型行號，改設計時回去對那一行就知道還準不準。
 void main() {
   Widget host(Widget child, {double bottomInset = 34, double width = 402}) {
     return CupertinoApp(
@@ -120,8 +116,6 @@ void main() {
       );
       final secondary = tester.getRect(find.byType(TmsPillButton).at(0));
       final primary = tester.getRect(find.byType(TmsPillButton).at(1));
-      // 兩顆按鈕一起佔掉 402 減左右各 16 再減中間 12，等於 358，1 比 2 分成
-      // 119.33 與 238.67。
       const available = 402 - 16 * 2 - 12;
       final bar = tester.getRect(find.byType(TmsActionBar));
       expect(secondary.left - bar.left, moreOrLessEquals(16, epsilon: 0.5));
@@ -328,7 +322,6 @@ void main() {
 
 void _noop() {}
 
-/// 送出鈕底下那顆純文字鈕的替身，用來量兩顆之間的間距。
 class _Forgot extends StatelessWidget {
   const _Forgot();
 

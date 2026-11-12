@@ -22,12 +22,6 @@ import java.util.function.Consumer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 任務執行模組的 Then（dsl.md Then 句型區）。每句除了查 tasks／task_events／
- * task_sop_checks 這些權威資料，還在 dsl.md 點名「跨視角／再讀確認」時另外呼叫一次
- * 對應的員工 API 驗證——身分是任務當下的負責人或部門同仁，不透過 StaffFixtures
- * （那個入口只服務 Given 建的員工），而是現場用 JwtService 幫 DB 裡查到的員工簽一張新權杖。
- */
 public class TaskExecutionThenSteps {
 
     private final ScenarioWorld world;
@@ -177,14 +171,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 完成回報的今日進度（dsl.md 點名的三個面向：呈現結果、權威狀態、跨視角）。
-     *
-     * <p>第一件事是把完成回報裡要用的值讀成區域變數：跨視角那一段要另外打一次
-     * {@code GET /me/today}，而 {@link BddApiClient} 每次呼叫都會覆寫
-     * {@link ScenarioWorld#lastResponse()}；先讀出來，後面才不會把今日進度的回應
-     * 誤當成完成回報來比對。
-     */
     @那麼("完成回報的今日進度為第 {int} 單")
     public void completeResponseCleaningProgressIs(int ordinal) {
         JsonNode completeJson = requireCompleteResponseJson();
@@ -217,9 +203,6 @@ public class TaskExecutionThenSteps {
         UUID callerId = UUID.fromString(String.valueOf(assigneeId));
         Object workDate = completedRow.get("work_date");
 
-        // 權威狀態：用 tasks 重算。state 為 done 或 inspected 本身就排除了 cancelled；
-        // 開工時鎖定免查房而直接結案的單（inspection_waived）狀態就是 done，
-        // 自然算進來，不必再依 inspection_waived 加總一次。
         long recounted = dbProbe.count(
                 "SELECT count(*) FROM tasks WHERE tenant_id = ? AND assignee_id = ? AND work_date = ?"
                         + " AND type = 'cleaning' AND state IN ('done', 'inspected')",
@@ -230,8 +213,6 @@ public class TaskExecutionThenSteps {
                             + " 張，實際 " + recounted + " 張");
         }
 
-        // 跨視角：同一時刻首頁的已清完間數必須是同一個數字，
-        // 兩個畫面給出不同數字就是不一致。
         ScenarioWorld.ApiResponse today =
                 apiClient.get("/me/today", BddApiClient.Auth.staff(mintJwtFor(callerId)));
         if (today.status() != 200 || today.json() == null) {
@@ -245,16 +226,9 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 完成回報的今日進度數的是打掃單；備品、工務這類非打掃任務完成時，回一個打掃數字會讓
-     * 畫面顯示一個與這次操作無關的進度，所以這個欄位必須整個不出現。這裡刻意分辨「欄位不存在」
-     * 與「欄位存在但是 null／0」——後兩者仍然是把一個無關的欄位送到畫面上，不算通過。
-     */
     @那麼("完成回報不含今日進度")
     public void completeResponseHasNoCleaningProgress() {
         JsonNode json = requireCompleteResponseJson();
-        // Jackson 的 has()／get() 以「鍵是否存在」為準：缺欄位時 get() 回 Java null，
-        // 欄位存在而值為 null 時回 NullNode，兩者可分辨；path() 會把兩者都抹成 MissingNode，不能用。
         if (json.has("cleaningDoneToday")) {
             JsonNode value = json.get("cleaningDoneToday");
             throw new AssertionError(
@@ -263,11 +237,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * dsl.md「完成回報的下一步是待開始的 "{房號}"」：三種去向靠 {@code nextStep.kind} 判定，
-     * 不可改用「taskId 是不是 null」推斷，所以 kind 一定要查。完成回應要先取下來再做跨視角
-     * 查詢——{@link BddApiClient} 每次呼叫都會覆寫 {@code world.lastResponse()}。
-     */
     @那麼("完成回報的下一步是待開始的 {string}")
     public void completeResponseNextStepIsAcceptedTask(String roomNo) {
         JsonNode json = requireCompleteResponseJson();
@@ -320,7 +289,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /** 上一次 tasksComplete 的回應；非 200 或沒有 JSON body 直接噴錯並印出 status 與 body。 */
     private JsonNode requireCompleteResponseJson() {
         ScenarioWorld.ApiResponse resp = world.lastResponse();
         if (resp.status() != 200 || resp.json() == null) {
@@ -330,12 +298,6 @@ public class TaskExecutionThenSteps {
         return resp.json();
     }
 
-    /**
-     * 「還沒做完的下一步」有兩層要驗：回應本身（去向種類與房號），以及資料庫裡的挑選前提——
-     * 呼叫者今天已經沒有任何待開始（accepted）的單，而且這一間真的是依
-     * 進行中→已中斷→已延後、同組房號遞增排下來的第一筆。只比對回應的話，後端用任何順序
-     * 挑一間都會通過，排序規則就等於沒有被測到。
-     */
     @那麼("完成回報的下一步是還沒做完的 {string}")
     public void completeNextStepIsUnfinishedTask(String roomNo) {
         JsonNode json = requireCompleteResponseJson();
@@ -343,7 +305,6 @@ public class TaskExecutionThenSteps {
         if (nextStep == null || nextStep.isNull()) {
             throw new AssertionError("完成回報預期帶 nextStep，實際沒有：" + world.lastResponse().body());
         }
-        // 三種去向靠 kind 判定，不從「taskId 是不是 null」反推——那會讓 all_clear 與這一條分不出來。
         String kind = textOrNull(nextStep, "kind");
         if (!"unfinished_task".equals(kind)) {
             throw new AssertionError(
@@ -387,20 +348,12 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 今日未結束的單，回傳順序即「完成後的接續去向」的挑選順序：先 doing，再 interrupted，
-     * 最後 deferred，同一組之內房號遞增。「今日」沿用 data truth 的口徑——work_date 有值時
-     * 比今天，沒有值（非打掃類）的未結束任務一律算今天。
-     */
     private List<Map<String, Object>> todayTasksInStates(UUID callerId, List<String> states) {
         String placeholders = String.join(", ", java.util.Collections.nCopies(states.size(), "?"));
         List<Object> params = new java.util.ArrayList<>();
         params.add(tenantFixtures.testTenantId());
         params.add(callerId);
         params.addAll(states);
-        // 「今天」一律取測試時鐘，不用 SQL 的 CURRENT_DATE：BDD 的 MutableClock 釘在
-        // DEFAULT_TEST_DATE，與資料庫主機的真實今天相差數週，用 CURRENT_DATE 會一筆都撈不到，
-        // 讓「今日沒有 accepted」這類檢查變成永遠通過的空集合。
         params.add(java.sql.Date.valueOf(today()));
         return dbProbe.queryMaps(
                 "SELECT t.state AS state, r.room_no AS room_no"
@@ -419,16 +372,6 @@ public class TaskExecutionThenSteps {
                 .collect(java.util.stream.Collectors.joining("、"));
     }
 
-    /**
-     * dsl.md：`完成回報說今天排定的房都清完了`。
-     *
-     * <p>三種去向（待開始的、還沒做完的、都清完了）一律只認 {@code nextStep.kind}
-     * 這個封閉三值，**不**用「{@code taskId} 是不是 null」推斷：後者會讓「查不到下一間」
-     * 與「今天都清完了」在測試上長得一模一樣，兩個相反的結論卻同樣會通過。
-     * 因此這句先比對 kind 字面值等於 {@code all_clear}（kind 缺漏、是另外兩值、
-     * 或是契約沒有的值，都直接失敗並印出實際值），確認 kind 之後才檢查
-     * taskId／roomNo 不出現——後者是附帶的形狀檢查，不是判定依據。
-     */
     @那麼("完成回報說今天排定的房都清完了")
     public void completionReportSaysAllClear() {
         JsonNode nextStep = requireCompletionNextStep();
@@ -458,7 +401,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /** 上一次 tasksComplete 回應裡的 nextStep；回應不是 200 或沒有這個物件都直接失敗。 */
     private JsonNode requireCompletionNextStep() {
         ScenarioWorld.ApiResponse resp = world.lastResponse();
         if (resp.status() != 200 || resp.json() == null) {
@@ -472,7 +414,6 @@ public class TaskExecutionThenSteps {
         return nextStep;
     }
 
-    /** kind 必須剛好等於期待的那一個字面值——另外兩種去向就是靠這裡分辨出來的。 */
     private void requireNextStepKind(JsonNode nextStep, String expectedKind) {
         String actualKind = textOrNull(nextStep, "kind");
         if (!expectedKind.equals(actualKind)) {
@@ -483,11 +424,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 「不該帶這個欄位」一律用 {@code has()} 判定鍵在不在，不用 {@code textOrNull}：
-     * 後者會讓 {@code "taskId": null} 過關、卻讓 {@code "taskId": ""} 失敗，與同檔
-     * 「完成回報不含今日進度」刻意分辨「缺欄位 vs 值為 null」的嚴謹度不一致。
-     */
     private void requireNextStepFieldAbsent(JsonNode nextStep, String field) {
         if (nextStep.has(field)) {
             JsonNode value = nextStep.get(field);
@@ -498,7 +434,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /** 本模組一律以測試時鐘判定「今天」，見 todayTasksInStates 的註解。 */
     private LocalDate today() {
         return clock.instant().atZone(clock.getZone()).toLocalDate();
     }
@@ -553,10 +488,6 @@ public class TaskExecutionThenSteps {
         return jwtService.issue(tenantId, staffId, (String) staff.get("role"), (String) staff.get("dept")).token();
     }
 
-    /**
-     * 待認領等沒有負責人的任務，dsl.md「以負責人或主管身分」沒有自然對應的身分可用；
-     * 跳過跨視角檢查，不杜撰一個不存在的操作者。
-     */
     private void withAssigneeReadTasks(UUID taskId, Map<String, Object> taskRow, Consumer<JsonNode> check) {
         Object assigneeId = taskRow.get("assignee_id");
         if (assigneeId == null) {
@@ -596,14 +527,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-    /**
-     * 「完成時，未勾選的 SOP 項記錄為跳過」這句 Then 要求 completed 事件的 payload
-     * 也記錄跳過項，但這個 payload 鍵名目前還沒有正式契約——data-model.dbml 只點名
-     * cancelled／deferred／interrupted／inspection_failed 幾種事件的 payload 形狀，
-     * 沒提到 completed。這裡依 sop_checked 事件既有的 label 慣例，嘗試幾個合理的鍵名；
-     * 都找不到就視為沒有記錄任何跳過項，讓上層比對自然失敗並印出實際 payload，
-     * 而不是在這裡假裝猜對一個不存在的欄位。
-     */
     private Set<String> skippedLabelsFromPayload(JsonNode payload) {
         if (payload == null || payload.isNull()) {
             return Set.of();

@@ -13,36 +13,20 @@ import '../notification/notification_screen.dart';
 import '../pool/pool_screen.dart';
 import '../today/my_today_scope.dart';
 
-/// 推到外殼之上的畫面要求外殼切分頁的通道。
-///
-/// 完成畫面的「去『待認領』看看」疊在外殼上好幾層，手上拿不到外殼那個
-/// state，所以它只在這裡留下要去哪一個分頁，外殼自己讀走並切過去。外殼
-/// 還沒掛上時留下的要求不會有人處理，下一次要求會蓋掉它。
 abstract final class MainShellTabRequest {
   static const int _poolIndex = 1;
 
   static final ValueNotifier<int?> pending = ValueNotifier<int?>(null);
 
-  /// 推播要待認領標亮的房號，待認領分頁自己讀走。
   static final ValueNotifier<String?> poolHighlightRoomNo =
       ValueNotifier<String?>(null);
 
-  /// 推播指到待認領也走這裡切分頁，不另推一張待認領：另推的那張頁沒有分頁
-  /// 列，員工回不了首頁。
   static void goToPool({String? highlightRoomNo}) {
     poolHighlightRoomNo.value = highlightRoomNo;
     pending.value = _poolIndex;
   }
 }
 
-/// 現在停在第幾個分頁，給分頁內容自己讀。
-///
-/// [IndexedStack] 會把建過的分頁留在樹上，所以切走的分頁不會收到任何通知，自
-/// 己也看不出來已經被切走。工務首頁的首次使用教學氣泡要在員工離開首頁之後就
-/// 不再出現，少了這個通道它永遠以為自己還在畫面上。
-///
-/// 外殼還沒掛上時（例如元件測試只 pump 一個分頁）當成停在首頁，那是分頁內容
-/// 單獨出現時唯一說得通的位置。
 class MainShellTab extends InheritedWidget {
   const MainShellTab({super.key, required this.index, required super.child});
 
@@ -60,18 +44,6 @@ class MainShellTab extends InheritedWidget {
       oldWidget.index != index;
 }
 
-/// 登入後的主畫面外殼：底部四個分頁，首頁／待認領／通知／我的。
-///
-/// 四個分頁是員工整天會來回切的地方，所以它們彼此平行、互相之間沒有返回
-/// 關係：切到待認領再切回首頁，首頁要還是原來那一屏，不是重新載入的新頁。
-/// 分頁數固定四個，部門切換不是第五個分頁——工務與房務是兩套不同的工作
-/// 內容，由 [EngineeringShell] 與 [HousekeepingShell] 各自提供自己的首頁與
-/// 待認領，通知與我的兩頁兩邊共用。
-///
-/// 分頁內容刻意不包在各自的 Navigator 裡。任務頁、工務單詳情這些從分頁點
-/// 進去的畫面要蓋住整個螢幕（含分頁列），登出也要能一次清掉整個返回堆疊；
-/// 分頁各帶一個 Navigator 的話，推進去的畫面會卡在分頁列上方，而登出只會
-/// 清掉當下那個分頁的堆疊，員工會留在一個還有分頁列的登入畫面上。
 class _MainShell extends StatelessWidget {
   const _MainShell({required this.homeTab, required this.poolTab});
 
@@ -81,28 +53,12 @@ class _MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 今日進度取在外殼這一層，不是取在首頁裡。分頁列的兩顆徽章與首頁的每一
-    // 個數字都出自同一支 `GET /me/today`，誰先要用都讀同一份：擺在首頁裡的
-    // 話外殼讀不到（InheritedWidget 只往下傳），外殼只好自己再打一次，一次
-    // 進場就變成兩個請求、兩份可能對不起來的數字。
     return MyTodayScope(
       child: _MainShellBody(homeTab: homeTab, poolTab: poolTab),
     );
   }
 }
 
-/// 外殼的分頁骨架。獨立成一個元件，是為了讓它的 `context` 落在
-/// [MyTodayScope] 底下——分頁列的徽章要靠這一點才讀得到今日進度。
-///
-/// 分頁列是浮在內容上方的玻璃板，不是把內容往上推的實心列，所以這裡用
-/// [Stack] 自己疊三層：分頁內容鋪滿整個畫面、底部的 soft scroll edge、最上
-/// 面的 [TmsTabBar]。Flutter 內建的 `CupertinoTabScaffold` 做不到這件事，它
-/// 一定把分頁列的高度從內容區扣掉，內容就不會從玻璃底下透出來。
-///
-/// 切過的分頁要留在原地：員工切到待認領再切回首頁，首頁得還是原來那一屏。
-/// [IndexedStack] 會把每一個建過的分頁留在樹上，捲動位置與畫面狀態因此不會
-/// 掉。沒去過的分頁先擺一個空殼，進去的時候才真的建起來，不然四個分頁會在
-/// 登入當下同時打自己的讀取請求。
 class _MainShellBody extends StatefulWidget {
   const _MainShellBody({required this.homeTab, required this.poolTab});
 
@@ -233,10 +189,6 @@ class EngineeringShell extends StatelessWidget {
   }
 }
 
-/// 主管的外殼：首頁是主管首頁，待認領是只看不搶的雙部門待認領，通知與我的
-/// 兩個分頁與員工共用。
-///
-/// 主管種類由分流時判好傳進來，外殼只往下交給首頁決定格子，不自己再判一次。
 class ManagerShell extends StatelessWidget {
   const ManagerShell({super.key, required this.kind});
 

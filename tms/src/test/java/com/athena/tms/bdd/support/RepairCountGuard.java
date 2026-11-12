@@ -1,10 +1,5 @@
 package com.athena.tms.bdd.support;
 
-/**
- * 「系統沒有建立工務單」類 Then 句要比對的操作前筆數快照，一個場景一份。
- * 比的是測試租戶的 repair_tickets 與 type=repair 的 tasks 筆數，和
- * {@link LastOperationGuard} 單一任務的整列快照形狀不同，所以分開持有。
- */
 public class RepairCountGuard {
 
     private final DbProbe dbProbe;

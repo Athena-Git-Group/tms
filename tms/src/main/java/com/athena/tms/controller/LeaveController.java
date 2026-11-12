@@ -12,10 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 請假登記 API，對應 contracts 的 createLeaves（POST /leaves）。登記者以認證身分
- * 為準（leaves.created_by），請求裡的 tenantId 不採信；連鎖效果在 {@link LeaveService}。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class LeaveController {

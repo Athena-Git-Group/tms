@@ -4,14 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/celebrate/celebrate_screen.dart';
 
-/// 驗慶祝頁三種接續分支各自長什麼樣、每個要被讀值的節點讀到的字跟畫面上
-/// 一致，而且沒有資料的那一段整段不出現。
-///
-/// 這幾個節點的 label 是驗收的斷言目標，版面怎麼排都不能動到它們。版面本身
-/// 的數值對照設計原型 `Claude Design/Main.dc.html:1372-1409`。
 void main() {
-  // 彩屑是無限循環的飄浮動畫（`Main.dc.html:36` 的 `tmsFloat`），動態開著就
-  // 永遠排得出下一幀，`pumpAndSettle` 會等到逾時而不是等到畫面靜止。
+  // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
@@ -76,7 +70,6 @@ void main() {
 
     expect(find.bySemanticsIdentifier('celebrate.celebration'), findsNothing);
     expect(find.bySemanticsIdentifier('celebrate.today-progress'), findsNothing);
-    // 關掉的是氣氛不是接力，所以這幾塊都還在（`Main.dc.html:1372-1409`）。
     expect(labelOf(tester, 'celebrate.title'), '305 完成！');
     expect(labelOf(tester, 'celebrate.subline'), '已通知主管查房');
     expect(labelOf(tester, 'celebrate.actual-minutes'), '25 / 30 分');
@@ -85,8 +78,6 @@ void main() {
     handle.dispose();
   });
 
-  // 這張卡是疊在任務頁上的覆蓋層而不是路由，所以沒有 modal barrier 幫它收下
-  // 落在卡外面的點擊。不收的話底下那一頁的按鍵仍然按得到。
   testWidgets('遮罩收下落在卡外面的點擊，底下那一頁按不到', (tester) async {
     var tappedUnderneath = false;
 
@@ -114,7 +105,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 卡置中，所以畫面最上緣那一點一定落在遮罩上。
     await tester.tapAt(const Offset(200, 8));
     await tester.pumpAndSettle();
 
@@ -182,7 +172,6 @@ void main() {
       labelOf(tester, 'celebrate.queued-note'),
       '目前離線，已先記錄在手機，恢復連線後自動送出。',
     );
-    // 離線時後端還沒算出去向，接續那一段整段不出現。
     expect(find.bySemanticsIdentifier('celebrate.next-button'), findsNothing);
 
     handle.dispose();

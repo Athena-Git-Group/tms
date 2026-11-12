@@ -20,10 +20,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/**
- * 沒帶 {@code tms.test-clock.enabled} 的後端（正式環境就是這樣）：時鐘是系統時鐘、
- * 可撥動的時鐘與撥動端點都不存在，打撥動路徑一律 404。
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @Testcontainers

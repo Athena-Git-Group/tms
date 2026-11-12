@@ -124,11 +124,6 @@ public class OutboxRelay {
         return true;
     }
 
-    /**
-     * key 用 aggregate_key 讓同鍵訊息落在同一個 partition；租戶 id 與冪等鍵放 header
-     * （名稱見 {@link OutboxKafkaHeaders}），消費者靠它們去重與套用租戶範圍。
-     * 沒有冪等鍵的訊息就不附那個 header，消費者自行決定如何處理。
-     */
     private ProducerRecord<String, String> toProducerRecord(PendingMessage message) {
         ProducerRecord<String, String> record = new ProducerRecord<>(this.topics.topicFor(message.kind()), message.aggregateKey(), message.payload());
         record.headers().add(new RecordHeader(OutboxKafkaHeaders.TENANT_ID, Long.toString(message.tenantId()).getBytes(StandardCharsets.UTF_8)));

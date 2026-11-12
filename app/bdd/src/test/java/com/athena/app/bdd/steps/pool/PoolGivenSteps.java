@@ -24,16 +24,6 @@ public class PoolGivenSteps {
         }
     }
 
-    /**
-     * 一列待認領任務。欄位語意照 backend dsl.md 同名句型：房號選填（留白＝公共區域）、
-     * 樓層選填（預設取房號第一位數字）、類別與來源選填（預設其他／住客掃碼）、
-     * 標記只有「優先通知」、提醒狀態直接標記未接提醒已到達的階段。
-     *
-     * <p>「交代或原因」一欄承載兩種意思，以全形分號分段：第一段是退池原因
-     * （{@code return_reason}），第二段是接手進度交代（{@code requeue_note}）——
-     * 單卡的「原因」與「接手進度」兩列分別讀這兩個欄位。來源是自動化規則時整欄
-     * 是「規則引擎命中：{規則名}」，規則名同時落地到 {@code rule_hit}。
-     */
     static void seedPoolTask(AppiumWorld world, Map<String, String> row) {
         String roomNo = blankToNull(row.get("房號"));
         String floorText = blankToNull(row.get("樓層"));
@@ -83,14 +73,6 @@ public class PoolGivenSteps {
         PoolDept.ensureOnPool(world, world.staff(staffName));
     }
 
-    /**
-     * 怎麼做：清除 App 本機的待認領部門選擇，讓這台手機沒有任何部門紀錄；以該主管身分
-     * 登入後停在首頁、還沒切到待認領。回寫：無。
-     *
-     * <p>部門選擇只存在手機上、後端沒有，所以直接刪掉那一把本機偏好設定
-     * （{@link CommonGivenSteps#POOL_DEPT_PREFERENCE_KEY}）；偏好設定只在 App 啟動時讀，
-     * 刪完要整個 process 重開再登入。
-     */
     @假設("{string} 第一次在這台手機打開待認領")
     public void firstTimeOpeningPoolOnThisDevice(String managerName) {
         BackendChannel.CreatedStaff manager = world.staff(managerName);

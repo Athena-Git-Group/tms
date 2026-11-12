@@ -5,14 +5,6 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/connection_status.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
-/// 驗連線狀態列掛在四個分頁上之後，它的 accessibility id 不會同時出現兩次。
-///
-/// 四個分頁同屬一個 `CupertinoTabScaffold`，切過的分頁會留在 widget 樹上，
-/// 所以四頁各掛一條狀態列時，同一個 id 會不會變成四個節點是個真問題——驗收
-/// 靠 id 定位，同一個 id 有兩個節點時定位不唯一，整個系統層模組會紅掉。
-/// 結論是不會：非當前分頁被包在 `Offstage` 裡，`Offstage` 不把子節點的
-/// semantics 交出去。這條測試把那個結論釘住，將來有人把分頁外殼換成會保留
-/// 全部分頁 semantics 的做法時會先在這裡紅掉。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();

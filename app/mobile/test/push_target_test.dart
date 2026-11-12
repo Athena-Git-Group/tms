@@ -2,8 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/push_target.dart';
 
-/// 後端 `PushTarget`（kind 格式）換算成 App 內部導頁 payload 的規則。
-/// 純 Dart，不碰 Firebase 也不碰網路：查房號的方法由測試餵對照表。
 void main() {
   Future<String?> roomNoOf(String taskId) async =>
       const {'task-305': '305', 'task-316': '316'}[taskId];

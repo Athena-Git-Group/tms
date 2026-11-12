@@ -4,10 +4,6 @@ import '../theme.dart';
 import 'tms_category_tile.dart';
 import 'tms_glass.dart';
 
-/// 分頁列上一格要畫的圖示。
-///
-/// 四個圖示都是同一套 1.9pt 線稿，所以不混用系統字形：字形的筆畫粗細由字型
-/// 決定，和旁邊三個自繪圖示對不起來，四格並排時看得出其中一格比較重。
 enum TmsTabGlyph { home, pool, notification, me }
 
 class TmsTabItem {
@@ -21,19 +17,9 @@ class TmsTabItem {
 
   final TmsTabGlyph glyph;
 
-  /// 右上角紅色數量徽章上的數字。0 表示整顆徽章不畫，理由見 [TmsCountBadge]
-  /// 的類別註解。
   final int badgeCount;
 }
 
-/// 浮動的毛玻璃分頁列。
-///
-/// 它是一塊浮在內容上方的玻璃板，不是把內容往上推的實心列：左右各離畫面邊
-/// 20，下緣離畫面底 [TmsSpacing.floatingTabBarBottom]，高 62、圓角 31。內容
-/// 從它底下捲過去，所以捲動容器得自己讓開 [TmsSpacing.scrollPadBottom] 那麼
-/// 多底部留白，否則最後一列會永遠被這塊玻璃蓋住。
-///
-/// 定位由呼叫端負責（外殼用 [Stack] 擺它），這個元件只畫自己。
 class TmsTabBar extends StatelessWidget {
   const TmsTabBar({
     super.key,
@@ -89,9 +75,6 @@ class TmsTabBar extends StatelessWidget {
                 child: Row(children: cells),
               ),
             ),
-            // 上緣那條高光。原型寫成 box-shadow 的 inset 段，BoxDecoration 畫
-            // 不出 inset 陰影，所以改成自己疊一條線；玻璃底板的圓角裁切會把
-            // 它的兩端收成跟邊框一樣的弧度。
             const Positioned(
               top: 0,
               left: 0,
@@ -106,10 +89,6 @@ class TmsTabBar extends StatelessWidget {
   }
 }
 
-/// 分頁列底下那層 soft scroll edge。
-///
-/// 它把分頁列佔到的那一段畫面壓淡並模糊，捲動內容從它底下透出來，員工因此
-/// 看得出清單還沒到底。上緣用漸層淡出，不是一條硬邊。
 class TmsBottomScrollEdge extends StatelessWidget {
   const TmsBottomScrollEdge({super.key, required this.height});
 
@@ -165,9 +144,6 @@ class _TabCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = selected ? TmsColors.brandPrimary : TmsColors.labelSoft;
 
-    // 整格併成一個無障礙節點。驗收工具是靠「標籤含某幾個字的那個元素」找分頁
-    // 再點下去的，一格拆成圖示、文字、徽章三個節點的話，它點到的可能是文字那
-    // 個子節點，點擊會落在整格可點範圍之外。
     return MergeSemantics(
       child: Semantics(
         button: true,
@@ -211,10 +187,6 @@ class _TabCell extends StatelessWidget {
   }
 }
 
-/// 把徽章擺在整格寬度 56% 的位置上。
-///
-/// 百分比的基準是整顆分頁按鈕的寬度，不是圖示的寬度，所以要量到這一格實際
-/// 分到多寬才算得出來。
 class _TabBadgeSlot extends StatelessWidget {
   const _TabBadgeSlot({required this.count});
 
@@ -258,10 +230,6 @@ class _TabGlyphIcon extends StatelessWidget {
   }
 }
 
-/// 照原型的 SVG 線稿畫四個分頁圖示。
-///
-/// 路徑座標直接取原型 `viewBox="0 0 24 24"` 的數字，畫之前把畫布縮放到實際
-/// 邊長，所以同一組座標在任何尺寸下都對得上。筆畫粗細跟著一起縮放。
 class _TabGlyphPainter extends CustomPainter {
   const _TabGlyphPainter({required this.glyph, required this.color});
 
@@ -275,8 +243,6 @@ class _TabGlyphPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = _glyphStroke
       ..strokeCap = StrokeCap.round
-      // 房子那一個原型只給了 stroke-linecap，沒給 stroke-linejoin，轉角是
-      // 預設的尖角；另外三個都指定了圓角轉角。
       ..strokeJoin = glyph == TmsTabGlyph.home
           ? StrokeJoin.miter
           : StrokeJoin.round
@@ -372,8 +338,6 @@ const double _edgeBlur = 12;
 
 const double _edgeSaturation = 160;
 
-/// soft scroll edge 上緣淡出後的顏色。原型用 mask 把整層的透明度收掉，這裡
-/// 改成同一個色相收到全透明，兩種寫法在畫面上等價。
 const Color _edgeFadeOut = Color(0x00F2F2F7);
 
 const double _iconLabelGap = 1;

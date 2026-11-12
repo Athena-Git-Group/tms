@@ -10,26 +10,13 @@ import '../../core/widgets/tms_option_row.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_sheet.dart';
 
-/// 查一下面板（ui-plan 畫面 8 的 `askSheet`）：列出這張任務的推薦問題，
-/// 讓員工在房內遇到不確定的事時先查、查不到再麻煩主管。
-///
-/// 推薦問題的順序與範圍標籤全部由後端決定（`GET /room-memories/suggestions`
-/// 依任務情境排好：剛跳過的 SOP 項排最前面），面板只照順序畫出來。App 自己
-/// 排序的話，畫面上看到的優先順序就和後端稽核紀錄裡的不是同一回事。
-///
-/// 面板是兩段式的：第一段只有推薦問題，點一則之後整面換成那一題的問答
-/// （`Main.dc.html:1598`）。問完還把清單留在旁邊的話，員工會以為剛才那一題
-/// 的答案也只是清單的一部分，而答案與出處正是這個面板唯一要他讀的東西。
 class AskSheet extends StatefulWidget {
   const AskSheet({super.key, required this.taskId, required this.roomNo});
 
   final String taskId;
 
-  /// 這張任務的房號，寫在面板標題上。員工手上常常同時有好幾間，標題不帶房號
-  /// 的話，他看不出這些答案講的是哪一間。
   final String roomNo;
 
-  /// 任務頁的開啟入口統一走這裡。
   static Future<void> show(
     BuildContext context, {
     required String taskId,
@@ -45,28 +32,20 @@ class AskSheet extends StatefulWidget {
   State<AskSheet> createState() => _AskSheetState();
 }
 
-/// 面板現在停在哪一段。
-///
-/// 問題本身在查詢途中與拿到答案之後都要顯示在上方的氣泡裡，所以它跟著狀態一
-/// 起走，不另外記一個「上次問了什麼」的欄位。分開記的話，答案換了而問題沒換
-/// 的那一幀，員工會看到一題配上另一題的答案。
 sealed class _AskStage {
   const _AskStage();
 }
 
-/// 第一段：只有推薦問題清單。
 class _AskBrowsing extends _AskStage {
   const _AskBrowsing();
 }
 
-/// 第二段，查詢途中：問題已經問出去了，答案還沒回來。
 class _AskWaiting extends _AskStage {
   const _AskWaiting(this.question);
 
   final String question;
 }
 
-/// 第二段，答案已經回來。[answer] 自己帶著查得到或查不到的分野。
 class _AskAnswered extends _AskStage {
   const _AskAnswered(this.question, this.answer);
 
@@ -79,8 +58,6 @@ class _AskSheetState extends State<AskSheet> {
 
   _AskStage _stage = const _AskBrowsing();
 
-  /// 員工對這則答案的回饋：true 是有幫助，false 是沒幫助，還沒回饋時是 null。
-  /// 回饋只收一次，收完整列換成一句謝謝（`Main.dc.html:1667`）。
   bool? _feedback;
 
   bool _escalated = false;
@@ -91,8 +68,6 @@ class _AskSheetState extends State<AskSheet> {
     _suggestions = ApiClient.instance.listAskSuggestions(widget.taskId);
   }
 
-  /// 點一則推薦問題就把它原文送去後端查。問題字串照推薦清單原樣帶走，不重組——
-  /// 後端的稽核紀錄記的是員工實際問出口的那一句。
   Future<void> _ask(String question) async {
     setState(() {
       _stage = _AskWaiting(question);
@@ -109,10 +84,6 @@ class _AskSheetState extends State<AskSheet> {
     setState(() => _stage = _AskAnswered(question, answer));
   }
 
-  /// 回饋送出後畫面立刻換成謝謝，不等後端回應。
-  ///
-  /// 這一筆只寫進稽核紀錄，員工的下一步不依賴它成不成功；讓他在原地等一個轉
-  /// 圈，換來的只是把他留在一個他已經讀完的畫面上。
   void _sendFeedback(String answerId, bool helpful) {
     setState(() => _feedback = helpful);
     ApiClient.instance.submitAskFeedback(
@@ -201,9 +172,6 @@ class _AskSheetState extends State<AskSheet> {
     ];
   }
 
-  /// 查不到時整張卡講清楚三件事：查不到什麼、為什麼會查不到、接下來可以做
-  /// 什麼。只畫一行「查不到」的話，員工會以為是系統壞了，而事實是這件事沒有
-  /// 記錄可查，該去問主管。查不到的訊息全文由後端給。
   Widget _buildNotFound(AskAnswer answer) {
     return TmsCard(
       child: Column(
@@ -237,13 +205,8 @@ class _AskSheetState extends State<AskSheet> {
     );
   }
 
-  /// 「問主管」與它送出後那一行的高度（`Main.dc.html:1651`）。
   static const double _askManagerButtonHeight = 48;
 
-  /// 回答區：回答全文、出處、AI 免責行，全部在同一張白卡裡。
-  ///
-  /// 免責行貼著出處放，而不是放在卡外或整個面板的最底下：它要講的是「上面這
-  /// 段答案是整理出來的，出處才是原文」，離開這張卡就沒有人知道它在說哪一段。
   Widget _buildAnswer(AskAnswer answer) {
     return TmsCard(
       child: Column(
@@ -281,10 +244,6 @@ class _AskSheetState extends State<AskSheet> {
     );
   }
 
-  /// 回饋列：答案有沒有幫助。
-  ///
-  /// 說沒幫助會讓後端去通知 SOP 管理者檢查被引用的那筆資料，所以這一列不是
-  /// 客套，是 SOP 寫錯時唯一會被發現的管道。
   Widget _feedbackRow(String answerId) {
     final feedback = _feedback;
     if (feedback != null) {
@@ -329,10 +288,6 @@ class _AskSheetState extends State<AskSheet> {
   }
 }
 
-/// 員工剛問出口的那一句，靠右的對話氣泡。
-///
-/// 答案與出處都是系統在說話，沒有這顆氣泡的話，捲到一半的員工分不出哪一段是
-/// 自己問的、哪一段是查到的。
 class _QuestionBubble extends StatelessWidget {
   const _QuestionBubble({required this.question});
 
@@ -375,15 +330,10 @@ class _QuestionBubble extends StatelessWidget {
     );
   }
 
-  /// 氣泡三個圓角與貼著發話者那一角的小圓角（`Main.dc.html:1612`）。
   static const double _bubbleRadius = 18;
   static const double _bubbleTailRadius = 4;
 }
 
-/// 查詢途中那張卡：一句說明加兩條骨架條，全部一起明暗呼吸。
-///
-/// 畫骨架條而不是一顆轉圈，是因為骨架條的形狀就是答案回來後會出現在那裡的東
-/// 西；轉圈只說得出「在忙」，說不出「在忙什麼、等一下會長什麼樣」。
 class _LoadingCard extends StatelessWidget {
   const _LoadingCard();
 
@@ -427,14 +377,9 @@ class _LoadingCard extends StatelessWidget {
     );
   }
 
-  /// 骨架條的高度（`Main.dc.html:1618`）。
   static const double _barHeight = 10;
 }
 
-/// 「問主管」按下去之後取代它的那一行。
-///
-/// 原地換掉按鈕，不另外跳提示：員工要知道的只有「傳出去了，回覆會用推播找
-/// 你」，而按鈕如果還在，他會再按一次。
 class _EscalatedNotice extends StatelessWidget {
   const _EscalatedNotice();
 
@@ -490,14 +435,9 @@ class _FeedbackChip extends StatelessWidget {
     );
   }
 
-  /// 膠囊的觸控高度（`Main.dc.html:1662`）。
   static const double _height = 40;
 }
 
-/// 一則推薦問題：問題本身一行，底下一行小字是範圍，整則可點。
-///
-/// 問題與範圍各自掛 id，測試才讀得到「第幾則的問題是什麼、範圍是什麼」。整則
-/// 合成一個節點的話，兩段文字會被併成同一個 label，分不出哪一段是範圍。
 class _SuggestionRow extends StatelessWidget {
   const _SuggestionRow({
     required this.index,
@@ -505,7 +445,6 @@ class _SuggestionRow extends StatelessWidget {
     required this.onTap,
   });
 
-  /// 這則在推薦清單裡的位置，用來組 accessibility id。順序由後端決定。
   final int index;
 
   final AskSuggestion suggestion;
@@ -532,19 +471,13 @@ class _SuggestionRow extends StatelessWidget {
   }
 }
 
-/// 一張出處卡：第一行是種類膠囊與標題，接著是原文，日期單獨一行收在最後。
-///
-/// 卡片只畫契約 `KbSource` 的四個欄位（種類、標題、原文、日期）——查一下不得
-/// 帶出住客身分，所以畫面連「要不要顯示住客欄位」這個選擇都不留。
 class _SourceCard extends StatelessWidget {
   const _SourceCard({required this.index, required this.source});
 
-  /// 這張卡在回答底下的位置，用來組 accessibility id。順序由後端決定。
   final int index;
 
   final AskSource source;
 
-  /// 出處種類的畫面用詞。對照表與契約 `KbSource.kind` 的 enum 一對一。
   static String _kindText(String kind) {
     switch (kind) {
       case 'room_memory':
@@ -556,8 +489,6 @@ class _SourceCard extends StatelessWidget {
     }
   }
 
-  /// 種類膠囊的配色。SOP 與房間記錄各一組，認不得的值退回中性灰——猜一組顏色
-  /// 給它，員工會以為那是第三種他沒看過的出處。
   (Color, Color) get _kindColors {
     switch (source.kind) {
       case 'room_memory':
@@ -572,8 +503,6 @@ class _SourceCard extends StatelessWidget {
     }
   }
 
-  /// 出處日期在畫面上只顯示月日（`2026-10-02` → `10/02`）：員工關心的是「多久
-  /// 以前的事」，年份在房務現場幾乎不會用到。解不開的字串原樣顯示，不自己補值。
   static String _monthDay(String isoDate) {
     final parts = isoDate.split('-');
     return parts.length == 3 ? '${parts[1]}/${parts[2]}' : isoDate;
@@ -637,10 +566,6 @@ class _SourceCard extends StatelessWidget {
   }
 }
 
-/// 出處卡的外框：整頁寬、畫面背景色的圓角方塊，內容由上而下靠左排。
-///
-/// 底色用畫面背景色而不是白色，讓它比上面那段回答往後退一層——它不是在對員工
-/// 說話，只是把答案的來源原樣貼出來。
 class _SourceCardFrame extends StatelessWidget {
   const _SourceCardFrame({required this.id, required this.children});
 

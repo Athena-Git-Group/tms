@@ -21,19 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 透過 Firebase Cloud Messaging（FCM）把推播送到裝置。iOS 與 Android 都經 FCM 送，
- * iOS 這一段由 FCM 轉交 APNS。
- *
- * <p><b>訊息一律是 data message，不是純 notification。</b>App 在前景或背景都要拿到
- * event、target 等欄位自己決定導頁，純 notification 在 Android 背景時由系統接手顯示，
- * App 收不到內容。data 欄位：event、title、body（有才帶）、target（PushTarget 的 JSON 字串）、
- * idempotencyKey。iOS 的 data message 預設不會在鎖屏顯示，所以另外附 APNS 的 alert
- * （title／body）讓系統顯示橫幅，並帶 content-available 讓 App 在背景被喚醒處理 data。
- *
- * <p>錯誤分兩類：UNREGISTERED 與 INVALID_ARGUMENT 代表這個推播地址不能再用，回報
- * {@link PushSendResult.Outcome#INVALID_TOKEN} 讓呼叫端撤銷該裝置；UNAVAILABLE、INTERNAL、
- * QUOTA_EXCEEDED 是服務端暫時性問題，丟 {@link PushTransientException} 讓消費者重試。
- * 其他錯誤視為永久失敗，記錄原因、不重試。
+ * 純 notification 訊息在 Android 背景時由系統接手顯示，App 收不到內容，所以一律送 data message。
+ * iOS 的 data message 預設不會在鎖屏顯示，所以另外附 APNS 的 alert 與 content-available。
  */
 public class FcmPushSender implements PushSender {
 

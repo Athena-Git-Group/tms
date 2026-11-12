@@ -22,19 +22,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 查一下的問答主線：回答員工的提問、留稽核紀錄、收回饋，以及把查不到的問題
- * 轉給主管並在主管回覆後推播員工。
- *
- * <p>回答不經語言模型：依問題關鍵字挑一類房間記錄（修繕或住客需求），取該房
- * 最近一筆的原文套固定句模板組出回答，並附上該筆記錄當出處；房間記錄對不上的
- * 問題再依關鍵字找 SOP 原文回答。查無記錄時明說
- * 查不到、不給任何回答文字。若放寬成自由生成，員工會拿到沒有出處、無法查證
- * 的答案，查一下就失去「只給有出處的答案」的意義。
- *
- * <p>每次提問都寫一筆 kb_audit_logs，id 直接當 API 的 answerId；回饋與轉問
- * 主管都更新同一筆，事後稽核能從一筆紀錄看完整個問答的來龍去脈。
- */
 @Service
 public class KbAskService {
 
@@ -57,7 +44,6 @@ public class KbAskService {
         this.clock = clock;
     }
 
-    /** 查無任務時由 {@link TaskRowLookup} 直接回 404，和其他任務相關 API 的行為一致。 */
     @Transactional
     public KbAnswer ask(UUID taskId, String question) {
         long tenantId = TenantContext.require();
@@ -124,11 +110,6 @@ public class KbAskService {
         return answer;
     }
 
-    /**
-     * 回饋寫進該次提問的稽核紀錄；answerId 查無稽核紀錄時回 404。回答引用的是
-     * SOP 而回饋是沒幫助時，另外推播通知 SOP 管理者檢查那份 SOP（契約
-     * submitKbFeedback 的敘述）；沒有通知，答錯的 SOP 會一直留著繼續誤導員工。
-     */
     @Transactional
     public void submitFeedback(UUID answerId, boolean helpful) {
         long tenantId = TenantContext.require();
@@ -143,12 +124,6 @@ public class KbAskService {
         }
     }
 
-    /**
-     * 通知 SOP 管理者檢查被按沒幫助的 SOP。收件人推定為全體主管（契約
-     * submitKbFeedback 的敘述，待 clarify 的 FR-044：誰負責維護 SOP）。要檢查哪份
-     * SOP 從稽核紀錄的引用來源讀回，所以引用來源不是 SOP 時這裡不送任何通知。
-     * 推播冪等鍵綁回答 id 加收件人，請求重試或重複按沒幫助不會重複通知。
-     */
     private void notifySopManagers(long tenantId, UUID answerId) {
         Map<String, Object> audit = findAuditLog(tenantId, answerId);
         if (audit == null || !"sop".equals(String.valueOf(audit.get("cited_kind")))) {
@@ -169,12 +144,6 @@ public class KbAskService {
         }
     }
 
-    /**
-     * 把一次提問轉給主管：建立一筆待回覆的提問，並把稽核紀錄標成已轉問。
-     * 一則回答只能轉問一次——前提條件直接寫在 UPDATE 的 WHERE（escalated=false），
-     * 條件不符就一列也不改、回 409；不這樣擋，重複點按會對同一個問題開出多筆
-     * 待回覆提問，主管會重複回覆同一件事。
-     */
     @Transactional
     public KbEscalationView escalate(UUID answerId) {
         long tenantId = TenantContext.require();
@@ -221,13 +190,6 @@ public class KbAskService {
                 .toList();
     }
 
-    /**
-     * 主管回覆提問並推播提問的員工，推播內容是回覆全文。只有 pending 的提問
-     * 收回覆——前提條件直接寫在 UPDATE 的 WHERE（status='pending'），條件不符
-     * 就一列也不改；已回覆的提問回 409，避免兩位主管先後回覆時後者悄悄蓋掉
-     * 前者、員工卻只收到第一則推播。推播冪等鍵綁提問 id，請求重試不會讓員工
-     * 收到兩則一樣的通知。
-     */
     @Transactional
     public KbEscalationView reply(UUID escalationId, String reply) {
         long tenantId = TenantContext.require();
@@ -270,11 +232,6 @@ public class KbAskService {
                 tenantId, "kb_escalation:" + escalationId, payload, "kb_reply:" + escalationId);
     }
 
-    /**
-     * 依問題關鍵字決定查哪一類房間記錄：問「修」的查修繕（kind=repair），問
-     * 住客「要求」的查住客需求（kind=preference）。對不上任何一類時回 null，
-     * 走「查不到」的路——寧可明說查不到，也不拿不相干的記錄硬湊答案。
-     */
     private static String memoryKindFor(String question) {
         if (question.contains("修")) {
             return "repair";
@@ -285,10 +242,6 @@ public class KbAskService {
         return null;
     }
 
-    /**
-     * SOP 題的關鍵字路由，與 {@link #memoryKindFor} 同一套做法：問「備品」的查
-     * 備品相關 SOP。對不上時回 null，和房間記錄都落空時一樣走「查不到」。
-     */
     private static String sopKeywordFor(String question) {
         if (question.contains("備品")) {
             return "備品";
@@ -332,15 +285,6 @@ public class KbAskService {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    /**
-     * 用固定句模板把一筆房間記錄的原文組成回答，不經語言模型改寫（契約
-     * roomMemoryAsk 的敘述）。修繕記錄：原文的「問題 → 處置」拆成兩段，套
-     * 「有。{日期} 工務換過{標的}，原因是住客反映{問題}，之後沒有再報修。」；
-     * 標的由標題的主詞（「工務單 · 冷氣」的「冷氣」）接上處置動詞「更換」後面
-     * 的受詞組成，讓員工一眼看出修的是哪個設備的哪個零件。住客需求：數原文有
-     * 幾項（以「；」分隔），套「有{幾}項：{原文}」。拆不出模板需要的片段時，
-     * 退回「有。{日期} {原文}」——原文照給、不硬湊句子。
-     */
     private static String composeAnswer(String kind, String title, String excerpt, LocalDate occurredOn) {
         String date = occurredOn.getMonthValue() + "/" + String.format("%02d", occurredOn.getDayOfMonth());
         if ("repair".equals(kind)) {
@@ -366,11 +310,6 @@ public class KbAskService {
         return (n >= 0 && n < words.length) ? words[n] : String.valueOf(n);
     }
 
-    /**
-     * room_memory.summary 與 sop_items.label 的落地慣例都是「{標題}：{內容}」
-     * 合併成一欄（工務單完修回寫也照這個格式），所以出處的標題與原文由第一個「：」切回兩段；
-     * 沒有「：」的舊資料整段當原文、標題給空字串。
-     */
     private static String titleOf(String summary) {
         int idx = summary.indexOf('：');
         return idx < 0 ? "" : summary.substring(0, idx);

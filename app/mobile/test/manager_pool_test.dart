@@ -10,8 +10,6 @@ import 'package:tms_staff_app/features/manager/pool_dept_preference.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 
-/// 主管待認領：第一次是房務、切換會記在手機上、兩個池都明帶 dept 查、單卡沒有
-/// 認領鈕。員工端的待認領改用同一份列表後，認領鈕要還在。
 void main() {
   late _RecordingApiClient api;
 

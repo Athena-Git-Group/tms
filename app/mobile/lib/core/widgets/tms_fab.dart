@@ -3,37 +3,12 @@ import 'package:flutter/cupertino.dart';
 import '../theme.dart';
 import 'tms_glass.dart';
 
-/// 浮動按鈕上畫哪一個圖示。
-///
-/// 兩個圖示都自己畫，不取 [CupertinoIcons] 的字形。字形的筆畫粗細由字型決定，
-/// 而這兩顆按鈕的線稿粗細是設計定下來的可量測值（加號 2.6pt、問號泡泡 2pt），
-/// 取字形就只能接受字型給的粗細，56pt 的圓鈕上差一截看得出來。
 enum TmsFabGlyph {
-  /// 加號。工務首頁的「開工單」用它。
   plus,
 
-  /// 帶問號的對話泡泡。任務頁的「查一下」用它。
   ask,
 }
 
-/// 浮在內容右下角的圓形浮動按鈕。
-///
-/// 一顆 56 見方的毛玻璃圓鈕，裡面只有一個圖示，按鈕的用途靠無障礙標籤說明。
-/// 工務首頁的「開工單」與任務頁的「查一下」共用這一顆，兩邊只有圖示、標籤與
-/// 按下去做什麼不同。
-///
-/// ## 為什麼只畫圖示
-///
-/// 這顆按鈕壓在捲動內容上面，底下常常是單卡或清單文字。放文字就得把底板加寬，
-/// 蓋掉的內容跟著變多；圖示配上固定的 56 見方，員工一眼認得出它是浮在上面的
-/// 動作而不是版面的一部分。看不見的那層意思由 [semanticsLabel] 說完整，
-/// VoiceOver 讀得到。
-///
-/// ## 定位由呼叫端負責
-///
-/// 這個元件只畫自己，不決定自己浮在哪裡。擺放的畫面用 [Stack] 配
-/// [Positioned]，右邊距固定 [sideInset]，下緣位置依畫面底下壓著什麼而不同，
-/// 兩種算法分別是 [bottomAboveTabBar] 與 [bottomAboveActionBar]。
 class TmsFab extends StatelessWidget {
   const TmsFab({
     super.key,
@@ -44,8 +19,6 @@ class TmsFab extends StatelessWidget {
 
   final TmsFabGlyph glyph;
 
-  /// 唸給 VoiceOver 聽的用途，例如「開工單」。按鈕上沒有文字，這一句是螢幕
-  /// 報讀時唯一的說明。
   final String semanticsLabel;
 
   final VoidCallback onPressed;
@@ -54,20 +27,10 @@ class TmsFab extends StatelessWidget {
 
   static const double sideInset = 16;
 
-  /// 浮在分頁列上方時，按鈕下緣離畫面底的距離。
-  ///
-  /// `Main.dc.html:4051` 的 `max(safeBottom - 13, 10) + 62 + 16`，也就是浮動
-  /// 分頁列整個佔掉的那一段再往上 16。[bottomSafeAreaInset] 取
-  /// `MediaQuery.paddingOf(context).bottom`。
   static double bottomAboveTabBar(double bottomSafeAreaInset) {
     return TmsSpacing.bottomScrollEdgeHeight(bottomSafeAreaInset) + 16;
   }
 
-  /// 浮在置底動作列上方時，按鈕下緣離可用區域底部的距離。
-  ///
-  /// `Main.dc.html:5027` 的 `hasPrimary ? 16 : safeBottom + 16`。有動作列時它
-  /// 自己已經讓開了底部安全區，按鈕只要離動作列 16；沒有動作列時按鈕直接壓在
-  /// 畫面最底下，要自己讓開安全區，否則會疊到 home indicator 上。
   static double bottomAboveActionBar({
     required bool hasActionBar,
     required double bottomSafeAreaInset,
@@ -75,16 +38,8 @@ class TmsFab extends StatelessWidget {
     return (hasActionBar ? 0 : bottomSafeAreaInset) + 16;
   }
 
-  /// 被這顆按鈕蓋住的捲動區，底部要多留的空白。
-  ///
-  /// `Main.dc.html:5028`、`Main.dc.html:4448` — 兩處都是 72。按鈕本身 56，
-  /// 上下各留一點，捲到底時最後一列才整列看得到，不會有一半藏在按鈕底下。
   static const double scrollPadClearance = 72;
 
-  /// 被這顆按鈕蓋住的捲動區，底部要留的空白。
-  ///
-  /// 這個算法給「按鈕下緣就是捲動區下緣」的畫面（任務頁）用。浮動分頁列上方
-  /// 的畫面已經有自己的分頁列留白，改成那個留白再加 [scrollPadClearance]。
   static double scrollPadBottom(double fabBottom) =>
       fabBottom + scrollPadClearance;
 
@@ -102,7 +57,6 @@ class TmsFab extends StatelessWidget {
           saturation: _glassSaturation,
           color: TmsColors.fabSurface,
           borderRadius: BorderRadius.circular(TmsRadius.pill),
-          // `Main.dc.html:4055` — 1px solid，不是分隔線那種半點細線。
           border: Border.all(color: TmsColors.fabBorder),
           boxShadow: const <BoxShadow>[
             BoxShadow(
@@ -117,9 +71,7 @@ class TmsFab extends StatelessWidget {
             child: Stack(
               children: [
                 Center(child: _TmsFabGlyphIcon(glyph: glyph)),
-                // 上緣那條高光。原型寫成 box-shadow 的 inset 段，
-                // BoxDecoration 畫不出 inset 陰影，所以自己疊一條線；玻璃底板
-                // 的圓角裁切會把它收成圓頂上的一小段。
+                // BoxDecoration 畫不出 inset 陰影，上緣的高光只能另外疊一條線。
                 const Positioned(
                   top: 0,
                   left: 0,
@@ -164,13 +116,6 @@ class _TmsFabGlyphIcon extends StatelessWidget {
   }
 }
 
-/// 兩個浮動按鈕圖示的線稿。
-///
-/// 原型用 24 單位見方的 SVG viewBox 寫座標，兩個圖示各自放到自己的實際尺寸
-/// （加號 26、問號泡泡 24）。這裡照原尺寸算一個縮放倍率，座標與筆畫粗細一起
-/// 乘上去，圖示放大時筆畫才跟著變粗，不會變成細線。
-///
-/// 公開是為了讓元件測試能單獨比對線稿，畫面不要直接用它，走 [TmsFab]。
 class TmsFabGlyphPainter extends CustomPainter {
   const TmsFabGlyphPainter(this.glyph);
 
@@ -178,7 +123,6 @@ class TmsFabGlyphPainter extends CustomPainter {
 
   static const Color strokeColor = TmsColors.brandPrimary;
 
-  /// 原型 SVG 的 viewBox 邊長。
   static const double _viewBox = 24;
 
   static const double plusStrokeWidth = 2.4;
@@ -214,7 +158,6 @@ class TmsFabGlyphPainter extends CustomPainter {
       ..lineTo(19, 12);
   }
 
-  /// `Main.dc.html:1346` — 對話泡泡的外框、問號的鉤，與下方那一點。
   Path _askPath() {
     const bubbleRadius = Radius.circular(8);
     return Path()

@@ -11,23 +11,6 @@ import '../../core/widgets/tms_action_bar.dart';
 import 'login_widgets.dart';
 import 'password_rules.dart';
 
-/// 臨時密碼登入後的強制改密畫面。
-///
-/// 規格要求「App 進入強制改密畫面，完成前無法使用其他畫面」（dsl.md）。
-/// 做法是兩層都擋：登入畫面把這裡設成唯一的 route（replaceAllRoutes，
-/// 清掉返回堆疊）——沒有上一頁可返回、也沒有 Tab bar，返回手勢自然無處
-/// 可去；完成改密前後端（BearerTokenAuthFilter）也會把這組憑證對其他
-/// API 的呼叫一律擋下（403 must_change_password）。
-///
-/// 送出走 [ApiClient.changePassword]（`POST /staff-accounts/change-password`）：
-/// 強制改密情境的身分已由登入換得的 token 證明，不帶 currentPassword。成功時
-/// 後端換發一組新的 JWT（舊的立即失效），client 換上新權杖後以 replaceAllRoutes
-/// 進首頁——登入流程到此結束，返回堆疊一併清掉。失敗時直接顯示後端回的訊息
-/// （新密碼與目前密碼相同等）。
-///
-/// 畫面上的四條規則清單（[NewPasswordCheck]）只是輸入提示，不是這裡的判準：
-/// 長度與字元組成的門檻 truth 尚未定義，App 發明一套會和後端對不上，所以能不能
-/// 換成這組密碼一律以後端的回應為準。
 class ForcePasswordChangeScreen extends StatefulWidget {
   const ForcePasswordChangeScreen({
     super.key,
@@ -35,11 +18,8 @@ class ForcePasswordChangeScreen extends StatefulWidget {
     required this.temporaryPassword,
   });
 
-  /// 員工這次登入用的員工編號，用來檢查「不能是員工編號」那一條。
   final String loginId;
 
-  /// 員工這次登入打的那組臨時密碼，用來檢查「和臨時密碼不同」那一條。
-  /// 只留在畫面上比對用，不會被送出，改密完成離開畫面就跟著消失。
   final String temporaryPassword;
 
   @override
@@ -62,8 +42,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
   @override
   void initState() {
     super.initState();
-    // 規則清單、相符的綠勾與送出鈕的狀態都跟著現在打了什麼走，每打一個字都要
-    // 重算一次。
     _newPasswordController.addListener(_onFieldEdited);
     _confirmPasswordController.addListener(_onFieldEdited);
   }
@@ -75,8 +53,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     super.dispose();
   }
 
-  /// 員工一動欄位就把上一次後端回的訊息收掉。留著的話，紅字會停在新打的字
-  /// 旁邊，看起來像是這次打的也被拒絕了。
   void _onFieldEdited() {
     setState(() {
       _errorMessage = null;
@@ -90,8 +66,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     loginId: widget.loginId,
   );
 
-  /// 送出前先問一次，因為按下去會把這個帳號在其他裝置上的登入全部踢掉。櫃檯
-  /// 的 iPad 正在用同一個帳號時，員工要先知道自己會讓它登出。
   void _confirmThenSubmit() {
     showCupertinoDialog<void>(
       context: context,
@@ -213,8 +187,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
     final check = _check;
     final errorMessage = _errorMessage;
     final ready = check.readyToSubmit && !_submitting;
-    // 卡片、紅字與規則清單之間 8，提示卡與這一整段之間 18
-    // （Main.dc.html:709、:722、:723）。
     final formBlock = <Widget>[
       _passwordFields(check),
       if (check.showsMismatch)
@@ -246,7 +218,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
         middle: Text('設定新密碼'),
         automaticallyImplyLeading: false,
       ),
-      // 置底操作列自己吃掉底部安全區，外面再包一層就會留兩倍白。
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -281,7 +252,6 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                   enabled: ready,
                   child: TmsPillButton(
                     label: '設定新密碼',
-                    // 表單置底列的送出鈕在原型裡用另一組光暈。
                     glow: TmsPillGlow.alt,
                     onPressed: ready ? _confirmThenSubmit : null,
                     child: _submitting

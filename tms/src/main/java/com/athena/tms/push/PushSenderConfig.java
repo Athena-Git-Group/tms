@@ -8,11 +8,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * 依 {@code tms.push.fcm.credentials-path} 決定推播送出的實作：設定有值而且檔案存在就用
- * {@link FcmPushSender}，否則用 {@link LoggingPushSender}。路徑填了但檔案不存在時不悄悄降級，
- * 直接啟動失敗，否則正式環境可能以為推播在送、其實只在寫日誌。
- */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(PushProperties.class)
 public class PushSenderConfig {

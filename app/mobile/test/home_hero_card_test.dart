@@ -6,9 +6,6 @@ import 'package:tms_staff_app/core/widgets/tms_home_cards.dart';
 import 'package:tms_staff_app/core/widgets/tms_motion.dart';
 import 'package:tms_staff_app/core/widgets/tms_progress_ring.dart';
 
-/// 首頁兩張主卡（房務與工務共用）盯的是幾件「原型有、照抄時最容易漏掉」的事：
-/// 超時的三個表現要一起出現、「下一間」右上角那塊旋轉方塊、卡內統一的間距，
-/// 以及進行中那顆圓點真的在呼吸。
 void main() {
   Widget host(Widget child) {
     return CupertinoApp(
@@ -24,8 +21,6 @@ void main() {
 
   group('進行中卡的計時欄（Main.dc.html:174-182）', () {
     testWidgets('超時時計時轉黃、長出深橘膠囊，分鐘數跟計時同一套捨去', (tester) async {
-      // 已做 40 分 30 秒、預估 35 分：已做分鐘減預估分鐘得 5
-      // （`specs/truth/features/ios-app/任務執行/dsl.md:46`）。
       await tester.pumpWidget(
         host(
           const TmsHeroTimer(
@@ -100,7 +95,6 @@ void main() {
       );
 
       expect(find.text('42 分'), findsOneWidget);
-      // 分鐘層級仍判得出超時，只是進位的精度退到分。
       expect(find.text('超時 7 分'), findsOneWidget);
     });
   });
@@ -131,7 +125,6 @@ void main() {
       expect(decoration.color, TmsColors.brandPrimary);
       expect(decoration.borderRadius, BorderRadius.circular(20));
 
-      // 傾斜 10 度：旋轉矩陣的 cos 項。
       final rotation = tester.widget<Transform>(
         find.ancestor(of: square, matching: find.byType(Transform)).first,
       );

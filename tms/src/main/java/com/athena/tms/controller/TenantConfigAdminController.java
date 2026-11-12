@@ -11,10 +11,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 主管調整租戶設定的 API，對應 contracts 的 updateTenantConfig。同一個鍵重複寫入
- * 會覆蓋前值；鍵名不在資料庫 CHECK 的封閉鍵集內時寫入直接失敗，不會靜默建出新鍵。
- */
 @RestController
 @RequestMapping("/api/v1/tenant-configs")
 public class TenantConfigAdminController {

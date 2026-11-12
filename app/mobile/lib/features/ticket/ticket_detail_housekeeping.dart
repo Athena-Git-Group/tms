@@ -14,16 +14,6 @@ import '../manager/manager_ids.dart';
 import 'repair_labels.dart';
 import 'ticket_last_verify_failure_card.dart';
 
-/// 工務單詳情的房務視角（`Main.dc.html:1746`）。
-///
-/// 報修的人打開這一頁要知道的只有三件事：單走到哪一步、我還能做什麼、當初報
-/// 了什麼。所以版面由上而下是一句話的狀態摘要、一條四步的進度時間軸、照片與
-/// 內容，動作只有工務接單前的撤回一顆。
-///
-/// 和工務視角分成兩支畫面而不是同一支加分支，是因為兩邊要回答的問題不同。工
-/// 務要的是「現在修到第幾分鐘、下一步按哪顆」，所以那一頁以計時當主角；房務
-/// 要的是「工務接了沒、修好驗收了沒」，那是一條時間軸。把兩種版面壓在同一支畫
-/// 面裡，每加一個狀態就要同時想兩個角色看到什麼，兩邊都會做不乾淨。
 class TicketDetailHousekeeping extends StatelessWidget {
   const TicketDetailHousekeeping({
     super.key,
@@ -34,7 +24,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     required this.onOpenPhoto,
   });
 
-  /// 這張單；還沒載回來是 null。
   final RepairTicketDetail? ticket;
 
   final String? errorMessage;
@@ -42,16 +31,10 @@ class TicketDetailHousekeeping extends StatelessWidget {
   final VoidCallback onWithdraw;
   final VoidCallback onAddPhoto;
 
-  /// 點第幾張照片（從 0 起算）要放大。
   final void Function(int index) onOpenPhoto;
 
-  /// 捲多少之後導覽列換成毛玻璃。這一頁最上面就是白卡，捲一點點卡的上緣就鑽
-  /// 到導覽列底下，所以門檻訂得比有大標題區的頁面低得多
-  /// （`Main.dc.html:4764`）。
   static const double _scrollThreshold = 4;
 
-  /// 這一頁的毛玻璃晚到七成才淡掉；底下一路都是同一塊灰，早淡會看成一條橫帶
-  /// （`Main.dc.html:4762`）。
   static const double _glassFadeStop = 0.7;
 
   @override
@@ -62,7 +45,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
         : '${detail.ticketNo} · ${repairCategoryText(detail.category)}';
     return CupertinoPageScaffold(
       backgroundColor: TmsColors.groupedBackground,
-      // 置底操作列自己吃掉底部安全區，外面再包一層就會留兩倍白。
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -91,12 +73,8 @@ class TicketDetailHousekeeping extends StatelessWidget {
   }
 
   Widget _buildNavBar(BuildContext context, bool scrolled, String title) {
-    // 標題不隨捲動換內容：這一頁沒有標題區可以捲走，單號與類別從頭到尾都是
-    // 導覽列上唯一那一行字（`Main.dc.html:4821`）。
     return TmsScrollNavBar(
       scrolled: scrolled,
-      // 靜止時原型是全透明，而此時導覽列底下就是頁面自己的灰，兩者看起來
-      // 一樣；寫成灰色才不會被元件判成深色標題區而把返回鈕壓暗。
       restingBackground: TmsColors.groupedBackground,
       restingForeground: TmsColors.label,
       restingTitle: title,
@@ -123,8 +101,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
       );
     }
     return SingleChildScrollView(
-      // 導覽列疊在內容上面，內容自己要讓開那麼高，否則摘要卡的第一行永遠
-      // 鑽在導覽列底下。
       padding: const EdgeInsets.fromLTRB(
         TmsSpacing.screenEdge,
         TmsSize.frozenNavBarHeight + TmsSpacing.md,
@@ -135,7 +111,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     );
   }
 
-  /// 區塊之間一律 12（`Main.dc.html:1769`）。
   List<Widget> _spaced(List<Widget> sections) {
     final spaced = <Widget>[];
     for (var i = 0; i < sections.length; i++) {
@@ -182,7 +157,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     ];
   }
 
-  /// 小標加一張卡。小標與卡之間 6、左右各留 16（`Main.dc.html:1790`）。
   Widget _sectionWithHeader(String header, Widget card) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -203,12 +177,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
   }
 
 
-  /// 摘要卡要說的話，以及那顆圓形圖示的形狀與底色。
-  ///
-  /// 標題一律出自 [repairStatusSummaryText] 的報修人那一欄，和工務、主管視角
-  /// 的狀態列是同一張對照表；這裡只補下面那句說明與配色。顏色對照原型
-  /// （`Main.dc.html:4801`）：還在等的事是橘的、退回重修是琥珀的、工務手上的
-  /// 是品牌色、結案的是綠或灰。
   ({
     String title,
     String detail,
@@ -305,9 +273,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     }
   }
 
-  /// 進度時間軸。外層節點的讀值是每一步的名字與註記接起來的一句，每一步各自
-  /// 再掛步驟條的 id：時間軸上的註記（例如主管改為一般件的原因）與「目前在第
-  /// 幾步」要分得開來讀。
   Widget _timeline(RepairTicketDetail detail) {
     final steps = _timelineSteps(detail);
     return TmsSemantics(
@@ -320,11 +285,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     );
   }
 
-  /// 四步時間軸，步驟名與工務、主管視角的步驟條同一套（[repairStepLabels]）。
-  ///
-  /// 每一步的狀態由後端那一個 state 推出來，畫面不另外記一份進度——別的裝置把
-  /// 單推進之後，自己記的那一份就是舊的。報修送出、還沒有人接單時停在第一步
-  /// 「待開始」：對報修的人來說單已經在排隊等工務，不是還沒開始。
   List<TmsTimelineStep> _timelineSteps(RepairTicketDetail detail) {
     final state = detail.state;
     final who = detail.assigneeName;
@@ -387,8 +347,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     ];
   }
 
-  /// 一步掛步驟條的 id：固定的 `ticket.stepper.{n}`，目前那一步外面再包
-  /// `--current`、走完的包 `--done`，和工務、主管視角的步驟條同一套。
   Widget _stepWrap(Widget node, int index, TmsTimelineStatus status) {
     final Widget step = TmsSemantics(
       id: 'ticket.stepper.${index + 1}',
@@ -408,8 +366,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     };
   }
 
-  /// 能不能補照片看的是後端收不收：契約 appendRepairTicketPhotos 在單結案後
-  /// 回 409，所以這裡用同一條界線決定要不要畫出「補照片」格，不另外猜一套。
   Widget? _photoSection(RepairTicketDetail detail) {
     final canAdd =
         detail.state != 'done' &&
@@ -502,8 +458,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
         : '${detail.reporterNameText} · ${repairClockText(createdAt)}';
   }
 
-  /// 列表底下那一句，講的是「這個狀態下你還能做什麼」
-  /// （`Main.dc.html:4836`）。單已經撤回或結案時沒有這一句。
   String? _actionNote(RepairTicketDetail detail) {
     switch (detail.state) {
       case 'pool':
@@ -517,10 +471,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
   }
 
 
-  /// 置底操作列。這一頁只有撤回一顆鍵。
-  ///
-  /// 撤回只在工務還沒接單前成立。工務已經認領的單讓按鈕直接不存在，而不是先
-  /// 顯示再讓員工點了才報 409——那是拿錯誤訊息當說明書。
   Widget? _buildActionBar(RepairTicketDetail detail) {
     if (detail.state != 'pool') {
       return null;
@@ -538,11 +488,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
   }
 }
 
-/// 「內容」卡裡的一列：左邊固定寬的欄名，右邊值（`Main.dc.html:1838`）。
-///
-/// 欄名寬度寫死 64 而不是讓它自己撐開，四列的值才會對齊在同一條直線上；值靠
-/// 左而不是靠右，是因為「說明」那一列可能長到換行，靠右的長句讀起來要從不同
-/// 位置起跳。
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
     required this.label,
@@ -554,7 +499,6 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final bool showDivider;
 
-  /// `Main.dc.html:4445` 的 `kvW`，中文介面是 64。
   static const double _labelWidth = 64;
 
   @override

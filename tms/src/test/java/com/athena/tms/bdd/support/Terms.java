@@ -2,21 +2,11 @@ package com.athena.tms.bdd.support;
 
 import java.util.Map;
 
-/**
- * Gherkin 場景裡的中文狀態詞和資料庫／contracts 的英文權威值是兩套獨立的詞彙。
- * 如果每個 stepdef 各自寫一份中翻英對照，兩邊改名時很容易漏改其中幾處，
- * 場景斷言就會悄悄比對到舊值而不自知。這裡集中成唯一一份，權威值改名只要改這裡。
- *
- * <p>每個對照表只收錄 dsl.md 或 contracts 已經寫明的詞。查不到的詞一律拋
- * {@link IllegalArgumentException} 帶原詞，不自行猜測權威值——猜錯的對照會讓
- * 場景「斷言通過」但其實驗的是錯的狀態，比起直接噴錯更難發現。
- */
 public final class Terms {
 
     private Terms() {
     }
 
-    // 來源：specs/truth/features/backend/dsl.md 「狀態用語對照」表前半（任務狀態，非工務單）。
     private static final Map<String, String> TASK_STATE = Map.ofEntries(
             Map.entry("待認領", "pool"),
             Map.entry("待開始", "accepted"),
@@ -29,7 +19,6 @@ public final class Terms {
             Map.entry("完成 · 免查房", "inspected"),
             Map.entry("已取消", "cancelled"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「狀態用語對照」表後段（工務單狀態）。
     private static final Map<String, String> REPAIR_TICKET_STATE = Map.ofEntries(
             Map.entry("已接單", "accepted"),
             Map.entry("維修中", "doing"),
@@ -37,32 +26,25 @@ public final class Terms {
             Map.entry("已結案", "closed"),
             Map.entry("已撤回", "cancelled"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「部門用語」表（dept 列）。
     private static final Map<String, String> DEPT = Map.ofEntries(
             Map.entry("房務", "housekeeping"),
             Map.entry("工務", "engineering"),
             Map.entry("櫃檯", "frontdesk"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「部門用語」表（role 列）。
     private static final Map<String, String> ROLE = Map.ofEntries(
             Map.entry("主管", "manager"),
             Map.entry("值班經理", "duty_manager"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「員工狀態用語」表。
     private static final Map<String, String> STAFF_STATE = Map.ofEntries(
             Map.entry("在職", "active"),
             Map.entry("待開通", "invited"),
             Map.entry("停用", "inactive"));
 
-    // 來源：specs/truth/features/backend/查房/dsl.md 「查房結果用語」表。
     private static final Map<String, String> INSPECTION = Map.ofEntries(
             Map.entry("通過", "passed"),
             Map.entry("免查", "waived"),
             Map.entry("退回重做", "failed"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「房務待認領有以下任務：」列的「來源」Data Table
-    // 參數說明，權威值對齊 specs/truth/data/data-model.dbml 的 tasks.pool_source CHECK
-    // 與 specs/truth/contracts/components/schemas/員工工作台.yaml 的 PoolSource enum。
     private static final Map<String, String> POOL_SOURCE = Map.ofEntries(
             Map.entry("住客掃碼", "guest_scan"),
             Map.entry("櫃檯轉單", "desk_forward"),
@@ -73,20 +55,14 @@ public final class Terms {
             Map.entry("房務報修", "staff_report"),
             Map.entry("自動化規則", "system"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「房務待認領有以下任務：」列的「提醒狀態」Data
-    // Table 參數說明，權威值對齊 data-model.dbml 的 tasks.reminder_stage。
     private static final Map<String, String> REMINDER_STAGE = Map.ofEntries(
             Map.entry("已提醒同仁", "staff_reminded"),
             Map.entry("已通知主管", "manager_notified"));
 
-    // 來源：specs/truth/features/backend/dsl.md 「已有以下工務單：」列的「來源」Data Table
-    // 參數說明，權威值對齊 tasks.source（房務報修＝staff、櫃檯＝desk）。
     private static final Map<String, String> REPAIR_TICKET_SOURCE = Map.ofEntries(
             Map.entry("房務報修", "staff"),
             Map.entry("櫃檯", "desk"));
 
-    // 來源：specs/truth/features/backend/工務單/dsl.md 的工務單類別，權威代碼以
-    // specs/truth/contracts/components/schemas/工務單.yaml 的 RepairCategory enum 為準。
     private static final Map<String, String> REPAIR_CATEGORY = Map.ofEntries(
             Map.entry("冷氣", "air_conditioning"),
             Map.entry("水電", "plumbing_electrical"),
@@ -94,91 +70,66 @@ public final class Terms {
             Map.entry("門鎖", "door_lock"),
             Map.entry("其他", "other"));
 
-    // 來源：根 dsl.md「完修結果」（工務單完修時選的處理結果），權威代碼為
-    // repair_tickets.resolution_type 的 CHECK（fixed|temporary|cannot_fix|no_action_needed）。
     private static final Map<String, String> RESOLUTION_TYPE = Map.ofEntries(
             Map.entry("已修好", "fixed"),
             Map.entry("暫時處理", "temporary"),
             Map.entry("無法修復", "cannot_fix"),
             Map.entry("不需處理", "no_action_needed"));
 
-    // 來源：specs/truth/contracts/components/schemas/員工工作台.yaml 的 PoolCategory enum。
     private static final Map<String, String> POOL_CATEGORY = Map.ofEntries(
             Map.entry("打掃", "cleaning"),
             Map.entry("備品", "amenity"),
             Map.entry("修繕", "repair"),
             Map.entry("其他", "other"));
 
-    /**
-     * 任務（非工務單）狀態中文 → 權威 {@code tasks.state}。「待查房」與「已送達」都對應
-     * {@code done}（差別只在是否打掃類，不屬於狀態本身），「查房通過」與「完成 · 免查房」
-     * 都對應 {@code inspected}（差別在 {@code tasks.inspection}，見 {@link #inspection}）。
-     */
     public static String taskState(String chinese) {
         return lookup(TASK_STATE, chinese, "任務狀態");
     }
 
-    /**
-     * 工務單狀態中文 → 權威 {@code tasks.state}。「已完修」是完修後等主管驗收的 {@code done}；
-     * 「已結案」是 {@code closed}，涵蓋主管驗收通過與以不需處理完修直接結案兩種情形。
-     * 「已撤回」除了狀態還帶取消原因，
-     * 用 {@link #repairTicketWithdrawnReason()} 另外取得。
-     */
     public static String repairTicketState(String chinese) {
         return lookup(REPAIR_TICKET_STATE, chinese, "工務單狀態");
     }
 
-    /** 工務單「已撤回」狀態對應的 {@code tasks.cancel_reason} 權威值（固定為 staff_withdrew）。 */
     public static String repairTicketWithdrawnReason() {
         return "staff_withdrew";
     }
 
-    /** 部門中文 → 權威 {@code dept}（housekeeping|engineering|frontdesk）。 */
     public static String dept(String chinese) {
         return lookup(DEPT, chinese, "部門");
     }
 
-    /** 角色中文 → 權威 {@code role}（manager|duty_manager，僅收錄 dsl.md 點名的這兩種）。 */
     public static String role(String chinese) {
         return lookup(ROLE, chinese, "角色");
     }
 
-    /** 員工狀態中文 → 權威 {@code staff_accounts} 狀態（active|invited|inactive）。 */
     public static String staffState(String chinese) {
         return lookup(STAFF_STATE, chinese, "員工狀態");
     }
 
-    /** 查房結果中文 → 權威 {@code tasks.inspection}（passed|waived|failed）。 */
     public static String inspection(String chinese) {
         return lookup(INSPECTION, chinese, "查房結果");
     }
 
-    /** 待認領來源中文 → 權威 {@code tasks.pool_source}（與 PoolSource enum 對齊）。 */
     public static String poolSource(String chinese) {
         return lookup(POOL_SOURCE, chinese, "待認領來源");
     }
 
-    /** 工務單類別中文 → 權威 {@code repair_tickets.category}（RepairCategory enum）。 */
     public static String repairCategory(String chinese) {
         return lookup(REPAIR_CATEGORY, chinese, "工務單類別");
     }
 
-    /** 工務單來源中文 → 權威 {@code tasks.source}（房務報修＝staff、櫃檯＝desk）。 */
     public static String repairTicketSource(String chinese) {
         return lookup(REPAIR_TICKET_SOURCE, chinese, "工務單來源");
     }
 
-    /** 完修結果中文 → 權威 {@code repair_tickets.resolution_type}，也是完修請求的 {@code resolutionType}。 */
     public static String resolutionType(String chinese) {
         return lookup(RESOLUTION_TYPE, chinese, "完修結果");
     }
 
-    /** 待認領類別中文 → 權威 {@code PoolCategory} enum。 */
     public static String poolCategory(String chinese) {
         return lookup(POOL_CATEGORY, chinese, "待認領類別");
     }
 
-    /** 未接提醒階段中文 → 權威 {@code tasks.reminder_stage}（staff_reminded|manager_notified）。 */
     public static String reminderStage(String chinese) {
         return lookup(REMINDER_STAGE, chinese, "未接提醒階段");
     }

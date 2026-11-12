@@ -6,13 +6,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 查一下面板的讀取工具：把「畫面上現在有哪幾則推薦問題、各自的問題與範圍是什麼」
- * 收在一處，給 When（要按第幾則）與 Then（順序與內容對不對）共用。
- *
- * <p>推薦問題的則數是執行期才知道的，所以先用 id 前綴掃出有哪幾個
- * {@code .question} 節點，再按同一個索引去讀它的 {@code .scope}。
- */
 final class AskPanel {
 
     private AskPanel() {
@@ -21,7 +14,6 @@ final class AskPanel {
     record Suggestion(String question, String scope) {
     }
 
-    /** 畫面上的推薦問題，依畫面由上而下的順序。 */
     static List<Suggestion> suggestions(AppiumWorld world) {
         List<Suggestion> rows = new ArrayList<>();
         for (String questionId : world.findTestIdsWithPrefix("ask.suggestion.")) {
@@ -49,7 +41,6 @@ final class AskPanel {
     record SourceCard(String type, String title, String excerpt, String date) {
     }
 
-    /** 畫面上的出處卡，依畫面由上而下的順序。 */
     static List<SourceCard> sourceCards(AppiumWorld world) {
         List<SourceCard> cards = new ArrayList<>();
         for (String typeId : world.findTestIdsWithPrefix("ask.answer.source-card.")) {
@@ -66,10 +57,6 @@ final class AskPanel {
         return cards;
     }
 
-    /**
-     * 等這一次提問的結果出現：查得到時是回答區，查不到時是查不到訊息——DSL 的
-     * 「等回答載入完成」兩種結局都算載完，所以兩個節點任一個出現就回來。
-     */
     static void waitForAnswerSettled(AppiumWorld world, Duration timeout) {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {

@@ -10,9 +10,6 @@ import 'package:tms_staff_app/features/shell/main_shell.dart';
 import 'package:tms_staff_app/features/ticket/repair_ticket_form_sheet.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
-/// 開工單的入口從工務待認領的導覽列搬到工務首頁的浮動按鈕
-/// （`Main.dc.html:4051`），表單本身從整頁改成底部面板
-/// （`Main.dc.html:2197`）。這一組驗的是員工走得到、填得完、送得出去。
 void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
@@ -217,8 +214,7 @@ void main() {
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
-/// 這一組畫面的按鈕都貼在畫面下緣，800x600 的預設測試視窗放不完整張面板，
-/// 點下去會落在視窗外面。改成與基準截圖同一台 iPhone 17 的邏輯尺寸。
+/// Flutter 測試視窗預設是 800x600，貼在下緣的按鈕會落在視窗外面而點不到。
 void _useIPhoneSurface(WidgetTester tester) {
   tester.view.physicalSize = const Size(402, 874);
   tester.view.devicePixelRatio = 1;

@@ -15,11 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 員工 App 的查房判定 API，對應 contracts 的 createInspections（POST /inspections）。
- * 誰可以查房（三種 403）與判定本體（涵蓋全集驗證、通過／退回的狀態轉移、PMS 回寫）
- * 都在 {@link InspectionService}，這裡只轉請求與回應。
- */
 @RestController
 @RequestMapping("/api/v1")
 public class InspectionApiController {
@@ -30,17 +25,8 @@ public class InspectionApiController {
         this.inspectionService = inspectionService;
     }
 
-    /**
-     * 請求形狀對應 contracts 查房.yaml 的 CreateInspectionRequest：只收 taskId 與逐項判定。
-     * 租戶與查房者一律以認證身分為準，通過或退回由 items 推導，所以請求不收
-     * tenantId、inspectorId 與 result。
-     */
     public record CreateInspectionRequest(UUID taskId, List<InspectionRequest.Item> items) {}
 
-    /**
-     * 判定成功回 201 與 {@link InspectionOutcome}。Idempotency-Key 必帶，沒帶回 400。同一把 Idempotency-Key 重送時，全域
-     * {@link IdempotencyFilter} 在進到這裡之前就回放第一次的回應，所以查房只判一次。
-     */
     @PostMapping("/inspections")
     @ResponseStatus(HttpStatus.CREATED)
     public InspectionOutcome create(

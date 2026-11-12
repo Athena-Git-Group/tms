@@ -3,74 +3,30 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-/// 真後端的 API client：登入換 JWT，之後的讀取請求都帶這把 token。
-///
-/// 基礎 URL 沿用登入殼既有的 `--dart-define=API_BASE_URL=...` 慣例，沒帶
-/// 旗標時預設打本機 8080。目前只封裝本 increment 畫面需要的端點
-/// （`specs/plans/001-staff-app-increment/ui/ui-plan.md` 列出的後端契約
-/// 清單內）：
-///
-/// - `POST /staff-accounts/login`（`LoginRequest`／`LoginResponse`）
-/// - `POST /staff-accounts/change-password`（`ChangePasswordRequest`／`LoginResponse`）
-/// - `GET /me/today`（`MyToday`）
-/// - `GET /pool`（`DeptPool`）
-/// - `GET /tasks/{id}`（`TaskDetail`）
-/// - `GET /notifications`、`POST /notifications/{id}/read`、
-///   `POST /notifications/read-all`（通知中心，`NotificationItem`）
-/// - `PUT /me/push-token`、`DELETE /me/push-token`（推播 token 登記）
-///
-/// 欄位名全部照抄 `specs/truth/contracts/components/schemas/` 的契約定義，
-/// 不自創欄位。
 class ApiClient {
   ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl;
 
-  /// 預設打本機後端。路徑要含 `/api/v1`：後端所有 REST controller 都掛在
-  /// 這個前綴下，少了它會打到 Spring Security 眼中不存在的路徑，一律被
-  /// 回 401，連登入端點都進不去。
   static const String _defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://localhost:8080/api/v1',
   );
 
-  /// 全 App 共用的 client。宣告成可覆寫的靜態欄位，widget 測試可以換成
-  /// fake 實作，不用真的起後端。
   static ApiClient instance = ApiClient();
 
-  /// 自動化測試拿這個欄位重現網路不穩：接下來幾次送出，後端會收下並處理
-  /// 完，但 App 這一側收不到回應，於是同一個動作得再送一次。真實網路底下
-  /// 這種情況難以按劇本重現，又正是「後端只能認列一次」要防的那一種。
-  ///
-  /// 一般建置沒有任何人寫這個欄位，它永遠是 0，每一次請求都照常拿到回應。
-  ///
-  /// 只對帶 `Idempotency-Key` 的請求生效，而且要等後端回了 2xx、回應內容也
-  /// 讀完才算數：要讓後端真的做過這件事，App 才有東西可以重送。在送出前就
-  /// 攔下來的話後端什麼都沒收到，重送幾次都只會建立一張單，驗不到後端認列
-  /// 一次的能力。
   static int dropWriteResponseCount = 0;
 
-  /// 上面那個額度只扣在路徑以這個字串開頭的請求上；空字串代表不限路徑。
-  ///
-  /// 一次使用者動作往往送出好幾個帶 `Idempotency-Key` 的請求（離線押著的報修
-  /// 單送出時，先替每張照片建立上傳位置，才開單）。不限路徑的話額度會被排在
-  /// 前面那個請求吃完，真正要驗重送的那一個一次也沒重送過，測試照樣是綠的。
   static String dropWriteResponsePathPrefix = '';
 
   final String baseUrl;
 
-  /// 登入成功後存下的 JWT；之後的請求放進 `Authorization: Bearer` 標頭。
   String? _token;
 
-  /// 登入成功的身分資訊（staffId／dept 等）。工務首頁要用 staffId 在任務
-  /// 清單裡挑出「我手上的工務單」、登入後的部門分流要看 dept，所以整份留著。
   LoginResult? _session;
 
   bool get isLoggedIn => _token != null;
 
-  /// 目前登入者；還沒登入為 null。
   LoginResult? get session => _session;
 
-  /// `POST /staff-accounts/login`：員工編號＋明文密碼換 JWT。
-  /// 成功時把 token 存在 client 裡，後續讀取請求自動帶上。
   Future<LoginResult> login({
     required String loginId,
     required String password,
@@ -86,17 +42,6 @@ class ApiClient {
     return result;
   }
 
-  /// `POST /staff-accounts/change-password`：本人設定新密碼（契約
-  /// `changeOwnPassword`）。後端重新雜湊新密碼、清掉 `mustChangePassword`
-  /// 旗標，並換發一組新的 JWT 回傳——形狀與登入相同，所以回應沿用
-  /// [LoginResult]。
-  ///
-  /// 強制改密情境（臨時密碼登入後）身分已由登入換得的 token 證明，不帶
-  /// [currentPassword]；自願變更情境才需要帶。密碼強度規則 truth 尚未定義，
-  /// App 不自行發明長度或字元門檻，一律交給後端判斷。
-  ///
-  /// 成功後舊 token 立即失效，所以這裡把 client 裡的 token 與身分一起換成
-  /// 新的，後續請求才不會拿著已失效的憑證。
   Future<LoginResult> changePassword({
     String? currentPassword,
     required String newPassword,
@@ -115,16 +60,10 @@ class ApiClient {
     return result;
   }
 
-  /// 手機上最後一次成功取回的今日進度；一次都還沒取到時為 null。
-  ///
-  /// 離線時算不出「接下來去哪一間」和「今天第幾單」的那些畫面讀這一份。存在
-  /// 這裡而不是各畫面各留一份：同一份快照才保證離線的完成畫面與首頁講的是同
-  /// 一個今天。
   MyToday? get lastKnownToday => _lastKnownToday;
 
   MyToday? _lastKnownToday;
 
-  /// `GET /me/today`：我的今日進度與下一間推薦。
   Future<MyToday> getMyToday() async {
     final json = await _requestJson('GET', '/me/today');
     final today = MyToday.fromJson(json as Map<String, dynamic>);
@@ -132,18 +71,6 @@ class ApiClient {
     return today;
   }
 
-  /// `GET /pool`：部門待認領池（含分類筆數）。四個查詢維度都來自契約
-  /// `listDeptPool`：[dept] 指定要看哪一個部門的池；[category] 只回該類別
-  /// （`cleaning`／`amenity`／`repair`／`other`，房務待認領的分類磚用它）；
-  /// [urgent]=true 只回急件；[source] 只回該來源（`staff_report`＝房務報修、
-  /// `desk_forward`＝櫃檯）。帶 [category] 時 `counts` 仍是整個池的筆數，
-  /// 分類磚的數字不會跟著縮水。分流與排序一律交給後端——App 只把磚的選擇
-  /// 換成查詢參數，不在本機重排或過濾。
-  ///
-  /// [dept] 省略就是「看自己帳號上的部門」，現場員工（房務／工務／櫃檯）一律
-  /// 這樣打。主管與老闆的帳號沒有部門，後端無從推斷要看哪一池，省略時回 422
-  /// `dept_required`，所以這兩種身分必須指定；現場員工帶了自己部門以外的值
-  /// 會被後端以 403 `forbidden_dept_pool` 擋下。
   Future<DeptPool> getPool({
     String? dept,
     String? category,
@@ -160,9 +87,6 @@ class ApiClient {
     return DeptPool.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /tasks`：租戶任務清單。工務首頁用它挑出「指派給我、還開著」的
-  /// 工務單（契約沒有「我的工務單」專用查詢，上游缺口已回報；這裡的挑選
-  /// 是補位，不是待認領池那種被禁止的本機過濾）。
   Future<List<TaskSummary>> listTasks() async {
     final json = await _requestJson('GET', '/tasks');
     return (json as List<dynamic>? ?? <dynamic>[])
@@ -170,23 +94,10 @@ class ApiClient {
         .toList();
   }
 
-  /// `POST /tasks/{id}/claim`：認領待認領的任務（工務單也是任務）。
-  /// 已被別人認領時後端回 409，message 帶認領人姓名，丟出 [ApiException]
-  /// 讓畫面呈現撞單提示。
   Future<void> claimTask(String taskId) async {
     await _requestJson('POST', '/tasks/$taskId/claim', idempotent: true);
   }
 
-  /// `POST /tasks/{id}/complete`：完成任務（契約 `tasksComplete`）。
-  /// 修繕任務必附完修照片；[resolutionType] 是完修三選一（fixed／temporary／
-  /// cannot_fix）。追蹤單自動建立與房況轉停用待確認都是後端行為，App 只送
-  /// 這個欄位、呈現結果。
-  ///
-  /// 打掃類任務兩個欄位都不帶：後端對非修繕任務不收也不看這兩個值，硬塞空
-  /// 清單反而會讓請求看起來像一張沒有照片的工務單。
-  ///
-  /// [idempotencyKey] 給離線佇列再送一次時指定同一把鍵用；不帶時每次都配一把
-  /// 新的，一次動作只保護它自己的重送。
   Future<TaskCompletion?> completeTask(
     String taskId, {
     List<String>? photoIds,
@@ -206,9 +117,6 @@ class ApiClient {
     return json is Map<String, dynamic> ? TaskCompletion.fromJson(json) : null;
   }
 
-  /// `GET /repair-tickets?roomId=`：同房未撤回的工務單（契約
-  /// `listRepairTickets`）。任務頁的同房工務單區用它，報修人從那一列進到
-  /// 自己那張單的詳情。
   Future<List<RepairTicketSummary>> listRepairTickets(String roomId) async {
     final json = await _requestJson(
       'GET',
@@ -221,10 +129,6 @@ class ApiClient {
         .toList();
   }
 
-  /// `POST /repair-tickets/precheck`：開單前檢查（契約 `precheckRepairTicket`）。
-  /// 報修人選定類別時呼叫，不建立任何工務單，只回兩件事：同房同類別還沒結案
-  /// 的那張單（重複提示用），以及系統依飯店設定規則算出的急件判定。判定是後端
-  /// 的結論，App 只負責呈現。
   Future<RepairTicketPrecheck> precheckRepairTicket({
     required String sourceTaskId,
     required String category,
@@ -237,19 +141,11 @@ class ApiClient {
     return RepairTicketPrecheck.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /me/manager-queues`：主管的三類待辦（待查房、待審核、待驗收），三格
-  /// 數字與三份清單同一次往返回完；排序由後端定，App 照順序畫。
   Future<ManagerQueues> getManagerQueues() async {
     final json = await _requestJson('GET', '/me/manager-queues');
     return ManagerQueues.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /inspections`：主管送出一次查房的逐項判定（契約 `createInspections`）。
-  /// body 只帶任務 id 與 items，租戶與查房者由權杖推導、通過或退回由後端算。
-  /// [idempotencyKey] 是這一次送出的鍵；重送同一次動作要帶同一把，後端回放
-  /// 第一次的結果。拒絕時丟 [ApiException]：409 `state_conflict`（單已被處理）、
-  /// 422 `inspection_items_mismatch`（項目集合不符，現行集合在
-  /// [ApiException.inspectionCurrentItems]）。
   Future<InspectionOutcome> createInspection({
     required String taskId,
     required List<InspectionItemJudgement> items,
@@ -268,19 +164,11 @@ class ApiClient {
     return InspectionOutcome.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /repair-tickets/{ticketId}`：工務單詳情（路徑參數是工務單的任務
-  /// id，不是 W- 單號）。
   Future<RepairTicketDetail> readRepairTicket(String taskId) async {
     final json = await _requestJson('GET', '/repair-tickets/$taskId');
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /repair-tickets/{ticketId}/verify`：主管驗收一張已完修的工務單
-  /// （契約 `verifyRepairTicket`）。[result] 是 `passed` 或 `failed`；
-  /// `failed` 時 [reason] 必填，`passed` 時不送。[idempotencyKey] 是這一次
-  /// 送出的鍵，重送同一次動作要帶同一把，後端回放第一次的結果。拒絕時丟
-  /// [ApiException]：409 `state_conflict`（單已被別人驗收或不在等驗收）、
-  /// 422 `verification_reason_required`（不通過沒寫原因）。
   Future<RepairVerificationOutcome> verifyRepairTicket({
     required String taskId,
     required String result,
@@ -300,8 +188,6 @@ class ApiClient {
     return RepairVerificationOutcome.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /repair-tickets/{ticketId}/photos`：補照片到既有工務單（契約
-  /// `appendRepairTicketPhotos`）。重複提示的「補充照片到這張單」走這裡。
   Future<void> appendRepairTicketPhotos(
     String taskId, {
     required List<String> photoIds,
@@ -314,9 +200,6 @@ class ApiClient {
     );
   }
 
-  /// `POST /repair-tickets/{ticketId}/withdraw`：報修人在工務認領前撤回
-  /// （契約 `withdrawRepairTicket`）。已被認領時後端回 409 `already_claimed`
-  /// ——畫面要在那之前就不顯示這顆按鈕。
   Future<RepairTicketDetail> withdrawRepairTicket(String taskId) async {
     final json = await _requestJson(
       'POST',
@@ -326,8 +209,6 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /repair-tickets/{ticketId}/resubmit`：報修人補完資料後把被退回的
-  /// 工務單重新送審（契約 `resubmitRepairTicket`）。
   Future<RepairTicketDetail> resubmitRepairTicket(String taskId) async {
     final json = await _requestJson(
       'POST',
@@ -337,9 +218,6 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /repair-tickets/{ticketId}/release-to-pool`：負責人自行把公共區域
-  /// 的工務單放回待認領（契約 `releaseRepairTicketToPool`）。客房單後端回
-  /// 409 `room_ticket_not_requeueable`——畫面要在那之前就不顯示按鈕。
   Future<RepairTicketDetail> releaseRepairTicketToPool(String taskId) async {
     final json = await _requestJson(
       'POST',
@@ -349,9 +227,6 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /repair-photos`：建立一張工務單照片的上傳位置（兩段式的第一段，
-  /// 契約 `createRepairPhoto`）。[purpose] 是 report（報修）或 completion
-  /// （完修）。回傳照片 id，接著用 [uploadRepairPhotoContent] 上傳內容。
   Future<String> createRepairPhoto({required String purpose}) async {
     final json = await _requestJson(
       'POST',
@@ -365,8 +240,6 @@ class ApiClient {
     return (json as Map<String, dynamic>)['id'] as String;
   }
 
-  /// `PUT /repair-photos/{photoId}/content`：上傳一張照片的內容（兩段式的
-  /// 第二段，冪等）。
   Future<void> uploadRepairPhotoContent(String photoId, List<int> jpegBytes) async {
     await _requestJson(
       'PUT',
@@ -375,15 +248,6 @@ class ApiClient {
     );
   }
 
-  /// `POST /repair-tickets`：開立工務單（契約 `createRepairTicket`）。
-  /// 三條開單路徑擇一：房務從原任務報修帶 [sourceTaskId]，工務自開帶
-  /// [roomId] 或 [isPublicArea]=true。急件由系統判定，請求不帶任何急件欄位。
-  /// [description] 是員工自己打的狀況說明，選填；空字串與 null 都不送這個
-  /// 欄位，後端收到的就是「沒有寫說明」，而不是一段空白的說明。
-  /// [idempotencyKey] 給離線佇列重送用：同一次送出重送幾遍都帶同一把鍵，
-  /// 後端才認得出是同一次動作、只建立一張單。
-  /// [assigneeId] 只有工務自開與櫃檯交辦走得通：帶了就直接把單指派給那個人、
-  /// 略過待認領與審核，不帶就進待認領。
   Future<RepairTicketDetail> createRepairTicket({
     String? sourceTaskId,
     String? roomId,
@@ -415,10 +279,6 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /rooms`：房間主檔（契約 `listRooms`）。
-  ///
-  /// 開工單要帶的是房間 id，員工打的是房號，兩者之間沒有別的換算路徑，所以
-  /// 這一支的用途就是把房號換成 id，順便決定員工打的房號到底存不存在。
   Future<List<RoomSummary>> listRooms() async {
     final json = await _requestJson('GET', '/rooms') as List<Object?>;
     return [
@@ -427,19 +287,11 @@ class ApiClient {
     ];
   }
 
-  /// `POST /tasks/{id}/start`：負責人開工（契約 `tasksStart`）。同一位員工
-  /// 已經有另一筆進行中的單時後端回 409 `doing_task_exists`，message 是給人
-  /// 看的「{房號} 還在進行中」、context 帶那一筆的 taskId 與 roomNo——「一次
-  /// 一間」的判定全在後端，App 只負責把它呈現出來。
   Future<TaskDetail> startTask(String taskId) async {
     final json = await _requestJson('POST', '/tasks/$taskId/start', idempotent: true);
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /tasks/{id}/defer`：負責人把自己名下待開始的任務延後（契約
-  /// `tasksDefer`）。[reason] 是預設原因或自填文字，長度規則（去頭尾空白後
-  /// 1–60 字）由後端把關，回 422 `reason_invalid`；App 端的字數上限提示只是
-  /// 讓員工在送出前就知道，不是權威判定。
   Future<TaskDetail> deferTask(String taskId, String reason) async {
     final json = await _requestJson(
       'POST',
@@ -450,8 +302,6 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /tasks/{id}/interrupt`：負責人把自己進行中的任務轉為已中斷
-  /// （契約 `tasksInterrupt`）。[reason] 的規則同 [deferTask]。
   Future<TaskDetail> interruptTask(String taskId, String reason) async {
     final json = await _requestJson(
       'POST',
@@ -462,11 +312,6 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /tasks/{id}/resume`：負責人把自己已中斷的任務接回來繼續做（契約
-  /// `tasksResume`）。中斷時停住的原因由後端清掉，任務回到進行中。
-  ///
-  /// 「一次一間」的判定同 [startTask]：手上已經有另一筆進行中的單時後端回 409
-  /// `doing_task_exists`，哪一間擋住了由後端說了算。
   Future<TaskDetail> resumeTask(String taskId) async {
     final json = await _requestJson(
       'POST',
@@ -476,16 +321,11 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /tasks/{id}`：單一任務的員工視角詳情。
   Future<TaskDetail> getTask(String taskId) async {
     final json = await _requestJson('GET', '/tasks/$taskId');
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /sop-items`：租戶的 SOP 與查房項目全集（契約 `listSopItems`）。
-  /// 打掃 SOP 與查房項目同構共表，差別在 `appliesTo`（`cleaning`／`inspection`），
-  /// 端點不收參數，要哪一種由呼叫端自己挑。任務詳情的 `checkedSopItems`／
-  /// `skippedSopItems` 只給 id，項目名稱一律從這裡取。
   Future<List<SopItem>> listSopItems() async {
     final json = await _requestJson('GET', '/sop-items');
     return (json as List<dynamic>? ?? <dynamic>[])
@@ -493,9 +333,6 @@ class ApiClient {
         .toList();
   }
 
-  /// `POST /tasks/{id}/sop-check`：勾選或跳過一項 SOP（契約 `tasksSopCheck`）。
-  /// [result] 只收 `checked` 或 `skipped`；跳過不擋完成，後端在完成那一步會把
-  /// 沒勾也沒跳過的項目一律補記成跳過。回應是更新後的任務詳情。
   Future<TaskDetail> sopCheck(
     String taskId, {
     required String sopItemId,
@@ -510,8 +347,6 @@ class ApiClient {
     return TaskDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `GET /room-memories/suggestions?taskId=`：查一下打開時的推薦問題。
-  /// 順序由後端依任務情境排好（剛跳過的 SOP 項在前），App 照單列出，不自己排。
   Future<List<AskSuggestion>> listAskSuggestions(String taskId) async {
     final json = await _requestJson(
       'GET',
@@ -523,8 +358,6 @@ class ApiClient {
         .toList();
   }
 
-  /// `POST /room-memories/ask`：拿一則問題去查這張任務的房間記錄或 SOP。
-  /// 回答與出處全部由後端組好，查不到時 `found=false`、`answer` 是 null。
   Future<AskAnswer> askRoomMemory({
     required String taskId,
     required String question,
@@ -538,9 +371,6 @@ class ApiClient {
     return AskAnswer.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /room-memories/answers/{answerId}/feedback`：對一則回答說有沒有
-  /// 幫助（契約 `submitKbFeedback`）。回饋寫進稽核紀錄；說沒幫助時後端會通知
-  /// SOP 管理者去查被引用的那筆資料。
   Future<void> submitAskFeedback({
     required String answerId,
     required bool helpful,
@@ -553,9 +383,6 @@ class ApiClient {
     );
   }
 
-  /// `POST /room-memories/answers/{answerId}/escalate`：把查不到的那一題轉給
-  /// 主管（契約 `escalateKbQuestion`）。後端建一筆待回覆的提問，主管回覆後用
-  /// 推播通知發問的員工。
   Future<void> escalateAskQuestion(String answerId) async {
     await _requestJson(
       'POST',
@@ -564,32 +391,21 @@ class ApiClient {
     );
   }
 
-  /// `GET /notifications`：我的通知清單，後端已依 createdAt 新到舊排好；
-  /// 「今天／更早」分組是 App 端的呈現邏輯（契約明訂本端點不分組）。
   Future<List<NotificationItem>> listNotifications() async {
     final json = await _requestJson('GET', '/notifications');
     return _asNotificationList(json);
   }
 
-  /// `POST /notifications/{id}/read`：標記單則已讀（冪等），回更新後那筆。
   Future<NotificationItem> markNotificationRead(String notificationId) async {
     final json = await _requestJson('POST', '/notifications/$notificationId/read');
     return NotificationItem.fromJson(json as Map<String, dynamic>);
   }
 
-  /// `POST /notifications/read-all`：全部標為已讀，回標記後的完整清單。
   Future<List<NotificationItem>> markAllNotificationsRead() async {
     final json = await _requestJson('POST', '/notifications/read-all');
     return _asNotificationList(json);
   }
 
-  /// `PUT /me/push-token`：把這支手機目前的 FCM token 登記在登入者名下，
-  /// 後端派單時才知道推播要送到哪一支裝置。
-  ///
-  /// [deviceFingerprint] 是 App 第一次啟動時產生、之後一直沿用的裝置識別
-  /// 字串。token 會換（重灌、Firebase 定期輪替），裝置不會；後端靠它把新
-  /// token 蓋掉同一支手機的舊 token，而不是替同一支手機累積一排已失效的
-  /// token，每次派單都多送幾次註定失敗的推播。
   Future<void> registerPushToken({
     required String deviceFingerprint,
     required String pushToken,
@@ -606,8 +422,6 @@ class ApiClient {
     );
   }
 
-  /// `DELETE /me/push-token`：登出前把這支手機從登入者名下拿掉，下一位用
-  /// 這支手機的同事才不會收到前一位的派單推播。
   Future<void> unregisterPushToken({required String deviceFingerprint}) async {
     await _requestJson(
       'DELETE',
@@ -643,9 +457,6 @@ class ApiClient {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
       }
       if (idempotent) {
-        // 沒有指定鍵時每次操作配一把新的：同一把鍵只保護「同一次使用者動作
-        // 的重送」，跨動作重用會讓第二次動作拿到第一次的回放結果。離線佇列
-        // 再送一次時會把那筆動作自己的鍵傳進來，後端才認得出是同一次動作。
         request.headers.set(
             'Idempotency-Key', idempotencyKey ?? newIdempotencyKey());
       }
@@ -673,8 +484,6 @@ class ApiClient {
     }
   }
 
-  /// 產生 UUID v4 字串（Idempotency-Key 用）。App 沒有引入 uuid 套件，
-  /// 這把鍵只要求「夠隨機、不重複」，用 [Random.secure] 自組即可。
   static String newIdempotencyKey() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
@@ -687,38 +496,23 @@ class ApiClient {
   }
 }
 
-/// 後端回非 2xx 時丟出的例外，帶狀態碼讓畫面決定要顯示哪句提示。
-///
-/// 後端錯誤 body 的固定形狀（`specs/truth/contracts/components/schemas/shared.yaml`
-/// 的 ApiError）：`{code, message, details?, context?}`。[errorCode]／
-/// [errorMessage]／[errorContext] 是對這個形狀的惰性解析，body 不是合法
-/// JSON 時回 null，讓畫面退回自己的固定文案。
 class ApiException implements Exception {
   const ApiException({required this.statusCode, required this.body});
 
   final int statusCode;
   final String body;
 
-  /// ApiError.code，例如 `credentials_invalid`／`account_locked`。
   String? get errorCode => _bodyJson()?['code'] as String?;
 
-  /// ApiError.message，後端已經是給人看的白話句，可直接上畫面。
   String? get errorMessage => _bodyJson()?['message'] as String?;
 
-  /// ApiError.context，例如帳號鎖定時的 `lockedUntil`／`remainingMinutes`。
   Map<String, dynamic>? get errorContext =>
       _bodyJson()?['context'] as Map<String, dynamic>?;
 
-  /// 帳號鎖定（429 account_locked）時後端算好的剩餘鎖定分鐘；不是鎖定回應
-  /// 時為 null。鎖定剩餘時間一律以這個值為準，App 不自己計時，才不會和
-  /// 後端的解鎖時間點對不上。
   int? get lockoutRemainingMinutes => statusCode == 429
       ? (errorContext?['remainingMinutes'] as num?)?.toInt()
       : null;
 
-  /// 422 `inspection_items_mismatch` 時後端附的飯店現行查房項目集合（依
-  /// 飯店排序），查房畫面拿它直接換成新的項目清單、不必再打一次；不是這種
-  /// 拒絕時為 null。
   List<InspectionItemRef>? get inspectionCurrentItems {
     if (errorCode != 'inspection_items_mismatch') {
       return null;
@@ -746,7 +540,6 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode)';
 }
 
-/// `LoginResponse`（specs/truth/contracts/components/schemas/員工帳號與登入.yaml）。
 class LoginResult {
   const LoginResult({
     required this.token,
@@ -765,7 +558,6 @@ class LoginResult {
   final String? dept;
   final String role;
 
-  /// true 表示臨時密碼登入，必須先改密碼才能呼叫其他需要身分的 API。
   final bool mustChangePassword;
 
   factory LoginResult.fromJson(Map<String, dynamic> json) {
@@ -781,7 +573,6 @@ class LoginResult {
   }
 }
 
-/// `MyToday`（specs/truth/contracts/components/schemas/員工工作台.yaml）。
 class MyToday {
   const MyToday({
     required this.cleaningDone,
@@ -806,38 +597,24 @@ class MyToday {
   final int adHocCompleted;
   final int remainingMinutes;
 
-  /// 本人今日的全部任務，已由後端排好（未結束的在前、同組內 doing 最前）。
-  /// 首頁任務列要列出或進入今天任何一張單一律用這份，不是只收 accepted 的
-  /// [nextTasks]——進行中、延後、中斷、今天已完成的單只有這裡看得到。
   final List<TodayTask> todayTasks;
 
-  /// 待開始的單的推薦子集，只用於首頁「下一間」卡，不是今日任務的全部。
   final List<NextTask> nextTasks;
 
-  /// 工務視角今日進度；只有工務部門（dept=engineering）的呼叫者有值。
   final EngineeringSummary? engineeringSummary;
 
-  /// 今天的班別顯示名稱（例如「早班」）。沒有排班或後端還沒給這個欄位時為
-  /// null，首頁的問候列就只顯示日期。
   final String? shift;
 
-  /// 今天負責的樓層（例如 `[3, 4]`）。沒有指定樓層或後端還沒給這個欄位時
-  /// 為 null，問候列略過樓層那一段。
   final List<int>? floors;
 
-  /// 分頁列「待認領」那一格的紅色數量徽章；0 表示不顯示徽章。
   final int poolBadgeCount;
 
-  /// 分頁列「通知」那一格的紅色數量徽章；0 表示不顯示徽章。
   final int unreadNotificationBadgeCount;
 
   factory MyToday.fromJson(Map<String, dynamic> json) {
     final todayTasksJson = json['todayTasks'] as List<dynamic>? ?? <dynamic>[];
     final nextTasksJson = json['nextTasks'] as List<dynamic>? ?? <dynamic>[];
     final engineeringJson = json['engineeringSummary'] as Map<String, dynamic>?;
-    // 班別、樓層與兩個徽章計數是後端分批落地的欄位：還沒落地時整個鍵不會
-    // 出現在回應裡，解析必須把缺席當成「沒有這件事」而不是當成錯誤——否則
-    // 後端一天沒補完，首頁就一天打不開。
     final floorsJson = json['floors'] as List<dynamic>?;
     return MyToday(
       cleaningDone: json['cleaningDone'] as int,
@@ -864,7 +641,6 @@ class MyToday {
   }
 }
 
-/// `MyToday.engineeringSummary`：工務首頁三格數字的資料來源。
 class EngineeringSummary {
   const EngineeringSummary({
     required this.openCount,
@@ -876,7 +652,6 @@ class EngineeringSummary {
     this.maintenanceTotal,
   });
 
-  /// 三格都是 0、沒有任何單的彙總，給「回應裡沒有工務彙總」的呼叫端當顯示值用。
   static const EngineeringSummary none = EngineeringSummary(
     openCount: 0,
     completedToday: 0,
@@ -884,28 +659,18 @@ class EngineeringSummary {
     tickets: <EngineeringTicket>[],
   );
 
-  /// 手上張數：本人目前 accepted／doing 的工務單筆數。
   final int openCount;
 
-  /// 今天已完修：本人今天 done 的工務單筆數。
   final int completedToday;
 
-  /// 急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
   final int urgentCount;
 
-  /// 本人手上（accepted／doing）與今天完修（done）的工務單，已由後端排好
-  /// （急件在前、未結案在已完修之前），工務首頁的單列直接依序呈現。
   final List<EngineeringTicket> tickets;
 
-  /// 今天預計要修的工務單總數，工務首頁進度環拿它當分母。排不出預計量時
-  /// 為 null，畫面退回用「已完修＋手上」相加當分母。
   final int? plannedToday;
 
-  /// 今日保養已完成張數。沒有保養維度時為 null。
   final int? maintenanceDone;
 
-  /// 今日保養總張數。與 [maintenanceDone] 同時有值或同時為 null，畫面也因此
-  /// 只在兩個都有值時才畫那一格。
   final int? maintenanceTotal;
 
   factory EngineeringSummary.fromJson(Map<String, dynamic> json) {
@@ -917,8 +682,6 @@ class EngineeringSummary {
       tickets: ticketsJson
           .map((entry) => EngineeringTicket.fromJson(entry as Map<String, dynamic>))
           .toList(),
-      // 這三個欄位是後來才補進契約的，後端還沒落地；缺席與 null 都收成
-      // null，由畫面各自決定退路，解析這一層不替它們編造數字。
       plannedToday: json['plannedToday'] as int?,
       maintenanceDone: json['maintenanceDone'] as int?,
       maintenanceTotal: json['maintenanceTotal'] as int?,
@@ -926,9 +689,6 @@ class EngineeringSummary {
   }
 }
 
-/// `EngineeringTicket`：工務首頁單列的一張工務單。
-///
-/// 欄位名與 `RepairTicketSummary` 一致，[taskId] 可以直接拿去打工務單詳情。
 class EngineeringTicket {
   const EngineeringTicket({
     required this.ticketNo,
@@ -943,33 +703,21 @@ class EngineeringTicket {
     this.verificationReturnReason,
   });
 
-  /// 單號（W-0412 這種）。契約列為必填，但後端目前可能給 null，所以收得下
-  /// null，不在解析時就把整份回應打掉。
   final String? ticketNo;
   final String taskId;
 
-  /// 客房單的房號；開給公共區域的單沒有房號，為 null。
   final String? roomNo;
 
-  /// true 表示這張單開給公共區域，此時 [roomNo] 為 null。
   final bool isPublicArea;
   final String title;
 
-  /// accepted｜doing｜done，照契約 enum，不縮寫。
   final String state;
   final bool isUrgent;
 
-  /// 單的來源，照契約 PoolSource enum：工務單只會是 staff_report（房務報修或
-  /// 工務自開）或 desk_forward（櫃檯交辦）。
   final String? source;
 
-  /// 這張單已做幾分鐘，口徑同 `TaskDetail.elapsedMinutes`。還沒開工的單是
-  /// 0；取不到時為 null，畫面不顯示計時——不是顯示 0 分，那會讓人以為單剛
-  /// 開工，而不是「這個數字現在沒有」。
   final int? workedMinutes;
 
-  /// 這張單被主管驗收不通過、退回重修中時，最近一次不通過的原因；單卡據此標
-  /// 「驗收退回」並把原因當副文。再完修或結案後、或從沒被退回過時為 null。
   final String? verificationReturnReason;
 
   factory EngineeringTicket.fromJson(Map<String, dynamic> json) {
@@ -982,17 +730,12 @@ class EngineeringTicket {
       state: json['state'] as String,
       isUrgent: json['isUrgent'] as bool? ?? false,
       source: json['source'] as String?,
-      // 後來才補進契約、後端尚未落地；缺席與 null 一律收成 null。
       workedMinutes: json['workedMinutes'] as int?,
       verificationReturnReason: json['verificationReturnReason'] as String?,
     );
   }
 }
 
-/// `TodayTask`：首頁任務列的一張單。
-///
-/// 欄位與任務詳情（`TaskDetail`）共用同一組名稱與值，[taskId] 可以直接拿去
-/// 打任務頁。
 class TodayTask {
   const TodayTask({
     required this.taskId,
@@ -1012,29 +755,20 @@ class TodayTask {
   final String roomNo;
   final String title;
 
-  /// cleaning｜amenity｜repair｜other，照契約 enum，不縮寫。
   final String type;
 
-  /// accepted｜doing｜deferred｜interrupted｜done｜inspected，與 tasks.state
-  /// 同一套值。
   final String state;
 
-  /// 被查房退回重做的次數；大於 0 時單卡標示「重做第 N 次」。
   final int redoCount;
 
-  /// 預估分鐘，由排房計畫帶入；沒有預估值時為 null。
   final int? estMin;
 
-  /// 已做分鐘，口徑同 `TaskDetail.elapsedMinutes`。
   final int workedMinutes;
 
-  /// 停住原因，延後或中斷時才有值，其他狀態為 null。
   final String? holdReason;
 
-  /// passed｜waived｜failed，還沒有查房結果為 null。
   final String? inspection;
 
-  /// 開工當下鎖定的是否免查房。
   final bool inspectionWaived;
 
   factory TodayTask.fromJson(Map<String, dynamic> json) {
@@ -1054,7 +788,6 @@ class TodayTask {
   }
 }
 
-/// `GET /tasks` 清單的一筆，只收工務首頁挑「我手上的工務單」要看的欄位。
 class TaskSummary {
   const TaskSummary({
     required this.id,
@@ -1065,10 +798,8 @@ class TaskSummary {
 
   final String id;
 
-  /// cleaning｜amenity｜repair｜other，照契約 enum。
   final String type;
 
-  /// 任務狀態，照契約 enum（pool｜accepted｜doing｜done…）。
   final String state;
   final String? assigneeId;
 
@@ -1082,8 +813,6 @@ class TaskSummary {
   }
 }
 
-/// `RepairTicket`（specs/truth/contracts/components/schemas/工務單.yaml）中
-/// 工務視角畫面要用的欄位。
 class RepairTicketDetail {
   const RepairTicketDetail({
     required this.taskId,
@@ -1119,94 +848,56 @@ class RepairTicketDetail {
 
   final String taskId;
 
-  /// W- 開頭的單號，例如 W-0410。
   final String ticketNo;
 
-  /// 房號；開給公共區域的單沒有房號，為 null，此時 [isPublicArea] 為 true、
-  /// 地點說明在報修說明裡。
   final String? roomNo;
 
-  /// true 表示這張單開給公共區域（沒有房號）。公共區域單才可以放回待認領；
-  /// 客房單只能走暫停。
   final bool isPublicArea;
 
-  /// 工務單類別，照契約 RepairCategory enum（air_conditioning…other）。
   final String category;
   final bool isUrgent;
 
-  /// pending_review｜rejected｜pool｜accepted｜doing｜done｜cancelled。
   final String state;
 
-  /// 來源：`reported` 是有人報修（房務、工務自開、櫃檯交辦都算），
-  /// `scheduled` 是每日排程建出的定期保養。
   final String origin;
 
-  /// 報修人顯示名稱；定期保養單由排程建立、沒有報修人時為 null。
   final String? reporterName;
 
-  /// 畫面上的地點文字：有房號給房號，公共區域單給「公共區域」。
   String get whereText => roomNo ?? '公共區域';
 
-  /// 畫面上的報修人文字；沒有報修人（定期保養）時給「—」。
   String get reporterNameText => reporterName ?? '—';
 
-  /// 詳情頁用這個時刻算「已送出 N 分鐘」與時間軸第一步的時刻。後端沒給時留
-  /// null，那兩段話整段不顯示，而不是填 0 分鐘讓員工以為單剛送出。
   final DateTime? createdAt;
 
-  /// 報修的人自己打的問題說明。工務視角拿它當標題區的主標，沒有說明時改用
-  /// 類別，員工才不會看到一片空白的標題區。
   final String? description;
 
-  /// 負責這張單的工務同仁。還沒有人接時是 null，資訊列表那一列改寫「等工務
-  /// 認領」，讓房務看得出來單還在池子裡而不是資料漏傳。
   final String? assigneeName;
 
-  /// 系統判定急件時命中的規則，例如「VIP · 15:00 入住」。急件狀態列要寫出判
-  /// 定理由，員工才知道這張單為什麼被插到前面；一般件沒有規則，是 null。
   final String? urgentRule;
 
-  /// 驗收通過的主管顯示名稱；尚未驗收為 null。App 只讀不寫——驗收是主管端
-  /// 的動作，App 沒有驗收操作。
   final String? verifiedBy;
   final String? verifiedAt;
   final String? resolutionNote;
 
-  /// 完修結果三選一：`fixed`、`temporary`、`cannot_fix`。尚未完修為 null；
-  /// 完修後必有值。
   final String? resolutionType;
 
-  /// 完修時間；尚未完修為 null。
   final String? doneAt;
 
-  /// 最近一次進入等主管審核的時間（第一次送出或補資料再送出）；不是房務報修
-  /// 一般件、或還沒送審時為 null。
   final String? reviewRequestedAt;
   final String? rejectReason;
   final String? urgentDowngradeReason;
   final String? originTicketNo;
 
-  /// 報修時附的照片（契約 RepairTicket.photos）。詳情頁照片區的張數與格數都
-  /// 看這一欄。
   final List<RepairTicketPhoto> photos;
 
-  /// 報修照片張數（契約 RepairTicket.photoCount，必有）。後端不一定帶
-  /// [photos] 明細，詳情頁照片區的格數以這個數字為準。
   final int photoCount;
 
-  /// 這一輪完修附的照片（契約 RepairTicket.completionPhotos）。被驗收不通過
-  /// 退回過的單只帶最近一次不通過之後的那幾張；退回重修中、還沒再完修時是空的。
   final List<RepairTicketPhoto> completionPhotos;
 
-  /// 最近一次驗收不通過的原因、判定主管顯示名稱與時間。三個欄位同時有值或
-  /// 同時為 null；從沒被判不通過為 null。重修、再完修與結案後都保留，
-  /// 要不要顯示由畫面依狀態決定。
   final String? lastVerifyFailedReason;
   final String? lastVerifyFailedBy;
   final String? lastVerifyFailedAt;
 
-  /// 目前登入者是不是這張單的處理人，由後端比對（顯示名稱可能重名，App 不自己
-  /// 比）。主管打開自己名下的單時為 true，畫面在主管動作之外同時給處理人的動作。
   final bool viewerIsAssignee;
 
   factory RepairTicketDetail.fromJson(Map<String, dynamic> json) {
@@ -1214,7 +905,6 @@ class RepairTicketDetail {
     return RepairTicketDetail(
       taskId: json['taskId'] as String,
       ticketNo: json['ticketNo'] as String,
-      // 後端補 isPublicArea 之前以佔位房號「公共區域」代表無房號，兩種都收。
       roomNo: roomNo == '公共區域' ? null : roomNo,
       isPublicArea: json['isPublicArea'] as bool? ?? roomNo == '公共區域',
       category: json['category'] as String,
@@ -1256,16 +946,11 @@ class RepairTicketDetail {
   }
 }
 
-/// 工務單上的一張照片（契約 RepairPhoto）。
-///
-/// 契約只回照片 id 與上傳狀態，沒有取得影像內容的端點，所以詳情頁畫得出照片
-/// 的張數與格子，畫不出縮圖。
 class RepairTicketPhoto {
   const RepairTicketPhoto({required this.id, required this.status});
 
   final String id;
 
-  /// pending 或 uploaded。
   final String status;
 
   factory RepairTicketPhoto.fromJson(Map<String, dynamic> json) {
@@ -1276,7 +961,6 @@ class RepairTicketPhoto {
   }
 }
 
-/// 開單前檢查的結果（契約 RepairTicketPrecheckResponse）。
 class RepairTicketPrecheck {
   const RepairTicketPrecheck({
     required this.urgent,
@@ -1284,14 +968,10 @@ class RepairTicketPrecheck {
     this.duplicate,
   });
 
-  /// 系統判定這張單是不是急件。這是後端依飯店設定規則算出來的結論，
-  /// App 不自己判、也不讓房務改。
   final bool urgent;
 
-  /// 命中的判定規則說明，例如「VIP · 15:00 入住」；判定為一般件時為 null。
   final String? urgentRule;
 
-  /// 同房、同類別、還沒結案的工務單；沒有時為 null。
   final RepairTicketSummary? duplicate;
 
   factory RepairTicketPrecheck.fromJson(Map<String, dynamic> json) {
@@ -1306,8 +986,6 @@ class RepairTicketPrecheck {
   }
 }
 
-/// 工務單摘要（契約 RepairTicketSummary）：任務詳情的同房工務單區與開單前
-/// 檢查的重複提示共用這一份。
 class RepairTicketSummary {
   const RepairTicketSummary({
     required this.taskId,
@@ -1323,14 +1001,12 @@ class RepairTicketSummary {
   final String taskId;
   final String ticketNo;
 
-  /// 房號；公共區域的單為 null，此時 [isPublicArea] 為 true。
   final String? roomNo;
   final bool isPublicArea;
   final String category;
   final bool isUrgent;
   final String state;
 
-  /// 報修人顯示名稱；定期保養單沒有報修人時為 null。
   final String? reporterName;
 
   factory RepairTicketSummary.fromJson(Map<String, dynamic> json) {
@@ -1348,8 +1024,6 @@ class RepairTicketSummary {
   }
 }
 
-/// `ManagerQueues`（契約 主管工作台.yaml）：主管首頁三格與三份清單的同一份回應。
-/// [counts] 的每個數字等於對應陣列的長度，App 以 counts 畫三格、以陣列畫清單。
 class ManagerQueues {
   const ManagerQueues({
     required this.counts,
@@ -1363,9 +1037,6 @@ class ManagerQueues {
   final List<ReviewQueueItem> review;
   final List<VerifyQueueItem> verify;
 
-  /// 後端只回這位主管看得到的類別：工務主管沒有待查房，回應裡 `inspection`
-  /// 鍵整個缺席；`review` 已收回，也可能缺席。缺席的類別一律解析成空清單、
-  /// 格子數字 0，不在解析這一層丟例外；要不要畫那一格由主管種類決定。
   factory ManagerQueues.fromJson(Map<String, dynamic> json) {
     return ManagerQueues(
       counts: ManagerQueueCounts.fromJson(
@@ -1387,7 +1058,6 @@ class ManagerQueues {
   }
 }
 
-/// 三格數字。某一類為 0 時仍是 0，畫面顯示 0 而不是藏起格子。
 class ManagerQueueCounts {
   const ManagerQueueCounts({
     required this.inspection,
@@ -1408,7 +1078,6 @@ class ManagerQueueCounts {
   }
 }
 
-/// 待查房清單的一列（契約 `InspectionQueueItem`）：別人清好、停在 done 等查房的打掃單。
 class InspectionQueueItem {
   const InspectionQueueItem({
     required this.taskId,
@@ -1423,22 +1092,16 @@ class InspectionQueueItem {
 
   final String taskId;
 
-  /// 房號；打掃單一律有房號，型別仍照契約 nullable。
   final String? roomNo;
   final bool isPublicArea;
   final String title;
 
-  /// 開始等主管的時間（最近一次完成的時間）；字串帶後端時區位移，顯示時直接
-  /// 用這個位移取時與分，不轉成手機時區。
   final String waitingSince;
 
-  /// 是否今天開始等；由後端依它的時鐘判定，false 時畫面在時刻前多標日期。
   final bool waitingSinceIsToday;
 
-  /// 原清房者顯示名稱，退回會回到這個人名下。
   final String cleanerName;
 
-  /// 被查房退回重做的次數。
   final int redoCount;
 
   factory InspectionQueueItem.fromJson(Map<String, dynamic> json) {
@@ -1455,7 +1118,6 @@ class InspectionQueueItem {
   }
 }
 
-/// 待審核清單的一列（契約 `ReviewQueueItem`）：房務報修、停在等主管審核的一般件。
 class ReviewQueueItem {
   const ReviewQueueItem({
     required this.taskId,
@@ -1476,17 +1138,14 @@ class ReviewQueueItem {
   final bool isPublicArea;
   final String title;
 
-  /// 開始等主管的時間（最近一次進入等主管審核的時間）。
   final String waitingSince;
   final bool waitingSinceIsToday;
   final String ticketNo;
   final String category;
 
-  /// 報修說明；報修人沒填時為 null。
   final String? description;
   final String reporterName;
 
-  /// 報修照片張數。
   final int photoCount;
 
   factory ReviewQueueItem.fromJson(Map<String, dynamic> json) {
@@ -1506,8 +1165,6 @@ class ReviewQueueItem {
   }
 }
 
-/// 待驗收清單的一列（契約 `VerifyQueueItem`）：已完修、尚未有主管驗收的工務單，
-/// 含暫時處理、無法修復與定期保養的單。
 class VerifyQueueItem {
   const VerifyQueueItem({
     required this.taskId,
@@ -1528,33 +1185,24 @@ class VerifyQueueItem {
 
   final String taskId;
 
-  /// 房號；公共區域的單（例如定期保養的「5 樓製冰機」）為 null。
   final String? roomNo;
   final bool isPublicArea;
   final String title;
 
-  /// 開始等主管的時間（完修時間）。
   final String waitingSince;
   final bool waitingSinceIsToday;
   final String ticketNo;
   final String category;
   final String? description;
 
-  /// 報修人；定期保養單沒有報修人時為 null。
   final String? reporterName;
 
-  /// 完修人（處理人）。
   final String? assigneeName;
 
-  /// `reported` 是有人報修、`scheduled` 是定期保養。
   final String origin;
 
-  /// `fixed`、`temporary`、`cannot_fix`。完修結果欄位出現之前就完修的舊單
-  /// 沒有值，為 null；不需處理的單直接結案，不會出現在待驗收。
   final String? resolutionType;
 
-  /// 這張單是否曾被驗收不通過過；true 時清單列標「重修後再驗」。詳細原因要打開
-  /// 工務單詳情才取。
   final bool wasVerificationFailed;
 
   factory VerifyQueueItem.fromJson(Map<String, dynamic> json) {
@@ -1577,10 +1225,6 @@ class VerifyQueueItem {
   }
 }
 
-/// `RepairVerificationOutcome`（契約 工務單.yaml）：這次驗收的結果與單的去處。
-/// [result] 與 [destination] 一起看：passed 時 destination 一定是 `closed`；
-/// failed 時是 `assignee`（回到原處理人名下待開始，原處理人收到推播）或
-/// `pool`（原處理人已下班或請假，回到工務待認領）。去處由後端算，App 不自己看班表。
 class RepairVerificationOutcome {
   const RepairVerificationOutcome({
     required this.taskId,
@@ -1598,24 +1242,17 @@ class RepairVerificationOutcome {
   final String taskId;
   final String ticketNo;
 
-  /// 房號；公共區域的單為 null，此時 [isPublicArea] 為 true。
   final String? roomNo;
   final bool isPublicArea;
 
-  /// `passed`｜`failed`，與請求的 result 相同。
   final String result;
 
-  /// `closed`｜`assignee`｜`pool`。
   final String destination;
 
-  /// 原處理人（完修人）顯示名稱；去處是 pool 時也帶，因為那時單本身的處理人
-  /// 已清空，結果畫面仍要說得出「阿強已下班」。
   final String? assigneeName;
 
-  /// 不通過的原因（去掉頭尾空白後的值）；passed 時為 null。
   final String? reason;
 
-  /// 這次驗收的主管顯示名稱與時間。
   final String decidedBy;
   final String decidedAt;
 
@@ -1635,8 +1272,6 @@ class RepairVerificationOutcome {
   }
 }
 
-/// 一個查房項目的判定（契約 `InspectionItemJudgement`）：[key] 是
-/// sop_items.item_key，[pass] 為 true 通過、false 不通過；沒有備註欄。
 class InspectionItemJudgement {
   const InspectionItemJudgement({required this.key, required this.pass});
 
@@ -1646,8 +1281,6 @@ class InspectionItemJudgement {
   Map<String, dynamic> toJson() => {'key': key, 'pass': pass};
 }
 
-/// 查房項目的引用（422 `inspection_items_mismatch` 的 `context.currentItems`
-/// 每一筆）：鍵、顯示名稱與飯店排序。
 class InspectionItemRef {
   const InspectionItemRef({
     required this.key,
@@ -1668,10 +1301,6 @@ class InspectionItemRef {
   }
 }
 
-/// `InspectionOutcome`（契約 查房.yaml）：這次查房的結果與單的去向。
-/// [result] 與 [destination] 一起看：passed 時 destination 一定是 closed；
-/// failed 時是 cleaner（回到原清房者名下）或 pool（原清房者已下班或請假，
-/// 回到房務待認領）。退回的原因就是 [failedItems]。
 class InspectionOutcome {
   const InspectionOutcome({
     required this.inspectionId,
@@ -1688,16 +1317,12 @@ class InspectionOutcome {
   final String taskId;
   final String roomNo;
 
-  /// `passed` 或 `failed`。
   final String result;
 
-  /// `closed`、`cleaner` 或 `pool`。
   final String destination;
 
-  /// 原清房者顯示名稱，結果畫面「回到小美名下」「小美已下班」用它。
   final String? cleanerName;
 
-  /// 被判不通過的項目，依飯店排序；passed 時為空。
   final List<InspectionFailedItem> failedItems;
   final String createdAt;
 
@@ -1718,7 +1343,6 @@ class InspectionOutcome {
   }
 }
 
-/// 查房被判不通過的一個項目：鍵與顯示名稱（例如「浴室無水痕」）。
 class InspectionFailedItem {
   const InspectionFailedItem({required this.key, required this.label});
 
@@ -1733,7 +1357,6 @@ class InspectionFailedItem {
   }
 }
 
-/// `rooms`：房間主檔的一筆。開工單只需要房號與 id 這兩個欄位。
 class RoomSummary {
   const RoomSummary({required this.id, required this.roomNo});
 
@@ -1749,7 +1372,6 @@ class RoomSummary {
   }
 }
 
-/// `NextTask`：下一間推薦清單的一筆（只列 accepted，後端已排好順序）。
 class NextTask {
   const NextTask({
     required this.taskId,
@@ -1763,7 +1385,6 @@ class NextTask {
   final String roomNo;
   final String title;
 
-  /// cleaning｜amenity｜repair｜other，照契約 enum，不縮寫。
   final String type;
   final int redoCount;
 
@@ -1778,7 +1399,6 @@ class NextTask {
   }
 }
 
-/// `DeptPool`：待認領池回應，items 已依後端定義的優先序排好。
 class DeptPool {
   const DeptPool({
     required this.items,
@@ -1788,16 +1408,8 @@ class DeptPool {
 
   final List<PoolItem> items;
 
-  /// 分類筆數。房務池的 key 是 all／cleaning／amenity／repair／other，工務池
-  /// 另外有 urgent／staffReport／deskForward——兩個部門的待認領不是依同一組
-  /// 維度分格的（房務依任務類別、工務依急件與來源），所以 key 也不同一套。
-  /// 一邊有的 key 在另一邊是缺席或 null，取用端一律用 `counts[key]` 取不到
-  /// 就當沒有，不假設某個 key 一定在。
   final Map<String, int> counts;
 
-  /// 這個部門目前在職、可以搶單的員工數（待開通與停用的不算）。畫面靠它
-  /// 分辨兩種都看不到單的情況：大於 0 而 [items] 是空的＝單都被接走了；
-  /// 等於 0＝這個部門沒有人可以搶單。
   final int activeStaffCount;
 
   factory DeptPool.fromJson(Map<String, dynamic> json) {
@@ -1807,9 +1419,6 @@ class DeptPool {
       items: itemsJson
           .map((entry) => PoolItem.fromJson(entry as Map<String, dynamic>))
           .toList(),
-      // 值是 null 的 key 直接不收進 map：工務獨有的那幾個 key 在房務池可能
-      // 以 null 的形式出現，收成 0 會讓畫面把「這個維度不適用」畫成「這個
-      // 維度有 0 張」。
       counts: <String, int>{
         for (final entry in countsJson.entries)
           if (entry.value is int) entry.key: entry.value as int,
@@ -1841,41 +1450,27 @@ class PoolItem {
 
   final String taskId;
 
-  /// 只有工務單有值，例如 W-0412。
   final String? ticketNo;
   final String roomNo;
   final int floor;
   final String title;
 
-  /// cleaning｜amenity｜repair｜other。
   final String category;
 
-  /// guest_scan｜desk_forward｜manager_requeue｜leave_return｜
-  /// shift_end_return｜inspection_return｜staff_report｜system。
   final String source;
   final bool urgent;
   final bool priorityNotify;
   final bool sameFloor;
 
-  /// 未接提醒階段：staff_reminded｜manager_notified；還沒進入提醒為 null。
   final String? reminderStage;
   final String? returnReason;
   final String? handoverNote;
   final String createdAt;
 
-  /// 這張單進池之後已經等了幾分鐘，由後端依回應當下的時間算好；單卡顯示成
-  /// 「等 N 分」。刻意不讓 App 拿 [createdAt] 自己減——等待時間要有單一權威
-  /// 口徑，也不該跟著裝置時鐘跳動。取不到時為 null，單卡不畫這顆標籤。
   final int? waitedMinutes;
 
-  /// 只有工務池的工務單會有值：被驗收不通過退回工務待認領、還沒再完修時，
-  /// 最近一次不通過的原因；單卡據此標「驗收退回」並把原因當副文。[source] 不因
-  /// 驗收退回而改變，分流磚的張數也不變。
   final String? verificationReturnReason;
 
-  /// 無房號的單在後端掛在公共區域佔位房上，房號字串就是這幾個字
-  /// （`AutomationRuleService.PUBLIC_AREA_ROOM_NO`；契約沒有獨立的布林旗標，
-  /// 同 [RepairTicketDetail.isPublicArea]）。
   static const String publicAreaRoomNo = '公共區域';
 
   bool get isPublicArea => roomNo == publicAreaRoomNo;
@@ -1896,15 +1491,12 @@ class PoolItem {
       returnReason: json['returnReason'] as String?,
       handoverNote: json['handoverNote'] as String?,
       createdAt: json['createdAt'] as String,
-      // 後來才補進契約、後端尚未落地；缺席與 null 一律收成 null。
       waitedMinutes: json['waitedMinutes'] as int?,
       verificationReturnReason: json['verificationReturnReason'] as String?,
     );
   }
 }
 
-/// 通知中心單筆通知（`specs/truth/contracts/components/schemas/通知中心.yaml`
-/// 的 notifications schema；後端回應不帶 tenantId／recipientStaffId）。
 class NotificationItem {
   const NotificationItem({
     required this.id,
@@ -1918,22 +1510,15 @@ class NotificationItem {
 
   final String id;
 
-  /// 這則通知是從哪一個推播事件落地的（shared.yaml 的 `PushPayload.event`，
-  /// 十七種事件值）。通知中心靠它決定每一列的分類圖示與顏色——標題只是文案，
-  /// 改一個字不該讓整批通知換顏色。沒見過的值照樣帶進來，由畫面決定怎麼畫。
   final String event;
 
   final String title;
   final String? body;
 
-  /// 點開後的去處（shared.yaml 的 PushTarget）：`kind` 是
-  /// task｜ticket｜pool｜home，kind=task 與 kind=ticket 帶 `taskId`，
-  /// kind=pool 可帶 `highlightTaskId`。
   final Map<String, dynamic> target;
 
   final DateTime createdAt;
 
-  /// 已讀時間；未讀為 null——未讀藍點就看這個欄位。
   final DateTime? readAt;
 
   bool get isUnread => readAt == null;
@@ -1942,8 +1527,6 @@ class NotificationItem {
     final readAt = json['readAt'] as String?;
     return NotificationItem(
       id: json['id'] as String,
-      // 契約把 event 列為必填，但舊版後端還沒帶這個欄位時，整份清單因為少一個
-      // 欄位就載入失敗太過頭——缺值落空字串，畫面把它當成分不出類別的一般通知。
       event: json['event'] as String? ?? '',
       title: json['title'] as String,
       body: json['body'] as String?,
@@ -1954,8 +1537,6 @@ class NotificationItem {
   }
 }
 
-/// `HandoverEntry`：任務頁交辦區的一則交辦。四個欄位全部來自後端——它已經把
-/// 交班單、櫃檯備註、接手進度三個來源併成同一份清單，App 只負責照單呈現。
 class HandoverEntry {
   const HandoverEntry({
     required this.kind,
@@ -1964,14 +1545,12 @@ class HandoverEntry {
     this.at,
   });
 
-  /// 來源，照契約 enum：shift_handover｜desk_note｜requeue_progress｜manager_note。
   final String kind;
 
   final String author;
 
   final String content;
 
-  /// 寫下的時刻；交班單以外的來源不一定有。
   final DateTime? at;
 
   factory HandoverEntry.fromJson(Map<String, dynamic> json) {
@@ -1985,8 +1564,6 @@ class HandoverEntry {
   }
 }
 
-/// `KbSuggestion`：查一下的一則推薦問題。[scope] 是這個問題會查到哪一類資料
-/// （例如「房間記錄」「SOP · 您剛剛跳過這項」），和問題本身一樣由後端給定。
 class AskSuggestion {
   const AskSuggestion({required this.question, required this.scope});
 
@@ -2001,8 +1578,6 @@ class AskSuggestion {
   }
 }
 
-/// `KbSource`：查一下回答的一筆出處。[excerpt] 是被引用資料的原文，
-/// [updatedOn] 是 ISO 日期字串（`yyyy-MM-dd`）。
 class AskSource {
   const AskSource({
     required this.kind,
@@ -2011,7 +1586,6 @@ class AskSource {
     required this.updatedOn,
   });
 
-  /// 出處種類，照契約 enum：sop｜room_memory。
   final String kind;
 
   final String title;
@@ -2028,9 +1602,6 @@ class AskSource {
   }
 }
 
-/// `KbAnswer`：查一下的一次回答。查不到時 [found] 是 false、[answer] 是 null、
-/// [sources] 是空的，只有 [notFoundMessage] 有文字——畫面要照這個分野決定
-/// 「有沒有東西可顯示」，不能把 null 當成空字串畫一個空的回答區。
 class AskAnswer {
   const AskAnswer({
     required this.answerId,
@@ -2040,7 +1611,6 @@ class AskAnswer {
     this.notFoundMessage,
   });
 
-  /// 稽核紀錄 id，之後的回饋與轉問主管都拿它當位址。
   final String answerId;
 
   final bool found;
@@ -2061,22 +1631,13 @@ class AskAnswer {
   }
 }
 
-/// `ReturnInfo`：查房退回後要給接手的人看的那段說明。
-///
-/// 後端把「不合格項」「第幾次重做」「為什麼換人」合成一句 [summary]，依序以
-/// ` · ` 串接，第一段是標題（查房退回：{SOP 項全名}不合格），其餘合起來是原因
-/// （第 N 次重做，換人時再接換人原因）。任務頁要把這兩段分行顯示，所以在這裡
-/// 就地切開——切法與後端組字的規則同一套，App 不自己重組任何一段文字。
 class ReturnInfo {
   const ReturnInfo({required this.summary});
 
   final String summary;
 
-  /// 標題段：`查房退回：換床單鋪床不合格`。
   String get title => summary.split(' · ').first;
 
-  /// 原因段：`第 1 次重做 · 原清房者小林已下班，改由您接手`。原因本身內部也用
-  /// ` · ` 接，所以只切第一刀，不把原因再拆開。
   String get reason {
     final cut = summary.indexOf(' · ');
     return cut < 0 ? '' : summary.substring(cut + 3);
@@ -2122,83 +1683,43 @@ class TaskDetail {
 
   final String id;
 
-  /// 任務狀態，照契約 enum：triage｜pending_review｜rejected｜pool｜
-  /// accepted｜doing｜done｜inspected｜deferred｜interrupted｜cancelled。
   final String state;
 
-  /// 任務類別，照契約 enum：cleaning｜amenity｜repair｜other。狀態文字要靠它
-  /// 分流（`done` 在打掃類是「待查房」，其他類是「已送達」）。
   final String type;
 
-  /// 打掃任務的查房結果：passed｜waived｜failed；還沒查房時為 null。
   final String? inspection;
 
-  /// 這張單目前的負責人。還在池裡沒有人認領時為 null。
-  ///
-  /// 接力到下一間之前要拿它跟登入者比一次：主管在員工按下接力之前把那一間改派
-  /// 走的話，端點照樣回 200，畫面就會把別人的單畫出來。
   final String? assigneeId;
 
-  /// 房間 id。同房工務單要靠它向 `GET /repair-tickets?roomId=` 取。
   final String? roomId;
   final String? roomNo;
   final String? title;
   final String? note;
 
-  /// 開工那一刻鎖定的免查房旗標。打掃類鎖定免查時，完成就直接結案成
-  /// `inspected`／`waived`，不經「待查房」——步驟條最後一段因此是「免查房」
-  /// 而不是「查房」。
   final bool inspectionWaived;
 
-  /// 預估工時（分鐘）；沒有估時的任務為 null。超時提示與完成慶祝頁的
-  /// 「預估 N 分」都讀它。
   final int? estMin;
 
-  /// 已做分鐘。分鐘層級的權威值：進行中時**已含**正在跑的這一段，所以不能
-  /// 拿它當走秒公式的基準再加本段一次，那會把本段重複累計。停住的單顯示
-  /// 「已做 N 分」讀它。
   final int elapsedMinutes;
 
-  /// 進入目前這一段**之前**的累計秒數（契約 `accumulatedSeconds`，不含中斷
-  /// 期間、也不含正在跑的這一段）。任務頁的計時與超時都以它當基準：
-  /// `accumulatedSeconds + (現在 − segmentStartedAt)` 才是目前已做秒數。
-  ///
-  /// 後端還沒回這一欄時這裡是 null，計時退回只顯示 [elapsedMinutes]——寧可
-  /// 不走秒，也不能退回拿已含本段的分鐘數再加一次本段。
   final int? accumulatedSeconds;
 
-  /// 目前這一段計時的起算時刻（契約 `segmentStartedAt`）。只有進行中的任務
-  /// 有值，其餘狀態為 null。任務頁拿它與 [accumulatedSeconds] 把計時算到
-  /// 秒，每秒重算一次，不必為了跳動的秒數反覆打端點。
-  ///
-  /// 後端還沒回這一欄時這裡是 null，計時就退回只顯示分鐘——少一欄不該讓整
-  /// 頁打不開。
   final DateTime? segmentStartedAt;
 
-  /// 任務來源，照契約 `tasks.source` enum：guest｜desk｜system｜staff。
-  /// 畫面上一律換成白話（見 task 畫面的來源用語），enum 值不露出去。
   final String? source;
 
-  /// 已勾選的 SOP 項（`sop_items.id`）。
   final List<String> checkedSopItems;
 
-  /// 已跳過的 SOP 項（`sop_items.id`）。跳過一樣計入 SOP 進度的分子。
   final List<String> skippedSopItems;
 
-  /// 停住原因，例如「等工務：水電」或「工務已修好：水電」。
   final String? holdReason;
 
-  /// 延後時是否為本人延後（有負責人）。主管延後為 false——那種單的負責人
-  /// 已經被拿掉，任務頁不給「開始」。
   final bool deferredBySelf;
 
-  /// 合併後的交辦清單，順序照後端給的順序。
   final List<HandoverEntry> handovers;
 
-  /// 這位員工看過這張任務的交辦了沒有。開工那一刻後端會自己記下已讀。
   final bool handoverRead;
 
-  /// 查房退回資訊；不在退回重做中的任務為 null。
   final ReturnInfo? returnInfo;
 
   factory TaskDetail.fromJson(Map<String, dynamic> json) {
@@ -2232,36 +1753,23 @@ class TaskDetail {
   }
 }
 
-/// 契約 `NextStep.kind`：完成一間之後員工該去哪裡。
-///
-/// 三種去向明確分辨，不是靠 [TaskNextStep.taskId] 是不是 null 推斷——後者會讓
-/// 「查不到下一間」與「今天都清完了」在畫面上長得一模一樣，員工看到的結論卻
-/// 完全相反。
 enum TaskNextStepKind {
-  /// 還有待開始的下一張任務。
   nextTask,
 
-  /// 沒有待開始的單，但今天還有停在一半的單（進行中、已中斷或已延後）。
   unfinishedTask,
 
-  /// 今天排定的房都清完了。
   allClear,
 }
 
-/// 契約 `NextStep`：完成一間之後的去向與那一間是誰。
 class TaskNextStep {
   const TaskNextStep({required this.kind, this.taskId, this.roomNo});
 
   final TaskNextStepKind kind;
 
-  /// 下一張任務的 id；[TaskNextStepKind.allClear] 時為 null。
   final String? taskId;
 
-  /// 下一張任務的房號；[TaskNextStepKind.allClear] 時為 null。
   final String? roomNo;
 
-  /// 後端沒給去向、或給了一個 App 還不認得的 kind 時回 null。認不得的去向
-  /// 硬歸到三種的其中一種，會把員工帶去一個後端沒有說的地方。
   static TaskNextStep? fromJson(Object? json) {
     if (json is! Map<String, dynamic>) {
       return null;
@@ -2283,12 +1791,6 @@ class TaskNextStep {
   }
 }
 
-/// 契約 `TaskCompletion`：完成一間之後回給 App 的東西，剛完成的那張任務詳情
-/// 加上完成畫面要用的兩個值。
-///
-/// 兩個值都在完成這一次往返內給完，App 不為了畫完成畫面再打一次今日進度——
-/// 多一次往返會讓完成畫面在訊號差的樓層卡住，而那正是員工最需要立刻看到回饋
-/// 的時候。
 class TaskCompletion {
   const TaskCompletion({
     required this.task,
@@ -2301,12 +1803,8 @@ class TaskCompletion {
 
   final TaskNextStep? nextStep;
 
-  /// 這是呼叫者今天完成的第幾張打掃單。只有打掃類的完成帶這個值，其餘為
-  /// null——備品單完成時給一個打掃數字，員工會看到一個與這次操作無關的進度。
   final int? cleaningDoneToday;
 
-  /// 租戶是否開著完成慶祝的氣氛呈現。後端省略這個鍵時視為 true，照契約
-  /// `TaskCompletion.celebrationEnabled` 的「省略時視為 true」。
   final bool celebrationEnabled;
 
   factory TaskCompletion.fromJson(Map<String, dynamic> json) {
@@ -2319,7 +1817,6 @@ class TaskCompletion {
   }
 }
 
-/// 契約 `SopItem`：打掃 SOP 項與查房項目同構共表，差別在 [appliesTo]。
 class SopItem {
   const SopItem({
     required this.id,
@@ -2332,7 +1829,6 @@ class SopItem {
 
   final String id;
 
-  /// `cleaning`（打掃 SOP）或 `inspection`（查房項目）。
   final String appliesTo;
   final String itemKey;
   final String label;
@@ -2351,9 +1847,6 @@ class SopItem {
   }
 }
 
-/// 契約裡的時刻欄位（`date-time`）解析成 [DateTime]。欄位缺席、為 null 或
-/// 格式不是合法時刻時都回 null，由畫面自己決定沒有時刻要怎麼顯示——後端少
-/// 回一欄或回了怪字串，不該讓整頁打不開。
 DateTime? _dateTime(Object? value) {
   if (value is! String) {
     return null;
@@ -2361,8 +1854,6 @@ DateTime? _dateTime(Object? value) {
   return DateTime.tryParse(value);
 }
 
-/// 契約裡的 id 陣列欄位（`checkedSopItems`／`skippedSopItems`）解析成字串清單。
-/// 欄位缺席或為 null 時當成空清單，不讓畫面因為後端少回一欄就整頁打不開。
 List<String> _stringList(Object? value) {
   if (value is! List) {
     return const <String>[];

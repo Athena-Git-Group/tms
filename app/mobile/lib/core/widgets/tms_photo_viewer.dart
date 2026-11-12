@@ -7,19 +7,11 @@ import 'tms_motion.dart';
 class TmsViewerPhoto {
   const TmsViewerPhoto({this.image, required this.description});
 
-  /// 要放大顯示的影像。不給時這一張只有黑底。
   final ImageProvider<Object>? image;
 
   final String description;
 }
 
-/// 全螢幕放大看照片。
-///
-/// 現場要判斷的是「這張照片拍清楚了沒有」，縮圖只有 72pt，牆上的裂縫或水漬
-/// 在那個尺寸裡看不出來。放大之後還要能兩指縮放，因為浮水印上的房號與時間
-/// 是事後對帳的依據。
-///
-/// 版面取自原型 `Main.dc.html:1857-1872`。
 Future<void> showTmsPhotoViewer(
   BuildContext context, {
   required String title,
@@ -66,7 +58,6 @@ class _TmsPhotoViewerState extends State<TmsPhotoViewer> {
   static const double _navButtonSize = TmsSize.minTouchTarget;
   static const double _navButtonInset = TmsSpacing.sm;
 
-  /// 安全區為零的機型在置底內容下面補的留白。
   static const double _fallbackBottomInset = TmsSpacing.lg;
 
   @override

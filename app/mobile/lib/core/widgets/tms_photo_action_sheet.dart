@@ -4,23 +4,12 @@ import '../theme.dart';
 import '../tms_semantics.dart';
 import 'tms_motion.dart';
 
-/// 員工要從哪裡取得這張照片。
 enum TmsPhotoSource {
   camera,
 
   library,
 }
 
-/// 問員工「拍照」還是「從相簿選擇」的 iOS 動作選單。
-///
-/// 選完回傳對應的 [TmsPhotoSource]；按取消或點選單外面回傳 null。相機取景
-/// 介面與相簿挑選器都由 iOS 系統提供，這個選單只負責問，不負責取像。
-///
-/// 現場的兩種情況需要不同入口：東西就在眼前時直接拍，而相機權限被關掉、或
-/// 照片是剛才在別的地方拍好的時候，只能從相簿挑。少了選單就等於強迫員工先
-/// 去設定裡開權限才報得了修。
-///
-/// 版面取自原型 `Main.dc.html:1682-1691`。
 Future<TmsPhotoSource?> showTmsPhotoActionSheet(BuildContext context) {
   return Navigator.of(context, rootNavigator: true).push<TmsPhotoSource>(
     PageRouteBuilder<TmsPhotoSource>(
@@ -40,7 +29,6 @@ Future<TmsPhotoSource?> showTmsPhotoActionSheet(BuildContext context) {
 class _PhotoActionSheet extends StatelessWidget {
   const _PhotoActionSheet();
 
-  /// 選單兩張卡與螢幕下緣之間的最小留白，原型寫 `max(安全區下緣, 8)`。
   static const double _minBottomInset = TmsSpacing.sm;
 
   static const double _rowHeight = 57;

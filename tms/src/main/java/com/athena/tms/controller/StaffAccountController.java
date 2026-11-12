@@ -28,13 +28,8 @@ public class StaffAccountController {
         this.staffAccountLoginService = staffAccountLoginService;
     }
 
-    /** 回應形狀取 contracts staff_accounts schema 的公開欄位，不含 password_hash 與 login_id。 */
     public record StaffAccountView(UUID id, String name, String role, String dept, boolean active) {}
 
-    /**
-     * 只回在職（active=true）的員工：這份名單給「選人」的場景用（例如挑查房者、派負責人），
-     * 停用帳號若還列在裡面，就可能被選成操作者或收單人。回應不帶登入憑證相關欄位。
-     */
     @GetMapping("/staff-accounts")
     public List<StaffAccountView> list() {
         long tenantId = TenantContext.require();
@@ -43,19 +38,11 @@ public class StaffAccountController {
                 .toList();
     }
 
-    /** 登入前還沒有身分，不帶任何認證 header（SecurityConfig 對這條路徑 permitAll）。 */
     @PostMapping("/staff-accounts/login")
     public StaffLoginResponse login(@RequestBody StaffLoginRequest request) {
         return staffAccountLoginService.login(request);
     }
 
-    /**
-     * 本人設定自己的新密碼（contracts changeOwnPassword）。回應形狀與登入相同，帶換發的
-     * 權杖，App 直接拿它進首頁。
-     *
-     * <p>臨時密碼登入後被強制改密的員工，其他需要身分的 API 一律被拒，只有這條放行
-     * （見 {@code BearerTokenAuthFilter}）——擋住這條，員工就卡死在改密畫面出不來。
-     */
     @PostMapping("/staff-accounts/change-password")
     public StaffLoginResponse changePassword(@RequestBody StaffChangePasswordRequest request) {
         CurrentActor actor = CurrentActor.require();

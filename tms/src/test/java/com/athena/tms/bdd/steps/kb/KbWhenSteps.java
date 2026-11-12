@@ -6,13 +6,6 @@ import io.cucumber.java.zh_tw.當;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * 查一下模組的 When（dsl.md When 句型區）。每句呼叫
- * {@code specs/truth/contracts/groups/知識與通知/房間記憶與問一下.yaml} 點名的
- * operation，路徑依 dsl.md「怎麼做」欄與 openapi.yaml 的 path（與主殼
- * {@code KbController} 現有的 {@code /staff}/{@code /admin} 路徑不同——後者是
- * 骨架階段的暫定落點，不是權威 contract）。
- */
 public class KbWhenSteps {
 
     private final ScenarioWorld world;

@@ -17,10 +17,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 任務執行模組的 Given（dsl.md Given 句型區，見
- * specs/truth/features/backend/任務執行/dsl.md）。只建立/確認權威狀態，不含任何斷言。
- */
 public class TaskExecutionGivenSteps {
 
     private final ScenarioWorld world;
@@ -83,17 +79,6 @@ public class TaskExecutionGivenSteps {
         clock.setInstant(interruptedAt.plusSeconds(minutes * 60L));
     }
 
-    /**
-     * 直接改寫 task_events／tasks 落地這段歷程，不透過任務引擎——V1 的任務引擎還沒有
-     * 「恢復」這個轉移（見 main 的 TaskLifecycleController 把 /resume 固定回 501），
-     * 這裡的歷程是測試資料本身要表達的既成事實，不是在練習一次真正的狀態轉移。
-     *
-     * <p>各段長度等於「分鐘」欄位：第一段寫 started 事件，之後每段依「狀態」欄位寫
-     * interrupted（轉為已中斷）或 resumed（轉回進行中）。已結束的進行中段落累計進
-     * worked_sec；最後一段若仍是進行中，則維持開放（segment_started_at＝該段開始時刻，
-     * 不計入 worked_sec），時間上恰好落在目前 Clock——讓之後呼叫「完成」時，
-     * 從 segment_started_at 到當下的這段也能被正確併入。
-     */
     @假設("{string} 的進行歷程如下：")
     public void taskTimelineIs(String taskKey, DataTable table) {
         UUID taskId = resolveTaskId(taskKey);

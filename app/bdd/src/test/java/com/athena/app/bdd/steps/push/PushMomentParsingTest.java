@@ -11,10 +11,6 @@ import java.time.ZonedDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * 「時刻」參數的解析只看傳入的裝置日期，不碰真實時鐘：場景撥過裝置時鐘後，
- * 「今天」「昨天」與「12/31」這類省年日期都要跟著注入的日期走。
- */
 class PushMomentParsingTest {
 
     private static final LocalDate DEVICE_TODAY = LocalDate.of(2027, 1, 2);

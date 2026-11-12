@@ -5,17 +5,7 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 
-/// 驗工務首頁會跟著工務單的狀態變：在待認領接了一張單、或在詳情頁把一張單
-/// 修完，回到首頁看到的要是新的那一份今日進度，不是進場時取的那一份。
-///
-/// 為什麼這組測試重要：待認領與工務單詳情都不在首頁那一層底下，它們改了後端
-/// 的狀態，首頁讀的 `GET /me/today` 不會自己變新。少了那一聲「資料舊了」的
-/// 廣播，工務完修一張單退回首頁，首頁仍寫著待開始；剛接到的單也不會出現在
-/// 「我的任務」。這組測試走的是真的畫面路徑（點分頁、點認領鈕、點完修回報），
-/// 而不是直接觸發廣播，所以漏呼叫的那一處會在這裡紅。
 void main() {
-  // 維修中那張卡的脈動圓點是無限循環動畫，動態開著 `pumpAndSettle` 就永遠等
-  // 不到靜止。
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
@@ -100,8 +90,6 @@ void main() {
   });
 }
 
-/// 詳情頁與完修面板的按鈕都貼在畫面下緣，800x600 的預設測試視窗放不完整張
-/// 面板，點下去會落在視窗外面。改成與基準截圖同一台 iPhone 17 的邏輯尺寸。
 void _useIPhoneSurface(WidgetTester tester) {
   tester.view.physicalSize = const Size(402, 874);
   tester.view.devicePixelRatio = 1;
@@ -184,11 +172,6 @@ RepairTicketDetail _detail({required String state}) {
   );
 }
 
-/// 記憶體 fake，扮演一個狀態會真的改變的後端。
-///
-/// 只是回固定資料的 fake 抓不到這條 bug：首頁不重查也「看起來」正確，因為
-/// 新舊兩份一模一樣。所以這裡的認領、開始、完修都會把下一次 `GET /me/today`
-/// 的回應換成改過狀態的那一份；首頁沒有重查，拿到的就還是舊的。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient({required this.today, required this.pool, this.ticket});
 

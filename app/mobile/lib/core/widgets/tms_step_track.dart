@@ -4,27 +4,14 @@ import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
 
-/// 步驟條上一步的狀態。
-///
-/// 三態是刻意分開的：只分「走到了／還沒走到」的話，員工看不出「現在站在哪一
-/// 步」——那正是步驟條唯一要回答的問題。
 enum TmsStepStatus {
-  /// 已經走完的步驟。實心圓加一個勾。
   done,
 
-  /// 現在停在這一步。空心圓加內點，標籤加粗。
   current,
 
-  /// 還沒走到的步驟。虛線圓。
   pending,
 }
 
-/// 步驟條上的一步。
-///
-/// [wrap] 給呼叫端把自己的 accessibility 節點包在這一步外面用。步驟條不自己
-/// 掛 id：房務任務頁與工務單詳情用的是兩套不同的 id 命名
-/// （`task.step-track.{步驟名}` 與 `ticket.stepper.{序號}`），在元件裡掛死會
-/// 讓其中一邊定位不到。
 class TmsStepTrackStep {
   const TmsStepTrackStep({
     required this.label,
@@ -37,21 +24,12 @@ class TmsStepTrackStep {
   final Widget Function(Widget node)? wrap;
 }
 
-/// 橫向步驟條：房務任務頁與工務單詳情共用的同一套畫法。
-///
-/// 頭尾兩步貼齊左右邊、中間的步驟置中，步驟之間是會自動拉長的連接線，橫向空
-/// 間全部用上。連接線的顏色跟著它右邊那一步走：走到了就是品牌色，沒走到就是
-/// 淺灰——所以一條線從頭亮到目前這一步，員工掃一眼就知道進度推到哪。
-///
-/// [onDark] 給深底（任務頁進行中時的青綠標題區）用：整組顏色換成白色系，否則
-/// 品牌色疊在品牌色上會整個看不見。
 class TmsStepTrack extends StatelessWidget {
   const TmsStepTrack({super.key, required this.steps, this.onDark = false});
 
   final List<TmsStepTrackStep> steps;
   final bool onDark;
 
-  /// 步驟圖示的邊長。連接線的上緣留白要對齊它的圓心，見 [_connector]。
   static const double _nodeSize = 28;
 
   Color _iconColor(TmsStepStatus status) {
@@ -64,7 +42,6 @@ class TmsStepTrack extends StatelessWidget {
     return reached ? TmsColors.brandPrimary : TmsColors.systemGray2;
   }
 
-  /// 已完成那顆實心圓裡面那個勾的顏色。勾是挖在圖示色上的，所以要用對比色。
   Color get _checkColor =>
       onDark ? TmsColors.brandPrimary : TmsColors.brandOnPrimary;
 
@@ -78,7 +55,6 @@ class TmsStepTrack extends StatelessWidget {
     return reached ? TmsColors.label : TmsColors.tertiaryLabel;
   }
 
-  /// 連接線的顏色。[reached] 是線右邊那一步走到了沒。
   Color _lineColor({required bool reached}) {
     if (onDark) {
       return reached
@@ -109,7 +85,6 @@ class TmsStepTrack extends StatelessWidget {
     );
   }
 
-  /// 兩步之間那條線。上緣留 13 讓 3pt 的線剛好落在 28pt 圖示的圓心高度。
   Widget _connector({required bool reached}) {
     return Container(
       height: 3,
@@ -121,11 +96,6 @@ class TmsStepTrack extends StatelessWidget {
     );
   }
 
-  /// 一步：圖示在上、標籤在下。
-  ///
-  /// 標籤通常比圖示寬，所以圖示在這一欄裡要靠哪邊對齊得看位置：第一步靠左、
-  /// 最後一步靠右、中間置中。不這樣做的話頭尾兩步的圖示會被標籤推離畫面邊
-  /// 緣，線的長度就對不上。
   Widget _node(TmsStepTrackStep step, {required int index, required int total}) {
     final CrossAxisAlignment align;
     if (index == 0) {
@@ -166,9 +136,6 @@ class TmsStepTrack extends StatelessWidget {
   }
 }
 
-/// 畫步驟圖示的三種形態。
-///
-/// 三種形態都佔 28 × 28，圓心與直徑一致，換形態時圖示不會左右跳動。
 class _TmsStepNodePainter extends CustomPainter {
   const _TmsStepNodePainter({
     required this.status,
@@ -218,11 +185,6 @@ class _TmsStepNodePainter extends CustomPainter {
     }
   }
 
-  /// 虛線圓。Flutter 的畫筆沒有虛線，所以自己把圓切成等長的弧段來畫。
-  ///
-  /// 一段實線 4、一段空白 3.2 是原型的值，但圓周未必整除這個週期，直接照抄會
-  /// 在起點收尾處留下一段長短不一的接縫。這裡先算出最接近的整數段數，再把週
-  /// 期等比縮放成整除——實線與空白的比例維持原樣，接縫不見了。
   void _drawDashedCircle(Canvas canvas, Offset center, double radius) {
     const dashLength = 4.0;
     const gapLength = 3.2;

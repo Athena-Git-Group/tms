@@ -20,14 +20,6 @@ import java.util.UUID;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 查房模組的 Given（查房/dsl.md Given 句型區）。只建立/確認權威狀態，不含任何斷言——
- * 「必查」清單在 {@link InspectionThenSteps}。
- *
- * <p>本套件兩個設定鍵（{@code inspection_waived_enabled}、{@code pms.writeback.room_status}）
- * 沿用「以主管身分呼叫 updateTenantConfig」慣例：臨時建一個不對外曝光姓名的主管帳號
- * 純粹用來滿足認證要求。
- */
 public class InspectionGivenSteps {
 
     private final ScenarioWorld world;
@@ -80,8 +72,6 @@ public class InspectionGivenSteps {
 
     @假設("飯店的 PMS 為手動匯入模式")
     public void hotelPmsIsManualImportMode() {
-        // dsl.md 沒有指名鍵值；沿用姊妹鍵「pms.writeback.room_status」的命名慣例，
-        // 供應商記在 pms.provider，值 manual 表示沒有可回寫的 PMS 對象。
         updateTenantConfig("pms.provider", "manual");
     }
 
@@ -112,8 +102,6 @@ public class InspectionGivenSteps {
             } else {
                 taskId = builder.state("inspected").create();
                 if ("waived".equals(result)) {
-                    // TaskFixtures 的 inspected 狀態固定走 engine.passInspection，事件型別
-                    // 寫死 inspection_passed；免查這支改標成 inspection_waived 才跟結果一致。
                     renameLastInspectionEvent(taskId, "inspection_waived");
                 }
             }
@@ -126,12 +114,6 @@ public class InspectionGivenSteps {
         }
     }
 
-    /**
-     * 查房/dsl.md「飯店目前設定的查房項目如下：」——把租戶 applies_to=inspection 的啟用集合
-     * 整批換成表格列出的這些：先把既有的全部停用（下架用停用不刪，與 sop_items 的設計一致），
-     * 再依表格順序寫入／重新啟用，sort_order 就是列序。item key 由 label 產生，
-     * 規則集中在 {@link InspectionItemKeys}，When 句解析不到 label 時用同一條規則對回來。
-     */
     @假設("飯店目前設定的查房項目如下：")
     public void hotelInspectionItemsAre(DataTable table) {
         long tenantId = tenantFixtures.testTenantId();
@@ -148,7 +130,6 @@ public class InspectionGivenSteps {
         deactivateAllInspectionItems(tenantFixtures.testTenantId());
     }
 
-    /** 在現行集合之後再加一項：sort_order 取目前最大值加一，確保「依飯店排序」時排在最後。 */
     @假設("飯店新增了查房項目 {string}")
     public void hotelAddsInspectionItem(String label) {
         long tenantId = tenantFixtures.testTenantId();
@@ -160,12 +141,6 @@ public class InspectionGivenSteps {
         upsertInspectionItem(tenantId, label, maxOrder + 1);
     }
 
-    /**
-     * 查房/dsl.md「"{主管}" 已判定 "{任務}" 查房全部項目通過」——Arrange 用的「另一位主管先送出」。
-     * 走 {@link InspectionFixtures#submit} 真的打 createInspections，items 為現行全集且全部通過。
-     * 這是前提不是待驗證的操作，所以送出沒成功直接視為情境建不起來；回應也不存進
-     * {@code lastInspectionResponse}，留給後面的 When 句。
-     */
     @假設("{string} 已判定 {string} 查房全部項目通過")
     public void managerAlreadyPassedFullInspection(String managerName, String roomNo) {
         long tenantId = tenantFixtures.testTenantId();
@@ -227,18 +202,9 @@ public class InspectionGivenSteps {
                 .create();
         world.rememberTask(roomNo, taskId.toString());
 
-        // dsl.md：「再呼叫 tasksStart」——走真正的 API 路徑而非直接呼叫 TaskEngine，
-        // 讓「開工當下鎖定 inspection_waived」這段產品邏輯經過和 production 相同的入口被驗證。
         apiClient.post("/tasks/" + taskId + "/start", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
-    /**
-     * 確認這位員工的查房判定會被系統拒絕。角色對動作的權限由程式碼
-     * （{@link RolePermissions}）決定，資料庫沒有任何列可以把單一員工的
-     * inspect_submit 設成未勾選。這個前提成立與否取決於員工的角色，
-     * 所以這裡查出角色後交給同一份權限程式碼判斷。角色其實有權限時若
-     * 當作成立，後面的「操作被拒絕」斷言驗的是系統裡不存在的行為。
-     */
     @假設("{string} 的角色沒有查房判定（inspect_submit）權限")
     public void staffLacksInspectSubmitPermission(String staffName) {
         UUID staffId = UUID.fromString(world.staffId(staffName));

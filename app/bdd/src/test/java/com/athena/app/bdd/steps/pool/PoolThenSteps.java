@@ -14,21 +14,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 待認領模組的 Then。語意逐列對照
- * {@code specs/truth/features/ios-app/待認領/dsl.md} 的「必查」欄：畫面半邊用
- * accessibility id（{@code pool.card.*}／{@code pool.category.*}，命名見 ui-plan.md）
- * 斷言；「與後端回應一致」半邊走 {@link BackendChannel} 以當事員工身分讀回
- * {@code GET /pool}（契約 listDeptPool），兩邊都要對上才算通過。
- */
 public class PoolThenSteps {
 
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(10);
 
-    /** 單卡 accessibility id 的共同前綴（ui-plan F4：{@code pool.card.{roomNo}}）。 */
     private static final String CARD_PREFIX = "pool.card.";
 
-    /** 分類中文 → 契約 PoolCategory 的值；「全部」是分類磚特有的彙總列，不是任務類別。 */
     private static final Map<String, String> CATEGORY_KEYS = Map.of(
             "全部", "all",
             "打掃", "cleaning",
@@ -36,19 +27,12 @@ public class PoolThenSteps {
             "修繕", "repair",
             "其他", "other");
 
-    /**
-     * 單卡資訊表「項目」欄 → 單卡上那一列的 accessibility id 後綴。
-     *
-     * <p>四列在卡上長得不一樣：來源是標題底下那一行副標，接手進度是卡內整塊的
-     * 備註，原因與說明是標籤列上的膠囊。讀值的方式一樣，所以這裡只記 id。
-     */
     private static final Map<String, String> CARD_FIELD_IDS = Map.of(
             "來源", "subtitle",
             "原因", "return-reason",
             "接手進度", "handoff-progress",
             "說明", "rule-hit-tag");
 
-    /** 未接提醒階段 → 單卡標籤的 id 後綴（ui-plan 裁決 2 的兩段標籤）。 */
     private static final Map<String, String> REMINDER_TAG_IDS = Map.of(
             "未接 · 已提醒同仁", "status-tag--unaccepted-notified-peer",
             "未接 · 已通知主管", "status-tag--unaccepted-notified-manager");
@@ -69,10 +53,6 @@ public class PoolThenSteps {
         return key;
     }
 
-    /**
-     * 必查：目前部門的列表中單卡順序剛好等於清單，沒有多也沒有少，並與後端 listDeptPool
-     * （帶目前部門的 {@code dept}）回應一致。清單寫的是房務池的房號或工務池的工務單號。
-     */
     @那麼("^待認領列表依序為 (.+)$")
     public void poolListOrderIs(String roomListText) {
         List<String> expected = splitList(roomListText);
@@ -95,15 +75,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：待認領標題下方有部門切換且停在該部門（{@code pool.dept-switch} 的選中項），
-     * 分類磚是該部門那一組（房務：全部、備品、打掃、其他；工務：全部、急件、房務報修、櫃檯），
-     * 列表內容與 listDeptPool 帶該部門 {@code dept} 的回應一致，App 本機的部門選擇等於該部門。
-     *
-     * <p>選中項有兩種看法：iOS 把 Flutter 的 selected 語意映成元素的 {@code selected} 屬性；
-     * App 若改以 {@code --selected} 的狀態修飾 id 表達（單卡標亮用的同一套慣例），也認。
-     * 兩種都沒有才算沒停在該部門。
-     */
     @那麼("待認領目前的部門為 {string}")
     public void poolCurrentDeptIs(String deptChinese) {
         String dept = PoolDept.deptKey(deptChinese);
@@ -142,14 +113,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：該單卡上沒有 {@code pool.card.{房號}.claim-button}（工務池為
-     * {@code engPool.item.{單號}.claim-button}）節點，也沒有任何可觸發認領的操作；後端該單
-     * 仍是待認領、沒有負責人。
-     *
-     * <p>單卡存在與沒有認領鈕兩個條件缺一不可：整張卡不在畫面上時找不到鈕也是真的，
-     * 但那驗的是「清單上沒這張單」，不是「看得到卻不能搶」。
-     */
     @那麼("{string} 的單卡沒有搶單鈕")
     public void poolCardHasNoClaimButton(String task) {
         String dept = PoolDept.currentDept(world);
@@ -184,7 +147,6 @@ public class PoolThenSteps {
         }
     }
 
-    /** 該部門那一組分類磚的 id：房務沿用 {@code pool.category.*}，工務沿用工務待認領的 {@code engPool.category.*}。 */
     private static List<String> deptChipIds(String dept) {
         if (PoolDept.ENGINEERING.equals(dept)) {
             return List.of("engPool.category.all.chip", "engPool.category.urgent.chip",
@@ -240,15 +202,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：該單卡的位置顯示「公共區域」而不是房號；後端該任務沒有房號。
-     * accessibility id：{@code pool.card.common-area-label}（ui-plan.md 標記「待原型補畫面」，
-     * 依 dsl 指定的 id 做最薄呈現）。
-     *
-     * <p>「後端該任務沒有房號」在資料庫的樣子是掛在公共區域佔位房上——{@code tasks.room_id}
-     * 是 NOT NULL，產品碼（AutomationRuleService／RepairService）一律用一間
-     * {@code room_type='public_area'} 的房代表無房號，所以這裡驗的是該房的 room_type。
-     */
     @那麼("{string} 的單卡位置顯示 {string}")
     public void poolCardLocationShows(String task, String location) {
         WebElement label = world.waitForTestId(CARD_PREFIX + "common-area-label", SCREEN_TIMEOUT);
@@ -264,13 +217,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：分類標籤逐列顯示類別與筆數，並與後端回應一致。筆數 0 的分類畫面上沒有筆數節點。
-     * accessibility id：{@code pool.category.{category}.chip}、{@code pool.category.{category}.count}。
-     *
-     * <p>筆數 0 的分類要斷言節點不存在，而不是斷言節點上寫著 0。畫面上一顆寫著 0 的紅色
-     * 徽章看起來像有單子等著接，員工會白點一次；設計因此在 0 的時候整顆徽章不畫。
-     */
     @那麼("待認領分類標籤顯示如下：")
     public void poolCategoryChipsShow(DataTable table) {
         JsonNode counts = poolResponse().path("counts");
@@ -293,13 +239,6 @@ public class PoolThenSteps {
         }
     }
 
-    /**
-     * 必查：池裡一張單都接不到時，待認領顯示這個標題與這句說明。
-     * accessibility id：{@code pool.empty-state}。
-     *
-     * <p>標題與說明讀的是同一個節點：空狀態整塊只掛一個 id，兩句話一起放進它的
-     * label，定位與讀值才落在同一個元素上。
-     */
     @那麼("待認領空狀態顯示標題 {string} 與說明 {string}")
     public void poolEmptyStateShows(String title, String description) {
         WebElement emptyState = world.waitForTestId("pool.empty-state", SCREEN_TIMEOUT);
@@ -313,31 +252,18 @@ public class PoolThenSteps {
         assertLabelContains(action, "pool.empty-state.action", label);
     }
 
-    /**
-     * 必查：空狀態底下沒有任何動作鈕。
-     *
-     * <p>整池都沒有單的時候切回全部分類看到的還是空清單，所以這個分支不給按鈕，
-     * 員工才不會按一下發現什麼都沒變。
-     */
     @那麼("待認領空狀態沒有動作鈕")
     public void poolEmptyStateHasNoAction() {
         world.waitForTestId("pool.empty-state", SCREEN_TIMEOUT);
         assertAbsent("pool.empty-state.action");
     }
 
-    /** 斷言某個 accessibility id 不在畫面上。用 findElements（空清單）而不是 findElement（要等逾時）。 */
     private void assertAbsent(String id) {
         if (!world.driver().findElements(world.byTestId(id)).isEmpty()) {
             throw new AssertionError("畫面上不應出現 " + id + "，實際找得到");
         }
     }
 
-    /**
-     * 必查：待認領列表區顯示該空狀態文字，搶單動作不可用；後端該部門沒有在職員工
-     * （待開通與停用的員工不能搶單）。
-     * accessibility id：{@code pool.empty-state--no-active-staff}（ui-plan.md 標記「待原型補畫面」，
-     * 依 dsl 指定的 id 做最薄呈現）。
-     */
     @那麼("待認領顯示空狀態 {string}")
     public void poolShowsEmptyState(String message) {
         WebElement emptyState = world.waitForTestId("pool.empty-state--no-active-staff", SCREEN_TIMEOUT);
@@ -365,12 +291,6 @@ public class PoolThenSteps {
         assertLabelContains(tag, CARD_PREFIX + key + "." + suffix, label);
     }
 
-    /**
-     * 以目前登入者的身分讀回 {@code GET /pool}，並帶上畫面當下選中的分類——App 點分類磚
-     * 是重打一次帶 {@code category} 的查詢，讀回不帶就會跟畫面比到不同的兩份資料。
-     * 主管沒有部門，後端要靠 {@code dept} 才知道回哪一池，所以主管讀回時明帶目前的部門；
-     * 現場員工省略，後端依登入身分回她自己部門的池。
-     */
     private JsonNode poolResponse() {
         List<String> query = new ArrayList<>();
         if (PoolDept.isManager(world.loggedInStaff())) {
@@ -388,12 +308,6 @@ public class PoolThenSteps {
         return cardKeysOnScreen(PoolDept.HOUSEKEEPING);
     }
 
-    /**
-     * 畫面上目前有哪些單卡，依由上而下排序。房務池的單卡 id 是 {@code pool.card.{房號}}，
-     * 卡內各列是 {@code pool.card.{房號}.{欄位}}，所以掃完前綴後把帶「.」的子節點與帶「--」
-     * 的狀態修飾（例如推播標亮）濾掉。工務池的單卡是 {@code engPool.item.{單號}.card}，
-     * 卡本身就掛在 {@code .card} 這一段上，掃到它時取單號那一段。
-     */
     private List<String> cardKeysOnScreen(String dept) {
         String prefix = PoolDept.cardPrefix(dept);
         List<String> keys = new ArrayList<>();
@@ -412,11 +326,6 @@ public class PoolThenSteps {
         return keys;
     }
 
-    /**
-     * 劇本用「任務」指涉單卡（有房號的寫房號，沒房號的寫內容），單卡的 id 用房號當
-     * 識別段，所以要先用後端回應把內容換算成房號——公共區域的單在後端的房號就是
-     * 「公共區域」。
-     */
     private String cardKey(String task) {
         Map<String, String> titleToRoom = new LinkedHashMap<>();
         for (JsonNode item : poolResponse().path("items")) {

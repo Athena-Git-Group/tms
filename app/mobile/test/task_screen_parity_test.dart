@@ -8,12 +8,6 @@ import 'package:tms_staff_app/core/widgets/tms_fab.dart';
 import 'package:tms_staff_app/core/widgets/tms_tip_popover.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 
-/// 任務頁對齊設計原型的幾件事：狀態列一頁只畫一則、SOP 清單的勾選框與跳過
-/// 條件、進度分子只數勾選的、「這間房的資訊」最多兩列。
-///
-/// 這幾條互相牽動：進度分子與置底那行「還有 N 項沒勾」數的是同一批項目，狀態
-/// 列的優先序決定說明泡泡要不要讓位。放在同一支測試裡，動其中一邊時另一邊走
-/// 樣會當場被讀出來。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();
@@ -32,8 +26,6 @@ void main() {
     );
     await tester.pumpWidget(
       CupertinoApp(
-        // 同一支測試連續 pump 兩種狀態時換一把 key：沒換的話 Flutter 認得同一個
-        // State，initState 不會再跑一次，第二次讀到的還是第一次那筆任務。
         home: TaskScreen(
           key: UniqueKey(),
           roomNo: task.roomNo ?? '305',
@@ -343,7 +335,6 @@ void main() {
           accumulatedSeconds: 0,
           segmentStartedAt: startedAt,
         ),
-        // 內容要長到捲得動，導覽列才會換成捲動後那一組標題。
         sopItems: <SopItem>[
           for (var i = 0; i < 8; i++)
             SopItem(
@@ -459,7 +450,6 @@ RepairTicketSummary _ticket({
   );
 }
 
-/// 記憶體 fake：固定回同一筆任務、同一份 SOP 與同一批工務單。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient({
     required this.task,

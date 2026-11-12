@@ -18,10 +18,6 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 班末掃描模組的 stepdef（dsl.md: specs/truth/features/backend/班末掃描/dsl.md）。
- * 只落地本模組專屬的 When／Then 句型，共用句型見 steps/common。
- */
 public class ShiftEndSteps {
 
     private final ScenarioWorld world;
@@ -57,10 +53,6 @@ public class ShiftEndSteps {
         jobTrigger.run("shift-end-scan");
     }
 
-    /**
-     * dsl.md 怎麼做：以主管身分呼叫 tasksRequeue（POST /tasks/{id}/requeue），附交代。
-     * 交代對應 contracts tasksRequest 的 note 欄位（note：住客原文/翻譯/交代/當場回答）。
-     */
     @當("{string} 以交代 {string} 把 {string} 退回待認領")
     public void managerRequeuesTaskWithHandoverNote(String managerName, String handoverNote, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
@@ -69,10 +61,6 @@ public class ShiftEndSteps {
         apiClient.post("/tasks/" + taskId + "/requeue", BddApiClient.Auth.staff(world.jwt(managerName)), body);
     }
 
-    /**
-     * dsl.md 必查：權威狀態——每一列都有 dept housekeeping、狀態 pool 的任務，
-     * 並且有給的欄位都相符；跨視角——房務員呼叫 listDeptPool（GET /pool）時看得到這些單。
-     */
     @那麼("房務待認領包含以下任務：")
     public void poolContainsTasks(DataTable table) {
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
@@ -105,10 +93,6 @@ public class ShiftEndSteps {
         }
     }
 
-    /**
-     * dsl.md 必查：不該發生——outbox 沒有任何收件人是該員工、內容帶該任務 id 或該房號的
-     * kind push 資料列。{@code 任務} 參數在本模組固定是房號，直接兼用來比對推播文字內容。
-     */
     @那麼("{string} 沒有收到關於 {string} 的推播")
     public void staffReceivedNoPushAboutTask(String staffName, String taskKey) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
@@ -155,7 +139,6 @@ public class ShiftEndSteps {
         }
     }
 
-    /** 跨視角驗證要用「DB 裡目前在職的房務員」，不限定是哪個 Given 建的員工。 */
     private String mintHousekeepingStaffJwt() {
         long tenantId = tenantFixtures.testTenantId();
         Map<String, Object> staff = dbProbe

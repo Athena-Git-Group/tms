@@ -9,14 +9,6 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 交班單 snapshot 測試資料入口（{@code handovers}，欄位依 data-model.dbml {@code Table handovers}）。
- *
- * <p>{@code snapshot} 定格交班當下的任務清單；這裡直接把 {@link HandoverItem} 原樣序列化成
- * {@code [{target, content, authorName}, …]}，不做任何欄位轉譯。{@code generated_by} 固定寫
- * {@code system}（班末掃描產生是預設路徑，見 dbml Note；需要 {@code manager} 手動情境的呼叫端
- * 請直接用 JdbcClient 另外處理，不在這個入口的範圍內）。
- */
 public class HandoverFixtures {
 
     private final JdbcClient jdbcClient;
@@ -59,6 +51,5 @@ public class HandoverFixtures {
         return objectMapper.writeValueAsString(rows);
     }
 
-    /** 交班單一筆項目：target 是房號或樓層層級的識別字，content 是交辦內容，authorName 是撰寫人。 */
     public record HandoverItem(String target, String content, String authorName) {}
 }

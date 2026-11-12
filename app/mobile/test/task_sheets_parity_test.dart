@@ -11,16 +11,9 @@ import 'package:tms_staff_app/features/task/ask_sheet.dart';
 import 'package:tms_staff_app/features/task/hold_sheet.dart';
 import 'package:tms_staff_app/features/task/repair_sheet.dart';
 
-/// 三個底部面板對齊設計原型：延後／中斷（`Main.dc.html:1411-1565`）、報修
-/// （`Main.dc.html:1455-1550`）、查一下（`Main.dc.html:1570-1676`）。
-///
-/// 三者共用同一個外框與同一組選項列，而且「點一下就算數」是這一輪最大的互動
-/// 改動，所以放在同一支測試裡：外框或選項列被動到時，三個面板會一起失敗，不
-/// 會只有其中一個被改壞而沒人發現。
 void main() {
   setUp(() {
-    // 查一下的載入卡掛的是無限來回的呼吸動畫，不關掉的話 pumpAndSettle 等不
-    // 到靜止，會逾時而不是失敗。
+    // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
     TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
         .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
@@ -279,7 +272,6 @@ void main() {
       expect(find.text('可能是沒有記錄，或資料還在更新。系統不會用猜的回答。'), findsOneWidget);
       expect(find.text('問主管'), findsOneWidget);
       expect(find.text('這個答案有幫助嗎？'), findsNothing);
-      // 置底那一顆是回到任務，問主管在卡裡，兩者不是同一顆。
       expect(
         tester.widget<TmsSheetButton>(find.byType(TmsSheetButton)).label,
         '回到任務',
@@ -306,7 +298,6 @@ void main() {
   });
 }
 
-/// 把延後／中斷面板推上畫面，跑完 [act] 之後回傳面板關掉時交出來的結論。
 Future<HoldSheetResult?> _pumpHoldSheet(
   WidgetTester tester, {
   required HoldSheetMode mode,
@@ -398,14 +389,12 @@ const AskAnswer _notFoundAnswer = AskAnswer(
   sources: <AskSource>[],
 );
 
-/// 記憶體 fake：記下面板送出去的東西，讓測試讀得到「面板到底送了什麼」。
 class _FakeApiClient extends ApiClient {
   _FakeApiClient({this.answer, this.precheck});
 
   final AskAnswer? answer;
   final RepairTicketPrecheck? precheck;
 
-  /// 把回答壓著不放，測試才有機會讀到載入態。
   bool holdAnswer = false;
 
   String? deferredReason;

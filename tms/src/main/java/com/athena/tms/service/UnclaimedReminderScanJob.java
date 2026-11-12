@@ -15,28 +15,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 待認領未接提醒的週期掃描（裁決 B，取代已廢除的 L1/L2/L3 逾時升級鏈）：一間房進了
- * 部門待認領池卻一直沒人接，先提醒同仁、再通知主管，避免房務／工務同仁沒注意到
- * 池子裡有新單。
- *
- * <p>只掃 {@code state=pool} 的任務：待開始、進行中的單已經有人在處理，不屬於
- * 「沒人接」的情境；認領、改派或撤回後任務自然離開 pool，掃描query 本身就排除掉，
- * 不需要額外清空階段。
- *
- * <p>門檻分鐘數讀 {@code tenant_config} 鍵 {@code unclaimed_reminder_minutes}
- * （見 V12__unclaimed_reminder_thresholds.sql），一般單與急件（{@code tasks.urgent}）
- * 各自獨立的「提醒同仁」「通知主管」分鐘數。從任務進池的時間算起（最近一次
- * {@code created} 或 {@code returned_to_pool} 事件；查不到事件時退回
- * {@code tasks.created_at}）：超過提醒同仁門檻先進 {@code staff_reminded}，超過通知
- * 主管門檻再進 {@code manager_notified}（見 V13__unclaimed_reminder_stage.sql）。
- * 兩段各自只推播一次——用條件式更新（WHERE 帶前一階段）推進階段，兩次掃描重疊時
- * 第二次一列也改不到；推播以「任務＋階段＋收件人」當冪等鍵，重跑不會重複插入。
- * 每段都只記「目前到哪個階段」，不另開新表或新 {@code task_events} 型別。
- *
- * <p>時間一律用注入的 {@link Clock}，測試能以可調時鐘直接把「現在」推到門檻之後，
- * 不必真等。
- */
 @Component
 public class UnclaimedReminderScanJob {
 
@@ -121,12 +99,6 @@ public class UnclaimedReminderScanJob {
         }
     }
 
-    /**
-     * 把任務的未接提醒階段推進一段。前一階段直接寫在 UPDATE 的 WHERE 裡（用
-     * {@code IS NOT DISTINCT FROM} 相容 NULL），另一次掃描搶先推進過這階段時這裡
-     * 一列也改不到，直接放棄，同一階段不會推進第二次。只更新 state=pool 的任務——
-     * 認領、改派或撤回後任務已經不在池中，這裡自然不會再動它。
-     */
     private boolean advanceStage(long tenantId, UUID taskId, String stage, String fromStage) {
         int updated = jdbcTemplate.update(
                 """
@@ -139,11 +111,6 @@ public class UnclaimedReminderScanJob {
         return updated > 0;
     }
 
-    /**
-     * 提醒同仁推播同部門在職成員；通知主管推播全體在職主管。去處都是部門待認領。
-     * 收件人查詢共用 {@link PushOutboxWriter#activeDeptStaffIds}／{@link PushOutboxWriter#activeManagerIds}
-     * ——與 {@link PushNotifier} 的部門推播、其他通知全體主管的事件同一套認定，不在這裡另開一份。
-     */
     private void notifyStage(long tenantId, UUID taskId, String stage, String dept, String label, int staffMinutes) {
         boolean isStaffStage = "staff_reminded".equals(stage);
         String pushEvent = isStaffStage ? "unclaimed_reminder_staff" : "unclaimed_reminder_manager";
@@ -159,10 +126,6 @@ public class UnclaimedReminderScanJob {
         }
     }
 
-    /**
-     * 房務／其他部門單用「房號 內容」；工務單用「單號 類別」（報修人與房務看慣的叫法不同）。
-     * 類別中文對照共用 {@link RepairService#CATEGORY_LABELS}，不維護第二份工務單類別名稱表。
-     */
     private static String labelOf(Map<String, Object> row) {
         Object ticketNo = row.get("ticket_no");
         if (ticketNo != null) {
@@ -172,7 +135,6 @@ public class UnclaimedReminderScanJob {
         return row.get("room_no") + " " + row.get("title");
     }
 
-    /** 讀 {@code unclaimed_reminder_minutes} 鍵；沒設定時回 null，這輪不掃。 */
     private JsonNode loadThresholds(long tenantId) {
         List<String> values = jdbcTemplate.queryForList(
                 "SELECT value #>> '{}' FROM tenant_config WHERE tenant_id = ? AND key = 'unclaimed_reminder_minutes'",

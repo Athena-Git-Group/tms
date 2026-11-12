@@ -20,19 +20,8 @@ import java.util.Set;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
-/**
- * 今日進度模組（dsl.md：specs/truth/features/backend/今日進度/dsl.md）。
- *
- * <p>When／Then 合併在同一個類別：dsl.md 的「必查」要求 Then 句另外用 tasks 以
- * FR-028、FR-029 的公式重算權威狀態來跟呈現結果對賬，但 Then 句本身的 Gherkin
- * 參數（項目／值）沒有員工欄位可以指出要查誰的 tasks。合理的身分來源只有同一個
- * scenario 裡「查看今日進度」用的那位員工，而每個 scenario 的 glue 實例都是獨立的
- * （cucumber-spring scenario-scoped），用本類別自己的欄位記住即可，不必為此擴充
- * {@link ScenarioWorld} 的公開 API（本輪邊界也不允許改 bdd/support/）。
- */
 public class TodaySteps {
 
-    /** FR-029：預估剩餘工時只計這四種狀態的本人任務。 */
     private static final Set<String> REMAINING_STATES = Set.of("accepted", "doing", "deferred", "interrupted");
 
     private final ScenarioWorld world;
@@ -41,7 +30,6 @@ public class TodaySteps {
     private final TenantFixtures tenantFixtures;
     private final MutableClock clock;
 
-    /** 最近一次「查看今日進度」的員工姓名，供後續 Then 句重算權威狀態用。 */
     private String lastQueriedStaffName;
 
     public TodaySteps(
@@ -138,7 +126,6 @@ public class TodaySteps {
         return UUID.fromString(world.staffId(lastQueriedStaffName));
     }
 
-    /** FR-028、FR-029 的公式重算（權威狀態），不依賴 API 回應。 */
     private TodayTotals recomputeTotals(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         List<Map<String, Object>> rows = dbProbe.queryMaps(
@@ -184,10 +171,6 @@ public class TodaySteps {
                 cleaningDone, cleaningTotal, completedCount, adHocCompleted, remainingMinutes, inspectedCount);
     }
 
-    /**
-     * FR-029 的「已做分鐘」：accepted／deferred 為 0；doing 為累計進行時間
-     * （worked_sec ＋ now − segment_started_at）；interrupted 為中斷前累計時間（worked_sec）。
-     */
     private int workedMinutesOf(String state, Map<String, Object> row) {
         if ("accepted".equals(state) || "deferred".equals(state)) {
             return 0;

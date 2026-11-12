@@ -27,11 +27,6 @@ public final class ShiftTimes {
         return !anyParsableWindow;
     }
 
-    /**
-     * 排班表上的班次欄位換成下班時間。班次欄位可能直接存 {@code HH:mm}，也可能是飯店班別設定
-     * （tenant_config 的 shift_times）裡的班別名稱，此時取該班別的 end。兩者都解析不出來時回 null，
-     * 呼叫端應視為「不知道幾點下班」而不是「已經下班」。
-     */
     public static LocalTime endOf(String shift, JsonNode shiftTimes) {
         if (shift == null) {
             return null;

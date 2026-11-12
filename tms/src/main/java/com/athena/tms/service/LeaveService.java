@@ -20,11 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 請假登記（contracts createLeaves）要保證請假的人手上的工作有人接得到。
- * 做法是登記當下把他名下未完成的任務退回部門待接池，再推播同樓層的在職房務員。
- * 少了這則推播，退回的單只會安靜躺在池裡，同樓層的人不會知道有事要接。
- */
 @Service
 public class LeaveService {
 

@@ -36,24 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/**
- * 工務單業務：兩段式照片、開單前檢查、開立、查看、補照片與撤回。工務單本身是一筆修繕任務
- * （type=repair、dept=engineering、source=staff），狀態與負責人一律看 tasks，
- * 所以狀態轉移委派 {@link TaskEngine}；這裡只負責工務單專屬的延伸資料——取號、
- * 照片綁定、原任務中斷與急件推播。
- */
 @Service
 public class RepairService {
 
-    /**
-     * 類別權威代碼 → 中文名稱。中斷模式的停住原因（「等工務：水電」）與工務單
-     * 任務標題是給現場員工看的，必須用中文；對照表收錄 contracts RepairCategory
-     * enum 的全部值，collection 查不到時退回原代碼而不是炸掉——類別值域由
-     * request 驗證把關，這裡不重複承擔。
-     *
-     * <p>公開供 {@link com.athena.tms.service.UnclaimedReminderScanJob} 共用——
-     * 未接提醒推播的工務單標籤要用同一套中文對照，不另開第二份。
-     */
     public static final Map<String, String> CATEGORY_LABELS = Map.of(
             "air_conditioning", "冷氣",
             "plumbing_electrical", "水電",
@@ -90,12 +75,6 @@ public class RepairService {
         this.clock = clock;
     }
 
-    /**
-     * 照片採兩段式（contracts createRepairPhoto）：先在這裡取得照片 id，內容
-     * 另外用 {@link #markUploaded} 上傳。拆成兩段是為了讓 App 在上傳失敗時
-     * 能拿同一個 id 重試失敗的那張，不必整批重來；還沒綁單的 pending 列由
-     * 保留期限排程清理，不會永久殘留。
-     */
     @Transactional
     public Map<String, Object> createPhoto(String purpose, String takenAt) {
         long tenantId = TenantContext.require();
@@ -116,13 +95,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 上傳一張照片的內容（contracts uploadRepairPhotoContent）。照片本體不入庫
-     * （沿用 lost_items.photo_ref 的外存慣例），資料庫只記引用與 uploaded 狀態。
-     * 契約規定這個操作冪等——App 斷線重送同一個 id 不該變成錯誤，所以用無條件
-     * 覆寫而不是「只允許 pending→uploaded」的條件式轉移；uploaded_at 用
-     * COALESCE 保留第一次成功的時間，重送不會改寫。
-     */
     @Transactional
     public Map<String, Object> markUploaded(UUID photoId) {
         long tenantId = TenantContext.require();
@@ -143,23 +115,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 開單前檢查（contracts precheckRepairTicket）：報修人選定類別時呼叫，
-     * 不建立工務單。
-     *
-     * <p>重複提示要保證同一個故障不會被兩位員工開成兩張單。做法是查同房、
-     * 同類別、還沒結案（不是 done 也不是 cancelled）的工務單，有就回傳摘要，
-     * 讓報修人改走「補照片到既有單」；同時把看到提示的員工記下來，之後他補
-     * 照片時才認得出他和這張單的關係。少了這筆紀錄，他回頭補照片會被當成
-     * 無關人員擋下，提示就變成一條死路。
-     *
-     * <p>急件判定（裁決 C）看原任務房間今天的訂單——今日入住或 VIP 的房間，
-     * 工務太慢會直接影響住客入住，所以系統直接判定為急件，不是提示房務自行
-     * 決定；判定結果與理由在這裡先算一次給報修人看，開單時 {@link #create} 會
-     * 再算一次並真正寫入 repair_tickets／tasks。兩處都呼叫 {@link #judgeUrgent}，
-     * 是為了讓同一間房在開單前與開單時判到同一個結果，不會因為各自維護一套
-     * 規則而兩邊兜不起來。
-     */
     @Transactional
     public Map<String, Object> precheck(UUID sourceTaskId, String category) {
         long tenantId = TenantContext.require();
@@ -187,8 +142,6 @@ public class RepairService {
             UUID ticketTaskId = UUID.fromString(String.valueOf(row.get("task_id")));
             duplicate = summaryFromRow(ticketTaskId, row);
 
-            // 報修人補照片的權限走 repair_tickets.reporter_id，這張表只收其他員工；
-            // 主鍵含 staff_id，同一位員工反覆選同類別也只會留一列。
             if (!actor.staffId().toString().equalsIgnoreCase(String.valueOf(row.get("reporter_id")))) {
                 jdbcTemplate.update(
                         """
@@ -207,12 +160,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 急件判定（裁決 C）：系統依飯店設定規則判定，不是提示——房務不能更改
-     * 判定結果，只能由主管事後呼叫 {@link #downgradeUrgency} 降級。目前唯一的
-     * 判定維度是原任務房間今天是否有入住訂單、是否 VIP（{@code reservations_cache}），
-     * 沒有命中規則時 {@code suggested=false}、{@code rule=null}，判定為一般件。
-     */
     private Map<String, Object> judgeUrgent(long tenantId, UUID roomId) {
         Map<String, Object> judgement = new LinkedHashMap<>();
         judgement.put("suggested", false);
@@ -242,22 +189,11 @@ public class RepairService {
         return judgement;
     }
 
-    /** 查看工務單詳情（contracts readRepairTicket）。 */
     public Map<String, Object> read(UUID ticketTaskId) {
         long tenantId = TenantContext.require();
         return ticketView(tenantId, ticketTaskId);
     }
 
-    /**
-     * 列出同房的工務單（contracts listRepairTickets）：給原任務頁的工務單區使用。
-     * 收錄該房間所有未撤回的單——撤回是 tasks.state=cancelled，報修人撤回後那張
-     * 單就不該再出現在任務頁，所以這裡是唯一被排除的狀態；其餘狀態（待認領、
-     * 處理中、已完修、已結案）全收，房務才看得到自己報的單現在走到哪一關。
-     *
-     * <p>欄位與 {@link #ticketView} 共用 {@link #summaryFromRow}，查詢的欄位別名
-     * 刻意跟詳情那段一致，同一張單在列表與詳情不會出現兩套命名。契約沒有規定
-     * 排序，取開單時間新到舊——任務頁要先看到最近報的那張。
-     */
     public List<Map<String, Object>> listByRoom(UUID roomId) {
         long tenantId = TenantContext.require();
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -279,16 +215,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 主管將急件降級為一般件（contracts downgradeRepairTicketUrgency）：急件判定
-     * 本身是系統算出的，房務開單時不能更改，只有主管可以事後用這個操作降級；
-     * 不能反向把一般件升為急件，所以目前不是急件時回 409。只改 is_urgent／
-     * urgent_downgrade_reason，urgent_rule 保留開單當下的原始判定理由供追溯；
-     * 同一交易內把 tasks.urgent 同步改回 false（待認領排序看這欄）並寫
-     * task_events（type=urgent_downgraded），事件本身不是狀態轉移，委派
-     * {@link TaskEngine#recordUrgentDowngraded} 沿用 sopCheck 同一套「不靠 state
-     * 轉移」的事件落地方式。
-     */
     @Transactional
     public Map<String, Object> downgradeUrgency(UUID ticketTaskId, String downgradeReason) {
         long tenantId = TenantContext.require();
@@ -310,12 +236,6 @@ public class RepairService {
         return ticketView(tenantId, ticketTaskId);
     }
 
-    /**
-     * 補照片到既有工務單（contracts appendRepairTicketPhotos）。可以補的人只有
-     * 報修人與在開單前檢查時觸發過這張單重複提示的員工；放寬到任何人，照片就
-     * 可能被與這個故障無關的人塞進來，工務到場會對不上現況。照片綁定沿用開單
-     * 的規則：只認領還沒綁單的照片列，ticket_task_id 一旦綁定就不可改。
-     */
     @Transactional
     public Map<String, Object> appendPhotos(UUID ticketTaskId, List<UUID> photoIds) {
         long tenantId = TenantContext.require();
@@ -340,13 +260,6 @@ public class RepairService {
         return ticketView(tenantId, ticketTaskId);
     }
 
-    /**
-     * 撤回工務單（contracts withdrawRepairTicket）：工務認領前報錯房、報錯類別
-     * 的單可以收回；認領後工務已經安排工作，不能再憑空消失。狀態轉移交給
-     * {@link TaskEngine#withdrawFromPool}（只允許 pool 轉 cancelled 的條件式更新）；轉移被拒而且這張單已有人認領時，把一般的狀態
-     * 衝突換成契約規定的 already_claimed 與「已被工務認領」，App 才能直接告訴
-     * 報修人原因。
-     */
     @Transactional
     public Map<String, Object> withdraw(UUID ticketTaskId) {
         long tenantId = TenantContext.require();
@@ -364,18 +277,6 @@ public class RepairService {
         return ticketView(tenantId, ticketTaskId);
     }
 
-    /**
-     * 工務完修時，保證報修那一側同步知道「修好了」：推播報修人，並把因這張單而中斷的
-     * 原任務停住原因改成「工務已修好：<類別>」。少了這段連動，報修人只能自己反覆去查單，
-     * 原任務上也仍顯示「等工務」，員工不知道可以回去把房間做完。
-     *
-     * <p>工務單任務本身的狀態轉移已由 TaskEngine 處理，這裡補的是工務單的延伸資料：
-     * 完修照片、處理說明與完修結果。工務判斷不需維修時，結案理由也記在處理說明裡。
-     *
-     * <p>完修結果寫進 repair_tickets.resolution_type，與 completed 事件 payload 的
-     * resolutionType 同一交易、同一個值，詳情與待驗收清單只讀這一欄。有些結果之後還要
-     * 另建追蹤單或把房間轉停用，見 {@link #applyResolution}。
-     */
     @Transactional
     public void resolveOnComplete(
             UUID ticketTaskId, List<UUID> photoIds, String resolutionNote, RepairResolution resolution) {
@@ -390,7 +291,6 @@ public class RepairService {
         applyResolution(tenantId, ticketTaskId, ticket, resolution);
     }
 
-    /** 把這次完修附的照片與處理說明記到工務單上，沒附的那一項不動。 */
     private void recordCompletionEvidence(
             long tenantId, UUID ticketTaskId, List<UUID> photoIds, String resolutionNote) {
         if (photoIds != null) {
@@ -403,11 +303,6 @@ public class RepairService {
         }
     }
 
-    /**
-     * 讓因這張單而中斷的原任務顯示「工務已修好」。原任務不自動恢復，何時回去做由負責人
-     * 自己決定，所以只改停住原因、不動狀態。用條件式更新限定 interrupted，原任務已被恢復
-     * 或退池時一列也不改。
-     */
     private void markSourceTaskRepaired(long tenantId, Map<String, Object> ticket, String categoryLabel) {
         Object sourceTaskId = ticket.get("source_task_id");
         if (sourceTaskId != null) {
@@ -420,14 +315,6 @@ public class RepairService {
         }
     }
 
-    /**
-     * 推播報修人「修好了」，每一次完修各通知一次。冪等鍵帶這次完成的事件序號，也就是
-     * 同一交易內剛遞增的 tasks.event_seq：請求重試時同一位報修人不會收到兩次，驗收不通過後
-     * 重修再完修則會再收到一次。
-     *
-     * <p>報修人點開要回到自己被中斷的那張單，那才是他接下來要做的事。工務或櫃檯自行開的單
-     * 沒有原任務，就回工務單本身。原任務不一定是打掃單，備品任務也會報修，任務類型以該列為準。
-     */
     private void notifyReporterRepaired(
             long tenantId, UUID ticketTaskId, Map<String, Object> ticket, String categoryLabel) {
         Object sourceTaskId = ticket.get("source_task_id");
@@ -444,10 +331,6 @@ public class RepairService {
                 targetType, targetTaskId, "repair_resolved:" + ticketTaskId + ":" + completedSeq);
     }
 
-    /**
-     * 記下完修結果，並做該結果之後的後續：建追蹤單（{@link #createFollowUpTicket}）或
-     * 把房間轉停用，照 {@link RepairResolution} 的對照。
-     */
     private void applyResolution(
             long tenantId, UUID ticketTaskId, Map<String, Object> ticket, RepairResolution resolution) {
         jdbcTemplate.update(
@@ -462,13 +345,6 @@ public class RepairService {
         }
     }
 
-    /**
-     * 暫時處理（resolutionType=temporary）自動建立的追蹤單：房號、類別都與原單相同，
-     * 狀態固定 pool（進工務待認領）、
-     * {@code origin_ticket_task_id} 指回原單供追溯；報修人沿用原單報修人，維持同一個
-     * 故障的追蹤脈絡。{@code tasks.source} 標 system——這張單不是任何人報修或交辦的，
-     * 是系統因應「先暫時處理」自動補開的。
-     */
     private void createFollowUpTicket(long tenantId, UUID originTicketTaskId, Map<String, Object> originTicket) {
         Actor systemActor = Actor.staff(CurrentActor.require().role(), CurrentActor.require().staffId());
         UUID roomId = UUID.fromString(String.valueOf(originTicket.get("room_id")));
@@ -493,7 +369,6 @@ public class RepairService {
                 now, originTicketTaskId);
     }
 
-    /** 這個 task id 必須是一張工務單；一般任務沒有 repair_tickets 延伸列，直接回 404。 */
     private Map<String, Object> requireTicket(long tenantId, UUID ticketTaskId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 "SELECT * FROM repair_tickets WHERE tenant_id = ? AND task_id = ?", tenantId, ticketTaskId);
@@ -503,15 +378,6 @@ public class RepairService {
         return rows.get(0);
     }
 
-    /**
-     * 組 contracts RepairTicket 回應：工務單摘要加上報修照片張數、說明與處理進度。
-     *
-     * <p>完修結果直接讀 repair_tickets.resolution_type，不翻 completed 事件的 JSON；來源
-     * （origin）由 tasks.source 推導——系統排程建的單（source=system）是定期保養
-     * （scheduled），其餘都是有人報修（reported），與待驗收清單同一套推導。
-     * 最近一次驗收不通過的原因、判定人與時間直接讀 repair_tickets 的三個欄位，重修、再完修與結案後都保留。
-     * viewerIsAssignee 由後端比對處理人 id，不讓 App 拿顯示名稱比對，因為名稱可能重名。
-     */
     private Map<String, Object> ticketView(long tenantId, UUID ticketTaskId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
@@ -524,13 +390,14 @@ public class RepairService {
                          WHERE p.tenant_id = rt.tenant_id AND p.ticket_task_id = rt.task_id
                            AND p.purpose = 'report') AS photo_count,
                        t.assignee_id, rt.last_verify_failed_reason, rt.last_verify_failed_at,
-                       f.name AS last_verify_failed_by_name
+                       f.name AS last_verify_failed_by_name, a.name AS assignee_name
                   FROM repair_tickets rt
                   JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
                   JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
                   JOIN staff_accounts s ON s.tenant_id = rt.tenant_id AND s.id = rt.reporter_id
                   LEFT JOIN staff_accounts v ON v.tenant_id = rt.tenant_id AND v.id = rt.verified_by
                   LEFT JOIN staff_accounts f ON f.tenant_id = rt.tenant_id AND f.id = rt.last_verify_failed_by
+                  LEFT JOIN staff_accounts a ON a.tenant_id = t.tenant_id AND a.id = t.assignee_id
                   LEFT JOIN repair_tickets ot ON ot.tenant_id = rt.tenant_id AND ot.task_id = rt.origin_ticket_task_id
                  WHERE rt.tenant_id = ? AND rt.task_id = ?
                 """,
@@ -562,6 +429,7 @@ public class RepairService {
         body.put("lastVerifyFailedBy", row.get("last_verify_failed_by_name"));
         body.put("lastVerifyFailedAt", row.get("last_verify_failed_at") == null
                 ? null : toOffsetDateTime(row.get("last_verify_failed_at")).toString());
+        body.put("assigneeName", row.get("assignee_name"));
         CurrentActor viewer = CurrentActor.get();
         body.put("viewerIsAssignee", viewer != null && row.get("assignee_id") != null
                 && viewer.staffId().toString().equalsIgnoreCase(String.valueOf(row.get("assignee_id"))));
@@ -569,11 +437,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 這一輪的完修照片（contracts RepairTicket.completionPhotos）：綁在這張單上的 completion 照片，
-     * 單被驗收不通過過時只取上傳時間晚於最近一次不通過的那些。退回重修中、還沒再完修時自然是空陣列；
-     * 上一輪的照片不對外提供，因為上一輪的完修結果與說明在不通過時已清空。
-     */
     private List<Map<String, Object>> completionPhotos(long tenantId, UUID ticketTaskId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
@@ -597,11 +460,6 @@ public class RepairService {
         return photos;
     }
 
-    /**
-     * 組 contracts RepairTicketSummary 的共同欄位。開單前檢查的重複提示與工務單
-     * 詳情查的是不同 SQL，但欄位別名刻意取成一致（ticket_no、room_no 等），
-     * 摘要組裝集中在這裡，兩邊的欄位命名與格式就不會各走各的。
-     */
     private Map<String, Object> summaryFromRow(UUID ticketTaskId, Map<String, Object> row) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("taskId", ticketTaskId.toString());
@@ -617,11 +475,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 把照片綁到工務單：只認領還沒綁單的照片列，ticket_task_id 一旦綁定就不可改
-     * （dbml 註記）。引用到別張單的照片時這裡一列也不會動，開單與補照片共用
-     * 同一條規則。
-     */
     private void bindUnclaimedPhotos(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
         for (UUID photoId : photoIds) {
             jdbcTemplate.update(
@@ -630,29 +483,6 @@ public class RepairService {
         }
     }
 
-    /**
-     * 開立工務單（contracts createRepairTicket）：取號、建修繕任務、落 repair_tickets、
-     * 綁定照片；中斷模式時原任務轉 interrupted（停住原因「等工務：<類別>」，已做時間由
-     * TaskEngine 結算保留）並連結新單；急件時推播全體工務與主管。整段在同一個交易裡——
-     * 契約要求任一步失敗時工務單不落地、原任務也不變，不能出現「單建了但原任務沒中斷」
-     * 的中間態。
-     *
-     * <p>三種開單路徑擇一（contracts CreateRepairTicketRequest）：①帶 {@code sourceTaskId}
-     * ——房號由原任務帶入，{@code tasks.source} 固定 staff（既有路徑，房務報修）；②③不帶
-     * {@code sourceTaskId}，改帶 {@code roomId} 或 {@code isPublicArea}——房號由 {@code roomId}
-     * 或公共區域佔位房決定，{@code tasks.source} 依呼叫者部門決定（工務自開＝staff、櫃檯交辦＝
-     * desk，見 {@link #directOpenSource}）；指定 {@code assigneeId} 時直接 accepted 給該人
-     * （櫃檯交辦進 pool 時額外標 {@code pool_source}=desk_forward，供 {@code listDeptPool}
-     * 的來源篩選使用——工務自開沒有對應的 PoolSource 值，留白）。
-     *
-     * <p>急件（裁決 C）不接受請求參數：開單時系統依 {@link #judgeUrgent} 的規則自行判定，
-     * 房務不能更改；判定結果同一交易內寫入 repair_tickets.is_urgent／urgent_rule，並同步
-     * tasks.urgent（待認領池排序看這欄）。
-     *
-     * <p>開單去向三條路徑共用同一個判定：{@code assigneeId} 有值時直接 accepted 給該人，
-     * 其餘一律進工務待認領（pool），不分一般件與急件。工務單沒有主管審核這一關，
-     * 報修送出後不會出現在任何主管的待辦，主管只在完修後驗收。
-     */
     @Transactional
     public Map<String, Object> create(
             UUID sourceTaskId,
@@ -693,7 +523,6 @@ public class RepairService {
 
         String categoryLabel = CATEGORY_LABELS.getOrDefault(category, category);
 
-        // 急件判定要在建任務之前先算出來，tasks.urgent 建立時就要寫入，待認領池才排得對。
         Map<String, Object> urgentJudgement = judgeUrgent(tenantId, effectiveRoomId);
         boolean isUrgent = Boolean.TRUE.equals(urgentJudgement.get("suggested"));
         String urgentRule = (String) urgentJudgement.get("rule");
@@ -749,14 +578,10 @@ public class RepairService {
         body.put("sourceTaskId", sourceTaskId == null ? null : sourceTaskId.toString());
         body.put("urgentJudgement", urgentJudgement);
         body.put("urgentDowngradeReason", null);
+        body.put("assigneeName", assigneeId == null ? null : staffName(tenantId, assigneeId));
         return body;
     }
 
-    /**
-     * 不帶 {@code sourceTaskId} 的開單路徑（工務自開或櫃檯交辦）依呼叫者部門決定
-     * {@code tasks.source}：工務＝staff（與房務報修同值，皆屬「員工自報」）、
-     * 櫃檯＝desk。其他部門無從呼叫這個路徑，契約沒有定義對應語意，直接拒絕。
-     */
     private static String directOpenSource(String dept) {
         return switch (dept) {
             case "engineering" -> "staff";
@@ -765,12 +590,6 @@ public class RepairService {
         };
     }
 
-    /**
-     * 公共區域佔位房：與 {@link AutomationRuleService#PUBLIC_AREA_ROOM_NO}
-     * 用同一個房號、同一套落地欄位（floor=0、room_type=public_area），兩邊各自建表是因為
-     * 排程規則與工務直開是不同交易路徑；都用 {@code ON CONFLICT DO NOTHING} 搶著建，
-     * 不會因為先後順序造成重複房號撞唯一索引。
-     */
     private UUID ensurePublicAreaRoom(long tenantId) {
         String roomNo = AutomationRuleService.PUBLIC_AREA_ROOM_NO;
         String existing = queryFirstString(
@@ -791,11 +610,6 @@ public class RepairService {
         return after != null ? UUID.fromString(after) : id;
     }
 
-    /**
-     * 工務自行把公共區域的工務單放回工務待認領（contracts releaseRepairTicketToPool）。
-     * 只允許公共區域（房號＝公共區域佔位房）的單；客房工務單維持既有「只能暫停」，
-     * 回 409 room_ticket_not_requeueable，避免與中斷／恢復機制混用。
-     */
     @Transactional
     public Map<String, Object> releaseToPool(UUID ticketTaskId) {
         long tenantId = TenantContext.require();
@@ -810,18 +624,6 @@ public class RepairService {
         return ticketView(tenantId, ticketTaskId);
     }
 
-    /**
-     * 主管驗收已完修的工務單（contracts verifyRepairTicket）：一支端點，請求帶通過或不通過。
-     * 只開放主管，房務主管與工務主管都可以，含驗收自己完修的單；其他角色回 403。
-     * 只有 done 的單能驗收，通過與不通過共用 {@link TaskEngine} 裡同一道 state='done' 條件，
-     * 兩位主管同時送出時只有先到的成立，後到的回 409 state_conflict，不會覆寫驗收人或不通過紀錄。
-     *
-     * <p>通過：done→closed，同一交易寫入驗收人與驗收時間；不推播、不改房況。
-     * 不通過：原因去掉頭尾空白後為空回 422；成立時寫入最近一次不通過的原因、判定人與時間，
-     * 清空完修結果與處理說明。原處理人此刻接得了，單回到他名下待開始並推播他；請假中或已不在
-     * 飯店任何班別時段內（與查房退回同一套判定，見 {@link StaffAvailability}），單退回工務待認領，
-     * 不推播任何人。
-     */
     @Transactional
     public RepairVerificationOutcome verify(UUID ticketTaskId, VerifyRepairTicketRequest request) {
         long tenantId = TenantContext.require();
@@ -882,12 +684,6 @@ public class RepairService {
                 now);
     }
 
-    /**
-     * 開單的照片規則（contracts createRepairTicket）：1 到 3 張，而且每張都已上傳。
-     * 在取號與建任務之前先驗完，驗不過就整個請求拒絕，工務單不落地、原任務不變。
-     * 張數之外還要查 repair_photos 的 status——App 端有照片上傳失敗時，照片列
-     * 還停在 pending，若放行開單，工務到場會拿到缺圖的單，對不上現場故障。
-     */
     private void requireUploadedPhotos(long tenantId, List<UUID> photoIds) {
         if (photoIds.isEmpty()) {
             throw new UnprocessableEntityException("photo_required", "至少需要 1 張照片");
@@ -908,10 +704,6 @@ public class RepairService {
         }
     }
 
-    /**
-     * 取下一個單號。計數器用 INSERT … ON CONFLICT 一句完成「第一張單時建列、
-     * 之後遞增」，和建單同一個交易——建單失敗回滾時號碼一併回滾，單號不會跳號。
-     */
     private String nextTicketNo(long tenantId) {
         Integer lastNo = jdbcTemplate.queryForObject(
                 """
@@ -923,12 +715,6 @@ public class RepairService {
         return String.format("W-%04d", lastNo);
     }
 
-    /**
-     * 急件推播該租戶所有在職工務員工與主管（contracts createRepairTicket：
-     * urgent=true 推播該租戶所有工務與主管），去處標亮這張單。收件人以
-     * 「單＋收件人」組冪等鍵，請求重試時 ON CONFLICT 會略過已寫入的列，
-     * 同一個人不會收到兩次。
-     */
     private void notifyUrgent(long tenantId, UUID ticketTaskId, String ticketNo, String roomNo, String categoryLabel) {
         List<UUID> recipients = jdbcTemplate.queryForList(
                 """
@@ -946,11 +732,6 @@ public class RepairService {
         }
     }
 
-    /**
-     * 驗收不通過、單回到原處理人名下時推播他（PushPayload.event=repair_verification_failed）：
-     * 標題帶房號、單號與「驗收不通過」，內容是不通過原因，點開進這張工務單詳情。冪等鍵帶這次
-     * 不通過的事件序號，同一張單第二次不通過照樣推播，請求重試則不重複。退回工務待認領時不呼叫這裡。
-     */
     private void pushVerificationFailed(long tenantId, UUID ticketTaskId, Map<String, Object> ticket, UUID assigneeId,
             String reason, int seq) {
         pushAboutTicket(tenantId, ticketTaskId, assigneeId, "repair_verification_failed",
@@ -958,9 +739,6 @@ public class RepairService {
                 "repair", ticketTaskId, "repair_verification_failed:" + ticketTaskId + ":" + seq);
     }
 
-    /**
-     * 發給報修人（repair_tickets.reporter_id）的推播：完修與退回各一封，只差事件值、文案與去處。
-     */
     private void pushToReporter(long tenantId, UUID ticketTaskId, Map<String, Object> ticket, String event,
             String title, String body, String targetTaskType, UUID targetTaskId, String idempotencyPrefix) {
         UUID reporterId = UUID.fromString(String.valueOf(ticket.get("reporter_id")));
@@ -968,12 +746,6 @@ public class RepairService {
                 idempotencyPrefix);
     }
 
-    /**
-     * 關於一張工務單、發給單一員工的推播都從這裡組 payload 並寫進 outbox：標題、選填的內容、
-     * 點開的去處（工務單是 kind=ticket，其他任務是 kind=task）與冪等鍵的組法集中在一處，
-     * 報修人的完修／退回與處理人的驗收不通過幾封推播，才不會一封改了去處規則、另一封還照舊。
-     * 冪等鍵是呼叫端給的前綴再接上收件人 id，請求重試時同一位收件人只收到一次。
-     */
     private void pushAboutTicket(long tenantId, UUID ticketTaskId, UUID recipientId, String event,
             String title, String body, String targetTaskType, UUID targetTaskId, String idempotencyPrefix) {
         ObjectNode payload = PushOutboxWriter.payload(objectMapper, recipientId, event, title);
@@ -994,7 +766,6 @@ public class RepairService {
                 "SELECT name FROM staff_accounts WHERE tenant_id = ? AND id = ?", tenantId, staffId);
     }
 
-    /** 查單一字串欄位的第一列；查無資料回 null，不丟例外。 */
     private String queryFirstString(String sql, Object... args) {
         List<String> values = jdbcTemplate.queryForList(sql, String.class, args);
         return values.isEmpty() ? null : values.get(0);

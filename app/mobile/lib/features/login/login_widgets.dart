@@ -6,18 +6,11 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import 'password_rules.dart';
 
-/// 登入與強制改密兩個畫面共用的版面零件。
-///
-/// 這兩頁是同一段流程的前後兩步，員工在幾秒內會連著看到。零件各寫一份的話，
-/// 兩頁的欄位高度、卡片圓角與按鈕位置就會差一點，看起來像兩個不同的 App。
-
 class LoginBrandHeader extends StatelessWidget {
   const LoginBrandHeader({super.key, required this.title, this.subtitle});
 
-  /// 大標，例如「歡迎回來」或員工的姓名。
   final String title;
 
-  /// 大標下面那一行說明；不給就不畫。
   final String? subtitle;
 
   @override
@@ -33,7 +26,6 @@ class LoginBrandHeader extends StatelessWidget {
             color: TmsColors.brandPrimary,
             borderRadius: BorderRadius.circular(TmsRadius.card),
             boxShadow: const <BoxShadow>[
-              // Main.dc.html:2324 的 `0 6px 16px rgba(12,118,128,.25)`。
               BoxShadow(
                 color: Color(0x400C7680),
                 offset: Offset(0, 6),
@@ -62,16 +54,11 @@ class LoginBrandHeader extends StatelessWidget {
   }
 }
 
-/// 品牌方塊裡那個「房子外框加一個打勾」的圖。
-///
-/// `CupertinoIcons` 的房子字形都是整間房子（實心或線框），沒有一個在屋內帶
-/// 打勾，所以照原型的兩條 path 自己描一次（`Main.dc.html:2324`）。
 class _HouseCheckPainter extends CustomPainter {
   const _HouseCheckPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 原型的 path 畫在 24×24 的 viewBox 上，線寬 1.9 也是那個尺度下的值。
     final scale = size.width / 24;
     final paint = Paint()
       ..style = PaintingStyle.stroke
@@ -100,11 +87,6 @@ class _HouseCheckPainter extends CustomPainter {
   bool shouldRepaint(_HouseCheckPainter oldDelegate) => false;
 }
 
-/// 記住帳號時，表單白卡最上面那一列：圓形頭像、姓名、以及身分的第二行。
-///
-/// 它和密碼欄在同一張卡裡，不是另外一張。員工看到的是「這個人，輸入他的密碼」
-/// 一件事；拆成兩張卡會變成兩件不相干的事，中間那段空白還會讓人以為身分卡是
-/// 可以點開來換人的。
 class LoginIdentityRow extends StatelessWidget {
   const LoginIdentityRow({
     super.key,
@@ -116,8 +98,6 @@ class LoginIdentityRow extends StatelessWidget {
 
   final String subtitle;
 
-  /// 頭像裡那個字。中文名取最後一個字（阿美→美、阿德→德），對齊原型的
-  /// `acct.initial`（`Main.dc.html:4504`）。
   static String initialOf(String name) =>
       name.isEmpty ? '' : name.characters.last;
 
@@ -141,7 +121,6 @@ class LoginIdentityRow extends StatelessWidget {
             ),
             child: Text(
               initialOf(name),
-              // 19pt 不在字級表上，是原型給頭像單獨訂的（Main.dc.html:2342）。
               style: const TextStyle(
                 fontFamilyFallback: TmsText.fontFamilyStack,
                 fontSize: 19,
@@ -173,10 +152,6 @@ class LoginIdentityRow extends StatelessWidget {
   }
 }
 
-/// 密碼欄右側那顆眼睛：切換密碼要不要遮起來。
-///
-/// 員工在走廊上單手打密碼，打錯了看不出來是哪一個字打錯；能看一眼再送出，比
-/// 連錯五次被鎖十五分鐘好。
 class LoginPasswordVisibilityButton extends StatelessWidget {
   const LoginPasswordVisibilityButton({
     super.key,
@@ -245,10 +220,6 @@ class LoginFormCard extends StatelessWidget {
   }
 }
 
-/// 表單白卡裡的一列輸入欄：左邊是欄位名稱，右邊是輸入區。
-///
-/// 名稱固定留在列內，不用提示字（placeholder）：提示字一輸入就消失，員工打到
-/// 一半被打斷回來時，看到的是兩個都有字的欄位，分不出哪一格是員工編號。
 class LoginFieldRow extends StatelessWidget {
   const LoginFieldRow({
     super.key,
@@ -260,26 +231,12 @@ class LoginFieldRow extends StatelessWidget {
 
   final String label;
 
-  /// 輸入區本身，由呼叫端給——它要掛自己的 accessibility id。
   final Widget field;
 
-  /// 輸入區右側的鈕，目前只有密碼欄的眼睛用得到。
-  ///
-  /// 有這顆鈕的那一列，右側內距是 6 而不是 16。鈕本身是 44pt 見方的觸控區，
-  /// 中間的圖示只佔 22pt，右側一樣給 16 的話，圖示會比其他列的右緣再往內縮。
   final Widget? trailing;
 
-  /// 這一欄這次送出有沒有出錯。
-  ///
-  /// 出錯時名稱轉紅。錯誤訊息一律是「員工編號或密碼不正確」，不講是哪一格
-  /// 打錯的，紅色的名稱是員工唯一看得出該重打哪一格的線索。
   final bool hasError;
 
-  /// 名稱欄的寬度。兩頁的欄位名稱都在四個字以內，固定寬度讓各列的輸入區左緣
-  /// 對齊；跟著文字長度變寬的話，每一列的游標起點都不一樣。
-  ///
-  /// 80 是原型的繁體中文值（`Main.dc.html:4526`）。原型另外給日文與英文 116、
-  /// 越南文 140，那幾個值要等介面語言真的換得動才有意義。
   static const double _labelWidth = 80;
 
   @override
@@ -310,7 +267,6 @@ class LoginFieldRow extends StatelessWidget {
   }
 }
 
-/// 表單列裡的輸入框：沒有外框與底色，框線交給外面那張白卡。
 class LoginTextField extends StatelessWidget {
   const LoginTextField({
     super.key,
@@ -324,17 +280,10 @@ class LoginTextField extends StatelessWidget {
   final TextEditingController controller;
   final bool obscureText;
 
-  /// 最多能打幾個字；null 代表不限。超過的字打不進去，不另外跳提示。
   final int? maxLength;
 
-  /// 打進去的小寫字母要不要當場變成大寫。
-  ///
-  /// 員工編號印在識別證上是 `H-0532` 這種大寫寫法，鍵盤卻會從小寫開始。
-  /// 不轉的話，螢幕上的字和識別證上的字長得不一樣，員工會以為自己打錯了。
   final bool uppercase;
 
-  /// 交給 iOS 鑰匙圈判斷要不要跳自動填入的提示，例如
-  /// [AutofillHints.username]。
   final List<String>? autofillHints;
 
   @override
@@ -357,11 +306,8 @@ class LoginTextField extends StatelessWidget {
   }
 }
 
-/// 把輸入的字一律轉成大寫。
-///
-/// [TextCapitalization.characters] 只是請鍵盤把 shift 打開，員工貼上一段
-/// 小寫文字、或用不理會這個提示的第三方鍵盤時都不會生效，所以實際的轉換在
-/// 這裡做一次。
+/// [TextCapitalization.characters] 只是請鍵盤把 shift 打開。
+/// 貼上的文字與不理會這個提示的第三方鍵盤不會被轉成大寫。
 class UpperCaseTextInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -372,18 +318,11 @@ class UpperCaseTextInputFormatter extends TextInputFormatter {
   }
 }
 
-/// 送出失敗時的一行紅字，貼在表單白卡下面。
-///
-/// [semanticsId] 有值時整段包一層 [TmsSemantics]，並把 [message] 同時放到
-/// accessibility label——要斷言的文字和定位用的 id 才會落在同一個節點。沒有
-/// 測試要讀的那一段就不帶 id，不多掛 semantics 節點。
 class LoginErrorText extends StatelessWidget {
   const LoginErrorText({super.key, required this.message, this.semanticsId});
 
   final String message;
 
-  /// accessibility id（例如 `login.error-banner`）；null 表示這一段不需要被
-  /// 測試定位。
   final String? semanticsId;
 
   @override
@@ -407,11 +346,6 @@ class LoginErrorText extends StatelessWidget {
   }
 }
 
-/// 在員工按下任何按鈕之前，先用一張白卡告訴他現在的處境：帳號被鎖住了，或者
-/// 他手上這組是臨時密碼。卡上是一顆圓形鎖頭加兩行字。
-///
-/// 做成一張卡而不是一行紅字，是因為這兩種處境員工都得先讀懂「要等多久、或者
-/// 接下來要做什麼」；一行紅字會被當成打錯字那種可以立刻重試的錯誤。
 class LoginNoticeCard extends StatelessWidget {
   const LoginNoticeCard({
     super.key,
@@ -421,12 +355,8 @@ class LoginNoticeCard extends StatelessWidget {
     required this.body,
   });
 
-  /// accessibility id（`login.lockout-banner`）。[body] 同時放到這個節點的
-  /// accessibility label，讀值與定位才落在同一個元素上。
   final String semanticsId;
 
-  /// 鎖頭底下那顆圓的顏色。擋住去路的用系統紅，還能往下走的用系統橘
-  /// （`Main.dc.html:709`、`:719`）。
   final Color iconColor;
 
   final String title;
@@ -481,12 +411,6 @@ class LoginNoticeCard extends StatelessWidget {
   }
 }
 
-/// 告訴員工「這一項已經過了」的綠色圓底白勾。
-///
-/// 確認密碼欄右側用 20pt 的一顆，密碼規則清單每一列用 14pt 的一顆
-/// （`Main.dc.html:745`、`:762`）。`CupertinoIcons` 的實心打勾圓是整塊同色，
-/// 勾痕要靠底下的背景透出來；這兩處都疊在白卡上，換個底色就看不見勾，所以
-/// 照原型的兩條 path 自己描。
 class LoginCheckBadge extends StatelessWidget {
   const LoginCheckBadge({
     super.key,
@@ -496,7 +420,6 @@ class LoginCheckBadge extends StatelessWidget {
 
   final double size;
 
-  /// 白色勾痕的線寬，以原型的 24×24 viewBox 為尺度。
   final double strokeWidth;
 
   @override
@@ -541,7 +464,6 @@ class _CheckBadgePainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth;
 }
 
-/// 還沒符合的那幾條規則前面的灰色空心圈（`Main.dc.html:763`）。
 class LoginUncheckedMark extends StatelessWidget {
   const LoginUncheckedMark({super.key, required this.size});
 
@@ -576,12 +498,6 @@ class _UncheckedMarkPainter extends CustomPainter {
   bool shouldRepaint(_UncheckedMarkPainter oldDelegate) => false;
 }
 
-/// 讓員工在打字的當下看得到自己離「可以送出」還差哪幾條規則，貼在輸入卡下方，
-/// 一條一列。
-///
-/// 每一列前面一顆記號：符合了換成綠色打勾、字轉深綠，還沒符合維持灰色空心圈
-/// （`Main.dc.html:757-766`）。整份清單一直在畫面上，不是只在出錯時才出現，
-/// 員工才不必靠送出失敗的訊息去猜後端要的是什麼。
 class PasswordRuleChecklist extends StatelessWidget {
   const PasswordRuleChecklist({
     super.key,
@@ -591,11 +507,8 @@ class PasswordRuleChecklist extends StatelessWidget {
 
   final List<PasswordRule> rules;
 
-  /// 自動化測試用來讀到整份清單的 accessibility id。清單的 accessibility
-  /// label 會把每一條規則的現況串成一句，例如「至少 8 碼：已符合」。
   final String? semanticsId;
 
-  /// 記號的邊長（`Main.dc.html:762`）。
   static const double _markSize = 14;
 
   @override

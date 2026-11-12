@@ -4,15 +4,6 @@ import '../theme.dart';
 import '../tms_semantics.dart';
 import 'tms_card.dart';
 
-/// 數字磚：上方類別名、中間一個大數字、下方一行說明，點整格進對應的清單。
-///
-/// 主管首頁的格子都是它。並排時是直式（類別名、數字、說明由上而下）；整排
-/// 只有一格時用 [wide] 的橫式寬磚，左邊類別名、右邊大數字，避免一格只佔一小
-/// 塊、旁邊留白像沒載完。數字還沒取到時給 null，磚上顯示「—」而不是 0：0 是
-/// 「沒有單在等」，跟「還不知道」是兩件事。
-///
-/// 整格的節點是 [id]，數字另外掛 [countId] 並把數字本身當 label，驗收讀
-/// 數字時不必理會磚上其他文字怎麼排。
 class TmsCountTile extends StatelessWidget {
   const TmsCountTile({
     super.key,
@@ -29,13 +20,10 @@ class TmsCountTile extends StatelessWidget {
   final String countId;
   final String title;
 
-  /// 類別名下面那一行說明；null 就不畫。
   final String? hint;
 
-  /// 橫式寬磚：左邊類別名與說明、右邊大數字。
   final bool wide;
 
-  /// null 代表還沒取到數字。
   final int? count;
   final VoidCallback onTap;
 

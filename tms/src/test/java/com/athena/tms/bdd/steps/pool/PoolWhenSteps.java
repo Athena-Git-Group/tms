@@ -54,8 +54,6 @@ public class PoolWhenSteps {
     @當("匯入今日房態 CSV，{string} 的訂房帶 {string} 屬性")
     public void importTodayRoomStateCsv(String roomNo, String attribute) {
         LocalDate checkinDate = clock.instant().atZone(clock.getZone()).toLocalDate();
-        // dsl.md 點名這句「走與介面根『從 PMS 拉今日房態』同一套批次比對與冪等鍵」，
-        // 所以直接重用同一個入口（見 PmsProbe），兩條路徑自然共用同一套冪等鍵。
         pmsProbe.pushTodayRoomState(roomNo, List.of(attribute), checkinDate);
     }
 
@@ -72,13 +70,10 @@ public class PoolWhenSteps {
     @當("{string} 認領 {string}")
     public void staffClaimsTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
-        // 認領可能撞單（任務已被他人認領），接下來的「這次操作被拒絕」Then 句要比對
-        // 操作前後的任務列、事件數與 outbox 數有沒有變動，靠的是這裡先留一份快照。
         lastOperationGuard.captureFor(taskId);
         apiClient.post("/tasks/" + taskId + "/claim", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
-    /** 任務：房號（對應 {@link ScenarioWorld#taskId}）或工務單號 W-NNNN（對應 {@link ScenarioWorld#repairTicketTaskId}）。 */
     private UUID resolveTaskId(String key) {
         if (key.startsWith("W-")) {
             return UUID.fromString(world.repairTicketTaskId(key));

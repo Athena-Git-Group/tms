@@ -5,10 +5,6 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/widgets/tms_step_track.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 
-/// 驗「查房通過之後步驟條四步全完成」（`Main.dc.html:4270-4272`）。
-///
-/// 查房通過代表整張單結案，沒有哪一步還停著。最後一步畫成「目前」的話，員工
-/// 會以為查房還在進行、這間房還不能賣。
 void main() {
   tearDown(() {
     ApiClient.instance = ApiClient();
@@ -47,7 +43,6 @@ void main() {
   });
 }
 
-/// 固定回一張打掃任務的假後端，state 由測試指定。
 class _FixedTaskApiClient extends ApiClient {
   _FixedTaskApiClient(this.state);
 

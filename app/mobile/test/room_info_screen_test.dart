@@ -4,10 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/task/room_info_screen.dart';
 
-/// 「這間房的資訊」點進來的那兩頁（`Main.dc.html:1693-1742`）。
-///
-/// 任務頁上一類只留一列，內容在這裡才讀得完：交辦整頁要逐則寫出內文與出處，
-/// 工務單清單要讓人分得出哪一張是急件、哪一張沒被核准。
 void main() {
   testWidgets('交辦整頁逐則寫出內文與出處，底下再給一句這裡收的是什麼', (tester) async {
     await tester.pumpWidget(

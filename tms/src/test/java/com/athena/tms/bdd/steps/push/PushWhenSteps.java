@@ -9,10 +9,6 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-/**
- * 通知中心句型的 When（dsl.md 通知中心段落）。只發動作、記錄回應，不含任何斷言——
- * 「必查」清單在 {@link PushThenSteps}。本類別只放通知中心的句型。
- */
 public class PushWhenSteps {
 
     private final ScenarioWorld world;
@@ -33,14 +29,6 @@ public class PushWhenSteps {
         apiClient.get("/notifications", BddApiClient.Auth.staff(world.jwt(staffName)));
     }
 
-    /**
-     * dsl.md 怎麼做：以該員工身分標記該筆通知已讀，呼叫 {@code markNotificationRead}
-     * （{@code POST /notifications/{id}/read}）。權威狀態落地：該筆通知的 {@code read_at}
-     * 已寫入。
-     *
-     * <p>dsl.md 這句只給標題，沒有另外給通知 id；先以該員工、該標題在
-     * {@code notifications} 表查出最新一筆的 id，再呼叫端點標記已讀。
-     */
     @當("{string} 將 {string} 的通知標為已讀")
     public void staffMarksNotificationRead(String staffName, String title) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
@@ -61,12 +49,6 @@ public class PushWhenSteps {
                 "/notifications/" + notificationId + "/read", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
-    /**
-     * dsl.md 怎麼做：以該員工身分呼叫批次已讀端點
-     * （contracts/groups/知識與通知/通知中心.yaml 的 {@code markAllNotificationsRead}，
-     * {@code POST /notifications/read-all}）。權威狀態落地：該員工名下每一則通知的
-     * {@code read_at} 都已寫入目前時間；已經是已讀的不受影響。
-     */
     @當("{string} 將所有通知標為已讀")
     public void staffMarksAllNotificationsRead(String staffName) {
         apiClient.post("/notifications/read-all", BddApiClient.Auth.staff(world.jwt(staffName)), null);

@@ -13,15 +13,9 @@ import '../shell/main_shell.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
 
-/// 待認領畫面（ui-plan 畫面 2 的 `pool`）：房務員工看自己部門的池、可以搶單。
-///
-/// 列表本身是 [HousekeepingPoolList]，這一層只管分頁該管的事：接推播帶來的
-/// 標亮房號，以及決定查詢要不要明帶部門。
 class PoolScreen extends StatefulWidget {
   const PoolScreen({super.key, this.highlightRoomNo});
 
-  /// 推播帶 `highlight` 房號時，該房的卡要掛標亮狀態 id
-  /// （`pool.card.{roomNo}--highlighted`）。
   final String? highlightRoomNo;
 
   @override
@@ -29,9 +23,6 @@ class PoolScreen extends StatefulWidget {
 }
 
 class _PoolScreenState extends State<PoolScreen> {
-  /// 要不要在查詢裡帶 `dept`。房務員工的帳號上就有部門，照既有作法省略，
-  /// 讓後端用帳號上的部門分流；主管與老闆的帳號沒有部門（契約 listDeptPool
-  /// 省略 dept 時回 422 `dept_required`），要看房務池就得把部門指明。
   String? get _deptQuery => ApiClient.instance.session?.dept == null
       ? HousekeepingPoolList.deptKey
       : null;
@@ -54,8 +45,6 @@ class _PoolScreenState extends State<PoolScreen> {
     super.dispose();
   }
 
-  /// 分頁建好後會留在樹上，之後的推播要在這裡接新的標亮房號；列表看到房號
-  /// 換了會自己重抓一次池。
   void _applyHighlightRequest() {
     setState(() {
       _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
@@ -78,14 +67,6 @@ class _PoolScreenState extends State<PoolScreen> {
   }
 }
 
-/// 房務待認領的分類磚＋單卡列表。
-///
-/// 資料來源是 [ApiClient.getPool]（`GET /pool`）。排序、分類筆數與分類篩選
-/// 全部由後端決定：點分類磚就是帶 `category` 重打一次查詢，App 不在本機重排、
-/// 不在本機重算筆數、不在本機過濾。
-///
-/// 房務員工與主管看的是同一份列表：[canClaim] 決定單卡底下有沒有「認領這單」。
-/// 主管沒有部門、後端本來就不接受主管認領，App 端直接不畫鈕，不是畫了再擋。
 class HousekeepingPoolList extends StatefulWidget {
   const HousekeepingPoolList({
     super.key,
@@ -95,20 +76,14 @@ class HousekeepingPoolList extends StatefulWidget {
     this.aboveCategories,
   });
 
-  /// 這份列表是房務部門的池（工務有自己的 [EngineeringPoolList]），所以查哪
-  /// 一池只有一個答案。
   static const String deptKey = 'housekeeping';
 
-  /// 查詢要帶的 `dept`；null 表示省略、讓後端依登入帳號的部門分流。
   final String? dept;
 
-  /// 單卡底下要不要有「認領這單」。
   final bool canClaim;
 
-  /// 推播要標亮的房號；換了會重抓一次池。
   final String? highlightRoomNo;
 
-  /// 夾在大標與分類磚之間的那一塊，見 [PoolScrollView.aboveCategories]。
   final Widget? aboveCategories;
 
   @override
@@ -116,13 +91,6 @@ class HousekeepingPoolList extends StatefulWidget {
 }
 
 class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
-  /// 分類磚：`key` 同時是契約 `PoolCategory` 的值與 accessibility id 的
-  /// `{category}` 段；`all` 是「不帶 category 參數」的彙總磚，不是任務類別。
-  /// 圖示方塊的底色與圖示色照原型逐格指定，不從類別色推算：「全部」不是一個
-  /// 任務類別，推不出顏色，而備品磚用的是比任務列更亮的橘，兩者刻意不同。
-  ///
-  /// 只有「全部」是實心圖示，其餘三格是描邊（`Main.dc.html:258-261`）：實心
-  /// 的那一格是彙總，描邊的三格是分類。
   static const _categories = [
     (
       key: 'all',
@@ -174,8 +142,6 @@ class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
   }
 
   Future<void> _fetch() async {
-    // 換分類磚時先清空列表再取新資料：舊分類的單卡留在畫面上會被當成新分類
-    // 的結果誤讀（列表順序與張數都是驗收點）。
     setState(() {
       _pool = null;
       _error = null;
@@ -195,18 +161,12 @@ class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
     }
   }
 
-  /// 把池裡的這張單接到自己名下。
-  ///
-  /// 離線時擋在這裡、不送請求：待認領是全部門在搶的同一批單，誰接到由後端
-  /// 決定。離線時先讓畫面當作接到了，等連線恢復才發現單早被別人接走，員工
-  /// 會白跑一趟。
   Future<void> _claim(PoolItem item) async {
     if (ConnectionStatus.instance.isOffline) {
       await showOfflineBlockedAlert(context);
       return;
     }
     await ApiClient.instance.claimTask(item.taskId);
-    // 接到的單立刻就是「我的任務」的一列，首頁那一份今日進度因此變舊了。
     TodayRefresh.instance.request();
     await _fetch();
   }
@@ -228,10 +188,6 @@ class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
         _categoryRow(pool?.counts ?? const <String, int>{}),
         if (_error != null) PoolLoadError(message: _error!),
         if (pool == null && _error == null) const PoolLoading(),
-        // 兩種「接不到單」要分開講。一個人都不在職時，池裡就算還躺著單也沒有人
-        // 搶得走，畫面要提示補人、而不是說「都接完了」；這時也不把單卡列出來
-        // ——卡上的「認領這單」對主管沒有意義，對停用的員工更按不得
-        // （dsl「待認領顯示空狀態」要求搶單動作不可用）。
         if (pool != null && pool.activeStaffCount == 0) ...[
           const SizedBox(height: TmsSpacing.lg),
           Padding(
@@ -258,8 +214,6 @@ class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
             },
           ),
         ] else if (pool != null) ...[
-          // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分類磚與第一張卡之間才
-          // 是原型的 16（`Main.dc.html:249`）。
           const SizedBox(height: TmsSpacing.sm),
           for (final item in pool.items)
             _HousekeepingPoolCard(
@@ -275,8 +229,6 @@ class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
 
   static const String _noActiveStaffMessage = '這個部門目前沒有在職員工可以搶單';
 
-  /// 分類磚列。筆數一律讀後端回的 `counts`，帶 category 查詢時 counts 仍是整池
-  /// 的數字，所以切換分類不會讓別的磚數字跟著變。
   Widget _categoryRow(Map<String, int> counts) {
     return PoolFilterRow(
       tiles: [
@@ -300,8 +252,6 @@ class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
   }
 }
 
-/// 一張房務待認領單卡。卡本身的 id 是 `pool.card.{roomNo}`，卡內各列是
-/// `pool.card.{roomNo}.{欄位}`（ui-plan F4）。
 class _HousekeepingPoolCard extends StatelessWidget {
   const _HousekeepingPoolCard({
     required this.item,
@@ -310,11 +260,6 @@ class _HousekeepingPoolCard extends StatelessWidget {
     required this.onClaim,
   });
 
-  /// 未接提醒階段（契約 `PoolItem.reminderStage`）→ 單卡標籤 id 後綴、文字與
-  /// 語氣。只有這兩段，沒有第三段，也不另外做橫幅或徽章。
-  ///
-  /// 兩段的語氣刻意不同：第一段只是提醒同仁，第二段已經驚動主管，紅色讓它在
-  /// 一列標籤裡先被看到。
   static const Map<String, ({String idSuffix, String text, TmsTagTone tone})>
   _reminderTags = {
     'staff_reminded': (
@@ -333,21 +278,12 @@ class _HousekeepingPoolCard extends StatelessWidget {
   final bool isHighlighted;
   final VoidCallback onTap;
 
-  /// 按「認領這單」要做的事；null 時整顆鈕不畫（主管只看不搶）。
   final VoidCallback? onClaim;
 
   @override
   Widget build(BuildContext context) {
-    // 標亮用同一個「畫面.區塊.房號」骨幹、依狀態切換 id 後綴，照 ui-plan
-    // 的 `--state` 修飾慣例：沒標亮是 `pool.card.{roomNo}`，標亮時是
-    // `pool.card.{roomNo}--highlighted`。
     final cardId = 'pool.card.${item.roomNo}';
-    // 副標整行的設計是「{來源} · 約 N 分」，但 `GET /pool` 的 PoolItem 沒有
-    // 預估分鐘這個欄位，所以只寫得出來源那一段。後端補上欄位之前，這裡寧可
-    // 短一截也不湊一個數字：單卡上的分鐘數員工會拿來排今天要先做哪一間。
     final sourceLabel = housekeepingPoolSourceLabels[item.source];
-    // 自動化規則開的單，退池原因欄位裝的是「規則引擎命中：{規則名}」，
-    // 那是規則說明而不是誰退的；其他來源才是退池原因。
     final reasonFieldId = item.source == 'system'
         ? '$cardId.rule-hit-tag'
         : '$cardId.return-reason';
@@ -378,8 +314,6 @@ class _HousekeepingPoolCard extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 公共區域的單沒有房號，方塊上寫的就是「公共區域」四個字；驗收
-            // 要讀的是方塊上這段文字，所以 id 掛在方塊本身。
             if (item.isPublicArea)
               TmsSemantics(
                 id: 'pool.card.common-area-label',
@@ -418,8 +352,6 @@ class _HousekeepingPoolCard extends StatelessWidget {
                           text: reminderTag.text,
                           tone: reminderTag.tone,
                         ),
-                      // 等待時間排在整列最後：前面幾顆講的是「這張單是什麼
-                      // 單」，它講的是「它擱了多久」，員工先認單再看久不久。
                       ?waitedTag,
                     ],
                   ),
@@ -428,9 +360,6 @@ class _HousekeepingPoolCard extends StatelessWidget {
             ),
           ],
         ),
-        // 設計上接手的單還要在標籤列掛一顆「接手 {前一位負責人} 的進度」，
-        // 但 PoolItem 只給得出交代內容、給不出前一位負責人是誰。後端補上這個
-        // 欄位之前，整顆標籤不畫，交代內容由這塊備註自己講完。
         if (item.handoverNote != null)
           PoolCardNote(
             id: '$cardId.handoff-progress',

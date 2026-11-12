@@ -23,26 +23,12 @@ import java.util.TreeSet;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
-/**
- * 主管工作台模組的 Then（dsl.md Then 句型區）：格子數字、待查房與待驗收兩類清單的順序與內容、
- * 今天或不是今天的標記、非主管被拒。
- *
- * <p>每句的「呈現結果」看 {@link ScenarioWorld#lastManagerQueuesResponse()}；「權威狀態」
- * 依 data-model.dbml tasks Note 的兩條公式直接查 tasks 與 repair_tickets 重算：
- * 待查房＝type=cleaning 且 state=done 且 assignee_id 不是呼叫者；待驗收＝type=repair 且
- * state=done 且 repair_tickets.resolution_type 不是 no_action_needed。
- *
- * <p>工務主管的回應沒有 {@code inspection} 與 {@code counts.inspection} 兩個鍵，
- * 所以跨清單找列時，缺少的清單直接略過，不當成格式錯誤。
- */
 public class ManagerQueueThenSteps {
 
     private static final Map<String, String> COUNT_SLOT = Map.of(
             "待查房", "inspection",
             "待驗收", "verify");
 
-    // 對照見 dsl.md「待驗收清單中 {單號} 的完修結果為 {結果}、來源為 {來源}」的參數說明，
-    // 值集對齊 repair_tickets.origin 的 CHECK；完修結果的對照在 Terms.resolutionType。
     private static final Map<String, String> ORIGIN = Map.of(
             "報修", "reported",
             "定期保養", "scheduled");
@@ -195,12 +181,6 @@ public class ManagerQueueThenSteps {
         }
     }
 
-    /**
-     * 待驗收同一時刻完修的兩列，依房號再依單號由小到大。
-     *
-     * <p>公共區域的單沒有房號，規格沒有規定它和有房號的單誰先。只要有一邊沒有房號，
-     * 這一對就不判定先後，以免把規格沒寫的順序寫死在測試裡。
-     */
     private static void assertSameInstantTieBreak(JsonNode before, JsonNode after) {
         String roomBefore = text(before, "roomNo");
         String roomAfter = text(after, "roomNo");
@@ -233,8 +213,6 @@ public class ManagerQueueThenSteps {
         Map<String, Object> task = taskRow(row);
         Map<String, Object> ticket = repairTicketRow(task);
         check(ticketNo + " repair_tickets.resolution_type", expectedResolution, ticket.get("resolution_type"));
-        // repair_tickets.origin 資料模型只在說明裡提到、還沒有欄位；003 以 tasks.source 推導
-        // （system＝scheduled、其餘＝reported），正式加欄前以推導值當權威。
         String originFromSource = "system".equals(task.get("source")) ? "scheduled" : "reported";
         check(ticketNo + " 由 tasks.source 推導的 origin", expectedOrigin, originFromSource);
     }
@@ -328,7 +306,6 @@ public class ManagerQueueThenSteps {
         return rows.stream().filter(r -> value.equals(text(r, field))).findFirst();
     }
 
-    /** 以房號或工務單號在待查房與待驗收清單裡找那一列；找不到即斷言失敗。 */
     private JsonNode anyQueueRow(String key) {
         Optional<JsonNode> inspection = okBody().has("inspection")
                 ? findRow(listRows("inspection"), "roomNo", key)

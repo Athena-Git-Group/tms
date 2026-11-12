@@ -3,11 +3,6 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 import '../tms_semantics.dart';
 
-/// iOS 的開關（`Main.dc.html:470`）。
-///
-/// 自己畫而不用 `CupertinoSwitch`。系統元件的軌道與旋鈕尺寸、位移量都由
-/// Flutter 內部決定，調不到原型的 51 × 31 與 27 的旋鈕；開關跟同一組清單裡
-/// 的列同高，差幾個 pixel 就會讓那一列看起來比上下兩列胖一點。
 class TmsToggle extends StatelessWidget {
   const TmsToggle({
     super.key,
@@ -21,10 +16,8 @@ class TmsToggle extends StatelessWidget {
 
   final ValueChanged<bool> onChanged;
 
-  /// 螢幕報讀器唸出來的名稱。開關本身只有一個圓點，沒有文字可唸。
   final String? label;
 
-  /// 自動化測試用來點到這個開關的 accessibility id。
   final String? id;
 
   static const double _trackWidth = 51;

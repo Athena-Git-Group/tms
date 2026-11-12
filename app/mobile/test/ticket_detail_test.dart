@@ -10,10 +10,6 @@ import 'package:tms_staff_app/core/widgets/tms_timeline.dart';
 import 'package:tms_staff_app/features/ticket/ticket_detail_engineering.dart';
 import 'package:tms_staff_app/features/ticket/ticket_detail_housekeeping.dart';
 
-/// 工務單詳情在原型裡是兩支獨立畫面：報修的人看審核走到哪（`Main.dc.html:1746`），
-/// 工務看自己要修什麼、下一步按哪顆（`Main.dc.html:1911`）。這組測試盯的是兩邊
-/// 真的各畫各的——同一張單在房務端是時間軸加撤回鍵，在工務端是深色標題區加完修
-/// 回報鍵——以及後端還沒有的欄位整段不顯示，不填假值。
 void main() {
   RepairTicketDetail ticket({
     String state = 'pending_review',
@@ -345,9 +341,6 @@ void main() {
       expect(find.text('放回待認領'), findsNothing);
     });
 
-    // 原型放回待認領之後直接關掉詳情頁（`Main.dc.html:3762`），所以沒有這個
-    // 畫面的樣本；這一條的依據是 truth 的 `工務單/dsl.md:78`，它要求放回之後
-    // 工務單詳情要顯示狀態摘要卡「待認領」。
     testWidgets('放回待認領之後，工務視角的詳情用狀態摘要卡說它沒有人負責', (tester) async {
       final handle = tester.ensureSemantics();
 

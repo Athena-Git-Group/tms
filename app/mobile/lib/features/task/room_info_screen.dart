@@ -10,14 +10,6 @@ import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
 import 'task_screen.dart';
 
-/// 「這間房的資訊」點進來的那一層（`Main.dc.html:1693`）。
-///
-/// 任務頁上一類只留一列，列尾有 chevron，所以點下去是導覽堆疊的下一層整頁，
-/// 不是底部面板：交辦可能有好幾則，工務單也可能有好幾張，面板放不下就得在
-/// 面板裡再捲一次，而面板裡的捲動和整頁的捲動在現場很容易互相吃掉手勢。
-///
-/// 兩頁共用這一層外框：同一個入口進來的兩頁長得不一樣的話，員工得在第二頁重
-/// 新找一次返回鍵在哪。
 class _RoomInfoScaffold extends StatelessWidget {
   const _RoomInfoScaffold({required this.title, required this.children});
 
@@ -25,7 +17,6 @@ class _RoomInfoScaffold extends StatelessWidget {
 
   final List<Widget> children;
 
-  /// 捲動內容與導覽列之間的距離。`Main.dc.html:4757` — ptBody = dv.top + 52 + 12
   static const double _contentGap = TmsSpacing.md;
 
   @override
@@ -41,8 +32,6 @@ class _RoomInfoScaffold extends StatelessWidget {
     return CupertinoPageScaffold(
       backgroundColor: TmsColors.groupedBackground,
       child: TmsScrollNavBarScroll(
-        // 這一頁的導覽列一捲就換成毛玻璃，不等到 72：它底下沒有彩色標題區，
-        // 內容第一行一鑽進去就要有東西把它和導覽列分開（`Main.dc.html:4765`）。
         threshold: TmsSpacing.xs,
         builder: (context, scrolled) => Stack(
           children: [
@@ -84,10 +73,6 @@ class _RoomInfoScaffold extends StatelessWidget {
   }
 }
 
-/// 這間房的交辦整頁（`Main.dc.html:1712`）。
-///
-/// 任務頁上只寫得下「交辦 N 則」，實際內容要整頁才讀得完。每一則內文在上、
-/// 出處在下：員工要的是那句話，誰在什麼時候寫的是看完之後才會追的事。
 class HandoverListScreen extends StatelessWidget {
   const HandoverListScreen({
     super.key,
@@ -136,8 +121,6 @@ class _HandoverRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: TmsColors.cardBackground,
-      // 左邊距寫在列上而不是卡片上：分隔線因此從內文的起點畫起，不貼齊卡片
-      // 左緣（`Main.dc.html:1714`）。
       padding: const EdgeInsets.fromLTRB(
         TmsSpacing.screenEdge,
         TmsSpacing.groupedRowVertical,
@@ -171,10 +154,6 @@ class _HandoverRow extends StatelessWidget {
   }
 }
 
-/// 這間房的工務單清單整頁（`Main.dc.html:1722`）。
-///
-/// 只有兩張以上才會走到這裡；一張的時候任務頁那一列直接開那張單的詳情，中間
-/// 再隔一層只有一列的清單只是多點一次。
 class RepairTicketListScreen extends StatelessWidget {
   const RepairTicketListScreen({
     super.key,
@@ -222,7 +201,6 @@ class _RepairTicketRow extends StatelessWidget {
   final RepairTicketSummary ticket;
   final VoidCallback onTap;
 
-  /// 急件徽章的內距。`Main.dc.html:1731` — padding: 1px 6px
   static const EdgeInsets _urgentBadgePadding = EdgeInsets.symmetric(
     horizontal: TmsSpacing.xs2,
     vertical: 1,

@@ -9,16 +9,6 @@ import '../shell/main_shell.dart';
 import 'manager_ids.dart';
 import 'pool_dept_preference.dart';
 
-/// 待認領（主管端，ui-plan 畫面 7）：看房務與工務兩個池，只看不搶。
-///
-/// 版面沿用員工端的待認領，只在大標下方多一個「房務 / 工務」兩段切換；切到
-/// 房務時列表就是 [HousekeepingPoolList]、切到工務就是 [EngineeringPoolList]，
-/// 單卡、分類磚、空狀態與員工端一致，差別只有單卡底下沒有「認領這單」
-/// （`canClaim: false`）。主管沒有部門，兩個池都明帶 `dept` 查
-/// `listDeptPool`。
-///
-/// 停在哪一池記在 [PoolDeptPreference]：第一次打開是房務，之後停在上次切到的
-/// 部門，重開 App 也一樣。
 class ManagerPoolScreen extends StatefulWidget {
   const ManagerPoolScreen({super.key});
 
@@ -27,8 +17,6 @@ class ManagerPoolScreen extends StatefulWidget {
 }
 
 class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
-  /// 目前停在哪一池；還沒讀到手機上的紀錄時是 null，這段時間先不畫列表，
-  /// 免得先閃一下房務再跳成工務。
   String? _dept;
 
   String? _highlightRoomNo;
@@ -58,14 +46,12 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
     }
   }
 
-  /// 分頁建好後會留在樹上，之後的推播要在這裡接新的標亮房號。
   void _applyHighlightRequest() {
     setState(() {
       _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
     });
   }
 
-  /// 推播先寫了部門再切分頁時，已經開著的這一頁要跟著換池。
   void _applyPreferenceChange() {
     final dept = PoolDeptPreference.changes.value;
     if (dept != null && dept != _dept) {
@@ -106,9 +92,6 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
     );
   }
 
-  /// 大標下方的「房務 / 工務」兩段切換。切換本身是 `pool.dept-switch`，兩段
-  /// 各是 `pool.dept-switch.{housekeeping|engineering}`，選中的那一段帶
-  /// selected 語意。
   Widget _deptSwitch(String dept) {
     return TmsSemantics(
       id: ManagerIds.poolDeptSwitch,

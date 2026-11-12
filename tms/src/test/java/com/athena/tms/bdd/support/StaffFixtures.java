@@ -9,23 +9,10 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-/**
- * 員工帳號測試資料入口（{@code staff_accounts}，欄位依 data-model.dbml {@code Table staff_accounts}）。
- *
- * <p>兩種形狀：現場部門員工（房務／工務／櫃檯）role 與 dept 剛好同值；主管／值班經理
- * 這類不固定部門的角色 dept 必須是 NULL（見 {@link #createFieldStaff}／{@link #createManagerLikeStaff}）。
- *
- * <p>班次與負責樓層查 {@code plan_rooms}（V4 已補建）：只有現場部門員工才有「負責樓層／班次」
- * 這個概念，這裡直接幫這位員工建一筆最小可用的 plan_rooms 列——帶一張 draft 狀態的
- * cleaning_plans（當日、這個部門常見的 shift 名稱）與一間用 floor 當樓層新建的房間，
- * est_min／route_seq 給固定預留值，因為它們對「查得到樓層」這個情境本身無關緊要；
- * plan_rooms.task_id 保持 NULL（發佈後才回填，不在這個 fixture 的職責內）。
- */
 public class StaffFixtures {
 
     public static final String DEFAULT_PASSWORD = "demo1234";
 
-    /** dsl.md「飯店有以下員工：」列的「班次結束」預設值。 */
     public static final String DEFAULT_SHIFT_END = "17:00";
 
     private static final Set<String> SUPPORTED_DEPTS = Set.of("housekeeping", "engineering", "frontdesk");
@@ -61,20 +48,10 @@ public class StaffFixtures {
         return created;
     }
 
-    /**
-     * 主管／值班經理：dept 固定 NULL，沒有負責樓層／班次的概念。{@code roleCode} 直接收
-     * 權威角色代碼（manager|duty_manager，見 {@link Terms#role}），不在這裡做值域檢查——
-     * 值班經理目前會在 INSERT 撞上 DB 的 CHECK（見本類別 class Javadoc），讓它自然噴錯。
-     */
     public CreatedStaff createManagerLikeStaff(String name, String roleCode, String stateCode) {
         return insertStaff(name, roleCode, null, stateCode);
     }
 
-    /**
-     * 被設了部門的主管（dsl.md「飯店有以下員工：」的 `角色` 欄寫主管、`部門` 寫房務或工務）：
-     * {@code staff_accounts.role}=manager、{@code dept} 仍寫該部門。這種帳號同時能走主管的
-     * 待辦與該部門的現場清單，所以樓層／班次照現場員工的方式落地。
-     */
     public CreatedStaff createDeptManager(
             String name, String deptCode, Integer floor, String shiftEndHHmm, String stateCode) {
         if (!SUPPORTED_DEPTS.contains(deptCode)) {
@@ -87,11 +64,6 @@ public class StaffFixtures {
         return created;
     }
 
-    /**
-     * 改這位員工的登入帳密（dsl.md 帳號與登入「"{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"」）：
-     * 沒有對應的 admin API，直接落地權威狀態——把 {@code login_id} 設成指定值、{@code password_hash}
-     * 設成指定明文密碼的雜湊，供後續登入情境用這組帳密呼叫 {@code staffAccountsLogin}。
-     */
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {
         long tenantId = tenantFixtures.testTenantId();
         String passwordHash = passwordEncoder.encode(rawPassword);
@@ -103,11 +75,6 @@ public class StaffFixtures {
                 .update();
     }
 
-    /**
-     * 查這位員工目前的 {@code login_id}（dsl.md 帳號與登入 Given「"{員工}" 已連續輸入錯誤密碼
-     * {次數} 次」用：先確認帳密（通常由同模組的「的員工編號密碼為」Given 落地），再用這個
-     * login_id 帶錯誤密碼呼叫登入 N 次，不是直接改資料庫的失敗次數欄位）。
-     */
     public String loginId(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         return jdbcClient
@@ -117,7 +84,6 @@ public class StaffFixtures {
                 .single();
     }
 
-    /** 停用員工（dsl.md「"{員工}" 已停用」）：沒有對應的 admin API，直接落地權威狀態。 */
     public void deactivate(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         jdbcClient
@@ -126,11 +92,6 @@ public class StaffFixtures {
                 .update();
     }
 
-    /**
-     * 帳號是臨時密碼（dsl.md 帳號與登入 Given「"{員工}" 的帳號是臨時密碼」）：標記
-     * {@code staff_accounts.must_change_password = true}（V15 新增欄位），沒有對應的
-     * admin API，直接落地權威狀態。
-     */
     public void markMustChangePassword(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         jdbcClient
@@ -161,20 +122,10 @@ public class StaffFixtures {
                 .params(id, tenantId, name, loginId, passwordHash, roleCode, deptCode, active, stateCode, now, now)
                 .update();
 
-        // 直接簽發 JWT 而不經過 /auth/login：登入本身是待測行為之一，
-        // fixture 不應該依賴它才能把測試資料準備好。
         JwtService.IssuedToken issued = jwtService.issue(tenantId, id, roleCode, deptCode);
         return new CreatedStaff(tenantId, id, loginId, DEFAULT_PASSWORD, issued.token());
     }
 
-    /**
-     * 幫這位員工掛一筆最小可用的 {@code plan_rooms} 列，讓「查這位員工負責哪層樓／哪個班次」
-     * 查得到資料。room_id 用專屬的佔位房號（樓層資訊以外，房況與房型對這個情境無關緊要，
-     * 不借用情境自己建立的房間，避免兩邊互相汙染）；shift 直接存呼叫端給的 {@code HH:mm}，
-     * 沒給時用固定佔位值；est_min／route_seq 是 plan_rooms 的 NOT NULL 欄位但在「查樓層／班次」
-     * 這個情境本身無關緊要，給固定預留值。plan_rooms.task_id 保持 NULL：發佈後才回填，
-     * 不在這個 fixture 的職責內。
-     */
     private void assignPlanRoom(long tenantId, UUID staffId, Integer floor, String shiftEndHHmm, OffsetDateTime now) {
         int effectiveFloor = floor != null ? floor : 0;
         String shift = shiftEndHHmm != null ? shiftEndHHmm : "default";
@@ -204,11 +155,6 @@ public class StaffFixtures {
                 .update();
     }
 
-    /**
-     * 員工狀態三態寫進 staff_accounts.status（V10 新增欄位）。active 這個 boolean
-     * 是「可登入、可被挑人、收推播」的衍生旗標，只有在職（active）為 true；
-     * 待開通（invited）與停用（inactive）都還不能動作，所以同為 false。
-     */
     private static void requireKnownState(String stateCode) {
         if (!Set.of("active", "invited", "inactive").contains(stateCode)) {
             throw new IllegalArgumentException("未知的員工狀態代碼: " + stateCode);
