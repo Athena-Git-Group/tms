@@ -2,8 +2,56 @@ listTasksAndcreateTasks:
   get:
     operationId: listTasks
     summary: list tasks
+    description: >-
+      櫃檯任務清單：本租戶工作日落在 from 到 to（含兩端）的任務，依開單時間由新到舊，不分頁。
+      工作日與員工首頁今日任務同一套算法：有 work_date 的單看 work_date；沒有 work_date 的單，
+      還沒結束的算今天，已結束（done、inspected、closed）的看完成時間是哪一天，已取消的看取消當天。
+      「今天」依租戶時區。
     tags:
     - 任務 API
+    parameters:
+    - name: assigneeId
+      in: query
+      required: false
+      description: 只回這位員工負責的單。
+      schema:
+        type: string
+        format: uuid
+    - name: state
+      in: query
+      required: false
+      description: 只回這些狀態的單，可重複帶多個。值域與 tasks.state 相同，帶了值域外的值回 400。
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          enum:
+          - triage
+          - pool
+          - accepted
+          - doing
+          - done
+          - inspected
+          - closed
+          - deferred
+          - interrupted
+          - cancelled
+    - name: from
+      in: query
+      required: false
+      description: 工作日範圍起日（含）。兩端都沒帶時預設今天；只帶一端時另一端取同一天。
+      schema:
+        type: string
+        format: date
+    - name: to
+      in: query
+      required: false
+      description: 工作日範圍迄日（含）。起日晚於迄日，或兩者相差超過 31 天，回 400。
+      schema:
+        type: string
+        format: date
     responses:
       '200':
         description: 成功
@@ -13,6 +61,8 @@ listTasksAndcreateTasks:
               type: array
               items:
                 $ref: '../../components/schemas/任務.yaml#/tasks'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
   post:
     operationId: createTasks
     summary: create tasks
