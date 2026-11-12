@@ -1,4 +1,7 @@
-listTasksAndcreateTasks:
+listDeskTasks:
+  servers:
+  - url: /
+    description: 櫃檯端點掛在 /desk 底下，不在 /api/v1 之下。
   get:
     operationId: listTasks
     summary: list tasks
@@ -48,7 +51,7 @@ listTasksAndcreateTasks:
     - name: to
       in: query
       required: false
-      description: 工作日範圍迄日（含）。起日晚於迄日，或兩者相差超過 31 天，回 400。
+      description: 工作日範圍迄日（含）。起日晚於迄日，或兩者相差超過 31 天（也就是含頭尾最多 32 個日曆天），回 400。
       schema:
         type: string
         format: date
@@ -63,6 +66,7 @@ listTasksAndcreateTasks:
                 $ref: '../../components/schemas/任務.yaml#/tasks'
       '400':
         $ref: '../../components/responses.yaml#/BadRequest'
+createTasks:
   post:
     operationId: createTasks
     summary: create tasks
