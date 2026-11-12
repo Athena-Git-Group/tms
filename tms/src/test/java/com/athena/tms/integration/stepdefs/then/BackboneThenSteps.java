@@ -2,6 +2,7 @@ package com.athena.tms.integration.stepdefs.then;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -217,6 +218,47 @@ public class BackboneThenSteps {
         for (String topic : List.of(first, second, third)) {
             assertEquals(expected, KafkaProbe.partitionCount(topic), "topic " + topic + " 的分區數");
         }
+    }
+
+    @Then("^push topic 上鍵 \"([^\"]+)\" 的訊息依序是 \"([^\"]+)\"、\"([^\"]+)\"、\"([^\"]+)\"$")
+    public void pushKeyArrivesInWriteOrder(String key, String first, String second, String third) {
+        Map<String, List<String>> notes = pushNotesByKey(key::equals);
+        assertEquals(List.of(first, second, third), notes.get(key), "同鍵訊息到達 Kafka 的順序必須和寫入順序一致");
+    }
+
+    @Then("^\"([^\"]+)\" 送出失敗、排了退避重試，沒有任何訊息上 Kafka$")
+    public void failedHeadBacksOffAndStaysOffKafka(String idempotencyKey) {
+        Long outboxId = ctx.get("outbox:" + idempotencyKey);
+        Awaits.waitUntil(Duration.ofSeconds(20L), "待送匣 " + idempotencyKey + " 該被試送過至少一次",
+                () -> db.outboxAttempts(outboxId) >= 1);
+        assertNotEquals("sent", db.outboxStatus(outboxId), "送不出去的訊息不得標 sent");
+        String key = aggregateKeyOf(outboxId);
+        assertTrue(pushNotesByKey(key::equals).isEmpty(), "送失敗的鍵整串不得有任何訊息上 Kafka");
+    }
+
+    @Then("^積壓的訊息全部標記 sent，且每個鍵在 Kafka 上依寫入順序到達$")
+    public void backlogDrainedInWriteOrder() {
+        List<Long> ids = ctx.get("outboxFreeIds");
+        for (Long id : ids) {
+            assertEquals("sent", db.outboxStatus(id), "積壓的待送匣列 " + id + " 該已送出");
+        }
+        int keys = ctx.get("backlogKeys");
+        int perKey = ctx.get("backlogPerKey");
+        List<String> writeOrder = java.util.stream.IntStream.range(0, perKey).mapToObj(String::valueOf).toList();
+        Map<String, List<String>> notes = pushNotesByKey(key -> key.startsWith("task:t-backlog-"));
+        assertEquals(keys, notes.size(), "每個積壓的鍵都該上 Kafka");
+        notes.forEach((key, arrived) -> assertEquals(writeOrder, arrived, "鍵 " + key + " 的到達順序"));
+    }
+
+    private Map<String, List<String>> pushNotesByKey(java.util.function.Predicate<String> keyFilter) {
+        Map<String, List<String>> notes = new java.util.LinkedHashMap<>();
+        for (ConsumerRecord<String, String> record : KafkaProbe.consumeAll("tms.push", Duration.ofSeconds(3L))) {
+            if (record.key() != null && keyFilter.test(record.key())) {
+                notes.computeIfAbsent(record.key(), k -> new ArrayList<>())
+                        .add(objectMapper.readTree(record.value()).get("note").asText());
+            }
+        }
+        return notes;
     }
 
     private String aggregateKeyOf(long outboxId) {

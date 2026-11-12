@@ -121,6 +121,34 @@
       那麼 待送匣 "ob-q3-second" 仍是 "pending"、attempts 仍是 0
 
     @boundary
+    場景: 同鍵多筆分波送出，到達 Kafka 的順序和寫入順序一致
+      假設 系統中存在以下待送匣:
+        | tenant_id | aggregate_key | kind | payload           | idempotency_key | status  | attempts |
+        | 1         | task:t-wave-1 | push | {"note":"first"}  | ob-w1-first     | pending | 0        |
+        | 1         | task:t-wave-2 | push | {"note":"other"}  | ob-w2-other     | pending | 0        |
+        | 1         | task:t-wave-1 | push | {"note":"second"} | ob-w1-second    | pending | 0        |
+        | 1         | task:t-wave-1 | push | {"note":"third"}  | ob-w1-third     | pending | 0        |
+      當 relay 下一輪輪詢
+      那麼 push topic 上鍵 "task:t-wave-1" 的訊息依序是 "first"、"second"、"third"
+
+    @boundary
+    場景: 一個鍵送失敗，不擋同租戶的其他鍵，也不擋其他租戶
+      假設 租戶 1 的鍵 "task:t-too-big" 依序排著一筆超過 Kafka 單筆上限的 "ob-big-head" 與一筆一般的 "ob-big-tail"
+      並且 系統中存在以下待送匣:
+        | tenant_id | aggregate_key | kind | payload         | idempotency_key | status  | attempts |
+        | 1         | task:t-fine-1 | push | {"note":"fine"} | ob-fine-1       | pending | 0        |
+        | 2         | task:t-fine-2 | push | {"note":"fine"} | ob-fine-2       | pending | 0        |
+      當 relay 下一輪輪詢
+      那麼 "ob-big-head" 送出失敗、排了退避重試，沒有任何訊息上 Kafka
+      並且 待送匣 "ob-big-tail" 仍是 "pending"、attempts 仍是 0
+
+    @boundary
+    場景: 積壓超過每輪撈取上限，分幾輪送完且同鍵不亂序
+      假設 租戶 1 積壓了 30 個鍵、每鍵 3 筆的待送訊息，多於每輪撈取上限
+      當 relay 下一輪輪詢
+      那麼 積壓的訊息全部標記 sent，且每個鍵在 Kafka 上依寫入順序到達
+
+    @boundary
     場景: Kafka 下游不回寫 tasks
       假設 系統中存在以下任務:
         | id      | tenant_id | type    | source | room_id | dept         | state | title  |

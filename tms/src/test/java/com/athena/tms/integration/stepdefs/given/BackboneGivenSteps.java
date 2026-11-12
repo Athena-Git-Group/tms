@@ -10,9 +10,12 @@ import com.athena.tms.integration.stepdefs.utils.TaskFixtures;
 import com.athena.tms.integration.stepdefs.utils.Tenants;
 import io.cucumber.java.en.Given;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
+import org.springframework.core.env.Environment;
 
 public class BackboneGivenSteps {
 
@@ -21,13 +24,15 @@ public class BackboneGivenSteps {
     private final ApiClient api;
     private final DbSupport db;
     private final SseSupport sse;
+    private final Environment environment;
 
-    public BackboneGivenSteps(ScenarioContext ctx, TaskFixtures fixtures, ApiClient api, DbSupport db, SseSupport sse) {
+    public BackboneGivenSteps(ScenarioContext ctx, TaskFixtures fixtures, ApiClient api, DbSupport db, SseSupport sse, Environment environment) {
         this.ctx = ctx;
         this.fixtures = fixtures;
         this.api = api;
         this.db = db;
         this.sse = sse;
+        this.environment = environment;
     }
 
     @Given("^「小美」在電梯間對任務 \"([^\"]+)\" 按「完成」且請求帶 Idempotency-Key \"([^\"]+)\"$")
@@ -77,5 +82,36 @@ public class BackboneGivenSteps {
         String payload = db.admin().queryForObject(
                 "SELECT payload FROM outbox WHERE id = ?", String.class, outboxId);
         sse.produceRaw(System.currentTimeMillis(), aggregateKey, payload);
+    }
+
+    @Given("^租戶 1 的鍵 \"([^\"]+)\" 依序排著一筆超過 Kafka 單筆上限的 \"([^\"]+)\" 與一筆一般的 \"([^\"]+)\"$")
+    public void keyHeadedByOversizedMessage(String aggregateKey, String headKey, String tailKey) {
+        // producer 單筆上限預設 1MB，超過就在送出當下失敗，用來穩定重現「這個鍵送不出去」。
+        String oversized = "{\"note\":\"" + "x".repeat(1_100_000) + "\"}";
+        ctx.put("outbox:" + headKey, insertPendingPush(1, aggregateKey, oversized, headKey));
+        ctx.put("outbox:" + tailKey, insertPendingPush(1, aggregateKey, "{\"note\":\"tail\"}", tailKey));
+    }
+
+    @Given("^租戶 1 積壓了 (\\d+) 個鍵、每鍵 (\\d+) 筆的待送訊息，多於每輪撈取上限$")
+    public void backlogBeyondBatchSize(int keys, int perKey) {
+        int batchSize = environment.getRequiredProperty("tms.outbox.relay.batch-size", Integer.class);
+        Assertions.assertTrue(keys * perKey > batchSize, "積壓筆數要多於每輪撈取上限 " + batchSize + "，才驗得到分輪送完");
+        List<Long> ids = new ArrayList<>();
+        for (int nth = 0; nth < perKey; nth++) {
+            for (int key = 0; key < keys; key++) {
+                ids.add(insertPendingPush(1, "task:t-backlog-" + key, "{\"note\":\"" + nth + "\"}", "ob-backlog-" + key + "-" + nth));
+            }
+        }
+        ctx.put("outboxFreeIds", ids);
+        ctx.put("backlogKeys", keys);
+        ctx.put("backlogPerKey", perKey);
+    }
+
+    private long insertPendingPush(long tenantId, String aggregateKey, String payload, String idempotencyKey) {
+        return db.admin().queryForObject("""
+                INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)
+                VALUES (?, ?, 'push', ?::jsonb, ?, 'pending', 0, now())
+                RETURNING id
+                """, Long.class, tenantId, aggregateKey, payload, idempotencyKey);
     }
 }
