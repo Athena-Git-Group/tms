@@ -11,17 +11,17 @@ abstract final class ManagerIds {
   /// 「我名下的單」沒有單時的說明。
   static const String homeMineEmpty = 'manager.home.mine.empty';
 
-  /// 三格磚；[queue] 是 inspection、review、verify。
+  /// 主管首頁的格子；[queue] 是 inspection 或 verify，與主管清單共用同一組鍵。
   static String homeTile(String queue) => 'manager.home.tile.$queue';
 
-  /// 三格磚上的數字。
+  /// 格子上的數字。
   static String homeTileCount(String queue) => 'manager.home.tile.$queue.count';
 
   /// 工務主管首頁唯一的一條待驗收寬磚。id 與房務主管的待驗收格相同，
   /// 「點待驗收」「待驗收格顯示幾張」兩種主管共用同一個定位。
   static const String homeTileVerifyWide = 'manager.home.tile.verify';
 
-  // 三類清單
+  // 主管清單（待查房、待驗收）
   static const String queue = 'manager.queue';
   static const String queueEmpty = 'manager.queue.empty';
 

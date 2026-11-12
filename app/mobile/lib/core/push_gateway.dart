@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
+import 'landing.dart';
 import 'push_target.dart';
 import '../features/shell/main_shell.dart';
 import '../features/task/task_screen.dart';
@@ -179,21 +180,23 @@ class PushGateway {
         navigator.push(
           CupertinoPageRoute<void>(
             builder: (_) => TicketScreen(
-              // 推播是唯一事前不知道這張單要給誰看的入口：報修的人與修的人
-              // 收到的是同一則推播，看到的卻是兩支不同的畫面，所以依登入帳
-              // 號的部門決定，和原型「同一個 App 只依部門切換」一致
-              // （`Main.dc.html:1909`）。
-              view: ApiClient.instance.session?.dept == 'engineering'
-                  ? TicketView.engineering
-                  : TicketView.housekeeping,
+              view: TicketView.forSession(ApiClient.instance.session),
               taskId: taskId,
             ),
           ),
         );
         break;
       case 'home':
+        // 首頁是哪一個外殼與登入、改密碼同一條分流；主管點開也回主管首頁，
+        // 格子照他的主管種類。
+        // 還沒有登入身分時照舊回房務外殼。
+        final session = ApiClient.instance.session;
         navigator.pushAndRemoveUntil(
-          CupertinoPageRoute<void>(builder: (_) => const HousekeepingShell()),
+          CupertinoPageRoute<void>(
+            builder: (_) => session == null
+                ? const HousekeepingShell()
+                : landingShellForLogin(session),
+          ),
           (route) => false,
         );
         break;

@@ -10,17 +10,19 @@ import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_scroll_nav_bar.dart';
 import '../../core/widgets/tms_timeline.dart';
+import '../manager/manager_ids.dart';
 import 'repair_labels.dart';
+import 'ticket_last_verify_failure_card.dart';
 
 /// 工務單詳情的房務視角（`Main.dc.html:1746`）。
 ///
 /// 報修的人打開這一頁要知道的只有三件事：單走到哪一步、我還能做什麼、當初報
-/// 了什麼。所以版面由上而下是一句話的狀態摘要、一條四步的審核時間軸、照片與
-/// 內容，動作只有撤回與補資料再送出兩顆。
+/// 了什麼。所以版面由上而下是一句話的狀態摘要、一條四步的進度時間軸、照片與
+/// 內容，動作只有工務接單前的撤回一顆。
 ///
 /// 和工務視角分成兩支畫面而不是同一支加分支，是因為兩邊要回答的問題不同。工
 /// 務要的是「現在修到第幾分鐘、下一步按哪顆」，所以那一頁以計時當主角；房務
-/// 要的是「主管核了沒、工務接了沒」，那是一條時間軸。把兩種版面壓在同一支畫
+/// 要的是「工務接了沒、修好驗收了沒」，那是一條時間軸。把兩種版面壓在同一支畫
 /// 面裡，每加一個狀態就要同時想兩個角色看到什麼，兩邊都會做不乾淨。
 class TicketDetailHousekeeping extends StatelessWidget {
   const TicketDetailHousekeeping({
@@ -28,7 +30,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
     required this.ticket,
     required this.errorMessage,
     required this.onWithdraw,
-    required this.onResubmit,
     required this.onAddPhoto,
     required this.onOpenPhoto,
   });
@@ -39,7 +40,6 @@ class TicketDetailHousekeeping extends StatelessWidget {
   final String? errorMessage;
 
   final VoidCallback onWithdraw;
-  final VoidCallback onResubmit;
   final VoidCallback onAddPhoto;
 
   /// 點第幾張照片（從 0 起算）要放大。
@@ -164,14 +164,9 @@ class TicketDetailHousekeeping extends StatelessWidget {
           ),
         ),
       ),
-      _sectionWithHeader(
-        '進度',
-        TmsSemantics(
-          id: 'ticket.timeline',
-          explicitChildNodes: true,
-          child: TmsTimeline(steps: _timelineSteps(detail)),
-        ),
-      ),
+      if (TicketLastVerifyFailureCard.shows(detail))
+        TicketLastVerifyFailureCard(ticket: detail),
+      _sectionWithHeader('進度', _timeline(detail)),
       ?_photoSection(detail),
       _sectionWithHeader('內容', _infoCard(detail)),
       if (note != null)
@@ -210,8 +205,10 @@ class TicketDetailHousekeeping extends StatelessWidget {
 
   /// 摘要卡要說的話，以及那顆圓形圖示的形狀與底色。
   ///
-  /// 顏色對照原型的九個分支（`Main.dc.html:4801`）：還在等的事是橘的、要員工
-  /// 回頭補東西的是紅的、工務手上的是品牌色、結案的是綠或灰。
+  /// 標題一律出自 [repairStatusSummaryText] 的報修人那一欄，和工務、主管視角
+  /// 的狀態列是同一張對照表；這裡只補下面那句說明與配色。顏色對照原型
+  /// （`Main.dc.html:4801`）：還在等的事是橘的、退回重修是琥珀的、工務手上的
+  /// 是品牌色、結案的是綠或灰。
   ({
     String title,
     String detail,
@@ -220,50 +217,70 @@ class TicketDetailHousekeeping extends StatelessWidget {
     Color detailColor,
   })
   _summaryOf(RepairTicketDetail detail) {
+    final title = repairStatusSummaryText(
+      detail,
+      audience: RepairSummaryAudience.reporter,
+    );
     final who = detail.assigneeName;
-    switch (detail.state) {
-      case 'pending_review':
-        final createdAt = detail.createdAt;
-        // 分鐘數要有開單時刻才算得出來；沒有就只留後半句，不寫「已送出 0
-        // 分鐘」騙人。
-        final sent = createdAt == null
-            ? ''
-            : '已送出 ${repairMinutesSince(createdAt)} 分鐘 · ';
+    if (repairIsReworking(detail)) {
+      return (
+        title: title,
+        detail: '上一次修完沒有通過驗收，工務正在重修。',
+        glyph: TmsStatusSummaryGlyph.wrench,
+        background: TmsColors.brandAccent,
+        detailColor: TmsColors.secondaryLabel,
+      );
+    }
+    switch (repairCompletionStage(detail)) {
+      case RepairCompletionStage.awaitingVerification:
         return (
-          title: '等主管審核',
-          detail: '$sent審核前可以補照片或撤回。',
-          glyph: TmsStatusSummaryGlyph.clock,
-          background: TmsColors.systemOrange,
+          title: title,
+          detail: who == null ? '工務已回報完修。' : '工務 $who 回報完修。',
+          glyph: TmsStatusSummaryGlyph.checkmark,
+          background: TmsColors.systemGreen,
           detailColor: TmsColors.secondaryLabel,
         );
-      case 'rejected':
-        final reason = detail.rejectReason;
+      case RepairCompletionStage.closedVerified:
         return (
-          title: '主管未核准，需要你補資料',
-          detail: '${reason == null ? '' : '$reason。'}補好後按下方「補資料再送出」。',
-          glyph: TmsStatusSummaryGlyph.exclamation,
-          background: TmsColors.systemRed,
-          detailColor: TmsColors.onErrorContainer,
+          title: title,
+          detail: '主管驗收通過，這張單已結案。',
+          glyph: TmsStatusSummaryGlyph.checkmark,
+          background: TmsColors.systemGreen,
+          detailColor: TmsColors.secondaryLabel,
         );
+      case RepairCompletionStage.closedNoAction:
+        return (
+          title: title,
+          detail: who == null ? '工務到場確認不需要處理。' : '工務 $who 到場確認不需要處理。',
+          glyph: TmsStatusSummaryGlyph.checkmark,
+          background: TmsColors.quaternaryLabel,
+          detailColor: TmsColors.secondaryLabel,
+        );
+      case RepairCompletionStage.notCompleted:
+        break;
+    }
+    switch (detail.state) {
       case 'cancelled':
         return (
-          title: '已撤回',
-          detail: '主管與工務都不會再看到這張單。',
+          title: title,
+          detail: '工務不會再看到這張單。',
           glyph: TmsStatusSummaryGlyph.cross,
           background: TmsColors.quaternaryLabel,
           detailColor: TmsColors.secondaryLabel,
         );
       case 'pool':
         return (
-          title: '等工務接單',
-          detail: detail.isUrgent ? '急件已直接送工務。' : '主管已核准。',
+          title: title,
+          detail: detail.lastVerifyFailedAt != null
+              ? '上一次修完沒有通過驗收，等工務重新接單。'
+              : '工務接單後會開始處理。',
           glyph: TmsStatusSummaryGlyph.clock,
           background: TmsColors.systemOrange,
           detailColor: TmsColors.secondaryLabel,
         );
       case 'accepted':
         return (
-          title: who == null ? '已接單' : '工務 $who 已接單',
+          title: title,
           detail: '還沒開始維修。',
           glyph: TmsStatusSummaryGlyph.checkmark,
           background: TmsColors.brandPrimary,
@@ -271,23 +288,15 @@ class TicketDetailHousekeeping extends StatelessWidget {
         );
       case 'doing':
         return (
-          title: who == null ? '維修中' : '工務 $who 維修中',
+          title: title,
           detail: '修好會通知你。',
           glyph: TmsStatusSummaryGlyph.wrench,
           background: TmsColors.brandPrimary,
           detailColor: TmsColors.secondaryLabel,
         );
-      case 'done':
-        return (
-          title: '已修好',
-          detail: who == null ? '工務已回報完修。' : '工務 $who 回報完修。',
-          glyph: TmsStatusSummaryGlyph.checkmark,
-          background: TmsColors.systemGreen,
-          detailColor: TmsColors.secondaryLabel,
-        );
       default:
         return (
-          title: repairStateText(detail.state),
+          title: title,
           detail: '',
           glyph: TmsStatusSummaryGlyph.clock,
           background: TmsColors.quaternaryLabel,
@@ -296,105 +305,116 @@ class TicketDetailHousekeeping extends StatelessWidget {
     }
   }
 
+  /// 進度時間軸。外層節點的讀值是每一步的名字與註記接起來的一句，每一步各自
+  /// 再掛步驟條的 id：時間軸上的註記（例如主管改為一般件的原因）與「目前在第
+  /// 幾步」要分得開來讀。
+  Widget _timeline(RepairTicketDetail detail) {
+    final steps = _timelineSteps(detail);
+    return TmsSemantics(
+      id: 'ticket.timeline',
+      label: [
+        for (final step in steps)
+          step.note == null ? step.label : '${step.label} ${step.note}',
+      ].join('，'),
+      child: TmsTimeline(steps: steps),
+    );
+  }
 
-  /// 四步時間軸：房務送出 → 主管審核 → 工務處理 → 完修。
+  /// 四步時間軸，步驟名與工務、主管視角的步驟條同一套（[repairStepLabels]）。
   ///
   /// 每一步的狀態由後端那一個 state 推出來，畫面不另外記一份進度——別的裝置把
-  /// 單推進之後，自己記的那一份就是舊的。
+  /// 單推進之後，自己記的那一份就是舊的。報修送出、還沒有人接單時停在第一步
+  /// 「待開始」：對報修的人來說單已經在排隊等工務，不是還沒開始。
   List<TmsTimelineStep> _timelineSteps(RepairTicketDetail detail) {
     final state = detail.state;
     final who = detail.assigneeName;
     final createdAt = detail.createdAt;
     final sentTime = createdAt == null ? null : repairClockText(createdAt);
+    final current = state == 'pool' ? 0 : repairCurrentStepIndex(detail);
+    final stage = repairCompletionStage(detail);
 
-    final TmsTimelineStep review;
+    TmsTimelineStatus statusOf(int index) {
+      if (index < current) {
+        return TmsTimelineStatus.done;
+      }
+      return index == current
+          ? TmsTimelineStatus.current
+          : TmsTimelineStatus.pending;
+    }
+
+    final downgrade = detail.urgentDowngradeReason;
+    final String firstNote;
+    if (detail.isUrgent) {
+      firstNote = '系統判定急件（${detail.urgentRule ?? '規則'}），已同步通知主管';
+    } else if (downgrade != null) {
+      firstNote = '主管改為一般件：$downgrade';
+    } else {
+      firstNote = '房務 ${detail.reporterNameText} 報修';
+    }
+    final notes = <String?>[
+      firstNote,
+      state == 'doing' && who != null ? '工務 $who 維修中' : null,
+      stage == RepairCompletionStage.notCompleted || who == null
+          ? null
+          : '工務 $who',
+      switch (stage) {
+        RepairCompletionStage.closedVerified =>
+          detail.verifiedBy == null ? null : '${detail.verifiedBy}驗收',
+        RepairCompletionStage.closedNoAction => '不需處理，直接結案',
+        _ => null,
+      },
+    ];
+
     if (state == 'cancelled') {
-      review = const TmsTimelineStep(
-        label: '已撤回',
-        status: TmsTimelineStatus.failed,
-      );
-    } else if (detail.isUrgent) {
-      review = TmsTimelineStep(
-        label: '主管審核',
-        status: TmsTimelineStatus.done,
-        note: '系統判定急件（${detail.urgentRule ?? '規則'}），'
-            '略過審核直接送工務，已同步通知主管',
-        time: sentTime,
-      );
-    } else if (state == 'pending_review') {
-      review = const TmsTimelineStep(
-        label: '主管審核',
-        status: TmsTimelineStatus.current,
-        note: '等待主管審核',
-      );
-    } else if (state == 'rejected') {
-      review = TmsTimelineStep(
-        label: '主管未核准',
-        status: TmsTimelineStatus.failed,
-        note: detail.rejectReason,
-      );
-    } else {
-      final downgrade = detail.urgentDowngradeReason;
-      review = TmsTimelineStep(
-        label: '主管審核',
-        status: TmsTimelineStatus.done,
-        note: downgrade == null ? '已核准' : '主管改為一般件：$downgrade',
-      );
+      return [
+        TmsTimelineStep(
+          label: '已撤回',
+          status: TmsTimelineStatus.failed,
+          note: firstNote,
+          time: sentTime,
+        ),
+      ];
     }
-
-    final bool workReached =
-        state == 'pool' ||
-        state == 'accepted' ||
-        state == 'doing' ||
-        state == 'done';
-    final TmsTimelineStep work;
-    if (state == 'done') {
-      work = const TmsTimelineStep(
-        label: '工務處理',
-        status: TmsTimelineStatus.done,
-      );
-    } else if (workReached) {
-      work = TmsTimelineStep(
-        label: '工務處理',
-        status: TmsTimelineStatus.current,
-        note: who == null
-            ? '還在待認領，等工務接單'
-            : '工務 $who ${state == 'doing' ? '維修中' : '已接單'}',
-      );
-    } else {
-      work = const TmsTimelineStep(
-        label: '工務處理',
-        status: TmsTimelineStatus.pending,
-      );
-    }
-
     return [
-      TmsTimelineStep(
-        label: '房務送出',
-        status: TmsTimelineStatus.done,
-        note: '房務 ${detail.reporterNameText}',
-        time: sentTime,
-      ),
-      review,
-      work,
-      state == 'done'
-          ? TmsTimelineStep(
-              label: '完修',
-              status: TmsTimelineStatus.done,
-              note: who == null ? null : '工務 $who',
-            )
-          : const TmsTimelineStep(
-              label: '完修',
-              status: TmsTimelineStatus.pending,
-            ),
+      for (var i = 0; i < repairStepLabels.length; i++)
+        TmsTimelineStep(
+          label: repairStepLabels[i],
+          status: statusOf(i),
+          note: notes[i],
+          time: i == 0 ? sentTime : null,
+          wrap: (node) => _stepWrap(node, i, statusOf(i)),
+        ),
     ];
   }
 
+  /// 一步掛步驟條的 id：固定的 `ticket.stepper.{n}`，目前那一步外面再包
+  /// `--current`、走完的包 `--done`，和工務、主管視角的步驟條同一套。
+  Widget _stepWrap(Widget node, int index, TmsTimelineStatus status) {
+    final Widget step = TmsSemantics(
+      id: 'ticket.stepper.${index + 1}',
+      label: repairStepLabels[index],
+      child: node,
+    );
+    return switch (status) {
+      TmsTimelineStatus.current => TmsSemantics(
+        id: 'ticket.stepper.${index + 1}--current',
+        child: step,
+      ),
+      TmsTimelineStatus.done => TmsSemantics(
+        id: ManagerIds.ticketStepperDone(index + 1),
+        child: step,
+      ),
+      _ => step,
+    };
+  }
 
   /// 能不能補照片看的是後端收不收：契約 appendRepairTicketPhotos 在單結案後
   /// 回 409，所以這裡用同一條界線決定要不要畫出「補照片」格，不另外猜一套。
   Widget? _photoSection(RepairTicketDetail detail) {
-    final canAdd = detail.state != 'done' && detail.state != 'cancelled';
+    final canAdd =
+        detail.state != 'done' &&
+        detail.state != 'closed' &&
+        detail.state != 'cancelled';
     final photos = detail.photos;
     if (photos.isEmpty && !canAdd) {
       return null;
@@ -486,11 +506,8 @@ class TicketDetailHousekeeping extends StatelessWidget {
   /// （`Main.dc.html:4836`）。單已經撤回或結案時沒有這一句。
   String? _actionNote(RepairTicketDetail detail) {
     switch (detail.state) {
-      case 'pending_review':
-        return '主管審核前可以補照片或撤回；核准後只能補照片。';
-      case 'rejected':
-        return '打開原本的單修改，不用整張重填。';
       case 'pool':
+        return '工務接單前可以補照片或撤回；接單後只能補照片。';
       case 'accepted':
       case 'doing':
         return '工務處理中仍可補照片，例如問題變嚴重時。';
@@ -500,32 +517,24 @@ class TicketDetailHousekeeping extends StatelessWidget {
   }
 
 
-  /// 置底操作列。這一頁一個狀態最多只有一顆鍵，兩顆不會同時出現。
+  /// 置底操作列。這一頁只有撤回一顆鍵。
   ///
-  /// 撤回只在主管還沒審核前成立（`Main.dc.html:4812`）。工務已經認領的單讓按
-  /// 鈕直接不存在，而不是先顯示再讓員工點了才報 409——那是拿錯誤訊息當說明書。
+  /// 撤回只在工務還沒接單前成立。工務已經認領的單讓按鈕直接不存在，而不是先
+  /// 顯示再讓員工點了才報 409——那是拿錯誤訊息當說明書。
   Widget? _buildActionBar(RepairTicketDetail detail) {
-    if (detail.state == 'pending_review') {
-      return TmsActionBar(
-        primary: TmsSemantics(
-          id: 'ticket.withdraw-button',
-          child: TmsPillButton(
-            label: '撤回工務單',
-            style: TmsPillButtonStyle.dangerOutlined,
-            onPressed: onWithdraw,
-          ),
-        ),
-      );
+    if (detail.state != 'pool') {
+      return null;
     }
-    if (detail.state == 'rejected') {
-      return TmsActionBar(
-        primary: TmsSemantics(
-          id: 'ticket.resubmit-button',
-          child: TmsPillButton(label: '補資料再送出', onPressed: onResubmit),
+    return TmsActionBar(
+      primary: TmsSemantics(
+        id: 'ticket.withdraw-button',
+        child: TmsPillButton(
+          label: '撤回工務單',
+          style: TmsPillButtonStyle.dangerOutlined,
+          onPressed: onWithdraw,
         ),
-      );
-    }
-    return null;
+      ),
+    );
   }
 }
 

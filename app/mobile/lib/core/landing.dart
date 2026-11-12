@@ -10,8 +10,9 @@ import 'api_client.dart';
 /// 主管即使被設了部門也還是主管，進主管外殼；不是主管的才看部門，工務進
 /// 工務外殼，其餘（房務、櫃檯、沒有部門）進房務外殼。
 Widget landingShellFor({required String role, String? dept}) {
-  if (role == 'manager') {
-    return const ManagerShell();
+  final kind = managerKindOf(role: role, dept: dept);
+  if (kind != null) {
+    return ManagerShell(kind: kind);
   }
   if (dept == 'engineering') {
     return const EngineeringShell();
@@ -19,14 +20,20 @@ Widget landingShellFor({required String role, String? dept}) {
   return const HousekeepingShell();
 }
 
-/// 主管的種類。只決定主管首頁的格子與「我名下的單」用哪一種卡，不決定進哪個
-/// 外殼，也不影響誰能驗收。
+/// 主管的種類。只決定主管看得到哪幾類待辦與「我名下的單」用哪一種卡，不決定
+/// 進哪個外殼，也不影響誰能驗收。
 enum ManagerKind {
-  /// 房務主管：看待查房與待驗收兩格，名下的單用房務首頁的任務卡。
-  housekeeping,
+  /// 房務主管：看待查房與待驗收兩類，名下的單用房務首頁的任務卡。
+  housekeeping(['inspection', 'verify']),
 
-  /// 工務主管：只看待驗收一格，名下的單用工務首頁的工務單卡；沒有查房入口。
-  engineering,
+  /// 工務主管：只看待驗收一類，名下的單用工務首頁的工務單卡；沒有查房入口。
+  engineering(['verify']);
+
+  const ManagerKind(this.queues);
+
+  /// 這種主管看得到的待辦類別，依首頁格子的順序排；鍵與後端主管待辦相同。
+  /// 首頁畫哪幾格、清單准不准打開，都只看這一份，待查房的入口不在別處另判。
+  final List<String> queues;
 }
 
 /// 判定主管種類，全 App 只在這裡判一次，再由主管外殼往下傳。

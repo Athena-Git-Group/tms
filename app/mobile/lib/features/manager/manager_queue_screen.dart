@@ -1,26 +1,35 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/landing.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_content_unavailable.dart';
+import '../ticket/ticket_screen.dart';
 import 'inspection_screen.dart';
 import 'manager_ids.dart';
 import 'manager_queue_row.dart';
 import 'manager_queues_store.dart';
 
-/// 等主管處理的單（ui-plan 畫面 2）：一個清單元件吃三種類別。
+/// 等主管處理的單（ui-plan 畫面 2）：一個清單元件吃待查房與待驗收兩類。
 ///
 /// 內容就是 [ManagerQueuesStore] 裡那一份 `GET /me/manager-queues` 回應的對應
-/// 陣列，與首頁三格同源；重取後兩邊一起更新。某一類沒有單時是一句說明，不是空白。
+/// 陣列，與首頁格子同源；重取後兩邊一起更新。某一類沒有單時是一句說明，不是空白。
+///
+/// 工務主管沒有待查房：首頁本來就不畫那一格，萬一還是以待查房開進來，這裡
+/// 直接退回首頁，不畫任何一列。
 class ManagerQueueScreen extends StatelessWidget {
   const ManagerQueueScreen({
     super.key,
+    required this.kind,
     required this.queue,
     required this.store,
   });
 
-  /// inspection、review 或 verify。
+  /// 打開清單的是哪種主管。
+  final ManagerKind kind;
+
+  /// inspection 或 verify。
   final String queue;
 
   /// 與主管首頁共用的那一份主管待辦。
@@ -28,18 +37,27 @@ class ManagerQueueScreen extends StatelessWidget {
 
   static const Map<String, String> _titles = {
     'inspection': '待查房',
-    'review': '待審核',
     'verify': '待驗收',
   };
 
   static const Map<String, String> _emptyTitles = {
     'inspection': '目前沒有等你查的房',
-    'review': '目前沒有等你審核的報修',
     'verify': '目前沒有等你驗收的工務單',
   };
 
+  /// 這種主管能不能看這一類清單；工務主管不能看待查房。
+  bool get _allowed => kind.queues.contains(queue);
+
   @override
   Widget build(BuildContext context) {
+    if (!_allowed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          Navigator.of(context).maybePop();
+        }
+      });
+      return const CupertinoPageScaffold(child: SizedBox.shrink());
+    }
     return TmsSemantics(
       id: ManagerIds.queue,
       explicitChildNodes: true,
@@ -54,7 +72,7 @@ class ManagerQueueScreen extends StatelessWidget {
             builder: (context, queues, _) => ListView(
               children: [
                 ..._rows(context, queues),
-                if (_rowData(queue, queues).isEmpty)
+                if (_entries(queue, queues).isEmpty)
                   TmsContentUnavailable(
                     id: ManagerIds.queueEmpty,
                     copy: TmsEmptyCopy(
@@ -71,7 +89,9 @@ class ManagerQueueScreen extends StatelessWidget {
     );
   }
 
-  static List<ManagerQueueRowData> _rowData(
+  /// 這一類清單的每一列與點下去要開的畫面，都由 item 型別一次決定：待查房
+  /// 進查房畫面，待驗收進工務單詳情（主管版）。
+  static List<({ManagerQueueRowData data, Widget Function() page})> _entries(
     String queue,
     ManagerQueues? queues,
   ) {
@@ -81,47 +101,32 @@ class ManagerQueueScreen extends StatelessWidget {
     return switch (queue) {
       'inspection' => [
         for (final item in queues.inspection)
-          ManagerQueueRowData.inspection(item),
+          (
+            data: ManagerQueueRowData.inspection(item),
+            page: () => InspectionScreen(item: item),
+          ),
       ],
-      'review' => [
-        for (final item in queues.review) ManagerQueueRowData.review(item),
+      _ => [
+        for (final item in queues.verify)
+          (
+            data: ManagerQueueRowData.verify(item),
+            page: () =>
+                TicketScreen(view: TicketView.manager, taskId: item.taskId),
+          ),
       ],
-      _ => [for (final item in queues.verify) ManagerQueueRowData.verify(item)],
     };
   }
 
-  /// 點待查房的一列進查房畫面。查房畫面送出成功會換成結果畫面、遇到單已被處理
-  /// 會自己退回來；不管怎麼回到清單，那張單的去向都已經變了，所以回來時一律
-  /// 重取一次，清單與首頁三格一起更新。
-  Future<void> _openInspection(
-    BuildContext context,
-    InspectionQueueItem item,
-  ) async {
-    await Navigator.of(context).push(
-      CupertinoPageRoute<void>(builder: (_) => InspectionScreen(item: item)),
-    );
+  /// 點一列進它的畫面。查房送出、驗收送出或遇到單已被處理，都會讓那張單的
+  /// 去向變了；不管怎麼回到清單，回來時一律重取一次，清單與首頁格子一起更新。
+  Future<void> _open(BuildContext context, Widget page) async {
+    await Navigator.of(context)
+        .push(CupertinoPageRoute<void>(builder: (_) => page));
     await store.refresh();
   }
 
-  /// 列被點下去要做的事；目前只有待查房的列可以點進去。
-  VoidCallback? _onTapRow(
-    BuildContext context,
-    ManagerQueues? queues,
-    ManagerQueueRowData row,
-  ) {
-    if (queue != 'inspection' || queues == null) {
-      return null;
-    }
-    for (final item in queues.inspection) {
-      if (item.taskId == row.taskId) {
-        return () => _openInspection(context, item);
-      }
-    }
-    return null;
-  }
-
   List<Widget> _rows(BuildContext context, ManagerQueues? queues) {
-    final rows = _rowData(queue, queues);
+    final rows = _entries(queue, queues);
     if (rows.isEmpty) {
       return const [];
     }
@@ -142,9 +147,9 @@ class ManagerQueueScreen extends StatelessWidget {
           children: [
             for (var i = 0; i < rows.length; i++)
               ManagerQueueRow(
-                data: rows[i],
+                data: rows[i].data,
                 showSeparator: i < rows.length - 1,
-                onTap: _onTapRow(context, queues, rows[i]),
+                onTap: () => _open(context, rows[i].page()),
               ),
           ],
         ),

@@ -25,6 +25,10 @@ void main() {
     String? urgentDowngradeReason,
     String? urgentRule,
     String? verifiedBy,
+    String? resolutionType,
+    String? lastVerifyFailedReason,
+    String? lastVerifyFailedBy,
+    String? lastVerifyFailedAt,
     bool isUrgent = false,
     DateTime? createdAt,
   }) {
@@ -42,6 +46,10 @@ void main() {
       assigneeName: assigneeName,
       urgentRule: urgentRule,
       verifiedBy: verifiedBy,
+      resolutionType: resolutionType,
+      lastVerifyFailedReason: lastVerifyFailedReason,
+      lastVerifyFailedBy: lastVerifyFailedBy,
+      lastVerifyFailedAt: lastVerifyFailedAt,
       rejectReason: rejectReason,
       urgentDowngradeReason: urgentDowngradeReason,
     );
@@ -53,7 +61,6 @@ void main() {
         ticket: detail,
         errorMessage: null,
         onWithdraw: () {},
-        onResubmit: () {},
         onAddPhoto: () {},
         onOpenPhoto: (_) {},
       ),
@@ -76,44 +83,54 @@ void main() {
   }
 
   group('房務視角（Main.dc.html:1746）', () {
-    testWidgets('審核進度是直列時間軸的四步，不是工務側的橫向步驟條', (tester) async {
-      await tester.pumpWidget(housekeeping(ticket()));
+    testWidgets('進度是直列時間軸，四步與工務側步驟條同名，不是橫向步驟條', (tester) async {
+      await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
 
       final timeline = tester.widget<TmsTimeline>(find.byType(TmsTimeline));
       expect(
         [for (final step in timeline.steps) step.label],
-        ['房務送出', '主管審核', '工務處理', '完修'],
+        ['待開始', '維修中', '完修', '驗收'],
       );
       expect(find.byType(TmsStepTrack), findsNothing);
     });
 
-    testWidgets('等主管審核時第二步是目前步驟，後面兩步都還沒走到', (tester) async {
-      await tester.pumpWidget(housekeeping(ticket()));
+    testWidgets('報修送出、等工務接單時停在第一步，後面三步都還沒走到', (tester) async {
+      await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
 
       final timeline = tester.widget<TmsTimeline>(find.byType(TmsTimeline));
-      expect(timeline.steps[0].status, TmsTimelineStatus.done);
-      expect(timeline.steps[1].status, TmsTimelineStatus.current);
+      expect(timeline.steps[0].status, TmsTimelineStatus.current);
+      expect(timeline.steps[1].status, TmsTimelineStatus.pending);
       expect(timeline.steps[2].status, TmsTimelineStatus.pending);
       expect(timeline.steps[3].status, TmsTimelineStatus.pending);
     });
 
-    testWidgets('主管未核准時那一步是沒通過，退回原因寫在它下面（Main.dc.html:4805）', (
-      tester,
-    ) async {
+    testWidgets('已結案時四步全部完成', (tester) async {
       await tester.pumpWidget(
-        housekeeping(ticket(state: 'rejected', rejectReason: '照片看不清楚')),
+        housekeeping(
+          ticket(
+            state: 'closed',
+            assigneeName: '阿德',
+            resolutionType: 'fixed',
+            verifiedBy: '王主管',
+          ),
+        ),
       );
 
       final timeline = tester.widget<TmsTimeline>(find.byType(TmsTimeline));
-      expect(timeline.steps[1].label, '主管未核准');
-      expect(timeline.steps[1].status, TmsTimelineStatus.failed);
-      expect(timeline.steps[1].note, '照片看不清楚');
-      expect(find.text('補資料再送出'), findsOneWidget);
+      expect([
+        for (final step in timeline.steps) step.status,
+      ], List.filled(4, TmsTimelineStatus.done));
     });
 
-    testWidgets('急件略過審核那一步仍算完成，理由寫在步驟下（Main.dc.html:4803）', (
-      tester,
-    ) async {
+    testWidgets('沒有任何主管審核的字樣與補資料再送出', (tester) async {
+      await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
+
+      expect(find.textContaining('主管審核'), findsNothing);
+      expect(find.textContaining('主管未核准'), findsNothing);
+      expect(find.text('補資料再送出'), findsNothing);
+    });
+
+    testWidgets('急件的判定理由寫在第一步底下', (tester) async {
       await tester.pumpWidget(
         housekeeping(
           ticket(state: 'pool', isUrgent: true, urgentRule: 'VIP · 15:00 入住'),
@@ -121,8 +138,7 @@ void main() {
       );
 
       final timeline = tester.widget<TmsTimeline>(find.byType(TmsTimeline));
-      expect(timeline.steps[1].status, TmsTimelineStatus.done);
-      expect(timeline.steps[1].note, contains('系統判定急件（VIP · 15:00 入住）'));
+      expect(timeline.steps[0].note, contains('系統判定急件（VIP · 15:00 入住）'));
     });
 
     testWidgets('摘要卡講的是狀態加一句後續，不是只有狀態詞（Main.dc.html:4801）', (
@@ -140,22 +156,46 @@ void main() {
       expect(card.glyph, TmsStatusSummaryGlyph.wrench);
     });
 
-    testWidgets('沒有開單時刻就不寫「已送出 N 分鐘」，整段不顯示（RULINGS R11）', (
-      tester,
-    ) async {
-      await tester.pumpWidget(housekeeping(ticket()));
+    testWidgets('已完修時摘要卡用完修結果的短說法講等主管驗收', (tester) async {
+      await tester.pumpWidget(
+        housekeeping(
+          ticket(state: 'done', assigneeName: '阿德', resolutionType: 'fixed'),
+        ),
+      );
 
-      expect(find.text('審核前可以補照片或撤回。'), findsOneWidget);
-      expect(find.textContaining('已送出'), findsNothing);
+      final card = tester.widget<TmsStatusSummaryCard>(
+        find.byType(TmsStatusSummaryCard),
+      );
+      expect(card.title, '已修好 · 等主管驗收');
     });
 
-    testWidgets('有開單時刻時分鐘數與時間軸的時刻都接上（Main.dc.html:4783）', (
-      tester,
-    ) async {
-      final createdAt = DateTime.now().subtract(const Duration(minutes: 7));
-      await tester.pumpWidget(housekeeping(ticket(createdAt: createdAt)));
+    testWidgets('退回重修中講誰在重修，下方帶最近一次不通過的原因與判定人', (tester) async {
+      await tester.pumpWidget(
+        housekeeping(
+          ticket(
+            state: 'accepted',
+            assigneeName: '阿德',
+            lastVerifyFailedReason: '排水仍然很慢',
+            lastVerifyFailedBy: '陳主管',
+            lastVerifyFailedAt: '2026-11-12T03:00:00Z',
+          ),
+        ),
+      );
 
-      expect(find.textContaining('已送出 7 分鐘'), findsOneWidget);
+      final card = tester.widget<TmsStatusSummaryCard>(
+        find.byType(TmsStatusSummaryCard),
+      );
+      expect(card.title, '退回重修中 · 阿德 處理中');
+      expect(find.text('排水仍然很慢'), findsOneWidget);
+      expect(find.textContaining('陳主管'), findsOneWidget);
+    });
+
+    testWidgets('有開單時刻時第一步的時刻接上（Main.dc.html:4783）', (tester) async {
+      final createdAt = DateTime.now().subtract(const Duration(minutes: 7));
+      await tester.pumpWidget(
+        housekeeping(ticket(state: 'pool', createdAt: createdAt)),
+      );
+
       final timeline = tester.widget<TmsTimeline>(find.byType(TmsTimeline));
       expect(timeline.steps[0].time, isNotNull);
     });
@@ -172,20 +212,20 @@ void main() {
       expect(find.text('阿美'), findsOneWidget);
     });
 
-    testWidgets('撤回只在主管還沒審核前出現，進了待認領就不再有（Main.dc.html:4812）', (
-      tester,
-    ) async {
-      await tester.pumpWidget(housekeeping(ticket()));
+    testWidgets('撤回只在工務還沒接單前出現，接單後就不再有', (tester) async {
+      await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
       expect(find.text('撤回工務單'), findsOneWidget);
 
-      await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
+      await tester.pumpWidget(
+        housekeeping(ticket(state: 'accepted', assigneeName: '阿德')),
+      );
       expect(find.text('撤回工務單'), findsNothing);
     });
 
     testWidgets('這個狀態還能做什麼寫在列表底下（Main.dc.html:4836）', (tester) async {
-      await tester.pumpWidget(housekeeping(ticket()));
+      await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
 
-      expect(find.text('主管審核前可以補照片或撤回；核准後只能補照片。'), findsOneWidget);
+      expect(find.text('工務接單前可以補照片或撤回；接單後只能補照片。'), findsOneWidget);
     });
 
     testWidgets('導覽列標題不隨捲動換內容，從頭到尾都是單號加類別（Main.dc.html:4822）', (

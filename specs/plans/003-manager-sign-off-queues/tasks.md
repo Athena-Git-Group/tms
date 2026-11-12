@@ -620,8 +620,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/工務單/完修與回到原任務.feature`
 
-- [ ] T119 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T120 [BDD-REFACTOR] 在綠燈下把四種完修結果的後續動作（追蹤單、停用、照片規則、落地狀態）收成一張對照，`resolveOnComplete` 不再用 if 串
+- [X] T119 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T120 [BDD-REFACTOR] 在綠燈下把四種完修結果的後續動作（追蹤單、停用、照片規則、落地狀態）收成一張對照，`resolveOnComplete` 不再用 if 串
 
 ## Phase 4F: MODIFY Feature File - backend/工務單/照片完整性與冪等送出.feature
 
@@ -640,8 +640,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/工務單/照片完整性與冪等送出.feature`
 
-- [ ] T121 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T122 [BDD-REFACTOR] 在綠燈下確認照片規則只寫在 4E 的對照一處
+- [X] T121 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T122 [BDD-REFACTOR] 在綠燈下確認照片規則只寫在 4E 的對照一處
 
 ## Phase 4G: MODIFY Feature File - backend/工務單/開立工務單與急件.feature
 
@@ -661,8 +661,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/工務單/開立工務單與急件.feature`
 
-- [ ] T123 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T124 [BDD-REFACTOR] 在綠燈下確認三條開單路徑共用同一個去向判定
+- [X] T123 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T124 [BDD-REFACTOR] 在綠燈下確認三條開單路徑共用同一個去向判定
 
 ## Phase 4H: MODIFY Feature File - backend/工務單/工務視角維修與開單.feature
 
@@ -681,8 +681,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/工務單/工務視角維修與開單.feature`
 
-- [ ] T125 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T126 [BDD-REFACTOR] 在綠燈下確認工務單列排序與今天已完修都用 4C 收斂的已結束判斷
+- [X] T125 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T126 [BDD-REFACTOR] 在綠燈下確認工務單列排序與今天已完修都用 4C 收斂的已結束判斷
 
 ## Phase 4I: MODIFY Feature File - backend/查房/逐項判定與退回去向.feature
 
@@ -702,8 +702,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/查房/逐項判定與退回去向.feature`
 
-- [ ] T127 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T128 [BDD-REFACTOR] 在綠燈下確認查房的三種 403 走同一個檢查出口
+- [X] T127 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T128 [BDD-REFACTOR] 在綠燈下確認查房的三種 403 走同一個檢查出口
 
 ## Phase 4J: DELETE Feature / DSL Truth - 後端主管審核（核准、退回、補資料再送出、待審核清單、`repair_rejected`）
 
@@ -727,8 +727,8 @@
 - `specs/truth/features/backend/工務單/主管驗收的狀態守衛.feature`
 - `specs/truth/features/backend/主管工作台/主管待辦清單.feature`
 
-- [ ] T129 [CODE-REMOVE] 移除後端主管審核的端點、服務方法、狀態轉移、`repair_rejected` 推播與事件、待審核清單與型別
-- [ ] T130 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
+- [X] T129 [CODE-REMOVE] 移除後端主管審核的端點、服務方法、狀態轉移、`repair_rejected` 推播與事件、待審核清單與型別
+- [X] T130 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
 
 ## Phase 4K: MODIFY Feature File - ios-app/帳號與登入/登入與登出守衛.feature
 
@@ -750,8 +750,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature`
 
-- [ ] T131 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T132 [BDD-REFACTOR] 在綠燈下確認主管種類只在 `core/landing.dart` 判一次，主管外殼、首頁與推播都讀同一個值
+- [X] T131 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T132 [BDD-REFACTOR] 在綠燈下確認主管種類只在 `core/landing.dart` 判一次，主管外殼、首頁與推播都讀同一個值
 
 ## Phase 4L: MODIFY Feature File - ios-app/主管工作台/主管首頁.feature
 
@@ -776,8 +776,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/主管工作台/主管首頁.feature`
 
-- [ ] T133 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T134 [BDD-REFACTOR] 在綠燈下讓 `TmsCountTile` 一份元件涵蓋一般與寬版，首頁格子由同一份清單定義產生，不再寫死三格
+- [X] T133 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T134 [BDD-REFACTOR] 在綠燈下讓 `TmsCountTile` 一份元件涵蓋一般與寬版，首頁格子由同一份清單定義產生，不再寫死三格
 
 ## Phase 4M: MODIFY Feature File - ios-app/主管工作台/主管清單.feature
 
@@ -801,8 +801,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/主管工作台/主管清單.feature`
 
-- [ ] T135 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T136 [BDD-REFACTOR] 在綠燈下讓兩類清單共用同一個列元件，只以 item 型別決定第三行與標籤
+- [X] T135 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T136 [BDD-REFACTOR] 在綠燈下讓兩類清單共用同一個列元件，只以 item 型別決定第三行與標籤
 
 ## Phase 4N: MODIFY Feature File - ios-app/主管工作台/查房.feature
 
@@ -822,8 +822,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/主管工作台/查房.feature`
 
-- [ ] T137 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T138 [BDD-REFACTOR] 在綠燈下確認待查房入口只從主管種類一處決定
+- [X] T137 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T138 [BDD-REFACTOR] 在綠燈下確認待查房入口只從主管種類一處決定
 
 ## Phase 4O: MODIFY Feature File - ios-app/工務單/主管視角.feature
 
@@ -849,8 +849,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/工務單/主管視角.feature`
 
-- [ ] T139 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T140 [BDD-REFACTOR] 在綠燈下把主管動作列、不通過面板與結果卡收成獨立元件，`TicketView` 的選版只在 `ticket_screen.dart` 一處
+- [X] T139 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T140 [BDD-REFACTOR] 在綠燈下把主管動作列、不通過面板與結果卡收成獨立元件，`TicketView` 的選版只在 `ticket_screen.dart` 一處
 
 ## Phase 4P: MODIFY Feature File - ios-app/工務單/工務視角.feature
 
@@ -874,8 +874,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/工務單/工務視角.feature`
 
-- [ ] T141 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T142 [BDD-REFACTOR] 在綠燈下把四種完修結果的白話與照片規則收在 `repair_labels.dart` 一處，步驟條第四步的完成條件與摘要卡共用同一個狀態判斷
+- [X] T141 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T142 [BDD-REFACTOR] 在綠燈下把四種完修結果的白話與照片規則收在 `repair_labels.dart` 一處，步驟條第四步的完成條件與摘要卡共用同一個狀態判斷
 
 ## Phase 4Q: MODIFY Feature File - ios-app/工務單/工務單房務端生命週期.feature
 

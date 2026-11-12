@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/manager/manager_queue_row.dart';
 
-/// 三類清單的列：右欄時間照後端字串的時區位移取時分、只看 waitingSinceIsToday
-/// 決定標不標日期；三種 item 換成同一份列資料，公共區域用標題當地點。
+/// 主管清單的列：右欄時間照後端字串的時區位移取時分、只看 waitingSinceIsToday
+/// 決定標不標日期；兩種 item 換成同一份列資料，公共區域用標題當地點。
 void main() {
   // 台北時間 2026-11-10 11:30。
   final now = DateTime.utc(2026, 11, 10, 3, 30);
@@ -80,22 +80,43 @@ void main() {
     expect(row.label, 'W-0111 5 樓製冰機定期保養 無法修復 定期保養 阿強 完修');
   });
 
-  test('待審核列：單號、房號、說明、類別與報修人', () {
-    final row = ManagerQueueRowData.review(
-      const ReviewQueueItem(
+  test('待驗收列：重修後再完修的單多一顆「重修後再驗」', () {
+    final row = ManagerQueueRowData.verify(
+      const VerifyQueueItem(
         taskId: 't3',
-        roomNo: '202',
+        roomNo: '312',
         isPublicArea: false,
-        title: '窗簾掛勾鬆脫',
-        waitingSince: '2026-11-10T09:12:00+08:00',
+        title: '門把鬆動',
+        waitingSince: '2026-11-10T11:25:00+08:00',
         waitingSinceIsToday: true,
-        ticketNo: 'W-0201',
-        category: 'furniture_equipment',
-        reporterName: '阿芳',
-        photoCount: 1,
+        ticketNo: 'W-0116',
+        category: 'lock',
+        origin: 'reported',
+        resolutionType: 'fixed',
+        assigneeName: '阿強',
+        wasVerificationFailed: true,
       ),
     );
-    expect(row.label, 'W-0201 202 窗簾掛勾鬆脫 家具／設備 阿芳 報修 1 張照片');
+    expect(row.label, 'W-0116 312 門把鬆動 已修好 重修後再驗 阿強 完修');
+  });
+
+  test('待驗收列：沒有完修結果的舊單不畫結果標籤', () {
+    final row = ManagerQueueRowData.verify(
+      const VerifyQueueItem(
+        taskId: 't4',
+        roomNo: '208',
+        isPublicArea: false,
+        title: '水龍頭滴水',
+        waitingSince: '2026-11-09T16:10:00+08:00',
+        waitingSinceIsToday: false,
+        ticketNo: 'W-0110',
+        category: 'plumbing',
+        origin: 'reported',
+        resolutionType: null,
+      ),
+    );
+    expect(row.tags, isEmpty);
+    expect(row.label, 'W-0110 208 水龍頭滴水');
   });
 
   testWidgets('列畫得出來，右欄節點讀值只有時刻', (tester) async {

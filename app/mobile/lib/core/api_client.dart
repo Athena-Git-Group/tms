@@ -1109,6 +1109,8 @@ class RepairTicketDetail {
     this.urgentDowngradeReason,
     this.originTicketNo,
     this.photos = const [],
+    this.photoCount = 0,
+    this.completionPhotos = const [],
     this.lastVerifyFailedReason,
     this.lastVerifyFailedBy,
     this.lastVerifyFailedAt,
@@ -1188,6 +1190,14 @@ class RepairTicketDetail {
   /// 看這一欄。
   final List<RepairTicketPhoto> photos;
 
+  /// 報修照片張數（契約 RepairTicket.photoCount，必有）。後端不一定帶
+  /// [photos] 明細，詳情頁照片區的格數以這個數字為準。
+  final int photoCount;
+
+  /// 這一輪完修附的照片（契約 RepairTicket.completionPhotos）。被驗收不通過
+  /// 退回過的單只帶最近一次不通過之後的那幾張；退回重修中、還沒再完修時是空的。
+  final List<RepairTicketPhoto> completionPhotos;
+
   /// 最近一次驗收不通過的原因、判定主管顯示名稱與時間。三個欄位同時有值或
   /// 同時為 null；從沒被判不通過為 null。重修、再完修與結案後都保留，
   /// 要不要顯示由畫面依狀態決定。
@@ -1228,6 +1238,14 @@ class RepairTicketDetail {
       originTicketNo: json['originTicketNo'] as String?,
       photos: [
         for (final photo in (json['photos'] as List<dynamic>? ?? const []))
+          RepairTicketPhoto.fromJson(photo as Map<String, dynamic>),
+      ],
+      photoCount:
+          (json['photoCount'] as num?)?.toInt() ??
+          (json['photos'] as List<dynamic>? ?? const []).length,
+      completionPhotos: [
+        for (final photo
+            in (json['completionPhotos'] as List<dynamic>? ?? const []))
           RepairTicketPhoto.fromJson(photo as Map<String, dynamic>),
       ],
       lastVerifyFailedReason: json['lastVerifyFailedReason'] as String?,

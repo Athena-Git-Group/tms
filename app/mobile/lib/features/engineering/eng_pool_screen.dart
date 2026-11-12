@@ -358,6 +358,17 @@ class _EngineeringPoolListState extends State<EngineeringPoolList> {
                       text: sourceLabel,
                     ),
                   ],
+                  if (item.verificationReturnReason case final reason?) ...[
+                    const SizedBox(height: TmsSpacing.xs),
+                    Text(
+                      reason,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TmsText.footnote.copyWith(
+                        color: TmsColors.secondaryLabel,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: TmsSpacing.xs),
                   PoolTagRow(
                     tags: [
@@ -366,6 +377,19 @@ class _EngineeringPoolListState extends State<EngineeringPoolList> {
                       // 所以只寫得出「急件」兩個字。
                       if (item.urgent)
                         const TmsTag(label: '急件', tone: TmsTagTone.danger),
+                      // 被主管驗收不通過、退回池子的單：有原因才標，原因寫在
+                      // 標籤的讀值上，接單的人先知道上一次哪裡沒修好。
+                      if (item.verificationReturnReason case final reason?)
+                        TmsSemantics(
+                          id: '$itemId.verification-return-label',
+                          label: '驗收退回：$reason',
+                          child: const ExcludeSemantics(
+                            child: TmsTag(
+                              label: '驗收退回',
+                              tone: TmsTagTone.warn,
+                            ),
+                          ),
+                        ),
                       // 等待時間排在整列最後：前面幾顆講的是「這張單是什麼
                       // 單」，它講的是「它擱了多久」，工務先認單再看久不久。
                       ?waitedTag,

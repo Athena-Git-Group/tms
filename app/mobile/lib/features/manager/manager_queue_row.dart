@@ -5,7 +5,6 @@ import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_tag.dart';
-import '../ticket/repair_labels.dart';
 import 'manager_ids.dart';
 
 /// 列上的一顆標籤。
@@ -16,7 +15,7 @@ class ManagerQueueTag {
   final TmsTagTone tone;
 }
 
-/// 清單一列要畫的東西，由三種 item 各自換算；畫法只有 [ManagerQueueRow] 一套。
+/// 清單一列要畫的東西，由兩種 item 各自換算；畫法只有 [ManagerQueueRow] 一套。
 class ManagerQueueRowData {
   const ManagerQueueRowData({
     required this.taskId,
@@ -48,27 +47,8 @@ class ManagerQueueRowData {
     );
   }
 
-  /// 待審核：單號、房號、報修說明；次要字是類別、報修人與照片張數。
-  factory ManagerQueueRowData.review(ReviewQueueItem item) {
-    return ManagerQueueRowData(
-      taskId: item.taskId,
-      key: item.ticketNo,
-      ticketNo: item.ticketNo,
-      where: _where(item.roomNo, item.isPublicArea, item.title),
-      title: item.title,
-      details: [
-        repairCategoryText(item.category),
-        if (item.reporterName.isNotEmpty) '${item.reporterName} 報修',
-        if (item.photoCount > 0) '${item.photoCount} 張照片',
-      ],
-      tags: const [],
-      waitingSince: item.waitingSince,
-      waitingSinceIsToday: item.waitingSinceIsToday,
-    );
-  }
-
-  /// 待驗收：單號、房號或地點、說明；標籤是完修結果（無法修復用琥珀色）與
-  /// 定期保養，次要字是完修人。
+  /// 待驗收：單號、房號或地點、說明；標籤是完修結果（無法修復用琥珀色）、
+  /// 定期保養與重修後再驗，次要字是完修人。
   factory ManagerQueueRowData.verify(VerifyQueueItem item) {
     return ManagerQueueRowData(
       taskId: item.taskId,
@@ -88,6 +68,8 @@ class ManagerQueueRowData {
           ),
         if (item.origin == 'scheduled')
           const ManagerQueueTag('定期保養', TmsTagTone.info),
+        if (item.wasVerificationFailed)
+          const ManagerQueueTag('重修後再驗', TmsTagTone.warn),
       ],
       waitingSince: item.waitingSince,
       waitingSinceIsToday: item.waitingSinceIsToday,
@@ -133,8 +115,8 @@ class ManagerQueueRowData {
   };
 }
 
-/// 三類清單的一列：左邊單號（工務單才有）、房號或地點、內容、標籤與次要字，
-/// 右邊開始等主管的時間。三種類別都是這一個元件，差別只在 [ManagerQueueRowData]
+/// 主管清單的一列：左邊單號（工務單才有）、房號或地點、內容、標籤與次要字，
+/// 右邊開始等主管的時間。待查房與待驗收都是這一個元件，差別只在 [ManagerQueueRowData]
 /// 依 item 型別填了哪些標籤與次要字。
 ///
 /// 整列節點顯式帶 [ManagerQueueRowData.label]；右欄另掛一個節點，讀值是

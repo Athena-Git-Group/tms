@@ -12,12 +12,16 @@ import 'repair_labels.dart';
 import 'ticket_complete_sheet.dart';
 import 'ticket_detail_engineering.dart';
 import 'ticket_detail_housekeeping.dart';
+import 'ticket_manager_action_bar.dart';
+import 'ticket_verify_fail_sheet.dart';
+import 'ticket_verify_result_card.dart';
+import '../manager/manager_conflict_alert.dart';
 
 /// 工務單詳情要給誰看。
 ///
-/// 同一張單對報修的人與修的人是兩件不同的事，兩邊的版面也完全不同
-/// （`Main.dc.html:1746` 與 `1911`），所以這個值由入口點明講，不讓畫面自己猜。
-/// 推播是唯一事前不知道收件人身分的入口，那裡依登入帳號的部門決定。
+/// 同一張單對報修的人、修的人與驗收的主管是三件不同的事，所以這個值由入口點
+/// 明講，不讓畫面自己猜；每一種視角畫成哪一版只在 [TicketScreen] 決定。推播
+/// 與通知中心是唯一事前不知道收件人身分的入口，那裡用 [TicketView.forSession]。
 enum TicketView {
   /// 報修的人看自己送出的單。
   housekeeping,
@@ -25,8 +29,20 @@ enum TicketView {
   /// 工務看自己要修的單。
   engineering,
 
-  /// 主管從待審核、待驗收、推播或其他畫面點開的單；審核與驗收動作只在這個視角出現。
-  manager,
+  /// 主管從待驗收清單、首頁「我名下的單」、推播或通知中心點開的單；通過與不通
+  /// 過只在這個視角出現。
+  manager;
+
+  /// 依登入帳號決定視角：主管不分部門一律是主管視角（工務主管也是），其餘
+  /// 依部門，和原型「同一個 App 只依部門切換」一致（`Main.dc.html:1909`）。
+  static TicketView forSession(LoginResult? session) {
+    if (session?.role == 'manager') {
+      return TicketView.manager;
+    }
+    return session?.dept == 'engineering'
+        ? TicketView.engineering
+        : TicketView.housekeeping;
+  }
 }
 
 /// 工務單詳情（ui-plan 畫面 7）。
@@ -52,6 +68,16 @@ class _TicketScreenState extends State<TicketScreen> {
 
   /// 本次在這個畫面完修時選的處理結果文字；由工務視角寫進狀態列。
   String? _resolutionLabel;
+
+  /// 驗收不通過送出成功後後端回的結果；有值時整頁換成驗收結果卡。
+  RepairVerificationOutcome? _verifyOutcome;
+
+  /// 這次驗收撞上別人已處理（409 `state_conflict`）；等面板收起再提示。
+  bool _verifyConflicted = false;
+
+  /// 通過與不通過各自的 Idempotency-Key。同一個動作重送（沒收到回應再按一
+  /// 次）帶同一把，後端才認得出是同一次驗收；兩種結果是兩件事，不共用。
+  final Map<String, String> _verifyKeys = {};
 
   @override
   void initState() {
@@ -116,11 +142,6 @@ class _TicketScreenState extends State<TicketScreen> {
     '撤回失敗，請稍後再試。',
   );
 
-  Future<void> _resubmit() => _mutate(
-    () => ApiClient.instance.resubmitRepairTicket(widget.taskId!),
-    '重新送出失敗，請稍後再試。',
-  );
-
   Future<void> _releaseToPool() => _mutate(
     () => ApiClient.instance.releaseRepairTicketToPool(widget.taskId!),
     '放回待認領失敗，請稍後再試。',
@@ -179,6 +200,82 @@ class _TicketScreenState extends State<TicketScreen> {
     '開始維修失敗，請稍後再試。',
   );
 
+  /// 送出這次驗收。成功或撞單都回 null（結果記在狀態上），其他失敗回一句給
+  /// 人看的話。
+  Future<String?> _sendVerify(String result, {String? reason}) async {
+    final ticket = _ticket;
+    if (ticket == null) {
+      return '工務單還沒載入，請稍後再試。';
+    }
+    final key = _verifyKeys[result] ??= ApiClient.newIdempotencyKey();
+    try {
+      final outcome = await ApiClient.instance.verifyRepairTicket(
+        taskId: ticket.taskId,
+        result: result,
+        reason: reason,
+        idempotencyKey: key,
+      );
+      _verifyKeys.clear();
+      if (mounted && outcome.result == 'failed') {
+        setState(() => _verifyOutcome = outcome);
+      }
+      return null;
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) {
+        _verifyKeys.clear();
+        _verifyConflicted = true;
+        return null;
+      }
+      return e.errorMessage ?? '送出失敗，請稍後再試。';
+    } catch (_) {
+      return '送出失敗，請稍後再試。';
+    }
+  }
+
+  /// 按通過：直接送出，成功後回到開這一頁的清單（清單由那一端重取）。
+  Future<void> _pass() async {
+    final error = await _sendVerify('passed');
+    if (!mounted) {
+      return;
+    }
+    if (_verifyConflicted) {
+      await _showVerifyConflict();
+      return;
+    }
+    if (error != null) {
+      _showError(error);
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  /// 按不通過：升起原因面板；面板收起後才處理撞單，對話框不會疊在面板上。
+  Future<void> _openFailSheet() async {
+    final ticket = _ticket;
+    if (ticket == null) {
+      return;
+    }
+    await TmsSheetRoute.show<void>(
+      context,
+      (_) => TicketVerifyFailSheet(
+        ticketNo: ticket.ticketNo,
+        onSubmit: (reason) => _sendVerify('failed', reason: reason),
+      ),
+    );
+    if (mounted && _verifyConflicted) {
+      await _showVerifyConflict();
+    }
+  }
+
+  /// 單已被別的主管驗收或判不通過：說一聲，回清單。
+  Future<void> _showVerifyConflict() async {
+    _verifyConflicted = false;
+    await showManagerConflictAlert(context, message: '可能是另一位主管剛驗收過。');
+    if (mounted) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   void _showError(String message) {
     if (!mounted) {
       return;
@@ -226,7 +323,7 @@ class _TicketScreenState extends State<TicketScreen> {
       title: '${ticket.ticketNo} · ${repairCategoryText(ticket.category)}',
       initialIndex: index,
       photos: [
-        for (var i = 0; i < ticket.photos.length; i++)
+        for (var i = 0; i < ticket.photoCount; i++)
           TmsViewerPhoto(description: '${ticket.ticketNo} 照片 ${i + 1}'),
       ],
     );
@@ -264,22 +361,51 @@ class _TicketScreenState extends State<TicketScreen> {
           ticket: _ticket,
           errorMessage: _error,
           onWithdraw: _confirmWithdraw,
-          onResubmit: _resubmit,
           onAddPhoto: _appendPhoto,
           onOpenPhoto: _openViewer,
         ),
-        // 主管版面另行接上，先沿用工務版。
-        TicketView.engineering || TicketView.manager => TicketDetailEngineering(
-          ticket: _ticket,
-          errorMessage: _error,
-          resolutionLabel: _resolutionLabel,
-          onClaim: _claim,
-          onStart: _start,
-          onReleaseToPool: _releaseToPool,
-          onComplete: _openCompleteSheet,
-          onOpenPhoto: _openViewer,
-        ),
+        TicketView.engineering => _engineeringLayout(),
+        TicketView.manager => _managerLayout(),
       },
+    );
+  }
+
+  Widget _engineeringLayout({
+    bool showWorkerActions = true,
+    Widget? bottomBar,
+  }) {
+    return TicketDetailEngineering(
+      ticket: _ticket,
+      errorMessage: _error,
+      resolutionLabel: _resolutionLabel,
+      onClaim: _claim,
+      onStart: _start,
+      onReleaseToPool: _releaseToPool,
+      onComplete: _openCompleteSheet,
+      onOpenPhoto: _openViewer,
+      showWorkerActions: showWorkerActions,
+      bottomBar: bottomBar,
+    );
+  }
+
+  /// 主管視角：工務版面，只換底部動作列。已完修時是通過與不通過；其他狀態只有
+  /// 打開自己名下的單才給處理人的動作。不通過送出後整頁換成結果卡。
+  Widget _managerLayout() {
+    final outcome = _verifyOutcome;
+    if (outcome != null) {
+      return TicketVerifyResultCard(
+        outcome: outcome,
+        onBack: () => Navigator.of(context).maybePop(),
+      );
+    }
+    final ticket = _ticket;
+    final verifying =
+        ticket != null && TicketManagerActionBar.shows(ticket.state);
+    return _engineeringLayout(
+      showWorkerActions: ticket?.viewerIsAssignee ?? false,
+      bottomBar: verifying
+          ? TicketManagerActionBar(onPass: _pass, onFail: _openFailSheet)
+          : null,
     );
   }
 }

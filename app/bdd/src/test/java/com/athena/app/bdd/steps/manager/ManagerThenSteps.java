@@ -94,6 +94,9 @@ public class ManagerThenSteps {
             "paused", "已暫停",
             "done", "已完修");
 
+    /** 兩格的 y 差在這個點數以內就算排在同一列。 */
+    private static final int SAME_ROW_TOLERANCE = 8;
+
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter MM_DD = DateTimeFormatter.ofPattern("MM/dd");
 
@@ -837,7 +840,9 @@ public class ManagerThenSteps {
             org.openqa.selenium.Rectangle rect = tile.getRect();
             placed.add(Map.entry(new int[] {rect.getY(), rect.getX()}, queue));
         }
-        placed.sort((a, b) -> a.getKey()[0] != b.getKey()[0]
+        // 同一列的格子讀出來的 y 可能差 1pt（讀兩次之間畫面還在收尾），差距在
+        // SAME_ROW_TOLERANCE 以內就算同一列，改比 x。
+        placed.sort((a, b) -> Math.abs(a.getKey()[0] - b.getKey()[0]) > SAME_ROW_TOLERANCE
                 ? Integer.compare(a.getKey()[0], b.getKey()[0])
                 : Integer.compare(a.getKey()[1], b.getKey()[1]));
         List<String> onScreen = placed.stream().map(Map.Entry::getValue).toList();

@@ -20,6 +20,23 @@ void main() {
       );
     });
 
+    test('主管外殼帶著分流時判好的主管種類，部門是工務才是工務主管', () {
+      Matcher shellOf(ManagerKind kind) =>
+          isA<ManagerShell>().having((s) => s.kind, 'kind', kind);
+      expect(
+        landingShellFor(role: 'manager'),
+        shellOf(ManagerKind.housekeeping),
+      );
+      expect(
+        landingShellFor(role: 'manager', dept: 'housekeeping'),
+        shellOf(ManagerKind.housekeeping),
+      );
+      expect(
+        landingShellFor(role: 'manager', dept: 'engineering'),
+        shellOf(ManagerKind.engineering),
+      );
+    });
+
     test('不是主管時，工務部門進工務外殼', () {
       expect(
         landingShellFor(role: 'engineering', dept: 'engineering'),

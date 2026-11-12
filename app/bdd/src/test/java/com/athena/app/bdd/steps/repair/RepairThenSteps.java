@@ -1223,6 +1223,8 @@ public class RepairThenSteps {
      */
     @那麼("驗收結果卡說明 {string} 退回重修，回到 {string} 名下")
     public void verificationResultBackToAssignee(String ticketNo, String assigneeName) {
+        // 先等結果卡出現再讀後端：送出後到後端落地之間有一段往返，先讀會讀到送出前的單。
+        world.waitForTestId(MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
         Map<String, Object> row = singleTicketRow("rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
         String reason = requireLastVerifyFailure(ticketNo, row);
         assertResultCardMentions(ticketNo, "退回重修", "回到" + assigneeName + "名下", "會收到推播", reason);
@@ -1245,6 +1247,8 @@ public class RepairThenSteps {
      */
     @那麼("驗收結果卡說明 {string} 退回重修，{string} 已下班，回到工務待認領")
     public void verificationResultBackToPool(String ticketNo, String assigneeName) {
+        // 先等結果卡出現再讀後端：送出後到後端落地之間有一段往返，先讀會讀到送出前的單。
+        world.waitForTestId(MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
         Map<String, Object> row = singleTicketRow("rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
         requireLastVerifyFailure(ticketNo, row);
         assertResultCardMentions(ticketNo, "退回重修", assigneeName + "已下班", "回到了工務待認領");

@@ -378,6 +378,13 @@ public class BackendChannel {
      */
     public OffsetDateTime setBackendClockOutsideAllShifts() {
         long tenantId = ensureTenant();
+        // 測試租戶預設沒有班別設定，沒有時產品把任何時刻都當成在班內。同後端同名句型，
+        // 先補一份與示範資料相同的班別（早班 08:00–16:00、午班 16:00–23:00），已有就沿用。
+        execute("INSERT INTO tenant_config (tenant_id, key, value, updated_at) "
+                        + "VALUES (?, 'shift_times', ?::jsonb, now()) ON CONFLICT (tenant_id, key) DO NOTHING",
+                tenantId,
+                "{\"morning\": {\"start\": \"08:00\", \"end\": \"16:00\"}, "
+                        + "\"afternoon\": {\"start\": \"16:00\", \"end\": \"23:00\"}}");
         Object raw = queryScalar(
                 "SELECT value::text FROM tenant_config WHERE tenant_id = ? AND key = 'shift_times'", tenantId)
                 .orElseThrow(() -> new IllegalStateException(
@@ -1040,6 +1047,26 @@ public class BackendChannel {
     }
 
     /**
+     * 把這位處理人手上進行中的單暫時改回待開始，回傳被讓出來的任務 id，
+     * 由呼叫端在完修後放回 {@code doing}。只動狀態欄，計時與歷程都不碰。
+     */
+    private List<UUID> parkOtherDoingTasks(long tenantId, CreatedStaff assignee) {
+        if (assignee == null) {
+            return List.of();
+        }
+        List<UUID> doing = new ArrayList<>();
+        for (Map<String, Object> row : queryRows(
+                "SELECT id FROM tasks WHERE tenant_id = ? AND assignee_id = ? AND state = 'doing'",
+                tenantId, assignee.id())) {
+            doing.add((UUID) row.get("id"));
+        }
+        for (UUID id : doing) {
+            execute("UPDATE tasks SET state = 'accepted' WHERE tenant_id = ? AND id = ?", tenantId, id);
+        }
+        return doing;
+    }
+
+    /**
      * 以主管身分把急件降級為一般件（contracts {@code downgradeRepairTicketUrgency}）：
      * {@code repair_tickets.is_urgent} 轉 false、{@code urgent_downgrade_reason} 落原因，
      * {@code tasks.urgent} 同步。走正式端點而不是直接 UPDATE，降級事件才會跟著長出來。
@@ -1324,6 +1351,11 @@ public class BackendChannel {
         }
 
         String baseState = finished ? "doing" : "cancelled".equals(state) ? "pool" : state;
+        // 劇本只說這張單已完修或已結案，不管處理人手上是不是另有一張維修中的單；開工
+        // 端點一人只准一筆進行中（doing_task_exists），所以先把那幾筆暫時讓出來，這張
+        // 單完修後再放回維修中。
+        long tenantId = ensureTenant();
+        List<UUID> parked = finished ? parkOtherDoingTasks(tenantId, spec.assignee()) : List.of();
         UUID taskId = createRepairTicket(spec.ticketNo(), roomNo, spec.categoryCode(), baseState,
                 reporter, spec.assignee(), spec.description(), spec.urgent());
 
@@ -1337,6 +1369,9 @@ public class BackendChannel {
                     ? spec.completionPhotoCount() : (noActionNeeded ? 0 : 1);
             completeRepairTask(taskId, requireAssignee(state, spec.assignee()),
                     resolution, spec.resolutionNote(), photos);
+            for (UUID doingId : parked) {
+                execute("UPDATE tasks SET state = 'doing' WHERE tenant_id = ? AND id = ?", tenantId, doingId);
+            }
             if ("cannot_fix".equals(resolution)) {
                 // 無法修復：房況轉停用（backend dsl 同名句型的「處理結果」欄）。產品碼在完修
                 // 那一步會做，這裡再寫一次只是把 fixture 的真相釘死，不依賴產品碼有沒有做。

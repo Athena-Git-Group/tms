@@ -126,7 +126,7 @@ start_appium() {
 
   # Appium server 要花一兩秒把 REST 介面開起來，用輪詢代替固定 sleep。
   local _i
-  for _i in $(seq 1 20); do
+  for _i in $(seq 1 60); do
     if curl -s -o /dev/null "http://127.0.0.1:${APPIUM_PORT}/status"; then
       return 0
     fi

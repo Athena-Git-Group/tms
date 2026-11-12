@@ -62,6 +62,12 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
   bool get _allPhotosUploaded =>
       _photos.isNotEmpty && _uploadedPhotoIds.length == _photos.length;
 
+  /// 照片這一關過了沒：不需處理可以不附照片，但附了的話也要等它們傳完；
+  /// 其他結果至少一張且全部傳完。
+  bool get _photosReady => repairResolutionNeedsPhoto(_selectedResolution)
+      ? _allPhotosUploaded
+      : _uploadedPhotoIds.length == _photos.length;
+
   Future<void> _addPhoto() async {
     if (_photos.length >= _maxPhotos) {
       return;
@@ -107,7 +113,7 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
 
   Future<void> _submit() async {
     final resolution = _selectedResolution;
-    if (resolution == null || !_allPhotosUploaded || _submitting) {
+    if (resolution == null || !_photosReady || _submitting) {
       return;
     }
     setState(() {
@@ -154,7 +160,7 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
   @override
   Widget build(BuildContext context) {
     final canSubmit =
-        _selectedResolution != null && _allPhotosUploaded && !_submitting;
+        _selectedResolution != null && _photosReady && !_submitting;
     final hint = _resolutionHint();
     return TmsSemantics(
       id: 'completeSheet.sheet',
@@ -205,15 +211,11 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
   /// 還沒拍照就不講：那時候送不出去，先講後果只是雜訊（`Main.dc.html:3994`）。
   String? _resolutionHint() {
     final resolution = _selectedResolution;
-    if (resolution == null || _photos.isEmpty) {
+    if (resolution == null ||
+        (_photos.isEmpty && repairResolutionNeedsPhoto(resolution))) {
       return null;
     }
-    for (final entry in repairResolutions) {
-      if (entry.key == resolution) {
-        return entry.hint;
-      }
-    }
-    return null;
+    return repairResolutionOf(resolution)?.hint;
   }
 
   /// 處理結果：一張白卡三列，每列兩行字。
@@ -283,7 +285,7 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
   /// 一張照片都還沒有時，卡片下面多一行說明，告訴員工沒有相機權限時還可以
   /// 從相簿挑。不說的話，相機被關掉的人會以為自己回報不了完修。
   Widget _photoCard() {
-    const label = '完修照片（必填，至少 1 張、最多 3 張）';
+    final label = repairCompletionPhotoLabel(_selectedResolution);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -304,7 +306,7 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: TmsSemantics(
                       id: 'completeSheet.photo.count-label',
                       label: label,

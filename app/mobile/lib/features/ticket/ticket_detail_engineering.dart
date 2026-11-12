@@ -10,7 +10,9 @@ import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_scroll_nav_bar.dart';
 import '../../core/widgets/tms_step_track.dart';
+import '../manager/manager_ids.dart';
 import 'repair_labels.dart';
+import 'ticket_last_verify_failure_card.dart';
 
 /// 工務單詳情的工務視角（`Main.dc.html:1911`）。
 ///
@@ -19,6 +21,9 @@ import 'repair_labels.dart';
 /// 也認得出手上這張單正在跑。
 ///
 /// 和房務視角分成兩支畫面的理由見 [TicketDetailHousekeeping]。
+///
+/// 主管視角也用這一版，只換底部動作列：由 [bottomBar] 帶進來的那一列取代工務
+/// 的動作；[showWorkerActions] 為 false 時（主管打開別人的單）不給處理人的動作。
 class TicketDetailEngineering extends StatelessWidget {
   const TicketDetailEngineering({
     super.key,
@@ -30,6 +35,8 @@ class TicketDetailEngineering extends StatelessWidget {
     required this.onReleaseToPool,
     required this.onComplete,
     required this.onOpenPhoto,
+    this.showWorkerActions = true,
+    this.bottomBar,
   });
 
   /// 這張單；還沒載回來是 null。
@@ -48,8 +55,11 @@ class TicketDetailEngineering extends StatelessWidget {
   final VoidCallback onComplete;
   final void Function(int index) onOpenPhoto;
 
-  /// 四步固定這四個名字（`Main.dc.html:3873`）。
-  static const List<String> _stepLabels = ['待開始', '維修中', '完修', '驗收'];
+  /// 底部要不要給處理人的動作（認領、開始、完修回報、放回待認領）。
+  final bool showWorkerActions;
+
+  /// 取代處理人動作的那一列（主管的通過、不通過）；null 時照處理人動作畫。
+  final Widget? bottomBar;
 
   @override
   Widget build(BuildContext context) {
@@ -119,10 +129,7 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  Widget _buildScrollView(
-    RepairTicketDetail? detail, {
-    required bool onDark,
-  }) {
+  Widget _buildScrollView(RepairTicketDetail? detail, {required bool onDark}) {
     final error = errorMessage;
     if (error != null || detail == null) {
       return SingleChildScrollView(
@@ -173,7 +180,6 @@ class TicketDetailEngineering extends StatelessWidget {
     return spaced;
   }
 
-
   /// 滿版標題區：地點當主角、問題標題、來源與類別那一行，最後是步驟條。
   ///
   /// 原型維修中時改由 56pt 的計時當主角、地點退到問題前面。後端還沒有計時起
@@ -211,10 +217,12 @@ class TicketDetailEngineering extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 // 公共區域沒有房號，那幾個字照 56pt 排會塞不下一行。
-                style: (detail.isPublicArea
-                        ? TmsText.title1
-                        : TmsText.displayHero)
-                    .copyWith(color: foreground, fontWeight: FontWeight.w800),
+                style:
+                    (detail.isPublicArea ? TmsText.title1 : TmsText.displayHero)
+                        .copyWith(
+                          color: foreground,
+                          fontWeight: FontWeight.w800,
+                        ),
               ),
             ),
           ),
@@ -264,33 +272,18 @@ class TicketDetailEngineering extends StatelessWidget {
   }
 
   Widget _buildStepTrack(RepairTicketDetail detail, {required bool onDark}) {
-    final currentIndex = _currentStepIndex(detail);
+    final currentIndex = repairCurrentStepIndex(detail);
     return TmsSemantics(
       id: 'ticket.step-track',
       explicitChildNodes: true,
       child: TmsStepTrack(
         onDark: onDark,
         steps: [
-          for (var i = 0; i < _stepLabels.length; i++)
+          for (var i = 0; i < repairStepLabels.length; i++)
             _trackStep(i, currentIndex),
         ],
       ),
     );
-  }
-
-  /// 目前在四步中的哪一步；對照 dsl 的狀態對照表（待開始＝已接單、維修中、
-  /// 完修＝已完修未驗收、驗收＝已驗收）。待認領等其他狀態沒有「目前步驟」。
-  int _currentStepIndex(RepairTicketDetail detail) {
-    switch (detail.state) {
-      case 'accepted':
-        return 0;
-      case 'doing':
-        return 1;
-      case 'done':
-        return detail.verifiedBy == null ? 2 : 3;
-      default:
-        return -1;
-    }
   }
 
   /// 一步的畫面：外層節點只在「這一步是目前步驟」時掛 `--current` id，
@@ -308,30 +301,36 @@ class TicketDetailEngineering extends StatelessWidget {
       status = TmsStepStatus.pending;
     }
     return TmsStepTrackStep(
-      label: _stepLabels[index],
+      label: repairStepLabels[index],
       status: status,
       wrap: (node) {
         final Widget step = TmsSemantics(
           id: 'ticket.stepper.${index + 1}',
-          label: _stepLabels[index],
+          label: repairStepLabels[index],
           child: node,
         );
-        if (status != TmsStepStatus.current) {
-          return step;
-        }
-        return TmsSemantics(
-          id: 'ticket.stepper.${index + 1}--current',
-          child: step,
-        );
+        return switch (status) {
+          TmsStepStatus.current => TmsSemantics(
+            id: 'ticket.stepper.${index + 1}--current',
+            child: step,
+          ),
+          TmsStepStatus.done => TmsSemantics(
+            id: ManagerIds.ticketStepperDone(index + 1),
+            child: step,
+          ),
+          _ => step,
+        };
       },
     );
   }
 
-
   List<Widget> _sections(RepairTicketDetail detail) {
     return [
       _buildCallouts(detail),
+      if (TicketLastVerifyFailureCard.shows(detail))
+        TicketLastVerifyFailureCard(ticket: detail),
       ?_photoSection(detail),
+      ?_completionPhotoSection(detail),
       _sectionWithHeader('這張單的資訊', _infoCard(detail)),
     ];
   }
@@ -355,7 +354,6 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-
   /// 一頁最多一條狀態列，誰蓋過誰由 [TmsCalloutKind] 的宣告順序決定，這裡只
   /// 說哪幾條成立。
   ///
@@ -365,6 +363,7 @@ class TicketDetailEngineering extends StatelessWidget {
     return TmsCalloutSlot(
       candidates: [
         _fixedCallout(detail),
+        ?_reworkingCallout(detail),
         if (detail.state == 'pool')
           TmsStatusCallout(
             kind: TmsCalloutKind.ticketInPool,
@@ -397,36 +396,30 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-  /// 已完修與已驗收共用的那一條。
+  /// 已完修與已結案共用的那一條。
   ///
   /// 完修結果寫進狀態列內文而不另開一張卡（`Main.dc.html:2013`）：員工掃到這
-  /// 一條就看完了整件事，分成兩塊的話得先讀狀態、再往下找結果。
+  /// 一條就看完了整件事，分成兩塊的話得先讀狀態、再往下找結果。結果先看這次
+  /// 在畫面上剛選的那一個，沒有就看後端回的 resolutionType。
   TmsCalloutSpec? _fixedCallout(RepairTicketDetail detail) {
-    if (detail.state != 'done') {
+    if (repairCompletionStage(detail) == RepairCompletionStage.notCompleted) {
       return null;
     }
-    final verifiedBy = detail.verifiedBy;
-    final title = verifiedBy == null
-        ? '已完修 · 等主管驗收'
-        : repairStatusSummaryText(detail);
-    if (verifiedBy != null) {
-      return TmsStatusCallout(
-        kind: TmsCalloutKind.ticketFixed,
-        tone: TmsCalloutTone.success,
-        title: title,
-        body: '這張單已結案。',
-        wrap: (node) => _summaryWrap(node, title),
-      );
-    }
+    final title = repairStatusSummaryText(detail);
+    final resolutionType = detail.resolutionType;
+    final result =
+        resolutionLabel ??
+        (resolutionType == null ? null : repairResolutionText(resolutionType));
     final parts = <String>[
-      if (resolutionLabel != null) '$resolutionLabel。',
+      if (result != null) '$result。',
       if (detail.resolutionNote != null) '說明：${detail.resolutionNote}。',
     ];
+    final fallback = detail.state == 'done' ? '等主管驗收後這張單就結案。' : '這張單已結案。';
     return TmsStatusCallout(
       kind: TmsCalloutKind.ticketFixed,
       tone: TmsCalloutTone.success,
       title: title,
-      body: parts.isEmpty ? '等主管驗收後這張單就結案。' : parts.join(''),
+      body: parts.isEmpty ? fallback : parts.join(''),
       wrap: (node) => _summaryWrap(
         TmsSemantics(
           id: 'ticket.resolution-label',
@@ -435,6 +428,22 @@ class TicketDetailEngineering extends StatelessWidget {
         ),
         title,
       ),
+    );
+  }
+
+  /// 驗收不通過、退回重修中的那一條：寫明是誰判的，原因在下方的提示卡。
+  TmsCalloutSpec? _reworkingCallout(RepairTicketDetail detail) {
+    if (!repairIsReworking(detail)) {
+      return null;
+    }
+    final title = repairStatusSummaryText(detail);
+    final assignee = detail.assigneeName;
+    return TmsStatusCallout(
+      kind: TmsCalloutKind.ticketReworking,
+      tone: TmsCalloutTone.warn,
+      title: title,
+      body: assignee == null ? '等工務重新接單。' : '工務 $assignee 重修中。',
+      wrap: (node) => _summaryWrap(node, title),
     );
   }
 
@@ -448,16 +457,15 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-
   /// 工務視角只看得到報修照片，沒有補照片格：補照片是報修的人在自己那一頁做
   /// 的事（`Main.dc.html:2000`）。
   Widget? _photoSection(RepairTicketDetail detail) {
-    final photos = detail.photos;
-    if (photos.isEmpty) {
+    final count = detail.photoCount;
+    if (count == 0) {
       return null;
     }
     return _sectionWithHeader(
-      '報修照片（${photos.length} 張，含浮水印）',
+      '報修照片（$count 張，含浮水印）',
       TmsCard(
         style: TmsCardStyle.inSheet,
         padding: const EdgeInsets.all(TmsSpacing.md),
@@ -468,7 +476,7 @@ class TicketDetailEngineering extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            for (var i = 0; i < photos.length; i++)
+            for (var i = 0; i < count; i++)
               TmsSemantics(
                 id: 'ticket.photo.${i + 1}',
                 child: TmsPhotoCell(
@@ -483,6 +491,39 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
+  /// 這一輪完修附的照片，已完修與已結案才有。驗收的主管靠它判斷修得好不好，
+  /// 處理人回頭看也知道自己交了什麼。
+  Widget? _completionPhotoSection(RepairTicketDetail detail) {
+    final photos = detail.completionPhotos;
+    if (repairCompletionStage(detail) == RepairCompletionStage.notCompleted ||
+        photos.isEmpty) {
+      return null;
+    }
+    return _sectionWithHeader(
+      '完修照片（${photos.length} 張）',
+      TmsCard(
+        style: TmsCardStyle.inSheet,
+        padding: const EdgeInsets.all(TmsSpacing.md),
+        child: GridView.count(
+          crossAxisCount: 3,
+          mainAxisSpacing: TmsSpacing.sm,
+          crossAxisSpacing: TmsSpacing.sm,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            for (var i = 0; i < photos.length; i++)
+              TmsSemantics(
+                id: 'ticket.completion-photo.${i + 1}',
+                child: TmsPhotoCell(
+                  edge: null,
+                  semanticsLabel: '完修照片 ${i + 1}',
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _infoCard(RepairTicketDetail detail) {
     final rows = <({String key, String value})>[
@@ -511,13 +552,19 @@ class TicketDetailEngineering extends StatelessWidget {
     );
   }
 
-
   /// 一個狀態一組按鍵（`Main.dc.html:3908`）。
   ///
   /// 原型的「暫停」在這裡還掛不上去：暫停要先有暫停面板與後端的暫停狀態，兩
   /// 者都還沒有，畫一顆按了沒反應的鍵比沒有更糟。「放回待認領」照原型應該收
   /// 進暫停面板，同一個理由先留在這裡，等暫停面板做好再一起搬。
   Widget? _buildActionBar(RepairTicketDetail detail) {
+    final override = bottomBar;
+    if (override != null) {
+      return override;
+    }
+    if (!showWorkerActions) {
+      return null;
+    }
     final secondary = _secondaryAction(detail);
     final primary = _primaryAction(detail);
     if (secondary == null && primary == null) {

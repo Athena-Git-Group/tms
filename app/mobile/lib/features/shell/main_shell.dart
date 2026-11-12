@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/landing.dart';
 import '../../core/theme.dart';
 import '../engineering/eng_home_screen.dart';
 import '../engineering/eng_pool_screen.dart';
@@ -232,17 +233,20 @@ class EngineeringShell extends StatelessWidget {
   }
 }
 
-/// 主管的外殼：首頁是主管首頁（三類待辦），待認領是只看不搶的雙部門待認領，
-/// 通知與我的兩個分頁與員工共用。
+/// 主管的外殼：首頁是主管首頁，待認領是只看不搶的雙部門待認領，通知與我的
+/// 兩個分頁與員工共用。
 ///
+/// 主管種類由分流時判好傳進來，外殼只往下交給首頁決定格子，不自己再判一次。
 class ManagerShell extends StatelessWidget {
-  const ManagerShell({super.key});
+  const ManagerShell({super.key, required this.kind});
+
+  final ManagerKind kind;
 
   @override
   Widget build(BuildContext context) {
-    return const _MainShell(
-      homeTab: ManagerHomeScreen(),
-      poolTab: ManagerPoolScreen(),
+    return _MainShell(
+      homeTab: ManagerHomeScreen(kind: kind),
+      poolTab: const ManagerPoolScreen(),
     );
   }
 }

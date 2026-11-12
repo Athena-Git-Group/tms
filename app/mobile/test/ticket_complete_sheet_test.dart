@@ -22,17 +22,34 @@ void main() {
     expect(find.text('完修回報 · 418'), findsOneWidget);
   });
 
-  testWidgets('處理結果是三列清單，每列都寫出送出後系統會做什麼（Main.dc.html:2176）', (
+  testWidgets('處理結果是四列清單，每列都寫出送出後系統會做什麼（Main.dc.html:2176）', (
     tester,
   ) async {
     await tester.pumpWidget(host());
 
     expect(find.text('處理結果'), findsOneWidget);
-    expect(find.byType(TmsOptionRow), findsNWidgets(3));
+    expect(find.byType(TmsOptionRow), findsNWidgets(4));
     expect(find.text('已修好，房間可正常使用'), findsOneWidget);
     expect(find.text('通知報修的人與櫃檯'), findsOneWidget);
     expect(find.text('無法修復，房間停用（OOO）'), findsOneWidget);
     expect(find.text('PMS 房況改為停用，並通知櫃檯與主管'), findsOneWidget);
+    expect(find.text('不需處理'), findsOneWidget);
+  });
+
+  testWidgets('選不需處理時不附照片也能送出', (tester) async {
+    await tester.pumpWidget(host());
+
+    await tester.ensureVisible(find.text('不需處理'));
+    await tester.tap(find.text('不需處理'));
+    await tester.pump();
+
+    expect(
+      tester.getSemantics(
+        find.bySemanticsIdentifier('completeSheet.submit-button'),
+      ),
+      isSemantics(hasEnabledState: true, isEnabled: true),
+    );
+    expect(find.text('完修照片（不需處理可以不附照片）'), findsOneWidget);
   });
 
   testWidgets('有處理說明欄位（Main.dc.html:2188）', (tester) async {

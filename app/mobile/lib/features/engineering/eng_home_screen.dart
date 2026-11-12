@@ -4,18 +4,17 @@ import '../../core/api_client.dart';
 import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
-import '../../core/widgets/tms_category_square.dart';
 import '../../core/widgets/tms_content_unavailable.dart';
 import '../../core/widgets/tms_fab.dart';
 import '../../core/widgets/tms_greeting_row.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_home_cards.dart';
 import '../../core/widgets/tms_pill_button.dart';
+import '../../core/widgets/tms_repair_ticket_row.dart';
 import '../../core/widgets/tms_status_chip.dart';
 import '../../core/widgets/tms_tip_popover.dart';
 import '../pool/pool_widgets.dart';
 import '../shell/main_shell.dart';
-import '../ticket/repair_labels.dart';
 import '../ticket/repair_ticket_form_sheet.dart';
 import '../ticket/ticket_screen.dart';
 import '../today/my_today_scope.dart';
@@ -595,93 +594,14 @@ class _InHandTickets extends StatelessWidget {
         ),
         TmsGroupedSection(
           children: [
-            for (final ticket in tickets) _InHandTicketRow(ticket: ticket),
+            for (final ticket in tickets)
+              TmsRepairTicketRow(
+                ticket: ticket,
+                onTap: () => _openTicket(context, ticket.taskId),
+              ),
           ],
         ),
       ],
-    );
-  }
-}
-
-class _InHandTicketRow extends StatelessWidget {
-  const _InHandTicketRow({required this.ticket});
-
-  final EngineeringTicket ticket;
-
-  @override
-  Widget build(BuildContext context) {
-    // 契約把 ticketNo 列為必填，但實際回應可能是 null；id 退回用 taskId，
-    // 讓單卡至少還是個可指認的節點，而不是整串變成同一個 null。
-    final ticketNo = ticket.ticketNo ?? ticket.taskId;
-    final place = ticket.roomNo ?? '公共區域';
-    final status = repairStatusAppearance(
-      state: ticket.state,
-      isUrgent: ticket.isUrgent,
-    );
-    final source = ticket.source;
-    final subtitle = source == null
-        ? null
-        : engineeringPoolSourceLabels[source];
-    return TmsSemantics(
-      id: 'engHome.in-hand.$ticketNo.card',
-      label: '$ticketNo $place ${status.text}',
-      child: GestureDetector(
-        onTap: () => _openTicket(context, ticket.taskId),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 64),
-          padding: const EdgeInsets.symmetric(
-            horizontal: TmsSpacing.md2,
-            vertical: TmsSpacing.md,
-          ),
-          color: TmsColors.cardBackground,
-          child: ExcludeSemantics(
-            child: Row(
-              children: [
-                TmsCategorySquare(
-                  where: place,
-                  palette: tmsRepairSquarePalette(
-                    isUrgent: ticket.isUrgent,
-                    isDone: ticket.state == 'done',
-                  ),
-                  // 「公共區域」四個字用 16pt 會撐破 48pt 的方塊。
-                  fontSize: ticket.roomNo == null ? 13 : 16,
-                ),
-                const SizedBox(width: TmsSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 列主文是工單標題（`Main.dc.html:959`）：地點已經在左邊
-                      // 的方塊上，單號工務平常不用來認單，兩者都串進主文會把
-                      // 標題擠到被截斷。
-                      Text(
-                        ticket.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TmsText.headline,
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: TmsSpacing.xxs),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TmsText.subheadline.copyWith(
-                            color: TmsColors.secondaryLabel,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: TmsSpacing.sm),
-                TmsStatusChip.of(status),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
