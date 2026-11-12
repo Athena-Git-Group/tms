@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/push_gateway.dart';
 import 'package:tms_staff_app/core/widgets/tms_category_tile.dart';
 import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
 import 'package:tms_staff_app/features/manager/manager_pool_screen.dart';
 import 'package:tms_staff_app/features/manager/pool_dept_preference.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
+import 'package:tms_staff_app/features/shell/main_shell.dart';
 
 void main() {
   late _RecordingApiClient api;
@@ -28,6 +30,8 @@ void main() {
         .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
     PoolDeptPreference.changes.value = null;
+    MainShellTabRequest.poolHighlightRoomNo.value = null;
+    MainShellTabRequest.poolHighlightTaskId.value = null;
   });
 
   Future<void> pumpManagerPool(WidgetTester tester) async {
@@ -74,6 +78,56 @@ void main() {
     expect(prefs.getString(PoolDeptPreference.key), 'engineering');
   });
 
+  testWidgets('主管停在房務，點開帶工務部門的推播，切到工務並標亮那張單', (tester) async {
+    final handle = tester.ensureSemantics();
+    SharedPreferences.setMockInitialValues({'pool.dept': 'housekeeping'});
+    api.session = _manager;
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+    await tester.pumpWidget(
+      CupertinoApp(
+        navigatorKey: navigatorKey,
+        home: const ManagerPoolScreen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(HousekeepingPoolList), findsOneWidget);
+
+    await PushGateway.instance.handlePushPayload(const {
+      'target':
+          '{"kind":"pool","dept":"engineering","highlightTaskId":"task-1"}',
+      'idempotencyKey': 'evt-pool-engineering',
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EngineeringPoolList), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier('engPool.item.W-0202.card--highlighted'),
+      findsOneWidget,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(PoolDeptPreference.key), 'engineering');
+    handle.dispose();
+  });
+
+  testWidgets('員工點開帶部門的推播，不改主管的部門選擇', (tester) async {
+    SharedPreferences.setMockInitialValues({'pool.dept': 'housekeeping'});
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+    await tester.pumpWidget(
+      CupertinoApp(navigatorKey: navigatorKey, home: const SizedBox()),
+    );
+
+    await PushGateway.instance.handlePushPayload(const {
+      'target': '{"kind":"pool","dept":"engineering"}',
+      'idempotencyKey': 'evt-pool-staff',
+    });
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(PoolDeptPreference.key), 'housekeeping');
+  });
+
   testWidgets('主管的單卡沒有認領鈕，員工的有', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpManagerPool(tester);
@@ -95,8 +149,24 @@ void main() {
   });
 }
 
+const _manager = LoginResult(
+  token: 't',
+  expiresAt: '2026-11-13T00:00:00Z',
+  staffId: 'staff-wang',
+  name: '王主管',
+  role: 'manager',
+  mustChangePassword: false,
+);
+
 class _RecordingApiClient extends ApiClient {
   final List<String?> deptQueries = [];
+
+  LoginResult? _fakeSession;
+
+  set session(LoginResult? value) => _fakeSession = value;
+
+  @override
+  LoginResult? get session => _fakeSession;
 
   @override
   Future<DeptPool> getPool({

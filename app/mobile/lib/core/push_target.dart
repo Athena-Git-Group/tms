@@ -41,8 +41,15 @@ Future<Map<String, dynamic>?> pushPayloadFromTarget(
       payload['room'] = roomNo;
     }
   } else if (kind == 'pool') {
+    final dept = target['dept'] as String?;
     final highlightTaskId = target['highlightTaskId'] as String?;
+    if (dept != null) {
+      payload['dept'] = dept;
+    }
     if (highlightTaskId != null) {
+      payload['highlightTaskId'] = highlightTaskId;
+    }
+    if (highlightTaskId != null && dept != 'engineering') {
       final roomNo = await roomNoOf(highlightTaskId);
       if (roomNo != null) {
         payload['highlight'] = roomNo;

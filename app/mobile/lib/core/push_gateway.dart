@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'api_client.dart';
 import 'landing.dart';
 import 'push_target.dart';
+import '../features/manager/pool_dept_preference.dart';
 import '../features/shell/main_shell.dart';
 import '../features/task/task_screen.dart';
 import '../features/ticket/ticket_screen.dart';
@@ -56,7 +57,7 @@ class PushGateway {
     if (payload == null) {
       return;
     }
-    _navigate(payload);
+    await _navigate(payload);
   }
 
   Future<void> handlePushPayload(Map<String, dynamic> payload) async {
@@ -71,7 +72,7 @@ class PushGateway {
       await openTarget(target);
       return;
     }
-    _navigate(payload);
+    await _navigate(payload);
   }
 
   Future<String?> _roomNoOf(String taskId) async {
@@ -98,7 +99,7 @@ class PushGateway {
     return isDuplicate;
   }
 
-  void _navigate(Map<String, dynamic> payload) {
+  Future<void> _navigate(Map<String, dynamic> payload) async {
     final navigator = _navigatorKey?.currentState;
     if (navigator == null) {
       return;
@@ -111,8 +112,12 @@ class PushGateway {
 
     switch (dest) {
       case 'pool':
+        await _rememberManagerPoolDept(payload['dept'] as String?);
         navigator.popUntil((route) => route.isFirst);
-        MainShellTabRequest.goToPool(highlightRoomNo: highlight);
+        MainShellTabRequest.goToPool(
+          highlightRoomNo: highlight,
+          highlightTaskId: payload['highlightTaskId'] as String?,
+        );
         break;
       case 'task':
         if (room == null) {
@@ -151,6 +156,15 @@ class PushGateway {
       default:
         break;
     }
+  }
+
+  /// 主管的待認領有房務、工務兩池；推播帶部門時先把本機的部門選擇改成它，待認領一打開就停在那一池。
+  Future<void> _rememberManagerPoolDept(String? dept) async {
+    if (ApiClient.instance.session?.role != 'manager' ||
+        !PoolDeptPreference.isPoolDept(dept)) {
+      return;
+    }
+    await PoolDeptPreference.write(dept!);
   }
 
   Map<String, dynamic> _asStringKeyedMap(Object? value) {

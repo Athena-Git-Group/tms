@@ -75,7 +75,24 @@ void main() {
         {'kind': 'pool', 'dept': 'housekeeping', 'highlightTaskId': 'task-316'},
         roomNoOf: roomNoOf,
       );
-      expect(payload, {'dest': 'pool', 'highlight': '316'});
+      expect(payload, {
+        'dest': 'pool',
+        'dept': 'housekeeping',
+        'highlightTaskId': 'task-316',
+        'highlight': '316',
+      });
+    });
+
+    test('kind=pool 工務池帶部門與要標亮的單，不換成房號', () async {
+      final payload = await pushPayloadFromTarget(
+        {'kind': 'pool', 'dept': 'engineering', 'highlightTaskId': 'task-316'},
+        roomNoOf: roomNoOf,
+      );
+      expect(payload, {
+        'dest': 'pool',
+        'dept': 'engineering',
+        'highlightTaskId': 'task-316',
+      });
     });
 
     test('kind=pool 標亮的那間查不到時仍導到池子，只是不標亮', () async {
@@ -83,7 +100,11 @@ void main() {
         {'kind': 'pool', 'dept': 'housekeeping', 'highlightTaskId': 'task-gone'},
         roomNoOf: roomNoOf,
       );
-      expect(payload, {'dest': 'pool'});
+      expect(payload, {
+        'dest': 'pool',
+        'dept': 'housekeeping',
+        'highlightTaskId': 'task-gone',
+      });
     });
 
     test('kind=home 與不認得的 kind 都回 payload，交給導頁端決定', () async {

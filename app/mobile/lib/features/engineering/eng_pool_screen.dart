@@ -34,6 +34,7 @@ class EngineeringPoolList extends StatefulWidget {
     super.key,
     required this.dept,
     required this.canClaim,
+    this.highlightTaskId,
     this.aboveCategories,
   });
 
@@ -42,6 +43,8 @@ class EngineeringPoolList extends StatefulWidget {
   final String? dept;
 
   final bool canClaim;
+
+  final String? highlightTaskId;
 
   final Widget? aboveCategories;
 
@@ -245,8 +248,10 @@ class _EngineeringPoolListState extends State<EngineeringPoolList> {
       palette: tmsRepairSquarePalette(isUrgent: item.urgent, isDone: false),
     );
 
+    final isHighlighted = item.taskId == widget.highlightTaskId;
     return PoolCard(
-      id: '$itemId.card',
+      id: isHighlighted ? '$itemId.card--highlighted' : '$itemId.card',
+      highlighted: isHighlighted,
       semanticsLabel: '$ticketNo ${item.roomNo} ${item.title}',
       onTap: () => Navigator.of(context).push(
         CupertinoPageRoute<void>(

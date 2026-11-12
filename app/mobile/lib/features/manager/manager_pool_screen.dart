@@ -21,11 +21,15 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
 
   String? _highlightRoomNo;
 
+  String? _highlightTaskId;
+
   @override
   void initState() {
     super.initState();
     _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
+    _highlightTaskId = MainShellTabRequest.poolHighlightTaskId.value;
     MainShellTabRequest.poolHighlightRoomNo.addListener(_applyHighlightRequest);
+    MainShellTabRequest.poolHighlightTaskId.addListener(_applyHighlightRequest);
     PoolDeptPreference.changes.addListener(_applyPreferenceChange);
     _load();
   }
@@ -33,6 +37,9 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
   @override
   void dispose() {
     MainShellTabRequest.poolHighlightRoomNo.removeListener(
+      _applyHighlightRequest,
+    );
+    MainShellTabRequest.poolHighlightTaskId.removeListener(
       _applyHighlightRequest,
     );
     PoolDeptPreference.changes.removeListener(_applyPreferenceChange);
@@ -49,6 +56,7 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
   void _applyHighlightRequest() {
     setState(() {
       _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
+      _highlightTaskId = MainShellTabRequest.poolHighlightTaskId.value;
     });
   }
 
@@ -75,6 +83,7 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
         key: const ValueKey<String>(PoolDeptPreference.engineering),
         dept: EngineeringPoolList.deptKey,
         canClaim: false,
+        highlightTaskId: _highlightTaskId,
         aboveCategories: _deptSwitch(dept),
       );
     } else {
@@ -86,9 +95,12 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
         aboveCategories: _deptSwitch(dept),
       );
     }
-    return CupertinoPageScaffold(
-      backgroundColor: TmsColors.groupedBackground,
-      child: body,
+    return TmsSemantics(
+      id: 'pool.screen',
+      child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
+        child: body,
+      ),
     );
   }
 

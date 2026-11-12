@@ -59,7 +59,8 @@ public class PushThenSteps {
             if (!side.isSelected()) {
                 throw new AssertionError("待認領的部門切換應停在 " + dept + "，pool.dept-switch." + dept + " 不是選中狀態");
             }
-            world.waitForTestId("pool.card." + key + "--highlighted", SCREEN_TIMEOUT);
+            String cardId = "engineering".equals(dept) ? "engPool.item." + key + ".card" : "pool.card." + key;
+            world.waitForTestId(cardId + "--highlighted", SCREEN_TIMEOUT);
             String local = world.readLocalPreference(CommonGivenSteps.POOL_DEPT_PREFERENCE_KEY);
             if (!dept.equals(local)) {
                 throw new AssertionError("App 本機的待認領部門選擇應為 " + dept + "，實際「" + local + "」");

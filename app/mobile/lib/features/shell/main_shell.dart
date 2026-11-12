@@ -21,8 +21,12 @@ abstract final class MainShellTabRequest {
   static final ValueNotifier<String?> poolHighlightRoomNo =
       ValueNotifier<String?>(null);
 
-  static void goToPool({String? highlightRoomNo}) {
+  static final ValueNotifier<String?> poolHighlightTaskId =
+      ValueNotifier<String?>(null);
+
+  static void goToPool({String? highlightRoomNo, String? highlightTaskId}) {
     poolHighlightRoomNo.value = highlightRoomNo;
+    poolHighlightTaskId.value = highlightTaskId;
     pending.value = _poolIndex;
   }
 }

@@ -13,6 +13,8 @@ abstract final class PoolDeptPreference {
 
   static final ValueNotifier<String?> changes = ValueNotifier<String?>(null);
 
+  static bool isPoolDept(String? dept) => _depts.contains(dept);
+
   static Future<String> read() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(key);

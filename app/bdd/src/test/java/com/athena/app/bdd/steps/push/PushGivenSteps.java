@@ -44,7 +44,7 @@ public class PushGivenSteps {
             String key = deptPoolMatcher.group(2);
             String highlightTaskId;
             if ("engineering".equals(dept)) {
-                highlightTaskId = world.backend().repairTicketRow(key).get("task_id").toString();
+                highlightTaskId = ensurePoolRepairTicket(key, title);
             } else {
                 world.ensurePoolTask(key, title);
                 highlightTaskId = poolTaskIdByRoom(key);
@@ -68,6 +68,21 @@ public class PushGivenSteps {
         } else {
             throw new IllegalArgumentException("認不得的去處字串：「" + destination + "」");
         }
+    }
+
+    /** dsl 怎麼做：去處是工務待認領時建立該工務單；房號取標題開頭的數字，報修人由阿美代表。 */
+    private String ensurePoolRepairTicket(String ticketNo, String title) {
+        List<Map<String, Object>> existing = world.backend().queryRows(
+                "SELECT task_id FROM repair_tickets WHERE tenant_id = ? AND ticket_no = ?",
+                world.backend().ensureTenant(), ticketNo);
+        if (!existing.isEmpty()) {
+            return existing.get(0).get("task_id").toString();
+        }
+        Matcher room = Pattern.compile("^(\\d+)\\s").matcher(title);
+        String roomNo = room.find() ? room.group(1) : BackendChannel.PUBLIC_AREA_ROOM_NO;
+        boolean urgent = title.contains("急件");
+        return world.backend().createRepairTicket(
+                ticketNo, roomNo, "other", "pool", world.staff("阿美"), null, null, urgent).toString();
     }
 
     private String poolTaskIdByRoom(String roomNo) {
