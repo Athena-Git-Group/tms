@@ -10,9 +10,14 @@ import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Then;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -155,6 +160,21 @@ public class StaffDeskThenSteps {
         }
         assertNotNull(found, "清單含標題「" + title + "」: " + all);
         assertEquals(state, found.get("state").asText(), "標題「" + title + "」的狀態");
+    }
+
+    @Then("^清單只有標題((?:「[^」]+」、?)+)$")
+    public void deskListHasExactlyTitles(String titles) {
+        Set<String> expected = new HashSet<>();
+        Matcher matcher = Pattern.compile("「([^」]+)」").matcher(titles);
+        while (matcher.find()) {
+            expected.add(matcher.group(1));
+        }
+        List<String> actual = new ArrayList<>();
+        for (JsonNode task : objectMapper.readTree((String) ctx.get("deskTasksBody"))) {
+            actual.add(task.get("title").asText());
+        }
+        assertEquals(expected.size(), actual.size(), "清單筆數，實際標題: " + actual);
+        assertEquals(expected, new HashSet<>(actual), "清單標題");
     }
 
     @Then("^待判讀清單只含 triage 的任務$")

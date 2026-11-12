@@ -5,6 +5,8 @@ import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.When;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,11 +23,13 @@ public class StaffDeskWhenSteps {
     private final ScenarioContext ctx;
     private final ApiClient api;
     private final DbSupport db;
+    private final Clock clock;
 
-    public StaffDeskWhenSteps(ScenarioContext ctx, ApiClient api, DbSupport db) {
+    public StaffDeskWhenSteps(ScenarioContext ctx, ApiClient api, DbSupport db, Clock clock) {
         this.ctx = ctx;
         this.api = api;
         this.db = db;
+        this.clock = clock;
     }
 
     @Given("^「([^」]+)」已認領任務 \"([^\"]+)\"$")
@@ -171,8 +175,35 @@ public class StaffDeskWhenSteps {
 
     @When("^櫃檯查詢任務清單$")
     public void deskListsAllTasks() {
-        ScenarioContext.HttpResult tasks = api.get("/desk/tasks", api.staffToken(1L, ctx.staffLogin("櫃檯")));
-        Assertions.assertEquals(200, tasks.status(), "全單視圖該成功: " + tasks.body());
+        listDeskTasks("");
+        Assertions.assertEquals(200, ctx.lastResponse().status(), "全單視圖該成功: " + ctx.lastResponse().body());
+    }
+
+    @When("^櫃檯查詢昨天的任務清單$")
+    public void deskListsYesterdayTasks() {
+        String yesterday = LocalDate.now(clock).minusDays(1).toString();
+        listDeskTasks("from=" + yesterday + "&to=" + yesterday);
+        Assertions.assertEquals(200, ctx.lastResponse().status(), ctx.lastResponse().body());
+    }
+
+    @When("^櫃檯查詢員工 \"([^\"]+)\" 狀態為 \"([^\"]+)\" 的任務清單$")
+    public void deskListsTasksOfAssigneeInStates(String staffSymbol, String states) {
+        StringBuilder query = new StringBuilder("assigneeId=" + ctx.entityId(staffSymbol));
+        for (String state : states.split(",")) {
+            query.append("&state=").append(state);
+        }
+        listDeskTasks(query.toString());
+        Assertions.assertEquals(200, ctx.lastResponse().status(), ctx.lastResponse().body());
+    }
+
+    @When("^櫃檯以查詢參數 \"([^\"]*)\" 查詢任務清單$")
+    public void deskListsTasksWithQuery(String query) {
+        listDeskTasks(query);
+    }
+
+    private void listDeskTasks(String query) {
+        String path = query.isEmpty() ? "/desk/tasks" : "/desk/tasks?" + query;
+        ScenarioContext.HttpResult tasks = api.get(path, api.staffToken(1L, ctx.staffLogin("櫃檯")));
         ctx.put("deskTasksBody", tasks.body());
         ctx.lastResponse(tasks);
     }

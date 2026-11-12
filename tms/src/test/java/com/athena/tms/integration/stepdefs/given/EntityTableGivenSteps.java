@@ -10,6 +10,7 @@ import com.athena.tms.integration.stepdefs.utils.Tenants;
 import com.athena.tms.integration.stepdefs.utils.TestData;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -25,11 +26,27 @@ public class EntityTableGivenSteps {
     private final ScenarioContext ctx;
     private final DbSupport db;
     private final TaskFixtures fixtures;
+    private final Clock clock;
 
-    public EntityTableGivenSteps(ScenarioContext ctx, DbSupport db, TaskFixtures fixtures) {
+    public EntityTableGivenSteps(ScenarioContext ctx, DbSupport db, TaskFixtures fixtures, Clock clock) {
         this.ctx = ctx;
         this.db = db;
         this.fixtures = fixtures;
+        this.clock = clock;
+    }
+
+    /** 「今天」以後端注入的時鐘為準，不用資料庫的 now()：測試把時鐘固定在某一天，和資料庫的日期通常不同。 */
+    @Given("^任務 \"([^\"]+)\" 的工作日為(今天|昨天)$")
+    public void taskWorkDateIs(String symbol, String day) {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate workDate = "今天".equals(day) ? today : today.minusDays(1);
+        db.admin().update("UPDATE tasks SET work_date = ? WHERE id = ?", workDate, ctx.entityId(symbol));
+    }
+
+    @Given("^任務 \"([^\"]+)\" 於昨天完成$")
+    public void taskFinishedYesterday(String symbol) {
+        OffsetDateTime yesterdayNoon = LocalDate.now(clock).minusDays(1).atTime(12, 0).atZone(clock.getZone()).toOffsetDateTime();
+        db.admin().update("UPDATE tasks SET done_at = ?, updated_at = ? WHERE id = ?", yesterdayNoon, yesterdayNoon, ctx.entityId(symbol));
     }
 
     @Given("^系統中存在以下房間:$")
