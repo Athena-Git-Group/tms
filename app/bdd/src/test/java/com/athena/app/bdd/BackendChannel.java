@@ -145,6 +145,52 @@ public class BackendChannel {
             Map.entry("房務報修", "staff_report"),
             Map.entry("自動化規則", "system"));
 
+    /**
+     * 員工狀態的中文用語對權威值。劇本的「飯店有以下員工」表用中文寫狀態，而待開通與停用的
+     * 員工要能不出現在挑人名單、不收推播，就得落成後端認得的狀態值；對照表照抄 tms Terms，
+     * 兩邊 BDD 才會對同一個狀態值下斷言。
+     */
+    private static final Map<String, String> STAFF_STATE = Map.ofEntries(
+            Map.entry("在職", "active"),
+            Map.entry("待開通", "invited"),
+            Map.entry("停用", "inactive"));
+
+    /**
+     * 工務單狀態的中文用語對權威值，給用單號指稱工務單的斷言用。工務單在後端也是一筆任務，
+     * 但它的狀態用語跟房務任務不同（已結案、已撤回是工務單的說法），所以不能沿用
+     * {@link #TASK_STATE}。已完修（done）是「等主管驗收」，驗收通過或以不需處理完修才是
+     * 已結案（closed）；待開始與已接單同為 accepted。
+     */
+    private static final Map<String, String> REPAIR_TICKET_STATE = Map.ofEntries(
+            Map.entry("待認領", "pool"),
+            Map.entry("已接單", "accepted"),
+            Map.entry("待開始", "accepted"),
+            Map.entry("維修中", "doing"),
+            Map.entry("已完修", "done"),
+            Map.entry("已結案", "closed"),
+            Map.entry("已撤回", "cancelled"));
+
+    /**
+     * 完修處理結果的中文用語對權威值。「已有以下工務單」表的「處理結果」欄要送進正式的完修端點
+     * （{@code CompleteTaskRequest.resolutionType}），端點只收這四個值，中文對不上就早爆，
+     * 不讓一張寫錯的單默默落成「已修好」。
+     */
+    private static final Map<String, String> RESOLUTION_TYPE = Map.ofEntries(
+            Map.entry("已修好", "fixed"),
+            Map.entry("暫時處理", "temporary"),
+            Map.entry("無法修復", "cannot_fix"),
+            Map.entry("不需處理", "no_action_needed"));
+
+    /**
+     * 房況的中文用語對權威值。主管查房、驗收之後要確認房況有沒有跟著走，斷言拿劇本的中文去比
+     * {@code rooms.hk_state}；對照取自 backend dsl「房況為」那一列，App 這邊不另訂一套。
+     */
+    private static final Map<String, String> HK_STATE = Map.ofEntries(
+            Map.entry("還沒打掃好", "dirty"),
+            Map.entry("已打掃", "cleaned"),
+            Map.entry("已查房", "inspected"),
+            Map.entry("停用", "out_of_order"));
+
     /** 未接提醒階段中文 → 權威 {@code tasks.reminder_stage}（V13 的 CHECK 值域）。 */
     private static final Map<String, String> REMINDER_STAGE = Map.ofEntries(
             Map.entry("已提醒同仁", "staff_reminded"),
@@ -223,6 +269,31 @@ public class BackendChannel {
         return value;
     }
 
+    public static String staffState(String chinese) {
+        return lookupTerm(STAFF_STATE, chinese, "員工狀態");
+    }
+
+    public static String repairTicketState(String chinese) {
+        return lookupTerm(REPAIR_TICKET_STATE, chinese, "工務單狀態");
+    }
+
+    public static String resolutionType(String chinese) {
+        return lookupTerm(RESOLUTION_TYPE, chinese, "處理結果");
+    }
+
+    public static String hkState(String chinese) {
+        return lookupTerm(HK_STATE, chinese, "房況");
+    }
+
+    private static String lookupTerm(Map<String, String> table, String chinese, String what) {
+        String value = table.get(chinese);
+        if (value == null) {
+            throw new IllegalArgumentException("找不到「" + chinese + "」在" + what
+                    + "對照表中的權威值（合法值：" + table.keySet() + "）");
+        }
+        return value;
+    }
+
     public static String reminderStage(String chinese) {
         String value = REMINDER_STAGE.get(chinese);
         if (value == null) {
@@ -269,6 +340,105 @@ public class BackendChannel {
         execute("TRUNCATE TABLE " + String.join(", ", tables) + " RESTART IDENTITY CASCADE");
         // staff_accounts 已被清空，快取的 JWT 全指向不存在的員工，留著只會害下一個情境 401。
         jwtByStaffId.clear();
+    }
+
+    /**
+     * 後端少了撥時鐘端點時的提示。沒帶旗標的新版後端回 404；還沒更新到含撥時鐘端點的舊版後端，
+     * 這條路徑會被角色規則擋成 401 或 403。三種都代表要重新啟動後端，而不是測試本身有錯。
+     */
+    private static final String TEST_CLOCK_RESTART_HINT =
+            "後端沒有開放撥時鐘端點（/api/v1/test/clock）。請用最新程式碼、帶旗標重啟後端："
+                    + "TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true "
+                    + "./tms/mvnw -f tms/pom.xml spring-boot:run";
+
+    /**
+     * 把跑著的後端的「現在」固定在指定時刻，直到下一次撥動或 {@link #resetBackendClock()}。
+     * 後端要帶 {@code tms.test-clock.enabled=true} 啟動才有這個端點；沒有就直接失敗並提示
+     * 重啟指令，不能只撥手機那一半，否則後端照真實時間判定，失敗看起來會像產品錯誤。
+     */
+    public void setBackendClock(OffsetDateTime moment) {
+        HttpResponse<String> response = send(request("POST", "/test/clock", null)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        toJson(Map.of("isoTime", moment.toString())), StandardCharsets.UTF_8)));
+        requireTestClock(response, "撥後端時鐘到 " + moment);
+    }
+
+    /**
+     * 把後端時鐘撥到今天、落在飯店所有班別時段之外的第一個整分鐘，回傳撥到的時刻，
+     * 讓呼叫端把裝置時間也撥到同一刻。
+     *
+     * <p>「某位工務人員今天的班已經結束」靠的是換人判定：現在不在飯店任何一個班別時段裡，
+     * 就視為原處理人接不了。班別時段讀租戶的 {@code shift_times} 設定，形狀是
+     * {@code {班別: {start, end}}}；涵蓋規則照後端：起訖相同視為全天，起點晚於終點視為跨午夜。
+     * 現在已經在所有班別之外時直接撥到現在。
+     *
+     * <p>租戶沒有設定班別，或班別首尾相接涵蓋全天時，後端會把任何時刻都當成在班，
+     * 這裡直接噴錯，提醒情境先給出班別時段，免得撥了時鐘卻判不出下班。
+     */
+    public OffsetDateTime setBackendClockOutsideAllShifts() {
+        long tenantId = ensureTenant();
+        Object raw = queryScalar(
+                "SELECT value::text FROM tenant_config WHERE tenant_id = ? AND key = 'shift_times'", tenantId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "測試租戶沒有 shift_times 設定，判不出「班別時段之外」；請先在情境裡設定飯店班別"));
+        List<LocalTime[]> windows = new ArrayList<>();
+        parseJson(raw.toString()).properties().forEach(shift -> {
+            JsonNode window = shift.getValue();
+            LocalTime start = parseShiftTime(window.get("start"));
+            LocalTime end = parseShiftTime(window.get("end"));
+            if (start != null && end != null) {
+                windows.add(new LocalTime[] {start, end});
+            }
+        });
+        OffsetDateTime candidate = OffsetDateTime.now().withSecond(0).withNano(0);
+        for (int minute = 0; minute <= 24 * 60; minute++) {
+            LocalTime at = candidate.toLocalTime();
+            boolean onShift = windows.isEmpty() || windows.stream().anyMatch(w -> shiftCovers(w[0], w[1], at));
+            if (!onShift) {
+                setBackendClock(candidate);
+                return candidate;
+            }
+            candidate = candidate.plusMinutes(1);
+        }
+        throw new IllegalStateException("飯店班別時段涵蓋全天或解析不出任何班別，找不到班別之外的時刻：" + raw);
+    }
+
+    private static LocalTime parseShiftTime(JsonNode node) {
+        if (node == null || !node.isTextual()) {
+            return null;
+        }
+        try {
+            return LocalTime.parse(node.asText());
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private static boolean shiftCovers(LocalTime start, LocalTime end, LocalTime at) {
+        if (start.equals(end)) {
+            return true;
+        }
+        if (start.isBefore(end)) {
+            return !at.isBefore(start) && at.isBefore(end);
+        }
+        return !at.isBefore(start) || at.isBefore(end);
+    }
+
+    /** 讓後端回到系統時鐘；每個情境開場呼叫，免得上一個情境撥過的時間留下來。 */
+    public void resetBackendClock() {
+        HttpResponse<String> response = send(request("DELETE", "/test/clock", null).DELETE());
+        requireTestClock(response, "後端時鐘回到系統時間");
+    }
+
+    private static void requireTestClock(HttpResponse<String> response, String what) {
+        int status = response.statusCode();
+        if (status == 404 || status == 401 || status == 403) {
+            throw new IllegalStateException(TEST_CLOCK_RESTART_HINT + "（HTTP " + status + "）");
+        }
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException(what + " 失敗：HTTP " + response.statusCode() + " " + response.body());
+        }
     }
 
     /** 確保房間存在，回傳 rooms.id（SQL 與預設值對照 RoomFixtures.ensureRoom）。 */
@@ -532,15 +702,28 @@ public class BackendChannel {
     public void failInspection(UUID taskId, CreatedStaff inspector, String failedItemLabel) {
         long tenantId = ensureTenant();
         String failKey = ensureInspectionItem(tenantId, failedItemLabel);
-        List<Map<String, Object>> items = queryRows(
+        List<Map<String, Object>> items = activeInspectionItemKeys(tenantId).stream()
+                .map(key -> Map.<String, Object>of("key", key, "pass", !failKey.equals(key)))
+                .toList();
+        postInspection(taskId, inspector, items);
+    }
+
+    /** 租戶現行啟用的查房項目鍵，依 sort_order——就是 App 查房畫面列出的那一串。 */
+    private List<String> activeInspectionItemKeys(long tenantId) {
+        return queryRows(
                 "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection'"
                         + " AND active = true ORDER BY sort_order", tenantId)
                 .stream()
-                .map(row -> Map.<String, Object>of(
-                        "key", row.get("item_key"),
-                        "pass", !failKey.equals(row.get("item_key"))))
+                .map(row -> String.valueOf(row.get("item_key")))
                 .toList();
+    }
 
+    /**
+     * 以查房者身分走正式的 {@code POST /inspections} 送出逐項判定（契約
+     * {@code CreateInspectionRequest{taskId, items[{key, pass}]}}），每次帶一把新的
+     * Idempotency-Key。非 2xx 直接噴錯：fixture 送不出去是準備狀態壞了，不是受測行為。
+     */
+    private void postInspection(UUID taskId, CreatedStaff inspector, List<Map<String, Object>> items) {
         Map<String, Object> body = Map.of("taskId", taskId.toString(), "items", items);
         HttpResponse<String> response = send(request("POST", "/inspections", jwt(inspector))
                 .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
@@ -739,14 +922,14 @@ public class BackendChannel {
 
         switch (stateCode) {
             case "pool" -> { /* 起點即終點 */ }
-            case "accepted" -> postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+            case "accepted" -> claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
             case "doing" -> {
-                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
                 withInspectionWaivedDuringStart(tenantId, inspectionWaived,
                         () -> postTaskAction(taskId, "start", assignee));
             }
             case "interrupted" -> {
-                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
                 postTaskAction(taskId, "start", assignee);
                 // 中斷端點（contracts tasksInterrupt）要求 reason 1–60 字，不帶 body 會
                 // 被 422 擋下。場景有給停住原因就用它（之後的 hold_reason UPDATE 再覆
@@ -755,14 +938,14 @@ public class BackendChannel {
                         Map.of("reason", holdReason != null ? holdReason : "測試資料準備：中斷"));
             }
             case "done" -> {
-                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
                 withInspectionWaivedDuringStart(tenantId, inspectionWaived,
                         () -> postTaskAction(taskId, "start", assignee));
                 postTaskAction(taskId, "complete", assignee);
             }
             case "deferred" -> {
                 // 「已延後」：本人延後（POST /tasks/{id}/defer）只從 accepted 出發，原因 1–60 字。
-                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
                 postTaskAction(taskId, "defer", assignee,
                         Map.of("reason", holdReason != null ? holdReason : "測試資料準備：延後"));
             }
@@ -770,7 +953,7 @@ public class BackendChannel {
                 // 「已取消」＝主管作廢（POST /tasks/{id}/cancel），原因 enum 只收
                 // manager_void／plan_superseded。情境只說這張單被取消、沒指定誰取消，
                 // 先認領成本人名下再作廢，讓這筆真相跟其他幾筆一樣掛在同一位員工底下。
-                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
                 postTaskAction(taskId, "cancel", assignee, Map.of("reason", "manager_void"));
             }
             case "inspected" -> {
@@ -782,7 +965,7 @@ public class BackendChannel {
                 //
                 // 「完成 · 免查房」走另一條：開工前鎖定免查，產品碼在完成那一步自己
                 // 落成 inspected／waived，不需要也不可以補寫 inspection = 'passed'。
-                postTaskAction(taskId, "claim", requireAssignee(stateCode, assignee));
+                claimAs(tenantId, taskId, requireAssignee(stateCode, assignee));
                 withInspectionWaivedDuringStart(tenantId, inspectionWaived,
                         () -> postTaskAction(taskId, "start", assignee));
                 postTaskAction(taskId, "complete", assignee);
@@ -825,56 +1008,21 @@ public class BackendChannel {
     /**
      * 建一張工務單：任務列（type=repair、dept=engineering、source=staff）＋
      * repair_tickets 延伸列（INSERT 欄位對照 tms RepairGivenSteps.existingRepairTickets）。
-     * 任務部分沿用 {@link #createTask}，支援的狀態同它；工務單特有的 pending_review
-     * （等主管審核，開單起點）另外直接落地。
-     *
-     * <p>要 rejected（主管未核准）的單請改用
-     * {@link #createRepairTicket(String, String, String, String, CreatedStaff, CreatedStaff,
-     * String, boolean, CreatedStaff, String)}——退回一定附原因，而原因沒有地方放在這組參數裡。
+     * 任務部分沿用 {@link #createTask}，支援 pool｜accepted｜doing｜done；已結案、已撤回與
+     * 驗收不通過的歷程走 {@link #createRepairTicket(RepairTicketSpec)}。
      */
     public UUID createRepairTicket(
             String ticketNo, String roomNo, String categoryCode, String stateCode,
             CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent) {
-        return createRepairTicket(ticketNo, roomNo, categoryCode, stateCode, reporter, assignee,
-                description, urgent, null, null);
-    }
-
-    /**
-     * 同上，另外吃「誰退回、退回原因」。
-     *
-     * <p>rejected（主管未核准）為什麼不在 {@link #createTask} 的狀態對照裡：它不是任務
-     * 通用狀態，而是工務單審核流程的一站——後端只有
-     * {@code POST /repair-tickets/{id}/reject} 走得到它，而那條路要先有 repair_tickets 列
-     * 才認得出這張單（{@code requireTicket}），所以必須等工務單列落地之後才能退。這裡的
-     * 作法是：任務先落在 pending_review（等主管審核），工務單列寫好之後，再以主管身分
-     * 走正式的退回端點轉成 rejected，{@code reject_reason} 與 task_events 都由產品碼自己
-     * 寫，與主管真的在後台按退回同形狀。
-     */
-    public UUID createRepairTicket(
-            String ticketNo, String roomNo, String categoryCode, String stateCode,
-            CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent,
-            CreatedStaff rejecter, String rejectReason) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
-        boolean rejected = "rejected".equals(stateCode);
-        if (rejected && (rejecter == null || rejectReason == null || rejectReason.isBlank())) {
-            throw new IllegalArgumentException(
-                    "state=rejected（主管未核准）需要退回的主管與退回原因（後端 reject 端點兩者都必填）");
-        }
 
-        UUID taskId;
-        if (rejected || "pending_review".equals(stateCode)) {
-            taskId = insertTaskAtCreatableState(
-                    tenantId, roomId, categoryCode + " 工務單", "repair", "engineering", null, null,
-                    "pending_review", "staff");
-        } else {
-            // 已完修的單先帶到維修中，延到工務單列落地之後才完修：完修會走
-            // 後端的修繕結案路徑，它查不到 repair_tickets 列就回 404。
-            String taskState = "done".equals(stateCode) ? "doing" : stateCode;
-            taskId = createTask(roomNo, categoryCode + " 工務單", "repair", "engineering", null,
-                    taskState, assignee, null, null);
-            execute("UPDATE tasks SET source = 'staff' WHERE tenant_id = ? AND id = ?", tenantId, taskId);
-        }
+        // 已完修的單先帶到維修中，延到工務單列落地之後才完修：完修會走
+        // 後端的修繕結案路徑，它查不到 repair_tickets 列就回 404。
+        String taskState = "done".equals(stateCode) ? "doing" : stateCode;
+        UUID taskId = createTask(roomNo, categoryCode + " 工務單", "repair", "engineering", null,
+                taskState, assignee, null, null);
+        execute("UPDATE tasks SET source = 'staff' WHERE tenant_id = ? AND id = ?", tenantId, taskId);
 
         execute("UPDATE tasks SET urgent = ? WHERE tenant_id = ? AND id = ?", urgent, tenantId, taskId);
         execute("""
@@ -888,19 +1036,7 @@ public class BackendChannel {
         if ("done".equals(stateCode)) {
             completeRepairTask(taskId, requireAssignee(stateCode, assignee));
         }
-        if (rejected) {
-            rejectRepairTicket(taskId, rejecter, rejectReason);
-        }
         return taskId;
-    }
-
-    /**
-     * 以主管身分走正式退回端點（contracts {@code rejectRepairTicket}）把等主管審核的
-     * 工務單退回：{@code tasks.state} 轉 rejected、{@code repair_tickets.reject_reason}
-     * 落原因。退回只有主管做得到（後端 {@code requireManager}）。
-     */
-    public void rejectRepairTicket(UUID ticketTaskId, CreatedStaff manager, String reason) {
-        postRepairTicketAction(ticketTaskId, "reject", manager, Map.of("reason", reason));
     }
 
     /**
@@ -912,18 +1048,51 @@ public class BackendChannel {
         postRepairTicketAction(ticketTaskId, "downgrade-urgency", manager, Map.of("note", note));
     }
 
-    /** 以某人身分對工務單執行一個 REST 動作（reject／downgrade-urgency／…），帶 JSON body。 */
+    /**
+     * 不經 App，以該主管身分走正式驗收端點送出驗收結果（contracts {@code verifyRepairTicket}，
+     * body 是 {@code VerifyRepairTicketRequest}）。[result] 是 {@code passed} 或 {@code failed}；
+     * [reason] 是 null 時整個欄位不送。給「另一位主管已先驗收」「剛送出驗收不通過」這類句子
+     * 在後端鋪好先到的那一筆。
+     */
+    public void verifyRepairTicket(UUID ticketTaskId, CreatedStaff manager, String result, String reason) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("result", result);
+        if (reason != null) {
+            body.put("reason", reason);
+        }
+        postRepairTicketAction(ticketTaskId, "verify", manager, body);
+    }
+
+    /**
+     * 與 {@link #verifyRepairTicket} 送同一個請求，但不把非 2xx 當成 fixture 失敗，
+     * 直接回 HTTP 狀態碼。給「這個身分呼叫驗收應被拒」這類斷言用。
+     */
+    public int verifyRepairTicketStatus(UUID ticketTaskId, CreatedStaff actor, String result, String reason) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("result", result);
+        if (reason != null) {
+            body.put("reason", reason);
+        }
+        return sendRepairTicketAction(ticketTaskId, "verify", actor, body).statusCode();
+    }
+
+    /** 以某人身分對工務單執行一個 REST 動作（verify／downgrade-urgency／…），帶 JSON body。 */
     private void postRepairTicketAction(
             UUID ticketTaskId, String action, CreatedStaff actor, Map<String, Object> body) {
         String path = "/repair-tickets/" + ticketTaskId + "/" + action;
-        HttpResponse<String> response = send(request("POST", path, jwt(actor))
-                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        HttpResponse<String> response = sendRepairTicketAction(ticketTaskId, action, actor, body);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IllegalStateException("fixture 工務單動作失敗：POST " + path + " -> HTTP "
                     + response.statusCode() + "，body=" + response.body());
         }
+    }
+
+    private HttpResponse<String> sendRepairTicketAction(
+            UUID ticketTaskId, String action, CreatedStaff actor, Map<String, Object> body) {
+        return send(request("POST", "/repair-tickets/" + ticketTaskId + "/" + action, jwt(actor))
+                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
     }
 
     /**
@@ -961,13 +1130,390 @@ public class BackendChannel {
     }
 
     /**
-     * 把工務單標成主管已驗收。驗收是主管端的動作，App 沒有對應畫面，而且
-     * 驗收端點要主管身分的 JWT，所以測試資料直接落地驗收人與驗收時間。
+     * 把一張已完修的工務單落成「主管驗收通過、已結案」：{@code tasks.state} done→closed、
+     * {@code verified_by}＝驗收人、{@code verified_at}＝現在，並補一筆 {@code repair_verified}
+     * 事件。fixture 不走正式驗收端點：那條路會推播報修人並寫通知，與情境自己鋪的推播、
+     * 通知撞在一起；這裡只落 backend dsl「已有以下工務單」那一列要的狀態與事件。
      */
-    public void markRepairTicketVerified(UUID ticketTaskId, UUID verifierStaffId) {
-        execute("UPDATE repair_tickets SET verified_by = ?, verified_at = ?"
-                        + " WHERE tenant_id = ? AND task_id = ?",
-                verifierStaffId, OffsetDateTime.now(), ensureTenant(), ticketTaskId);
+    public void closeRepairTicketAsVerified(UUID ticketTaskId, CreatedStaff verifier) {
+        long tenantId = ensureTenant();
+        OffsetDateTime now = OffsetDateTime.now();
+        execute("UPDATE tasks SET state = 'closed', updated_at = ? WHERE tenant_id = ? AND id = ? AND state = 'done'",
+                now, tenantId, ticketTaskId);
+        execute("UPDATE repair_tickets SET verified_by = ?, verified_at = ? WHERE tenant_id = ? AND task_id = ?",
+                verifier.id(), now, tenantId, ticketTaskId);
+        appendTaskEvent(ticketTaskId, "repair_verified", "manager", verifier.id(), null, now);
+    }
+
+    /**
+     * 在任務歷程最後補一筆事件：{@code event_seq} 加一，新事件取這個序號
+     * （與 TaskEngine 帶狀態條件的 UPDATE 同句取號的形狀一致）。[payload] 為 null 時存 SQL NULL。
+     */
+    private void appendTaskEvent(
+            UUID taskId, String type, String actorRole, UUID actorId, Map<String, Object> payload,
+            OffsetDateTime at) {
+        long tenantId = ensureTenant();
+        execute("UPDATE tasks SET event_seq = event_seq + 1 WHERE tenant_id = ? AND id = ?", tenantId, taskId);
+        execute("""
+                INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+                SELECT tenant_id, id, event_seq, ?, ?, ?, CAST(? AS jsonb), ?
+                  FROM tasks WHERE tenant_id = ? AND id = ?
+                """, type, actorRole, actorId, payload == null ? null : toJson(payload), at, tenantId, taskId);
+    }
+
+    // ---- 主管工作台（主管首頁三類待辦、查房）用的 fixture 入口。先只放方法殼，語意另行補上。 ----
+
+    /**
+     * 把租戶啟用的查房項目整批換成這些顯示名稱，依傳入順序寫 sort_order（ios 主管工作台
+     * dsl「飯店目前設定的查房項目如下」）。
+     *
+     * <p>查房項目沒有員工端或主管端的設定端點（它是 /admin/settings 的門面），所以直接落地
+     * {@code sop_items}。先把這個租戶現有的查房項目全部停用、再逐一啟用或補建表格列出的：
+     * 停用不刪（歷史查房快照要能對回來源，同 V1 schema 的註解），既有同名項目保留原
+     * {@code item_key}——App 的列 id（{@code inspect.item.{key}}）與後端判定都認鍵不認名。
+     */
+    public void replaceInspectionItems(List<String> labels) {
+        long tenantId = ensureTenant();
+        disableAllInspectionItems();
+        int sortOrder = 0;
+        for (String label : labels) {
+            upsertInspectionItem(tenantId, label, sortOrder++);
+        }
+    }
+
+    /** 把租戶的查房項目全部停用（「飯店目前沒有任何啟用的查房項目」）。 */
+    public void disableAllInspectionItems() {
+        execute("UPDATE sop_items SET active = false WHERE tenant_id = ? AND applies_to = 'inspection'",
+                ensureTenant());
+    }
+
+    /**
+     * 在現行查房項目集合最後追加一項啟用的項目（「飯店在送出前新增了查房項目」）：
+     * sort_order 取現行啟用集合的最大值加一，所以它一定排在最後。
+     */
+    public void appendInspectionItem(String label) {
+        long tenantId = ensureTenant();
+        int nextSortOrder = queryScalar(
+                "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sop_items"
+                        + " WHERE tenant_id = ? AND applies_to = 'inspection' AND active = true", tenantId)
+                .map(value -> ((Number) value).intValue())
+                .orElse(0);
+        upsertInspectionItem(tenantId, label, nextSortOrder);
+    }
+
+    /** 同名查房項目已存在就啟用並改排序，否則補建一筆（鍵的長法同 {@link #ensureInspectionItem}）。 */
+    private void upsertInspectionItem(long tenantId, String label, int sortOrder) {
+        Optional<Object> existing = queryScalar(
+                "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' AND label = ?",
+                tenantId, label);
+        if (existing.isPresent()) {
+            execute("UPDATE sop_items SET active = true, sort_order = ?"
+                            + " WHERE tenant_id = ? AND applies_to = 'inspection' AND item_key = ?",
+                    sortOrder, tenantId, String.valueOf(existing.get()));
+            return;
+        }
+        String itemKey = "adhoc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        execute("""
+                INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at)
+                VALUES (?, ?, 'inspection', ?, ?, ?, true, ?)
+                """, UUID.randomUUID(), tenantId, itemKey, label, sortOrder, OffsetDateTime.now());
+    }
+
+    /**
+     * 不經 App，以指定主管的身分對一張待查房的單送出查房，items 為現行全集且全部通過
+     * （「剛被另一位主管查完」）。走正式的 {@code POST /inspections}，帶新的 Idempotency-Key。
+     */
+    public void passInspectionAs(UUID taskId, CreatedStaff inspector) {
+        List<Map<String, Object>> items = activeInspectionItemKeys(ensureTenant()).stream()
+                .map(key -> Map.<String, Object>of("key", key, "pass", true))
+                .toList();
+        postInspection(taskId, inspector, items);
+    }
+
+    /**
+     * 把別人名下、已完成的打掃單寫成指定的完成時間（跨日待查房的 fixture）。
+     * 只改 {@code tasks.done_at}（與 work_date），不動狀態與負責人。
+     */
+    public void setTaskDoneAt(UUID taskId, OffsetDateTime doneAt) {
+        long tenantId = ensureTenant();
+        // completed 事件的時刻要跟著走：backend dsl「完成時間」寫的是 done_at 與 completed
+        // 事件時間兩處，待查房清單的「開始等主管」就是從這裡讀的。
+        execute("UPDATE tasks SET done_at = ?, work_date = ? WHERE tenant_id = ? AND id = ?",
+                doneAt, doneAt.toLocalDate(), tenantId, taskId);
+        execute("UPDATE task_events SET created_at = ? WHERE tenant_id = ? AND task_id = ? AND type = 'completed'",
+                doneAt, tenantId, taskId);
+    }
+
+    /**
+     * 「已有以下工務單：」的一列，欄位同後端共用 DSL 的同名句型：處理結果（fixed／temporary／
+     * cannot_fix／no_action_needed，null 時已完修與已結案的單視為 fixed）、處理說明、
+     * 完修照片張數（null 時不需處理是 0、其他是 1）、完修時間、驗收人、來源（reported／scheduled）、
+     * 最近一次驗收不通過的原因、判定人與時間，房號可為「公共區域」。
+     * 時間欄為 null 時沿用 dsl 的預設；驗收人只用於已結案、且處理結果不是不需處理的單。
+     */
+    public record RepairTicketSpec(
+            String ticketNo,
+            String roomNo,
+            boolean publicArea,
+            String categoryCode,
+            String stateCode,
+            CreatedStaff reporter,
+            CreatedStaff assignee,
+            String description,
+            boolean urgent,
+            String origin,
+            String resolutionType,
+            String resolutionNote,
+            Integer completionPhotoCount,
+            OffsetDateTime doneAt,
+            CreatedStaff verifier,
+            String verifyFailedReason,
+            CreatedStaff verifyFailedBy,
+            OffsetDateTime verifyFailedAt) {}
+
+    /**
+     * 依 {@link RepairTicketSpec} 建一張工務單，回任務 id。
+     *
+     * <p>先沿用 {@link #createRepairTicket} 落到 pool｜accepted｜doing，已完修與已結案的單
+     * 停在維修中，等工務單列落地後以處理人身分走正式完修（帶處理結果）：不需處理由產品碼在
+     * 完修那一步直接結案，其他結果完修後再落成驗收通過（{@link #closeRepairTicketAsVerified}）。
+     * 已撤回的單從待認領以報修人撤回的形狀落地。有不通過原因時最後補上最近一次驗收不通過的
+     * 三欄與 {@code repair_verification_failed} 事件。
+     */
+    public UUID createRepairTicket(RepairTicketSpec spec) {
+        String state = spec.stateCode();
+        boolean closed = "closed".equals(state);
+        boolean finished = closed || "done".equals(state);
+        if (!finished && spec.resolutionType() != null) {
+            throw new IllegalArgumentException("工務單「" + spec.ticketNo()
+                    + "」：處理結果只用於已完修與已結案的單，狀態=" + state);
+        }
+        String resolution = finished && spec.resolutionType() == null ? "fixed" : spec.resolutionType();
+        boolean noActionNeeded = "no_action_needed".equals(resolution);
+        if ("done".equals(state) && noActionNeeded) {
+            throw new IllegalArgumentException("工務單「" + spec.ticketNo()
+                    + "」：已完修的單不會是不需處理（不需處理完修當下就結案）");
+        }
+        if (closed && !noActionNeeded && spec.verifier() == null) {
+            throw new IllegalArgumentException("工務單「" + spec.ticketNo()
+                    + "」：已結案且處理結果不是不需處理時，驗收人必填");
+        }
+        if (spec.verifier() != null && (!closed || noActionNeeded)) {
+            throw new IllegalArgumentException("工務單「" + spec.ticketNo()
+                    + "」：驗收人只用於已結案、且處理結果不是不需處理的單");
+        }
+        if (spec.verifyFailedReason() == null
+                ? spec.verifyFailedBy() != null || spec.verifyFailedAt() != null
+                : spec.verifyFailedBy() == null) {
+            throw new IllegalArgumentException("工務單「" + spec.ticketNo()
+                    + "」：有不通過原因時不通過判定人必填；沒有不通過原因就不能寫判定人或時間");
+        }
+
+        // 報修人是 NOT NULL 欄（repair_tickets.reporter_id）：定期保養的單劇本可以不寫
+        // 報修人，資料層卻沒有「沒有人報」的寫法，先以處理人頂上；兩者都沒有就早爆。
+        CreatedStaff reporter = spec.reporter() != null ? spec.reporter() : spec.assignee();
+        if (reporter == null) {
+            throw new IllegalArgumentException("工務單「" + spec.ticketNo()
+                    + "」沒有報修人也沒有處理人：repair_tickets.reporter_id 是 NOT NULL，定期保養的單至少要有處理人");
+        }
+        String roomNo = spec.roomNo();
+        if (spec.publicArea()) {
+            // 先把佔位房建成產品碼要的形狀，後面 ensureRoom 同房號就會直接沿用它。
+            ensurePublicAreaRoom();
+            roomNo = PUBLIC_AREA_ROOM_NO;
+        }
+
+        String baseState = finished ? "doing" : "cancelled".equals(state) ? "pool" : state;
+        UUID taskId = createRepairTicket(spec.ticketNo(), roomNo, spec.categoryCode(), baseState,
+                reporter, spec.assignee(), spec.description(), spec.urgent());
+
+        if ("scheduled".equals(spec.origin())) {
+            // 定期保養＝系統開的單（backend dsl：定期保養＝system／scheduled）。
+            // repair_tickets 沒有 origin 欄，只落得了 tasks.source。
+            setTaskSource(taskId, "system");
+        }
+        if (finished) {
+            int photos = spec.completionPhotoCount() != null
+                    ? spec.completionPhotoCount() : (noActionNeeded ? 0 : 1);
+            completeRepairTask(taskId, requireAssignee(state, spec.assignee()),
+                    resolution, spec.resolutionNote(), photos);
+            if ("cannot_fix".equals(resolution)) {
+                // 無法修復：房況轉停用（backend dsl 同名句型的「處理結果」欄）。產品碼在完修
+                // 那一步會做，這裡再寫一次只是把 fixture 的真相釘死，不依賴產品碼有沒有做。
+                setRoomHkState(roomNo, "out_of_order");
+            }
+            if (spec.doneAt() != null) {
+                setTaskDoneAt(taskId, spec.doneAt());
+            }
+            if (closed && !noActionNeeded) {
+                closeRepairTicketAsVerified(taskId, spec.verifier());
+            }
+        }
+        if ("cancelled".equals(state)) {
+            markWithdrawnByReporter(taskId, reporter);
+        }
+        if (spec.verifyFailedReason() != null) {
+            OffsetDateTime failedAt = spec.verifyFailedAt();
+            if (failedAt == null) {
+                OffsetDateTime base = "done".equals(state) && spec.doneAt() != null ? spec.doneAt() : OffsetDateTime.now();
+                failedAt = base.minusMinutes(30);
+            }
+            recordVerificationFailed(taskId, state, spec.assignee(),
+                    spec.verifyFailedReason(), spec.verifyFailedBy(), failedAt);
+        }
+        return taskId;
+    }
+
+    /**
+     * 待認領的工務單落成「報修人撤回」：state=cancelled、cancel_reason=staff_withdrew，補一筆
+     * cancelled 事件（payload reason=staff_withdrew，與 TaskEngine 撤回同形狀）。
+     */
+    private void markWithdrawnByReporter(UUID taskId, CreatedStaff reporter) {
+        long tenantId = ensureTenant();
+        OffsetDateTime now = OffsetDateTime.now();
+        execute("UPDATE tasks SET state = 'cancelled', cancel_reason = 'staff_withdrew', updated_at = ?"
+                        + " WHERE tenant_id = ? AND id = ? AND state = 'pool'",
+                now, tenantId, taskId);
+        String actorRole = reporter.dept() != null ? reporter.dept() : reporter.role();
+        appendTaskEvent(taskId, "cancelled", actorRole, reporter.id(), Map.of("reason", "staff_withdrew"), now);
+    }
+
+    /**
+     * 補上「這張單曾被主管驗收不通過」：三個 {@code last_verify_failed_*} 欄同時寫入，
+     * 並補一筆 {@code repair_verification_failed} 事件（payload 帶 reason、destination：
+     * 待認領是 pool，其他是 assignee；有處理人時另帶 assigneeId）。待認領的單另把
+     * {@code pool_source} 寫成 verification_return、清空負責人，代表原處理人接不了、回到工務待認領。
+     */
+    private void recordVerificationFailed(
+            UUID taskId, String stateCode, CreatedStaff assignee, String reason, CreatedStaff failedBy,
+            OffsetDateTime failedAt) {
+        long tenantId = ensureTenant();
+        boolean toPool = "pool".equals(stateCode);
+        execute("""
+                UPDATE repair_tickets
+                   SET last_verify_failed_reason = ?, last_verify_failed_by = ?, last_verify_failed_at = ?
+                 WHERE tenant_id = ? AND task_id = ?
+                """, reason, failedBy.id(), failedAt, tenantId, taskId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reason", reason);
+        payload.put("destination", toPool ? "pool" : "assignee");
+        if (assignee != null) {
+            payload.put("assigneeId", assignee.id().toString());
+        }
+        appendTaskEvent(taskId, "repair_verification_failed", "manager", failedBy.id(), payload, failedAt);
+        if (toPool) {
+            execute("""
+                    UPDATE tasks SET pool_source = 'verification_return', assignee_id = NULL,
+                           return_reason = '驗收不通過 · 原處理人已下班或請假'
+                     WHERE tenant_id = ? AND id = ?
+                    """, tenantId, taskId);
+        }
+    }
+
+    /**
+     * 同 {@link #completeRepairTask(UUID, CreatedStaff)}，另外帶處理結果四選一
+     * （契約 {@code CompleteTaskRequest.resolutionType}：fixed／temporary／cannot_fix／no_action_needed，null 視為 fixed）、
+     * 處理說明與完修照片張數；照片逐張走正式的建立＋上傳。
+     */
+    public void completeRepairTask(
+            UUID taskId, CreatedStaff assignee, String resolutionType, String resolutionNote, int photoCount) {
+        List<String> photoIds = new ArrayList<>();
+        for (int i = 0; i < photoCount; i++) {
+            photoIds.add(createCompletionPhoto(assignee).toString());
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("photoIds", photoIds);
+        if (resolutionType != null) {
+            body.put("resolutionType", resolutionType);
+        }
+        if (resolutionNote != null) {
+            body.put("resolutionNote", resolutionNote);
+        }
+        postTaskAction(taskId, "complete", assignee, body);
+    }
+
+    /**
+     * 幫一張已落地的工務單補 N 張報修照片（{@code repair_photos}，purpose=report、已上傳）。
+     * 報修照片在產品上是開單前上傳、開單時綁定的；fixture 的單不是從 App 開的，沒有那一步，
+     * 而詳情頁的照片區與「照片張數」斷言要有東西可數，所以直接落地已綁定的列。
+     */
+    public void insertReportPhotos(UUID ticketTaskId, UUID uploaderId, int count) {
+        long tenantId = ensureTenant();
+        OffsetDateTime now = OffsetDateTime.now();
+        for (int i = 0; i < count; i++) {
+            UUID id = UUID.randomUUID();
+            execute("""
+                    INSERT INTO repair_photos
+                        (id, tenant_id, ticket_task_id, purpose, status, storage_ref, taken_at,
+                         uploaded_by, created_at, uploaded_at)
+                    VALUES (?, ?, ?, 'report', 'uploaded', ?, ?, ?, ?, ?)
+                    """, id, tenantId, ticketTaskId, "fixture/" + id + ".jpg", now, uploaderId, now, now);
+        }
+    }
+
+    /** 直接落地某房的房況（{@code rooms.hk_state}：dirty／cleaned／inspected／out_of_order）。 */
+    public void setRoomHkState(String roomNo, String hkState) {
+        execute("UPDATE rooms SET hk_state = ?, updated_at = ? WHERE tenant_id = ? AND room_no = ?",
+                hkState, OffsetDateTime.now(), ensureTenant(), roomNo);
+    }
+
+    /** 權威讀回：某房目前的 {@code rooms.hk_state}；沒有這間房直接噴錯。 */
+    public String roomHkState(String roomNo) {
+        return String.valueOf(queryScalar(
+                "SELECT hk_state FROM rooms WHERE tenant_id = ? AND room_no = ?", ensureTenant(), roomNo)
+                .orElseThrow(() -> new IllegalStateException("後端沒有房號「" + roomNo + "」的房間")));
+    }
+
+    /**
+     * 權威讀回：{@code outbox} 裡發給這位員工的推播（kind push），回每一筆的標題，新到舊。
+     * 後端寫推播有兩種形狀：{@code OutboxWriter.enqueuePush} 包成
+     * {@code {tenant_id, task_id, payload: PushMessage}} 的信封，收件人與標題在內層；
+     * {@code PushOutboxWriter.enqueue}（查房結果等）直接把 PushMessage 當 payload，收件人與
+     * 標題在最外層。兩種都要認，只讀一種會把另一種的推播當成沒送。
+     */
+    public List<String> pushTitlesSentTo(UUID staffId) {
+        return queryRows("""
+                SELECT COALESCE(payload->'payload'->>'title', payload->>'title') AS title FROM outbox
+                 WHERE tenant_id = ? AND kind = 'push'
+                   AND COALESCE(payload->'payload'->>'recipientStaffId', payload->>'recipientStaffId') = ?
+                 ORDER BY id DESC
+                """, ensureTenant(), staffId.toString())
+                .stream().map(row -> String.valueOf(row.get("title"))).toList();
+    }
+
+    /** 權威讀回：以該主管身分呼叫 {@code getManagerQueues}（{@code GET /me/manager-queues}）。 */
+    public JsonNode managerQueues(CreatedStaff manager) {
+        return getJson("/me/manager-queues", manager);
+    }
+
+    /**
+     * 幫這位員工掛一筆 {@code plan_rooms} 列，並把班次欄寫成真的班次結束時刻（{@code HH:mm}）。
+     * 與 {@link #assignPlanRoom(UUID, int)} 的差別只在 {@code cleaning_plans.shift}：那一支刻意
+     * 寫佔位值讓班末掃描跳過；劇本明寫「班次結束」時才用這一支，班末行為就由這個值驅動。
+     */
+    public void assignPlanRoom(UUID staffId, int floor, String shiftEndHhmm) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom("PLANROOM-F" + floor, floor);
+        OffsetDateTime now = OffsetDateTime.now();
+        UUID planId = UUID.randomUUID();
+        execute("""
+                INSERT INTO cleaning_plans
+                    (id, tenant_id, work_date, shift, status, version, generated_by, algo_version, generated_at)
+                VALUES (?, ?, ?, ?, 'draft', 0, 'system', 'v1', ?)
+                """, planId, tenantId, now.toLocalDate(), shiftEndHhmm, now);
+        execute("""
+                INSERT INTO plan_rooms (id, tenant_id, plan_id, room_id, staff_id, est_min, route_seq)
+                VALUES (?, ?, ?, ?, ?, 30, 1)
+                """, UUID.randomUUID(), tenantId, planId, roomId, staffId);
+    }
+
+    /**
+     * 建員工並明寫角色、部門與狀態（ios dsl「飯店有以下員工」的「角色」欄：部門寫房務或工務而
+     * 角色寫主管，代表被設了部門的主管帳號——{@code role}=manager、{@code dept} 仍是該部門）。
+     * 其他兩支（{@link #createFieldStaff}／{@link #createManagerLikeStaff}）是這一支的固定組合。
+     */
+    public CreatedStaff createStaff(String name, String roleCode, String deptCode, String stateCode) {
+        return insertStaff(name, roleCode, deptCode, stateCode);
     }
 
     /**
@@ -1055,7 +1601,7 @@ public class BackendChannel {
     }
 
     /**
-     * 直接落地一列「可作為起點」的任務（pool｜pending_review）＋第 1 筆 created 事件，
+     * 直接落地一列「可作為起點」的任務（pool）＋第 1 筆 created 事件，
      * 欄位與事件形狀對照 TaskEngine.create（event_seq=1、task_events.seq=1、actor=system、
      * payload 帶建立快照）。不寫 outbox，理由見類別 Javadoc 的偏差 2。
      */
@@ -1086,6 +1632,29 @@ public class BackendChannel {
                 VALUES (?, ?, 1, 'created', 'system', NULL, CAST(? AS jsonb), ?)
                 """, tenantId, taskId, toJson(snapshot), now);
         return taskId;
+    }
+
+    /**
+     * 讓 assignee 認領這張單。員工走正式認領端點；主管沒有部門，認領端點只放行同部門的人
+     * （{@code TaskEngine.claim} 比對 {@code tasks.dept}），而產品上也沒有「把單派給主管」的
+     * 端點，所以主管名下的單照 {@code TaskEngine.claim} 寫出的形狀直接落地：
+     * state=accepted、assignee_id、event_seq+1，並補一筆 claimed 事件。之後的開工、完成
+     * 仍走正式端點（那兩支只比對 assignee_id）。
+     */
+    private void claimAs(long tenantId, UUID taskId, CreatedStaff assignee) {
+        if (!"manager".equals(assignee.role())) {
+            postTaskAction(taskId, "claim", assignee);
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        execute("UPDATE tasks SET state = 'accepted', assignee_id = ?, event_seq = event_seq + 1, updated_at = ?"
+                        + " WHERE tenant_id = ? AND id = ? AND state = 'pool'",
+                assignee.id(), now, tenantId, taskId);
+        execute("""
+                INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+                SELECT tenant_id, id, event_seq, 'claimed', 'manager', ?, CAST(? AS jsonb), ?
+                  FROM tasks WHERE tenant_id = ? AND id = ?
+                """, assignee.id(), toJson(Map.of("assignee_id", assignee.id().toString())), now, tenantId, taskId);
     }
 
     private static CreatedStaff requireAssignee(String stateCode, CreatedStaff assignee) {

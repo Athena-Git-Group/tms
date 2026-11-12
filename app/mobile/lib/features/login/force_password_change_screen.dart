@@ -1,13 +1,13 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/landing.dart';
 import '../../core/navigation.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_action_bar.dart';
-import '../shell/main_shell.dart';
 import 'login_widgets.dart';
 import 'password_rules.dart';
 
@@ -133,12 +133,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
       if (!mounted) {
         return;
       }
-      replaceAllRoutes(
-        context,
-        result.dept == 'engineering'
-            ? const EngineeringShell()
-            : const HousekeepingShell(),
-      );
+      replaceAllRoutes(context, landingShellForLogin(result));
       return;
     } on ApiException catch (e) {
       setState(() {

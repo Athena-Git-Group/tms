@@ -11,7 +11,10 @@ import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpMethod;
@@ -58,10 +61,22 @@ public class CommonGivenSteps {
             Integer floor = parseIntOrNull(row.get("負責樓層"));
             String shiftEnd = blankToNull(row.get("班次結束"));
             String stateCode = Terms.staffState(row.getOrDefault("狀態", "在職"));
+            // dsl.md 選填 `角色`（主管／員工）：部門寫主管或值班經理時角色一定是主管；部門寫
+            // 房務／工務而角色寫主管，代表這位主管帳號被設了部門（role=manager、dept 照表）。
+            String roleChinese = blankToNull(row.get("角色"));
+            boolean managerLikeDept = "主管".equals(deptChinese) || "值班經理".equals(deptChinese);
+            if (managerLikeDept && "員工".equals(roleChinese)) {
+                throw new IllegalArgumentException("部門寫「" + deptChinese + "」時角色一定是主管，不能寫員工：" + row);
+            }
+            if (roleChinese != null && !"主管".equals(roleChinese) && !"員工".equals(roleChinese)) {
+                throw new IllegalArgumentException("角色只支援 主管／員工，收到「" + roleChinese + "」：" + row);
+            }
 
             StaffFixtures.CreatedStaff created;
-            if ("主管".equals(deptChinese) || "值班經理".equals(deptChinese)) {
+            if (managerLikeDept) {
                 created = staffFixtures.createManagerLikeStaff(name, Terms.role(deptChinese), stateCode);
+            } else if ("主管".equals(roleChinese)) {
+                created = staffFixtures.createDeptManager(name, Terms.dept(deptChinese), floor, shiftEnd, stateCode);
             } else {
                 created = staffFixtures.createFieldStaff(name, Terms.dept(deptChinese), floor, shiftEnd, stateCode);
             }
@@ -124,6 +139,23 @@ public class CommonGivenSteps {
                 // 「查房通過」與「完成 · 免查房」都對應 tasks.state=inspected，差別只在
                 // tasks.inspection（passed｜waived），見 Terms.taskState 的說明。
                 builder.inspectionWaived(true);
+            }
+            String doneAtChinese = blankToNull(row.get("完成時間"));
+            if (doneAtChinese != null) {
+                // dsl.md「完成時間」：`今天 HH:mm`／`昨天 HH:mm`，只用於已完成的狀態；寫入
+                // tasks.done_at 與 completed 事件時間，「昨天」時 work_date 也落在昨天。
+                if (!"done".equals(state) && !"inspected".equals(state)) {
+                    throw new IllegalArgumentException(
+                            "「完成時間」只用於待查房／已送達／查房通過／完成 · 免查房，收到狀態「" + stateChinese + "」：" + row);
+                }
+                String[] parts = doneAtChinese.trim().split("\\s+", 2);
+                if (parts.length != 2 || !("今天".equals(parts[0]) || "昨天".equals(parts[0]))) {
+                    throw new IllegalArgumentException("「完成時間」格式須為 `今天 HH:mm` 或 `昨天 HH:mm`，收到「" + doneAtChinese + "」");
+                }
+                LocalDate today = clock.instant().atZone(clock.getZone()).toLocalDate();
+                LocalDate doneDate = "昨天".equals(parts[0]) ? today.minusDays(1) : today;
+                Instant doneAt = ZonedDateTime.of(doneDate, LocalTime.parse(parts[1]), clock.getZone()).toInstant();
+                builder.doneAt(doneAt).workDate(doneDate);
             }
 
             UUID taskId = builder.create();

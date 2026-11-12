@@ -31,10 +31,10 @@
 </div>
 <script src="manager.js"></script>
 <script>
-if (isOffline()) document.getElementById('phone').classList.add('offline');
-function go(url) { location.href = carryOffline(url); }
+applyOffline();
+if (isEngineeringManager()) location.replace('index.html');
 const room = Q.get('room') || '301';
-const task = QUEUE.inspection.find(r => r.room === room) || QUEUE.inspection[1];
+const task = INSPECTION_QUEUE.find(r => r.room === room) || INSPECTION_QUEUE[1];
 const BASE_ITEMS = ['床鋪平整', '浴室無水痕', '備品齊全', '地面乾淨', '無異味'];
 const CHANGED_ITEMS = BASE_ITEMS.concat(['窗戶玻璃乾淨']);
 /* 303 是「送出時飯店剛新增了項目」的那一張；小林今天已下班 */

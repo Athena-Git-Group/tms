@@ -2,6 +2,7 @@ package com.athena.tms.bdd.steps.common;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
@@ -24,6 +25,7 @@ public class CommonWhenSteps {
     private final PmsProbe pmsProbe;
     private final TenantFixtures tenantFixtures;
     private final JdbcClient jdbcClient;
+    private final InspectionFixtures inspectionFixtures;
 
     public CommonWhenSteps(
             ScenarioWorld world,
@@ -33,7 +35,8 @@ public class CommonWhenSteps {
             JobTrigger jobTrigger,
             PmsProbe pmsProbe,
             TenantFixtures tenantFixtures,
-            JdbcClient jdbcClient) {
+            JdbcClient jdbcClient,
+            InspectionFixtures inspectionFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.lastOperationGuard = lastOperationGuard;
@@ -42,6 +45,7 @@ public class CommonWhenSteps {
         this.pmsProbe = pmsProbe;
         this.tenantFixtures = tenantFixtures;
         this.jdbcClient = jdbcClient;
+        this.inspectionFixtures = inspectionFixtures;
     }
 
     @當("{string} 開始 {string}")
@@ -82,13 +86,13 @@ public class CommonWhenSteps {
                 .map(key -> Map.<String, Object>of("key", key, "pass", true))
                 .toList();
 
-        Map<String, Object> body = Map.of(
-                "tenantId", tenantId,
-                "taskId", taskId.toString(),
-                "inspectorId", world.staffId(staffName),
-                "result", "passed",
-                "items", items);
-        apiClient.post("/inspections", BddApiClient.Auth.staff(world.jwt(staffName)), body);
+        // dsl.md：body 只帶 taskId 與 items（租戶與查房者由權杖推導、結果由後端算），帶新的
+        // Idempotency-Key；回應 InspectionOutcome 存進 ScenarioWorld，讓「這次操作被拒絕，錯誤碼為」
+        // 與「這次查房的結果為」讀得到。
+        ScenarioWorld.ApiResponse response = inspectionFixtures.submit(world, staffName, taskId, items);
+        world.setLastInspectionResponse(response);
+        // 送出的 items 也留一份，查房組的 Then 句拿它算 missing／unexpected。
+        world.setLastInspectionItems(items);
     }
 
     @當("時間來到 {string}")

@@ -1,0 +1,55 @@
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/landing.dart';
+import 'package:tms_staff_app/features/shell/main_shell.dart';
+
+/// 釘住首頁分流的三條判定順序：先看角色再看部門。登入、強制改密、推播開首頁
+/// 三個入口都只問 `landingShellFor`，所以分流錯了會先在這裡紅掉。
+void main() {
+  group('landingShellFor', () {
+    test('主管一律進主管外殼，不看有沒有部門', () {
+      expect(landingShellFor(role: 'manager'), isA<ManagerShell>());
+      expect(
+        landingShellFor(role: 'manager', dept: 'housekeeping'),
+        isA<ManagerShell>(),
+      );
+      expect(
+        landingShellFor(role: 'manager', dept: 'engineering'),
+        isA<ManagerShell>(),
+      );
+    });
+
+    test('不是主管時，工務部門進工務外殼', () {
+      expect(
+        landingShellFor(role: 'engineering', dept: 'engineering'),
+        isA<EngineeringShell>(),
+      );
+    });
+
+    test('其餘（房務、櫃檯、沒有部門）進房務外殼', () {
+      expect(
+        landingShellFor(role: 'housekeeping', dept: 'housekeeping'),
+        isA<HousekeepingShell>(),
+      );
+      expect(
+        landingShellFor(role: 'front_desk', dept: 'front_desk'),
+        isA<HousekeepingShell>(),
+      );
+      expect(landingShellFor(role: 'housekeeping'), isA<HousekeepingShell>());
+    });
+
+    test('登入回應直接分流，用的是回應裡的 role 與 dept', () {
+      const session = LoginResult(
+        token: 't',
+        expiresAt: '2026-01-01T00:00:00Z',
+        staffId: 's',
+        name: '李主管',
+        role: 'manager',
+        dept: 'housekeeping',
+        mustChangePassword: false,
+      );
+      expect(landingShellForLogin(session), isA<ManagerShell>());
+    });
+  });
+}

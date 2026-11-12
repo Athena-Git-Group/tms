@@ -4,6 +4,8 @@ import '../../core/theme.dart';
 import '../engineering/eng_home_screen.dart';
 import '../engineering/eng_pool_screen.dart';
 import '../home/home_screen.dart';
+import '../manager/manager_home_screen.dart';
+import '../manager/manager_pool_screen.dart';
 import '../me/me_screen.dart';
 import '../../core/widgets/tms_tab_bar.dart';
 import '../notification/notification_screen.dart';
@@ -227,5 +229,20 @@ class EngineeringShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const _MainShell(homeTab: EngHomeScreen(), poolTab: EngPoolScreen());
+  }
+}
+
+/// 主管的外殼：首頁是主管首頁（三類待辦），待認領是只看不搶的雙部門待認領，
+/// 通知與我的兩個分頁與員工共用。
+///
+class ManagerShell extends StatelessWidget {
+  const ManagerShell({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const _MainShell(
+      homeTab: ManagerHomeScreen(),
+      poolTab: ManagerPoolScreen(),
+    );
   }
 }

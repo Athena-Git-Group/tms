@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
+import '../../core/landing.dart';
 import '../../core/navigation.dart';
 import '../../core/push_token_service.dart';
 import '../../core/theme.dart';
@@ -12,7 +13,6 @@ import '../../core/widgets/tms_pill_button.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_action_bar.dart';
-import '../shell/main_shell.dart';
 import 'force_password_change_screen.dart';
 import 'login_language.dart';
 import 'login_mode.dart';
@@ -119,10 +119,8 @@ class _LoginScreenState extends State<LoginScreen> {
           loginId: loginId,
           temporaryPassword: _passwordController.text,
         );
-      } else if (result.dept == 'engineering') {
-        landing = const EngineeringShell();
       } else {
-        landing = const HousekeepingShell();
+        landing = landingShellForLogin(result);
       }
       replaceAllRoutes(context, landing);
       return;

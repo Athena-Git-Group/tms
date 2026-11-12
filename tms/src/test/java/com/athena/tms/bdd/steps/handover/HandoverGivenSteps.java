@@ -4,6 +4,7 @@ import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.HandoverFixtures;
+import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.RoomFixtures;
@@ -34,6 +35,7 @@ public class HandoverGivenSteps {
     private final TaskFixtures taskFixtures;
     private final RoomFixtures roomFixtures;
     private final HandoverFixtures handoverFixtures;
+    private final InspectionFixtures inspectionFixtures;
     private final TenantFixtures tenantFixtures;
     private final MutableClock clock;
     private final BddApiClient apiClient;
@@ -46,6 +48,7 @@ public class HandoverGivenSteps {
             TaskFixtures taskFixtures,
             RoomFixtures roomFixtures,
             HandoverFixtures handoverFixtures,
+            InspectionFixtures inspectionFixtures,
             TenantFixtures tenantFixtures,
             MutableClock clock,
             BddApiClient apiClient,
@@ -56,6 +59,7 @@ public class HandoverGivenSteps {
         this.taskFixtures = taskFixtures;
         this.roomFixtures = roomFixtures;
         this.handoverFixtures = handoverFixtures;
+        this.inspectionFixtures = inspectionFixtures;
         this.tenantFixtures = tenantFixtures;
         this.clock = clock;
         this.apiClient = apiClient;
@@ -135,7 +139,6 @@ public class HandoverGivenSteps {
     public void checkoutCleaningFailedInspection(
             String roomNo, String priorStaffName, String managerName, String itemLabel) {
         UUID priorStaffId = UUID.fromString(world.staffId(priorStaffName));
-        UUID managerId = UUID.fromString(world.staffId(managerName));
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
 
         UUID taskId = taskFixtures
@@ -153,13 +156,7 @@ public class HandoverGivenSteps {
         long tenantId = tenantFixtures.testTenantId();
         List<Map<String, Object>> items = buildInspectionItemsFailingOne(tenantId, itemLabel);
 
-        Map<String, Object> body = Map.of(
-                "tenantId", tenantId,
-                "taskId", taskId.toString(),
-                "inspectorId", managerId.toString(),
-                "result", "failed",
-                "items", items);
-        apiClient.post("/inspections", BddApiClient.Auth.staff(world.jwt(managerName)), body);
+        inspectionFixtures.submit(world, managerName, taskId, items);
 
         world.rememberTask(roomNo, taskId.toString());
     }

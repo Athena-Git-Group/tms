@@ -17,7 +17,8 @@ import 'package:tms_staff_app/features/ticket/ticket_detail_housekeeping.dart';
 void main() {
   RepairTicketDetail ticket({
     String state = 'pending_review',
-    String roomNo = '305',
+    String? roomNo = '305',
+    bool isPublicArea = false,
     String? assigneeName,
     String? description,
     String? rejectReason,
@@ -31,6 +32,7 @@ void main() {
       taskId: 't-1',
       ticketNo: 'W-0412',
       roomNo: roomNo,
+      isPublicArea: isPublicArea,
       category: 'air_conditioning',
       isUrgent: isUrgent,
       state: state,
@@ -295,7 +297,7 @@ void main() {
 
     testWidgets('公共區域的單才有放回待認領，客房只能走暫停', (tester) async {
       await tester.pumpWidget(
-        engineering(ticket(state: 'doing', roomNo: '公共區域')),
+        engineering(ticket(state: 'doing', roomNo: null, isPublicArea: true)),
       );
       expect(find.text('放回待認領'), findsOneWidget);
 

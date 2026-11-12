@@ -2,7 +2,7 @@
 # 用 source 載入，不能直接執行；呼叫端要自己 set -euo pipefail 並掛 trap cleanup EXIT。
 #
 # 提供的函式（依建議呼叫順序）：
-#   check_backend_ready   後端（HTTP）與資料庫（TCP）就緒檢查——只檢查、不啟動，
+#   check_backend_ready   後端（HTTP、撥時鐘端點）與資料庫（TCP）就緒檢查——只檢查、不啟動，
 #                         未就緒時印出啟動指令後直接失敗
 #   build_and_install_app flutter build（TEST_BACKDOOR=true）→ boot simulator → 安裝
 #   start_appium          起 Appium server 並等它的 REST 介面就緒
@@ -59,7 +59,17 @@ check_backend_ready() {
     # ${} 不能省：系統 bash 3.2 會把全形「）」的位元組吞進變數名，set -u 下直接炸
     log "後端沒有回應（${BACKEND_URL}）。先起後端："
     log "  docker compose up -d"
-    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
+    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
+    return 1
+  fi
+
+  # 「現在時間是」要把後端時鐘一起撥，撥時鐘端點只在後端帶 TMS_TEST_CLOCK_ENABLED=true 啟動時存在。
+  # 少了它，劇本會在第一個撥時間的場景才失敗，這裡先擋下來並給重啟指令。GET 只讀、不撥時間。
+  local clock_code
+  clock_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$BACKEND_URL/api/v1/test/clock" || true)"
+  if [ "$clock_code" != "200" ]; then
+    log "後端沒有開放撥時鐘端點（/api/v1/test/clock 回 HTTP ${clock_code}）。停掉後端、帶旗標重啟："
+    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
     return 1
   fi
 
@@ -74,7 +84,7 @@ check_backend_ready() {
 
 build_and_install_app() {
   log "flutter build（TEST_BACKDOOR=true，必須是這個 dart-define，它是編譯期旗標）"
-  (cd "$MOBILE_DIR" && flutter build ios --simulator --debug --dart-define=TEST_BACKDOOR=true)
+  (cd "$MOBILE_DIR" && flutter build ios --simulator --debug --dart-define=TEST_BACKDOOR=true --dart-define=API_BASE_URL="$BACKEND_URL/api/v1")
 
   APP_PATH="$MOBILE_DIR/build/ios/iphonesimulator/Runner.app"
   if [ ! -d "$APP_PATH" ]; then

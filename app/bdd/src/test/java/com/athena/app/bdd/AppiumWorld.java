@@ -167,6 +167,14 @@ public class AppiumWorld {
      */
     private Map<String, String> offlineWindowTaskStates;
 
+    /**
+     * 裝置切到離線的那一刻，後端每一張單的狀態快照（鍵見 {@link #backendUnitStatesNow}）。
+     * 主管在離線時被擋下的動作對象不是任務頁上的房（查房從清單開、驗收對的是工務單），
+     * {@link #offlineWindowTaskStates} 以房號指認不到它們，所以另外把任務與工務單
+     * 連驗收人一起記下來，斷言時整份比對：被擋在送出之前的動作，後端一張單都不該變。
+     */
+    private Map<String, String> offlineWindowUnitStates;
+
     private static volatile AppiumDriver driver;
     private static volatile boolean shutdownHookRegistered;
 
@@ -305,9 +313,13 @@ public class AppiumWorld {
         currentTaskRoomNo = null;
         offlineWindowPendingCount = null;
         offlineWindowTaskStates = null;
+        offlineWindowUnitStates = null;
         // 真後端的資料在情境之間會留下來（不像以前的記憶體 fixture 隨 App process 消失），
         // 不清掉會讓上一個情境的任務繼續出現在待認領池；清法與 tms 的 ResetHooks 相同。
         backend.resetBusinessData();
+        // 上一個情境可能用「現在時間是」把後端時鐘撥走了，不放回去的話這個情境的「今天」「下班了沒」
+        // 會沿用那個時刻。
+        backend.resetBackendClock();
 
         runSimctl("terminate", udid, bundleId); // 第一個情境時 App 還沒啟動過，失敗沒關係
         runSimctlRequired("launch", udid, bundleId);
@@ -371,12 +383,16 @@ public class AppiumWorld {
         }
         Duration timeout = LOGIN_TIMEOUT;
         String landing = landingScreenId(staff);
+        // 要登入的不是那些「欠一次在 App 按開始」的任務的負責人時（主管看別人清的房），
+        // 那幾筆進行中永遠沒有機會在 App 補上，所以改由後端把它們開工——介面根 dsl
+        // 「名下有以下任務」：操作者是別人時只建資料、不換登入者。
+        settleDeferredStartsViaBackendExcept(staff);
         postBackdoorJson("/remembered-account", "{\"employee\":null}");
         typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
         typeInto("login.password-field", timeout, staff.password());
         for (int attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
             dismissForgotPasswordAlert();
-            tapTestId("login.submit-button", timeout);
+            tapWhenEnabled("login.submit-button", timeout);
             if (waitForTestIdQuietly(landing, timeout) != null) {
                 loggedInStaff = staff;
                 return;
@@ -408,11 +424,14 @@ public class AppiumWorld {
     }
 
     /**
-     * 登入成功後會停在哪個首頁。App 依登入者部門分流（工務走工務首頁，其他
-     * 部門走房務首頁），所以等待條件要跟著員工的部門走——一律等房務首頁會讓
-     * 工務的登入永遠逾時。
+     * 登入成功後會停在哪個首頁。App 先看角色再看部門分流（{@code landing.dart}：主管走
+     * 主管首頁，不是主管的工務走工務首頁，其他部門走房務首頁），所以等待條件要跟著
+     * 員工的角色與部門走——一律等房務首頁會讓工務與主管的登入永遠逾時。
      */
     private static String landingScreenId(BackendChannel.CreatedStaff staff) {
+        if ("manager".equals(staff.role())) {
+            return "manager.home";
+        }
         return "engineering".equals(staff.dept()) ? "engHome.screen" : "home.screen";
     }
 
@@ -601,6 +620,26 @@ public class AppiumWorld {
     }
 
     /**
+     * 把不屬於這位員工的「欠一次在 App 按開始」任務改由後端開工（{@code POST /tasks/{id}/start}），
+     * 屬於她的留著，等她進任務頁時照原路在 App 按。
+     *
+     * <p>同一情境只允許一位登入者，別人名下的那幾筆一旦由她登入就再也補不起來；劇本要的只是
+     * 「那張單在後端是進行中」這個真相（主管首頁看小美的進行中），不是她按下按鈕的動線。
+     */
+    private void settleDeferredStartsViaBackendExcept(BackendChannel.CreatedStaff loggingIn) {
+        for (Map.Entry<String, DeferredStart> entry :
+                new java.util.LinkedHashMap<>(roomsToStartInApp).entrySet()) {
+            BackendChannel.CreatedStaff owner = entry.getValue().staff();
+            if (owner.id().equals(loggingIn.id())) {
+                continue;
+            }
+            Map<String, Object> row = taskRowByRoomNo(entry.getKey());
+            backend.postTaskAction((UUID) row.get("id"), "start", owner);
+            roomsToStartInApp.remove(entry.getKey());
+        }
+    }
+
+    /**
      * 把裝置切到無網路，並記下這個離線視窗的開場基準。
      *
      * <p>基準包含兩項：App 本機待送出佇列的筆數，以及後端每一筆房務任務的狀態。
@@ -623,7 +662,7 @@ public class AppiumWorld {
     public void goOffline() {
         boolean alreadyInOfflineWindow = offlineWindowPendingCount != null;
         if (loggedInStaff == null) {
-            ensureLoggedInAs(onlyFieldStaff());
+            ensureLoggedInAs(onlyOperator());
         }
         postBackdoorJson("/offline", "{\"offline\":true}");
         if (alreadyInOfflineWindow) {
@@ -631,6 +670,48 @@ public class AppiumWorld {
         }
         offlineWindowPendingCount = OptionalInt.of(pendingSyncCountInApp());
         offlineWindowTaskStates = taskStatesByRoomNo();
+        offlineWindowUnitStates = backendUnitStatesNow();
+    }
+
+    /**
+     * 這個離線視窗開場時後端每一張單的狀態快照；沒有離線視窗時噴錯（理由同
+     * {@link #offlineWindowPendingCount()}）。
+     */
+    public Map<String, String> offlineWindowUnitStates() {
+        if (offlineWindowUnitStates == null) {
+            throw new IllegalStateException(
+                    "目前這個離線視窗沒有量到開場的後端狀態，無從比對操作前後的狀態。"
+                            + "手機要嘛還沒切到離線，要嘛切過之後又恢復連線把基準清掉了");
+        }
+        return offlineWindowUnitStates;
+    }
+
+    /**
+     * 權威讀回：本情境每一張單目前的狀態，任務以 {@code task:{房號或任務 id}}、工務單以
+     * {@code ticket:{單號}} 為鍵；工務單的值連驗收人與驗收時間一起（驗收不改 state，只寫
+     * {@code repair_tickets.verified_*}），主管驗收被擋下有沒有偷偷送出才看得出來。
+     */
+    public Map<String, String> backendUnitStatesNow() {
+        long tenantId = backend.ensureTenant();
+        Map<String, String> states = new LinkedHashMap<>();
+        for (Map<String, Object> row : backend.queryRows("""
+                SELECT t.id, t.state, t.type, r.room_no FROM tasks t
+                  JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                 WHERE t.tenant_id = ? ORDER BY t.created_at, t.id
+                """, tenantId)) {
+            String key = "repair".equals(String.valueOf(row.get("type")))
+                    ? "task:" + row.get("id") : "task:" + row.get("room_no");
+            states.put(key, String.valueOf(row.get("state")));
+        }
+        for (Map<String, Object> row : backend.queryRows("""
+                SELECT rt.ticket_no, t.state, rt.verified_by, rt.verified_at FROM repair_tickets rt
+                  JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
+                 WHERE rt.tenant_id = ? ORDER BY rt.ticket_no
+                """, tenantId)) {
+            states.put("ticket:" + row.get("ticket_no"), row.get("state") + "|verified_by="
+                    + row.get("verified_by") + "|verified_at=" + row.get("verified_at"));
+        }
+        return states;
     }
 
     /**
@@ -644,6 +725,7 @@ public class AppiumWorld {
         postBackdoorJson("/offline", "{\"offline\":false}");
         offlineWindowPendingCount = null;
         offlineWindowTaskStates = null;
+        offlineWindowUnitStates = null;
     }
 
     /**
@@ -733,6 +815,11 @@ public class AppiumWorld {
      * 對照。這個值讓那些句子知道現在對照的是哪一間房。還沒有打開過任何任務頁時
      * 直接噴錯：那代表劇本少了打開任務頁的那一句。
      */
+    /** 目前有沒有打開過任務頁（有才有「當事那一間房」可比）。 */
+    public boolean hasCurrentTaskRoomNo() {
+        return currentTaskRoomNo != null;
+    }
+
     public String currentTaskRoomNo() {
         if (currentTaskRoomNo == null) {
             throw new IllegalStateException("這個情境還沒有打開過任何任務頁，無從判斷是哪一間房");
@@ -911,6 +998,48 @@ public class AppiumWorld {
                     + " 位現場員工，無法推定操作人；背景「飯店有以下員工」需要剛好一位有部門的員工");
         }
         return fieldStaff.get(0);
+    }
+
+    /**
+     * 劇本的操作者：句型沒有員工參數、又還沒有人登入時，該由誰登入。背景只建了一位員工就是
+     * 他（主管一個人的離線劇本）；建了不只一位時沿用「唯一那位現場員工」的推定——主管在
+     * 背景裡多半只是被通知的人。兩種推定都不成立就噴錯，讓劇本自己寫清楚。
+     */
+    private BackendChannel.CreatedStaff onlyOperator() {
+        if (staffByName.size() == 1) {
+            return staffByName.values().iterator().next();
+        }
+        return onlyFieldStaff();
+    }
+
+    /**
+     * 「飯店有以下員工」一列的完整版：角色、負責樓層、班次結束與狀態都開放。
+     *
+     * <p>角色決定登入後的外殼（主管即使寫了部門也進主管首頁），所以「部門房務、角色主管」
+     * 要落成 role=manager、dept=housekeeping，不能照部門推角色。班次結束只在有負責樓層時
+     * 落地：它存在排房計畫列上，而那一列要掛在一間房底下；沒有樓層的員工（主管）沒有這
+     * 個概念。狀態不是在職的員工照樣建，待開通與停用的人不出現在挑人名單是後端的事。
+     */
+    public void seedStaff(String name, String deptChinese, String roleChinese, Integer floor,
+                          String shiftEndHhmm, String stateChinese) {
+        staffByName.computeIfAbsent(name, n -> {
+            String stateCode = stateChinese == null ? "active" : BackendChannel.staffState(stateChinese);
+            boolean managerDept = "主管".equals(deptChinese) || "值班經理".equals(deptChinese);
+            if (managerDept) {
+                return backend.createManagerLikeStaff(n, BackendChannel.role(deptChinese), stateCode);
+            }
+            String deptCode = BackendChannel.dept(deptChinese);
+            String roleCode = "主管".equals(roleChinese) ? BackendChannel.role("主管") : deptCode;
+            BackendChannel.CreatedStaff created = backend.createStaff(n, roleCode, deptCode, stateCode);
+            if (floor != null) {
+                if (shiftEndHhmm != null) {
+                    backend.assignPlanRoom(created.id(), floor, shiftEndHhmm);
+                } else {
+                    backend.assignPlanRoom(created.id(), floor);
+                }
+            }
+            return created;
+        });
     }
 
     /**
@@ -1217,6 +1346,16 @@ public class AppiumWorld {
      * 的約定一致（{@code taskId} 可為 null，對應「去處房號沒有既存任務」的推播）。
      */
     public void sendPush(String title, String body, String dest, String room, String taskId, String highlight) {
+        sendPush(title, body, dest, room, taskId, highlight, null, null);
+    }
+
+    /**
+     * 同上，另外帶待認領入口的部門與要標亮的單 id（契約 {@code PushTarget}：kind=pool 時
+     * {@code dept} 必填、{@code highlightTaskId} 選填）。主管收的推播要指明開哪一個部門的池，
+     * 而工務單在池裡以單號當卡片鍵，房號反查不到它，所以單 id 也一起帶。
+     */
+    public void sendPush(String title, String body, String dest, String room, String taskId,
+                         String highlight, String dept, String highlightTaskId) {
         backgroundApp();
 
         StringBuilder json = new StringBuilder();
@@ -1232,6 +1371,12 @@ public class AppiumWorld {
         }
         if (highlight != null) {
             json.append(",\"highlight\":").append(jsonString(highlight));
+        }
+        if (dept != null) {
+            json.append(",\"dept\":").append(jsonString(dept));
+        }
+        if (highlightTaskId != null) {
+            json.append(",\"highlightTaskId\":").append(jsonString(highlightTaskId));
         }
         json.append('}');
 
@@ -1532,6 +1677,52 @@ public class AppiumWorld {
     }
 
     /**
+     * 等送出鈕變成可按再點。文字欄位剛打完字時，XCUITest 的 sendKeys 會在 Flutter 處理完
+     * 最後一個字之前就返回；這時送出鈕還是禁用的，點下去只會收起鍵盤、什麼都不送（實測：
+     * 登入頁兩欄都填好、鍵盤收起、送出鈕可按，但後端沒收到登入）。只等位置定格分不出這種
+     * 情況，所以先等 enabled 成立。逾時仍禁用就照樣點，交給後面的斷言報錯。
+     */
+    public void tapWhenEnabled(String testId, Duration timeout) {
+        withStaleRetry(testId, timeout, element -> {
+            long deadline = System.nanoTime() + timeout.toNanos();
+            while (!element.isEnabled() && System.nanoTime() < deadline) {
+                sleep(150);
+            }
+            waitForSettledLayoutAfterTyping(element);
+            element.click();
+        });
+    }
+
+    /**
+     * 打完字之後等版面真的停下來。送出鈕在置底列，置底列貼著鍵盤頂端；密碼欄位拿到焦點
+     * 之後，鍵盤上方的密碼自動填入列會晚半拍才長出來，把整個置底列往上推。只等 150ms
+     * 定格會在它長出來之前就放行，點擊落在送出鈕原本的位置，也就是現在「忘記密碼？」
+     * 的位置（實測：登入頁停在原地或跳出忘記密碼提示，後端沒收到登入）。所以這裡把鍵盤
+     * 的外框也算進來，送出鈕與鍵盤連續 600ms 都沒動才點；一直在動最多等 3 秒就放行，
+     * 交給 click 自己成敗。
+     */
+    private void waitForSettledLayoutAfterTyping(WebElement element) {
+        By keyboard = AppiumBy.className("XCUIElementTypeKeyboard");
+        long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
+        String last = layoutSignature(element, keyboard);
+        int stableReads = 0;
+        while (stableReads < 3 && System.nanoTime() < deadline) {
+            sleep(200);
+            String now = layoutSignature(element, keyboard);
+            stableReads = now.equals(last) ? stableReads + 1 : 0;
+            last = now;
+        }
+    }
+
+    private String layoutSignature(WebElement element, By keyboard) {
+        StringBuilder signature = new StringBuilder(element.getRect().toString());
+        for (WebElement shown : driver().findElements(keyboard)) {
+            signature.append('|').append(shown.getRect());
+        }
+        return signature.toString();
+    }
+
+    /**
      * 等元素的畫面位置定下來再回傳。頁面轉場動畫進行中就點，XCUITest 以當下
      * 座標落點，會點到還在移動的畫面之外（實測重現：通知中心剛推入時點
      * 「全部標為已讀」沒有任何效果）；連續兩次讀到相同的 frame 才視為定格。
@@ -1634,6 +1825,119 @@ public class AppiumWorld {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    /**
+     * 這台手機上 App 本機偏好設定的一把鍵（Flutter {@code shared_preferences}）。iOS 上它落在
+     * App 容器的 NSUserDefaults，鍵前面固定加 {@code flutter.}；用 {@code simctl spawn … defaults}
+     * 直接寫，不經畫面也不經測試後門——「上次停在哪個部門」這種只存在手機上的狀態，
+     * 正是 dsl 要求「不經畫面」鋪的。寫完要 {@link #restartApp()} App 才會讀到。
+     */
+    public void writeLocalPreference(String key, String value) {
+        runSimctlRequired("spawn", udid, "defaults", "write", preferencesDomain(), "flutter." + key, "-string", value);
+    }
+
+    /**
+     * App 的 NSUserDefaults 在模擬器上的 domain：App 資料容器裡的
+     * {@code Library/Preferences/{bundleId}}（給 {@code defaults} 的是不帶 {@code .plist} 的完整路徑）。
+     * 只寫 bundle id 的話，{@code defaults} 讀寫的是模擬器使用者層的
+     * {@code Library/Preferences/{bundleId}.plist}，跟 App 自己存的不是同一份，兩邊互相看不到。
+     * 容器路徑在重新安裝後會變，所以每次現查。
+     */
+    private String preferencesDomain() {
+        try {
+            Process process = new ProcessBuilder(buildSimctlCommand("get_app_container", udid, bundleId, "data"))
+                    .start();
+            String container = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IllegalStateException("查 App 資料容器逾時：" + bundleId);
+            }
+            if (process.exitValue() != 0 || container.isEmpty()) {
+                throw new IllegalStateException("查不到 App 資料容器：" + bundleId + "，exit=" + process.exitValue());
+            }
+            return container + "/Library/Preferences/" + bundleId;
+        } catch (IOException e) {
+            throw new IllegalStateException("查 App 資料容器失敗：" + bundleId, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("查 App 資料容器時被中斷：" + bundleId, e);
+        }
+    }
+
+    /** 讀 {@link #writeLocalPreference} 那一把鍵目前的值；沒有紀錄回 null。 */
+    public String readLocalPreference(String key) {
+        try {
+            Process process = new ProcessBuilder(buildSimctlCommand(
+                    "spawn", udid, "defaults", "read", preferencesDomain(), "flutter." + key))
+                    .redirectErrorStream(true)
+                    .start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IllegalStateException("讀本機偏好設定逾時：" + key);
+            }
+            return process.exitValue() == 0 ? output : null;
+        } catch (IOException e) {
+            throw new IllegalStateException("讀本機偏好設定失敗：" + key, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("讀本機偏好設定時被中斷：" + key, e);
+        }
+    }
+
+    /**
+     * 刪掉 {@link #writeLocalPreference} 那一把鍵。給「這台手機還沒有任何紀錄」的起始狀態用：
+     * 同一台模擬器連跑很多情境，前一個情境寫下的偏好設定會留給下一個情境。
+     */
+    public void deleteLocalPreference(String key) {
+        runSimctl("spawn", udid, "defaults", "delete", preferencesDomain(), "flutter." + key);
+    }
+
+    /**
+     * 情境中途把 App process 整個重開（terminate＋launch），再等測試後門就緒。給「改了只有
+     * 啟動時才讀的本機狀態」的 Given 用。重開之後 App 回到登入畫面，所以登入者記錄一併清掉，
+     * 下一個需要身分的句子會重新登入；後端資料與員工表不動。
+     */
+    public void restartApp() {
+        runSimctl("terminate", udid, bundleId);
+        runSimctlRequired("launch", udid, bundleId);
+        waitForBackdoorReady();
+        loggedInStaff = null;
+        currentTaskRoomNo = null;
+        offlineWindowPendingCount = null;
+        offlineWindowTaskStates = null;
+        offlineWindowUnitStates = null;
+    }
+
+    /**
+     * 把畫面帶回某個外殼的根畫面（主管首頁 {@code manager.home}、工務首頁 {@code engHome.screen}）：
+     * 已在上面就不動，否則逐層按返回，最多 {@link #MAX_BACK_TAPS} 次。與 {@link #ensureOnHome}
+     * 同一套走法，只是根畫面的 id 由呼叫端給——首頁依角色分流之後，根畫面不再只有一種。
+     */
+    public void ensureOnScreenRoot(String screenId, Duration timeout) {
+        for (int i = 0; i < MAX_BACK_TAPS; i++) {
+            if (!driver().findElements(byTestId(screenId)).isEmpty()) {
+                return;
+            }
+            if (!driver().findElements(byTestId("celebrate.screen")).isEmpty()) {
+                tapTestId("celebrate.back-home-button", timeout);
+                sleep(300);
+                continue;
+            }
+            List<WebElement> back = driver().findElements(byTestId("nav.back-button"));
+            if (back.isEmpty()) {
+                back = driver().findElements(AppiumBy.accessibilityId("Back"));
+            }
+            if (back.isEmpty()) {
+                break;
+            }
+            back.get(0).click();
+            sleep(300);
+        }
+        waitForTestId(screenId, timeout);
     }
 
     private void runSimctl(String... args) {

@@ -43,6 +43,15 @@ public class AutomationRuleService {
     /** 排程規則沒有房號時使用的佔位房號，樓層固定 0，不屬於任何客房。 */
     public static final String PUBLIC_AREA_ROOM_NO = "公共區域";
 
+    /**
+     * 這個房號是不是公共區域佔位房。資料側 tasks.room_id 不可為空，公共區域的單一律掛在
+     * 佔位房上；回應要表達「公共區域、沒有房號」時（roomNo 為 null、isPublicArea 為 true），
+     * 各處都用這支判斷，同一張單在工務首頁、工務單詳情與主管清單才不會說法不一。
+     */
+    public static boolean isPublicAreaRoomNo(Object roomNo) {
+        return PUBLIC_AREA_ROOM_NO.equals(roomNo == null ? null : String.valueOf(roomNo));
+    }
+
     private record FactoryRule(String attribute, String name) {
     }
 

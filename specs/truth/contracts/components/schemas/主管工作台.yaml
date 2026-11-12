@@ -1,56 +1,47 @@
 ManagerQueues:
   type: object
   description: >-
-    主管首頁三格與三份清單的同一份回應。counts 的每個數字等於對應陣列的長度，由同一條查詢算出；
-    App 以 counts 畫三格、以三個陣列畫清單，不自己數陣列長度覆寫格子，也不為三格另打端點。
+    主管首頁的格子與清單的同一份回應，依主管種類只帶看得到的類別：
+    房務主管（role=manager 且 dept 不是 engineering，含 dept 為 null）帶待查房 inspection 與待驗收 verify；
+    工務主管（role=manager 且 dept=engineering）只帶 verify，inspection 與 counts.inspection 兩個鍵整個不出現。
+    不出現而不是回空陣列，是因為空陣列等於「待查房 0 張」，房務主管首頁要照常畫一格 0，工務主管則根本沒有這一格。
+    回應不另帶主管種類，App 依自己用同一條規則算出的主管種類畫格子，兩邊口徑相同。
+    counts 的每個數字等於對應陣列的長度，由同一條查詢算出；App 以 counts 畫格子、以陣列畫清單，
+    不自己數陣列長度覆寫格子，也不為格子另打端點。
   required:
   - counts
-  - inspection
-  - review
   - verify
   properties:
     counts:
       type: object
-      description: 三格數字。某一類為 0 時仍回 0，App 顯示 0 而不是隱藏格子。
+      description: 格子數字。某一類為 0 時仍回 0，App 顯示 0 而不是隱藏格子。
       required:
-      - inspection
-      - review
       - verify
       properties:
         inspection:
           type: integer
           format: int32
           minimum: 0
-          description: 待查房張數，等於 inspection 陣列長度。
-        review:
-          type: integer
-          format: int32
-          minimum: 0
-          description: 待審核張數，等於 review 陣列長度。
+          description: 待查房張數，等於 inspection 陣列長度。只有房務主管的回應有這個鍵。
         verify:
           type: integer
           format: int32
           minimum: 0
-          description: 待驗收張數，等於 verify 陣列長度。
+          description: 待驗收張數，等於 verify 陣列長度。房務主管與工務主管拿到的值相同。
     inspection:
       type: array
-      description: 待查房清單，已依 waitingSince 由舊到新排好。
+      description: 待查房清單，已依 waitingSince 由舊到新排好。只有房務主管的回應有這個鍵（房務主管必帶，可為空陣列）。
       items:
         $ref: '#/InspectionQueueItem'
-    review:
-      type: array
-      description: 待審核清單，已依 waitingSince 由舊到新排好。
-      items:
-        $ref: '#/ReviewQueueItem'
     verify:
       type: array
-      description: 待驗收清單，已依 waitingSince 由舊到新排好。
+      description: 待驗收清單，已依 waitingSince 由舊到新排好。所有主管拿到同一份。
       items:
         $ref: '#/VerifyQueueItem'
 QueueItemBase:
   type: object
   description: >-
-    三類清單每一列共用的欄位：識別、房號或地點、內容、開始等主管的時間與是否今天。
+    兩類清單每一列共用的欄位：識別、房號或地點、內容、開始等主管的時間與是否今天。
     清單列的目標是讓主管不點開就認得這是哪一張單、在等多久。
   required:
   - taskId
@@ -62,7 +53,7 @@ QueueItemBase:
     taskId:
       type: string
       format: uuid
-      description: 任務 id。打掃單拿它開任務相關端點；工務單本身就是修繕任務，同一個 id 可直接用在 readRepairTicket 與主管的四個動作端點。
+      description: 任務 id。打掃單拿它開任務相關端點；工務單本身就是修繕任務，同一個 id 可直接用在 readRepairTicket 與 verifyRepairTicket。
     roomNo:
       type: string
       nullable: true
@@ -81,7 +72,7 @@ QueueItemBase:
       format: date-time
       description: >-
         開始等主管的時間，也是這一類清單的排序鍵。待查房是最近一次完成的時間；
-        待審核是最近一次進入等主管審核的時間（第一次送出或補資料再送出，取自任務事件）；待驗收是完修時間。
+        待驗收是最近一次完修的時間（tasks.done_at，驗收不通過後再完修會重寫）。
         字串帶後端 Clock 的時區位移，App 顯示時直接用這個位移取時與分，不轉成手機時區。
     waitingSinceIsToday:
       type: boolean
@@ -106,37 +97,10 @@ InspectionQueueItem:
         format: int32
         minimum: 0
         description: 被查房退回重做的次數，與 TodayTask.redoCount 同一個值；大於 0 時清單列可標「重做後再查」。
-ReviewQueueItem:
-  description: 待審核清單的一列：房務報修、停在等主管審核的一般件工務單。
-  allOf:
-  - $ref: '#/QueueItemBase'
-  - type: object
-    required:
-    - ticketNo
-    - category
-    - reporterName
-    properties:
-      ticketNo:
-        type: string
-        pattern: ^W-\d{4}$
-        example: W-0201
-        description: 工務單號，顯示在房號前面的小字。
-      category:
-        $ref: './工務單.yaml#/RepairCategory'
-      description:
-        type: string
-        nullable: true
-        description: 報修說明；報修人沒填時為 null，畫面只顯示標題。
-      reporterName:
-        type: string
-        description: 報修人顯示名稱。
-      photoCount:
-        type: integer
-        format: int32
-        minimum: 0
-        description: 報修照片張數，供清單列標「N 張照片」；照片本體打開詳情（readRepairTicket）才取。
 VerifyQueueItem:
-  description: 待驗收清單的一列：已完修、尚未有主管驗收的工務單，含暫時處理、無法修復與定期保養的單。
+  description: >-
+    待驗收清單的一列：已完修（state=done）、等主管驗收的工務單，含暫時處理、無法修復與定期保養的單；
+    以不需處理完修的單直接結案，不在這裡。
   allOf:
   - $ref: '#/QueueItemBase'
   - type: object
@@ -144,7 +108,7 @@ VerifyQueueItem:
     - ticketNo
     - category
     - origin
-    - resolutionType
+    - wasVerificationFailed
     properties:
       ticketNo:
         type: string
@@ -173,11 +137,18 @@ VerifyQueueItem:
         description: 來源，與 RepairTicket.origin 同一套值：reported 是有人報修，scheduled 是定期保養。scheduled 時清單列標「定期保養」。
       resolutionType:
         type: string
+        nullable: true
         enum:
         - fixed
         - temporary
         - cannot_fix
         description: >-
-          完修結果三選一，與 RepairTicket.resolutionType 同一套值（來源 repair_tickets.resolution_type）：
-          fixed 已修好、temporary 暫時處理、cannot_fix 無法修復。待驗收的單一定已完修，所以必填且不為 null；
+          完修結果，與 RepairTicket.resolutionType 同一套值（來源 repair_tickets.resolution_type），
+          這裡只會出現 fixed 已修好、temporary 暫時處理、cannot_fix 無法修復三種，不會出現 no_action_needed。
           cannot_fix 的列在畫面上用警示色，主管得看出哪些是無法修復。
+          完修結果欄位出現之前就完修的舊單為 null，畫面不顯示完修結果。
+      wasVerificationFailed:
+        type: boolean
+        description: >-
+          這張單是否曾被驗收不通過過（repair_tickets.last_verify_failed_at 有值）。true 時清單列標「重修後再驗」；
+          詳細的原因、判定人與時間打開詳情（readRepairTicket 的 lastVerifyFailed 三個欄位）才取。

@@ -19,6 +19,9 @@ public class InspectionController {
 
     @PostMapping(value={"/admin/inspections/{taskId}"})
     public InspectionResponse inspect(@PathVariable UUID taskId, @RequestBody InspectionRequest request) {
-        return this.inspectionService.inspect(taskId, request);
+        InspectionService.Judged judged = this.inspectionService.inspect(taskId, request);
+        String taskState = judged.passed() ? "inspected" : "pool".equals(judged.destination()) ? "pool" : "accepted";
+        return new InspectionResponse(taskId, judged.passed() ? "passed" : "failed", taskState,
+                judged.redoCount(), "pool".equals(judged.destination()));
     }
 }

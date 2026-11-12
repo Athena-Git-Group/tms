@@ -7,24 +7,27 @@ getMyToday:
       打掃總數＝本人今日打掃任務數，不含 cancelled；
       打掃完成數＝其中 done 或 inspected 的數量；
       查房通過數（inspectedCount）＝本人今日 inspection=passed 的任務數，首頁四格顯示這個值；
-      今日完成單數（completedCount）＝本人 done 或 inspected 的任務數，首頁四格不顯示，供完成慶祝頁「第 N 單」使用；
-      臨時需求完成數＝本人非打掃類 done 的任務數；
+      今日完成單數（completedCount）＝本人 done、inspected 或 closed 的任務數，首頁四格不顯示，供完成慶祝頁「第 N 單」使用；
+      臨時需求完成數＝本人非打掃類 done 或 closed 的任務數；
       預估剩餘工時＝Σ（accepted、doing、deferred、interrupted 的本人任務）max(0, 預估分鐘 − 已做分鐘)。
       今日任務列（todayTasks）＝負責人是本人、工作日是今天、狀態不是 cancelled 的全部任務，
-      涵蓋 accepted、doing、deferred、interrupted、done、inspected 六個狀態，每筆帶狀態、已做分鐘與停住原因，
+      涵蓋 accepted、doing、deferred、interrupted、done、inspected、closed 七個狀態（closed 只有工務單），每筆帶狀態、已做分鐘與停住原因，
       供首頁任務列與「繼續處理」使用；排序由後端排好，App 依序呈現不再重排。
       下一間推薦（nextTasks）是 todayTasks 中 accepted 那些單的推薦子集，只列 accepted，
       排序為：redo 次數多的先、非打掃類先於打掃類、最後依房號遞增；兩份清單口徑不同，不可互相取代。
-      呼叫者是工務（dept=engineering）時另外回傳 engineeringSummary：手上張數（accepted／doing 的工務單數）、
-      今天已完修（今天 done 的工務單數）、急件數（手上單中 isUrgent 的數量），
-      以及這些單的清單 tickets（accepted／doing 的工務單，加上今天 done 的工務單，讓工務能打開已完修的單看驗收狀態）；
-      非工務呼叫者這個欄位為 null。
-      呼叫者是主管（role=manager）時：todayTasks 與 nextTasks 照常回本人名下今天的單（主管首頁「我名下的單」只讀 todayTasks）；
+      呼叫者的部門是工務（dept=engineering，工務員工與工務主管都算）時另外回傳 engineeringSummary：
+      手上張數（accepted／doing 的工務單數）、今天已完修（今天完修、done 或 closed 的工務單數）、急件數（手上單中 isUrgent 的數量），
+      以及這些單的清單 tickets（accepted／doing 的工務單，加上今天完修的 done 與 closed 工務單，讓工務能打開已完修的單看驗收狀態）；
+      驗收不通過退回本人名下重修的單帶 verificationReturnReason。其他呼叫者這個欄位為 null。
+      呼叫者是主管（role=manager）時：todayTasks 與 nextTasks 照常回本人名下今天的單；
+      主管首頁「我名下的單」依主管種類讀不同欄位：房務主管讀 todayTasks，工務主管（dept=engineering）讀 engineeringSummary.tickets，
+      與對應員工首頁同一個口徑；
       打掃進度六個數字（cleaningDone、cleaningTotal、inspectedCount、completedCount、adHocCompleted、remainingMinutes）
       依同一套公式對本人名下的單計算，主管沒有名下的單時都是 0，主管首頁不顯示這些數字；
       poolBadgeCount 一律為 0（主管不屬於任何部門池、搶不到單，待認領徽章不顯示）；
-      unreadNotificationBadgeCount 照常；shift 與 floors 為 null（排班只存在房務的排房計畫）；engineeringSummary 為 null。
-      主管的三格待辦不在這支端點，走 getManagerQueues。
+      unreadNotificationBadgeCount 照常；shift 與 floors 為 null（排班只存在房務的排房計畫）；
+      engineeringSummary 只有工務主管有值，房務主管為 null。
+      主管首頁的待查房、待驗收格子不在這支端點，走 getManagerQueues。
     tags:
     - 員工工作台 API
     responses:
@@ -46,8 +49,10 @@ listDeptPool:
       回應包含分類筆數；帶 category 時只回傳該類別，但 counts 仍回傳全部類別。
       工務池另支援 urgent、source 兩個篩選維度：urgent=true 只回急件；source 只回該來源（staff_report＝
       房務報修、desk_forward＝櫃檯），可與 category 並用；三者都可省略（全部）。
+      被驗收不通過退回工務待認領的單照常列在工務池，source 仍依開單路徑換算，PoolItem.verificationReturnReason 帶不通過原因。
       要看的是哪個部門的池由 dept 參數決定：現場員工（房務、工務、櫃檯）省略它，看自己部門的池；
       主管與老闆不屬於單一部門，必須帶 dept 才知道要看哪一池，省略時回 422；
+      主管不論部門（房務主管或工務主管）都可以帶 housekeeping 或 engineering，只看不搶；
       現場員工帶了自己部門以外的 dept 回 403 forbidden_dept_pool。
       回應另外帶 activeStaffCount＝該部門目前在職、可以搶單的員工數（在職定義見
       `員工工作台.yaml` 的 DeptPool.activeStaffCount：帳號啟用且已開通，待開通與停用不計），

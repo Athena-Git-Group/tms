@@ -25,7 +25,7 @@ tasks:
       description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
     state:
       type: string
-      description: 'CHECK 十一值: triage|pending_review|rejected|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled（pending_review／rejected 為本 plan 新增：工務單審核流程專用）'
+      description: 'CHECK 十值: triage|pool|accepted|doing|done|inspected|closed|deferred|interrupted|cancelled（closed 已結案只有工務單會出現；工務單的 done 是已完修、等主管驗收，不是終點）'
     eventSeq:
       type: integer
       format: int32
@@ -149,7 +149,7 @@ tasksRequest:
       description: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）'
     state:
       type: string
-      description: 'CHECK 十一值: triage|pending_review|rejected|pool|accepted|doing|done|inspected|deferred|interrupted|cancelled（pending_review／rejected 為本 plan 新增：工務單審核流程專用）'
+      description: 'CHECK 十值: triage|pool|accepted|doing|done|inspected|closed|deferred|interrupted|cancelled（closed 已結案只有工務單會出現；工務單的 done 是已完修、等主管驗收，不是終點）'
     eventSeq:
       type: integer
       format: int32
@@ -217,30 +217,38 @@ HoldReasonRequest:
       description: 去掉頭尾空白後 1–60 字；全是空白視為空。
 CompleteTaskRequest:
   type: object
-  description: 打掃與一般任務不需要 body。修繕任務（工務單）必須附完修照片。
+  description: >-
+    打掃與一般任務不需要 body。修繕任務（工務單）要帶完修結果；完修結果不是不需處理（no_action_needed）時必須附完修照片。
   properties:
     photoIds:
       type: array
-      minItems: 1
+      minItems: 0
       maxItems: 3
       items:
         type: string
         format: uuid
-      description: 修繕任務必填，至少 1 張已上傳（status=uploaded）、purpose=completion 的照片。
+      description: >-
+        修繕任務的完修照片，每張都要已上傳（status=uploaded）、purpose=completion。
+        resolutionType 為 fixed、temporary、cannot_fix（含省略）時，這一次請求至少帶 1 張，否則回 422 completion_photo_required；
+        驗收不通過退回重修後再完修也一樣，上一輪的照片不能抵用。
+        resolutionType 為 no_action_needed 時可以省略或送空陣列。
     resolutionNote:
       type: string
-      description: 處理說明，選填。判斷不需維修時在這裡註明，例如「不需維修：已重新設定門鎖，測試正常」。
+      description: 處理說明，選填，四種完修結果都一樣，例如「刷卡測試三次正常」。
     resolutionType:
       type: string
       enum:
       - fixed
       - temporary
       - cannot_fix
+      - no_action_needed
       description: >-
-        處理結果，只對修繕任務（工務單）有意義；省略視為 fixed（已修好）。
-        temporary（暫時處理）：工務單仍轉 done，系統另外自動建立一張房號、類別都相同的追蹤單進工務待認領
-        （見 RepairTicket.originTicketNo）。cannot_fix（無法修復）：工務單轉 done，該房 rooms.hk_state
-        轉為 out_of_order（停用待確認）。
+        完修結果，只對修繕任務（工務單）有意義；省略視為 fixed（已修好）。
+        fixed（已修好）：工務單轉 done，等主管驗收。
+        temporary（暫時處理）：工務單轉 done 等主管驗收，系統另外自動建立一張房號、類別都相同的追蹤單進工務待認領
+        （見 RepairTicket.originTicketNo）。cannot_fix（無法修復）：工務單轉 done 等主管驗收，該房 rooms.hk_state
+        轉為 out_of_order（停用待確認）。no_action_needed（不需處理）：不要求照片、不建追蹤單、不改房況，
+        工務單直接轉 closed（已結案），不進待驗收；推播報修人與原任務停住原因的處理與 fixed 相同。
 CancelTaskRequest:
   type: object
   required:
@@ -406,6 +414,8 @@ NextStep:
 TaskCompletion:
   description: >-
     完成一間之後回給 App 的東西：剛完成的那張任務詳情，加上完成畫面要用的兩個值。
+    修繕任務（工務單）完成後，詳情裡的 state 直接說明結果：done 是已完修、進入待驗收，closed 是以不需處理直接結案，
+    App 依它把狀態列換成「已完修 · 等主管驗收」或「已結案 · 不需處理」，不必再打一次工務單詳情。
     兩個值都在完成這一次往返內給完，App 不為了畫完成畫面再打一次 MyToday——
     多一次往返會讓完成畫面在訊號差的樓層卡住，而那正是員工最需要立刻看到回饋的時候。
   allOf:

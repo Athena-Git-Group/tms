@@ -1,6 +1,8 @@
 package com.athena.tms.repair;
 
 import com.athena.tms.common.error.UnprocessableEntityException;
+import com.athena.tms.dto.RepairVerificationOutcome;
+import com.athena.tms.dto.VerifyRepairTicketRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -176,7 +178,8 @@ public class RepairController {
     }
 
     @PostMapping("/repair-tickets/{ticketId}/verify")
-    public Map<String, Object> verifyRepairTicket(@PathVariable UUID ticketId) {
-        return repairService.verify(ticketId);
+    public RepairVerificationOutcome verifyRepairTicket(
+            @PathVariable UUID ticketId, @RequestBody VerifyRepairTicketRequest request) {
+        return repairService.verify(ticketId, request);
     }
 }

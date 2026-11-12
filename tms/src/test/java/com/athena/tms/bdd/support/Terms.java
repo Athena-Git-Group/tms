@@ -34,9 +34,8 @@ public final class Terms {
             Map.entry("已接單", "accepted"),
             Map.entry("維修中", "doing"),
             Map.entry("已完修", "done"),
-            Map.entry("已撤回", "cancelled"),
-            Map.entry("等主管審核", "pending_review"),
-            Map.entry("主管未核准", "rejected"));
+            Map.entry("已結案", "closed"),
+            Map.entry("已撤回", "cancelled"));
 
     // 來源：specs/truth/features/backend/dsl.md 「部門用語」表（dept 列）。
     private static final Map<String, String> DEPT = Map.ofEntries(
@@ -95,6 +94,14 @@ public final class Terms {
             Map.entry("門鎖", "door_lock"),
             Map.entry("其他", "other"));
 
+    // 來源：根 dsl.md「完修結果」（工務單完修時選的處理結果），權威代碼為
+    // repair_tickets.resolution_type 的 CHECK（fixed|temporary|cannot_fix|no_action_needed）。
+    private static final Map<String, String> RESOLUTION_TYPE = Map.ofEntries(
+            Map.entry("已修好", "fixed"),
+            Map.entry("暫時處理", "temporary"),
+            Map.entry("無法修復", "cannot_fix"),
+            Map.entry("不需處理", "no_action_needed"));
+
     // 來源：specs/truth/contracts/components/schemas/員工工作台.yaml 的 PoolCategory enum。
     private static final Map<String, String> POOL_CATEGORY = Map.ofEntries(
             Map.entry("打掃", "cleaning"),
@@ -112,7 +119,9 @@ public final class Terms {
     }
 
     /**
-     * 工務單狀態中文 → 權威 {@code tasks.state}。「已撤回」除了狀態還帶取消原因，
+     * 工務單狀態中文 → 權威 {@code tasks.state}。「已完修」是完修後等主管驗收的 {@code done}；
+     * 「已結案」是 {@code closed}，涵蓋主管驗收通過與以不需處理完修直接結案兩種情形。
+     * 「已撤回」除了狀態還帶取消原因，
      * 用 {@link #repairTicketWithdrawnReason()} 另外取得。
      */
     public static String repairTicketState(String chinese) {
@@ -157,6 +166,11 @@ public final class Terms {
     /** 工務單來源中文 → 權威 {@code tasks.source}（房務報修＝staff、櫃檯＝desk）。 */
     public static String repairTicketSource(String chinese) {
         return lookup(REPAIR_TICKET_SOURCE, chinese, "工務單來源");
+    }
+
+    /** 完修結果中文 → 權威 {@code repair_tickets.resolution_type}，也是完修請求的 {@code resolutionType}。 */
+    public static String resolutionType(String chinese) {
+        return lookup(RESOLUTION_TYPE, chinese, "完修結果");
     }
 
     /** 待認領類別中文 → 權威 {@code PoolCategory} enum。 */

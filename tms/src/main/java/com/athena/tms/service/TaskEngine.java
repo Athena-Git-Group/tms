@@ -158,15 +158,40 @@ public class TaskEngine {
      */
     @Transactional
     public int complete(long tenantId, UUID taskId, Actor actor) {
+        return this.complete(tenantId, taskId, actor, null);
+    }
+
+    /**
+     * 同 {@link #complete(long, UUID, Actor)}，另把呼叫端給的欄位併進 completed 事件的
+     * payload。修繕任務用它帶完修結果 resolutionType：事件與 repair_tickets.resolution_type
+     * 由同一交易寫入，查事件歷程與查單看到的是同一個結果。
+     */
+    @Transactional
+    public int complete(long tenantId, UUID taskId, Actor actor, Map<String, Object> extraPayload) {
+        return this.complete(tenantId, taskId, actor, extraPayload, false);
+    }
+
+    /**
+     * 同 {@link #complete(long, UUID, Actor, Map)}，{@code closeRepair} 為 true 時修繕任務
+     * 一步落在 closed（已結案），不經 done 等主管驗收。工務判斷不需處理的單用它：
+     * 完成事件本身就是結案事件，不另記驗收。
+     */
+    @Transactional
+    public int complete(long tenantId, UUID taskId, Actor actor, Map<String, Object> extraPayload, boolean closeRepair) {
         if (actor.id() == null) {
             throw new UnprocessableEntityException("完成任務必須是具名員工");
         }
         OffsetDateTime now = OffsetDateTime.now(this.clock);
         // 開工時鎖定免查（inspection_waived）的打掃任務直接免查結案：不經「待查房」（done），
-        // 一步落在 inspected、查房結果記 waived；其他任務維持 done 等查房或送達。
-        int seq = this.guard("完成", "UPDATE tasks\n   SET state = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'inspected' ELSE 'done' END,\n       inspection = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'waived' ELSE inspection END,\n       " + CLOSE_SEGMENT_SET + ", done_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'doing' AND assignee_id = ?\nRETURNING event_seq\n", now, now, tenantId, taskId, actor.id());
+        // 一步落在 inspected、查房結果記 waived；不需處理的工務單一步落在 closed；
+        // 其他任務維持 done 等查房、驗收或送達。
+        int seq = this.guard("完成", "UPDATE tasks\n   SET state = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'inspected'\n                    WHEN type = 'repair' AND ? THEN 'closed' ELSE 'done' END,\n       inspection = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'waived' ELSE inspection END,\n       " + CLOSE_SEGMENT_SET + ", done_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'doing' AND assignee_id = ?\nRETURNING event_seq\n", closeRepair, now, now, tenantId, taskId, actor.id());
         List<String> skippedLabels = this.markUncheckedSopAsSkipped(tenantId, taskId, now);
         Map<String, Object> payload = skippedLabels == null ? null : TaskEngine.payload("skipped_items", skippedLabels);
+        if (extraPayload != null && !extraPayload.isEmpty()) {
+            payload = payload == null ? new LinkedHashMap<>() : payload;
+            payload.putAll(extraPayload);
+        }
         int completedSeq = this.recordEvent(tenantId, taskId, seq, "completed", actor, payload);
         if (this.isWaivedClosed(tenantId, taskId)) {
             this.writebackRoomStatusIfEnabled(tenantId, taskId, actor);
@@ -262,9 +287,13 @@ public class TaskEngine {
         return this.recordEvent(tenantId, taskId, seq, "inspection_failed", actor, TaskEngine.payload("note", note));
     }
 
+    /**
+     * 查房退回後原清房者已下班或請假時，把單放回部門待認領。{@code pool_source} 記為
+     * inspection_return，讓待認領清單與交接畫面看得出這張單是查房退回來的，而不是新單。
+     */
     @Transactional
     public int returnToPool(long tenantId, UUID taskId, String note, Actor actor) {
-        int seq = this.guard("退回待接池", "UPDATE tasks\n   SET state = 'pool', assignee_id = NULL, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'accepted'\nRETURNING event_seq\n", tenantId, taskId);
+        int seq = this.guard("退回待接池", "UPDATE tasks\n   SET state = 'pool', assignee_id = NULL, pool_source = 'inspection_return', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'accepted'\nRETURNING event_seq\n", tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "returned_to_pool", actor, TaskEngine.payload("note", note));
     }
 
@@ -482,19 +511,39 @@ public class TaskEngine {
     }
 
     /**
-     * 主管驗收通過已完修的工務單（contracts verifyRepairTicket）：state 仍是 done，
-     * 不開新狀態值，只是推進 event_seq／updated_at 並留一筆 repair_verified 事件。
-     * 是否限主管呼叫、verified_by／verified_at 的落地由
-     * {@link com.athena.tms.repair.RepairService#verify} 負責；這裡只管單目前是不是 done——
-     * 不是 done 時一列也不改，回 409。
+     * 主管驗收通過已完修的工務單（contracts verifyRepairTicket）：done→closed，留一筆
+     * repair_verified 事件。單不是 done 時一列也不改，回 409；兩位主管同時送出時，
+     * 這句 UPDATE 只會讓先到的那一次成立。是否限主管呼叫、驗收人與驗收時間的落地由
+     * {@link com.athena.tms.repair.RepairService#verify} 負責。
      */
     @Transactional
     public int verifyRepairTicket(long tenantId, UUID taskId, Actor actor) {
         int seq = this.guard(
                 "驗收",
-                "UPDATE tasks\n   SET event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'done'\nRETURNING event_seq\n",
+                "UPDATE tasks\n   SET state = 'closed', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND type = 'repair' AND state = 'done'\nRETURNING event_seq\n",
                 tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "repair_verified", actor, null);
+    }
+
+    /**
+     * 主管判定已完修的工務單驗收不通過（contracts verifyRepairTicket 的 failed）。與通過共用同一道
+     * state='done' 條件，先到的那一次成立，後到的回 409。兩條去處都清空完修時間，開工時間、累計工時
+     * 與重做次數不動：
+     * <ul>
+     *   <li>原處理人接得了：done→accepted，回到他名下待開始，負責人不變。</li>
+     *   <li>原處理人接不了（請假或已下班）：done→pool，清空負責人，進池來源記 verification_return，
+     *       退池原因記「驗收不通過 · 原處理人已下班或請假」，由工務待認領重新認領。</li>
+     * </ul>
+     * 事件 payload 帶原因、去處（assignee 或 pool）與原處理人，重放時才還原得出這次退回給了誰。
+     */
+    @Transactional
+    public int failRepairVerification(long tenantId, UUID taskId, Actor actor, String reason, UUID assigneeId, boolean toPool) {
+        String sql = toPool
+                ? "UPDATE tasks\n   SET state = 'pool', assignee_id = NULL, pool_source = 'verification_return',\n       return_reason = '驗收不通過 · 原處理人已下班或請假', done_at = NULL,\n       event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND type = 'repair' AND state = 'done'\nRETURNING event_seq\n"
+                : "UPDATE tasks\n   SET state = 'accepted', done_at = NULL, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND type = 'repair' AND state = 'done'\nRETURNING event_seq\n";
+        int seq = this.guard("驗收不通過", sql, tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "repair_verification_failed", actor,
+                TaskEngine.payload("reason", reason, "destination", toPool ? "pool" : "assignee", "assigneeId", assigneeId));
     }
 
     private int guard(String operation, String sql, Object ... params) {

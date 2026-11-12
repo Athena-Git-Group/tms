@@ -100,7 +100,7 @@ class TicketDetailEngineering extends StatelessWidget {
     required bool scrolled,
     required bool onDark,
   }) {
-    final where = detail?.roomNo;
+    final where = detail?.whereText;
     return TmsSemantics(
       id: 'ticket.nav',
       explicitChildNodes: true,
@@ -204,10 +204,10 @@ class TicketDetailEngineering extends StatelessWidget {
         children: [
           TmsSemantics(
             id: 'ticket.hero.where',
-            label: detail.roomNo,
+            label: detail.whereText,
             child: ExcludeSemantics(
               child: Text(
-                detail.roomNo,
+                detail.whereText,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 // 公共區域沒有房號，那幾個字照 56pt 排會塞不下一行。
@@ -257,7 +257,7 @@ class TicketDetailEngineering extends StatelessWidget {
   String _heroMeta(RepairTicketDetail detail) {
     final createdAt = detail.createdAt;
     return [
-      '${detail.reporterName} 報修',
+      '${detail.reporterNameText} 報修',
       repairCategoryText(detail.category),
       if (createdAt != null) '${repairMinutesSince(createdAt)} 分鐘前',
     ].join(' · ');
@@ -486,9 +486,9 @@ class TicketDetailEngineering extends StatelessWidget {
 
   Widget _infoCard(RepairTicketDetail detail) {
     final rows = <({String key, String value})>[
-      (key: '地點', value: detail.roomNo),
+      (key: '地點', value: detail.whereText),
       (key: '類別', value: repairCategoryText(detail.category)),
-      (key: '報修人', value: detail.reporterName),
+      (key: '報修人', value: detail.reporterNameText),
       (key: '負責人', value: detail.assigneeName ?? '等工務認領'),
     ];
     return ClipRRect(

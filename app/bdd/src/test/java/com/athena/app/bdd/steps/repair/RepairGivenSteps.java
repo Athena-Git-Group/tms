@@ -8,7 +8,10 @@ import io.cucumber.java.zh_tw.假設;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -27,19 +30,13 @@ public class RepairGivenSteps {
             "門鎖", "door_lock",
             "其他", "other");
 
-    /** 工務單狀態中文 → 權威 {@code tasks.state}（對照 dsl 的狀態用語表）。 */
-    private static final Map<String, String> TICKET_STATE = Map.of(
-            "等主管審核", "pending_review",
-            "主管未核准", "rejected",
-            "待認領", "pool",
-            "已接單", "accepted",
-            "維修中", "doing",
-            "已完修", "done");
-
     /** 工務單來源中文 → 權威 {@code tasks.source}。 */
     private static final Map<String, String> TICKET_SOURCE = Map.of(
             "房務報修", "staff",
             "櫃檯", "desk");
+
+    /** 「剛送出驗收不通過」句型不帶原因時用的預設原因（dsl 該列的預設值）。 */
+    private static final String DEFAULT_VERIFY_FAIL_REASON = "刷卡仍偶爾無反應";
 
     /** 報修面板上每一次點擊的等待上限；與 {@link RepairContext} 用同一個數字。 */
     private static final Duration SCREEN_TIMEOUT = Duration.ofSeconds(8);
@@ -146,13 +143,13 @@ public class RepairGivenSteps {
      * 怎麼做：透過後端測試資料建立該工務單。權威狀態落地：後端有該單。
      *
      * <p>句型沒有帶處理人，但「維修中」這類狀態在後端一定要有負責人，所以由
-     * {@link AppiumWorld#onlyEngineer()} 取背景裡那位工務；pool／pending_review
-     * 這類還沒有人接的狀態不需要負責人，給了也用不到。
+     * {@link AppiumWorld#onlyEngineer()} 取背景裡那位工務；pool 還沒有人接，
+     * 不需要負責人，給了也用不到。
      */
     @假設("後端已有 {string} 報的 {string} 冷氣工務單 {string}，狀態為 {string}")
     public void backendHasExistingAcTicket(String reporter, String roomNo, String ticketNo, String status) {
-        String stateCode = lookup(TICKET_STATE, status, "工務單狀態");
-        boolean needsAssignee = !"pool".equals(stateCode) && !"pending_review".equals(stateCode);
+        String stateCode = BackendChannel.repairTicketState(status);
+        boolean needsAssignee = !"pool".equals(stateCode);
         world.backend().createRepairTicket(
                 ticketNo, roomNo, REPAIR_CATEGORY.get("冷氣"), stateCode,
                 world.staff(reporter), needsAssignee ? world.onlyEngineer() : null, null, false);
@@ -177,44 +174,82 @@ public class RepairGivenSteps {
      * （單號／房號／類別／狀態／報修人／處理人／來源）。
      *
      * <p>表頭與語意逐欄對照後端同名 Given（tms {@code RepairGivenSteps.existingRepairTickets}）：
-     * {@code 單號}／{@code 房號}／{@code 類別}／{@code 狀態}／{@code 報修人} 必填，
-     * {@code 處理人}（pool 以外的狀態必要）、{@code 急件}（「是」才算急件）、
-     * {@code 來源}（省略視為房務報修）、{@code 驗收人}（有值代表主管已驗收）、
-     * {@code 退回原因}（狀態為主管未核准時必要，主管退回時附的原因）選填。
-     * 中文對照一律走權威值對照表，不自己猜 enum。
+     * {@code 單號}／{@code 房號}（客房房號或「公共區域」）／{@code 類別}／{@code 狀態}（待認領、
+     * 已接單、待開始、維修中、已完修、已結案、已撤回）必填；{@code 報修人}（來源為定期保養時
+     * 可留空，其餘必填）、{@code 處理人}（待認領以外的狀態必要）、{@code 說明}、{@code 照片張數}
+     * （報修照片，預設 1）、{@code 急件}（「是」才算急件）、{@code 來源}（房務報修／櫃檯／定期保養，
+     * 省略視為房務報修）、{@code 處理結果}（已修好／暫時處理／無法修復／不需處理，只用於已完修與
+     * 已結案，預設已修好；無法修復時房況轉停用）、{@code 處理說明}、{@code 完修照片張數}（預設 1，
+     * 不需處理時 0）、{@code 完修時間}、{@code 驗收人}（已結案且處理結果不是不需處理時必填）、
+     * {@code 不通過原因}／{@code 不通過判定人}／{@code 不通過時間}（這張單曾被主管驗收不通過；
+     * 有原因時判定人必填，時間預設：已完修是完修時間前 30 分鐘，其他狀態是現在前 30 分鐘）選填。
+     * 中文對照一律走權威值對照表，不自己猜 enum。落地走
+     * {@link BackendChannel#createRepairTicket(BackendChannel.RepairTicketSpec)}。
      */
     @假設("已有以下工務單：")
     public void hasExistingTickets(DataTable table) {
+        LocalDate today = world.deviceNow().toLocalDate();
         for (Map<String, String> row : table.asMaps()) {
             String ticketNo = requireCell(row, "單號");
             String roomNo = requireCell(row, "房號");
+            boolean publicArea = BackendChannel.PUBLIC_AREA_ROOM_NO.equals(roomNo);
             String categoryChinese = requireCell(row, "類別");
             String stateChinese = requireCell(row, "狀態");
+            String sourceChinese = blankToNull(row.get("來源"));
+            boolean scheduled = "定期保養".equals(sourceChinese);
+
             // 報修人多半是房務同事，工務視角的背景只列工務員工，不會有他；
             // 缺的時候就地補一位房務，不要求劇本為了一個報修人名稱多寫一列背景。
-            String reporterName = requireCell(row, "報修人");
-            world.seedStaff(reporterName, "房務");
-            BackendChannel.CreatedStaff reporter = world.staff(reporterName);
+            // 定期保養的單沒有人報，報修人欄可以留空。
+            String reporterName = blankToNull(row.get("報修人"));
+            if (reporterName == null && !scheduled) {
+                throw new IllegalArgumentException("工務單「" + ticketNo + "」缺報修人：只有來源為定期保養的單可以留空");
+            }
+            BackendChannel.CreatedStaff reporter = null;
+            if (reporterName != null) {
+                world.seedStaff(reporterName, "房務");
+                reporter = world.staff(reporterName);
+            }
 
-            String rejectReason = blankToNull(row.get("退回原因"));
             String assigneeName = blankToNull(row.get("處理人"));
             BackendChannel.CreatedStaff assignee =
                     assigneeName == null ? null : world.staff(assigneeName);
             boolean urgent = "是".equals(blankToNull(row.get("急件")));
-            String sourceChinese = blankToNull(row.get("來源"));
-            String verifierName = blankToNull(row.get("驗收人"));
+            String resolutionChinese = blankToNull(row.get("處理結果"));
+            String doneAtText = blankToNull(row.get("完修時間"));
+            String completionPhotosText = blankToNull(row.get("完修照片張數"));
+            int reportPhotos = optionalInt(row, "照片張數", 1);
+            String stateCode = BackendChannel.repairTicketState(stateChinese);
 
-            String stateCode = lookup(TICKET_STATE, stateChinese, "工務單狀態");
-            // 退回是主管的動作，退回原因由他附上；劇本的背景已經建好一位主管，
-            // 就以那一位為準（沒有主管欄可指名，理由同 AppiumWorld.onlyManager）。
-            BackendChannel.CreatedStaff rejecter =
-                    "rejected".equals(stateCode) ? world.onlyManager() : null;
-            UUID taskId = world.backend().createRepairTicket(
-                    ticketNo, roomNo, lookup(REPAIR_CATEGORY, categoryChinese, "工務單類別"),
-                    stateCode, reporter, assignee,
-                    blankToNull(row.get("說明")), urgent, rejecter, rejectReason);
+            // 驗收人與不通過判定人是主管端的人，背景的員工表只列現場員工（工務／房務），
+            // 不會有他們；缺的時候就地補一位主管，不要求劇本為了一個顯示名稱多寫一列背景。
+            BackendChannel.CreatedStaff verifier = managerCell(row, "驗收人");
+            String failedReason = blankToNull(row.get("不通過原因"));
+            BackendChannel.CreatedStaff failedBy = managerCell(row, "不通過判定人");
+            String failedAtText = blankToNull(row.get("不通過時間"));
 
-            if (sourceChinese != null) {
+            UUID taskId = world.backend().createRepairTicket(new BackendChannel.RepairTicketSpec(
+                    ticketNo,
+                    roomNo,
+                    publicArea,
+                    lookup(REPAIR_CATEGORY, categoryChinese, "工務單類別"),
+                    stateCode,
+                    reporter,
+                    assignee,
+                    blankToNull(row.get("說明")),
+                    urgent,
+                    scheduled ? "scheduled" : "reported",
+                    resolutionChinese == null ? null : BackendChannel.resolutionType(resolutionChinese),
+                    blankToNull(row.get("處理說明")),
+                    completionPhotosText == null ? null : Integer.valueOf(completionPhotosText),
+                    doneAtText == null ? null : parseMoment(doneAtText, today),
+                    verifier,
+                    failedReason,
+                    failedBy,
+                    failedAtText == null ? null : parseMoment(failedAtText, today)));
+            world.backend().insertReportPhotos(taskId, (reporter != null ? reporter : assignee).id(), reportPhotos);
+
+            if (sourceChinese != null && !scheduled) {
                 world.backend().setTaskSource(
                         taskId, lookup(TICKET_SOURCE, sourceChinese, "工務單來源"));
             }
@@ -223,18 +258,41 @@ public class RepairGivenSteps {
             // 追蹤這張單的 App 路徑也是走那張任務的任務頁（同房工務單區）。
             // 測試資料只落工務單、不落來源任務的話，報修人在 App 上沒有任何
             // 入口進得了自己的單——那是劇本湊不出來的狀態，不是待驗的行為。
-            if ("housekeeping".equals(reporter.dept())) {
+            // 公共區域沒有房務任務可當來源，跳過。
+            if (reporter != null && "housekeeping".equals(reporter.dept()) && !publicArea) {
                 seedSourceTaskFor(reporter, roomNo);
             }
-
-            if (verifierName != null) {
-                // 驗收人是主管端的人，背景的員工表只列現場員工（工務／房務），
-                // 不會有他；缺的時候就地補一位主管，不要求劇本為了一個顯示
-                // 名稱多寫一列背景。
-                world.seedStaff(verifierName, "主管");
-                world.backend().markRepairTicketVerified(taskId, world.staff(verifierName).id());
-            }
         }
+    }
+
+    /** 主管身分的選填欄（驗收人、不通過判定人）：有值就確保有這位主管並回傳，留白回 null。 */
+    private BackendChannel.CreatedStaff managerCell(Map<String, String> row, String column) {
+        String name = blankToNull(row.get(column));
+        if (name == null) {
+            return null;
+        }
+        world.seedStaff(name, "主管");
+        return world.staff(name);
+    }
+
+    /** 選填的整數欄；缺欄或留白用預設值。 */
+    private static int optionalInt(Map<String, String> row, String column, int defaultValue) {
+        String value = blankToNull(row.get(column));
+        return value == null ? defaultValue : Integer.parseInt(value);
+    }
+
+    /** 「今天 HH:mm」／「昨天 HH:mm」→ 時刻；日期以裝置生效的日期為準，與通知中心那一句同一套。 */
+    private static OffsetDateTime parseMoment(String text, LocalDate today) {
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("時刻格式須為「今天 HH:mm」或「昨天 HH:mm」，實際=" + text);
+        }
+        LocalDate date = switch (parts[0]) {
+            case "今天" -> today;
+            case "昨天" -> today.minusDays(1);
+            default -> throw new IllegalArgumentException("時刻的日期只收「今天」或「昨天」，實際=" + text);
+        };
+        return ZonedDateTime.of(date, LocalTime.parse(parts[1]), ZoneId.systemDefault()).toOffsetDateTime();
     }
 
     @假設("{string} 已將 {string} 降級為一般件，原因為 {string}")
@@ -292,6 +350,90 @@ public class RepairGivenSteps {
         Map<String, Object> ticket = world.backend().repairTicketRow(ticketNo);
         world.backend().postTaskAction(
                 (UUID) ticket.get("task_id"), "claim", world.staff(staffName));
+    }
+
+    /**
+     * 怎麼做：以該員工身分登入，從首頁、清單或通知進入該工務單的詳情頁，停在詳情頁。
+     * 這是 Arrange，給「畫面已開著、世界在背後改變」或「接著按某個動作」的情境鋪底；
+     * 開頁本身是受測動作時用同名的 When（{@code RepairWhenSteps}，不共用 annotation）。
+     * 主管進入時從待驗收清單點該單。回寫：畫面停在工務單詳情。
+     * 進法三個視角的分流在 {@link RepairContext#openTicketDetail}。
+     */
+    @假設("{string} 已在 App 打開 {string} 的工務單詳情")
+    public void alreadyOnTicketDetail(String staffName, String ticketNo) {
+        context.openTicketDetail(world.staff(staffName), ticketNo);
+    }
+
+    /**
+     * 怎麼做：不經 App，以先驗收那位主管的身分呼叫 {@code verifyRepairTicket}
+     * （{@code POST /repair-tickets/{ticketId}/verify}，{@code VerifyRepairTicketRequest{result: passed}}）；
+     * 不觸發畫面刷新。權威狀態落地：後端該單已結案、有驗收人；畫面開著的那位看到的仍是
+     * 已完修、等主管驗收的詳情。
+     *
+     * <p>這一句一定排在「已在 App 打開 … 的工務單詳情」之後：先驗收再開頁的話那張單從
+     * 第一刻就不在待驗收清單裡，驗收鈕畫不出來，撞單這條路走不到。
+     */
+    @假設("{string} 剛被 {string} 驗收，{string} 的畫面還沒更新")
+    public void justVerifiedByAnotherManager(String ticketNo, String otherManagerName, String managerName) {
+        context.requireTicketDetailOpenAs(managerName);
+        world.backend().verifyRepairTicket(
+                context.ticketTaskId(ticketNo), world.staff(otherManagerName), "passed", null);
+    }
+
+    /**
+     * 怎麼做：不經 App，以先送出那位主管的身分呼叫 {@code verifyRepairTicket}
+     * （{@code VerifyRepairTicketRequest{result: failed, reason: 原因}}）；不觸發畫面刷新。
+     * 權威狀態落地：後端該單已退回重修（待開始或工務待認領），有最近一次不通過的原因與判定人；
+     * 畫面開著的那位看到的仍是已完修、等主管驗收的詳情。排在「已在 App 打開 … 的工務單詳情」
+     * 之後，理由同「剛被另一位主管驗收」。
+     */
+    @假設("{string} 剛被 {string} 以原因 {string} 判定驗收不通過，{string} 的畫面還沒更新")
+    public void justFailedByAnotherManager(
+            String ticketNo, String otherManagerName, String reason, String managerName) {
+        context.requireTicketDetailOpenAs(managerName);
+        world.backend().verifyRepairTicket(
+                context.ticketTaskId(ticketNo), world.staff(otherManagerName), "failed", reason);
+    }
+
+    /**
+     * 怎麼做：把裝置時間與後端 {@code Clock} 設到今天、落在飯店所有班別時段之外的時刻
+     * （同後端 {@code 工務單} 模組的同名句型）。後端半邊由
+     * {@link BackendChannel#setBackendClockOutsideAllShifts()} 找出時刻並撥過去，裝置半邊注入
+     * 測試後門的 {@code POST /clock}，兩邊同一刻。權威狀態落地：無資料變動；該工務人員不在請假中
+     * （這句不建請假資料）。
+     *
+     * <p>工務沒有個人班表，「班已經結束」只看飯店班別時段，所以句型帶的工務名字只用來確認
+     * 劇本裡有這個人，不寫任何屬於他的資料。
+     */
+    @假設("{string} 今天的班已經結束")
+    public void engineerShiftHasEnded(String engineerName) {
+        world.staff(engineerName);
+        OffsetDateTime moment = world.backend().setBackendClockOutsideAllShifts();
+        world.postBackdoorJson("/clock", "{\"isoTime\":\"" + moment + "\"}");
+    }
+
+    /**
+     * 怎麼做：以該主管身分從待驗收清單打開該單，按不通過、寫下原因並送出，停在驗收結果卡
+     * （{@code managerTicket.result}）不再操作。句型不帶原因，用 dsl 的預設原因。
+     * 權威狀態落地：後端該單已退回重修（待開始或工務待認領）——結果卡出現之後回後端讀一次
+     * 狀態，沒有離開已完修就是前提沒鋪起來，在這裡就說清楚。回寫：畫面停在驗收結果卡。
+     */
+    @假設("{string} 剛送出 {string} 的驗收不通過，結果卡停在畫面上")
+    public void managerJustSubmittedVerifyFail(String managerName, String ticketNo) {
+        Object state = world.backend().repairTicketRow(ticketNo).get("task_state");
+        if (!"done".equals(String.valueOf(state))) {
+            throw new IllegalStateException("「" + ticketNo + "」要是已完修才在待驗收清單上，實際狀態=" + state);
+        }
+        context.openTicketDetail(world.staff(managerName), ticketNo);
+        world.tapTestId(RepairContext.MANAGER_FAIL_BUTTON, SCREEN_TIMEOUT);
+        world.typeInto(RepairContext.MANAGER_FAIL_REASON_FIELD, SCREEN_TIMEOUT, DEFAULT_VERIFY_FAIL_REASON);
+        world.tapTestId(RepairContext.MANAGER_FAIL_SUBMIT_BUTTON, SCREEN_TIMEOUT);
+        world.waitForTestId(RepairContext.MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
+        Object after = world.backend().repairTicketRow(ticketNo).get("task_state");
+        if (!"accepted".equals(String.valueOf(after)) && !"pool".equals(String.valueOf(after))) {
+            throw new AssertionError("「" + ticketNo + "」驗收不通過送出後應退回重修（待開始或工務待認領），"
+                    + "後端實際狀態=" + after);
+        }
     }
 
     /**

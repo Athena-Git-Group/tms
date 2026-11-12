@@ -69,24 +69,129 @@ public class PoolThenSteps {
         return key;
     }
 
+    /**
+     * 必查：目前部門的列表中單卡順序剛好等於清單，沒有多也沒有少，並與後端 listDeptPool
+     * （帶目前部門的 {@code dept}）回應一致。清單寫的是房務池的房號或工務池的工務單號。
+     */
     @那麼("^待認領列表依序為 (.+)$")
     public void poolListOrderIs(String roomListText) {
         List<String> expected = splitList(roomListText);
+        String dept = PoolDept.currentDept(world);
 
         List<String> backendOrder = new ArrayList<>();
         for (JsonNode item : poolResponse().path("items")) {
-            backendOrder.add(item.path("roomNo").asText());
+            backendOrder.add(PoolDept.itemKey(dept, item));
         }
         if (!expected.equals(backendOrder)) {
-            throw new AssertionError("後端 GET /pool 的順序與劇本不符：預期 " + expected + "，實際 " + backendOrder);
+            throw new AssertionError("後端 GET /pool（dept=" + dept + "）的順序與劇本不符：預期 "
+                    + expected + "，實際 " + backendOrder);
         }
 
-        List<String> screenOrder = cardKeysOnScreen();
+        List<String> screenOrder = cardKeysOnScreen(dept);
         if (!expected.equals(screenOrder)) {
             throw new AssertionError("畫面單卡順序不符：預期 " + expected + "，實際 " + screenOrder
-                    + "；單卡矩形 " + world.describeTestIdsWithPrefix(CARD_PREFIX)
+                    + "；單卡矩形 " + world.describeTestIdsWithPrefix(PoolDept.cardPrefix(dept))
                     + "；元素樹 " + world.dumpPageSourceTagged("pool-order"));
         }
+    }
+
+    /**
+     * 必查：待認領標題下方有部門切換且停在該部門（{@code pool.dept-switch} 的選中項），
+     * 分類磚是該部門那一組（房務：全部、備品、打掃、其他；工務：全部、急件、房務報修、櫃檯），
+     * 列表內容與 listDeptPool 帶該部門 {@code dept} 的回應一致，App 本機的部門選擇等於該部門。
+     *
+     * <p>選中項有兩種看法：iOS 把 Flutter 的 selected 語意映成元素的 {@code selected} 屬性；
+     * App 若改以 {@code --selected} 的狀態修飾 id 表達（單卡標亮用的同一套慣例），也認。
+     * 兩種都沒有才算沒停在該部門。
+     */
+    @那麼("待認領目前的部門為 {string}")
+    public void poolCurrentDeptIs(String deptChinese) {
+        String dept = PoolDept.deptKey(deptChinese);
+        world.waitForTestId(PoolDept.DEPT_SWITCH_ID, SCREEN_TIMEOUT);
+        WebElement side = world.waitForTestId(PoolDept.switchSideId(dept), SCREEN_TIMEOUT);
+        boolean selectedAttribute = "true".equalsIgnoreCase(String.valueOf(side.getAttribute("selected")));
+        boolean selectedModifier = !world.driver().findElements(
+                world.byTestId(PoolDept.switchSideId(dept) + "--selected")).isEmpty();
+        if (!selectedAttribute && !selectedModifier) {
+            throw new AssertionError("部門切換沒有停在「" + deptChinese + "」：" + PoolDept.switchSideId(dept)
+                    + " 的 selected=" + side.getAttribute("selected")
+                    + "；元素樹 " + world.dumpPageSourceTagged("pool-dept"));
+        }
+
+        for (String chipId : deptChipIds(dept)) {
+            world.waitForTestId(chipId, SCREEN_TIMEOUT);
+        }
+        String otherDept = PoolDept.ENGINEERING.equals(dept) ? PoolDept.HOUSEKEEPING : PoolDept.ENGINEERING;
+        for (String chipId : deptChipIds(otherDept)) {
+            assertAbsent(chipId);
+        }
+
+        List<String> backendOrder = new ArrayList<>();
+        for (JsonNode item : world.backend().getJson("/pool?dept=" + dept, world.loggedInStaff()).path("items")) {
+            backendOrder.add(PoolDept.itemKey(dept, item));
+        }
+        List<String> screenOrder = cardKeysOnScreen(dept);
+        if (!backendOrder.equals(screenOrder)) {
+            throw new AssertionError("畫面列表與後端 GET /pool?dept=" + dept + " 不一致：後端 "
+                    + backendOrder + "，畫面 " + screenOrder);
+        }
+
+        String local = PoolDept.localSelection(world);
+        if (!dept.equals(local)) {
+            throw new AssertionError("App 本機的部門選擇應為 " + dept + "，實際 " + local);
+        }
+    }
+
+    /**
+     * 必查：該單卡上沒有 {@code pool.card.{房號}.claim-button}（工務池為
+     * {@code engPool.item.{單號}.claim-button}）節點，也沒有任何可觸發認領的操作；後端該單
+     * 仍是待認領、沒有負責人。
+     *
+     * <p>單卡存在與沒有認領鈕兩個條件缺一不可：整張卡不在畫面上時找不到鈕也是真的，
+     * 但那驗的是「清單上沒這張單」，不是「看得到卻不能搶」。
+     */
+    @那麼("{string} 的單卡沒有搶單鈕")
+    public void poolCardHasNoClaimButton(String task) {
+        String dept = PoolDept.currentDept(world);
+        String cardId = PoolDept.cardPrefix(dept) + task;
+        if (!cardKeysOnScreen(dept).contains(task)) {
+            throw new AssertionError("畫面上找不到「" + task + "」的單卡（" + cardId + "）；實際有 "
+                    + cardKeysOnScreen(dept) + "；元素樹 " + world.dumpPageSourceTagged("pool-no-claim"));
+        }
+        assertAbsent(cardId + ".claim-button");
+        if (!world.driver().findElements(
+                org.openqa.selenium.By.xpath("//*[contains(@label, '認領這單')]")).isEmpty()) {
+            throw new AssertionError("主管的待認領不該有任何可觸發認領的操作，畫面上卻有「認領這單」");
+        }
+
+        List<Map<String, Object>> rows = PoolDept.ENGINEERING.equals(dept)
+                ? world.backend().queryRows("""
+                        SELECT t.state, t.assignee_id FROM repair_tickets rt
+                        JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
+                        WHERE rt.tenant_id = ? AND rt.ticket_no = ?
+                        """, world.backend().ensureTenant(), task)
+                : world.backend().queryRows("""
+                        SELECT t.state, t.assignee_id FROM tasks t
+                        JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                        WHERE t.tenant_id = ? AND r.room_no = ? AND t.dept = 'housekeeping'
+                        """, world.backend().ensureTenant(), task);
+        if (rows.size() != 1) {
+            throw new AssertionError("預期後端剛好一張「" + task + "」的單，實際 " + rows.size() + " 張");
+        }
+        Map<String, Object> row = rows.get(0);
+        if (!"pool".equals(row.get("state")) || row.get("assignee_id") != null) {
+            throw new AssertionError("後端權威狀態不符：「" + task + "」應仍是待認領（pool）且沒有負責人，實際 " + row);
+        }
+    }
+
+    /** 該部門那一組分類磚的 id：房務沿用 {@code pool.category.*}，工務沿用工務待認領的 {@code engPool.category.*}。 */
+    private static List<String> deptChipIds(String dept) {
+        if (PoolDept.ENGINEERING.equals(dept)) {
+            return List.of("engPool.category.all.chip", "engPool.category.urgent.chip",
+                    "engPool.category.staff.chip", "engPool.category.desk.chip");
+        }
+        return List.of("pool.category.all.chip", "pool.category.amenity.chip",
+                "pool.category.cleaning.chip", "pool.category.other.chip");
     }
 
     @那麼("^待認領列表中標示同樓層的單為 (.+)$")
@@ -261,26 +366,46 @@ public class PoolThenSteps {
     }
 
     /**
-     * 以目前登入者的身分讀回 {@code GET /pool}（後端只回她自己部門的池），並帶上
-     * 畫面當下選中的分類——App 點分類磚是重打一次帶 {@code category} 的查詢，
-     * 讀回不帶就會跟畫面比到不同的兩份資料。
+     * 以目前登入者的身分讀回 {@code GET /pool}，並帶上畫面當下選中的分類——App 點分類磚
+     * 是重打一次帶 {@code category} 的查詢，讀回不帶就會跟畫面比到不同的兩份資料。
+     * 主管沒有部門，後端要靠 {@code dept} 才知道回哪一池，所以主管讀回時明帶目前的部門；
+     * 現場員工省略，後端依登入身分回她自己部門的池。
      */
     private JsonNode poolResponse() {
+        List<String> query = new ArrayList<>();
+        if (PoolDept.isManager(world.loggedInStaff())) {
+            query.add("dept=" + PoolDept.currentDept(world));
+        }
         String category = context.selectedCategory();
-        String path = category == null ? "/pool" : "/pool?category=" + category;
+        if (category != null) {
+            query.add("category=" + category);
+        }
+        String path = query.isEmpty() ? "/pool" : "/pool?" + String.join("&", query);
         return world.backend().getJson(path, world.loggedInStaff());
     }
 
-    /**
-     * 畫面上目前有哪些單卡，依由上而下排序。單卡本身的 id 是
-     * {@code pool.card.{房號}}，卡內各列是 {@code pool.card.{房號}.{欄位}}，
-     * 所以掃完前綴後把帶「.」的子節點與帶「--」的狀態修飾（例如推播標亮）濾掉。
-     */
     private List<String> cardKeysOnScreen() {
+        return cardKeysOnScreen(PoolDept.HOUSEKEEPING);
+    }
+
+    /**
+     * 畫面上目前有哪些單卡，依由上而下排序。房務池的單卡 id 是 {@code pool.card.{房號}}，
+     * 卡內各列是 {@code pool.card.{房號}.{欄位}}，所以掃完前綴後把帶「.」的子節點與帶「--」
+     * 的狀態修飾（例如推播標亮）濾掉。工務池的單卡是 {@code engPool.item.{單號}.card}，
+     * 卡本身就掛在 {@code .card} 這一段上，掃到它時取單號那一段。
+     */
+    private List<String> cardKeysOnScreen(String dept) {
+        String prefix = PoolDept.cardPrefix(dept);
         List<String> keys = new ArrayList<>();
-        for (String id : world.findTestIdsWithPrefix(CARD_PREFIX)) {
-            String rest = id.substring(CARD_PREFIX.length());
-            if (!rest.contains(".") && !rest.contains("--")) {
+        for (String id : world.findTestIdsWithPrefix(prefix)) {
+            String rest = id.substring(prefix.length());
+            if (rest.contains("--")) {
+                continue;
+            }
+            if (PoolDept.ENGINEERING.equals(dept) && rest.endsWith(".card")) {
+                rest = rest.substring(0, rest.length() - ".card".length());
+            }
+            if (!rest.contains(".") && !keys.contains(rest)) {
                 keys.add(rest);
             }
         }

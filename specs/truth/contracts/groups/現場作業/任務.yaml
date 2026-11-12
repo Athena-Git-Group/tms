@@ -125,13 +125,15 @@ tasksComplete:
       負責人完成 doing 的任務。實際工時等於各段 doing 期間的總和，不含中斷期間。
       打掃任務：未勾也未跳過的 SOP 項記為跳過。開工時鎖定為免查的，直接轉 inspected、inspection=waived，
       PMS 回寫 occupied_clean（OC）；其他的轉 done 等查房。
-      修繕任務（工務單）：photoIds 至少 1 張，否則回 422 completion_photo_required；resolutionNote 選填。
-      判斷不需維修也用完成結案，並在 resolutionNote 註明。resolutionType 選填（fixed／temporary／cannot_fix，
-      省略視為 fixed）：temporary 會自動建立追蹤單並進工務待認領；cannot_fix 會把房況轉為停用待確認
-      （rooms.hk_state=out_of_order）。
-      工務單完成時推播報修人，連結的原任務停住原因改為「工務已修好：<類別>」，但原任務不自動恢復。
-      完修後的工務單新增「等主管驗收」子狀態（不開新狀態值，見 RepairTicket.verifiedBy／verifiedAt）；
-      主管驗收通過後呼叫 verifyRepairTicket。
+      修繕任務（工務單）：resolutionType 選填，四選一（fixed／temporary／cannot_fix／no_action_needed，省略視為 fixed）；
+      resolutionNote 選填。fixed、temporary、cannot_fix 這一次請求的 photoIds 至少 1 張，否則回 422 completion_photo_required，
+      完成後工務單轉 done（已完修、等主管驗收），之後由主管呼叫 verifyRepairTicket 通過或不通過；
+      temporary 另外自動建立追蹤單並進工務待認領；cannot_fix 會把房況轉為停用待確認（rooms.hk_state=out_of_order）。
+      no_action_needed（不需處理）的 photoIds 可省略或為空陣列，不建追蹤單、不改房況，工務單直接轉 closed（已結案），
+      不進待驗收、不計入任何主管的待驗收。
+      驗收不通過退回重修的工務單，再完修時以這一次的完修結果、說明與照片為準。
+      工務單完成時（四種結果都一樣）推播報修人，連結的原任務停住原因改為「工務已修好：<類別>」，但原任務不自動恢復。
+      回應 TaskCompletion 的 state 就說明結果：done 是進入待驗收，closed 是直接結案。
       回應除了剛完成的任務詳情，另外帶完成畫面要用的兩個值（見 TaskCompletion）：
       nextStep 是接下來該去哪一間（next_task／unfinished_task／all_clear 三種去向），
       cleaningDoneToday 是今天完成的第幾張打掃單（只有打掃類帶）。

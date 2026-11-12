@@ -17,7 +17,7 @@ tags:
 - name: 交班單 API
   description: 查看凍結快照（班末排程產生、之後任務再變快照不變）與簽收。
 - name: 查房 API
-  description: 主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；自清自查 403；原清房者已下班→連動退池。
+  description: 房務主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；自清自查 403；工務主管送出 403；原清房者已下班→連動退池。
 - name: 請假 API
   description: 登記請假即觸發連鎖：該員 accepted 單自動退池、doing 單標中斷並回傳受影響清單給主管收尾。
 - name: 遺失物 API
@@ -44,8 +44,9 @@ tags:
   description: 封閉鍵集合的讀寫（含住客資訊頁 guest-home 的前台讀取面）；sop_items/inspection_items 兩鍵為 sop_items 表的門面。
 - name: 工務單 API
   description: >-
-    本 plan 新增。房務從任務開工務單交給工務（工務部門的修繕任務），照片兩段式上傳、開單前檢查（重複提示與急件判定）、
-    補照片、撤回。急件由系統依飯店設定規則判定，開單時房務不能更改，只有主管能事後降級為一般件（附原因）。
+    房務從任務開工務單交給工務（工務部門的修繕任務），照片兩段式上傳、開單前檢查（重複提示與急件判定）、
+    補照片、撤回，以及主管驗收（通過結案，或附原因不通過退回重修）。開單直接進工務待認領，沒有主管審核。
+    急件由系統依飯店設定規則判定，開單時房務不能更改，只有主管能事後降級為一般件（附原因）。
     認領、開始、完成沿用任務 API。
 - name: 員工工作台 API
   description: 本 plan 新增。員工首頁的今日進度與下一間，以及依部門的待認領（排序、同樓層、分類篩選與筆數）。
@@ -57,8 +58,8 @@ tags:
     不是只有通知板（公告）的已讀。
 - name: 主管工作台 API
   description: >-
-    主管首頁的三類待辦（待查房、待審核、待驗收）：三格數字與三份清單同一次往返、由舊到新排好、排除主管本人清的房。
-    主管動作本身沿用查房 API 與工務單 API 既有端點。
+    主管首頁的待辦：房務主管看待查房與待驗收，工務主管只看待驗收；格子數字與清單同一次往返、由舊到新排好、
+    待查房排除主管本人清的房。主管動作本身沿用查房 API（createInspections）與工務單 API（verifyRepairTicket）。
 paths:
   /alerts:
     $ref: './groups/營運管理/主管手動上報.yaml#/createAlerts'
@@ -186,12 +187,6 @@ paths:
     $ref: './groups/現場作業/工務單.yaml#/withdrawRepairTicket'
   /repair-tickets/{ticketId}/downgrade-urgency:
     $ref: './groups/現場作業/工務單.yaml#/downgradeRepairTicketUrgency'
-  /repair-tickets/{ticketId}/approve:
-    $ref: './groups/現場作業/工務單.yaml#/approveRepairTicket'
-  /repair-tickets/{ticketId}/reject:
-    $ref: './groups/現場作業/工務單.yaml#/rejectRepairTicket'
-  /repair-tickets/{ticketId}/resubmit:
-    $ref: './groups/現場作業/工務單.yaml#/resubmitRepairTicket'
   /repair-tickets/{ticketId}/verify:
     $ref: './groups/現場作業/工務單.yaml#/verifyRepairTicket'
   /repair-tickets/{ticketId}/release-to-pool:
@@ -409,8 +404,10 @@ components:
       $ref: './components/schemas/工務單.yaml#/UrgentJudgement'
     DowngradeRepairTicketUrgencyRequest:
       $ref: './components/schemas/工務單.yaml#/DowngradeRepairTicketUrgencyRequest'
-    RejectRepairTicketRequest:
-      $ref: './components/schemas/工務單.yaml#/RejectRepairTicketRequest'
+    VerifyRepairTicketRequest:
+      $ref: './components/schemas/工務單.yaml#/VerifyRepairTicketRequest'
+    RepairVerificationOutcome:
+      $ref: './components/schemas/工務單.yaml#/RepairVerificationOutcome'
     LoginRequest:
       $ref: './components/schemas/員工帳號與登入.yaml#/LoginRequest'
     LoginResponse:
@@ -441,8 +438,6 @@ components:
       $ref: './components/schemas/主管工作台.yaml#/QueueItemBase'
     InspectionQueueItem:
       $ref: './components/schemas/主管工作台.yaml#/InspectionQueueItem'
-    ReviewQueueItem:
-      $ref: './components/schemas/主管工作台.yaml#/ReviewQueueItem'
     VerifyQueueItem:
       $ref: './components/schemas/主管工作台.yaml#/VerifyQueueItem'
     CreateDeskNoteRequest:

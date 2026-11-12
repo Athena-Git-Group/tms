@@ -3,9 +3,11 @@ package com.athena.tms.bdd;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.HandoverFixtures;
+import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
 import com.athena.tms.bdd.support.KafkaGroupAwait;
 import com.athena.tms.bdd.support.LastOperationGuard;
+import com.athena.tms.bdd.support.VerifyFixtures;
 import com.athena.tms.bdd.support.RecordingPushSender;
 import com.athena.tms.bdd.support.RepairCountGuard;
 import com.athena.tms.push.PushSender;
@@ -195,6 +197,20 @@ public class BddSpringConfiguration {
         HandoverFixtures handoverFixtures(
                 JdbcClient jdbcClient, TenantFixtures tenantFixtures, ObjectMapper objectMapper) {
             return new HandoverFixtures(jdbcClient, tenantFixtures, objectMapper);
+        }
+
+        /** 走 {@link BddApiClient} 送請求，而 apiClient 是 scenario 一份，所以跟著掛 {@code @ScenarioScope}。 */
+        @Bean
+        @ScenarioScope
+        InspectionFixtures inspectionFixtures(BddApiClient bddApiClient) {
+            return new InspectionFixtures(bddApiClient);
+        }
+
+        /** 跟 {@link InspectionFixtures} 一樣走 scenario 一份的 {@link BddApiClient}，所以也掛 {@code @ScenarioScope}。 */
+        @Bean
+        @ScenarioScope
+        VerifyFixtures verifyFixtures(BddApiClient bddApiClient) {
+            return new VerifyFixtures(bddApiClient);
         }
 
         /**

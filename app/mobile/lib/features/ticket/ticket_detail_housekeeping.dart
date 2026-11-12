@@ -372,7 +372,7 @@ class TicketDetailHousekeeping extends StatelessWidget {
       TmsTimelineStep(
         label: '房務送出',
         status: TmsTimelineStatus.done,
-        note: '房務 ${detail.reporterName}',
+        note: '房務 ${detail.reporterNameText}',
         time: sentTime,
       ),
       review,
@@ -438,7 +438,7 @@ class TicketDetailHousekeeping extends StatelessWidget {
 
   Widget _infoCard(RepairTicketDetail detail) {
     final rows = <({String key, String value})>[
-      (key: '房號', value: detail.roomNo),
+      (key: '房號', value: detail.whereText),
       (key: '類別', value: _categoryValue(detail)),
       (key: '說明', value: detail.description ?? '—'),
       (key: '報修人', value: _reporterValue(detail)),
@@ -478,8 +478,8 @@ class TicketDetailHousekeeping extends StatelessWidget {
   String _reporterValue(RepairTicketDetail detail) {
     final createdAt = detail.createdAt;
     return createdAt == null
-        ? detail.reporterName
-        : '${detail.reporterName} · ${repairClockText(createdAt)}';
+        ? detail.reporterNameText
+        : '${detail.reporterNameText} · ${repairClockText(createdAt)}';
   }
 
   /// 列表底下那一句，講的是「這個狀態下你還能做什麼」

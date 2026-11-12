@@ -2,11 +2,14 @@ package com.athena.tms.bdd.steps.repair;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.RepairCountGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.RoomFixtures;
+import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.bdd.support.VerifyFixtures;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.當;
 import java.time.OffsetDateTime;
@@ -34,6 +37,9 @@ public class RepairWhenSteps {
     private final RepairCountGuard repairCountGuard;
     private final MutableClock clock;
     private final RoomFixtures roomFixtures;
+    private final VerifyFixtures verifyFixtures;
+    private final DbProbe dbProbe;
+    private final TenantFixtures tenantFixtures;
 
     public RepairWhenSteps(
             ScenarioWorld world,
@@ -41,13 +47,19 @@ public class RepairWhenSteps {
             LastOperationGuard lastOperationGuard,
             RepairCountGuard repairCountGuard,
             MutableClock clock,
-            RoomFixtures roomFixtures) {
+            RoomFixtures roomFixtures,
+            VerifyFixtures verifyFixtures,
+            DbProbe dbProbe,
+            TenantFixtures tenantFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.lastOperationGuard = lastOperationGuard;
         this.repairCountGuard = repairCountGuard;
         this.clock = clock;
         this.roomFixtures = roomFixtures;
+        this.verifyFixtures = verifyFixtures;
+        this.dbProbe = dbProbe;
+        this.tenantFixtures = tenantFixtures;
     }
 
     @當("{string} 中斷 {string} 並開立以下工務單：")
@@ -201,16 +213,6 @@ public class RepairWhenSteps {
                 body);
     }
 
-    @當("{string} 核准 {string}")
-    public void approveTicket(String managerName, String ticketNo) {
-        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        lastOperationGuard.captureFor(ticketTaskId);
-        apiClient.post(
-                "/repair-tickets/" + ticketTaskId + "/approve",
-                BddApiClient.Auth.staff(world.jwt(managerName)),
-                null);
-    }
-
     @當("{string} 對 {string} 選擇工務單類別 {string}")
     public void selectCategoryForPrecheck(String staffName, String roomNo, String categoryChinese) {
         UUID sourceTaskId = UUID.fromString(world.taskId(roomNo));
@@ -234,22 +236,45 @@ public class RepairWhenSteps {
         apiClient.post("/repair-tickets/" + ticketTaskId + "/photos", BddApiClient.Auth.staff(jwt), body);
     }
 
-    @當("{string} 以原因 {string} 退回 {string}")
-    public void rejectTicket(String managerName, String reason, String ticketNo) {
-        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        lastOperationGuard.captureFor(ticketTaskId);
-
-        Map<String, Object> body = Map.of("reason", reason);
-        apiClient.post(
-                "/repair-tickets/" + ticketTaskId + "/reject", BddApiClient.Auth.staff(world.jwt(managerName)), body);
-    }
-
+    /**
+     * dsl.md：以主管身分呼叫 {@code verifyRepairTicket}（{@code POST /repair-tickets/{ticketId}/verify}），
+     * body {@code VerifyRepairTicketRequest{result: passed}}，帶新的 {@code Idempotency-Key}。只有已完修
+     * （done）的單能被驗收，成功時轉為已結案（closed）並寫入驗收人、驗收時間與 repair_verified 事件；
+     * 單不是 done 回 409 state_conflict、呼叫者不是主管回 403 forbidden，都不改權威資料。
+     * 回應另存進 {@link ScenarioWorld#lastVerifyResponse()}，供「這次驗收的結果為…，去處為…」讀取。
+     */
     @當("{string} 驗收通過 {string}")
     public void verifyTicket(String managerName, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
         lastOperationGuard.captureFor(ticketTaskId);
-        apiClient.post(
-                "/repair-tickets/" + ticketTaskId + "/verify", BddApiClient.Auth.staff(world.jwt(managerName)), null);
+        world.setLastVerifyRequest(managerName, null);
+        world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "passed", null));
+    }
+
+    /**
+     * dsl.md：以主管身分呼叫 {@code verifyRepairTicket}，body
+     * {@code VerifyRepairTicketRequest{result: failed, reason: 原因}}，帶新的 {@code Idempotency-Key}。
+     * 去處（退回原處理人或工務待認領）、最近一次不通過紀錄與推播都由後接的 Then 驗，這句不斷言。
+     */
+    @當("{string} 以原因 {string} 判定 {string} 驗收不通過")
+    public void failVerification(String managerName, String reason, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        world.setLastVerifyRequest(managerName, reason);
+        world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "failed", reason));
+    }
+
+    /**
+     * dsl.md：同 {@link #failVerification}，但 {@code reason} 是空字串。預期回 422
+     * verification_reason_required，單仍為 done、沒有寫入最近一次不通過、沒有事件、沒有推播，
+     * 都由後接的 Then 驗。
+     */
+    @當("{string} 判定 {string} 驗收不通過但沒有寫原因")
+    public void failVerificationWithoutReason(String managerName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        world.setLastVerifyRequest(managerName, "");
+        world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "failed", ""));
     }
 
     @當("{string} 把 {string} 放回工務待認領")
@@ -293,14 +318,10 @@ public class RepairWhenSteps {
                 "/repair-tickets/" + ticketTaskId + "/withdraw", BddApiClient.Auth.staff(world.jwt(staffName)), null);
     }
 
-    @當("{string} 補資料再送出 {string}")
-    public void resubmitTicket(String staffName, String ticketNo) {
-        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
-        lastOperationGuard.captureFor(ticketTaskId);
-        apiClient.post(
-                "/repair-tickets/" + ticketTaskId + "/resubmit", BddApiClient.Auth.staff(world.jwt(staffName)), null);
-    }
-
+    /**
+     * dsl.md：以工務身分上傳這一次的完修照片（purpose=completion），再呼叫 {@code tasksComplete}，
+     * body {@code CompleteTaskRequest{resolutionType: fixed, resolutionNote, photoIds}}。
+     */
     @當("{string} 附 {int} 張完修照片、處理說明 {string} 完成 {string}")
     public void completeWithPhotosAndNote(String staffName, int photoCount, String note, String ticketNo) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -309,7 +330,10 @@ public class RepairWhenSteps {
         String jwt = world.jwt(staffName);
         List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
 
-        Map<String, Object> body = Map.of("photoIds", photoIds, "resolutionNote", note);
+        Map<String, Object> body = Map.of(
+                "resolutionType", "fixed",
+                "resolutionNote", note,
+                "photoIds", photoIds);
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
     }
 
@@ -344,14 +368,32 @@ public class RepairWhenSteps {
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
     }
 
-    @當("{string} 不附完修照片完成 {string}")
-    public void completeWithoutPhotos(String staffName, String ticketNo) {
+    /**
+     * dsl.md：以工務身分呼叫 {@code tasksComplete}，body
+     * {@code CompleteTaskRequest{resolutionType, resolutionNote}}、{@code photoIds} 為空陣列。
+     * 不需處理時單直接結案、不建追蹤單、不改房況；其他三種結果回 422 completion_photo_required。
+     * 送出前先記下全租戶工務單筆數與這張單所在房的房況，供「系統沒有為…建立追蹤單」
+     * 「…的房況沒有改變」比對；公共區域的單沒有房間，不記房況。
+     */
+    @當("{string} 以完修結果 {string} 完成 {string}，處理說明 {string}，不附照片")
+    public void completeWithResolutionWithoutPhotos(
+            String staffName, String resolutionChinese, String ticketNo, String note) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
         lastOperationGuard.captureFor(ticketTaskId);
+        repairCountGuard.capture();
+        dbProbe.queryOne(
+                        "SELECT r.room_no FROM tasks t JOIN rooms r ON r.id = t.room_id AND r.tenant_id = t.tenant_id WHERE t.id = ?",
+                        ticketTaskId)
+                .map(row -> (String) row.get("room_no"))
+                .ifPresent(roomNo -> lastOperationGuard.captureRoom(tenantFixtures.testTenantId(), roomNo));
 
-        Map<String, Object> body = Map.of("photoIds", List.of());
+        Map<String, Object> body = Map.of(
+                "resolutionType", Terms.resolutionType(resolutionChinese),
+                "resolutionNote", note,
+                "photoIds", List.of());
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), body);
     }
+
 
     private void createTicket(
             String staffName, String taskKey, DataTable table, boolean interrupt, String idempotencyKey) {

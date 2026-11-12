@@ -18,6 +18,17 @@ public class ScenarioWorld {
     private final java.util.List<String> photoIds = new java.util.ArrayList<>();
 
     private ApiResponse lastResponse;
+    /** 上一次主管待辦查詢（getManagerQueues）的回應；主管工作台的 Then 句只看這一份，不受後續呼叫覆蓋。 */
+    private ApiResponse lastManagerQueuesResponse;
+    /** 上一次查房送出（createInspections）的回應；查房結果與去向的 Then 句看這一份。 */
+    private ApiResponse lastInspectionResponse;
+    /** 上一次查房送出實際送的 items（[{key, pass}]）；項目集合不符的 Then 句用它算少送／多送的 key。 */
+    private java.util.List<Map<String, Object>> lastInspectionItems;
+    /** 上一次驗收送出（verifyRepairTicket）的回應；驗收結果與去處的 Then 句看這一份。 */
+    private ApiResponse lastVerifyResponse;
+    /** 上一次驗收是誰送的、送了什麼原因（通過時為 null）；驗收結果的 Then 句拿它比對 decidedBy 與 reason。 */
+    private String lastVerifyManagerName;
+    private String lastVerifyReason;
     private String lastAnswerId;
     private String lastEscalationId;
     private String lastIdempotencyKey;
@@ -72,6 +83,67 @@ public class ScenarioWorld {
             throw new IllegalStateException("本 scenario 尚未發出任何 API 呼叫");
         }
         return lastResponse;
+    }
+
+    public void setLastManagerQueuesResponse(ApiResponse response) {
+        this.lastManagerQueuesResponse = response;
+    }
+
+    public ApiResponse lastManagerQueuesResponse() {
+        if (lastManagerQueuesResponse == null) {
+            throw new IllegalStateException("本 scenario 尚未查看主管待辦");
+        }
+        return lastManagerQueuesResponse;
+    }
+
+    public void setLastInspectionResponse(ApiResponse response) {
+        this.lastInspectionResponse = response;
+    }
+
+    public ApiResponse lastInspectionResponse() {
+        if (lastInspectionResponse == null) {
+            throw new IllegalStateException("本 scenario 尚未送出查房");
+        }
+        return lastInspectionResponse;
+    }
+
+    public void setLastInspectionItems(java.util.List<Map<String, Object>> items) {
+        this.lastInspectionItems = items;
+    }
+
+    public java.util.List<Map<String, Object>> lastInspectionItems() {
+        if (lastInspectionItems == null) {
+            throw new IllegalStateException("本 scenario 尚未送出查房");
+        }
+        return lastInspectionItems;
+    }
+
+    public void setLastVerifyResponse(ApiResponse response) {
+        this.lastVerifyResponse = response;
+    }
+
+    /** 記下上一次驗收送出的主管姓名與原因，與 {@link #setLastVerifyResponse} 成對呼叫。 */
+    public void setLastVerifyRequest(String managerName, String reason) {
+        this.lastVerifyManagerName = managerName;
+        this.lastVerifyReason = reason;
+    }
+
+    public String lastVerifyManagerName() {
+        if (lastVerifyManagerName == null) {
+            throw new IllegalStateException("本 scenario 尚未送出驗收");
+        }
+        return lastVerifyManagerName;
+    }
+
+    public String lastVerifyReason() {
+        return lastVerifyReason;
+    }
+
+    public ApiResponse lastVerifyResponse() {
+        if (lastVerifyResponse == null) {
+            throw new IllegalStateException("本 scenario 尚未送出驗收");
+        }
+        return lastVerifyResponse;
     }
 
     public String lastAnswerId() {

@@ -1,10 +1,10 @@
 package com.athena.tms.service;
 
+import com.athena.tms.dto.ShiftTimes;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,7 +76,8 @@ public class ShiftEndScanJob {
                 """,
                 tenantId);
         for (Map<String, Object> row : rows) {
-            LocalTime shiftEnd = resolveShiftEnd(String.valueOf(row.get("shift")), shiftTimes);
+            LocalTime shiftEnd = ShiftTimes.endOf(String.valueOf(row.get("shift")), shiftTimes);
+            // 解析不出下班時間就這輪不掃：寧可漏掃一輪，也不能猜一個時間把還在上班的人的單退走。
             if (shiftEnd == null || now.isBefore(shiftEnd)) {
                 continue;
             }
@@ -156,29 +157,6 @@ public class ShiftEndScanJob {
                 target.put("taskId", taskId.toString());
                 pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                         "shift-end-interrupted:" + taskId + ":" + today + ":" + manager);
-            }
-        }
-    }
-
-    /**
-     * 回 null 代表這位員工這輪不掃——寧可漏掃一輪，也不能在解析不出班次結束時刻時
-     * 猜一個，把還在上班的人的單退走。
-     */
-    private LocalTime resolveShiftEnd(String shift, JsonNode shiftTimes) {
-        try {
-            return LocalTime.parse(shift);
-        } catch (DateTimeParseException notHHmm) {
-            if (shiftTimes == null || !shiftTimes.isObject()) {
-                return null;
-            }
-            JsonNode window = shiftTimes.get(shift);
-            if (window == null || !window.isObject() || !window.path("end").isTextual()) {
-                return null;
-            }
-            try {
-                return LocalTime.parse(window.get("end").asText());
-            } catch (DateTimeParseException badConfig) {
-                return null;
             }
         }
     }

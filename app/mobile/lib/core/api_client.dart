@@ -237,11 +237,67 @@ class ApiClient {
     return RepairTicketPrecheck.fromJson(json as Map<String, dynamic>);
   }
 
+  /// `GET /me/manager-queues`：主管的三類待辦（待查房、待審核、待驗收），三格
+  /// 數字與三份清單同一次往返回完；排序由後端定，App 照順序畫。
+  Future<ManagerQueues> getManagerQueues() async {
+    final json = await _requestJson('GET', '/me/manager-queues');
+    return ManagerQueues.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /inspections`：主管送出一次查房的逐項判定（契約 `createInspections`）。
+  /// body 只帶任務 id 與 items，租戶與查房者由權杖推導、通過或退回由後端算。
+  /// [idempotencyKey] 是這一次送出的鍵；重送同一次動作要帶同一把，後端回放
+  /// 第一次的結果。拒絕時丟 [ApiException]：409 `state_conflict`（單已被處理）、
+  /// 422 `inspection_items_mismatch`（項目集合不符，現行集合在
+  /// [ApiException.inspectionCurrentItems]）。
+  Future<InspectionOutcome> createInspection({
+    required String taskId,
+    required List<InspectionItemJudgement> items,
+    required String idempotencyKey,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/inspections',
+      idempotent: true,
+      idempotencyKey: idempotencyKey,
+      body: {
+        'taskId': taskId,
+        'items': [for (final item in items) item.toJson()],
+      },
+    );
+    return InspectionOutcome.fromJson(json as Map<String, dynamic>);
+  }
+
   /// `GET /repair-tickets/{ticketId}`：工務單詳情（路徑參數是工務單的任務
   /// id，不是 W- 單號）。
   Future<RepairTicketDetail> readRepairTicket(String taskId) async {
     final json = await _requestJson('GET', '/repair-tickets/$taskId');
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// `POST /repair-tickets/{ticketId}/verify`：主管驗收一張已完修的工務單
+  /// （契約 `verifyRepairTicket`）。[result] 是 `passed` 或 `failed`；
+  /// `failed` 時 [reason] 必填，`passed` 時不送。[idempotencyKey] 是這一次
+  /// 送出的鍵，重送同一次動作要帶同一把，後端回放第一次的結果。拒絕時丟
+  /// [ApiException]：409 `state_conflict`（單已被別人驗收或不在等驗收）、
+  /// 422 `verification_reason_required`（不通過沒寫原因）。
+  Future<RepairVerificationOutcome> verifyRepairTicket({
+    required String taskId,
+    required String result,
+    String? reason,
+    required String idempotencyKey,
+  }) async {
+    final json = await _requestJson(
+      'POST',
+      '/repair-tickets/$taskId/verify',
+      idempotent: true,
+      idempotencyKey: idempotencyKey,
+      body: {
+        'result': result,
+        if (reason != null) 'reason': reason,
+      },
+    );
+    return RepairVerificationOutcome.fromJson(json as Map<String, dynamic>);
   }
 
   /// `POST /repair-tickets/{ticketId}/photos`：補照片到既有工務單（契約
@@ -660,6 +716,23 @@ class ApiException implements Exception {
       ? (errorContext?['remainingMinutes'] as num?)?.toInt()
       : null;
 
+  /// 422 `inspection_items_mismatch` 時後端附的飯店現行查房項目集合（依
+  /// 飯店排序），查房畫面拿它直接換成新的項目清單、不必再打一次；不是這種
+  /// 拒絕時為 null。
+  List<InspectionItemRef>? get inspectionCurrentItems {
+    if (errorCode != 'inspection_items_mismatch') {
+      return null;
+    }
+    final raw = errorContext?['currentItems'];
+    if (raw is! List<dynamic>) {
+      return null;
+    }
+    return [
+      for (final item in raw)
+        InspectionItemRef.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
   Map<String, dynamic>? _bodyJson() {
     try {
       final decoded = jsonDecode(body);
@@ -867,6 +940,7 @@ class EngineeringTicket {
     required this.isUrgent,
     required this.source,
     this.workedMinutes,
+    this.verificationReturnReason,
   });
 
   /// 單號（W-0412 這種）。契約列為必填，但後端目前可能給 null，所以收得下
@@ -894,6 +968,10 @@ class EngineeringTicket {
   /// 開工，而不是「這個數字現在沒有」。
   final int? workedMinutes;
 
+  /// 這張單被主管驗收不通過、退回重修中時，最近一次不通過的原因；單卡據此標
+  /// 「驗收退回」並把原因當副文。再完修或結案後、或從沒被退回過時為 null。
+  final String? verificationReturnReason;
+
   factory EngineeringTicket.fromJson(Map<String, dynamic> json) {
     return EngineeringTicket(
       ticketNo: json['ticketNo'] as String?,
@@ -906,6 +984,7 @@ class EngineeringTicket {
       source: json['source'] as String?,
       // 後來才補進契約、後端尚未落地；缺席與 null 一律收成 null。
       workedMinutes: json['workedMinutes'] as int?,
+      verificationReturnReason: json['verificationReturnReason'] as String?,
     );
   }
 }
@@ -1013,7 +1092,9 @@ class RepairTicketDetail {
     required this.category,
     required this.isUrgent,
     required this.state,
-    required this.reporterName,
+    this.isPublicArea = false,
+    this.origin = 'reported',
+    this.reporterName,
     this.createdAt,
     this.description,
     this.assigneeName,
@@ -1021,10 +1102,17 @@ class RepairTicketDetail {
     this.verifiedBy,
     this.verifiedAt,
     this.resolutionNote,
+    this.resolutionType,
+    this.doneAt,
+    this.reviewRequestedAt,
     this.rejectReason,
     this.urgentDowngradeReason,
     this.originTicketNo,
     this.photos = const [],
+    this.lastVerifyFailedReason,
+    this.lastVerifyFailedBy,
+    this.lastVerifyFailedAt,
+    this.viewerIsAssignee = false,
   });
 
   final String taskId;
@@ -1032,9 +1120,13 @@ class RepairTicketDetail {
   /// W- 開頭的單號，例如 W-0410。
   final String ticketNo;
 
-  /// 房號；公共區域的單固定是「公共區域」（後端以這個特殊房號代表無房號
-  /// 的公共區域單，契約沒有獨立的布林旗標）。
-  final String roomNo;
+  /// 房號；開給公共區域的單沒有房號，為 null，此時 [isPublicArea] 為 true、
+  /// 地點說明在報修說明裡。
+  final String? roomNo;
+
+  /// true 表示這張單開給公共區域（沒有房號）。公共區域單才可以放回待認領；
+  /// 客房單只能走暫停。
+  final bool isPublicArea;
 
   /// 工務單類別，照契約 RepairCategory enum（air_conditioning…other）。
   final String category;
@@ -1042,7 +1134,19 @@ class RepairTicketDetail {
 
   /// pending_review｜rejected｜pool｜accepted｜doing｜done｜cancelled。
   final String state;
-  final String reporterName;
+
+  /// 來源：`reported` 是有人報修（房務、工務自開、櫃檯交辦都算），
+  /// `scheduled` 是每日排程建出的定期保養。
+  final String origin;
+
+  /// 報修人顯示名稱；定期保養單由排程建立、沒有報修人時為 null。
+  final String? reporterName;
+
+  /// 畫面上的地點文字：有房號給房號，公共區域單給「公共區域」。
+  String get whereText => roomNo ?? '公共區域';
+
+  /// 畫面上的報修人文字；沒有報修人（定期保養）時給「—」。
+  String get reporterNameText => reporterName ?? '—';
 
   /// 詳情頁用這個時刻算「已送出 N 分鐘」與時間軸第一步的時刻。後端沒給時留
   /// null，那兩段話整段不顯示，而不是填 0 分鐘讓員工以為單剛送出。
@@ -1065,6 +1169,17 @@ class RepairTicketDetail {
   final String? verifiedBy;
   final String? verifiedAt;
   final String? resolutionNote;
+
+  /// 完修結果三選一：`fixed`、`temporary`、`cannot_fix`。尚未完修為 null；
+  /// 完修後必有值。
+  final String? resolutionType;
+
+  /// 完修時間；尚未完修為 null。
+  final String? doneAt;
+
+  /// 最近一次進入等主管審核的時間（第一次送出或補資料再送出）；不是房務報修
+  /// 一般件、或還沒送審時為 null。
+  final String? reviewRequestedAt;
   final String? rejectReason;
   final String? urgentDowngradeReason;
   final String? originTicketNo;
@@ -1073,18 +1188,30 @@ class RepairTicketDetail {
   /// 看這一欄。
   final List<RepairTicketPhoto> photos;
 
-  /// 公共區域單（無房號）才可以放回待認領；客房單只能走暫停。
-  bool get isPublicArea => roomNo == '公共區域';
+  /// 最近一次驗收不通過的原因、判定主管顯示名稱與時間。三個欄位同時有值或
+  /// 同時為 null；從沒被判不通過為 null。重修、再完修與結案後都保留，
+  /// 要不要顯示由畫面依狀態決定。
+  final String? lastVerifyFailedReason;
+  final String? lastVerifyFailedBy;
+  final String? lastVerifyFailedAt;
+
+  /// 目前登入者是不是這張單的處理人，由後端比對（顯示名稱可能重名，App 不自己
+  /// 比）。主管打開自己名下的單時為 true，畫面在主管動作之外同時給處理人的動作。
+  final bool viewerIsAssignee;
 
   factory RepairTicketDetail.fromJson(Map<String, dynamic> json) {
+    final roomNo = json['roomNo'] as String?;
     return RepairTicketDetail(
       taskId: json['taskId'] as String,
       ticketNo: json['ticketNo'] as String,
-      roomNo: json['roomNo'] as String,
+      // 後端補 isPublicArea 之前以佔位房號「公共區域」代表無房號，兩種都收。
+      roomNo: roomNo == '公共區域' ? null : roomNo,
+      isPublicArea: json['isPublicArea'] as bool? ?? roomNo == '公共區域',
       category: json['category'] as String,
       isUrgent: json['isUrgent'] as bool? ?? false,
       state: json['state'] as String,
-      reporterName: json['reporterName'] as String,
+      origin: json['origin'] as String? ?? 'reported',
+      reporterName: json['reporterName'] as String?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       description: json['description'] as String?,
       assigneeName: json['assigneeName'] as String?,
@@ -1093,6 +1220,9 @@ class RepairTicketDetail {
       verifiedBy: json['verifiedBy'] as String?,
       verifiedAt: json['verifiedAt'] as String?,
       resolutionNote: json['resolutionNote'] as String?,
+      resolutionType: json['resolutionType'] as String?,
+      doneAt: json['doneAt'] as String?,
+      reviewRequestedAt: json['reviewRequestedAt'] as String?,
       rejectReason: json['rejectReason'] as String?,
       urgentDowngradeReason: json['urgentDowngradeReason'] as String?,
       originTicketNo: json['originTicketNo'] as String?,
@@ -1100,6 +1230,10 @@ class RepairTicketDetail {
         for (final photo in (json['photos'] as List<dynamic>? ?? const []))
           RepairTicketPhoto.fromJson(photo as Map<String, dynamic>),
       ],
+      lastVerifyFailedReason: json['lastVerifyFailedReason'] as String?,
+      lastVerifyFailedBy: json['lastVerifyFailedBy'] as String?,
+      lastVerifyFailedAt: json['lastVerifyFailedAt'] as String?,
+      viewerIsAssignee: json['viewerIsAssignee'] as bool? ?? false,
     );
   }
 }
@@ -1164,26 +1298,419 @@ class RepairTicketSummary {
     required this.category,
     required this.isUrgent,
     required this.state,
-    required this.reporterName,
+    this.isPublicArea = false,
+    this.reporterName,
   });
 
   final String taskId;
   final String ticketNo;
-  final String roomNo;
+
+  /// 房號；公共區域的單為 null，此時 [isPublicArea] 為 true。
+  final String? roomNo;
+  final bool isPublicArea;
   final String category;
   final bool isUrgent;
   final String state;
-  final String reporterName;
+
+  /// 報修人顯示名稱；定期保養單沒有報修人時為 null。
+  final String? reporterName;
 
   factory RepairTicketSummary.fromJson(Map<String, dynamic> json) {
+    final roomNo = json['roomNo'] as String?;
     return RepairTicketSummary(
       taskId: json['taskId'] as String,
       ticketNo: json['ticketNo'] as String,
-      roomNo: json['roomNo'] as String? ?? '',
+      roomNo: roomNo == '公共區域' ? null : roomNo,
+      isPublicArea: json['isPublicArea'] as bool? ?? roomNo == '公共區域',
       category: json['category'] as String,
       isUrgent: json['isUrgent'] as bool? ?? false,
       state: json['state'] as String,
+      reporterName: json['reporterName'] as String?,
+    );
+  }
+}
+
+/// `ManagerQueues`（契約 主管工作台.yaml）：主管首頁三格與三份清單的同一份回應。
+/// [counts] 的每個數字等於對應陣列的長度，App 以 counts 畫三格、以陣列畫清單。
+class ManagerQueues {
+  const ManagerQueues({
+    required this.counts,
+    required this.inspection,
+    required this.review,
+    required this.verify,
+  });
+
+  final ManagerQueueCounts counts;
+  final List<InspectionQueueItem> inspection;
+  final List<ReviewQueueItem> review;
+  final List<VerifyQueueItem> verify;
+
+  /// 後端只回這位主管看得到的類別：工務主管沒有待查房，回應裡 `inspection`
+  /// 鍵整個缺席；`review` 已收回，也可能缺席。缺席的類別一律解析成空清單、
+  /// 格子數字 0，不在解析這一層丟例外；要不要畫那一格由主管種類決定。
+  factory ManagerQueues.fromJson(Map<String, dynamic> json) {
+    return ManagerQueues(
+      counts: ManagerQueueCounts.fromJson(
+        json['counts'] as Map<String, dynamic>? ?? const {},
+      ),
+      inspection: [
+        for (final item in (json['inspection'] as List<dynamic>? ?? const []))
+          InspectionQueueItem.fromJson(item as Map<String, dynamic>),
+      ],
+      review: [
+        for (final item in (json['review'] as List<dynamic>? ?? const []))
+          ReviewQueueItem.fromJson(item as Map<String, dynamic>),
+      ],
+      verify: [
+        for (final item in (json['verify'] as List<dynamic>? ?? const []))
+          VerifyQueueItem.fromJson(item as Map<String, dynamic>),
+      ],
+    );
+  }
+}
+
+/// 三格數字。某一類為 0 時仍是 0，畫面顯示 0 而不是藏起格子。
+class ManagerQueueCounts {
+  const ManagerQueueCounts({
+    required this.inspection,
+    required this.review,
+    required this.verify,
+  });
+
+  final int inspection;
+  final int review;
+  final int verify;
+
+  factory ManagerQueueCounts.fromJson(Map<String, dynamic> json) {
+    return ManagerQueueCounts(
+      inspection: (json['inspection'] as num?)?.toInt() ?? 0,
+      review: (json['review'] as num?)?.toInt() ?? 0,
+      verify: (json['verify'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// 待查房清單的一列（契約 `InspectionQueueItem`）：別人清好、停在 done 等查房的打掃單。
+class InspectionQueueItem {
+  const InspectionQueueItem({
+    required this.taskId,
+    required this.roomNo,
+    required this.isPublicArea,
+    required this.title,
+    required this.waitingSince,
+    required this.waitingSinceIsToday,
+    required this.cleanerName,
+    required this.redoCount,
+  });
+
+  final String taskId;
+
+  /// 房號；打掃單一律有房號，型別仍照契約 nullable。
+  final String? roomNo;
+  final bool isPublicArea;
+  final String title;
+
+  /// 開始等主管的時間（最近一次完成的時間）；字串帶後端時區位移，顯示時直接
+  /// 用這個位移取時與分，不轉成手機時區。
+  final String waitingSince;
+
+  /// 是否今天開始等；由後端依它的時鐘判定，false 時畫面在時刻前多標日期。
+  final bool waitingSinceIsToday;
+
+  /// 原清房者顯示名稱，退回會回到這個人名下。
+  final String cleanerName;
+
+  /// 被查房退回重做的次數。
+  final int redoCount;
+
+  factory InspectionQueueItem.fromJson(Map<String, dynamic> json) {
+    return InspectionQueueItem(
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String?,
+      isPublicArea: json['isPublicArea'] as bool? ?? false,
+      title: json['title'] as String? ?? '',
+      waitingSince: json['waitingSince'] as String,
+      waitingSinceIsToday: json['waitingSinceIsToday'] as bool? ?? false,
+      cleanerName: json['cleanerName'] as String? ?? '',
+      redoCount: (json['redoCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// 待審核清單的一列（契約 `ReviewQueueItem`）：房務報修、停在等主管審核的一般件。
+class ReviewQueueItem {
+  const ReviewQueueItem({
+    required this.taskId,
+    required this.roomNo,
+    required this.isPublicArea,
+    required this.title,
+    required this.waitingSince,
+    required this.waitingSinceIsToday,
+    required this.ticketNo,
+    required this.category,
+    required this.reporterName,
+    this.description,
+    this.photoCount = 0,
+  });
+
+  final String taskId;
+  final String? roomNo;
+  final bool isPublicArea;
+  final String title;
+
+  /// 開始等主管的時間（最近一次進入等主管審核的時間）。
+  final String waitingSince;
+  final bool waitingSinceIsToday;
+  final String ticketNo;
+  final String category;
+
+  /// 報修說明；報修人沒填時為 null。
+  final String? description;
+  final String reporterName;
+
+  /// 報修照片張數。
+  final int photoCount;
+
+  factory ReviewQueueItem.fromJson(Map<String, dynamic> json) {
+    return ReviewQueueItem(
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String?,
+      isPublicArea: json['isPublicArea'] as bool? ?? false,
+      title: json['title'] as String? ?? '',
+      waitingSince: json['waitingSince'] as String,
+      waitingSinceIsToday: json['waitingSinceIsToday'] as bool? ?? false,
+      ticketNo: json['ticketNo'] as String,
+      category: json['category'] as String,
+      description: json['description'] as String?,
       reporterName: json['reporterName'] as String? ?? '',
+      photoCount: (json['photoCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// 待驗收清單的一列（契約 `VerifyQueueItem`）：已完修、尚未有主管驗收的工務單，
+/// 含暫時處理、無法修復與定期保養的單。
+class VerifyQueueItem {
+  const VerifyQueueItem({
+    required this.taskId,
+    required this.roomNo,
+    required this.isPublicArea,
+    required this.title,
+    required this.waitingSince,
+    required this.waitingSinceIsToday,
+    required this.ticketNo,
+    required this.category,
+    required this.origin,
+    required this.resolutionType,
+    this.description,
+    this.reporterName,
+    this.assigneeName,
+    this.wasVerificationFailed = false,
+  });
+
+  final String taskId;
+
+  /// 房號；公共區域的單（例如定期保養的「5 樓製冰機」）為 null。
+  final String? roomNo;
+  final bool isPublicArea;
+  final String title;
+
+  /// 開始等主管的時間（完修時間）。
+  final String waitingSince;
+  final bool waitingSinceIsToday;
+  final String ticketNo;
+  final String category;
+  final String? description;
+
+  /// 報修人；定期保養單沒有報修人時為 null。
+  final String? reporterName;
+
+  /// 完修人（處理人）。
+  final String? assigneeName;
+
+  /// `reported` 是有人報修、`scheduled` 是定期保養。
+  final String origin;
+
+  /// `fixed`、`temporary`、`cannot_fix`。完修結果欄位出現之前就完修的舊單
+  /// 沒有值，為 null；不需處理的單直接結案，不會出現在待驗收。
+  final String? resolutionType;
+
+  /// 這張單是否曾被驗收不通過過；true 時清單列標「重修後再驗」。詳細原因要打開
+  /// 工務單詳情才取。
+  final bool wasVerificationFailed;
+
+  factory VerifyQueueItem.fromJson(Map<String, dynamic> json) {
+    return VerifyQueueItem(
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String?,
+      isPublicArea: json['isPublicArea'] as bool? ?? false,
+      title: json['title'] as String? ?? '',
+      waitingSince: json['waitingSince'] as String,
+      waitingSinceIsToday: json['waitingSinceIsToday'] as bool? ?? false,
+      ticketNo: json['ticketNo'] as String,
+      category: json['category'] as String,
+      description: json['description'] as String?,
+      reporterName: json['reporterName'] as String?,
+      assigneeName: json['assigneeName'] as String?,
+      origin: json['origin'] as String? ?? 'reported',
+      resolutionType: json['resolutionType'] as String?,
+      wasVerificationFailed: json['wasVerificationFailed'] as bool? ?? false,
+    );
+  }
+}
+
+/// `RepairVerificationOutcome`（契約 工務單.yaml）：這次驗收的結果與單的去處。
+/// [result] 與 [destination] 一起看：passed 時 destination 一定是 `closed`；
+/// failed 時是 `assignee`（回到原處理人名下待開始，原處理人收到推播）或
+/// `pool`（原處理人已下班或請假，回到工務待認領）。去處由後端算，App 不自己看班表。
+class RepairVerificationOutcome {
+  const RepairVerificationOutcome({
+    required this.taskId,
+    required this.ticketNo,
+    required this.isPublicArea,
+    required this.result,
+    required this.destination,
+    required this.decidedBy,
+    required this.decidedAt,
+    this.roomNo,
+    this.assigneeName,
+    this.reason,
+  });
+
+  final String taskId;
+  final String ticketNo;
+
+  /// 房號；公共區域的單為 null，此時 [isPublicArea] 為 true。
+  final String? roomNo;
+  final bool isPublicArea;
+
+  /// `passed`｜`failed`，與請求的 result 相同。
+  final String result;
+
+  /// `closed`｜`assignee`｜`pool`。
+  final String destination;
+
+  /// 原處理人（完修人）顯示名稱；去處是 pool 時也帶，因為那時單本身的處理人
+  /// 已清空，結果畫面仍要說得出「阿強已下班」。
+  final String? assigneeName;
+
+  /// 不通過的原因（去掉頭尾空白後的值）；passed 時為 null。
+  final String? reason;
+
+  /// 這次驗收的主管顯示名稱與時間。
+  final String decidedBy;
+  final String decidedAt;
+
+  factory RepairVerificationOutcome.fromJson(Map<String, dynamic> json) {
+    return RepairVerificationOutcome(
+      taskId: json['taskId'] as String,
+      ticketNo: json['ticketNo'] as String,
+      roomNo: json['roomNo'] as String?,
+      isPublicArea: json['isPublicArea'] as bool? ?? false,
+      result: json['result'] as String,
+      destination: json['destination'] as String,
+      assigneeName: json['assigneeName'] as String?,
+      reason: json['reason'] as String?,
+      decidedBy: json['decidedBy'] as String,
+      decidedAt: json['decidedAt'] as String,
+    );
+  }
+}
+
+/// 一個查房項目的判定（契約 `InspectionItemJudgement`）：[key] 是
+/// sop_items.item_key，[pass] 為 true 通過、false 不通過；沒有備註欄。
+class InspectionItemJudgement {
+  const InspectionItemJudgement({required this.key, required this.pass});
+
+  final String key;
+  final bool pass;
+
+  Map<String, dynamic> toJson() => {'key': key, 'pass': pass};
+}
+
+/// 查房項目的引用（422 `inspection_items_mismatch` 的 `context.currentItems`
+/// 每一筆）：鍵、顯示名稱與飯店排序。
+class InspectionItemRef {
+  const InspectionItemRef({
+    required this.key,
+    required this.label,
+    required this.sortOrder,
+  });
+
+  final String key;
+  final String label;
+  final int sortOrder;
+
+  factory InspectionItemRef.fromJson(Map<String, dynamic> json) {
+    return InspectionItemRef(
+      key: json['key'] as String,
+      label: json['label'] as String? ?? '',
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// `InspectionOutcome`（契約 查房.yaml）：這次查房的結果與單的去向。
+/// [result] 與 [destination] 一起看：passed 時 destination 一定是 closed；
+/// failed 時是 cleaner（回到原清房者名下）或 pool（原清房者已下班或請假，
+/// 回到房務待認領）。退回的原因就是 [failedItems]。
+class InspectionOutcome {
+  const InspectionOutcome({
+    required this.inspectionId,
+    required this.taskId,
+    required this.roomNo,
+    required this.result,
+    required this.destination,
+    required this.failedItems,
+    required this.createdAt,
+    this.cleanerName,
+  });
+
+  final String inspectionId;
+  final String taskId;
+  final String roomNo;
+
+  /// `passed` 或 `failed`。
+  final String result;
+
+  /// `closed`、`cleaner` 或 `pool`。
+  final String destination;
+
+  /// 原清房者顯示名稱，結果畫面「回到小美名下」「小美已下班」用它。
+  final String? cleanerName;
+
+  /// 被判不通過的項目，依飯店排序；passed 時為空。
+  final List<InspectionFailedItem> failedItems;
+  final String createdAt;
+
+  factory InspectionOutcome.fromJson(Map<String, dynamic> json) {
+    return InspectionOutcome(
+      inspectionId: json['inspectionId'] as String,
+      taskId: json['taskId'] as String,
+      roomNo: json['roomNo'] as String? ?? '',
+      result: json['result'] as String,
+      destination: json['destination'] as String,
+      cleanerName: json['cleanerName'] as String?,
+      failedItems: [
+        for (final item in (json['failedItems'] as List<dynamic>? ?? const []))
+          InspectionFailedItem.fromJson(item as Map<String, dynamic>),
+      ],
+      createdAt: json['createdAt'] as String? ?? '',
+    );
+  }
+}
+
+/// 查房被判不通過的一個項目：鍵與顯示名稱（例如「浴室無水痕」）。
+class InspectionFailedItem {
+  const InspectionFailedItem({required this.key, required this.label});
+
+  final String key;
+  final String label;
+
+  factory InspectionFailedItem.fromJson(Map<String, dynamic> json) {
+    return InspectionFailedItem(
+      key: json['key'] as String,
+      label: json['label'] as String? ?? '',
     );
   }
 }
@@ -1291,6 +1818,7 @@ class PoolItem {
     this.returnReason,
     this.handoverNote,
     this.waitedMinutes,
+    this.verificationReturnReason,
   });
 
   final String taskId;
@@ -1322,6 +1850,11 @@ class PoolItem {
   /// 口徑，也不該跟著裝置時鐘跳動。取不到時為 null，單卡不畫這顆標籤。
   final int? waitedMinutes;
 
+  /// 只有工務池的工務單會有值：被驗收不通過退回工務待認領、還沒再完修時，
+  /// 最近一次不通過的原因；單卡據此標「驗收退回」並把原因當副文。[source] 不因
+  /// 驗收退回而改變，分流磚的張數也不變。
+  final String? verificationReturnReason;
+
   /// 無房號的單在後端掛在公共區域佔位房上，房號字串就是這幾個字
   /// （`AutomationRuleService.PUBLIC_AREA_ROOM_NO`；契約沒有獨立的布林旗標，
   /// 同 [RepairTicketDetail.isPublicArea]）。
@@ -1347,6 +1880,7 @@ class PoolItem {
       createdAt: json['createdAt'] as String,
       // 後來才補進契約、後端尚未落地；缺席與 null 一律收成 null。
       waitedMinutes: json['waitedMinutes'] as int?,
+      verificationReturnReason: json['verificationReturnReason'] as String?,
     );
   }
 }

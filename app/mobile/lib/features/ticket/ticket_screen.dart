@@ -24,6 +24,9 @@ enum TicketView {
 
   /// 工務看自己要修的單。
   engineering,
+
+  /// 主管從待審核、待驗收、推播或其他畫面點開的單；審核與驗收動作只在這個視角出現。
+  manager,
 }
 
 /// 工務單詳情（ui-plan 畫面 7）。
@@ -265,7 +268,8 @@ class _TicketScreenState extends State<TicketScreen> {
           onAddPhoto: _appendPhoto,
           onOpenPhoto: _openViewer,
         ),
-        TicketView.engineering => TicketDetailEngineering(
+        // 主管版面另行接上，先沿用工務版。
+        TicketView.engineering || TicketView.manager => TicketDetailEngineering(
           ticket: _ticket,
           errorMessage: _error,
           resolutionLabel: _resolutionLabel,

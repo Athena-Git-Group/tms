@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.codes.TaskState;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +28,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -221,20 +225,22 @@ public class TaskExecutionService {
     }
 
     /**
-     * 負責人完成自己進行中的任務（contracts tasksComplete）。修繕任務（工務單）在
-     * 狀態轉移成功後，由 {@link RepairService#resolveOnComplete} 做完修收尾——照片
-     * 綁定、處理說明、推播報修人與原任務的停住原因連動。整個方法包在同一個交易裡，
+     * 負責人完成自己進行中的任務（contracts tasksComplete）。修繕任務（工務單）以不需處理
+     * 完成時直接結案（closed），其餘完修結果落在 done 等主管驗收；狀態轉移成功後，由
+     * {@link RepairService#resolveOnComplete} 做完修收尾——照片綁定、處理說明、推播報修人
+     * 與原任務的停住原因連動。整個方法包在同一個交易裡，
      * 不會出現「單已結案但報修人沒收到通知」的中間態。
      */
     @Transactional
     public Map<String, Object> complete(UUID taskId, CompleteTaskRequest request) {
         long tenantId = TenantContext.require();
         Map<String, Object> task = taskRowLookup.require(tenantId, taskId);
-        requireCompletionPhotosForRepair(task, request);
+        requireCompletionPhotosForRepair(tenantId, taskId, task, request);
+        Map<String, Object> completedPayload = completedPayloadFor(task, request);
+        boolean closeRepair = isRepair(task) && RepairService.closesOnComplete(resolutionTypeOf(request));
         Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
-                (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef));
-        if ("repair".equals(String.valueOf(task.get("type")))) {
-            // 修繕任務能走到這裡，表示上面的完修照片驗證已確認 request 與照片存在。
+                (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef, completedPayload, closeRepair));
+        if (isRepair(task)) {
             repairService.resolveOnComplete(
                     taskId, request.photoIds(), request.resolutionNote(), request.resolutionType());
         }
@@ -291,7 +297,8 @@ public class TaskExecutionService {
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
                  WHERE t.tenant_id = ? AND t.assignee_id = ?
-                   AND t.state IN ('accepted', 'doing', 'interrupted', 'deferred', 'done', 'inspected')
+                   AND t.state IN ('accepted', 'doing', 'interrupted', 'deferred', """ + TaskState.FINISHED_SQL_LIST + """
+                       )
                 """,
                 tenantId, actor.staffId());
     }
@@ -376,7 +383,7 @@ public class TaskExecutionService {
         int done = 0;
         for (Map<String, Object> row : rows) {
             String state = String.valueOf(row.get("state"));
-            boolean doneLike = "done".equals(state) || "inspected".equals(state);
+            boolean doneLike = TaskState.isFinished(state);
             if (doneLike && "cleaning".equals(String.valueOf(row.get("type")))
                     && today.equals(toLocalDate(row.get("work_date")))) {
                 done++;
@@ -386,17 +393,59 @@ public class TaskExecutionService {
     }
 
     /**
-     * 完成前的完修照片驗證：修繕任務（工務單）必須附至少 1 張完修照片才能完成，
-     * 缺照片時回 422 completion_photo_required，不進任何狀態轉移。放行的話，
-     * 工務單會在沒有完修證據的情況下結案，報修人與主管就無從確認真的修好了。
-     * 打掃與一般任務不需要照片，直接放行。
+     * 修繕任務的 completed 事件要帶完修結果（省略送出視為 fixed），與
+     * {@link RepairService#resolveOnComplete} 寫進 repair_tickets.resolution_type 的值相同；
+     * 其他任務不加欄位。
      */
-    private static void requireCompletionPhotosForRepair(Map<String, Object> task, CompleteTaskRequest request) {
+    private static Map<String, Object> completedPayloadFor(Map<String, Object> task, CompleteTaskRequest request) {
         if (!"repair".equals(String.valueOf(task.get("type")))) {
+            return null;
+        }
+        return Map.of("resolutionType", RepairService.effectiveResolutionType(resolutionTypeOf(request)));
+    }
+
+    private static boolean isRepair(Map<String, Object> task) {
+        return "repair".equals(String.valueOf(task.get("type")));
+    }
+
+    private static String resolutionTypeOf(CompleteTaskRequest request) {
+        return request == null ? null : request.resolutionType();
+    }
+
+    /**
+     * 完成前的完修照片驗證：修繕任務（工務單）除了判斷不需處理（no_action_needed）之外，
+     * 都必須附至少 1 張這一次的完修照片才能完成，缺照片時回 422 completion_photo_required，
+     * 不進任何狀態轉移。放行的話，工務單會在沒有完修證據的情況下進待驗收，主管就無從確認
+     * 真的修好了。不需處理沒有東西可拍，打掃與一般任務不需要照片，都直接放行。
+     *
+     * <p>驗收不通過退回重修的單，上一輪已綁在這張單上的完修照片不能拿來抵用：這次送來的照片
+     * 全都是不通過之前就綁好的舊照片時，同樣視為沒附照片。驗收不通過不解綁舊照片，
+     * 區分輪次看照片上傳時間與 repair_tickets.last_verify_failed_at。
+     */
+    private void requireCompletionPhotosForRepair(
+            long tenantId, UUID taskId, Map<String, Object> task, CompleteTaskRequest request) {
+        if (!isRepair(task) || !RepairService.requiresCompletionPhotos(resolutionTypeOf(request))) {
             return;
         }
         if (request == null || request.photoIds() == null || request.photoIds().isEmpty()) {
             throw new UnprocessableEntityException("completion_photo_required", "需要完修照片");
+        }
+        String placeholders = String.join(", ", Collections.nCopies(request.photoIds().size(), "?"));
+        List<Object> params = new ArrayList<>();
+        params.add(tenantId);
+        params.add(taskId);
+        params.addAll(request.photoIds());
+        Integer stale = jdbcTemplate.queryForObject(
+                """
+                SELECT count(*) FROM repair_photos p
+                  JOIN repair_tickets rt ON rt.tenant_id = p.tenant_id AND rt.task_id = p.ticket_task_id
+                 WHERE p.tenant_id = ? AND p.ticket_task_id = ?
+                   AND rt.last_verify_failed_at IS NOT NULL
+                   AND COALESCE(p.uploaded_at, p.created_at) <= rt.last_verify_failed_at
+                   AND p.id IN (""" + placeholders + ")",
+                Integer.class, params.toArray());
+        if (stale != null && stale == request.photoIds().size()) {
+            throw new UnprocessableEntityException("completion_photo_required", "需要這一次的完修照片");
         }
     }
 
@@ -609,6 +658,7 @@ public class TaskExecutionService {
             item.put("reminderStage", row.get("reminder_stage"));
             item.put("returnReason", row.get("return_reason"));
             item.put("handoverNote", row.get("requeue_note"));
+            item.put("verificationReturnReason", verificationReturnReason(row));
             item.put("createdAt", row.get("created_at"));
             items.add(item);
         }
@@ -655,10 +705,10 @@ public class TaskExecutionService {
         return jdbcTemplate.queryForList(
                 """
                 SELECT * FROM (
-                    SELECT t.id, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
+                    SELECT t.id, t.state, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
                            t.return_reason, t.requeue_note, t.created_at, t.reminder_stage,
                            r.room_no, r.floor,
-                           rt.ticket_no,
+                           rt.ticket_no, rt.last_verify_failed_reason,
                            (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
                            COALESCE((SELECT MAX(te.created_at) FROM task_events te
                                       WHERE te.tenant_id = t.tenant_id AND te.task_id = t.id
@@ -771,7 +821,7 @@ public class TaskExecutionService {
                 SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
                        t.work_date, t.done_at, t.redo_count, t.inspection, t.inspection_waived,
                        t.hold_reason, t.urgent, t.source, r.room_no,
-                       rt.ticket_no,
+                       rt.ticket_no, rt.last_verify_failed_reason,
                        COALESCE(rt.is_urgent, t.urgent) AS ticket_is_urgent,
                        COALESCE(rt.created_at, t.created_at) AS ticket_created_at
                   FROM tasks t
@@ -805,7 +855,7 @@ public class TaskExecutionService {
         for (Map<String, Object> row : rows) {
             String type = String.valueOf(row.get("type"));
             String state = String.valueOf(row.get("state"));
-            boolean doneLike = "done".equals(state) || "inspected".equals(state);
+            boolean doneLike = TaskState.isFinished(state);
             if ("cleaning".equals(type) && today.equals(toLocalDate(row.get("work_date")))
                     && !"cancelled".equals(state)) {
                 cleaningTotal++;
@@ -820,7 +870,7 @@ public class TaskExecutionService {
             boolean doneToday = doneAt != null && !doneAt.isBefore(dayStart) && doneAt.isBefore(dayEnd);
             if (doneLike && doneToday) {
                 completedCount++;
-                if (!"cleaning".equals(type) && "done".equals(state)) {
+                if (!"cleaning".equals(type) && doneLike) {
                     adHocCompleted++;
                 }
             }
@@ -854,7 +904,7 @@ public class TaskExecutionService {
                         engineeringUrgentCount++;
                     }
                 }
-                boolean completedToday = "done".equals(state) && doneToday;
+                boolean completedToday = doneLike && doneToday;
                 if (completedToday) {
                     engineeringCompletedToday++;
                 }
@@ -864,15 +914,15 @@ public class TaskExecutionService {
             }
         }
         // 排序口徑（contracts MyToday.todayTasks）：未結束的四個狀態排在已結束的
-        // done／inspected 之前；未結束組內 doing 最前、其餘依房號遞增；已結束組
+        // done／inspected／closed 之前；未結束組內 doing 最前、其餘依房號遞增；已結束組
         // 依完成時間由新到舊。兩組的次級排序鍵不同，所以先比組別再各自比。
         todayTaskRows.sort(Comparator
-                .comparingInt((Map<String, Object> r) -> isFinishedState(String.valueOf(r.get("state"))) ? 1 : 0)
+                .comparingInt((Map<String, Object> r) -> TaskState.isFinished(String.valueOf(r.get("state"))) ? 1 : 0)
                 .thenComparingInt(r -> "doing".equals(String.valueOf(r.get("state"))) ? 0 : 1)
-                .thenComparing(r -> isFinishedState(String.valueOf(r.get("state")))
+                .thenComparing(r -> TaskState.isFinished(String.valueOf(r.get("state")))
                         ? "" : String.valueOf(r.get("room_no")))
                 .thenComparing(
-                        r -> isFinishedState(String.valueOf(r.get("state")))
+                        r -> TaskState.isFinished(String.valueOf(r.get("state")))
                                 ? SqlTimestamps.toOffsetDateTime(r.get("done_at")) : null,
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(r -> String.valueOf(r.get("room_no"))));
@@ -997,12 +1047,12 @@ public class TaskExecutionService {
     }
 
     /**
-     * todayTasks 的收錄狀態（contracts TodayTask.state）：有負責人且今日有效的六個值。
-     * cancelled 不收錄，還在池中（pool）、等審核（pending_review）、被退回（rejected）
-     * 的單也不在首頁任務列。
+     * todayTasks 的收錄狀態（contracts TodayTask.state）：有負責人且今日有效的七個值。
+     * cancelled 不收錄，還在池中（pool）的單也不在首頁任務列。
      */
     private static final Set<String> TODAY_TASK_STATES =
-            Set.of("accepted", "doing", "deferred", "interrupted", "done", "inspected");
+            Stream.concat(Stream.of("accepted", "doing", "deferred", "interrupted"), TaskState.FINISHED.stream())
+                    .collect(Collectors.toUnmodifiableSet());
 
     /**
      * 這張單算不算「今天的」。只有打掃類會排工作日（{@code TaskEngine.create} 只對
@@ -1021,7 +1071,7 @@ public class TaskExecutionService {
         if (workDate != null) {
             return today.equals(workDate);
         }
-        return isFinishedState(state) ? doneToday : true;
+        return TaskState.isFinished(state) ? doneToday : true;
     }
 
     /**
@@ -1044,14 +1094,13 @@ public class TaskExecutionService {
     private List<Map<String, Object>> engineeringTickets(List<Map<String, Object>> ticketRows) {
         ticketRows.sort(Comparator
                 .comparingInt((Map<String, Object> r) -> Boolean.TRUE.equals(r.get("ticket_is_urgent")) ? 0 : 1)
-                .thenComparingInt(r -> "done".equals(String.valueOf(r.get("state"))) ? 1 : 0)
+                .thenComparingInt(r -> TaskState.isFinished(String.valueOf(r.get("state"))) ? 1 : 0)
                 .thenComparing(
                         r -> SqlTimestamps.toOffsetDateTime(r.get("ticket_created_at")),
                         Comparator.nullsLast(Comparator.naturalOrder())));
         List<Map<String, Object>> tickets = new ArrayList<>(ticketRows.size());
         for (Map<String, Object> row : ticketRows) {
-            boolean publicArea =
-                    AutomationRuleService.PUBLIC_AREA_ROOM_NO.equals(String.valueOf(row.get("room_no")));
+            boolean publicArea = AutomationRuleService.isPublicAreaRoomNo(row.get("room_no"));
             Map<String, Object> ticket = new LinkedHashMap<>();
             ticket.put("ticketNo", row.get("ticket_no"));
             ticket.put("taskId", String.valueOf(row.get("id")));
@@ -1064,14 +1113,23 @@ public class TaskExecutionService {
             // 已做分鐘走 TaskDetail.elapsedMinutes 同一支算法（契約要求兩邊同口徑）：
             // 已結束段落的累計秒數加上還在進行中的這一段。還沒開工的單兩者都沒有，自然是 0。
             ticket.put("workedMinutes", elapsedMinutes(row));
+            ticket.put("verificationReturnReason", verificationReturnReason(row));
             tickets.add(ticket);
         }
         return tickets;
     }
 
-    /** todayTasks 排序用的組別判定：done／inspected 算已結束，排在未結束的單之後。 */
-    private static boolean isFinishedState(String state) {
-        return "done".equals(state) || "inspected".equals(state);
+    /**
+     * 工務單正處於驗收不通過、退回重修中時，最近一次不通過的原因（contracts
+     * PoolItem／EngineeringTicket.verificationReturnReason）；其他單為 null。
+     * 不通過只會把單從 done 送回 accepted 或 pool，而再完修就回到 done，所以單還在
+     * pool、accepted 或 doing 而且有不通過紀錄，就表示退回之後還沒再完修。
+     * 兩個欄位共用這一處，待認領單卡與首頁單卡的「驗收退回」標示才不會各算各的。
+     */
+    private static Object verificationReturnReason(Map<String, Object> row) {
+        String state = String.valueOf(row.get("state"));
+        boolean reworking = "pool".equals(state) || "accepted".equals(state) || "doing".equals(state);
+        return reworking ? row.get("last_verify_failed_reason") : null;
     }
 
     /** 單一任務的剩餘分鐘：預估分鐘減已做分鐘，進行中的段落折算到現在，最低 0。 */

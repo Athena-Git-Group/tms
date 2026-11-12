@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
@@ -372,6 +373,97 @@ class PoolFilterRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
       ),
+    );
+  }
+}
+
+/// 待認領一頁的捲動骨架：連線狀態列、大標、（主管的）部門切換，接著是呼叫端
+/// 給的分類磚與單卡。
+///
+/// 房務、工務與主管三個待認領畫面的骨架一樣，差別只在分類磚與單卡，所以骨架
+/// 在這裡只畫一次。大標跟著內容捲而不是放導覽列（`Main.dc.html:251`、`975`）；
+/// 底部不讓 SafeArea 收邊，單卡要從浮動分頁列底下捲過去，開分頁列的那段留白
+/// 由清單自己帶。
+class PoolScrollView extends StatelessWidget {
+  const PoolScrollView({
+    super.key,
+    required this.children,
+    this.aboveCategories,
+  });
+
+  /// 分類磚起算的內容。
+  final List<Widget> children;
+
+  /// 夾在大標與分類磚之間的那一塊；主管的部門切換放這裡，員工的待認領沒有。
+  final Widget? aboveCategories;
+
+  @override
+  Widget build(BuildContext context) {
+    final aboveCategories = this.aboveCategories;
+    return SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: EdgeInsets.only(
+          top: TmsSpacing.md,
+          bottom: TmsSpacing.scrollPadBottom(
+            MediaQuery.paddingOf(context).bottom,
+          ),
+        ),
+        children: [
+          // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
+          // 員工要先知道現在連不上，而不是按了認領才發現。
+          const SystemStatusBar(
+            padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
+            child: Text('待認領', style: TmsText.largeTitle),
+          ),
+          if (aboveCategories != null) ...[
+            const SizedBox(height: TmsSpacing.md),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: TmsSpacing.screenEdge,
+              ),
+              child: aboveCategories,
+            ),
+          ],
+          const SizedBox(height: TmsSpacing.lg),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+/// 列表載入失敗時分類磚底下那一行說明。
+class PoolLoadError extends StatelessWidget {
+  const PoolLoadError({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        left: TmsSpacing.screenEdge,
+        right: TmsSpacing.screenEdge,
+        top: TmsSpacing.lg,
+      ),
+      child: Text(message),
+    );
+  }
+}
+
+/// 列表還在載入時分類磚底下的轉圈。
+class PoolLoading extends StatelessWidget {
+  const PoolLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(top: TmsSpacing.lg),
+      child: Center(child: CupertinoActivityIndicator()),
     );
   }
 }

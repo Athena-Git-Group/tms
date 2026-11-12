@@ -1,18 +1,24 @@
 package com.athena.tms.repair;
 
 import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.ManagerKind;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.UuidV7;
 import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.error.NotFoundException;
 import com.athena.tms.common.error.StateConflictException;
 import com.athena.tms.common.error.UnprocessableEntityException;
+import com.athena.tms.common.codes.ErrorCode;
 import com.athena.tms.common.codes.StaffRole;
+import com.athena.tms.common.codes.TaskState;
 import com.athena.tms.dto.Actor;
+import com.athena.tms.dto.RepairVerificationOutcome;
+import com.athena.tms.dto.VerifyRepairTicketRequest;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
 import com.athena.tms.service.AutomationRuleService;
 import com.athena.tms.service.PushOutboxWriter;
+import com.athena.tms.service.StaffAvailability;
 import com.athena.tms.service.TaskEngine;
 import com.athena.tms.service.TaskRowLookup;
 import java.time.Clock;
@@ -24,6 +30,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -56,6 +63,20 @@ public class RepairService {
             "door_lock", "門鎖",
             "other", "其他");
 
+    /**
+     * 最近一次進入等主管審核的時間（SQL 純量子查詢，外層須以 t 為 tasks 別名）：該單任務事件中
+     * 最後一筆 created（第一次送出）或 repair_resubmitted（補資料再送出）的時間。待審核清單的
+     * waitingSince 與工務單詳情的 reviewRequestedAt 共用這一段，兩邊對同一張單說的是同一個時間。
+     */
+    public static final String LAST_REVIEW_SUBMISSION_AT = """
+            (SELECT te.created_at FROM task_events te
+              WHERE te.tenant_id = t.tenant_id AND te.task_id = t.id
+                AND te.type IN ('created', 'repair_resubmitted')
+              ORDER BY te.seq DESC LIMIT 1)""";
+
+    private static final String VERIFY_PASSED = "passed";
+    private static final String VERIFY_FAILED = "failed";
+    private static final Set<String> RESOLUTION_TYPES = Set.of("fixed", "temporary", "cannot_fix", "no_action_needed");
     private static final DateTimeFormatter CHECKIN_TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final JdbcTemplate jdbcTemplate;
@@ -63,6 +84,7 @@ public class RepairService {
     private final PushOutboxWriter pushOutboxWriter;
     private final TaskRowLookup taskRowLookup;
     private final ObjectMapper objectMapper;
+    private final StaffAvailability staffAvailability;
     private final Clock clock;
 
     public RepairService(
@@ -71,12 +93,14 @@ public class RepairService {
             PushOutboxWriter pushOutboxWriter,
             TaskRowLookup taskRowLookup,
             ObjectMapper objectMapper,
+            StaffAvailability staffAvailability,
             Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.taskEngine = taskEngine;
         this.pushOutboxWriter = pushOutboxWriter;
         this.taskRowLookup = taskRowLookup;
         this.objectMapper = objectMapper;
+        this.staffAvailability = staffAvailability;
         this.clock = clock;
     }
 
@@ -166,7 +190,8 @@ public class RepairService {
                   JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
                   JOIN staff_accounts s ON s.tenant_id = rt.tenant_id AND s.id = rt.reporter_id
                  WHERE rt.tenant_id = ? AND rt.room_id = ? AND rt.category = ?
-                   AND t.state NOT IN ('done', 'cancelled')
+                   AND t.state NOT IN ('cancelled', """ + TaskState.FINISHED_SQL_LIST + """
+                       )
                  ORDER BY rt.created_at DESC
                  LIMIT 1
                 """,
@@ -359,24 +384,29 @@ public class RepairService {
     /**
      * 工務完修結案時，保證報修那一側同步知道「修好了」：推播報修人，並把因這張單
      * 而中斷的原任務停住原因改成「工務已修好：<類別>」。工務單任務本身的 doing→done
-     * 轉移已由 TaskEngine 處理，這裡只補工務單的延伸資料——完修照片綁定與處理說明
+     * （不需處理是 doing→closed）轉移已由 TaskEngine 處理，這裡只補工務單的延伸資料——完修照片綁定與處理說明
      * （工務判斷不需維修時，結案理由也記在處理說明裡）。少了這段連動，報修人只能
      * 自己反覆去查單，原任務上也仍顯示「等工務」，員工不知道可以回去把房間做完。
      *
      * <p>原任務不自動恢復，何時回去做由負責人自己決定，所以只改停住原因、不動狀態；
      * 用條件式更新限定 interrupted，原任務已被恢復或退池時一列也不改。推播以
-     * 「單＋收件人」組冪等鍵，請求重試時同一位報修人不會收到兩次。
+     * 「單＋這次完成的事件序號＋收件人」組冪等鍵，請求重試時同一位報修人不會收到兩次，
+     * 驗收不通過後重修再完修則會再收到一次。
      *
-     * <p>完修三選一（contracts CompleteTaskRequest.resolutionType，省略視為 fixed）：
+     * <p>完修四選一（contracts CompleteTaskRequest.resolutionType，省略視為 fixed）：
      * fixed 不另外動作（既有行為）；temporary 另建一張房號／類別都相同的追蹤單進工務
      * 待認領（{@link #createFollowUpTicket}）；cannot_fix 把該房 {@code rooms.hk_state}
-     * 轉為 out_of_order（停用待確認）。
+     * 轉為 out_of_order（停用待確認）；no_action_needed 不附照片、不建追蹤單、不改房況，
+     * 單在完成那一步已直接結案。四者都把結果寫進 repair_tickets.resolution_type，
+     * 與 completed 事件 payload 的 resolutionType 同一交易、同一個值，詳情與待驗收清單只讀這一欄。
      */
     @Transactional
     public void resolveOnComplete(UUID ticketTaskId, List<UUID> photoIds, String resolutionNote, String resolutionType) {
         long tenantId = TenantContext.require();
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
-        bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
+        if (photoIds != null) {
+            bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
+        }
         if (resolutionNote != null) {
             jdbcTemplate.update(
                     "UPDATE repair_tickets SET resolution_note = ? WHERE tenant_id = ? AND task_id = ?",
@@ -396,25 +426,27 @@ public class RepairService {
                     "工務已修好：" + categoryLabel, tenantId, sourceTaskId);
         }
 
-        String roomNo = queryFirstString(
-                "SELECT room_no FROM rooms WHERE tenant_id = ? AND id = ?", tenantId, ticket.get("room_id"));
-        UUID reporterId = UUID.fromString(String.valueOf(ticket.get("reporter_id")));
-        ObjectNode payload = PushOutboxWriter.payload(
-                objectMapper, reporterId, "repair_completed", roomNo + " " + categoryLabel + "已修好");
         // 報修人點開要回到自己被中斷的那張單，那才是他接下來要做的事；工務或櫃檯
         // 自行開的單沒有原任務，就回工務單本身。原任務不一定是打掃單（備品任務也
         // 會報修），類別以該列為準。
+        String targetType = "repair";
+        UUID targetTaskId = ticketTaskId;
         if (sourceTaskId != null) {
-            UUID sourceId = UUID.fromString(String.valueOf(sourceTaskId));
-            Map<String, Object> sourceTask = taskRowLookup.require(tenantId, sourceId);
-            PushOutboxWriter.targetOwnedTask(payload, String.valueOf(sourceTask.get("type")), sourceId);
-        } else {
-            PushOutboxWriter.targetOwnedTask(payload, "repair", ticketTaskId);
+            targetTaskId = UUID.fromString(String.valueOf(sourceTaskId));
+            targetType = String.valueOf(taskRowLookup.require(tenantId, targetTaskId).get("type"));
         }
-        pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
-                "repair_resolved:" + ticketTaskId + ":" + reporterId);
+        // 退回重修後再完修也要再通知報修人一次，冪等鍵帶這次完成的事件序號（同一交易內剛遞增的
+        // tasks.event_seq），每一次完修各算一封，同一次請求重試則不重複。
+        Integer completedSeq = jdbcTemplate.queryForObject(
+                "SELECT event_seq FROM tasks WHERE tenant_id = ? AND id = ?", Integer.class, tenantId, ticketTaskId);
+        pushToReporter(tenantId, ticketTaskId, ticket, "repair_completed",
+                roomNoOf(tenantId, ticket) + " " + categoryLabel + "已修好", null,
+                targetType, targetTaskId, "repair_resolved:" + ticketTaskId + ":" + completedSeq);
 
-        String effectiveResolution = resolutionType == null ? "fixed" : resolutionType;
+        String effectiveResolution = effectiveResolutionType(resolutionType);
+        jdbcTemplate.update(
+                "UPDATE repair_tickets SET resolution_type = ? WHERE tenant_id = ? AND task_id = ?",
+                effectiveResolution, tenantId, ticketTaskId);
         if ("temporary".equals(effectiveResolution)) {
             createFollowUpTicket(tenantId, ticketTaskId, ticket);
         } else if ("cannot_fix".equals(effectiveResolution)) {
@@ -422,6 +454,30 @@ public class RepairService {
                     "UPDATE rooms SET hk_state = 'out_of_order' WHERE tenant_id = ? AND id = ?",
                     tenantId, ticket.get("room_id"));
         }
+    }
+
+    /** 這個完修結果完成時是否必須附完修照片：只有不需處理不用，沒有東西可拍。 */
+    public static boolean requiresCompletionPhotos(String resolutionType) {
+        return !"no_action_needed".equals(effectiveResolutionType(resolutionType));
+    }
+
+    /** 這個完修結果完成時是否直接結案：不需處理不進待驗收，其餘落在 done 等主管驗收。 */
+    public static boolean closesOnComplete(String resolutionType) {
+        return "no_action_needed".equals(effectiveResolutionType(resolutionType));
+    }
+
+    /**
+     * 完修結果四選一的實際落地值：省略送出視為 fixed；不在 fixed／temporary／cannot_fix／
+     * no_action_needed 之內的值整個完修請求拒絕（422），不讓一個看不懂的結果寫進單與事件。
+     */
+    public static String effectiveResolutionType(String resolutionType) {
+        if (resolutionType == null) {
+            return "fixed";
+        }
+        if (!RESOLUTION_TYPES.contains(resolutionType)) {
+            throw new UnprocessableEntityException("resolutionType 必須是 fixed、temporary、cannot_fix 或 no_action_needed");
+        }
+        return resolutionType;
     }
 
     /**
@@ -465,23 +521,34 @@ public class RepairService {
         return rows.get(0);
     }
 
-    /** 組 contracts RepairTicket 回應：工務單摘要加上報修照片張數與說明。 */
+    /**
+     * 組 contracts RepairTicket 回應：工務單摘要加上報修照片張數、說明與處理進度。
+     *
+     * <p>完修結果直接讀 repair_tickets.resolution_type，不翻 completed 事件的 JSON；來源
+     * （origin）由 tasks.source 推導——系統排程建的單（source=system）是定期保養
+     * （scheduled），其餘都是有人報修（reported），與待驗收清單同一套推導。
+     * 最近一次驗收不通過的原因、判定人與時間直接讀 repair_tickets 的三個欄位，重修、再完修與結案後都保留。
+     * viewerIsAssignee 由後端比對處理人 id，不讓 App 拿顯示名稱比對，因為名稱可能重名。
+     */
     private Map<String, Object> ticketView(long tenantId, UUID ticketTaskId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT rt.ticket_no, rt.category, rt.description, rt.created_at, rt.source_task_id,
                        rt.resolution_note, rt.is_urgent, rt.urgent_rule, rt.urgent_downgrade_reason,
-                       rt.reject_reason, rt.verified_at, rt.origin_ticket_task_id,
-                       t.state, r.room_no, s.name AS reporter_name,
+                       rt.verified_at, rt.origin_ticket_task_id, rt.resolution_type,
+                       t.state, t.source, t.done_at, r.room_no, s.name AS reporter_name,
                        v.name AS verifier_name, ot.ticket_no AS origin_ticket_no,
                        (SELECT count(*) FROM repair_photos p
                          WHERE p.tenant_id = rt.tenant_id AND p.ticket_task_id = rt.task_id
-                           AND p.purpose = 'report') AS photo_count
+                           AND p.purpose = 'report') AS photo_count,
+                       t.assignee_id, rt.last_verify_failed_reason, rt.last_verify_failed_at,
+                       f.name AS last_verify_failed_by_name
                   FROM repair_tickets rt
                   JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
                   JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
                   JOIN staff_accounts s ON s.tenant_id = rt.tenant_id AND s.id = rt.reporter_id
                   LEFT JOIN staff_accounts v ON v.tenant_id = rt.tenant_id AND v.id = rt.verified_by
+                  LEFT JOIN staff_accounts f ON f.tenant_id = rt.tenant_id AND f.id = rt.last_verify_failed_by
                   LEFT JOIN repair_tickets ot ON ot.tenant_id = rt.tenant_id AND ot.task_id = rt.origin_ticket_task_id
                  WHERE rt.tenant_id = ? AND rt.task_id = ?
                 """,
@@ -494,6 +561,7 @@ public class RepairService {
         body.put("photoCount", ((Number) row.get("photo_count")).intValue());
         body.put("description", row.get("description"));
         body.put("resolutionNote", row.get("resolution_note"));
+        body.put("completionPhotos", completionPhotos(tenantId, ticketTaskId));
         if (row.get("source_task_id") != null) {
             body.put("sourceTaskId", String.valueOf(row.get("source_task_id")));
         }
@@ -503,11 +571,48 @@ public class RepairService {
         urgentJudgement.put("rule", urgentRule);
         body.put("urgentJudgement", urgentJudgement);
         body.put("urgentDowngradeReason", row.get("urgent_downgrade_reason"));
-        body.put("rejectReason", row.get("reject_reason"));
         body.put("verifiedBy", row.get("verifier_name"));
         body.put("verifiedAt", row.get("verified_at") == null ? null : toOffsetDateTime(row.get("verified_at")).toString());
         body.put("originTicketNo", row.get("origin_ticket_no"));
+        body.put("resolutionType", row.get("resolution_type"));
+        body.put("doneAt", row.get("done_at") == null ? null : toOffsetDateTime(row.get("done_at")).toString());
+        body.put("lastVerifyFailedReason", row.get("last_verify_failed_reason"));
+        body.put("lastVerifyFailedBy", row.get("last_verify_failed_by_name"));
+        body.put("lastVerifyFailedAt", row.get("last_verify_failed_at") == null
+                ? null : toOffsetDateTime(row.get("last_verify_failed_at")).toString());
+        CurrentActor viewer = CurrentActor.get();
+        body.put("viewerIsAssignee", viewer != null && row.get("assignee_id") != null
+                && viewer.staffId().toString().equalsIgnoreCase(String.valueOf(row.get("assignee_id"))));
+        body.put("origin", "system".equals(row.get("source")) ? "scheduled" : "reported");
         return body;
+    }
+
+    /**
+     * 這一輪的完修照片（contracts RepairTicket.completionPhotos）：綁在這張單上的 completion 照片，
+     * 單被驗收不通過過時只取上傳時間晚於最近一次不通過的那些。退回重修中、還沒再完修時自然是空陣列；
+     * 上一輪的照片不對外提供，因為上一輪的完修結果與說明在不通過時已清空。
+     */
+    private List<Map<String, Object>> completionPhotos(long tenantId, UUID ticketTaskId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                """
+                SELECT p.id, p.status, p.taken_at
+                  FROM repair_photos p
+                  JOIN repair_tickets rt ON rt.tenant_id = p.tenant_id AND rt.task_id = p.ticket_task_id
+                 WHERE p.tenant_id = ? AND p.ticket_task_id = ? AND p.purpose = 'completion'
+                   AND (rt.last_verify_failed_at IS NULL
+                        OR COALESCE(p.uploaded_at, p.created_at) > rt.last_verify_failed_at)
+                 ORDER BY p.taken_at, p.id
+                """,
+                tenantId, ticketTaskId);
+        List<Map<String, Object>> photos = new ArrayList<>(rows.size());
+        for (Map<String, Object> photoRow : rows) {
+            Map<String, Object> photo = new LinkedHashMap<>();
+            photo.put("id", String.valueOf(photoRow.get("id")));
+            photo.put("status", photoRow.get("status"));
+            photo.put("takenAt", toOffsetDateTime(photoRow.get("taken_at")).toString());
+            photos.add(photo);
+        }
+        return photos;
     }
 
     /**
@@ -519,7 +624,9 @@ public class RepairService {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("taskId", ticketTaskId.toString());
         body.put("ticketNo", row.get("ticket_no"));
-        body.put("roomNo", row.get("room_no"));
+        boolean publicArea = AutomationRuleService.isPublicAreaRoomNo(row.get("room_no"));
+        body.put("roomNo", publicArea ? null : row.get("room_no"));
+        body.put("isPublicArea", publicArea);
         body.put("category", row.get("category"));
         body.put("isUrgent", Boolean.TRUE.equals(row.get("is_urgent")));
         body.put("state", row.get("state"));
@@ -726,7 +833,7 @@ public class RepairService {
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
         String roomNo = queryFirstString(
                 "SELECT room_no FROM rooms WHERE tenant_id = ? AND id = ?", tenantId, ticket.get("room_id"));
-        if (!AutomationRuleService.PUBLIC_AREA_ROOM_NO.equals(roomNo)) {
+        if (!AutomationRuleService.isPublicAreaRoomNo(roomNo)) {
             throw new StateConflictException("room_ticket_not_requeueable", "客房工務單只能暫停，不能放回工務待認領");
         }
         taskEngine.releaseToPool(tenantId, ticketTaskId, Actor.staff(actor.role(), actor.staffId()));
@@ -758,14 +865,18 @@ public class RepairService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         requireManager(actor);
-        requireTicket(tenantId, ticketTaskId);
+        Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
         if (reason == null || reason.isBlank()) {
             throw new UnprocessableEntityException("reject_reason_required", "退回必須附原因");
         }
-        taskEngine.rejectRepairTicket(tenantId, ticketTaskId, reason, Actor.staff(actor.role(), actor.staffId()));
+        int seq = taskEngine.rejectRepairTicket(tenantId, ticketTaskId, reason, Actor.staff(actor.role(), actor.staffId()));
         jdbcTemplate.update(
                 "UPDATE repair_tickets SET reject_reason = ? WHERE tenant_id = ? AND task_id = ?",
                 reason, tenantId, ticketTaskId);
+        // 同一張單可能退回、補送、再退回，冪等鍵帶這次退回的事件序號，第二次退回才不會被當成重複而略過。
+        pushToReporter(tenantId, ticketTaskId, ticket, "repair_rejected",
+                roomNoOf(tenantId, ticket) + " " + ticket.get("ticket_no") + " 主管未核准", reason,
+                "repair", ticketTaskId, "repair_rejected:" + ticketTaskId + ":" + seq);
         return ticketView(tenantId, ticketTaskId);
     }
 
@@ -799,32 +910,75 @@ public class RepairService {
     }
 
     /**
-     * 主管驗收通過已完修的工務單（contracts verifyRepairTicket）：state 仍是 done，
-     * 不開新狀態值，只補 verified_by／verified_at。只有已完修（done）且尚未驗收
-     * （verified_by 為 null）的單能被驗收；非 done 或已驗收過回 409 state_conflict。
-     * state 轉移（實際上只是 event_seq／updated_at 推進，state 不變）委派
-     * {@link TaskEngine#verifyRepairTicket}，verified_by／verified_at 的落地在同一交易內
-     * 以 {@code verified_by IS NULL} 當二次保護，避免併發重複驗收。原型未描繪「驗收退回」，
-     * 本輪不支援這個分支（上游缺口，見 truth-delta.md 行 304）。
+     * 主管驗收已完修的工務單（contracts verifyRepairTicket）：一支端點，請求帶通過或不通過。
+     * 只開放主管，房務主管與工務主管都可以，含驗收自己完修的單；其他角色回 403。
+     * 只有 done 的單能驗收，通過與不通過共用 {@link TaskEngine} 裡同一道 state='done' 條件，
+     * 兩位主管同時送出時只有先到的成立，後到的回 409 state_conflict，不會覆寫驗收人或不通過紀錄。
+     *
+     * <p>通過：done→closed，同一交易寫入驗收人與驗收時間；不推播、不改房況。
+     * 不通過：原因去掉頭尾空白後為空回 422；成立時寫入最近一次不通過的原因、判定人與時間，
+     * 清空完修結果與處理說明。原處理人此刻接得了，單回到他名下待開始並推播他；請假中或已不在
+     * 飯店任何班別時段內（與查房退回同一套判定，見 {@link StaffAvailability}），單退回工務待認領，
+     * 不推播任何人。
      */
     @Transactional
-    public Map<String, Object> verify(UUID ticketTaskId) {
+    public RepairVerificationOutcome verify(UUID ticketTaskId, VerifyRepairTicketRequest request) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
-        requireManager(actor);
+        if (ManagerKind.of(actor).isEmpty()) {
+            throw new ForbiddenException("只有主管可以驗收工務單");
+        }
+        String result = request == null ? null : request.result();
+        if (!VERIFY_PASSED.equals(result) && !VERIFY_FAILED.equals(result)) {
+            throw new UnprocessableEntityException("驗收結果只能是 passed 或 failed");
+        }
+        String reason = request.reason() == null ? "" : request.reason().strip();
+        if (VERIFY_FAILED.equals(result) && reason.isEmpty()) {
+            throw new UnprocessableEntityException(ErrorCode.VERIFICATION_REASON_REQUIRED, "驗收不通過必須寫原因");
+        }
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
-        if (ticket.get("verified_by") != null) {
-            throw new StateConflictException("已驗收，不能重複驗收");
+        Actor manager = Actor.staff(actor.role(), actor.staffId());
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        UUID assigneeId = jdbcTemplate.queryForObject(
+                "SELECT assignee_id FROM tasks WHERE tenant_id = ? AND id = ?", UUID.class, tenantId, ticketTaskId);
+
+        String destination;
+        if (VERIFY_PASSED.equals(result)) {
+            taskEngine.verifyRepairTicket(tenantId, ticketTaskId, manager);
+            jdbcTemplate.update(
+                    "UPDATE repair_tickets SET verified_by = ?, verified_at = ? WHERE tenant_id = ? AND task_id = ?",
+                    actor.staffId(), now, tenantId, ticketTaskId);
+            destination = "closed";
+        } else {
+            boolean toPool = assigneeId == null || staffAvailability.unavailable(tenantId, assigneeId);
+            int seq = taskEngine.failRepairVerification(tenantId, ticketTaskId, manager, reason, assigneeId, toPool);
+            jdbcTemplate.update(
+                    """
+                    UPDATE repair_tickets
+                       SET last_verify_failed_reason = ?, last_verify_failed_by = ?, last_verify_failed_at = ?,
+                           resolution_type = NULL, resolution_note = NULL
+                     WHERE tenant_id = ? AND task_id = ?
+                    """,
+                    reason, actor.staffId(), now, tenantId, ticketTaskId);
+            destination = toPool ? "pool" : "assignee";
+            if (!toPool) {
+                pushVerificationFailed(tenantId, ticketTaskId, ticket, assigneeId, reason, seq);
+            }
         }
-        taskEngine.verifyRepairTicket(tenantId, ticketTaskId, Actor.staff(actor.role(), actor.staffId()));
-        int updated = jdbcTemplate.update(
-                "UPDATE repair_tickets SET verified_by = ?, verified_at = ? "
-                        + "WHERE tenant_id = ? AND task_id = ? AND verified_by IS NULL",
-                actor.staffId(), OffsetDateTime.now(clock), tenantId, ticketTaskId);
-        if (updated == 0) {
-            throw new StateConflictException("已驗收，不能重複驗收");
-        }
-        return ticketView(tenantId, ticketTaskId);
+
+        String roomNo = roomNoOf(tenantId, ticket);
+        boolean publicArea = AutomationRuleService.isPublicAreaRoomNo(roomNo);
+        return new RepairVerificationOutcome(
+                ticketTaskId,
+                (String) ticket.get("ticket_no"),
+                publicArea ? null : roomNo,
+                publicArea,
+                result,
+                destination,
+                assigneeId == null ? null : staffName(tenantId, assigneeId),
+                VERIFY_FAILED.equals(result) ? reason : null,
+                staffName(tenantId, actor.staffId()),
+                now);
     }
 
     /**
@@ -889,6 +1043,49 @@ public class RepairService {
             pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
                     "repair_urgent:" + ticketTaskId + ":" + recipient);
         }
+    }
+
+    /**
+     * 驗收不通過、單回到原處理人名下時推播他（PushPayload.event=repair_verification_failed）：
+     * 標題帶房號、單號與「驗收不通過」，內容是不通過原因，點開進這張工務單詳情。冪等鍵帶這次
+     * 不通過的事件序號，同一張單第二次不通過照樣推播，請求重試則不重複。退回工務待認領時不呼叫這裡。
+     */
+    private void pushVerificationFailed(long tenantId, UUID ticketTaskId, Map<String, Object> ticket, UUID assigneeId,
+            String reason, int seq) {
+        pushAboutTicket(tenantId, ticketTaskId, assigneeId, "repair_verification_failed",
+                roomNoOf(tenantId, ticket) + " " + ticket.get("ticket_no") + " 驗收不通過", reason,
+                "repair", ticketTaskId, "repair_verification_failed:" + ticketTaskId + ":" + seq);
+    }
+
+    /**
+     * 發給報修人（repair_tickets.reporter_id）的推播：完修與退回各一封，只差事件值、文案與去處。
+     */
+    private void pushToReporter(long tenantId, UUID ticketTaskId, Map<String, Object> ticket, String event,
+            String title, String body, String targetTaskType, UUID targetTaskId, String idempotencyPrefix) {
+        UUID reporterId = UUID.fromString(String.valueOf(ticket.get("reporter_id")));
+        pushAboutTicket(tenantId, ticketTaskId, reporterId, event, title, body, targetTaskType, targetTaskId,
+                idempotencyPrefix);
+    }
+
+    /**
+     * 關於一張工務單、發給單一員工的推播都從這裡組 payload 並寫進 outbox：標題、選填的內容、
+     * 點開的去處（工務單是 kind=ticket，其他任務是 kind=task）與冪等鍵的組法集中在一處，
+     * 報修人的完修／退回與處理人的驗收不通過幾封推播，才不會一封改了去處規則、另一封還照舊。
+     * 冪等鍵是呼叫端給的前綴再接上收件人 id，請求重試時同一位收件人只收到一次。
+     */
+    private void pushAboutTicket(long tenantId, UUID ticketTaskId, UUID recipientId, String event,
+            String title, String body, String targetTaskType, UUID targetTaskId, String idempotencyPrefix) {
+        ObjectNode payload = PushOutboxWriter.payload(objectMapper, recipientId, event, title);
+        if (body != null) {
+            payload.put("body", body);
+        }
+        PushOutboxWriter.targetOwnedTask(payload, targetTaskType, targetTaskId);
+        pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload, idempotencyPrefix + ":" + recipientId);
+    }
+
+    private String roomNoOf(long tenantId, Map<String, Object> ticket) {
+        return queryFirstString(
+                "SELECT room_no FROM rooms WHERE tenant_id = ? AND id = ?", tenantId, ticket.get("room_id"));
     }
 
     private String staffName(long tenantId, UUID staffId) {

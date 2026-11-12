@@ -31,12 +31,14 @@ public class RepairWhenSteps {
 
     /**
      * 完修處理結果文字 → 契約 {@code CompleteTaskRequest.resolutionType}
-     * （{@code specs/truth/contracts/components/schemas/任務.yaml}）的 enum 值。
+     * （{@code specs/truth/contracts/components/schemas/任務.yaml}）的 enum 值。不需處理可以
+     * 不附照片，送出後直接結案。
      */
     private static final Map<String, String> RESOLUTION_TYPE_BY_LABEL = Map.of(
             "已修好", "fixed",
             "暫時處理", "temporary",
-            "無法修復", "cannot_fix");
+            "無法修復", "cannot_fix",
+            "不需處理", "no_action_needed");
 
     /**
      * 類別文字 → 契約 {@code RepairCategory}
@@ -59,6 +61,16 @@ public class RepairWhenSteps {
     private static final Map<String, String> WHO_SEGMENT_BY_LABEL = Map.of(
             "我自己處理", "repair.who.me.segment",
             "放進待認領", "repair.who.pool.segment");
+
+    // ---- 主管視角工務單詳情（managerTicket）驗收用的 accessibility id，對照
+    // app/mobile/lib/features/manager/manager_ids.dart。
+    private static final String MANAGER_PASS_BUTTON = "managerTicket.pass-button";
+    private static final String MANAGER_FAIL_BUTTON = "managerTicket.fail-button";
+    private static final String MANAGER_FAIL_REASON_FIELD = "managerTicket.fail-sheet.reason-field";
+    private static final String MANAGER_FAIL_SUBMIT_BUTTON = "managerTicket.fail-sheet.submit-button";
+    private static final String MANAGER_RESULT_CARD = "managerTicket.result";
+    private static final String MANAGER_RESULT_BACK_BUTTON = "managerTicket.result.back-button";
+    private static final String MANAGER_QUEUE = "manager.queue";
 
     private final AppiumWorld world;
 
@@ -102,67 +114,13 @@ public class RepairWhenSteps {
     /**
      * 怎麼做：從任務頁、通知或「我的」進入該工務單的詳情頁。回寫：工務單詳情內容。
      *
-     * <p>兩個視角的進法不同，依登入者部門分流：
-     * <ul>
-     *   <li>工務：工務首頁「手上」列表的單卡（{@code engHome.in-hand.{單號}.card}）
-     *       ——工務的單一定掛在自己名下。</li>
-     *   <li>房務（報修人）：dsl 的三條路（任務頁／通知／「我的」）裡只有任務頁的
-     *       同房工務單區有契約可依（{@code listRepairTickets?roomId=}），所以走
-     *       首頁該房任務列 → 任務頁 → 「這間房的資訊」的工務單列
-     *       （{@code task.info-row.repair-tickets}）。該房未撤回的單只有一張時那一列
-     *       直接開詳情，兩張以上才先推工務單清單頁，再點該單那一列
-     *       （{@code room-info.repair-ticket.{單號}.row}）。張數去後端問，不試點看看：
-     *       試錯的寫法在 App 真的壞掉時會多吞一次逾時。</li>
-     * </ul>
+     * <p>三個視角的進法不同（工務走首頁「手上」單卡、報修人走任務頁的同房工務單列、
+     * 主管從待驗收清單或通知點該單），分流與進法集中在
+     * {@link RepairContext#openTicketDetail}，同名的 Given（Arrange 版）也走同一條路。
      */
     @當("{string} 在 App 打開 {string} 的工務單詳情")
     public void openTicketDetail(String staffName, String ticketNo) {
-        BackendChannel.CreatedStaff staff = world.staff(staffName);
-        world.ensureLoggedInAs(staff);
-        if ("engineering".equals(staff.dept())) {
-            world.tapTestId("engHome.in-hand." + ticketNo + ".card", SCREEN_TIMEOUT);
-        } else {
-            world.tapTestId("home.task." + roomNoOf(ticketNo) + ".card", SCREEN_TIMEOUT);
-            world.waitForTestId("task.screen", SCREEN_TIMEOUT);
-            world.tapTestId("task.info-row.repair-tickets", SCREEN_TIMEOUT);
-            if (uncancelledTicketCountOfRoom(ticketNo) > 1) {
-                world.waitForTestId("room-info.repair-tickets.screen", SCREEN_TIMEOUT);
-                world.tapTestId("room-info.repair-ticket." + ticketNo + ".row", SCREEN_TIMEOUT);
-            }
-        }
-        world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
-    }
-
-    private String roomNoOf(String ticketNo) {
-        List<Map<String, Object>> rows = world.backend().queryRows(
-                """
-                SELECT r.room_no FROM repair_tickets rt
-                JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
-                WHERE rt.tenant_id = ? AND rt.ticket_no = ?
-                """, world.backend().ensureTenant(), ticketNo);
-        if (rows.size() != 1) {
-            throw new IllegalStateException("單號「" + ticketNo + "」在後端應恰有 1 張工務單，實際 "
-                    + rows.size() + " 張");
-        }
-        return (String) rows.get(0).get("room_no");
-    }
-
-    /**
-     * 權威讀回：該工務單所在房間有幾張未撤回的單——任務頁那一列是直接開詳情還是先推
-     * 清單頁，取決於這個數字。
-     *
-     * <p>排除值只有 {@code cancelled} 一個，跟後端 {@code listRepairTickets}
-     * （{@code tms/src/main/java/com/athena/tms/repair/RepairService.java} 的
-     * {@code listByRoom}）同一口徑；多排一個狀態就會數少，進法會選錯分支。
-     */
-    private int uncancelledTicketCountOfRoom(String ticketNo) {
-        return world.backend().queryRows(
-                """
-                SELECT rt.ticket_no FROM repair_tickets target
-                JOIN repair_tickets rt ON rt.tenant_id = target.tenant_id AND rt.room_id = target.room_id
-                JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
-                WHERE target.tenant_id = ? AND target.ticket_no = ? AND t.state <> 'cancelled'
-                """, world.backend().ensureTenant(), ticketNo).size();
+        context.openTicketDetail(world.staff(staffName), ticketNo);
     }
 
     /**
@@ -244,6 +202,8 @@ public class RepairWhenSteps {
         }
         openInHandTicketDetail(staffName);
         world.tapTestId("ticket.complete-button", SCREEN_TIMEOUT);
+        // 不需處理可以是 0 張：先等面板打開，接著點的結果 chip 才確定是面板上的。
+        world.waitForTestId("completeSheet.photo.add-button", SCREEN_TIMEOUT);
         for (int i = 0; i < photoCount; i++) {
             context.addPhoto("completeSheet.photo.add-button");
         }
@@ -347,6 +307,72 @@ public class RepairWhenSteps {
         }
 
         world.tapTestId("repair.submit-button", SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 怎麼做：在已開著的主管視角工務單詳情點實心「通過」（{@code managerTicket.pass-button}），
+     * 不開面板、不填任何東西。權威狀態落地：連線時呼叫 {@code verifyRepairTicket}
+     * （{@code VerifyRepairTicketRequest{result: passed}}，帶 {@code Idempotency-Key}），成功則
+     * 單轉為已結案、{@code verified_by}＝該主管、{@code verified_at}＝現在；後端回 409 時單
+     * 不變；離線時擋在送出之前、不呼叫後端、不進離線佇列。回寫：換頁後的畫面或對話框——
+     * 哪一種由 Then 去驗，這裡只按到通過為止。
+     */
+    @當("{string} 在工務單詳情按通過")
+    public void managerTapsPass(String managerName) {
+        context.requireTicketDetailOpenAs(managerName);
+        world.tapTestId(MANAGER_PASS_BUTTON, SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 怎麼做：點描邊「不通過」（{@code managerTicket.fail-button}）升起不通過面板，在
+     * {@code managerTicket.fail-sheet.reason-field} 輸入原因，點
+     * {@code managerTicket.fail-sheet.submit-button}。權威狀態落地：連線時呼叫
+     * {@code verifyRepairTicket}（{@code VerifyRepairTicketRequest{result: failed, reason: 原因}}，
+     * 帶 {@code Idempotency-Key}），成功則依後端換人判定退回原處理人名下或工務待認領；後端回
+     * 409 時單不變、面板收起；離線時擋在送出之前、面板裡的原因保留。回寫：驗收結果卡或
+     * 對話框，由 Then 去驗。
+     */
+    @當("{string} 在工務單詳情按不通過，寫下原因 {string} 並送出")
+    public void managerFailsWithReason(String managerName, String reason) {
+        if (reason.isBlank()) {
+            throw new IllegalArgumentException("這句的原因不能是空白；原因留空的案例請用「打開不通過面板，不寫原因」");
+        }
+        openFailSheet(managerName);
+        world.typeInto(MANAGER_FAIL_REASON_FIELD, SCREEN_TIMEOUT, reason);
+        world.tapTestId(MANAGER_FAIL_SUBMIT_BUTTON, SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 怎麼做：點描邊「不通過」升起不通過面板，原因欄留空，停在面板上。權威狀態落地：不呼叫
+     * 後端，單仍為已完修。回寫：面板上的送出鈕狀態（由「不通過面板的送出鈕為」去驗）。
+     */
+    @當("{string} 在工務單詳情打開不通過面板，不寫原因")
+    public void managerOpensFailSheetWithoutReason(String managerName) {
+        openFailSheet(managerName);
+        // 刻意不輸入、不點送出：留給 Then 驗送出鈕禁用且後端沒收到這次驗收不通過。
+    }
+
+    /**
+     * 怎麼做：在驗收結果卡點唯一的「回到待驗收」（{@code managerTicket.result.back-button}），
+     * 等清單畫面（{@code manager.queue}）出現。權威狀態落地：不改後端。回寫：清單畫面——
+     * 清單內容與首頁格數由 Then 去驗。
+     */
+    @當("{string} 從驗收結果卡回到待驗收清單")
+    public void managerBackToVerifyQueueFromResultCard(String managerName) {
+        if (!world.loggedInStaff().name().equals(managerName)) {
+            throw new IllegalStateException("畫面上登入的不是「" + managerName + "」——"
+                    + "劇本是否漏了讓該主管送出驗收不通過、停在結果卡的那一句？");
+        }
+        world.waitForTestId(MANAGER_RESULT_CARD, SCREEN_TIMEOUT);
+        world.tapUntilVisible(MANAGER_RESULT_BACK_BUTTON, MANAGER_QUEUE, SCREEN_TIMEOUT);
+    }
+
+    /** 點「不通過」升起不通過面板，等原因欄與送出鈕都在畫面上才算面板開好。 */
+    private void openFailSheet(String managerName) {
+        context.requireTicketDetailOpenAs(managerName);
+        world.tapTestId(MANAGER_FAIL_BUTTON, SCREEN_TIMEOUT);
+        world.waitForTestId(MANAGER_FAIL_REASON_FIELD, SCREEN_TIMEOUT);
+        world.waitForTestId(MANAGER_FAIL_SUBMIT_BUTTON, SCREEN_TIMEOUT);
     }
 
     /**

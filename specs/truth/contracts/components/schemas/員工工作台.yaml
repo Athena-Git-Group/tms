@@ -26,7 +26,7 @@ MyToday:
       type: integer
       format: int32
       description: >-
-        今天完成單數：本人 done 或 inspected 的任務數。首頁四格不顯示，供完成慶祝頁「第 N 單」使用。
+        今天完成單數：本人 done、inspected 或 closed 的任務數。首頁四格不顯示，供完成慶祝頁「第 N 單」使用。
     adHocCompleted:
       type: integer
       format: int32
@@ -41,14 +41,14 @@ MyToday:
         「屬於今天」依 work_date 有無分兩種算法：有 work_date 的（排房建出來的打掃類）比
         work_date 等於今天；work_date 為 null 的（備品、其他、修繕這幾類建單時不填工作日）
         改看狀態——未結束（accepted、doing、deferred、interrupted）就算今天手上的單，
-        已結束（done、inspected）看 done_at 是否落在今天。
+        已結束（done、inspected、closed）看 done_at 是否落在今天。
         這兩把尺與同一支端點的其他欄位一致：未結束的那把與 nextTasks、remainingMinutes 相同，
         已結束的那把與今日完成單數相同。只比 work_date 會讓不填工作日的三類任務永遠不在清單裡，
         與「nextTasks 是 todayTasks 的子集」這條契約自相矛盾。
         因此 accepted（已接單）、doing（進行中）、deferred（已延後）、interrupted（已中斷）、
-        done（今天已完成）、inspected（今天已查房通過）全部都在裡面；池中還沒人接的單不在這裡（見 listDeptPool）。
+        done（今天已完成）、inspected（今天已查房通過）、closed（今天完修、已結案的工務單）全部都在裡面；池中還沒人接的單不在這裡（見 listDeptPool）。
         排序口徑與首頁任務列呈現順序一致，由後端排好後直接依序呈現，App 不再重排：
-        未結束的單（accepted、doing、deferred、interrupted）排在已結束的單（done、inspected）之前；
+        未結束的單（accepted、doing、deferred、interrupted）排在已結束的單（done、inspected、closed）之前；
         同一組內 doing 最前，其餘依房號遞增；已結束的單依完成時間由新到舊。
         和 nextTasks 的關係：nextTasks 是本陣列中 accepted 那些單的推薦子集，另有自己的推薦排序，
         只用於首頁「下一間」卡；需要列出或進入今天任何一張單一律用 todayTasks。
@@ -96,7 +96,9 @@ MyToday:
     engineeringSummary:
       type: object
       nullable: true
-      description: 只有工務部門（dept=engineering）的呼叫者才有值；其他部門為 null。本 plan 新增，供工務視角今日進度卡使用。
+      description: >-
+        只有部門是工務（dept=engineering）的呼叫者才有值，包含工務員工與工務主管；其他呼叫者為 null。
+        供工務首頁今日進度卡使用；工務主管首頁的「我名下的單」讀這裡的 tickets。
       required:
       - openCount
       - completedToday
@@ -110,7 +112,7 @@ MyToday:
         completedToday:
           type: integer
           format: int32
-          description: 今天已完修：本人今天 done 的工務單筆數。
+          description: 今天已完修：處理人是本人、完修時間落在今天、狀態為 done 或 closed 的工務單筆數（驗收通過或不需處理結案後仍計入）。
         urgentCount:
           type: integer
           format: int32
@@ -145,13 +147,14 @@ MyToday:
         tickets:
           type: array
           description: >-
-            本人手上與今天結案的工務單清單，供工務首頁的單列與進入工務單詳情使用。
-            收錄口徑：處理人是本人且狀態為 accepted 或 doing 的工務單，加上處理人是本人、今天完修（done）的工務單
-            ——今天已完修的也要給，工務才能打開它看主管驗收狀態（RepairTicket.verifiedBy／verifiedAt）。
-            還在待認領（pool）、等審核（pending_review）、被退回（rejected）、已撤回（cancelled）的單不在這裡。
-            排序：急件（isUrgent=true）在前，其次未結案（accepted、doing）在已完修（done）之前，
+            本人手上與今天完修的工務單清單，供工務首頁（以及工務主管首頁的「我名下的單」）的單列與進入工務單詳情使用。
+            收錄口徑：處理人是本人且狀態為 accepted 或 doing 的工務單（含驗收不通過退回本人名下重修的單），
+            加上處理人是本人、今天完修、狀態為 done 或 closed 的工務單。
+            今天已完修的也要給，工務才能打開它看主管驗收狀態。
+            還在待認領（pool）、已撤回（cancelled）的單不在這裡。
+            排序：急件（isUrgent=true）在前，其次未完修（accepted、doing）在已完修（done、closed）之前，
             同組內依開單時間由舊到新。
-            筆數關係：openCount 等於本陣列中 accepted 與 doing 的筆數，completedToday 等於其中 done 的筆數。
+            筆數關係：openCount 等於本陣列中 accepted 與 doing 的筆數，completedToday 等於其中 done 與 closed 的筆數。
           items:
             $ref: '#/EngineeringTicket'
 TodayTask:
@@ -191,9 +194,10 @@ TodayTask:
       - interrupted
       - done
       - inspected
+      - closed
       description: >-
-        與 tasks.state 同一套值；本陣列只會出現有負責人且今日有效的這六個值，
-        cancelled 不收錄，還在池中（pool）、等審核（pending_review）、被退回（rejected）的單也不在這裡。
+        與 tasks.state 同一套值；本陣列只會出現有負責人且今日有效的這七個值，closed 只有工務單會出現。
+        cancelled 不收錄，還在池中（pool）的單也不在這裡。
     redoCount:
       type: integer
       format: int32
@@ -208,7 +212,7 @@ TodayTask:
       format: int32
       description: >-
         已做分鐘，等同 TaskDetail.elapsedMinutes 的口徑：accepted 與 deferred 為 0，
-        doing 為目前累計，interrupted 為中斷前累計，done 與 inspected 為完成時的累計（不含中斷期間）。
+        doing 為目前累計，interrupted 為中斷前累計，done、inspected 與 closed 為完成時的累計（不含中斷期間）。
     holdReason:
       type: string
       nullable: true
@@ -278,14 +282,23 @@ EngineeringTicket:
       - accepted
       - doing
       - done
+      - closed
       description: >-
-        與 RepairTicketSummary.state 同一套值；本陣列只會出現已接單（accepted）、維修中（doing）
-        與今天已完修（done）這三個值。
+        與 RepairTicketSummary.state 同一套值；本陣列只會出現已接單（accepted）、維修中（doing）、
+        今天已完修等驗收（done）與今天完修且已結案（closed）這四個值。
     isUrgent:
       type: boolean
       description: 目前是否仍視為急件；主管降級後為 false，口徑與 RepairTicketSummary.isUrgent 相同。
     source:
       $ref: '#/PoolSource'
+    verificationReturnReason:
+      type: string
+      nullable: true
+      description: >-
+        這張單正處於驗收不通過、退回重修中時，最近一次不通過的原因（RepairTicket.lastVerifyFailedReason），
+        單卡據此標「驗收退回」並把原因當副文。「退回重修中」指 state 為 accepted 或 doing、
+        而且最近一次不通過之後還沒再完修；再完修（done）或結案（closed）後為 null，從沒被退回過也是 null。
+        判定人與時間打開詳情才取。
 NextTask:
   type: object
   required:
@@ -395,6 +408,13 @@ PoolItem:
       type: string
       nullable: true
       description: 接手進度交代，例如「浴室已刷完，還沒換床單」。
+    verificationReturnReason:
+      type: string
+      nullable: true
+      description: >-
+        只有工務池的工務單會有值：這張單是被驗收不通過退回工務待認領、還沒再完修時，最近一次不通過的原因
+        （RepairTicket.lastVerifyFailedReason），單卡據此標「驗收退回」並把原因當副文；其他單為 null。
+        工務池的 source 仍依開單路徑換算（staff_report 或 desk_forward），不因驗收退回而改變，分流磚的張數也不變。
     createdAt:
       type: string
       format: date-time

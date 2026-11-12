@@ -10,11 +10,11 @@ Error:
     photo_not_uploaded（422，有照片還沒上傳成功）；
     completion_photo_required（422，「需要完修照片」）；
     already_claimed（409，「已被工務認領」）；
-    ticket_closed（409，工務單已結案）；
+    ticket_closed（409，工務單已完修、已結案或已撤回，不能再補照片）；
     credentials_invalid（401，「員工編號或密碼不正確」；員工編號不存在時提示相同，不洩漏是否存在）；
     account_locked（429，context 帶 lockedUntil、remainingMinutes）；
     account_disabled（403，帳號停用，即使密碼正確也被拒）；
-    reject_reason_required（422，主管退回工務單時原因空白）；
+    verification_reason_required（422，verifyRepairTicket 送驗收不通過時原因去掉頭尾空白後為空）；
     repair_source_missing（422，createRepairTicket 沒有提供 sourceTaskId、roomId 或 isPublicArea 任何一種來源）；
     repair_source_conflict（422，同時提供 sourceTaskId 與 roomId 或 isPublicArea）；
     room_ticket_not_requeueable（409，客房工務單不能放回工務待認領，只能暫停）；
@@ -26,8 +26,10 @@ Error:
     inspection_items_mismatch（422，createInspections 送出的項目集合與飯店現行啟用的查房項目全集不符，少項或多項都算；
     context 帶 missing（少的鍵）、unexpected（多的鍵）與 currentItems（現行集合，每筆 key、label、sortOrder），
     App 用 currentItems 換掉畫面上的項目讓主管重判）。
-    違反狀態機守衛時沿用 state_conflict（409）：工務單的核准、退回、驗收與查房送出撞到單已不在預期狀態
-    （另一位主管先處理、報修人撤回、單被改派或作廢）都回這一個 code，App 顯示「這張單已被處理」並刷新清單。
+    違反狀態機守衛時沿用 state_conflict（409）：工務單的驗收（通過或不通過）與查房送出撞到單已不在預期狀態
+    （另一位主管先處理、單被改派或作廢）都回這一個 code，App 顯示「這張單已被處理」並刷新清單。
+    角色或身分不符一律回 403 forbidden，message 是業務原文、App 直接顯示，例如員工呼叫 verifyRepairTicket、
+    工務主管呼叫 createInspections、主管查自己清的房；這幾種 App 不需要依 code 分辨。
   required:
   - code
   - message
@@ -745,19 +747,17 @@ RepairTicketSummary:
     state:
       type: string
       enum:
-      - pending_review
-      - rejected
       - pool
       - accepted
       - doing
       - done
+      - closed
       - cancelled
       description: >-
-        等主管審核、主管未核准、待認領、已接單、維修中、已完修、已撤回（cancelled 且原因為 staff_withdrew）。
-        pending_review／rejected 是本 plan 新增的狀態值，只有房務報修的一般件（非急件、tasks.source=staff
-        且帶 sourceTaskId）送出後會先進 pending_review；急件（不論來源）、工務自開、櫃檯交辦開單一律直接進 pool，
-        不經過審核。已完修（done）之後是否已驗收是另一組欄位（見 RepairTicket.verifiedBy／verifiedAt），
-        不新增獨立狀態值。
+        待認領、已接單（待開始）、維修中、已完修（等主管驗收）、已結案、已撤回（cancelled 且原因為 staff_withdrew）。
+        開單一律直接進 pool，直接指定處理人時為 accepted。done 不是終點：完修結果為已修好、暫時處理、無法修復時停在 done
+        等主管驗收，驗收通過轉 closed；驗收不通過退回 accepted（原處理人名下）或 pool（工務待認領）重修。
+        完修結果為不需處理（no_action_needed）時完成當下直接 closed，不經 done。closed 只有工務單會出現。
     reporterName:
       type: string
       nullable: true
@@ -776,10 +776,12 @@ PushPayload:
     沒有對應的 HTTP 端點，這裡列出它的形狀，作為 App 解析推播與後端 E2E 斷言的依據。
     unclaimed_reminder_staff／unclaimed_reminder_manager 是待認領未接超時兩段提醒（一般單與急件門檻各自可設定，
     各段只發一次，認領後不再發）；標題例如「319 退房清潔 已等 10 分，還沒人接」、「319 退房清潔 已通知主管」。
-    repair_rejected 是主管退回等審核中（pending_review）的房務報修工務單時發給報修人（repair_tickets.reporter_id）的一封：
-    title 帶房號、單號與「主管未核准」，body 帶退回原因（RepairTicket.rejectReason），例如 title「202 W-0201 主管未核准」、
-    body「照片看不出哪裡鬆」；target 的 kind=ticket、taskId 為該工務單的任務 id，點開進工務單詳情（那裡有「補資料再送出」）。
-    與 task_events.type 的 repair_rejected 同名、同一交易寫入 outbox；主管核准與驗收不另發推播。
+    repair_verification_failed 是主管驗收不通過、而且單回到原處理人名下（RepairVerificationOutcome.destination=assignee）時
+    發給原處理人的一封：title 帶房號、單號與「驗收不通過」，body 是不通過原因（RepairTicket.lastVerifyFailedReason），
+    例如 title「301 W-0108 驗收不通過」、body「刷卡仍偶爾無反應」；公共區域的單以地點代替房號。
+    target 的 kind=ticket、taskId 為該工務單的任務 id，點開進工務單詳情。與 task_events.type 的 repair_verification_failed
+    同名、同一交易寫入 outbox。單回到工務待認領（destination=pool）時不發這一封，也不發 pool_new_request 給工務池，
+    工務照既有方式在待認領看到它。驗收通過與結案都不另發推播。
   required:
   - recipientStaffId
   - event
@@ -809,7 +811,7 @@ PushPayload:
       - shift_end_still_interrupted
       - unclaimed_reminder_staff
       - unclaimed_reminder_manager
-      - repair_rejected
+      - repair_verification_failed
     title:
       type: string
       description: 推播標題全文，例如「305 水電已修好」。

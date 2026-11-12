@@ -55,6 +55,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/tenant-configs/**").hasRole("manager")
                         .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/login").permitAll()
+                        // 撥動後端時鐘的測試端點：只有啟動參數 tms.test-clock.enabled=true 時才有對應的
+                        // controller。這裡一律放行，沒開時請求才會落到「找不到路徑」回 404，
+                        // 而不是被下面的角色規則擋成 401，測試工具才分得出「後端沒開旗標」。
+                        .requestMatchers("/api/v1/test/clock").permitAll()
                         // 本人設定新密碼（contracts changeOwnPassword）：每個角色都要能換自己的密碼，
                         // 所以不套下面「/api/v1 寫入限現場執行部門」的通則，否則櫃檯與老闆一律 403。
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/change-password")

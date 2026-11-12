@@ -23,12 +23,12 @@
     <a class="tab" href="index.html"><span class="glyph"></span>首頁</a>
     <a class="tab active" href="pool.html"><span class="glyph"></span>待認領</a>
     <a class="tab" href="#"><span class="glyph"></span>通知<span class="badge">2</span></a>
-    <a class="tab" href="#"><span class="glyph"></span>我的</a>
+    <a class="tab" href="#" onclick="openMe();return false"><span class="glyph"></span>我的</a>
   </div>
 </div>
 <script src="manager.js"></script>
 <script>
-if (isOffline()) document.getElementById('phone').classList.add('offline');
+applyOffline();
 const KEY = 'managerPoolDept';
 /* 推播帶部門時先寫入這台手機的選擇，再呈現；沒有紀錄視為房務 */
 let dept = Q.get('dept');
@@ -47,11 +47,15 @@ const DATA = {
   },
   engineering: {
     cats: ['全部', '急件', '房務報修', '櫃檯'],
-    items: [
-      { key: '306', no: 'W-0202', room: '306', title: '冷氣不冷', cat: '急件', source: '房務報修', reporter: '阿芳', category: '冷氣', tags: ['急件', '1 張照片'] },
+    items: allTickets().filter(t => t.state === 'pool').map(t => ({
+      key: t.publicArea ? t.no : t.room, pub: !!t.publicArea, no: t.no, room: t.room, title: t.title,
+      cat: t.urgent ? '急件' : t.scheduled ? '其他' : '房務報修', source: t.scheduled ? '定期保養' : '房務報修',
+      reporter: t.reporter, category: t.category, lastFail: t.lastFail,
+      tags: [t.urgent ? '急件' : '', t.lastFail ? '驗收退回' : '', t.publicArea ? '公共區域' : '', t.photos ? t.photos + ' 張照片' : ''].filter(Boolean),
+    })).concat([
       { key: '213', no: 'W-0205', room: '213', title: '吹風機沒電', cat: '房務報修', source: '房務報修', reporter: '小林', category: '水電', tags: ['1 張照片'] },
       { key: '大廳', no: 'W-0206', room: '大廳', title: '自動門感應遲鈍', cat: '櫃檯', source: '櫃檯', reporter: '小葉', category: '其他', tags: ['公共區域', '2 張照片'] },
-    ],
+    ]),
   },
 };
 function setDept(d) { dept = d; try { localStorage.setItem(KEY, d); } catch (e) {} category = '全部'; render(); }
@@ -66,11 +70,11 @@ function render() {
   document.getElementById('cards').innerHTML = shown.length ? shown.map(i => `
     <div class="poolcard ${i.key === highlight ? 'hl' : ''}">
       <div class="top"><span class="room">${i.room}</span>${i.no ? `<span class="ticketno" style="font-size:12px;font-weight:700;color:var(--tertiary-label)">${i.no}</span>` : `<span class="chip">${i.cat}</span>`}</div>
-      <div class="title">${i.room} ${i.title}</div>
+      <div class="title">${i.pub ? '' : i.room + ' '}${i.title}</div>
       <div class="sub">${dept === 'housekeeping'
         ? `來源：${i.source}${i.reason ? ` · ${i.reason}` : ''}${i.progress ? `<br>接手進度：${i.progress}` : ''}`
-        : `${i.source} · ${i.reporter} 報修 · ${i.category}`}</div>
-      <div class="tags">${i.tags.map(x => `<span class="chip ${x === '急件' ? 'urgent' : ''}">${x}</span>`).join('')}</div>
+        : `${i.source}${i.reporter ? ` · ${i.reporter} 報修` : ''} · ${i.category}${i.lastFail ? `<br>${i.lastFail.by} 驗收不通過：${i.lastFail.reason}` : ''}`}</div>
+      <div class="tags">${i.tags.map(x => `<span class="chip ${x === '急件' ? 'urgent' : x === '驗收退回' ? 'returned' : ''}">${x}</span>`).join('')}</div>
     </div>`).join('') : '<div class="empty"><div class="t">這個部門目前沒有在職員工可以搶單</div></div>';
 }
 render();

@@ -1,6 +1,7 @@
 package com.athena.app.bdd.steps.push;
 
 import com.athena.app.bdd.AppiumWorld;
+import com.athena.app.bdd.BackendChannel;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 
@@ -22,6 +23,7 @@ public class PushGivenSteps {
     private static final Pattern HOME = Pattern.compile("^首頁$");
     private static final Pattern POOL_PLAIN = Pattern.compile("^待認領$");
     private static final Pattern TICKET_DETAIL = Pattern.compile("^(\\S+) 的工務單詳情$");
+    private static final Pattern DEPT_POOL_HIGHLIGHT = Pattern.compile("^(房務|工務)待認領並標亮 (\\S+)$");
 
     private final AppiumWorld world;
 
@@ -49,6 +51,12 @@ public class PushGivenSteps {
      * 等句型）必須先鋪好，查不到就讓這一步早爆。App 照 {@code dest} 機械導頁，
      * 不自己查任務類別。
      *
+     * <p>去處是「房務待認領並標亮 X」或「工務待認領並標亮 X」時（主管收的推播），payload 帶
+     * {@code kind}=pool、{@code dept}（housekeeping 或 engineering）與 {@code highlightTaskId}
+     * （契約 PushTarget）；房務池標亮的是房號那張卡、工務池標亮的是單號那張（卡片鍵也一起
+     * 帶在 {@code highlight}）。去處是「首頁」時 {@code kind}=home，App 依登入 session 的
+     * role 與 dept 開外殼，payload 不帶角色。標題只是這則推播的顯示文字，不驗權威文案。
+     *
      * <p>送推播前先以該員工登入（{@link AppiumWorld#ensureLoggedInAs}）：App 的
      * 起始畫面一律是登入殼，點開推播後的去處畫面（待認領池等）要用她的 JWT 向
      * 後端讀資料，沒登入時池子只會顯示載入失敗、沒有卡可標亮。
@@ -59,8 +67,21 @@ public class PushGivenSteps {
         Matcher taskMatcher = TASK_SCREEN.matcher(destination);
         Matcher highlightMatcher = POOL_HIGHLIGHT.matcher(destination);
         Matcher ticketMatcher = TICKET_DETAIL.matcher(destination);
+        Matcher deptPoolMatcher = DEPT_POOL_HIGHLIGHT.matcher(destination);
 
-        if (taskMatcher.matches()) {
+        if (deptPoolMatcher.matches()) {
+            String dept = BackendChannel.dept(deptPoolMatcher.group(1));
+            String key = deptPoolMatcher.group(2);
+            String highlightTaskId;
+            if ("engineering".equals(dept)) {
+                // 工務池的卡以單號指認，單要先由「已有以下工務單」鋪好，查不到就讓這一步早爆。
+                highlightTaskId = world.backend().repairTicketRow(key).get("task_id").toString();
+            } else {
+                world.ensurePoolTask(key, title);
+                highlightTaskId = poolTaskIdByRoom(key);
+            }
+            world.sendPush(title, "", "pool", null, null, key, dept, highlightTaskId);
+        } else if (taskMatcher.matches()) {
             String room = taskMatcher.group(1);
             // 去處房號已有既存任務（「名下有以下任務」先鋪的）就把 taskId 一起放進
             // payload：任務頁的房號反查只蓋得到待認領與下一間推薦（accepted），
@@ -84,6 +105,19 @@ public class PushGivenSteps {
         } else {
             throw new IllegalArgumentException("認不得的去處字串：「" + destination + "」");
         }
+    }
+
+    /** 房號 → 待認領池裡那張任務的 id（{@link AppiumWorld#ensurePoolTask} 保證剛好一張）。 */
+    private String poolTaskIdByRoom(String roomNo) {
+        List<Map<String, Object>> tasks = world.backend().queryRows("""
+                SELECT t.id FROM tasks t
+                JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
+                WHERE t.tenant_id = ? AND r.room_no = ? AND t.state = 'pool'
+                """, world.backend().ensureTenant(), roomNo);
+        if (tasks.size() != 1) {
+            throw new IllegalStateException("房號「" + roomNo + "」在待認領池裡應剛好一張任務，實際 " + tasks.size());
+        }
+        return tasks.get(0).get("id").toString();
     }
 
     /** 房號 → 既存任務 id；剛好一張才帶（多張無從指認哪張是推播講的那張），否則 null。 */

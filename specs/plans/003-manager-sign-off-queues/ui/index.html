@@ -12,11 +12,7 @@
   <div class="content">
     <div class="largetitle">主管首頁</div>
     <div class="offlinebar"><span>目前離線</span><span>待同步 0 筆</span></div>
-    <div class="tiles">
-      <button class="tile inspection" onclick="go('queue.html?kind=inspection')"><span class="cap">待查房</span><span class="num" id="n-inspection">0</span><span class="hint">別人清好的房</span></button>
-      <button class="tile review" onclick="go('queue.html?kind=review')"><span class="cap">待審核</span><span class="num" id="n-review">0</span><span class="hint">房務的報修</span></button>
-      <button class="tile verify" onclick="go('queue.html?kind=verify')"><span class="cap">待驗收</span><span class="num" id="n-verify">0</span><span class="hint">已完修的工務單</span></button>
-    </div>
+    <div id="tiles"></div>
     <div class="sectionlabel"><span>我名下的單</span><span id="mine-count"></span></div>
     <div id="mine"></div>
   </div>
@@ -24,29 +20,59 @@
     <a class="tab active" href="index.html"><span class="glyph"></span>首頁</a>
     <a class="tab" href="pool.html"><span class="glyph"></span>待認領</a>
     <a class="tab" href="#"><span class="glyph"></span>通知<span class="badge">2</span></a>
-    <a class="tab" href="#"><span class="glyph"></span>我的</a>
+    <a class="tab" href="#" onclick="openMe();return false"><span class="glyph"></span>我的</a>
   </div>
 </div>
 <script src="manager.js"></script>
 <script>
-if (isOffline()) document.getElementById('phone').classList.add('offline');
-function go(url) { location.href = carryOffline(url); }
-for (const k of ['inspection', 'review', 'verify']) document.getElementById('n-' + k).textContent = remaining(k).length;
-const mine = Q.get('mine') === '0' ? [] : [
-  { room: '403', title: '退房打掃', sub: '預估 30 分 · 已做 12 分', state: '進行中', cls: 'doing' },
-  { room: '404', title: '退房打掃', sub: '預估 30 分', state: '待開始', cls: '' },
-];
-const box = document.getElementById('mine');
-if (!mine.length) {
-  box.innerHTML = '<div class="empty"><div class="t">今天沒有名下的單</div><div class="s">有需要時可以到待認領看看兩個部門的單</div></div>';
+applyOffline();
+const m = me();
+const verifyCount = verifyQueue().length;
+const tiles = document.getElementById('tiles');
+if (m.kind === 'engineering') {
+  tiles.className = 'tiles one';
+  tiles.innerHTML = `<button class="tile verify" onclick="go('queue.html?kind=verify')">
+      <span class="text"><span class="cap">待驗收</span></span>
+      <span class="num">${verifyCount}</span></button>`;
 } else {
-  document.getElementById('mine-count').textContent = mine.length + ' 張';
-  box.innerHTML = mine.map(t => `
-    <button class="taskcard" onclick="location.href='#'">
-      <span class="room">${t.room}</span>
-      <span class="meta"><div class="title">${t.room} ${t.title}</div><div class="sub">${t.sub}</div></span>
-      <span class="chip ${t.cls}">${t.state}</span>
-    </button>`).join('');
+  tiles.className = 'tiles';
+  tiles.innerHTML = `
+    <button class="tile inspection" onclick="go('queue.html?kind=inspection')"><span class="cap">待查房</span><span class="num">${inspectionQueue().length}</span><span class="hint">別人清好的房</span></button>
+    <button class="tile verify" onclick="go('queue.html?kind=verify')"><span class="cap">待驗收</span><span class="num">${verifyCount}</span><span class="hint">已完修的工務單</span></button>`;
+}
+
+const box = document.getElementById('mine');
+const noMine = Q.get('mine') === '0';
+if (m.kind === 'engineering') {
+  const STATE = { accepted: ['待開始', ''], doing: ['維修中', 'doing'], verify: ['已完修 · 等驗收', ''] };
+  const mine = noMine ? [] : allTickets().filter(t => t.assignee === m.name && STATE[t.state]);
+  if (!mine.length) {
+    box.innerHTML = '<div class="empty"><div class="t">目前沒有名下的工務單</div><div class="s">有需要時可以到待認領看看兩個部門的單</div></div>';
+  } else {
+    document.getElementById('mine-count').textContent = mine.length + ' 張';
+    box.innerHTML = mine.map(t => `
+      <button class="taskcard" onclick="go('ticket.html?no=${t.no}')">
+        <span class="room">${t.room}</span>
+        <span class="meta"><div class="ticketno" style="font-size:12px;font-weight:700;color:var(--tertiary-label)">${t.no}</div><div class="title">${t.title}</div><div class="sub">${t.reporter === m.name ? '自己開的單' : t.reporter + ' 報修'} · ${t.category}</div></span>
+        <span class="chip ${STATE[t.state][1]}">${STATE[t.state][0]}</span>
+      </button>`).join('');
+  }
+} else {
+  const mine = noMine ? [] : [
+    { room: '403', title: '退房打掃', sub: '預估 30 分 · 已做 12 分', state: '進行中', cls: 'doing' },
+    { room: '404', title: '退房打掃', sub: '預估 30 分', state: '待開始', cls: '' },
+  ];
+  if (!mine.length) {
+    box.innerHTML = '<div class="empty"><div class="t">今天沒有名下的單</div><div class="s">有需要時可以到待認領看看兩個部門的單</div></div>';
+  } else {
+    document.getElementById('mine-count').textContent = mine.length + ' 張';
+    box.innerHTML = mine.map(t => `
+      <button class="taskcard" onclick="location.href='#'">
+        <span class="room">${t.room}</span>
+        <span class="meta"><div class="title">${t.room} ${t.title}</div><div class="sub">${t.sub}</div></span>
+        <span class="chip ${t.cls}">${t.state}</span>
+      </button>`).join('');
+  }
 }
 </script>
 </body>

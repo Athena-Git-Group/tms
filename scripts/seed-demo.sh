@@ -24,16 +24,21 @@
 # 帳密（密碼全部都是 demo1234）
 #   hk1   小美     房務員工，登入後進房務首頁
 #   mt1   阿強     工務員工，登入後進工務首頁
-#   mg1   王主管   主管，帳號沒有部門，登入後進房務首頁
+#   mg1   王主管   房務主管，帳號沒有部門，登入後進主管首頁（待查房與待驗收兩格）
+#   mg2   陳主管   工務主管，部門是工務，登入後進主管首頁（只有待驗收一格）
 #   另外種了阿芳（hk2）、阿義（mt2）、林櫃檯（fd1）三個配角帳號，密碼同上，
 #   用來當交辦的作者與工務單的報修人，不是給人登入的主角。
 #
 # 會種出什麼
-#   租戶「示範飯店」（tenant_id = 1）底下：6 位員工、18 間房、今天的排房計畫、
+#   租戶「示範飯店」（tenant_id = 1）底下：7 位員工、18 間房、今天的排房計畫、
 #   打掃與查房 SOP 項、小美名下 7 張涵蓋六種狀態的今日任務、房務待認領 6 張、
-#   工務待認領 5 張、阿強手上 2 張加今天已完修 2 張、王主管名下 2 張、三位
+#   工務待認領 5 張、阿強手上 2 張加今天已完修 3 張、王主管名下 2 張、三位
 #   主角各 5–6 則通知（各留幾則未讀撐出分頁列徽章），以及 302 房那張進行中的
 #   單的配套（SOP 勾記、同房工務單、房務交班的交辦）。
+#   主管首頁的格子都有單：待查房有小美今天做完的 301 與阿芳昨天做完的 205，
+#   只有王主管看得到；待驗收有阿強完修但還沒人驗收的 W-0108（帶一張完修照片），
+#   王主管與陳主管看到的是同一張。W-0109 已由王主管驗收通過、已結案；W-0110
+#   「305 浴室燈不亮」以不需處理完修、沒有照片、直接結案。這兩張都不在待驗收裡。
 #
 # 重複執行
 #   腳本開頭會先刪掉 tenant_id = 1 的全部業務資料再重種，所以跑幾次結果都一樣，
@@ -85,6 +90,7 @@ DELETE FROM repair_tickets             WHERE tenant_id = 1;
 DELETE FROM repair_ticket_counters     WHERE tenant_id = 1;
 DELETE FROM room_memory                WHERE tenant_id = 1;
 DELETE FROM plan_rooms                 WHERE tenant_id = 1;
+DELETE FROM push_deliveries            WHERE tenant_id = 1;
 DELETE FROM notifications              WHERE tenant_id = 1;
 DELETE FROM desk_notes                 WHERE tenant_id = 1;
 DELETE FROM guest_sessions             WHERE tenant_id = 1;
@@ -113,7 +119,9 @@ INSERT INTO staff_accounts (id, tenant_id, name, login_id, password_hash, role, 
   ('00000000-0000-7000-8000-00000000a003', 1, '王主管', 'mg1', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'manager',      NULL,           true, 'active', now(), now()),
   ('00000000-0000-7000-8000-00000000a004', 1, '林櫃檯', 'fd1', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'frontdesk',    'frontdesk',    true, 'active', now(), now()),
   ('00000000-0000-7000-8000-00000000a005', 1, '阿芳',   'hk2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'housekeeping', 'housekeeping', true, 'active', now(), now()),
-  ('00000000-0000-7000-8000-00000000a006', 1, '阿義',   'mt2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'engineering',  'engineering',  true, 'active', now(), now());
+  ('00000000-0000-7000-8000-00000000a006', 1, '阿義',   'mt2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'engineering',  'engineering',  true, 'active', now(), now()),
+  -- 陳主管是工務主管：role=manager 加上 dept=engineering，後端與 App 都靠這兩欄分出主管種類。
+  ('00000000-0000-7000-8000-00000000a007', 1, '陳主管', 'mg2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'manager',      'engineering',  true, 'active', now(), now());
 
 -- 房間。每一張單都 JOIN 房間取房號，房間不在單就整張從畫面上消失。
 -- 最後那間「公共區域」是佔位房：tasks.room_id 不可為空，沒有房號的單（大廳、
@@ -250,7 +258,7 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    NULL, NULL, NULL, now() - interval '20 minutes', now(), 0, NULL,
    NULL, false, NULL, false, 0, false, false, 'system', NULL, NULL, '大廳定時巡檢', NULL),
   ('00000000-0000-7000-8000-00000000d013', 1, 'repair', 'desk', '00000000-0000-7000-8000-000000000202', 'housekeeping', 'pool', 1,
-   NULL, '202 窗簾掛勾鬆脫', NULL, 20,
+   NULL, '202 浴室置物架鬆動', NULL, 20,
    NULL, NULL, NULL, now() - interval '45 minutes', now(), 0, NULL,
    NULL, false, NULL, false, 0, false, false, 'desk_forward', NULL, NULL, NULL, 'staff_reminded'),
   ('00000000-0000-7000-8000-00000000d014', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000203', 'housekeeping', 'pool', 1,
@@ -288,7 +296,10 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    NULL, false, NULL, false, 0, false, false, 'system', NULL, NULL, '公區巡檢規則', 'manager_notified'),
 
   -- 第四群是阿強（mt1）的工務單。工務首頁三格的算法是：手上＝待開始加進行中、
-  -- 今天已完修＝今天完修的、急件＝手上那些裡標急件的，所以這四張各占一格。
+  -- 今天已完修＝今天完修的（已完修與已結案都算）、急件＝手上那些裡標急件的。
+  -- 301（W-0108）已完修、等主管驗收；405（W-0109）已由王主管驗收通過而結案；
+  -- 305 浴室燈不亮（W-0110）到場發現是客人沒找到開關，以不需處理完修，
+  -- 完成當下就結案，不經過等驗收。
   ('00000000-0000-7000-8000-00000000d030', 1, 'repair', 'staff', '00000000-0000-7000-8000-000000000305', 'engineering', 'accepted', 1,
    '00000000-0000-7000-8000-00000000a002', '305 冷氣滴水', NULL, 40,
    NULL, NULL, NULL, now() - interval '50 minutes', now(), 0, NULL,
@@ -301,13 +312,19 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    '00000000-0000-7000-8000-00000000a002', '301 門鎖電池更換', NULL, 20,
    now() - interval '4 hours', now() - interval '100 minutes', NULL, now() - interval '5 hours', now(), 2400, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
-  ('00000000-0000-7000-8000-00000000d033', 1, 'repair', 'desk', '00000000-0000-7000-8000-000000000405', 'engineering', 'done', 1,
+  ('00000000-0000-7000-8000-00000000d033', 1, 'repair', 'desk', '00000000-0000-7000-8000-000000000405', 'engineering', 'closed', 1,
    '00000000-0000-7000-8000-00000000a002', '405 電視遙控器失靈', NULL, 15,
    now() - interval '70 minutes', now() - interval '40 minutes', NULL, now() - interval '3 hours', now(), 1200, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
+  -- event_seq 是 2：除了下面統一補的 created，這張還有一筆帶完修結果的 completed。
+  ('00000000-0000-7000-8000-00000000d034', 1, 'repair', 'staff', '00000000-0000-7000-8000-000000000305', 'engineering', 'closed', 2,
+   '00000000-0000-7000-8000-00000000a002', '305 浴室燈不亮', NULL, 15,
+   now() - interval '2 hours', now() - interval '110 minutes', NULL, now() - interval '150 minutes', now(), 600, NULL,
+   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
 
-  -- 第五群是王主管（mg1）名下的兩張房務單。主管帳號沒有部門，登入後進的是房務
-  -- 首頁，而首頁只列自己名下的單——不給他兩張，主管一登入就是一片空白。
+  -- 第五群是王主管（mg1）名下的兩張房務單。主管登入後進的是主管首頁，這兩張
+  -- 在那裡看不到，留著是讓「我的」分頁與排除本人清的房有東西可對：403 是主管
+  -- 自己在清的房，做完後不會出現在他自己的待查房裡。
   ('00000000-0000-7000-8000-00000000d040', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000403', 'housekeeping', 'doing', 1,
    '00000000-0000-7000-8000-00000000a003', '403 退房打掃', NULL, 30,
    now() - interval '15 minutes', NULL, current_date, now() - interval '2 hours', now(), 0, now() - interval '10 minutes',
@@ -315,6 +332,15 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
   ('00000000-0000-7000-8000-00000000d041', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000404', 'housekeeping', 'accepted', 1,
    '00000000-0000-7000-8000-00000000a003', '404 退房打掃', NULL, 30,
    NULL, NULL, current_date, now() - interval '2 hours', now(), 0, NULL,
+   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
+
+  -- 第六群是主管首頁待查房要用到的單。待查房看的是打掃類、done、不是王主管自己清的
+  -- 單，小美的 301（第一群 d005）已經是一張；這裡再補一張阿芳（hk2）昨天做完的
+  -- 205，讓清單上的跨日日期標籤看得到。work_date 與 done_at 都是昨天，同房今天
+  -- 沒有別的單，排房計畫的唯一鍵也不會撞。
+  ('00000000-0000-7000-8000-00000000d042', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000205', 'housekeeping', 'done', 1,
+   '00000000-0000-7000-8000-00000000a005', '205 退房打掃', NULL, 30,
+   now() - interval '1 day 3 hours', now() - interval '1 day 150 minutes', current_date - 1, now() - interval '1 day 4 hours', now() - interval '1 day', 1800, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL);
 
 -- 每張單補第一筆 created 事件。待認領單卡的「等了幾分鐘」是從最後一筆 created
@@ -327,6 +353,11 @@ SELECT 1, id, 1, 'created', 'system', NULL,
                           'work_date', work_date),
        created_at
 FROM tasks WHERE tenant_id = 1;
+
+-- 305 浴室燈不亮的完修事件。以不需處理完修的這一筆就是結案事件，不另寫驗收事件。
+INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at) VALUES
+  (1, '00000000-0000-7000-8000-00000000d034', 2, 'completed', 'engineering', '00000000-0000-7000-8000-00000000a002',
+   '{"resolutionType": "no_action_needed"}'::jsonb, now() - interval '110 minutes');
 
 -- 工務單延伸列。每一張修繕任務都要有一列，單號、分類、報修人、急件旗標都在
 -- 這裡；少了它，工務首頁的單列沒有單號、任務頁的同房工務單也查不到。
@@ -341,15 +372,35 @@ INSERT INTO repair_tickets (task_id, tenant_id, ticket_no, room_id, category, de
   ('00000000-0000-7000-8000-00000000d030', 1, 'W-0106', '00000000-0000-7000-8000-000000000305', 'air_conditioning',    '出風口會滴水到地毯，今天有 VIP 入住',        '00000000-0000-7000-8000-00000000a005', NULL, NULL, now() - interval '50 minutes', true),
   ('00000000-0000-7000-8000-00000000d031', 1, 'W-0107', '00000000-0000-7000-8000-000000000502', 'plumbing_electrical', '馬桶水箱一直補水停不下來',                   '00000000-0000-7000-8000-00000000a001', NULL, NULL, now() - interval '2 hours',    false),
   ('00000000-0000-7000-8000-00000000d032', 1, 'W-0108', '00000000-0000-7000-8000-000000000301', 'door_lock',           '門鎖低電量警示',                             '00000000-0000-7000-8000-00000000a001', NULL, '更換四顆三號電池，刷卡測試三次正常', now() - interval '5 hours', false),
-  ('00000000-0000-7000-8000-00000000d033', 1, 'W-0109', '00000000-0000-7000-8000-000000000405', 'furniture_equipment', '電視遙控器按了沒反應',                       '00000000-0000-7000-8000-00000000a004', NULL, '更換遙控器與電池，頻道測試正常',     now() - interval '3 hours', false);
+  ('00000000-0000-7000-8000-00000000d033', 1, 'W-0109', '00000000-0000-7000-8000-000000000405', 'furniture_equipment', '電視遙控器按了沒反應',                       '00000000-0000-7000-8000-00000000a004', NULL, '更換遙控器與電池，頻道測試正常',     now() - interval '3 hours', false),
+  ('00000000-0000-7000-8000-00000000d034', 1, 'W-0110', '00000000-0000-7000-8000-000000000305', 'plumbing_electrical', '浴室燈按了不亮',                             '00000000-0000-7000-8000-00000000a005', NULL, '燈正常，開關在門邊',                 now() - interval '150 minutes', false);
 
 -- 取號計數器撥到最後一號，在 App 裡開的新工務單才不會跟上面這幾張撞號。
-INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (1, 109);
+INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (1, 110);
 
--- 其中一張完修單標成主管已驗收，驗收狀態才不是一片空白。
+-- 三張完修單的完修結果：產品在完修那一刻寫 resolution_type，直接種成已完修或
+-- 已結案的單沒有經過那一步，要自己補，不然待驗收清單與詳情的完修結果會是空的。
+-- W-0110 是不需處理，所以它沒有完修照片，也不會出現在待驗收。
+UPDATE repair_tickets
+   SET resolution_type = 'fixed'
+ WHERE tenant_id = 1 AND ticket_no IN ('W-0108', 'W-0109');
+UPDATE repair_tickets
+   SET resolution_type = 'no_action_needed'
+ WHERE tenant_id = 1 AND ticket_no = 'W-0110';
+
+-- W-0109 由王主管驗收通過而結案，驗收人與時間要跟 tasks.state=closed 對得上；
+-- W-0108 留著不驗收，它就是主管首頁待驗收那一格的單。不需處理結案的 W-0110
+-- 沒有經過驗收，驗收人維持 NULL。
 UPDATE repair_tickets
    SET verified_by = '00000000-0000-7000-8000-00000000a003', verified_at = now() - interval '30 minutes'
  WHERE tenant_id = 1 AND ticket_no = 'W-0109';
+
+-- W-0108 的完修照片。照片本體不入庫，storage_ref 照產品碼 RepairService.markUploaded
+-- 的寫法是 upload: 接照片 id；App 的工務單詳情只拿 id、狀態與張數，不會去抓本體。
+INSERT INTO repair_photos (id, tenant_id, ticket_task_id, purpose, status, storage_ref, taken_at, uploaded_by, created_at, uploaded_at) VALUES
+  ('00000000-0000-7000-8000-00000000e601', 1, '00000000-0000-7000-8000-00000000d032', 'completion', 'uploaded',
+   'upload:00000000-0000-7000-8000-00000000e601', now() - interval '105 minutes', '00000000-0000-7000-8000-00000000a002',
+   now() - interval '105 minutes', now() - interval '104 minutes');
 
 -- 302 那張進行中的單的 SOP 勾記：三項已勾、一項跳過、兩項還沒做，步驟條才有
 -- 進度可看。勾記與 SOP 項是用 item_key 對起來的，值要跟上面 sop_items 一致。
@@ -387,7 +438,7 @@ INSERT INTO room_memory (id, tenant_id, room_id, kind, summary, occurred_at) VAL
 INSERT INTO notifications (id, tenant_id, recipient_staff_id, title, body, target, event, created_at, read_at) VALUES
   ('00000000-0000-7000-8000-00000000e501', 1, '00000000-0000-7000-8000-00000000a001', '306 冷氣不冷已判定為急件', '住客今天入住，請優先處理',
    '{"kind": "pool", "dept": "engineering", "highlightTaskId": "00000000-0000-7000-8000-00000000d020"}'::jsonb, 'repair_urgent',             now() - interval '8 minutes',  NULL),
-  ('00000000-0000-7000-8000-00000000e502', 1, '00000000-0000-7000-8000-00000000a001', '202 窗簾掛勾鬆脫還沒有人接', '進池 45 分鐘了',
+  ('00000000-0000-7000-8000-00000000e502', 1, '00000000-0000-7000-8000-00000000a001', '202 浴室置物架鬆動還沒有人接', '進池 45 分鐘了',
    '{"kind": "pool", "dept": "housekeeping", "highlightTaskId": "00000000-0000-7000-8000-00000000d013"}'::jsonb, 'unclaimed_reminder_staff',  now() - interval '15 minutes', NULL),
   ('00000000-0000-7000-8000-00000000e503', 1, '00000000-0000-7000-8000-00000000a001', '405 加毛巾 ×2 進了待認領', '住客掃碼送出的需求',
    '{"kind": "pool", "dept": "housekeeping", "highlightTaskId": "00000000-0000-7000-8000-00000000d011"}'::jsonb, 'pool_new_request',          now() - interval '5 minutes',  NULL),
@@ -436,6 +487,19 @@ SELECT '  任務 ' || count(*) || ' 張（房務待認領 '
        || count(*) FILTER (WHERE state = 'pool' AND dept = 'engineering') || '）'
   FROM tasks WHERE tenant_id = 1;
 SELECT '  工務單 ' || count(*) || ' 張' FROM repair_tickets WHERE tenant_id = 1;
+-- 王主管是房務主管，看待查房與待驗收；陳主管是工務主管，只看待驗收。
+-- 兩種主管看到的待驗收是同一份，所以只算一次。
+SELECT '  主管首頁：王主管 待查房 '
+       || (SELECT count(*) FROM tasks WHERE tenant_id = 1 AND type = 'cleaning' AND state = 'done'
+            AND assignee_id IS DISTINCT FROM '00000000-0000-7000-8000-00000000a003')
+       || '、待驗收 ' || v.n || '；陳主管 待驗收 ' || v.n
+  FROM (SELECT count(*) AS n FROM tasks t JOIN repair_tickets r ON r.task_id = t.id AND r.tenant_id = t.tenant_id
+         WHERE t.tenant_id = 1 AND t.type = 'repair' AND t.state = 'done'
+           AND r.resolution_type IS DISTINCT FROM 'no_action_needed') v;
+SELECT '  工務單已結案 ' || count(*) FILTER (WHERE r.resolution_type IS DISTINCT FROM 'no_action_needed')
+       || ' 張、不需處理結案 ' || count(*) FILTER (WHERE r.resolution_type = 'no_action_needed') || ' 張'
+  FROM tasks t JOIN repair_tickets r ON r.task_id = t.id AND r.tenant_id = t.tenant_id
+ WHERE t.tenant_id = 1 AND t.state = 'closed';
 SELECT '  通知 ' || count(*) || ' 則（未讀 ' || count(*) FILTER (WHERE read_at IS NULL) || '）'
   FROM notifications WHERE tenant_id = 1;
 SQL
@@ -444,6 +508,7 @@ cat <<'EOF'
 [seed-demo] 可以登入的帳號（密碼都是 demo1234）：
   hk1  小美    房務員工
   mt1  阿強    工務員工
-  mg1  王主管  主管
+  mg1  王主管  房務主管
+  mg2  陳主管  工務主管
 [seed-demo] 跑過 app/bdd 的 BDD 之後這份資料會被清掉，想再玩就再跑一次這支腳本。
 EOF

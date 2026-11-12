@@ -1,6 +1,7 @@
 package com.athena.tms.bdd.steps.common;
 
 import com.athena.tms.bdd.support.KafkaGroupAwait;
+import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.RecordingPushSender;
 import com.athena.tms.config.KafkaTopicsProperties;
 import io.cucumber.java.Before;
@@ -10,7 +11,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
- * 每個 scenario 開始前清空業務資料，避免跨 feature 的唯一鍵碰撞（例如兩個 feature 都用 305 房）。
+ * 每個 scenario 開始前還原測試時鐘並清空業務資料，避免跨 feature 的唯一鍵碰撞（例如兩個 feature 都用 305 房）。
  * 保留 flyway_schema_history 與 tenants：租戶由 TenantFixtures 快取重用，schema 歷史不可動。
  * 以 information_schema 動態列表，之後加表不必回來改這裡。
  */
@@ -20,16 +21,19 @@ public class ResetHooks {
     private final KafkaGroupAwait kafkaGroupAwait;
     private final KafkaTopicsProperties topics;
     private final RecordingPushSender recordingPushSender;
+    private final MutableClock clock;
 
     public ResetHooks(
             JdbcClient jdbc,
             KafkaGroupAwait kafkaGroupAwait,
             KafkaTopicsProperties topics,
-            RecordingPushSender recordingPushSender) {
+            RecordingPushSender recordingPushSender,
+            MutableClock clock) {
         this.jdbc = jdbc;
         this.kafkaGroupAwait = kafkaGroupAwait;
         this.topics = topics;
         this.recordingPushSender = recordingPushSender;
+        this.clock = clock;
     }
 
     /**
@@ -41,6 +45,15 @@ public class ResetHooks {
         awaitNoPendingPushOutbox(Duration.ofSeconds(10));
         kafkaGroupAwait.awaitCaughtUp("tms-push-sender", topics.getPush(), Duration.ofSeconds(15));
         recordingPushSender.reset();
+    }
+
+    /**
+     * 測試時鐘是單例，前一個情境撥過的時間（例如撥到班別之外）不還原就會帶進下一個情境，
+     * 讓依賴「現在」的判定隨執行順序改變。每個情境開場還原成預設的測試日中午。
+     */
+    @Before(order = 1)
+    public void resetClock() {
+        clock.reset();
     }
 
     /**

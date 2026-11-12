@@ -57,7 +57,7 @@ precheckRepairTicket:
     summary: 開單前檢查（選類別時呼叫）
     description: >-
       報修人選定類別時呼叫。這個操作不建立工務單。
-      重複提示：同房、同類別、還沒結案（不是 done 也不是 cancelled）的工務單存在時，回傳它的單號與狀態，
+      重複提示：同房、同類別、還沒完修也沒結案（不是 done、closed 也不是 cancelled）的工務單存在時，回傳它的單號與狀態，
       並記錄呼叫者可以對那張單補照片。
       急件判定：系統依飯店設定規則判定是否為急件（例如房間今日有入住或是 VIP），回傳 urgentJudgement，
       suggested=true 時 rule 附判定理由，例如「VIP · 15:00 入住」；房務不能更改這個判定結果，只能由主管事後降級。
@@ -115,13 +115,12 @@ listRepairTicketsAndcreateRepairTicket:
       照片 1–3 張，而且每張都必須已上傳（status=uploaded）；否則回 422，不建立工務單，原任務也不變。
       interruptSourceTask=true 時同時把 doing 的原任務轉為 interrupted，停住原因記為「等工務：<類別>」並連結單號；
       只有帶 sourceTaskId 時才有意義。
-      assigneeId 有值時（僅限路徑②③）直接指派處理人、accepted 給該人，略過工務待認領與審核。
+      assigneeId 有值時（僅限路徑②③）直接指派處理人、accepted 給該人，略過工務待認領。
       請求不接受急件欄位：急件由系統依飯店設定規則判定（寫入 isUrgent 與 urgentJudgement），
       判定為急件時排在工務待認領的所有非急件之前，並推播該租戶所有工務與主管；判定結果開單時房務不能更改，
       只能由主管事後呼叫 downgradeRepairTicketUrgency 降級為一般件。
-      送出後的去向：assigneeId 有值時直接 accepted；系統判定急件、或路徑②③（工務自開／櫃檯交辦）一律直接進
-      工務待認領（pool），不經主管審核；只有路徑①（房務報修）且非急件時先進 pending_review（等主管審核），
-      主管核准（approveRepairTicket）後才轉 pool。
+      送出後的去向：assigneeId 有值時直接 accepted；其他一律直接進工務待認領（pool），不分一般件與急件、不分三種開單路徑。
+      工務單沒有主管審核這一關，完修後才由主管驗收（verifyRepairTicket）。
       必須帶 Idempotency-Key；離線重送時回放第一次的回應，不會產生第二張單。
     tags:
     - 工務單 API
@@ -153,9 +152,11 @@ readRepairTicket:
     operationId: readRepairTicket
     summary: 查看工務單詳情
     description: >-
-      回傳照片、類別、說明、處理進度、完修照片、完修結果與處理說明。報修人、原任務負責人、工務，以及主管都可以查看；
-      主管不論從待審核、待驗收、推播或其他畫面進來，任何狀態的工務單都能打開（FR-032），主管動作只在
-      pending_review（核准／退回）與 done 且尚未驗收（驗收）兩種狀態出現，其他狀態沒有主管動作。
+      回傳照片、類別、說明、處理進度、完修照片、完修結果與處理說明、驗收人，以及最近一次驗收不通過的原因、判定人與時間。
+      報修人、原任務負責人、工務，以及所有主管（房務主管與工務主管，不分部門）都可以查看；
+      主管不論從待驗收、推播或其他畫面進來，任何狀態的工務單都能打開。主管動作（驗收通過、驗收不通過）只在
+      state=done（已完修、等主管驗收）時出現，其他狀態沒有主管動作。
+      viewerIsAssignee 告訴 App 目前登入者是不是這張單的處理人，App 用它決定主管版要不要同時疊上處理人的動作。
       公共區域的單 roomNo 為 null、isPublicArea 為 true，地點說明在 title 或 description 裡。
     tags:
     - 工務單 API
@@ -175,8 +176,8 @@ appendRepairTicketPhotos:
     operationId: appendRepairTicketPhotos
     summary: 補照片到工務單
     description: >-
-      報修人，以及在該房開單前檢查時觸發這張單重複提示的員工，可以在工務單結案前補照片，每次 1–3 張，而且都必須已上傳。
-      工務單已 done 或 cancelled 時回 409 ticket_closed；其他員工回 403。
+      報修人，以及在該房開單前檢查時觸發這張單重複提示的員工，可以在工務單完修前補照片，每次 1–3 張，而且都必須已上傳。
+      工務單已完修（done）、已結案（closed）或已撤回（cancelled）時回 409 ticket_closed；其他員工回 403。
       事件只記補了幾張，不含照片本體。
     tags:
     - 工務單 API
@@ -207,9 +208,9 @@ withdrawRepairTicket:
     operationId: withdrawRepairTicket
     summary: 撤回工務單
     description: >-
-      報修人在工務認領前撤回：pool 或 pending_review（等主管審核）→cancelled，原因 staff_withdrew，
-      之後不再出現在工務待認領。已經被認領時回 409 already_claimed，message 為「已被工務認領」；
-      rejected（主管未核准）或已結案（done／cancelled）等其他狀態回 409 state_conflict。
+      報修人在工務認領前撤回：pool→cancelled，原因 staff_withdrew，之後不再出現在工務待認領。
+      已經被認領時回 409 already_claimed，message 為「已被工務認領」；
+      已完修（done）、已結案（closed）或已撤回（cancelled）等其他狀態回 409 state_conflict。
     tags:
     - 工務單 API
     parameters:
@@ -261,40 +262,30 @@ downgradeRepairTicketUrgency:
         $ref: '../../components/responses.yaml#/Conflict'
       '422':
         $ref: '../../components/responses.yaml#/UnprocessableEntity'
-approveRepairTicket:
+verifyRepairTicket:
   post:
-    operationId: approveRepairTicket
-    summary: 主管核准等審核中的一般件工務單
+    operationId: verifyRepairTicket
+    summary: 主管驗收已完修的工務單：通過或不通過
     description: >-
-      只有 pending_review（等主管審核）的工務單能被核准；核准後轉為 pool（工務待認領）。
-      其他狀態回 409 state_conflict；非主管呼叫回 403。寫入核准事件，記錄核准人。
-    tags:
-    - 工務單 API
-    parameters:
-    - $ref: '../../components/parameters.yaml#/RepairTicketId'
-    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
-    responses:
-      '200':
-        description: 成功
-        content:
-          application/json:
-            schema:
-              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
-      '403':
-        $ref: '../../components/responses.yaml#/Forbidden'
-      '404':
-        $ref: '../../components/responses.yaml#/NotFound'
-      '409':
-        $ref: '../../components/responses.yaml#/Conflict'
-rejectRepairTicket:
-  post:
-    operationId: rejectRepairTicket
-    summary: 主管退回等審核中的一般件工務單，須附原因
-    description: >-
-      只有 pending_review（等主管審核）的工務單能被退回；退回後轉為 rejected，寫入 rejectReason，
-      不進入工務待認領。同一交易推播報修人（PushPayload.event=repair_rejected，body 帶退回原因，去處為這張工務單詳情）。
-      原因空白回 422 reject_reason_required；其他狀態回 409 state_conflict；
-      非主管呼叫回 403。
+      一支端點、請求帶結果（VerifyRepairTicketRequest.result）。只開放主管角色（staff_accounts.role=manager），
+      房務主管與工務主管都能呼叫，不分部門、不限開單人，工務主管也能驗收自己完修的單；其他角色回 403 forbidden。
+      只有 state=done（已完修、等主管驗收）的工務單能被驗收；其他狀態（已結案 closed、退回重修中 accepted／pool、
+      維修中、已撤回）回 409 state_conflict，與查房送出同一個錯誤碼，App 顯示「這張單已被處理」並刷新清單。
+      兩位主管同時送出時，不論各自送的是通過還是不通過，只有先到的那一次成立，後到的拿到這個 409。
+      通過（passed）：done→closed，同一交易寫入驗收人與驗收時間（RepairTicket.verifiedBy／verifiedAt），
+      寫一筆任務事件 repair_verified；不推播任何人，不改房況（cannot_fix 的房間維持 out_of_order）。
+      不通過（failed）：reason 去掉頭尾空白後為空回 422 verification_reason_required，單維持 done。
+      成立時同一交易寫入最近一次不通過的原因、判定人與時間（RepairTicket.lastVerifyFailedReason／By／At），
+      清空完修時間、完修結果與處理說明，寫一筆任務事件 repair_verification_failed，然後依換人判定退回工務重修：
+      原處理人在班時回到他名下待開始（state=accepted，destination=assignee），並推播原處理人
+      （PushPayload.event=repair_verification_failed）；原處理人接不了時（與查房退回同一套換人判定：
+      請假中、現在落在飯店所有班別時段之外，或已過他最近一份排房班次的下班時間），回到工務待認領（state=pool，destination=pool），不推播原處理人，也不推播工務池。
+      換人判定由後端做，App 不自己看班表，結果畫面照回應的 destination 與 assigneeName 說明單去了哪裡。
+      不通過不改房況，也不動連結的原房務任務。重修後再完修會重新進入待驗收。
+      必須帶 Idempotency-Key；訊號不穩重送時回放第一次的回應，不會判兩次。
+      驗收用一支帶結果而不是通過、不通過各一支：兩種結果共用同一個前置狀態（done）與同一道先到先決的守衛，
+      一支端點時兩位主管一個按通過、一個按不通過也只會撞同一個 409；App 也只需要一套送出、離線阻擋與冪等重送的寫法，
+      結果卡直接讀同一個回應形狀。代價是請求多一個必填的 result 欄位。
     tags:
     - 工務單 API
     parameters:
@@ -305,14 +296,14 @@ rejectRepairTicket:
       content:
         application/json:
           schema:
-            $ref: '../../components/schemas/工務單.yaml#/RejectRepairTicketRequest'
+            $ref: '../../components/schemas/工務單.yaml#/VerifyRepairTicketRequest'
     responses:
       '200':
-        description: 成功
+        description: 已記錄這次驗收，回應說明結果與單的去處。
         content:
           application/json:
             schema:
-              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
+              $ref: '../../components/schemas/工務單.yaml#/RepairVerificationOutcome'
       '403':
         $ref: '../../components/responses.yaml#/Forbidden'
       '404':
@@ -321,57 +312,6 @@ rejectRepairTicket:
         $ref: '../../components/responses.yaml#/Conflict'
       '422':
         $ref: '../../components/responses.yaml#/UnprocessableEntity'
-resubmitRepairTicket:
-  post:
-    operationId: resubmitRepairTicket
-    summary: 房務補資料後重新送出被退回的工務單
-    description: >-
-      只有原報修人可以呼叫；只有 rejected（主管未核准）的工務單能轉回 pending_review（等主管審核），
-      rejectReason 清空。其他狀態回 409 state_conflict；非原報修人回 403。
-    tags:
-    - 工務單 API
-    parameters:
-    - $ref: '../../components/parameters.yaml#/RepairTicketId'
-    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
-    responses:
-      '200':
-        description: 成功
-        content:
-          application/json:
-            schema:
-              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
-      '403':
-        $ref: '../../components/responses.yaml#/Forbidden'
-      '404':
-        $ref: '../../components/responses.yaml#/NotFound'
-      '409':
-        $ref: '../../components/responses.yaml#/Conflict'
-verifyRepairTicket:
-  post:
-    operationId: verifyRepairTicket
-    summary: 主管驗收通過已完修的工務單
-    description: >-
-      只有已完修（state=done）且尚未驗收（verifiedBy 為 null）的工務單能被驗收；驗收後記錄 verifiedBy、
-      verifiedAt，state 仍維持 done，不開新狀態值。已驗收或非 done 狀態回 409 state_conflict；
-      非主管呼叫回 403。原型未描繪「驗收退回」，本輪不支援這個分支。
-    tags:
-    - 工務單 API
-    parameters:
-    - $ref: '../../components/parameters.yaml#/RepairTicketId'
-    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
-    responses:
-      '200':
-        description: 成功
-        content:
-          application/json:
-            schema:
-              $ref: '../../components/schemas/工務單.yaml#/RepairTicket'
-      '403':
-        $ref: '../../components/responses.yaml#/Forbidden'
-      '404':
-        $ref: '../../components/responses.yaml#/NotFound'
-      '409':
-        $ref: '../../components/responses.yaml#/Conflict'
 releaseRepairTicketToPool:
   post:
     operationId: releaseRepairTicketToPool

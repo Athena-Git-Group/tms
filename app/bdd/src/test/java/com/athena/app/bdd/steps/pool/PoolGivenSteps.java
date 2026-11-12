@@ -2,9 +2,11 @@ package com.athena.app.bdd.steps.pool;
 
 import com.athena.app.bdd.AppiumWorld;
 import com.athena.app.bdd.BackendChannel;
+import com.athena.app.bdd.steps.common.CommonGivenSteps;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 
+import java.time.Duration;
 import java.util.Map;
 
 public class PoolGivenSteps {
@@ -78,7 +80,27 @@ public class PoolGivenSteps {
 
     @假設("{string} 已在 App 打開待認領")
     public void alreadyOpenedPool(String staffName) {
-        world.ensureOnPool(world.staff(staffName));
+        PoolDept.ensureOnPool(world, world.staff(staffName));
+    }
+
+    /**
+     * 怎麼做：清除 App 本機的待認領部門選擇，讓這台手機沒有任何部門紀錄；以該主管身分
+     * 登入後停在首頁、還沒切到待認領。回寫：無。
+     *
+     * <p>部門選擇只存在手機上、後端沒有，所以直接刪掉那一把本機偏好設定
+     * （{@link CommonGivenSteps#POOL_DEPT_PREFERENCE_KEY}）；偏好設定只在 App 啟動時讀，
+     * 刪完要整個 process 重開再登入。
+     */
+    @假設("{string} 第一次在這台手機打開待認領")
+    public void firstTimeOpeningPoolOnThisDevice(String managerName) {
+        BackendChannel.CreatedStaff manager = world.staff(managerName);
+        if (!PoolDept.isManager(manager)) {
+            throw new IllegalArgumentException("只有主管的待認領會記部門，「" + managerName + "」的角色是 " + manager.role());
+        }
+        world.deleteLocalPreference(CommonGivenSteps.POOL_DEPT_PREFERENCE_KEY);
+        world.restartApp();
+        world.ensureLoggedInAs(manager);
+        world.waitForTestId("manager.home", Duration.ofSeconds(10));
     }
 
     private static String blankToNull(String value) {

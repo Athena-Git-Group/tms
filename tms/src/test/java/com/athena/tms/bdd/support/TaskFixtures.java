@@ -81,6 +81,7 @@ public class TaskFixtures {
         private String source = "desk";
         private UUID reservationId;
         private LocalDate workDate;
+        private Instant doneAt;
         private String cancelReason = "manager_void";
         private String poolSource;
         private Boolean priorityNotify;
@@ -168,6 +169,16 @@ public class TaskFixtures {
             return this;
         }
 
+        /**
+         * dsl.md「完成時間」：已完成狀態（done／inspected／closed）的 {@code tasks.done_at} 與
+         * {@code completed} 事件時間。事件歷程以這個時刻為錨點重排：completed 之前的事件往前
+         * 每筆 60 秒，之後的（inspection_passed／inspection_waived）往後每筆 60 秒。
+         */
+        public Builder doneAt(Instant v) {
+            this.doneAt = v;
+            return this;
+        }
+
         public Builder workDate(LocalDate v) {
             this.workDate = v;
             return this;
@@ -178,25 +189,25 @@ public class TaskFixtures {
             return this;
         }
 
-        /** 最近一次進池的來源標籤（tasks.pool_source 本 plan 新增投影欄位）。 */
+        /** 最近一次進池的來源標籤（tasks.pool_source 本 plan 新增衍生欄位）。 */
         public Builder poolSource(String v) {
             this.poolSource = v;
             return this;
         }
 
-        /** 待認領排序第二鍵（tasks.priority_notify 本 plan 新增投影欄位）。 */
+        /** 待認領排序第二鍵（tasks.priority_notify 本 plan 新增衍生欄位）。 */
         public Builder priorityNotify(boolean v) {
             this.priorityNotify = v;
             return this;
         }
 
-        /** 最近一次退池的原因（tasks.return_reason 本 plan 新增投影欄位）。 */
+        /** 最近一次退池的原因（tasks.return_reason 本 plan 新增衍生欄位）。 */
         public Builder returnReason(String v) {
             this.returnReason = v;
             return this;
         }
 
-        /** 接手進度交代（tasks.requeue_note 本 plan 新增投影欄位；PII 去識別化範圍）。 */
+        /** 接手進度交代（tasks.requeue_note 本 plan 新增衍生欄位；PII 去識別化範圍）。 */
         public Builder requeueNote(String v) {
             this.requeueNote = v;
             return this;
@@ -247,6 +258,10 @@ public class TaskFixtures {
                         "workedMinutes 代表「已做分鐘」，只在 state=doing 或 interrupted 時有意義，收到 state="
                                 + state);
             }
+            if (doneAt != null && !"done".equals(state) && !"inspected".equals(state) && !"closed".equals(state)) {
+                throw new IllegalArgumentException(
+                        "doneAt 代表「完成時間」，只在 state=done、inspected 或 closed 時有意義，收到 state=" + state);
+            }
             if (reminderStage != null && !"pool".equals(state)) {
                 throw new IllegalArgumentException(
                         "tasks.reminder_stage 只在 state=pool 時有意義，收到 state=" + state);
@@ -279,7 +294,7 @@ public class TaskFixtures {
             if (holdReason != null || poolSource != null || priorityNotify != null
                     || returnReason != null || requeueNote != null || ruleHit != null
                     || dueAtHHmm != null || deferredBySelf != null) {
-                // 這些都是本 plan／SLA 增補新增的投影欄位，TaskEngine 的狀態轉移不寫它們；
+                // 這些都是本 plan／SLA 增補新增的衍生欄位，TaskEngine 的狀態轉移不寫它們；
                 // COALESCE 只覆寫呼叫端有給值的欄位，沒給的維持 NULL／預設值，不假裝幫情境
                 // 決定沒要求的值。
                 jdbcClient
@@ -347,17 +362,6 @@ public class TaskFixtures {
                     return poolOrTriageCreate(tenantId, roomId, workDate, "triage", systemActor);
                 case "pool":
                     return poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
-                case "pending_review":
-                    // 這是房務報修一般件真正的開單起點（contracts createRepairTicket），
-                    // 跟 pool/triage 同一層級，不是任何轉移的終點。
-                    return poolOrTriageCreate(tenantId, roomId, workDate, "pending_review", systemActor);
-                case "rejected": {
-                    // 退回理由這裡只是讓 engine 的必填檢查過關；場景實際要斷言的理由
-                    // 由 existingRepairTickets 接著直接寫入 repair_tickets.reject_reason。
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pending_review", systemActor);
-                    engine.rejectRepairTicket(tenantId, task.getId(), "測試資料備用退回原因", systemActor);
-                    return task;
-                }
                 case "accepted": {
                     Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
                     engine.claim(tenantId, task.getId(), dept, requireAssignee());
@@ -378,6 +382,20 @@ public class TaskFixtures {
                     engine.complete(tenantId, task.getId(), actor);
                     return task;
                 }
+                case "closed": {
+                    // 工務單「已結案」：重演到 done（完修）後把 tasks.state 收到 closed。結案事件由呼叫端
+                    // 依結案方式補：驗收通過補 repair_verified；不需處理時 completed 事件本身就是結案事件。
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Actor actor = requireAssignee();
+                    engine.claim(tenantId, task.getId(), dept, actor);
+                    engine.start(tenantId, task.getId(), actor);
+                    engine.complete(tenantId, task.getId(), actor);
+                    jdbcClient
+                            .sql("UPDATE tasks SET state = 'closed' WHERE tenant_id = ? AND id = ?")
+                            .params(tenantId, task.getId())
+                            .update();
+                    return task;
+                }
                 case "inspected": {
                     Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
                     Actor actor = requireAssignee();
@@ -385,7 +403,7 @@ public class TaskFixtures {
                     engine.start(tenantId, task.getId(), actor);
                     if (inspectionWaived) {
                         // 「完成 · 免查房」：比照正式流程在開工當下鎖定免查（tasks.inspection_waived），
-                        // 這裡用 UPDATE 直接補這個投影欄位（不是事件本身，本身也不代表任何事件），
+                        // 這裡用 UPDATE 直接補這個衍生欄位（不是事件本身，本身也不代表任何事件），
                         // 讓接下來的 complete() 照正式的 CASE 邏輯把狀態收在 inspected、
                         // inspection 記為 waived，事件歷程跟正式流程一致。
                         jdbcClient
@@ -421,9 +439,8 @@ public class TaskFixtures {
                     return task;
                 }
                 default:
-                    // tasks.state 的 CHECK 在 V1 恰好就是這 9 個值，見 data-model.dbml Table tasks 的 Note。
-                    throw new IllegalArgumentException(
-                            "不支援的任務狀態代碼: " + state + "（V1 的 tasks.state CHECK 只有 9 個值）");
+                    // tasks.state 的 CHECK 見 V23（10 個值），對照 data-model.dbml Table tasks 的 Note。
+                    throw new IllegalArgumentException("不支援的任務狀態代碼: " + state);
             }
         }
 
@@ -468,10 +485,26 @@ public class TaskFixtures {
             Instant lastEventTime = workedMinutes != null ? now.minusSeconds(workedMinutes * 60L) : now;
             int n = events.size();
             Instant[] times = new Instant[n];
-            times[n - 1] = lastEventTime;
-            for (int i = n - 2; i >= 0; i--) {
+            // 錨點預設是最後一筆事件＝目前 Clock；有給「完成時間」時錨點改成 completed 事件，
+            // 之後的查房事件往後排，讓 done_at 與 completed 事件時間都落在指定時刻。
+            int anchor = n - 1;
+            Instant anchorTime = lastEventTime;
+            if (doneAt != null) {
+                for (int i = 0; i < n; i++) {
+                    if ("completed".equals(events.get(i).get("type"))) {
+                        anchor = i;
+                        anchorTime = doneAt;
+                        break;
+                    }
+                }
+            }
+            times[anchor] = anchorTime;
+            for (int i = anchor - 1; i >= 0; i--) {
                 // 只需要嚴格遞增、維持事件先後順序；精確間距對任何斷言都不重要。
                 times[i] = times[i + 1].minusSeconds(60);
+            }
+            for (int i = anchor + 1; i < n; i++) {
+                times[i] = times[i - 1].plusSeconds(60);
             }
 
             for (int i = 0; i < n; i++) {

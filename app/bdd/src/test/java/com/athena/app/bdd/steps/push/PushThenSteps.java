@@ -1,6 +1,9 @@
 package com.athena.app.bdd.steps.push;
 
 import com.athena.app.bdd.AppiumWorld;
+import com.athena.app.bdd.BackendChannel;
+import com.athena.app.bdd.steps.common.CommonGivenSteps;
+import com.athena.app.bdd.steps.manager.ManagerHomeWait;
 import io.appium.java_client.AppiumBy;
 import io.cucumber.java.zh_tw.那麼;
 import org.openqa.selenium.Rectangle;
@@ -32,6 +35,14 @@ public class PushThenSteps {
     private static final Pattern TICKET_DETAIL = Pattern.compile("^(W-\\d+) 的工務單詳情$");
     private static final Pattern HOME = Pattern.compile("^首頁$");
     private static final Pattern POOL_PLAIN = Pattern.compile("^待認領$");
+    private static final Pattern DEPT_POOL_HIGHLIGHTED =
+            Pattern.compile("^待認領，部門為(房務|工務)，(\\S+) 標亮$");
+
+    /** 依登入者的角色與部門該停在哪個首頁外殼（與 {@code landing.dart} 同一條判定）。 */
+    private static final Map<String, String> HOME_SHELL = Map.of(
+            "房務首頁", "home.screen",
+            "工務首頁", "engHome.screen",
+            "主管首頁", "manager.home");
 
     private final AppiumWorld world;
 
@@ -42,6 +53,9 @@ public class PushThenSteps {
     /**
      * 必查：目前畫面符合描述；有標亮時，該房的單卡在可視範圍內並有標亮樣式；
      * 畫面是工務單詳情時，顯示的是該單號的工務單詳情頁，不是任務頁。
+     *
+     * 畫面寫明部門時，待認領的部門切換停在該部門、本機的部門選擇已改成它；畫面是首頁時，
+     * 外殼與登入者的角色一致；主管看到的工務單詳情是主管視角。
      *
      * <p>「畫面」字串跟 {@link PushGivenSteps} 解析「去處」用的是同一套白話形式
      * （dsl.md），這裡對應回 accessibility id：標亮用 {@code pool.card.{roomNo}--highlighted}
@@ -59,8 +73,27 @@ public class PushThenSteps {
         Matcher highlightedMatcher = POOL_HIGHLIGHTED.matcher(screenDescription);
         Matcher taskMatcher = TASK_SCREEN.matcher(screenDescription);
         Matcher ticketMatcher = TICKET_DETAIL.matcher(screenDescription);
+        Matcher deptPoolMatcher = DEPT_POOL_HIGHLIGHTED.matcher(screenDescription);
 
-        if (highlightedMatcher.matches()) {
+        if (deptPoolMatcher.matches()) {
+            // 畫面寫明部門：待認領的部門切換停在該部門、本機的部門選擇已改成它、該單的卡標亮。
+            // 本機選擇讀的是 shared_preferences 那一把鍵——畫面上的切換停對了但沒寫回本機，
+            // 下次打開待認領就會跳回另一個部門。
+            String dept = BackendChannel.dept(deptPoolMatcher.group(1));
+            String key = deptPoolMatcher.group(2);
+            world.waitForTestId("pool.screen", SCREEN_TIMEOUT);
+            WebElement side = world.waitForTestId("pool.dept-switch." + dept, SCREEN_TIMEOUT);
+            if (!side.isSelected()) {
+                throw new AssertionError("待認領的部門切換應停在 " + dept + "，pool.dept-switch." + dept + " 不是選中狀態");
+            }
+            world.waitForTestId("pool.card." + key + "--highlighted", SCREEN_TIMEOUT);
+            String local = world.readLocalPreference(CommonGivenSteps.POOL_DEPT_PREFERENCE_KEY);
+            if (!dept.equals(local)) {
+                throw new AssertionError("App 本機的待認領部門選擇應為 " + dept + "，實際「" + local + "」");
+            }
+        } else if (HOME_SHELL.containsKey(screenDescription)) {
+            assertHomeShell(screenDescription);
+        } else if (highlightedMatcher.matches()) {
             String room = highlightedMatcher.group(1);
             world.waitForTestId("pool.screen", SCREEN_TIMEOUT);
             world.waitForTestId("pool.card." + room + "--highlighted", SCREEN_TIMEOUT);
@@ -71,6 +104,10 @@ public class PushThenSteps {
         } else if (ticketMatcher.matches()) {
             String ticketNo = ticketMatcher.group(1);
             world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
+            if ("manager".equals(world.loggedInStaff().role())) {
+                // 主管從推播進同一張單，看到的要是主管視角（managerTicket），不是工務或房務那一版。
+                world.waitForTestId("managerTicket", SCREEN_TIMEOUT);
+            }
             String roomNo = roomNoOf(ticketNo);
             String onScreen = world.waitForLabelOf("ticket.hero.where", roomNo, SCREEN_TIMEOUT);
             if (!roomNo.equals(onScreen)) {
@@ -88,6 +125,34 @@ public class PushThenSteps {
             world.waitForTestId("pool.screen", SCREEN_TIMEOUT);
         } else {
             throw new IllegalArgumentException("認不得的畫面字串：「" + screenDescription + "」");
+        }
+    }
+
+    /**
+     * 畫面是首頁時，外殼要與登入者的角色一致：主管首頁依主管種類顯示格子數字（房務主管待查房
+     * 與待驗收兩格、工務主管只有待驗收一格，見 {@link ManagerHomeWait}）、工務首頁顯示工務今日
+     * 進度、房務首頁顯示今日進度；另外兩個外殼的根節點不得同時在畫面上。劇本寫的首頁先跟
+     * 這位登入者的角色與部門對過，寫錯外殼的劇本不該因為 App 也分錯而綠。
+     */
+    private void assertHomeShell(String homeChinese) {
+        var staff = world.loggedInStaff();
+        String expectedHome = "manager".equals(staff.role()) ? "主管首頁"
+                : "engineering".equals(staff.dept()) ? "工務首頁" : "房務首頁";
+        if (!expectedHome.equals(homeChinese)) {
+            throw new AssertionError("登入者「" + staff.name() + "」的角色是 " + staff.role() + "、部門是 "
+                    + staff.dept() + "，依分流應停在「" + expectedHome + "」，劇本卻寫「" + homeChinese + "」");
+        }
+        String shell = HOME_SHELL.get(homeChinese);
+        world.waitForTestId(shell, SCREEN_TIMEOUT);
+        switch (homeChinese) {
+            case "主管首頁" -> ManagerHomeWait.awaitExactly(world, staff.name(), SCREEN_TIMEOUT);
+            case "工務首頁" -> world.waitForTestId("engHome.progress.in-hand-count", SCREEN_TIMEOUT);
+            default -> world.waitForTestId("home.progress.cleaned-ratio", SCREEN_TIMEOUT);
+        }
+        for (String other : HOME_SHELL.values()) {
+            if (!other.equals(shell) && !world.driver().findElements(world.byTestId(other)).isEmpty()) {
+                throw new AssertionError("停在「" + homeChinese + "」時不該同時找得到 " + other);
+            }
         }
     }
 

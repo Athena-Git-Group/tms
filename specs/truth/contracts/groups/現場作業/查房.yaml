@@ -24,9 +24,11 @@ listInspectionsAndcreateInspections:
       App 用 currentItems 直接換掉畫面上的項目清單、清空判定讓主管重判，不必再打 listSopItems；
       飯店沒有任何啟用的查房項目時 items 送空陣列即可，視為全部通過。
       單已不是待查房（另一位主管先送出、單被改派或作廢、狀態不是 done）回 409 state_conflict，
-      與工務單四個主管動作的 409 同一類語意，App 顯示「這張單已被處理」並刷新清單；
+      與 verifyRepairTicket 的 409 同一個錯誤碼，App 顯示「這張單已被處理」並刷新清單；
       兩位主管同時送出時只有先到的那一次成立，後到的拿到這個 409。
-      查房者是這張單的清房者本人回 403（自清自查，E-07）；沒有查房判定權限的角色回 403。
+      只有房務主管能送出查房：工務主管（role=manager 且 dept=engineering）呼叫回 403 forbidden，message 為「你沒有查房的權限」，
+      即使單停在 done 也一樣；查房者是這張單的清房者本人回 403 forbidden（自清自查，E-07）；沒有查房判定權限的角色回 403 forbidden。
+      三種 403 共用同一個 code，message 不同，App 直接顯示 message，不需要依 code 分辨。
       全部通過：任務轉 inspected、inspection=passed，排 PMS 回寫，推播清房者「<房號> 查房通過」。
       任一項不通過：任務退回 accepted、redo 加 1、清空計時與 SOP 勾記、inspection=failed，推播清房者
       「<房號> 查房退回 · <項目>不合格」；原清房者已下班或請假時改退回房務待認領（pool）。

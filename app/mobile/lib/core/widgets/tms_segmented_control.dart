@@ -3,11 +3,22 @@ import 'package:flutter/widgets.dart';
 import '../theme.dart';
 
 class TmsSegment<T> {
-  const TmsSegment({required this.value, required this.label, this.wrap});
+  const TmsSegment({
+    required this.value,
+    required this.label,
+    this.id,
+    this.wrap,
+  });
 
   final T value;
 
   final String label;
+
+  /// 這一段的 accessibility id。給了就掛在「選中與否」那一個 semantics 節點
+  /// 上，Appium 以 id 找到這一段時讀到的 `selected` 就是它現在有沒有被選。
+  /// [wrap] 另外包的一層是分開的節點，id 與選中狀態會落在不同元素上，所以
+  /// 要同時讀選中狀態的切換用這個欄位，不用 [wrap]。
+  final String? id;
 
   /// 把這一段的節點再包一層，用來掛 accessibility id。
   final Widget Function(Widget node)? wrap;
@@ -92,7 +103,11 @@ class TmsSegmentedControl<T> extends StatelessWidget {
       ),
     );
     final wrap = segment.wrap;
+    final id = segment.id;
     return Semantics(
+      identifier: id,
+      // 帶 id 的那一段要有自己的節點，id 才不會併進上層。
+      container: id != null,
       selected: selected,
       button: true,
       child: wrap == null ? node : wrap(node),

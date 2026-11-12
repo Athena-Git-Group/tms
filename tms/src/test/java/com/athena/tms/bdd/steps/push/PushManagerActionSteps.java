@@ -3,6 +3,7 @@ package com.athena.tms.bdd.steps.push;
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.OutboxAwait;
@@ -37,6 +38,7 @@ public class PushManagerActionSteps {
     private final StaffFixtures staffFixtures;
     private final JdbcClient jdbcClient;
     private final ObjectMapper objectMapper;
+    private final InspectionFixtures inspectionFixtures;
 
     public PushManagerActionSteps(
             ScenarioWorld world,
@@ -48,7 +50,8 @@ public class PushManagerActionSteps {
             TenantFixtures tenantFixtures,
             StaffFixtures staffFixtures,
             JdbcClient jdbcClient,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            InspectionFixtures inspectionFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -59,6 +62,7 @@ public class PushManagerActionSteps {
         this.staffFixtures = staffFixtures;
         this.jdbcClient = jdbcClient;
         this.objectMapper = objectMapper;
+        this.inspectionFixtures = inspectionFixtures;
     }
 
     /**
@@ -81,24 +85,22 @@ public class PushManagerActionSteps {
                 .listOfRows();
 
         String failedKey = sopItems.stream()
-                .filter(row -> String.valueOf(row.get("label")).contains(itemLabel))
+                .filter(row -> itemLabel.equals(String.valueOf(row.get("label"))))
                 .map(row -> String.valueOf(row.get("item_key")))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "租戶查房項目裡找不到標籤包含「" + itemLabel + "」的項目"));
+                        "租戶現行啟用的查房項目裡沒有顯示名稱「" + itemLabel + "」的項目"));
 
         List<Map<String, Object>> items = sopItems.stream()
                 .map(row -> Map.<String, Object>of(
                         "key", row.get("item_key"), "pass", !failedKey.equals(row.get("item_key"))))
                 .toList();
 
-        Map<String, Object> body = Map.of(
-                "tenantId", tenantId,
-                "taskId", taskId.toString(),
-                "inspectorId", world.staffId(managerName),
-                "result", "failed",
-                "items", items);
-        apiClient.post("/inspections", BddApiClient.Auth.staff(world.jwt(managerName)), body);
+        // dsl.md：body 只帶 taskId 與 items（CreateInspectionRequest），帶新的 Idempotency-Key；
+        // 推播斷言不動，回應另存一份給查房結果的 Then 句。
+        ScenarioWorld.ApiResponse response = inspectionFixtures.submit(world, managerName, taskId, items);
+        world.setLastInspectionResponse(response);
+        world.setLastInspectionItems(items);
     }
 
     @當("{string} 以原因 {string} 作廢 {string}")

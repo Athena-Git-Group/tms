@@ -266,31 +266,24 @@ public class TaskExecutionThenSteps {
         }
     }
 
+    /**
+     * 必查：透過後端測試資料查核，該員工的 {@code outbox} 沒有任何 kind push 的資料。
+     *
+     * <p>權威位置是介面根 {@code specs/truth/features/ios-app/dsl.md}（不是本模組）：任務執行的
+     * 「超時提示不推播」與主管工作台的「查房項目不符時不推播」共用這一句——純 App 端顯示、
+     * 或被後端拒絕的送出，都不該連帶觸發推播。
+     *
+     * <p>收件人看推播 payload 裡的 {@code recipientStaffId}，不看任務的負責人：主管退回工務單
+     * 時收件人是報修人，不是名下有那張單的人，以負責人查會漏掉。
+     */
     @那麼("後端沒有對 {string} 送出任何推播")
     public void noPushSentTo(String staffName) {
-        long tenantId = world.backend().ensureTenant();
         UUID staffId = world.staff(staffName).id();
 
-        // 推播在 outbox 裡掛在任務上（aggregate_key 是 task:{任務 id}），所以查法是
-        // 「這位員工名下的任務有沒有長出推播」。
-        List<Map<String, Object>> pushes = world.backend().queryRows(
-                """
-                SELECT o.id FROM outbox o
-                  JOIN tasks t ON o.aggregate_key = 'task:' || t.id::text
-                 WHERE o.tenant_id = ? AND o.kind = 'push' AND t.assignee_id = ?
-                """, tenantId, staffId);
+        List<String> pushes = world.backend().pushTitlesSentTo(staffId);
         if (!pushes.isEmpty()) {
-            throw new AssertionError("「" + staffName + "」名下的任務送出了 " + pushes.size()
-                    + " 筆推播，這個情境不該有任何一筆");
-        }
-
-        // 推播送到員工手上之後會留下一則通知，所以收件匣也要是空的。
-        List<Map<String, Object>> notifications = world.backend().queryRows(
-                "SELECT id FROM notifications WHERE tenant_id = ? AND recipient_staff_id = ?",
-                tenantId, staffId);
-        if (!notifications.isEmpty()) {
-            throw new AssertionError("「" + staffName + "」收到了 " + notifications.size()
-                    + " 則通知，這個情境不該有任何一則");
+            throw new AssertionError("後端對「" + staffName + "」送出了 " + pushes.size()
+                    + " 筆推播（" + pushes + "），這個情境不該有任何一筆");
         }
     }
 
@@ -827,11 +820,15 @@ public class TaskExecutionThenSteps {
      * 畫面提示不夠，這裡讀的是佇列筆數本身，而且盯一段時間才下結論。
      *
      * <p>操作前的筆數與狀態，由把手機切到離線的那一句先量好，讀法見
-     * {@link com.athena.app.bdd.AppiumWorld#goOffline()}。句型不帶房號，對照的是目前
-     * 打開的那一頁任務。
+     * {@link com.athena.app.bdd.AppiumWorld#goOffline()}。句型不帶房號：打開著任務頁時對照
+     * 那一間房；主管的動作（查房從清單開、驗收對的是工務單）沒有任務頁，就拿
+     * 離線視窗記下的整份後端快照（每張任務的狀態、每張工務單的狀態與驗收人）逐筆比對——
+     * 被擋在送出之前的動作，後端一張單都不該變。
      *
-     * <p>用於離線時被擋在送出之前的動作，也就是恢復處理、開始、認領與延後。離線完成
-     * 剛好相反，它會押進佇列等補送，兩者的斷言不可互相沿用。
+     * <p>權威位置是介面根 {@code specs/truth/features/ios-app/dsl.md}（不是本模組）：系統層的
+     * 主管離線與任務執行的離線恢復共用這一句。用於離線時被擋在送出之前的動作，也就是恢復
+     * 處理、開始、認領、延後，以及主管的查房送出、驗收通過與驗收不通過。離線完成剛好相反，它會
+     * 押進佇列等補送，兩者的斷言不可互相沿用。
      *
      * <p>筆數兩次都讀測試後門的 {@code pendingSyncCount}，不讀畫面上那一列。離線被擋下
      * 的動作會彈一個對話框，而對話框會把底下整頁的 accessibility 節點擋掉，拿畫面讀的話
@@ -856,12 +853,24 @@ public class TaskExecutionThenSteps {
                     + "操作前是 " + before + " 筆，現在是 " + after + " 筆");
         }
 
-        String task = world.currentTaskRoomNo();
-        String stateBefore = world.offlineWindowTaskState(task);
-        String stateNow = String.valueOf(world.taskRowByRoomNo(task).get("state"));
-        if (!stateBefore.equals(stateNow)) {
-            throw new AssertionError("這次操作被擋在送出之前，後端「" + task + "」的狀態就不該變："
-                    + "操作前是「" + stateBefore + "」，現在是「" + stateNow + "」");
+        if (world.hasCurrentTaskRoomNo()) {
+            String task = world.currentTaskRoomNo();
+            String stateBefore = world.offlineWindowTaskState(task);
+            String stateNow = String.valueOf(world.taskRowByRoomNo(task).get("state"));
+            if (!stateBefore.equals(stateNow)) {
+                throw new AssertionError("這次操作被擋在送出之前，後端「" + task + "」的狀態就不該變："
+                        + "操作前是「" + stateBefore + "」，現在是「" + stateNow + "」");
+            }
+        }
+
+        Map<String, String> unitsBefore = world.offlineWindowUnitStates();
+        Map<String, String> unitsNow = world.backendUnitStatesNow();
+        for (Map.Entry<String, String> entry : unitsBefore.entrySet()) {
+            String now = unitsNow.get(entry.getKey());
+            if (!entry.getValue().equals(now)) {
+                throw new AssertionError("這次操作被擋在送出之前，後端「" + entry.getKey()
+                        + "」就不該變：操作前是「" + entry.getValue() + "」，現在是「" + now + "」");
+            }
         }
     }
 

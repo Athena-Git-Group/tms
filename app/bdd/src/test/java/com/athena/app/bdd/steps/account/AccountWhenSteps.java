@@ -19,14 +19,14 @@ public class AccountWhenSteps {
     @當("{string} 在記住帳號畫面輸入密碼 {string} 並登入")
     public void loginOnRememberedScreen(String staffName, String password) {
         world.typeInto("login.password-field", ELEMENT_TIMEOUT, password);
-        world.tapTestId("login.submit-button", ELEMENT_TIMEOUT);
+        world.tapWhenEnabled("login.submit-button", ELEMENT_TIMEOUT);
     }
 
     @當("{string} 在共用手機畫面輸入員工編號 {string} 密碼 {string} 並登入")
     public void loginOnSharedDeviceScreen(String staffName, String staffId, String password) {
         world.typeInto("login.shared-device.staff-id-field", ELEMENT_TIMEOUT, staffId);
         world.typeInto("login.password-field", ELEMENT_TIMEOUT, password);
-        world.tapTestId("login.submit-button", ELEMENT_TIMEOUT);
+        world.tapWhenEnabled("login.submit-button", ELEMENT_TIMEOUT);
     }
 
     /**
@@ -45,7 +45,7 @@ public class AccountWhenSteps {
     public void setNewPassword(String staffName, String newPassword) {
         world.typeInto("login.force-password-change.new-password-field", ELEMENT_TIMEOUT, newPassword);
         world.typeInto("login.force-password-change.confirm-password-field", ELEMENT_TIMEOUT, newPassword);
-        world.tapTestId("login.force-password-change.submit-button", ELEMENT_TIMEOUT);
+        world.tapWhenEnabled("login.force-password-change.submit-button", ELEMENT_TIMEOUT);
         world.tapTestId("login.force-password-change.confirm-alert.confirm-button", ELEMENT_TIMEOUT);
     }
 

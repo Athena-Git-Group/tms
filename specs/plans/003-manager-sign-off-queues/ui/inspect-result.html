@@ -20,7 +20,6 @@
 </div>
 <script src="manager.js"></script>
 <script>
-function go(url) { location.href = carryOffline(url); }
 const room = Q.get('room') || '301', outcome = Q.get('outcome') || 'passed';
 const cleaner = Q.get('cleaner') || '小美', fails = (Q.get('fails') || '').split('、').filter(Boolean);
 document.getElementById('room').textContent = room;

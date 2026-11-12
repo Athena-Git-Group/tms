@@ -79,6 +79,91 @@ public class CommonThenSteps {
         assertAuthoritativeStateUnchanged();
     }
 
+    /**
+     * dsl.md「這次操作被拒絕，錯誤碼為 "{錯誤碼}"」：與「這次操作被拒絕」共用保存的回應與
+     * 「權威狀態沒被改動」的檢查，另外必查 contracts {@code Error.code} 等於該錯誤碼，且 HTTP
+     * 狀態碼與 shared.yaml 的 Error 說明一致（對照表只收錄 shared.yaml 已寫明狀態碼的 code，
+     * 沒列到的 code 只驗 4xx）。
+     */
+    @那麼("這次操作被拒絕，錯誤碼為 {string}")
+    public void operationRejectedWithCode(String errorCode) {
+        assertRejectedResponse();
+        ScenarioWorld.ApiResponse resp = world.lastResponse();
+        String code = textOrNull(resp.json(), "code");
+        if (!errorCode.equals(code)) {
+            throw new AssertionError("預期 Error.code=" + errorCode + "，實際 code=" + code + "，body=" + resp.body());
+        }
+        Integer expectedStatus = ERROR_CODE_HTTP_STATUS.get(errorCode);
+        if (expectedStatus != null && resp.status() != expectedStatus) {
+            throw new AssertionError("Error.code=" + errorCode + " 依 shared.yaml 應回 " + expectedStatus
+                    + "，實際狀態碼=" + resp.status());
+        }
+        assertAuthoritativeStateUnchanged();
+    }
+
+    // 來源：specs/truth/contracts/components/schemas/shared.yaml Error.description 列出的 code 與狀態碼。
+    private static final Map<String, Integer> ERROR_CODE_HTTP_STATUS = Map.ofEntries(
+            Map.entry("state_conflict", 409),
+            Map.entry("doing_task_exists", 409),
+            Map.entry("already_claimed", 409),
+            Map.entry("ticket_closed", 409),
+            Map.entry("room_ticket_not_requeueable", 409),
+            Map.entry("reason_invalid", 422),
+            Map.entry("photo_required", 422),
+            Map.entry("photo_limit", 422),
+            Map.entry("photo_not_uploaded", 422),
+            Map.entry("completion_photo_required", 422),
+            Map.entry("verification_reason_required", 422),
+            Map.entry("repair_source_missing", 422),
+            Map.entry("repair_source_conflict", 422),
+            Map.entry("current_password_required", 422),
+            Map.entry("new_password_invalid", 422),
+            Map.entry("dept_required", 422),
+            Map.entry("inspection_items_mismatch", 422),
+            Map.entry("credentials_invalid", 401),
+            Map.entry("current_password_invalid", 401),
+            Map.entry("account_disabled", 403),
+            Map.entry("forbidden", 403),
+            Map.entry("forbidden_dept_pool", 403),
+            Map.entry("account_locked", 429));
+
+    // 來源：dsl.md「"{房號}" 的房況為 "{房況}"」列的對照（rooms.hk_state）。
+    private static final Map<String, String> HK_STATE = Map.of(
+            "還沒打掃好", "dirty",
+            "已查房", "inspected",
+            "停用", "out_of_order");
+
+    /**
+     * dsl.md「"{房號}" 的房況為 "{房況}"」：權威狀態是 {@code rooms.hk_state}；再讀確認走
+     * {@code readRooms}（GET /rooms/{id}）的 {@code hkState}。這句沒有自然對應的操作者身分，
+     * 用租戶任一在職員工的權杖再讀（房況查詢不分角色）；找不到在職員工時只驗權威狀態。
+     */
+    @那麼("{string} 的房況為 {string}")
+    public void roomHkStateIs(String roomNo, String hkStateChinese) {
+        String expected = HK_STATE.get(hkStateChinese);
+        if (expected == null) {
+            throw new IllegalArgumentException("找不到「" + hkStateChinese + "」在房況用語對照（還沒打掃好／已查房／停用）中的權威值");
+        }
+        long tenantId = tenantFixtures.testTenantId();
+        Map<String, Object> room = dbProbe
+                .queryOne("SELECT id, hk_state FROM rooms WHERE tenant_id = ? AND room_no = ?", tenantId, roomNo)
+                .orElseThrow(() -> new AssertionError("rooms 查無房號「" + roomNo + "」"));
+        check("rooms.hk_state", expected, room.get("hk_state"));
+
+        dbProbe.queryOne(
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND active = true ORDER BY role = 'manager' DESC LIMIT 1",
+                        tenantId)
+                .ifPresent(staff -> {
+                    String jwt = mintJwtFor(UUID.fromString(String.valueOf(staff.get("id"))));
+                    ScenarioWorld.ApiResponse resp = apiClient.get("/rooms/" + room.get("id"), BddApiClient.Auth.staff(jwt));
+                    if (resp.status() != 200 || resp.json() == null) {
+                        throw new AssertionError("readRooms(" + room.get("id") + ") 預期 200，實際 status=" + resp.status()
+                                + "，body=" + resp.body());
+                    }
+                    check("readRooms.hkState", expected, textOrNull(resp.json(), "hkState"));
+                });
+    }
+
     @那麼("{string} 的狀態為 {string}")
     public void taskStateIs(String taskKey, String stateChinese) {
         UUID taskId = resolveTaskId(taskKey);
@@ -114,7 +199,7 @@ public class CommonThenSteps {
         try {
             return new ExpectedTaskState(Terms.taskState(stateChinese), null, null);
         } catch (IllegalArgumentException notPlainTaskState) {
-            // 工務單專屬狀態詞（已接單/維修中/已完修/已撤回）走工務單對照
+            // 工務單專屬狀態詞（已接單/維修中/已完修/已結案/已撤回）走工務單對照
             String cancelReason = "已撤回".equals(stateChinese) ? Terms.repairTicketWithdrawnReason() : null;
             return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason);
         }
@@ -194,10 +279,16 @@ public class CommonThenSteps {
         UUID staffId = UUID.fromString(world.staffId(staffName));
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
             String title = blankToNull(row.get("標題"));
+            String body = blankToNull(row.get("內容"));
             String destination = blankToNull(row.get("去處"));
+            // dsl.md：有給標題時標題必須相等、有給 `內容` 時 PushPayload.body 必須相等；兩者都納入挑選條件，
+            // 同一人有多筆同標題推播（例如每次完修都推播報修人）時才挑得到內容相符的那一筆。
             PushPayloadView push = outboxAwait.waitForPush(
-                    v -> staffId.equals(v.recipientStaffId()) && (title == null || title.equals(v.title())),
-                    staffName + " 收到" + (title != null ? "標題「" + title + "」的" : "") + "推播");
+                    v -> staffId.equals(v.recipientStaffId())
+                            && (title == null || title.equals(v.title()))
+                            && (body == null || body.equals(v.body())),
+                    staffName + " 收到" + (title != null ? "標題「" + title + "」" : "")
+                            + (body != null ? "內容「" + body + "」" : "") + "的推播");
             if (destination != null) {
                 assertDestinationMatches(push.target(), destination);
             }
@@ -244,6 +335,20 @@ public class CommonThenSteps {
             throw new AssertionError("操作被拒絕後仍新增了 outbox：操作前 " + before.outboxCount() + " 筆，操作後 "
                     + afterOutbox + " 筆");
         }
+        // 工務單的退回原因、驗收人、處理結果，與查房紀錄筆數，也是這個任務的權威資料：
+        // 退回沒寫原因、撞單驗收、撞單查房被拒之後，這些都不能被動到。
+        Map<String, Object> afterTicket = dbProbe
+                .queryOne("SELECT * FROM repair_tickets WHERE task_id = ?", before.taskId())
+                .orElse(null);
+        if (!Objects.equals(before.repairTicketRow(), afterTicket)) {
+            throw new AssertionError("操作被拒絕後 repair_tickets 仍被改動：操作前=" + before.repairTicketRow()
+                    + "，操作後=" + afterTicket);
+        }
+        long afterInspections = dbProbe.count("SELECT count(*) FROM inspections WHERE task_id = ?", before.taskId());
+        if (afterInspections != before.inspectionCount()) {
+            throw new AssertionError("操作被拒絕後仍新增了 inspections：操作前 " + before.inspectionCount()
+                    + " 筆，操作後 " + afterInspections + " 筆");
+        }
     }
 
     /**
@@ -281,10 +386,12 @@ public class CommonThenSteps {
     private void assertDestinationMatches(PushPayloadView.Target target, String destination) {
         if ("待認領".equals(destination)) {
             requireKind(target, "pool");
+            requirePoolDept(target);
         } else if ("首頁".equals(destination)) {
             requireKind(target, "home");
         } else if (destination.startsWith("待認領並標亮 ")) {
             requireKind(target, "pool");
+            requirePoolDept(target);
             String label = destination.substring("待認領並標亮 ".length());
             if (world.hasTask(label)) {
                 requireUuidEquals("highlightTaskId", target.highlightTaskId(), UUID.fromString(world.taskId(label)));
@@ -304,6 +411,14 @@ public class CommonThenSteps {
             }
         } else {
             throw new AssertionError("無法解析的推播去處格式（不在 dsl.md PushTarget 對照範圍內）：" + destination);
+        }
+    }
+
+    /** dsl.md：去處為待認領時 target 除了 kind=pool 還要帶 dept（housekeeping 或 engineering）。 */
+    private static void requirePoolDept(PushPayloadView.Target target) {
+        if (!"housekeeping".equals(target.dept()) && !"engineering".equals(target.dept())) {
+            throw new AssertionError("去處為待認領的推播 target.dept 應為 housekeeping 或 engineering，實際 "
+                    + target.dept());
         }
     }
 

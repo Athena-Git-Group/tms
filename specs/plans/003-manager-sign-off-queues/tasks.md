@@ -1,782 +1,1020 @@
-# Tasks: 003-manager-sign-off-queues（主管在 App 上處理待查房、待審核、待驗收）
+# Tasks: 003-manager-sign-off-queues（主管在 App 上處理待查房與待驗收，取消主管審核）
 
 **Plan Package**: `specs/plans/003-manager-sign-off-queues`
 **Core Inputs**: `spec.md`, `plan.md`, `truth-delta.md`, `ui/ui-plan.md`, `ui/*.html`, `ui/manager.css`, `ui/manager.js`, `specs/truth/techstack.md`, `specs/truth/contracts/**`, `specs/truth/data/data-model.dbml`, `specs/truth/features/backend/**`, `specs/truth/features/ios-app/**`
 
 本輪沒有 `research.md`（`/technical-research` 未執行，本輪不引入新技術）。
-本檔承接 `truth-delta.md` 三節：`/api-plan`（新 api group 主管工作台、`createInspections` 請求形狀收斂、`RepairTicket` 補欄位、`repair_rejected` 推播事件）、`/data-plan`（含 Wave 3 的 `repair_tickets.resolution_type`、`notifications.event` 加值、三張表的 Note）、`/dsl-refine`（backend 新模組 `主管工作台` 與三支新 feature、ios-app 新模組 `主管工作台` 與六支新增或修改的 feature、兩個介面根共用 DSL 的 ADD 與 MODIFY、三條 row 搬移）。
+本檔承接 `truth-delta.md` 三節：`/api-plan`（收回審核三支端點與相關欄位、`verifyRepairTicket` 帶結果、`RepairVerificationOutcome`、`no_action_needed`、主管待辦依主管種類、`createInspections` 擋工務主管）、`/data-plan`（`closed`、收回 `pending_review`／`rejected`、`last_verify_failed_*`、`verification_return`、`repair_verification_failed`、既有資料處置）、`/dsl-refine`（後端與 iOS App 的句型與 feature 改動、三支改名的 feature）。
 
 ## Task Binding Contract
 
 - 每個**開發任務**都必須對應 `truth-delta.md` 的 ADD / MODIFY / DELETE / NOOP 語意。
-- 本輪沒有新增技術，**省略 Setup phase**。待認領記住部門用既有的 `SharedPreferences`（`core/firebase_push_messaging.dart` 已在用），不是新技術。
+- 本輪沒有新增技術，**省略 Setup phase**。
 - Phase 2 `Foundational` 只建立後續實作與測試共用的元件、入口、fixture、helper 與落點骨架；每則寫「只做／不做」。
 - Phase 3 `Test Alignment & Implementation` 在寫產品碼之前，把本輪所有受影響 DSL 的自動化測試對齊最新版 truth。
 - Truth 參照使用 `specs/truth/**`；plan 參照才使用本 plan package 內相對路徑。
 - Feature `Shared Must Read` 除 feature、同模組 DSL、對應 `truth-delta` 列外，還必須列入回追到的 planner 產物。
-- 後端 Test Scope 以 `tms/src/test/java/com/athena/tms/bdd/RunTruthFeaturesTest.java` 跑（JDK 25、Testcontainers、Docker Desktop）；App Test Scope 以 `app/bdd/src/test/java/com/athena/app/bdd/RunModuleFeatureTest.java` 跑（Appium、iOS 模擬器）。寫法同 002：Test Scope 只列 feature 路徑。
+- **起點是工作樹現況，不是 HEAD。** 舊審核版 `/implement` 已做到 159 題中的 152 題，程式碼都在工作樹、未 commit（後端主管待辦含待審核、查房 `InspectionOutcome` 與 409／422、`resolution_type`（V22）、`repair_rejected` 推播、可撥時鐘；App 登入分流、主管首頁三格、三類清單、查房、待認領）。本檔每一題都以「現況已經有什麼」為前提，只寫要改的差距。
+
+**測試指令**（每個 Feature phase 的 Test Scope 用這兩組跑）：
+- 後端（`tms/`，JDK 25、Testcontainers、Docker Desktop）：
+  ```
+  export JAVA_HOME=/Users/Caresys/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home
+  export DOCKER_HOST=unix:///Users/Caresys/.docker/run/docker.sock
+  export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+  cd tms && mvn -q test -Dtest=RunTruthFeaturesTest -Dcucumber.features=../specs/truth/features/backend/<模組>/<檔名>.feature
+  ```
+  undefined 檢查加 `-Dcucumber.execution.dry-run=true`。帶 `-Dcucumber.features` 時會多 1 個 CucumberTestEngine discovery 假影 error，忽略。Cucumber Expression 中文句含 `/` 要寫 `\\/`。
+- App BDD（Appium、iOS 模擬器）：先以撥時鐘旗標啟動 8080 後端
+  `TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run`，
+  再跑 `FEATURE=<ios-app 下路徑，例如 主管工作台/主管首頁.feature> bash /private/tmp/claude-501/-Users-Caresys-IdeaProjects-tms-mvp/3c9b6266-e9f4-42c8-9264-f2d79669856a/scratchpad/run-4i.sh`（內含 build、install、Appium、收 WDA）。後端產品碼改過就要重啟 8080。模擬器同一時間只能跑一支。
+  App 的 undefined 檢查：`cd app/bdd && JAVA_HOME="$(/usr/libexec/java_home -v 25)" mvn -q test -Dtest=RunModuleFeatureTest -Dsurefire.excludeJUnit5Engines=cucumber -Dcucumber.execution.dry-run=true -Dcucumber.features=../../specs/truth/features/ios-app/<路徑>`。
 
 ## Scope Note（停止範圍、判斷與回交）
 
-1. **沒有回交 `/dsl-refine` 的範圍。** 本輪 ADD 與 MODIFY 的每一句都在唯一的 `dsl.md` 裡有定義；六支 acceptance 旅程都已被 truth feature 承接（含 `truth-delta.md`「刻意不承接」三條的處理）。
-2. **`contracts` 與 `data` 不加 quality gate。** 回追到的 `specs/truth/contracts/**` 與 `specs/truth/data/data-model.dbml` 都在 `specs/truth/**`，依 `Feature約束從plan介面回追` Rule 3 以 Feature 的 Test Scope 全綠當閘門，不另加題。但有三處契約 MODIFY 沒有後端 feature 直接驗（`RepairTicket` 的 `origin`、`doneAt`、`reviewRequestedAt`、`resolutionType`；`RepairTicketSummary` 的 `roomNo` 可為 null 與 `isPublicArea`；`getMyToday` 主管呼叫時的語意），它們由 App 端 Feature 的 Test Scope 間接驗，並寫進 Phase 4D 的 `Boundary` 明列為該 phase 必做。只有 `ui/` 家族是 plan-side 產物，在最後消費者之後加一題 gate（Phase 4N）。
-3. **`features/acceptance/` 六支旅程不列入 `Shared Must Read`。** 它們是 `/spec-by-example` 的 plan-side 產物，不是 `/ui-plan`、`/api-plan`、`/data-plan` 的產物，回追順序不經過它們；truth feature 已逐條承接，Feature phase 讀 truth 就夠。
-4. **`truth-delta.md` `/dsl-refine`「順手補的既有缺口」兩句不產生任務。** `通知中心沒有「全部標為已讀」`（`app/bdd/.../steps/push/PushThenSteps.java:225`）與 `"{任務}" 的面板換成工務單表單，原任務還沒有被中斷`（`.../steps/taskexecution/TaskExecutionThenSteps.java:1273`）的 stepdef 本來就在，只是 `dsl.md` 缺 row；不屬 003，也沒有測試層或產品碼影響。
-5. **`be/工務單/dsl.md` 三句 Then（`"{單號}" 的退回原因為 "{原因}"`、`"{單號}" 已由 "{主管}" 驗收`、`"{單號}" 尚未驗收`）的 MODIFY 不列 Phase 3。** 改動只是拿掉「待 /data-plan 補」註記、寫出實際欄位 `reject_reason`、`verified_by`、`verified_at`；既有 stepdef（`tms/.../steps/repair/RepairThenSteps.java:408、425、455`）本來就查這些欄位，語意沒變且 stepdef 已在。同理 `be/工務單/dsl.md` 裁決段 L13、`be/dsl.md` 狀態用語對照兩句、`be/推播/dsl.md` 模組說明、`ios/工務單/dsl.md` 裁決段 L9 都是說明文字的 MODIFY，沒有句型可對齊。
-6. **`ios/dsl.md` 的 `已有以下工務單：` 列 Phase 3 `[BDD-ALIGN]`。** 這一列的 ios 表沒有 MODIFY，但它的 Data Table 寫「同後端共用 DSL 的同名句型」，而後端那一列本輪 MODIFY 加了 `送出時間`、`處理結果`、`處理說明`、`完修照片張數`、`完修時間`、`驗收人`、`來源` 加 `定期保養`、`房號` 可為「公共區域」、`報修人` 改選填。ios 六支 feature 的工務單表已經在用這些欄（例如 `主管首頁.feature:29`、`主管視角.feature:91`），App 的 fixture（`app/bdd/.../steps/repair/RepairGivenSteps.java` 與 `BackendChannel.createRepairTicket`）不補就會在 Given 就掛掉。
-7. **App fixture `BackendChannel.java:545` 不產生任務。** `truth-delta.md` 把它列為 `createInspections` 破壞性變更的牽動點，但現況已送新 body（`{taskId, items}`）並帶 `Idempotency-Key`（`BackendChannel.java:532-550` 的 `failInspection`），已與新契約一致；後端改完 record 之後它直接通。
-8. **`HandoverGivenSteps.java:156-162` 不是 DSL 的 MODIFY，放 Foundational。** 它是 `"{房號}" 的退房清潔由 "{員工}" 清完，"{主管}" 判定 "{項目}" 不合格`（`HandoverGivenSteps.java:134`）的落地碼，句型語意沒變，只是送舊 body 會被收斂後的 record 拒收。T003 建立共用的查房送出 helper 時一併把它切過去；`CommonWhenSteps.java:85-91` 與 `PushManagerActionSteps.java:95-101` 兩處是 DSL MODIFY，留在 Phase 3。
-9. **示範資料不是 truth，但 FR-034 與 `plan.md` 結構決策要求列為任務**，放 Foundational T002；它不是任何 Feature 的 Test Scope，驗法是 `scripts/seed-demo.sh` 跑完後王主管登入三格都有單。
+1. **沒有回交 `/dsl-refine` 的範圍。** 盤點 20 支本輪 feature 的每一步，都剛好對到一個 `dsl.md` 句型，沒有重複定義，也沒有找不到定義的句；DELETE 的句型在所有 feature 裡都已不再出現。acceptance 旅程由 truth feature 承接，含 `truth-delta.md`「刻意不承接」五條的處理。
+2. **`contracts` 與 `data` 不加 quality gate。** 回追到的 `specs/truth/contracts/**` 與 `specs/truth/data/data-model.dbml` 都在 `specs/truth/**`，以 Feature 的 Test Scope 全綠當閘門。只有 `ui/` 家族是 plan-side 產物，在最後一個 App 消費者之後加一題 gate（Phase 4V）。
+3. **`features/acceptance/` 不列入 `Shared Must Read`。** 它是 `/spec-by-example` 的 plan-side 產物，回追順序不經過它。
+4. **truth-delta 的兩條待決已有裁決，照裁決寫：** ①每次完修都推播報修人，完修推播的冪等鍵要帶事件序號（`repair/RepairService.java:424` 現在是 `"repair_resolved:" + ticketTaskId`）；②工務人員「班已結束」只看請假與飯店所有班別時段，DSL 以 `Clock` 落在所有班別時段之外表達，不另建工務排班。驗收不通過原因不設長度上限。
+5. **不改 V17、V22。** `V22__repair_ticket_resolution_type_and_repair_rejected_event.sql` 雖然還沒 commit，仍視為已發布；收回與加值一律寫在新的 V23。
+6. **NOOP 的句不出題（工作樹已對齊或語意沒變）：** 後端 `飯店有以下員工：`、`"{員工}" 判定 "{任務}" 查房全部項目通過`、`"{員工}" 收到以下推播：`、`"{員工}" 查看主管待辦`、`待驗收清單不包含 "{單號}"`、`待驗收清單中 "{單號}" 的完修結果為 "{結果}"、來源為 "{來源}"`、三句開單 When（`中斷…並開立以下工務單：`、`從…開立以下工務單：`、`中斷…並以已準備的照片開立水電工務單`）、`"{員工}" 撤回 "{單號}"`、`"{主管}" 判定 "{任務}" 查房如下：`（共 11 句，都只呼叫 API 或比對通用欄位，新行為是產品碼）；iOS `飯店有以下員工：`、`這次操作沒有留在手機上等補送`、`後端已對 "{員工}" 送出推播 "{標題}"`、`「我名下的單」依序列出 {房號清單}，卡片與房務首頁的任務卡一致`、`完修回報的送出鈕為 "{按鈕狀態}"`、`"{任務}" 的單卡沒有搶單鈕`（共 6 句）。另外 `"{員工}" 在 App 打開 "{單號}" 的工務單詳情`（When）與 T055 的 Given 共用 `RepairContext` 的開啟路由，T055 修好即一併對齊，不另出題。說明文字類的 MODIFY（`be/dsl.md` 部門用語對照、`be/工務單/dsl.md` 模組說明與刪除「truth 領先現況」段、`be/推播/dsl.md` 模組說明、`ios/工務單/dsl.md` 與 `ios/主管工作台/dsl.md` 模組說明）沒有句型可對齊；其中對照表有落地碼的（`Terms.java` 狀態對照）併入 T008。
+7. **`repair_tickets.origin` 欄位在 truth 早就有、資料庫還沒有**（不是 003 的改動）。`待驗收清單中…來源為` 沿用現行由 `tasks.source` 換算的做法，本輪不補欄位。
+8. **示範資料不是 truth，但 FR-041 要求列為任務**，放 Foundational T002；它不是任何 Feature 的 Test Scope，驗法是 seed 跑完後王主管登入兩格、陳主管登入一格都不是 0。
+9. **兩句不在 truth-delta、但工作樹 stepdef 會讓本輪劇本紅的句，照 `[BDD-ALIGN]` 出題：** `ios/dsl.md` 的 `已有以下工務單：`（T054；ios 表寫「同後端共用 DSL 的同名句型」，後端那列本輪 MODIFY）與 `ios/系統層/dsl.md` 的 `"{員工}" 已在 App 登入，停在首頁`（T109；主管分支寫死等待審核格）。
+10. **刪除的產品行為（審核三動作、待審核清單、`repair_rejected`）放在後端 Phase 4J 與 App Phase 4U 的 `[CODE-REMOVE]`。** 前面的 GREEN 為了讓 Test Scope 綠，可能已經順手拿掉一部分（例如 `counts` 剛好是表格的格子就得拿掉 `review`）；CODE-REMOVE 負責清掉剩下的、確認不殘留。
 
 ## Phase 2: Foundational
 
-**Goal**: 只建立 Phase 3 與 Phase 4 會用到的資料欄位、示範資料、測試共用 helper、後端查詢入口骨架與 App 的分流函式、外殼、畫面檔案與 API client 落點。不寫三條判定公式、不寫查房逐項判定、不寫任何主管動作的畫面行為。
+**Goal**: 只建立後續要用的 migration、示範資料、測試共用 helper、後端與 App 的型別與方法落點、App BDD 的 fixture 殼。不寫驗收不通過的判定、不寫依主管種類的查詢、不寫任何畫面行為。
 
-- [ ] T001 新增 Flyway migration `V10`，加 `repair_tickets.resolution_type` 與 `notifications.event` 的 `repair_rejected`
+- [X] T001 新增 Flyway migration `V23`，收回審核狀態並加入結案、驗收不通過的欄位與值
   - Read:
-    - `truth-delta.md` -> `/data-plan` Wave 3 ADD `repair_tickets.resolution_type`、`/data-plan` MODIFY `notifications.event` 的 CHECK 值集
-    - `specs/truth/data/data-model.dbml` -> `Table repair_tickets` 的 `resolution_type` 欄位說明、`Table notifications` 的 `event` 十八值
-    - `tms/src/main/resources/db/migration/` -> `V9__rule_idempotency_key.sql` 的命名與既有 CHECK 重建慣例（`DROP CONSTRAINT` 再 `ADD CONSTRAINT` 整個值集）
-  - 只做：一支 migration 做兩件事。①`repair_tickets` 加 nullable `text` 欄 `resolution_type`，CHECK `fixed|temporary|cannot_fix`，不加索引；②重建 `notifications.event` 的 CHECK 為 dbml 現行十八值（加 `repair_rejected`）。
-  - 不做：不回填既有列（seed 在 T002 自己補）；不寫 `resolveOnComplete` 的寫入（Phase 4D）；不動 `task_events.type`（已有 `repair_rejected`）。
+    - `truth-delta.md` -> `/data-plan`「既有資料處置」四段、MODIFY `tasks.state`、`tasks.pool_source`、`repair_tickets.resolution_type`、`notifications.event`，DELETE `reject_reason`，ADD `last_verify_failed_*`
+    - `specs/truth/data/data-model.dbml` -> `Table tasks` 的 `state`、`pool_source` CHECK；`Table repair_tickets` 的 `resolution_type`、`last_verify_failed_*` 與複合外鍵；`Table notifications` 的 `event` 十八值
+    - `tms/src/main/resources/db/migration/` -> `V17__repair_ticket_review_and_verification.sql`（`pending_review`／`rejected`、`reject_reason` 的出處）、`V22__repair_ticket_resolution_type_and_repair_rejected_event.sql`（兩個 CHECK 的現行寫法）
+    - `tms/src/main/java/com/athena/tms/repair/RepairService.java:497-520` -> `ticketView` 直接 SELECT `rt.reject_reason`
+  - 只做：一支 `V23__...sql`，順序為先拿掉舊 CHECK、處理資料列、再加新 CHECK。①`type=repair` 且 `state IN (pending_review, rejected)` 轉 `pool`、`assignee_id`=NULL、`pool_source=staff_report`、`reminder_stage`=NULL；`type=repair` 且 `state=done` 且 `repair_tickets.verified_at` 有值轉 `closed`；換上十值 `chk_tasks_state`；`chk_tasks_pool_source` 加 `verification_return`。②`repair_tickets` 刪 `reject_reason`；加 `last_verify_failed_reason`、`last_verify_failed_by`、`last_verify_failed_at` 三個 nullable 欄與 `(tenant_id, last_verify_failed_by)` 複合外鍵；`chk_repair_tickets_resolution_type` 加 `no_action_needed`。③刪 `notifications.event='repair_rejected'` 的列與 `outbox` 裡尚未送出、事件為 `repair_rejected` 的 push，再換上以 `repair_verification_failed` 取代 `repair_rejected` 的十八值 CHECK。④同題把 `RepairService` 的 `ticketView` SELECT 拿掉 `rt.reject_reason`（`rejectReason` 先回 null），讓既有讀取在欄位刪掉後不壞。
+  - 不做：不改 V17、V22；不動 `task_events`（資料庫對 `type` 沒有 CHECK）；不回填舊完修單的 `resolution_type`；不刪 `RepairService.reject` 寫 `reject_reason` 的 UPDATE、不改任何狀態轉移或讀取端（Phase 4A～4J）。
 
-- [ ] T002 調整 `scripts/seed-demo.sh`，讓王主管登入三格都有單
+- [X] T002 調整 `scripts/seed-demo.sh`，對齊 FR-041
   - Read:
-    - `spec.md` -> FR-034、「舉例說明用的人物與示範資料」
-    - `truth-delta.md` -> `/data-plan` NOOP `scripts/seed-demo.sh 所需欄位` 那一列（三處調整各用哪些欄位、partial UNIQUE 不會撞、`repair_photos.storage_ref` 必填）、Wave 3 段末「seed 為 W-0108 與 W-0109 補 `resolution_type='fixed'`」
-    - `scripts/seed-demo.sh` -> 第 193 行起的五群 `tasks`、第 323 行 `task_events`、第 335 行 `repair_tickets`、第 387 行 `notifications`、第 76 與 82 行的 `DELETE`
-    - `tms/src/main/java/com/athena/tms/repair/RepairService.java` -> 完修照片 `storage_ref` 的既有存放慣例（App 要抓得到）
-  - 只做：①加一列前一天完成的待查房打掃單（`type=cleaning`、`state=done`、`work_date` 與 `done_at` 為昨天、`assignee_id` 不是王主管）；②加一張等主管審核的一般件（`tasks` 一列 `type=repair`、`dept=engineering`、`source=staff`、`state=pending_review`、`urgent=false`、`assignee_id` 為空，`repair_tickets` 一列 `is_urgent=false`、`origin=reported`、`reporter_id` 為阿芳，`task_events` 一筆 `created` 當排序鍵）；③為 W-0108 加一列 `repair_photos`（`purpose=completion`、`status=uploaded`、`uploaded_by` 為阿強、`storage_ref` 指到 App 真的抓得到的物件）；④W-0108 與 W-0109 寫 `resolution_type='fixed'`；⑤把第 27 行與第 309 行「主管登入後進房務首頁」的過期註解改成主管首頁。
-  - 不做：不改既有單的狀態與時間；不加 ui-plan 假資料裡 W-0110、W-0111 這類 FR-034 沒要求的單（要加也等 Phase 4 全綠後另議）；不碰 truth。
+    - `spec.md` -> FR-041、「舉例說明用的人物與示範資料」（陳主管 `mg2`）
+    - `truth-delta.md` -> `/data-plan` NOOP `scripts/seed-demo.sh 所需欄位` 那一列
+    - `scripts/seed-demo.sh` -> 檔頭說明 :37-39、帳號 :117 一帶與結尾帳號清單 :492、202 窗簾單 `tasks` :333-339 與 `repair_tickets` W-0110 :366、取號計數器 :369、W-0108 :304／:374-389、W-0109 :308／:380-382、檢查查詢 :476-483
+  - 只做：①加工務主管陳主管（`mg2`、`role=manager`、`dept=engineering`），結尾帳號清單補上；②拿掉阿芳報修、等主管審核的 202 窗簾掛勾單（`tasks` 列、`repair_tickets` W-0110 列、前一列結尾逗號改分號、取號計數器改回 109、待審核張數檢查），房務待認領裡櫃檯轉單的 202 照舊；③W-0109 改 `state=closed`、`verified_by` 王主管、`verified_at` 有值；④新增一張以不需處理結案的工務單（`state=closed`、`resolution_type=no_action_needed`、沒有 completion 照片、`verified_by` 為 NULL，`task_events` 一筆 `completed` 帶 `resolutionType=no_action_needed`）；⑤檢查查詢改成王主管看待查房與待驗收、陳主管只看待驗收，兩人都不是 0。
+  - 不做：不改 W-0108（維持 `done`、`fixed`、一張完修照片）、小美的 301、昨天完成的 205 待查房單、王主管名下的 403 與 404；不加 ui-plan 雛形裡 FR-041 沒要求的單；不碰 truth。
 
-- [ ] T003 建立後端測試共用的查房送出 helper，並把交班 fixture 切過去
+- [X] T003 建立後端測試共用的驗收送出 helper、房況快照與「班別時段之外」時刻
   - Read:
-    - `truth-delta.md` -> `/api-plan` MODIFY `createInspections`、「牽動既有後端 stepdef 或 App 的破壞性變更」第一點
-    - `specs/truth/contracts/components/schemas/查房.yaml` -> `CreateInspectionRequest`、`InspectionItemJudgement`
-    - `tms/src/test/java/com/athena/tms/bdd/support/BddApiClient.java`、`tms/src/test/java/com/athena/tms/bdd/ScenarioWorld.java` -> 既有呼叫與保存回應的方式
-    - `tms/src/test/java/com/athena/tms/bdd/steps/handover/HandoverGivenSteps.java:134、156-162` -> 送舊 body 的 fixture
-  - 只做：在 `support/` 加一個 helper（例如 `InspectionFixtures.submit(world, inspectorName, taskId, items)`），送 `{taskId, items[{key, pass}]}` 並帶 `Idempotency-Key`，回傳整個 HTTP 回應讓呼叫端自己決定要不要斷言；把 `HandoverGivenSteps.java:156-162` 改成呼叫它（這一句語意沒變，見 Scope Note 第 8 條）。
-  - 不做：不動 `CommonWhenSteps.java:85-91` 與 `PushManagerActionSteps.java:95-101`（Phase 3 的 ALIGN）；不寫任何 `InspectionOutcome` 的斷言。
+    - `truth-delta.md` -> `/dsl-refine` 後端 MODIFY `"{主管}" 驗收通過 "{單號}"`、ADD 兩句驗收不通過 When、ADD `"{工務}" 今天的班已經結束`、ADD `"{房號}" 的房況沒有改變`
+    - `specs/truth/contracts/components/schemas/工務單.yaml` -> `VerifyRepairTicketRequest`、`RepairVerificationOutcome`
+    - `tms/src/test/java/com/athena/tms/bdd/support/InspectionFixtures.java`（送 body＋`Idempotency-Key` 的寫法）、`support/LastOperationGuard.java`、`support/MutableClock.java`、`ScenarioWorld.java`（`lastInspectionResponse` 的保存方式）
+    - `tms/src/main/java/com/athena/tms/service/InspectionService.java:218` -> `cleanerUnavailable` 用的飯店班別時段
+  - 只做：`support/` 加驗收 helper（例如 `VerifyFixtures.send(world, managerName, ticketNo, result, reason)`），送 `{result, reason}` 並帶新的 `Idempotency-Key`，回傳整個 HTTP 回應；`ScenarioWorld` 加 `lastVerifyResponse` 的保存與讀取；`LastOperationGuard` 加「指定房號的 `rooms` 房況快照」欄位殼；`MutableClock` 旁加一個算「飯店所有班別時段之外的下一個時刻」的函式。
+  - 不做：不改任何既有 stepdef（Phase 3）；不寫結果、去處或房況的斷言。
 
-- [ ] T004 建立後端主管待辦查詢的入口骨架
+- [X] T004 建立後端驗收與結案的型別與常數落點
   - Read:
-    - `truth-delta.md` -> `/api-plan` ADD `getManagerQueues`、ADD `components/schemas/主管工作台.yaml`
-    - `specs/truth/contracts/groups/現場作業/主管工作台.yaml` -> `GET /me/manager-queues`
-    - `specs/truth/contracts/components/schemas/主管工作台.yaml` -> `ManagerQueues`、`QueueItemBase`、三種 item
-    - `tms/src/main/java/com/athena/tms/controller/TaskExecutionController.java` -> `getMyToday` 掛在 `/me/` 下的寫法與 `CurrentActor` 取法
-  - 只做：新 controller 與 service（例如 `controller/ManagerQueueController` 與 `service/ManagerQueueService`），端點路徑與回應 DTO 欄位名照契約，先回 `counts` 三個 0 與三個空陣列。
-  - 不做：不寫三條判定公式、排序、排除本人、`waitingSinceIsToday`、403（全部 Phase 4A／4B）。
+    - `truth-delta.md` -> `/api-plan` MODIFY `verifyRepairTicket`、ADD `VerifyRepairTicketRequest`／`RepairVerificationOutcome`、MODIFY `Error`（`verification_reason_required`）；`/data-plan` 讀取端清單 `common/codes/TaskState.java:15`
+    - `specs/truth/contracts/components/schemas/工務單.yaml`、`shared.yaml` -> 兩個新 schema、`Error.code`
+    - `tms/src/main/java/com/athena/tms/common/codes/`、`tms/src/main/java/com/athena/tms/dto/`、`tms/src/main/java/com/athena/tms/repair/RepairController.java:178-181`
+  - 只做：`common/codes/` 加 `closed`（`TaskState`）、`no_action_needed`（完修結果）、`repair_verification_failed`（推播與事件）、`verification_return`（進池來源）、`verification_reason_required`（錯誤碼）的常數；`dto/` 定義 `VerifyRepairTicketRequest`（`result`、`reason`）與 `RepairVerificationOutcome`（`taskId`、`ticketNo`、`roomNo`、`isPublicArea`、`result`、`destination`、`assigneeName`、`reason`、`decidedBy`、`decidedAt`）兩個 record。
+  - 不做：不改 `RepairController.verify` 的簽章與回應、不寫不通過分支、不改任何讀取端認得 `closed`（Phase 4A～4I）；不刪審核相關碼（Phase 4J）。
 
-- [ ] T005 把 `createInspections` 的請求 record 與回應 DTO 對齊契約形狀
+- [X] T005 擴充 App `api_client.dart` 的驗收方法與工務單新欄位解析
   - Read:
-    - `truth-delta.md` -> `/api-plan` MODIFY `createInspections`、ADD `InspectionOutcome`、DELETE `inspectionsRequest`
-    - `specs/truth/contracts/components/schemas/查房.yaml` -> `CreateInspectionRequest`、`InspectionOutcome`
-    - `tms/src/main/java/com/athena/tms/controller/InspectionApiController.java:39` -> `record CreateInspectionRequest`
-    - `tms/src/main/java/com/athena/tms/service/InspectionService.java` -> `InspectionRequest` 內部型別、`processed_ops` 冪等機制的既有接法（參考 `RepairController` 的 `Idempotency-Key`）
-  - 只做：record 改成只收 `taskId` 與 `items[{key, pass}]`，controller 方法簽章加 `@RequestHeader("Idempotency-Key")` 參數位置（先收不接）；定義 `InspectionOutcome` 回應 DTO 類別（`inspectionId`、`taskId`、`roomNo`、`result`、`destination`、`cleanerName`、`failedItems`、`createdAt`）。
-  - 不做：不改 `validateCoverage` 的判定（缺項、多項、`currentItems`）、不加 409、不算 `destination`、不把 `Idempotency-Key` 接進 `processed_ops` 回放（全部 Phase 4C）；controller 回應內容先維持既有，DTO 只定義不接。
+    - `truth-delta.md` -> `/api-plan` MODIFY `RepairTicket`、`VerifyQueueItem`、ADD `EngineeringTicket.verificationReturnReason`／`PoolItem.verificationReturnReason`、ADD `RepairVerificationOutcome`；「破壞性變更清單」App 那一點
+    - `specs/truth/contracts/components/schemas/工務單.yaml`、`主管工作台.yaml`、`員工工作台.yaml`
+    - `app/mobile/lib/core/api_client.dart` -> `RepairTicketDetail`（:1076 起）、`ManagerQueues`（:1289 起）、`VerifyQueueItem`（:1481、:1497 的 `?? 'fixed'`）、`completeTask`（:181-203）
+  - 只做：加 `verifyRepairTicket(taskId, result, reason, idempotencyKey)` 回 `RepairVerificationOutcome` 模型；`RepairTicketDetail` 加 `lastVerifyFailedReason`、`lastVerifyFailedBy`、`lastVerifyFailedAt`、`viewerIsAssignee`；`VerifyQueueItem.resolutionType` 改可為 null、加 `wasVerificationFailed`；`EngineeringTicket`、`PoolItem` 加 `verificationReturnReason`；`ManagerQueues` 對 `inspection`、`review` 兩鍵缺席時解析不炸（缺席視為沒有這一類）。
+  - 不做：不刪 `ReviewQueueItem`、`resubmitRepairTicket`、`rejectReason`、`reviewRequestedAt`（Phase 4U）；不接畫面、不改 `completeTask` 的照片規則（Phase 4P）。
 
-- [ ] T006 預留後端 `主管工作台` 與 `查房` 新句的 stepdef 落點
+- [X] T006 建立 App 的主管種類判定、新 id 與驗收畫面元件殼
   - Read:
-    - `specs/truth/features/backend/主管工作台/dsl.md`、`specs/truth/features/backend/查房/dsl.md` -> 本輪 ADD 的句
-    - `tms/src/test/java/com/athena/tms/bdd/steps/inspection/` -> 既有查房 stepdef 的檔案分法（Given／When／Then 三檔加 `package-info.java`）
-    - `tms/src/test/java/com/athena/tms/bdd/ScenarioWorld.java`
-  - 只做：建 `steps/managerqueue/`（`ManagerQueueWhenSteps`、`ManagerQueueThenSteps`、`package-info.java`）空殼；`ScenarioWorld` 加保存「上一次主管待辦回應」與「上一次查房送出回應」的欄位；查房新句落在既有 `steps/inspection/` 三檔。
-  - 不做：不寫任何句的實作語意（Phase 3）。
+    - `ui/ui-plan.md` -> 介面 1 判定順序、介面 4 不通過面板與結果卡、「前端實作切分建議」
+    - `specs/truth/features/ios-app/主管工作台/dsl.md`、`specs/truth/features/ios-app/工務單/dsl.md` -> 本輪 ADD／MODIFY 句實作語意點名的 id（`managerTicket.pass-button`、`managerTicket.fail-button`、不通過面板、結果卡與回清單鈕、工務待認領的驗收退回標籤、步驟條第四步、工務主管寬磚）
+    - `app/mobile/lib/core/landing.dart`、`app/mobile/lib/features/manager/manager_ids.dart`、`app/mobile/lib/features/ticket/ticket_screen.dart:28-29`
+  - 只做：`core/landing.dart` 加主管種類純函式（`role=manager` 且 `dept=engineering` 為工務主管，其餘主管為房務主管）；`manager_ids.dart` 加上述新 id 常數；`features/ticket/` 建不通過面板與驗收結果卡兩個空殼元件。
+  - 不做：不刪核准、退回的 id（Phase 4U）；不把主管外殼依種類分流、不接資料、不寫版面（Phase 4K～4T）。
 
-- [ ] T007 建立 App 的首頁分流純函式與主管外殼空殼
+- [X] T007 建立 App BDD 的主管首頁等待 helper 與 `BackendChannel` 驗收 fixture 殼
   - Read:
-    - `ui/ui-plan.md` -> 介面 1 的判定順序表與「主管外殼」段
-    - `app/mobile/lib/features/shell/main_shell.dart` -> `_MainShell(homeTab, poolTab)`、`HousekeepingShell`、`EngineeringShell`
-    - `app/mobile/lib/core/api_client.dart` -> 登入 session 的 `role` 與 `dept`
-  - 只做：`core/landing.dart` 的 `landingShellFor(session)`（先看 `role == 'manager'`，再看 `dept == 'engineering'`，其餘房務）；`main_shell.dart` 加 `ManagerShell`（`homeTab` 與 `poolTab` 先放空殼畫面，通知與我的兩分頁沿用）。
-  - 不做：不把三個入口（`login_screen.dart:122`、`force_password_change_screen.dart:138`、`push_gateway.dart:194`）切過去（Phase 4F）；不寫主管首頁內容。
-
-- [ ] T008 建立 `features/manager/` 畫面檔案骨架、`TicketView.manager` 與本輪 accessibility id 落點
-  - Read:
-    - `ui/ui-plan.md` -> 「前端實作切分建議」的頁面／容器切分與共用元件
-    - `specs/truth/features/ios-app/主管工作台/dsl.md`、`specs/truth/features/ios-app/工務單/dsl.md`、`specs/truth/features/ios-app/待認領/dsl.md` -> 各句實作語意裡點名的 id（`manager.home.tile.{inspection|review|verify}`、`manager.queue.row.{房號}`、`inspect.item.{key}.pass-button`／`.fail-button`、`inspect.submit-button`、`inspect.result.back-button` 等）
-    - `app/mobile/lib/features/ticket/ticket_screen.dart:21` -> `enum TicketView`
-    - `app/mobile/lib/core/tms_semantics.dart` -> id 掛法
-  - 只做：建 `features/manager/manager_home_screen.dart`、`manager_queue_screen.dart`、`inspection_screen.dart`、`inspection_result_screen.dart`、`manager_pool_screen.dart` 空殼（可空白）；`TicketView` 加 `manager` 值，`ticket_screen.dart` 的 switch 先讓它落到工務版；把三個 dsl 點名的 id 常數集中成一份清單掛在對應空殼元件上。
-  - 不做：不接任何資料、不寫版面、不寫動作列（Phase 4G～4L）。
-
-- [ ] T009 擴充 App `api_client.dart` 的主管待辦、查房送出與工務單欄位解析
-  - Read:
-    - `truth-delta.md` -> `/api-plan` ADD `getManagerQueues`、MODIFY `createInspections`、MODIFY `RepairTicket`、MODIFY `RepairTicketSummary`、MODIFY `Error` 錯誤碼清單、「牽動既有後端 stepdef 或 App 的破壞性變更」第三、四點
-    - `specs/truth/contracts/components/schemas/主管工作台.yaml`、`查房.yaml`、`工務單.yaml`、`shared.yaml`
-    - `app/mobile/lib/core/api_client.dart` -> `json['roomNo'] as String`（第 964、1083、1228、1336 行）與 `ApiException` 的 `code`／`context`
-  - 只做：加 `getManagerQueues()` 與三種 item 模型（含 `waitingSinceIsToday`、`isPublicArea`、`roomNo` 可為 null）；加 `createInspection(taskId, items, idempotencyKey)` 回 `InspectionOutcome` 模型；`RepairTicket` 模型加 `origin`、`doneAt`、`reviewRequestedAt`、`resolutionType`，`description` 與 `reporterName` 可為 null；工務單相關解析的 `roomNo` 改成可為 null 並補 `isPublicArea`；`ApiException` 能讀到 `inspection_items_mismatch` 的 `context.currentItems`。
-  - 不做：不接畫面、不寫導頁；不動打掃任務的 `roomNo` 解析（任務一定有房號）。
-
-- [ ] T010 預留 App BDD 的 `steps/manager/` 落點與 `BackendChannel` 的主管用 fixture 殼
-  - Read:
-    - `specs/truth/features/ios-app/主管工作台/dsl.md` -> Given 句的 `怎麼做`（整批換查房項目、全部停用、新增一項、另一位主管查完）
-    - `app/bdd/src/test/java/com/athena/app/bdd/BackendChannel.java` -> `createManagerLikeStaff`（第 403 行）、`failInspection`（第 532 行）、`createRepairTicket`（第 835 行）、`markRepairTicketVerified`（第 967 行）
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/pool/PoolContext.java` -> 模組 context 的寫法
-  - 只做：建 `steps/manager/`（`ManagerGivenSteps`、`ManagerWhenSteps`、`ManagerThenSteps`、`ManagerContext`、`package-info.java`）空殼；`BackendChannel` 加方法殼：整批替換啟用的查房項目、全部停用、追加一項、以指定主管送出查房、把別人的打掃單寫成指定 `done_at`、工務單 fixture 收新欄位（`送出時間`、`處理結果`、`處理說明`、`完修照片張數`、`完修時間`、`驗收人`、`來源=定期保養`、公共區域）。
-  - 不做：不寫任何句的斷言或操作（Phase 3）。
+    - `truth-delta.md` -> `/dsl-refine` iOS MODIFY `"{員工}" 在 App 打開首頁`、ADD 三個驗收 Given、ADD `"{工務}" 今天的班已經結束`
+    - `app/bdd/src/test/java/com/athena/app/bdd/BackendChannel.java` -> `verifyRepairTicket`（:1040，送空 body）、撥時鐘（:347-366）
+    - 「等三格含 review」重複的 6 處：`steps/common/CommonWhenSteps.java:39`、`steps/system/SystemGivenSteps.java:41`、`steps/push/PushThenSteps.java:147`、`steps/account/AccountThenSteps.java:177`、`steps/manager/ManagerGivenSteps.java:160`、`steps/system/SystemWhenSteps.java` 的 `openManagerQueueRow`
+  - 只做：加一個共用 helper（例如 `ManagerHomeWait.await(world, staffName)`），依該員工後端的 `role`／`dept` 決定要等哪幾格（房務主管等待查房與待驗收、工務主管只等待驗收）；`BackendChannel` 加方法殼：送驗收帶 `result`／`reason`、撥時鐘到飯店所有班別時段之外。
+  - 不做：不把 6 處切到 helper（各句的 Phase 3 task 自己切）；不改 `createRepairTicket` 與任何 stepdef 的斷言（Phase 3）。
 
 ## Phase 3: Test Alignment & Implementation
 
-**Goal**: 把本輪 Feature 用到的 DSL 自動化測試對齊最新版 truth；含 truth-delta 有改的句，以及本輪 Feature 用到、尚無 stepdef 的句。不寫產品行為。
+**Goal**: 把本輪 Feature 用到的 DSL 自動化測試對齊最新版 truth；含 truth-delta 有改的句，以及本輪 Feature 用到、尚無 stepdef 的句。不寫產品行為。起點是工作樹的 stepdef（舊審核版已做過一輪 ALIGN／RED），已對齊新 truth 的句列在 Scope Note 第 6 條，不出題。
 
 **DSL 參照**:
 - 每一句只屬於一個權威 `dsl.md`：同模組 `specs/truth/features/{介面}/{模組}/dsl.md`，或介面根 `specs/truth/features/{介面}/dsl.md`。不得掃其他模組。
-- backend 的句分四處：`specs/truth/features/backend/主管工作台/dsl.md`（新模組）、`specs/truth/features/backend/查房/dsl.md`、`specs/truth/features/backend/工務單/dsl.md`、`specs/truth/features/backend/推播/dsl.md`；**另有七句在介面根** `specs/truth/features/backend/dsl.md`（五句 MODIFY、兩句 ADD），見下方「backend / 介面根共用 DSL」。
-- ios-app 的句分六處：`specs/truth/features/ios-app/主管工作台/dsl.md`（新模組，38 句全部 ADD：Given 9、When 6、Then 23）、`specs/truth/features/ios-app/工務單/dsl.md`、`specs/truth/features/ios-app/待認領/dsl.md`、`specs/truth/features/ios-app/系統層/dsl.md`、`specs/truth/features/ios-app/推播/dsl.md`、`specs/truth/features/ios-app/帳號與登入/dsl.md`；**另有十三句在介面根** `specs/truth/features/ios-app/dsl.md`（八句 MODIFY 含兩句搬移、五句 ADD）。
-- 三條搬移的 row（`這次操作沒有留在手機上等補送`、`後端沒有對 "{員工}" 送出任何推播` 上提到 `ios-app/dsl.md`；`"{員工}" 已在 App 登入，停在首頁` 下放到 `ios-app/系統層/dsl.md`）語意不變：前兩句既有 stepdef 在 `steps/taskexecution/`，只對齊精確參照與用途（`[BDD-ALIGN]`），不拆成移除再新增；第三句是本輪新建，`[BDD-RED]` 落在 `steps/system/`。
-- 讀法：用 task title 的句型對到該檔那一列，以 `StepDef 實作語意`（ios-app 為 `App 實作語意（Appium）`）當作測試程式碼語意。Given／When 讀 `怎麼做`、`權威狀態落地`、`回寫`；Then 讀 `必查`。
+- backend 的句分三處：介面根 `specs/truth/features/backend/dsl.md`（T008～T010）、`specs/truth/features/backend/工務單/dsl.md`（T011～T040）、`specs/truth/features/backend/主管工作台/dsl.md`（T041～T049）。
+- ios-app 的句分七處：介面根 `specs/truth/features/ios-app/dsl.md`（T050～T054）、`specs/truth/features/ios-app/工務單/dsl.md`（T055～T088）、`specs/truth/features/ios-app/主管工作台/dsl.md`（T089～T104）、`specs/truth/features/ios-app/推播/dsl.md`（T105）、`specs/truth/features/ios-app/帳號與登入/dsl.md`（T106）、`specs/truth/features/ios-app/系統層/dsl.md`（T107～T109）。
+- 本輪沒有 DSL row 只搬移權威位置。句型改名但位置不變的六句（`主管待辦的格子數字為：`、`"{工務}" 以完修結果 "{結果}" 完成 "{單號}"，處理說明 "{說明}"，不附照片`、`首頁的格子依序顯示：`、`每一列都看得到工務單號與完修結果`、`首頁沒有主管的格子`、`"{主管}" 在工務單詳情按通過`）是 `[BDD-ALIGN]`：改既有 stepdef 的句型與語意，不拆成 REMOVE 加 RED。
+- 讀法：用 task title 的句型對到該檔那一列，以 `StepDef 實作語意`（ios-app 為 `App 實作語意（Appium）`）當作測試程式碼語意。Given／When 讀 `怎麼做`、`權威狀態落地`、`回寫`；Then 讀 `必查`（`呈現結果`、`權威狀態`、`再讀確認`）。
 - `truth-delta.md` 只告訴這句是 ADD / MODIFY / DELETE。語意以 `dsl.md` 那一列為準，不得用 feature 措辭或舊 stepdef 自行發明。
 
 **Markers**:
-- `[BDD-ALIGN]`：`MODIFY`。既有 stepdef 還在，但語意是舊 truth（Data Table 少欄、送舊 body、沒帶 `Idempotency-Key`、值集沒有主管的去處或畫面、首頁不分角色），或這句的唯一權威位置被搬移。依 `dsl.md` 該列改測試。
+- `[BDD-ALIGN]`：`MODIFY`。既有 stepdef 還在，但語意是舊 truth（送空 body、還有 `pending_review`／`rejected`／`review` 分支、Data Table 少欄、狀態對照沒有已結案、句型名是舊的）。依 `dsl.md` 該列改測試。
+- `[BDD-REMOVE]`：`DELETE`。此句已不是 truth。移除仍綁這句的 stepdef、只服務它的 helper 與 `BackendChannel` 方法，不得留下保護審核行為的測試。
 - `[BDD-RED]`：`ADD`，或本輪 Feature 用到、尚無 stepdef 的句。依 `dsl.md` 該列寫出 stepdef。完成時這句可被跑到，失敗只能是 assertion 或產品行為，不能是 undefined step。
-- 本輪沒有 `DELETE` 的 DSL 句（唯一的 DELETE 是契約 schema `inspectionsRequest`，沒有句型綁它），不使用 `[BDD-REMOVE]`。
-- 兩個 marker 都只動測試層，不寫產品碼。
+- 三個 marker 都只動測試層，不寫產品碼。
 
 **Shared Must Read**:
-- `specs/truth/features/backend/dsl.md` -> `飯店有以下員工：`、`"{員工}" 名下有以下任務：`、`已有以下工務單：`、`"{員工}" 判定 "{任務}" 查房全部項目通過`、`"{員工}" 收到以下推播：`、`這次操作被拒絕，錯誤碼為 "{錯誤碼}"`、`"{房號}" 的房況為 "{房況}"`
-- `specs/truth/features/backend/主管工作台/dsl.md` -> 本檔 When／Then 全部
-- `specs/truth/features/backend/查房/dsl.md` -> 本輪 ADD 的四個 Given、三個 When、五個 Then
-- `specs/truth/features/backend/工務單/dsl.md` -> 四個主管動作 When、本輪 ADD 的三個 Given／When 與三個 Then
-- `specs/truth/features/backend/推播/dsl.md` -> `"{主管}" 查房 "{任務}"，判定 "{項目}" 不合格`
-- `specs/truth/features/ios-app/dsl.md` -> 本檔 Given／When／Then 本輪 ADD 與 MODIFY 的十三句
-- `specs/truth/features/ios-app/主管工作台/dsl.md` -> 本檔全部
-- `specs/truth/features/ios-app/工務單/dsl.md` -> 本輪 ADD 的十四句、MODIFY 的兩句 Then
-- `specs/truth/features/ios-app/待認領/dsl.md`、`specs/truth/features/ios-app/系統層/dsl.md`、`specs/truth/features/ios-app/推播/dsl.md`、`specs/truth/features/ios-app/帳號與登入/dsl.md` -> 本輪 ADD 與 MODIFY 的句
-- `truth-delta.md` -> `/dsl-refine` 全表與「DSL row 搬移」表
-- `tms/src/test/java/com/athena/tms/bdd/steps/`（`common/`、`inspection/`、`repair/`、`push/`、`managerqueue/`）、`tms/src/test/java/com/athena/tms/bdd/support/`
-- `app/bdd/src/test/java/com/athena/app/bdd/steps/`（`common/`、`manager/`、`repair/`、`pool/`、`system/`、`push/`、`account/`、`taskexecution/`）、`app/bdd/src/test/java/com/athena/app/bdd/BackendChannel.java`
+- `specs/truth/features/backend/dsl.md` -> 狀態用語對照、`已有以下工務單：`、`"{任務}" 的狀態為 "{狀態}"`、`這次操作被拒絕，錯誤碼為 "{錯誤碼}"`
+- `specs/truth/features/backend/工務單/dsl.md` -> 模組說明「報修與驗收」與本題句型
+- `specs/truth/features/backend/主管工作台/dsl.md` -> 模組說明與本題句型
+- `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`、`"{員工}" 在 App 打開首頁`、`"{任務}" 在 App 顯示為 "{狀態}"`、兩句回清單 Then
+- `specs/truth/features/ios-app/工務單/dsl.md` -> 模組說明「三種視角對各狀態的呈現表」與本題句型
+- `specs/truth/features/ios-app/主管工作台/dsl.md`、`推播/dsl.md`、`帳號與登入/dsl.md`、`系統層/dsl.md` -> 本題句型
+- `truth-delta.md` -> `/dsl-refine` 後端與 iOS App 兩節，有對應 ADD / MODIFY / DELETE 的句
+- 後端 stepdef：`tms/src/test/java/com/athena/tms/bdd/steps/repair/`、`steps/managerqueue/`、`steps/common/`、`tms/src/test/java/com/athena/tms/bdd/support/`（`TaskFixtures.java`、`Terms.java`、T003 的 helper）
+- App stepdef：`app/bdd/src/test/java/com/athena/app/bdd/steps/repair/`、`steps/manager/`、`steps/common/`、`steps/push/`、`steps/account/`、`steps/system/`、`BackendChannel.java`、T007 的 `ManagerHomeWait`
 
 **Boundary**:
 - 一條 DSL 一個 task。
 - 只改該句的 stepdef / assertion / 直接依賴的 helper。
-- 不寫產品碼。
-- review 啟動 subagent；本輪所有 Test Scope 不得再有 undefined step，失敗只能是 assertion 或產品行為。有 issues 就修正再 review，直到沒有任何問題。通過前不解鎖 Phase 4。
+- 不寫產品碼。ALIGN 改完的句在產品補上之前實跑仍會紅，這是預期；完成條件看 dry-run 沒有 undefined、斷言表達新語意。
+- 刪 `BackendChannel`、`TaskFixtures` 裡呼叫產品審核方法的分支（例如 `TaskFixtures.java:365-375` 呼叫 `engine.rejectRepairTicket`）必須在 Phase 3 完成，Phase 4J／4U 刪產品碼時測試才編得過。
+- 共用檔（`BackendChannel.java`、`CommonThenSteps.java`、`RepairContext.java`、`ScenarioWorld.java`）改動前先重新讀檔、只做最小追加、寫入後立即 `mvn -q -o test-compile`；不要重排或重寫別人的段落。
+- review 啟動 subagent；本輪所有 Test Scope 不得再有 undefined step（後端與 App 各跑一次 dry-run），失敗只能是 assertion 或產品行為。有 issues 就修正再 review，直到沒有任何問題。通過前不解鎖 Phase 4。
 
-**Parallel Hint**:
-- backend（T011–T052）與 ios-app（T053–T131）落在不同 repo 目錄，兩邊可同時開工；T132 等全部回來再啟動 subagent 來 review。
-- backend：T011、T012 都動 `steps/common/CommonGivenSteps.java`，T015、T016、T017 都動 `steps/common/CommonThenSteps.java`，T014 與 T003 的 helper 相依；同檔的題不要同時派。T018–T029（`steps/managerqueue/`）、T030–T041（`steps/inspection/`）、T042–T051（`steps/repair/`）三組各自獨立，可平行。T052 動 `steps/push/PushManagerActionSteps.java`，與其他組不衝突。
-- ios-app：T053–T060 多半在 `steps/common/`，後寫入者自己 merge；T061–T065 的根 Given／Then 建議放 `steps/common/` 既有檔案附近，與 T053–T058 同檔，一併排序。T069–T106（`steps/manager/` 三檔）分 Given（T069–T077）／When（T078–T083）／Then（T084–T106）三組派；T107–T122（`steps/repair/`）一組；T123–T128（`steps/pool/`）一組；T129–T131（`steps/system/`）一組；T066（`steps/account/`）、T067–T068（`steps/push/`）各自獨立。
+**Parallel Hint**（依檔案衝突分組；組與組平行，組內依序）：
+- 後端 B1（`steps/common/CommonThenSteps.java`、`support/Terms.java`）：T008、T009。
+- 後端 B2（`steps/repair/RepairGivenSteps.java`、`support/TaskFixtures.java`）：T010 先做，再 T011～T015。
+- 後端 B3（`steps/repair/RepairWhenSteps.java`）：T016～T024。
+- 後端 B4（`steps/repair/RepairThenSteps.java`）：T025～T040。
+- 後端 B5（`steps/managerqueue/ManagerQueueThenSteps.java`）：T041～T049。
+- App A1（`steps/common/CommonWhenSteps.java`、`CommonThenSteps.java`）：T050～T053。
+- App A2（`steps/repair/RepairGivenSteps.java`、`RepairContext.java`、`BackendChannel.java` 的工務單段）：T054 先做，再 T055～T060。
+- App A3（`steps/repair/RepairWhenSteps.java`）：T061～T069。
+- App A4（`steps/repair/RepairThenSteps.java`）：T070～T088。
+- App A5（`steps/manager/*`）：T089～T104。
+- App A6（`steps/push/`、`steps/account/`、`steps/system/`）：T105～T109。
+- 十一組各派一個獨立 subagent；T110 等全部回來再啟動 subagent 來 review。
 
-### backend / 介面根共用 DSL
+### 後端：介面根 `specs/truth/features/backend/dsl.md`
 
-- [ ] T011 [P] [BDD-ALIGN] `飯店有以下員工：`
-  - Read:
-    - `specs/truth/features/backend/dsl.md` -> 該列 Data Table 新增的選填 `角色`（主管／員工；可表達被設了部門的主管）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`、`tms/src/test/java/com/athena/tms/bdd/support/StaffFixtures.java`
-  - 沒給 `角色` 時行為不變；給「主管」時 `role=manager`，`dept` 照表（可為空也可帶部門）。
+- [X] T008 [P] [BDD-ALIGN] `"{任務}" 的狀態為 "{狀態}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/support/Terms.java:33-39`、`steps/common/CommonThenSteps.java:189-202`
+  - 依「狀態用語對照」：刪「等主管審核」「主管未核准」，加「已結案＝`closed`」；「已完修」是等主管驗收。
 
-- [ ] T012 [P] [BDD-ALIGN] `"{員工}" 名下有以下任務：`
-  - Read:
-    - `specs/truth/features/backend/dsl.md` -> 該列新增的選填 `完成時間`（`今天 HH:mm`／`昨天 HH:mm`，寫 `done_at`）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonGivenSteps.java`、`tms/src/test/java/com/athena/tms/bdd/support/TaskFixtures.java`、`support/MutableClock.java`
-  - `昨天` 以測試時鐘的當天往前一天算，`work_date` 跟著落在昨天。
+- [X] T009 [P] [BDD-ALIGN] `這次操作被拒絕，錯誤碼為 "{錯誤碼}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonThenSteps.java:88、102-124`
+  - 對照表加 `verification_reason_required`→422、`forbidden`→403，刪 `reject_reason_required`。
 
-- [ ] T013 [P] [BDD-ALIGN] `已有以下工務單：`
-  - Read:
-    - `specs/truth/features/backend/dsl.md` -> 該列全部新增與改動的欄（`送出時間`、`處理結果`、`處理說明`、`完修照片張數`、`完修時間`、`驗收人`、`來源` 加 `定期保養`、`報修人` 改選填、`房號` 可為「公共區域」）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java`
-  - `處理結果` 直接寫 `repair_tickets.resolution_type`（T001 的欄位），`無法修復` 時該房 `rooms.hk_state` 一併寫 `out_of_order`；`送出時間` 落成 `task_events` 的 `created` 或 `repair_resubmitted` 時間；`驗收人` 寫 `verified_by` 與 `verified_at`。
+- [X] T010 [P] [BDD-ALIGN] `已有以下工務單：`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java:95-338`、`support/TaskFixtures.java:365-375`、`support/LastOperationGuard.java:23`
+  - 刪 `送出時間`、`退回原因` 欄與 `reject_reason` INSERT、`pending_review`／`rejected` 分支（含呼叫 `engine.rejectRepairTicket`）；狀態加已結案與待開始；`處理結果` 加不需處理（完修照片預設 0）；已結案（非不需處理）寫 `closed`＋`verified_*`＋`repair_verified` 事件；加 `不通過原因`、`不通過判定人`、`不通過時間` 三欄，寫 `last_verify_failed_*` 與一筆 `repair_verification_failed`，退回重修中的單清空完修欄位，待認領時 `pool_source=verification_return`。
 
-- [ ] T014 [P] [BDD-ALIGN] `"{員工}" 判定 "{任務}" 查房全部項目通過`
-  - Read:
-    - `specs/truth/features/backend/dsl.md` -> 該列改寫後的實作語意（`CreateInspectionRequest{taskId, items}` 加 `Idempotency-Key`，回應 `InspectionOutcome`；403 自清自查、409 非待查房、房況 `inspected`）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonWhenSteps.java:85-91`
-    - T003 的 helper
-  - 改成呼叫 T003 的 helper 並把回應存進 `ScenarioWorld`，讓後續 `這次操作被拒絕，錯誤碼為` 與 `這次查房的結果為` 讀得到。
+### 後端：`specs/truth/features/backend/工務單/dsl.md`
 
-- [ ] T015 [P] [BDD-ALIGN] `"{員工}" 收到以下推播：`
-  - Read:
-    - `specs/truth/features/backend/dsl.md` -> 該列新增的選填 `內容`（`PushPayload.body`）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonThenSteps.java`、`tms/src/test/java/com/athena/tms/bdd/support/PushPayloadView.java`
-  - 表格有 `內容` 欄才比對 body，沒有時行為不變。
+- [X] T011 [P] [BDD-ALIGN] `"{主管}" 已先驗收通過 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java:438`
+  - 改用 T003 helper 帶 `{result: passed}`；落地為 `closed`。
 
-- [ ] T016 [P] [BDD-RED] `這次操作被拒絕，錯誤碼為 "{錯誤碼}"`
-  - 驗上一次操作的 HTTP 狀態是 4xx 且 `Error.code` 等於值（`state_conflict`、`inspection_items_mismatch`、`reject_reason_required` 等）；與既有 `這次操作被拒絕` 共用保存的回應，不共用 annotation。
+- [X] T012 [P] [BDD-RED] `"{主管}" 已先以原因 "{原因}" 判定 "{單號}" 驗收不通過`
 
-- [ ] T017 [P] [BDD-RED] `"{房號}" 的房況為 "{房況}"`
-  - 查 `rooms.hk_state`（已查房、還沒打掃好、停用待確認等用語對照見 `be/dsl.md` 狀態用語對照）。
+- [X] T013 [P] [BDD-RED] `"{工務}" 今天的班已經結束`
 
-### backend / 主管工作台
+- [X] T014 [P] [BDD-RED] `"{單號}" 已由 "{工務}" 以不需處理結案`
 
-- [ ] T018 [P] [BDD-RED] `"{員工}" 查看主管待辦`
-- [ ] T019 [P] [BDD-RED] `主管待辦的三格數字為：`
-- [ ] T020 [P] [BDD-RED] `待查房清單依序為 {房號清單}`
-- [ ] T021 [P] [BDD-RED] `待查房清單不包含 "{任務}"`
-- [ ] T022 [P] [BDD-RED] `待審核清單依序為 {單號清單}`
-- [ ] T023 [P] [BDD-RED] `待審核清單不包含 "{單號}"`
-- [ ] T024 [P] [BDD-RED] `待驗收清單依序為 {單號清單}`
-- [ ] T025 [P] [BDD-RED] `待驗收清單不包含 "{單號}"`
-- [ ] T026 [P] [BDD-RED] `待驗收清單中 "{單號}" 的完修結果為 "{結果}"、來源為 "{來源}"`
-- [ ] T027 [P] [BDD-RED] `"{單}" 在清單上標為不是今天開始等`
-- [ ] T028 [P] [BDD-RED] `"{單}" 在清單上標為今天開始等`
-- [ ] T029 [P] [BDD-RED] `這次查詢被拒絕，因為呼叫者不是主管`
+- [X] T015 [P] [BDD-REMOVE] `"{員工}" 已撤回 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java:453`
 
-### backend / 查房
+- [X] T016 [P] [BDD-REMOVE] `"{主管}" 核准 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:204-220`
 
-- [ ] T030 [P] [BDD-RED] `飯店目前設定的查房項目如下：`
-- [ ] T031 [P] [BDD-RED] `飯店停用了全部查房項目`
-- [ ] T032 [P] [BDD-RED] `飯店新增了查房項目 "{項目}"`
-- [ ] T033 [P] [BDD-RED] `"{主管}" 已判定 "{任務}" 查房全部項目通過`
-- [ ] T034 [P] [BDD-RED] `"{主管}" 判定 "{任務}" 查房如下：`
-- [ ] T035 [P] [BDD-RED] `"{主管}" 以空的項目清單判定 "{任務}" 查房`
-- [ ] T036 [P] [BDD-RED] `"{主管}" 判定 "{任務}" 查房全部項目通過，同一請求共送出 {次數} 次`
-- [ ] T037 [P] [BDD-RED] `這次查房的結果為 "{結果}"，去向為 "{去向}"`
-- [ ] T038 [P] [BDD-RED] `這次查房被拒絕，原因是項目集合不符，回應帶現行項目 {項目清單}`
-- [ ] T039 [P] [BDD-RED] `"{任務}" 在房務待認領`
-- [ ] T040 [P] [BDD-RED] `"{任務}" 的查房紀錄只有 {筆數} 筆`
-- [ ] T041 [P] [BDD-RED] `"{員工}" 沒有收到查房退回的推播`
+- [X] T017 [P] [BDD-REMOVE] `"{主管}" 以原因 "{原因}" 退回 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:244-254、265-275`（helper `postReject` 一併刪）
 
-### backend / 工務單
+- [X] T018 [P] [BDD-REMOVE] `"{主管}" 退回 "{單號}" 但沒有寫原因`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:256-263`
 
-- [ ] T042 [P] [BDD-ALIGN] `"{主管}" 核准 "{單號}"`
-  - Read:
-    - `specs/truth/features/backend/工務單/dsl.md` -> 該列改寫後的實作語意（`approveRepairTicket`、`Idempotency-Key`、409 `state_conflict`）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:204`
-  - 現況 `post(..., null)` 沒帶 `Idempotency-Key`；補上並保存回應供 `這次操作被拒絕，錯誤碼為` 讀取。
-- [ ] T043 [P] [BDD-ALIGN] `"{主管}" 以原因 "{原因}" 退回 "{單號}"`
-  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:237`；同上，另注意退回同交易推播報修人的語意由 Then 驗、這句不斷言。
-- [ ] T044 [P] [BDD-ALIGN] `"{員工}" 補資料再送出 "{單號}"`
-  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:296`；同上。
-- [ ] T045 [P] [BDD-ALIGN] `"{主管}" 驗收通過 "{單號}"`
-  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:247`；同上，驗收不改房況。
-- [ ] T046 [P] [BDD-RED] `"{主管}" 退回 "{單號}" 但沒有寫原因`
-- [ ] T047 [P] [BDD-RED] `"{主管}" 已先驗收通過 "{單號}"`
-- [ ] T048 [P] [BDD-RED] `"{員工}" 已撤回 "{單號}"`
-- [ ] T049 [P] [BDD-RED] `"{單號}" 的驗收時間為現在`
-- [ ] T050 [P] [BDD-RED] `"{單號}" 的驗收人只有 "{主管}" 一人，驗收只記下一次`
-- [ ] T051 [P] [BDD-RED] `"{單號}" 開始等主管的時間為現在`
+- [X] T019 [P] [BDD-REMOVE] `"{員工}" 補資料再送出 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:334-349`
 
-### backend / 推播
+- [X] T020 [P] [BDD-ALIGN] `"{主管}" 驗收通過 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:276-292`
+  - body 改為 `{result: passed}`（T003 helper），回應存進 `lastVerifyResponse`；Javadoc 拿掉「狀態值仍是 done」。
 
-- [ ] T052 [P] [BDD-ALIGN] `"{主管}" 查房 "{任務}"，判定 "{項目}" 不合格`
-  - Read:
-    - `specs/truth/features/backend/推播/dsl.md` -> 該列（新 body 與 `Idempotency-Key`，語意不變）
-    - `tms/src/test/java/com/athena/tms/bdd/steps/push/PushManagerActionSteps.java:95-101`
-  - 改成呼叫 T003 的 helper；推播斷言不動。
+- [X] T021 [P] [BDD-RED] `"{主管}" 以原因 "{原因}" 判定 "{單號}" 驗收不通過`
 
-### ios-app / 介面根共用 DSL
+- [X] T022 [P] [BDD-RED] `"{主管}" 判定 "{單號}" 驗收不通過但沒有寫原因`
 
-- [ ] T053 [P] [BDD-ALIGN] `飯店有以下員工：`
-  - Read:
-    - `specs/truth/features/ios-app/dsl.md` -> 該列新增的 `角色`、`班次結束` 與部門值集
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonGivenSteps.java`、`BackendChannel.createManagerLikeStaff`
-- [ ] T054 [P] [BDD-ALIGN] `"{員工}" 名下有以下任務：`
-  - Read:
-    - `specs/truth/features/ios-app/dsl.md` -> 該列實作語意（操作者是別人時只建資料、不換登入者；`完成時間` 寫 `done_at`）
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonGivenSteps.java`
-  - 主管看別人清好的房的案例：表格的人不是劇本操作者時，不可因此重新登入成那個人。
-- [ ] T055 [P] [BDD-ALIGN] `已有以下工務單：`
-  - Read:
-    - `specs/truth/features/ios-app/dsl.md` -> 該列「支援：同後端共用 DSL 的同名句型」
-    - `specs/truth/features/backend/dsl.md` -> 該列新增的欄（見 Scope Note 第 6 條）
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairGivenSteps.java`、`BackendChannel.createRepairTicket`（第 835、853 行）、`markRepairTicketVerified`、`completeRepairTask`
-  - 補收 `送出時間`、`處理結果`、`處理說明`、`完修照片張數`、`完修時間`、`驗收人`、`來源=定期保養`、公共區域與選填報修人；`處理結果` 寫 `repair_tickets.resolution_type`。
-- [ ] T056 [P] [BDD-ALIGN] `手機目前離線`
-  - Read: `specs/truth/features/ios-app/dsl.md` -> 「劇本中的員工」改「劇本中的操作者」；`app/bdd/.../steps/common/CommonGivenSteps.java`。主管當操作者時也要切得了離線。
-- [ ] T057 [P] [BDD-ALIGN] `"{員工}" 在 App 打開首頁`
-  - Read:
-    - `specs/truth/features/ios-app/dsl.md` -> 該列改寫後的實作語意（依角色分流的首頁與各自的載入完成條件）
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonWhenSteps.java`
-  - 主管等 `manager.home.tile.*` 載入完成，工務等工務首頁，房務等既有首頁；不得假設一律是房務首頁。
-- [ ] T058 [P] [BDD-ALIGN] `"{任務}" 在 App 顯示為 "{狀態}"`
-  - Read: `specs/truth/features/ios-app/dsl.md` -> 必查處新增「工務單詳情」；`app/bdd/.../steps/common/CommonThenSteps.java`。任務是工務單號時到工務單詳情的狀態列驗。
-- [ ] T059 [P] [BDD-ALIGN] `這次操作沒有留在手機上等補送`
-  - Read:
-    - `truth-delta.md` -> 「DSL row 搬移」表第一列（舊 `ios-app/任務執行/dsl.md`，新 `ios-app/dsl.md`，用途加主管四動作）
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/taskexecution/TaskExecutionThenSteps.java`
-  - 只對齊精確參照與用途說明；待同步筆數不增加、後端狀態不變的兩面必查不變。
-- [ ] T060 [P] [BDD-ALIGN] `後端沒有對 "{員工}" 送出任何推播`
-  - Read: `truth-delta.md` -> 「DSL row 搬移」表第二列；`app/bdd/.../steps/taskexecution/TaskExecutionThenSteps.java`。只對齊精確參照，主管工作台「項目不符時不推播」場景可用。
-- [ ] T061 [P] [BDD-RED] `"{員工}" 上次在待認領停在 "{部門}"`
-  - 透過測試後門或直接寫 App 本機的部門選擇（`SharedPreferences` 那一把鍵），不經畫面。
-- [ ] T062 [P] [BDD-RED] `後端已對 "{員工}" 送出推播 "{標題}"`
-- [ ] T063 [P] [BDD-RED] `後端 "{房號}" 的房況為 "{房況}"`
-- [ ] T064 [P] [BDD-RED] `畫面回到 "{清單}"，"{單}" 不在清單上`
-- [ ] T065 [P] [BDD-RED] `畫面顯示 "這張單已被處理"，並回到 "{清單}"，"{單}" 不在清單上`
+- [X] T023 [P] [BDD-ALIGN] `"{工務}" 附 {張數} 張完修照片、處理說明 "{說明}" 完成 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:351-361`
+  - body 明帶 `resolutionType: fixed`，照片是這一次上傳的。
 
-### ios-app / 帳號與登入
+- [X] T024 [P] [BDD-ALIGN] `"{工務}" 以完修結果 "{結果}" 完成 "{單號}"，處理說明 "{說明}"，不附照片`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairWhenSteps.java:394-401`（舊句型 `"{工務}" 不附完修照片完成 "{單號}"`）
+  - 改句型；body 帶 `resolutionType` 四選一與 `resolutionNote`、空 `photoIds`；送出前先 `repairCountGuard.capture()` 與 T003 的房況快照。
 
-- [ ] T066 [P] [BDD-ALIGN] `"{員工}" 登入成功，進入 "{首頁}"`
-  - Read:
-    - `specs/truth/features/ios-app/帳號與登入/dsl.md` -> 該列（房務首頁／工務首頁／主管首頁；三入口共用的分流判定）
-    - `truth-delta.md` -> `/dsl-refine` MODIFY 該句與既有 3 個 Example
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/account/AccountThenSteps.java` -> `@那麼("{string} 登入成功，進入首頁")`
-  - 句型帶參數後舊 annotation 不再匹配，改寫而不是另加一個；三個值各自驗對應外殼的首頁元素。
+- [X] T025 [P] [BDD-REMOVE] `"{單號}" 的退回原因為 "{原因}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:416-431`
 
-### ios-app / 推播
+- [X] T026 [P] [BDD-REMOVE] `"{單號}" 開始等主管的時間為現在`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:533-591、716-725`（只有這句在用的 `managerJwt` 一併刪）
 
-- [ ] T067 [P] [BDD-ALIGN] `"{員工}" 收到一則推播 "{標題}"，去處為 "{去處}"`
-  - Read:
-    - `specs/truth/features/ios-app/推播/dsl.md` -> `去處` 值集加「房務待認領並標亮 X」「工務待認領並標亮 X」；`kind=pool` 帶 `dept`、`kind=home` 依 session 角色、冷啟動；標題不驗權威文案
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/push/PushGivenSteps.java`
-- [ ] T068 [P] [BDD-ALIGN] `App 停在 "{畫面}"`
-  - Read:
-    - `specs/truth/features/ios-app/推播/dsl.md` -> 畫面值集加主管首頁／工務首頁／房務首頁／帶部門的待認領；必查加部門切換與本機選擇、外殼與角色一致、主管視角詳情
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/push/PushThenSteps.java`
+- [X] T027 [P] [BDD-ALIGN] `"{單號}" 已由 "{主管}" 驗收`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:433-452`
+  - `tasks.state` 改斷 `closed`；加 `repair_verified` 事件與 `readRepairTicket.state` 再讀確認。
 
-### ios-app / 主管工作台 / Given
+- [X] T028 [P] [BDD-ALIGN] `"{單號}" 的驗收人只有 "{主管}" 一人，驗收只記下一次`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:514`
+  - 加斷 `state=closed` 與 `repair_verification_failed` 為 0 筆。
 
-- [ ] T069 [P] [BDD-RED] `"{主管}" 已在 App 打開主管首頁`
-- [ ] T070 [P] [BDD-RED] `"{主管}" 已在 App 打開 "{清單}"`
-- [ ] T071 [P] [BDD-RED] `飯店目前設定的查房項目如下：`
-- [ ] T072 [P] [BDD-RED] `飯店目前沒有任何啟用的查房項目`
-- [ ] T073 [P] [BDD-RED] `"{主管}" 已從待查房清單打開 "{任務}"，還沒判任何一項`
-- [ ] T074 [P] [BDD-RED] `"{主管}" 已從待查房清單打開 "{任務}"，判定如下：`
-- [ ] T075 [P] [BDD-RED] `飯店在 "{主管}" 送出前新增了查房項目 "{項目}"`
-- [ ] T076 [P] [BDD-RED] `"{任務}" 剛被 "{另一位主管}" 查完，"{主管}" 的畫面還沒更新`
-  - 不經 App，以另一位主管呼叫 `createInspections` 全部通過（可用 `BackendChannel.failInspection` 旁邊再開一個全通過版本）；不觸發畫面刷新。
-- [ ] T077 [P] [BDD-RED] `"{主管}" 剛送出 "{任務}" 的查房，結果畫面停在畫面上`
+- [X] T029 [P] [BDD-ALIGN] `"{單號}" 尚未驗收`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:463`
+  - 加斷 `state` 不是 `closed`、沒有 `repair_verified` 事件、`verified_at` 為 null。
 
-### ios-app / 主管工作台 / When
+- [X] T030 [P] [BDD-RED] `"{單號}" 的驗收不通過只記下一次`
 
-- [ ] T078 [P] [BDD-RED] `"{主管}" 在主管首頁點 "{格}"`
-- [ ] T079 [P] [BDD-RED] `"{主管}" 從待查房清單打開 "{任務}"`
-- [ ] T080 [P] [BDD-RED] `"{主管}" 把 "{項目}" 判 "{判定}"`
-- [ ] T081 [P] [BDD-RED] `"{主管}" 把以下項目判定後送出：`
-- [ ] T082 [P] [BDD-RED] `"{主管}" 送出查房`
-- [ ] T083 [P] [BDD-RED] `"{主管}" 從結果畫面回到待查房清單`
+- [X] T031 [P] [BDD-RED] `這次驗收的結果為 "{結果}"，去處為 "{去處}"`
 
-### ios-app / 主管工作台 / Then
+- [X] T032 [P] [BDD-RED] `"{單號}" 最近一次驗收不通過的原因為 "{原因}"，判定人為 "{主管}"`
 
-- [ ] T084 [P] [BDD-RED] `三格依序顯示：`
-  - 必查有兩面：畫面三個磚的數字逐格等於表格，且等於 `getManagerQueues` 回應的 `counts` 與各陣列長度；只驗畫面不算數。
-- [ ] T085 [P] [BDD-RED] `"{格}" 格顯示 {數字}`
-- [ ] T086 [P] [BDD-RED] `清單依序為 {清單}`
-- [ ] T087 [P] [BDD-RED] `清單上沒有 "{單}"`
-- [ ] T088 [P] [BDD-RED] `"{單}" 那一列標出日期 "{日期}" 與時刻 "{時刻}"`
-- [ ] T089 [P] [BDD-RED] `"{單}" 那一列只顯示時刻 "{時刻}"`
-- [ ] T090 [P] [BDD-RED] `每一列都看得到房號與內容`
-- [ ] T091 [P] [BDD-RED] `每一列都看得到工務單號`
-- [ ] T092 [P] [BDD-RED] `"{單號}" 那一列標示 "{標籤}"`
-- [ ] T093 [P] [BDD-RED] `清單說明目前沒有等他處理的單，畫面不是空白`
-- [ ] T094 [P] [BDD-RED] `「我名下的單」依序列出 {房號清單}，卡片與房務首頁的任務卡一致`
-- [ ] T095 [P] [BDD-RED] `主管首頁沒有問候列與今日進度`
-- [ ] T096 [P] [BDD-RED] `「我名下的單」說明目前沒有名下的單`
-- [ ] T097 [P] [BDD-RED] `首頁沒有待查房、待審核、待驗收三格`
-- [ ] T098 [P] [BDD-RED] `底部分頁依序是 {分頁清單}`
-- [ ] T099 [P] [BDD-RED] `查房畫面列出以下項目，每一項都還沒判：`
-- [ ] T100 [P] [BDD-RED] `查房送出鈕為 "{按鈕狀態}"`
-  - 禁用時要確認真的按不下去（與 `完修回報的送出鈕為` 同一套語意）。
-- [ ] T101 [P] [BDD-RED] `查房畫面沒有備註欄`
-- [ ] T102 [P] [BDD-RED] `查房畫面說明目前沒有查房項目，送出即視為全部通過`
-- [ ] T103 [P] [BDD-RED] `查房結果畫面說明 "{任務}" 查房通過、已結案`
-- [ ] T104 [P] [BDD-RED] `查房結果畫面說明 "{任務}" 退回重做，回到 "{員工}" 名下，不合格項為 "{項目}"`
-- [ ] T105 [P] [BDD-RED] `查房結果畫面說明 "{任務}" 退回重做，"{員工}" 已下班，回到房務待認領`
-- [ ] T106 [P] [BDD-RED] `查房畫面重新載入以下項目並清空判定：`
+- [X] T033 [P] [BDD-RED] `"{單號}" 的完修結果為 "{結果}"`
 
-### ios-app / 工務單
+- [X] T034 [P] [BDD-RED] `系統沒有為 "{單號}" 建立追蹤單`
+  - 可重用 `RepairThenSteps` 的 `assertNoRepairTicketCreatedSinceGuard`。
 
-- [ ] T107 [P] [BDD-ALIGN] `工務單詳情顯示狀態摘要卡 "{摘要卡文案}"`
-  - Read:
-    - `specs/truth/features/ios-app/工務單/dsl.md` -> 文案清單加主管視角三句；必查改對 `RepairTicket.verifiedBy`、`reviewRequestedAt`
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java`
-- [ ] T108 [P] [BDD-ALIGN] `工務單詳情顯示退回原因 "{原因}"`
-  - Read: `specs/truth/features/ios-app/工務單/dsl.md` -> 對 `RepairTicket.rejectReason`；`app/bdd/.../steps/repair/RepairThenSteps.java`。
-- [ ] T109 [P] [BDD-RED] `"{員工}" 已在 App 打開 "{單號}" 的工務單詳情`
-  - Arrange 版：停在詳情；開頁是受測動作時用同名 When（`RepairWhenSteps` 既有），不共用 annotation。
-- [ ] T110 [P] [BDD-RED] `"{單號}" 剛被 "{主管}" 驗收，"{員工}" 的畫面還沒更新`
-- [ ] T111 [P] [BDD-RED] `"{單號}" 剛被 "{員工}" 撤回，"{主管}" 的畫面還沒更新`
-- [ ] T112 [P] [BDD-RED] `"{主管}" 在工務單詳情按核准`
-- [ ] T113 [P] [BDD-RED] `"{主管}" 在工務單詳情按退回，寫下原因 "{原因}" 並送出`
-- [ ] T114 [P] [BDD-RED] `"{主管}" 在工務單詳情打開退回面板，不寫原因`
-- [ ] T115 [P] [BDD-RED] `"{主管}" 在工務單詳情按驗收`
-- [ ] T116 [P] [BDD-RED] `工務單詳情的主管動作為 "{動作}"`
-- [ ] T117 [P] [BDD-RED] `工務單詳情顯示報修內容：`
-- [ ] T118 [P] [BDD-RED] `工務單詳情顯示完修照片 {張數} 張與處理說明 "{說明}"`
-- [ ] T119 [P] [BDD-RED] `工務單詳情沒有驗收不通過、退回與備註欄`
-- [ ] T120 [P] [BDD-RED] `退回面板的送出鈕為 "{按鈕狀態}"`
-- [ ] T121 [P] [BDD-RED] `後端沒有收到這次退回`
-- [ ] T122 [P] [BDD-RED] `"{單號}" 已由 "{主管}" 驗收，驗收時間為現在`
+- [X] T035 [P] [BDD-RED] `"{房號}" 的房況沒有改變`
+  - 讀 T003 的房況快照。
 
-### ios-app / 待認領
+- [X] T036 [P] [BDD-RED] `工務待認領中 "{單號}" 帶驗收退回原因 "{原因}"`
 
-- [ ] T123 [P] [BDD-ALIGN] `"{員工}" 在 App 打開房務待認領`
-  - Read:
-    - `specs/truth/features/ios-app/待認領/dsl.md` -> 實作語意補主管時是切到待認領分頁並把部門切到房務
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/pool/PoolWhenSteps.java`
-- [ ] T124 [P] [BDD-ALIGN] `待認領列表依序為 {房號清單}`
-  - Read:
-    - `specs/truth/features/ios-app/待認領/dsl.md` -> 參數加「工務池寫工務單號」；必查改為目前部門的列表、`listDeptPool` 帶目前部門
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/pool/PoolThenSteps.java` -> `@那麼("^待認領列表依序為 (.+)$")`
-- [ ] T125 [P] [BDD-RED] `"{主管}" 第一次在這台手機打開待認領`
-  - 先清掉本機的部門選擇再開；與 `"{員工}" 上次在待認領停在` 相反，不共用落地碼。
-- [ ] T126 [P] [BDD-RED] `"{主管}" 在待認領切到 "{部門}"`
-- [ ] T127 [P] [BDD-RED] `待認領目前的部門為 "{部門}"`
-- [ ] T128 [P] [BDD-RED] `"{任務}" 的單卡沒有搶單鈕`
-  - 單卡存在（`pool.card.{roomNo}` 或 `engPool.item.{單號}`）但沒有 `.claim-button` 子節點；兩個條件缺一不可。
+- [X] T037 [P] [BDD-RED] `主管待辦的任何一類都不包含 "{單號}"`
 
-### ios-app / 系統層
+- [X] T038 [P] [BDD-ALIGN] `工務待認領包含 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:203-219`
+  - 拿掉「沒有主管審核事件」的 `manager_review` 檢查。
 
-- [ ] T129 [P] [BDD-ALIGN] `"{員工}" 在 App 離線時嘗試 "{動作}"`
-  - Read:
-    - `specs/truth/features/ios-app/系統層/dsl.md` -> `動作` 值集加主管四動作（送出查房結果、核准工務單、退回工務單、驗收工務單）與各自對應的畫面操作、不呼叫的端點
-    - `app/bdd/src/test/java/com/athena/app/bdd/steps/system/SystemWhenSteps.java`
-- [ ] T130 [P] [BDD-RED] `"{員工}" 已在 App 登入，停在首頁`
-  - Read: `truth-delta.md` -> 「DSL row 搬移」表第三列（下放到系統層）。停在依角色分流後的首頁，不是固定房務首頁。
-- [ ] T131 [P] [BDD-RED] `"{員工}" 在離線時嘗試過 "{動作}" 並被擋下`
-  - Arrange 版：切離線、做該動作、確認提示出現，停在原畫面；用於驗恢復連線後不補送。
+- [X] T039 [P] [BDD-ALIGN] `"{房號}" 未結案的 "{類別}" 工務單只有 {張數} 張`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:316-326`
+  - 排除條件改 `NOT IN ('done','closed','cancelled')`。
 
-- [ ] T132 subagent review (phase quality gate)
+- [X] T040 [P] [BDD-ALIGN] `"{工務}" 的工務視角今日進度為：`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java:652`
+  - 呈現結果對 `getMyToday.engineeringSummary`；加權威狀態重算，今天已完修＝今天完修且現在 `done` 或 `closed`。
 
-## Phase 4A: ADD Feature File - backend/主管工作台/主管待辦三類清單.feature
+### 後端：`specs/truth/features/backend/主管工作台/dsl.md`
 
-**Goal**: `getManagerQueues` 依三條判定公式回三格數字與三份清單，排除呼叫者本人清的房，由舊到新排好，並以後端 `Clock` 標記是不是今天。
+- [X] T041 [P] [BDD-ALIGN] `主管待辦的格子數字為：`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:25-37、68、95-108`（舊句型 `主管待辦的三格數字為：`）
+  - 改句型；`counts` 的鍵必須剛好是表格列出的格子；刪「待審核→review」與 recount 的 review 分支；待驗收重算改為 `state=done` 且 `resolution_type IS DISTINCT FROM 'no_action_needed'`。
+
+- [X] T042 [P] [BDD-RED] `主管待辦沒有待查房這一類`
+
+- [X] T043 [P] [BDD-ALIGN] `待驗收清單依序為 {單號清單}`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:165`
+  - `requireFields` 加 `wasVerificationFailed`；不再斷 `verified_at` 為空，改斷完修結果不是 `no_action_needed`；同一時刻依房號再依單號。
+
+- [X] T044 [P] [BDD-RED] `待驗收清單中 "{單號}" 標為重修後再驗`
+
+- [X] T045 [P] [BDD-REMOVE] `待審核清單依序為 {單號清單}`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:140、359-372`（helper `lastEnteredPendingReview` 一併刪）
+
+- [X] T046 [P] [BDD-REMOVE] `待審核清單不包含 "{單號}"`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:160`
+
+- [X] T047 [P] [BDD-ALIGN] `"{單}" 在清單上標為不是今天開始等`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:217、285-290`
+  - `anyQueueRow` 拿掉 `review`，回應沒有 `inspection` 鍵時（工務主管）不得丟例外。
+
+- [X] T048 [P] [BDD-ALIGN] `"{單}" 在清單上標為今天開始等`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:230`
+  - 與 T047 共用 `anyQueueRow`，T047 先做。
+
+- [X] T049 [P] [BDD-ALIGN] `這次查詢被拒絕，因為呼叫者不是主管`
+  - Read: `tms/src/test/java/com/athena/tms/bdd/steps/managerqueue/ManagerQueueThenSteps.java:243`
+  - 加斷 `code`=`forbidden`。
+
+### App：介面根 `specs/truth/features/ios-app/dsl.md`
+
+- [X] T050 [P] [BDD-ALIGN] `"{員工}" 在 App 打開首頁`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonWhenSteps.java:33-39`
+  - 主管分支改用 T007 的 `ManagerHomeWait`，依主管種類等格子。
+
+- [X] T051 [P] [BDD-ALIGN] `"{任務}" 在 App 顯示為 "{狀態}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonThenSteps.java:80-86、144、259`
+  - `TICKET_STATUS_TEXT` 刪等主管審核、主管未核准，加已結案與退回重修；主管看工務單時，結果卡停在畫面上要先進主管視角詳情再讀狀態列。
+
+- [X] T052 [P] [BDD-ALIGN] `畫面回到 "{清單}"，"{單}" 不在清單上`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonThenSteps.java:91-95、326`
+  - `QUEUE_KEY` 刪待審核清單；Javadoc 改為按通過、查房結果畫面與驗收結果卡回清單。
+
+- [X] T053 [P] [BDD-ALIGN] `畫面顯示 "這張單已被處理"，並回到 "{清單}"，"{單}" 不在清單上`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/common/CommonThenSteps.java:350、420-445`
+  - `assertProcessedExactlyOnce` 刪 review 分支；verify 分支改為「單已離開 `done`、驗收或不通過恰好一次」，涵蓋先不通過後按通過；加驗不通過面板一起收起。
+
+- [X] T054 [P] [BDD-ALIGN] `已有以下工務單：`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairGivenSteps.java:34-40、152-158、180-252`、`BackendChannel.java:163-179、947-1012、1021、1105、1245-1260、1470`
+  - 對齊後端同名句：狀態對照刪等主管審核、主管未核准，加待開始、已結案；處理結果加不需處理；加 `不通過原因`、`不通過判定人`、`不通過時間` 三欄；有驗收人時落地 `closed`；刪 `rejectRepairTicket`、送出時間與 `repair_resubmitted` 回推、`insertTaskAtCreatableState` 的 `pending_review`。
+
+### App：`specs/truth/features/ios-app/工務單/dsl.md`
+
+- [X] T055 [P] [BDD-ALIGN] `"{員工}" 已在 App 打開 "{單號}" 的工務單詳情`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairGivenSteps.java:377`、`RepairContext.java:99-102、128-141`、`RepairWhenSteps.java:106-109`
+  - 主管入口刪 `pending_review`→review；`done` 一律走待驗收清單，不再看 `verified_at`。
+
+- [X] T056 [P] [BDD-ALIGN] `"{單號}" 剛被 "{主管}" 驗收，"{員工}" 的畫面還沒更新`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairGivenSteps.java:390`、`BackendChannel.java:1040`
+  - 改帶 `{result: passed}`，後端已結案。
+
+- [X] T057 [P] [BDD-RED] `"{單號}" 剛被 "{主管}" 以原因 "{原因}" 判定驗收不通過，"{員工}" 的畫面還沒更新`
+
+- [X] T058 [P] [BDD-RED] `"{工務}" 今天的班已經結束`
+
+- [X] T059 [P] [BDD-RED] `"{主管}" 剛送出 "{單號}" 的驗收不通過，結果卡停在畫面上`
+
+- [X] T060 [P] [BDD-REMOVE] `"{單號}" 剛被 "{員工}" 撤回，"{主管}" 的畫面還沒更新`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairGivenSteps.java:402`、`BackendChannel.java:1049`（`withdrawRepairTicket` 只有這句在用，一併刪）
+
+- [X] T061 [P] [BDD-REMOVE] `"{主管}" 在工務單詳情按核准`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairWhenSteps.java:305`
+
+- [X] T062 [P] [BDD-REMOVE] `"{主管}" 在工務單詳情按退回，寫下原因 "{原因}" 並送出`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairWhenSteps.java:319`
+
+- [X] T063 [P] [BDD-REMOVE] `"{主管}" 在工務單詳情打開退回面板，不寫原因`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairWhenSteps.java:333、352`（helper `openRejectSheet` 與 `RepairContext.java:38-42` 的核准、退回、退回面板 id 一併刪）
+
+- [X] T064 [P] [BDD-ALIGN] `"{主管}" 在工務單詳情按通過`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairWhenSteps.java:345`（舊句型 `"{主管}" 在工務單詳情按驗收`）、`RepairContext.java:40`
+  - 改句型；按鈕 id 改 `managerTicket.pass-button`；成功落地為已結案。
+
+- [X] T065 [P] [BDD-RED] `"{主管}" 在工務單詳情按不通過，寫下原因 "{原因}" 並送出`
+
+- [X] T066 [P] [BDD-RED] `"{主管}" 在工務單詳情打開不通過面板，不寫原因`
+
+- [X] T067 [P] [BDD-RED] `"{主管}" 從驗收結果卡回到待驗收清單`
+
+- [X] T068 [P] [BDD-ALIGN] `"{工務}" 在工務單詳情完修，回報結果 "{結果}"，附 {張數} 張照片`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairWhenSteps.java:36-39、184`
+  - `RESOLUTION_TYPE_BY_LABEL` 加不需處理＝`no_action_needed`；張數可為 0。
+
+- [X] T069 [P] [BDD-ALIGN] `"{工務}" 在工務單詳情打開完修回報，選結果 "{結果}"，附 {張數} 張照片`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairWhenSteps.java:212`
+  - 同 T068 的對照，T068 先做。
+
+- [X] T070 [P] [BDD-REMOVE] `工務單詳情顯示退回原因 "{原因}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:754-780`
+
+- [X] T071 [P] [BDD-REMOVE] `工務單詳情顯示撤回按鈕`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:789`（`工務單詳情沒有撤回按鈕` :413 保留）
+
+- [X] T072 [P] [BDD-REMOVE] `工務單詳情顯示「補資料再送出」按鈕`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:801`
+
+- [X] T073 [P] [BDD-REMOVE] `工務單詳情沒有驗收不通過、退回與備註欄`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:972`
+
+- [X] T074 [P] [BDD-REMOVE] `退回面板的送出鈕為 "{按鈕狀態}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:1003`
+
+- [X] T075 [P] [BDD-REMOVE] `後端沒有收到這次退回`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:1033`
+
+- [X] T076 [P] [BDD-ALIGN] `工務單詳情顯示狀態摘要卡 "{摘要卡文案}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:317-394、1118-1123、1157-1163`
+  - 刪等主管審核（`reviewRequestedAt`）、主管未核准（`rejectReason`）、「已驗收 · {主管}」斷 `done` 三支；依模組說明三視角表補已修好 · 等主管驗收、退回重修（對 `lastVerifyFailedAt`）、已結案 · {驗收人}驗收（`closed`＋`verifiedBy`）、已結案 · 不需處理。
+
+- [X] T077 [P] [BDD-ALIGN] `工務單詳情的主管動作為 "{動作}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:830`
+  - 值改為「通過、不通過」（pass、fail 兩顆）與「無」；只看 `state=done`，不看 `verifiedAt`。
+
+- [X] T078 [P] [BDD-ALIGN] `工務單詳情的步驟條依序為 "{步驟清單}"，目前在 "{目前步驟}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:702`
+  - 對照改為待開始＝`accepted`（含退回重修）、驗收＝`done`；已結案四步全完成交 T080。
+
+- [X] T079 [P] [BDD-ALIGN] `"{單號}" 已由 "{主管}" 驗收，驗收時間為現在`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/repair/RepairThenSteps.java:1077`
+  - 狀態改斷 `closed`。
+
+- [X] T080 [P] [BDD-RED] `工務單詳情的步驟條第四步「驗收」為 "{完成狀態}"`
+
+- [X] T081 [P] [BDD-RED] `工務單詳情顯示最近一次不通過的原因 "{原因}" 與判定人 "{主管}"`
+
+- [X] T082 [P] [BDD-RED] `工務單詳情沒有任何主管審核的狀態或動作`
+
+- [X] T083 [P] [BDD-RED] `工務單詳情沒有通過或不通過的動作`
+
+- [X] T084 [P] [BDD-RED] `工務待認領中 "{單號}" 標示驗收退回，原因 "{原因}"`
+
+- [X] T085 [P] [BDD-RED] `不通過面板的送出鈕為 "{按鈕狀態}"`
+
+- [X] T086 [P] [BDD-RED] `後端沒有收到這次驗收不通過`
+
+- [X] T087 [P] [BDD-RED] `驗收結果卡說明 "{單號}" 退回重修，回到 "{處理人}" 名下`
+
+- [X] T088 [P] [BDD-RED] `驗收結果卡說明 "{單號}" 退回重修，"{處理人}" 已下班，回到工務待認領`
+
+### App：`specs/truth/features/ios-app/主管工作台/dsl.md`
+
+- [X] T089 [P] [BDD-ALIGN] `"{主管}" 已在 App 打開主管首頁`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerGivenSteps.java:55、160`
+  - `ensureOnManagerHome` 改用 `ManagerHomeWait`。
+
+- [X] T090 [P] [BDD-ALIGN] `"{主管}" 已在 App 打開 "{清單}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerGivenSteps.java:35-38、61、230`
+  - `QUEUE_KEYS` 刪待審核清單。
+
+- [X] T091 [P] [BDD-ALIGN] `"{主管}" 在主管首頁點 "{格}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerWhenSteps.java:33-37、59`
+  - 刪待審核→review。
+
+- [X] T092 [P] [BDD-ALIGN] `首頁的格子依序顯示：`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:48、89、611-625`（舊句型 `三格依序顯示：`）、`ManagerContext.java:4、10`
+  - 改句型；格子必須剛好是表格列出的這幾格，不再寫死三格。
+
+- [X] T093 [P] [BDD-RED] `首頁只有待驗收一格，數字為 {數字}`
+
+- [X] T094 [P] [BDD-RED] `首頁沒有待查房格，也沒有任何進待查房清單的入口`
+
+- [X] T095 [P] [BDD-RED] `「我名下的單」列出 "{單號}"，卡片與工務首頁的工務單卡一致`
+
+- [X] T096 [P] [BDD-RED] `"{主管}" 在「我名下的單」點 "{單號}"`
+
+- [X] T097 [P] [BDD-RED] `App 開啟 "{單號}" 的工務單詳情，底部動作與工務員工相同`
+
+- [X] T098 [P] [BDD-ALIGN] `"{格}" 格顯示 {數字}`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:51-54、106`
+  - 對照表刪待審核；工務主管的寬磚用同一個 id。
+
+- [X] T099 [P] [BDD-ALIGN] `清單說明目前沒有等他處理的單，畫面不是空白`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:57-60、387`
+  - `EMPTY_TITLE_BY_QUEUE` 刪待審核那句。
+
+- [X] T100 [P] [BDD-ALIGN] `「我名下的單」說明目前沒有名下的單`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:170`
+  - 工務主管改查 `engineeringSummary.tickets`、數工務單卡；房務主管照舊查 `todayTasks`。
+
+- [X] T101 [P] [BDD-ALIGN] `主管首頁沒有問候列與今日進度`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:154`
+  - 另查工務首頁的問候、`engHome.progress.*`、急件與保養區都不在。
+
+- [X] T102 [P] [BDD-ALIGN] `每一列都看得到工務單號與完修結果`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:343`（舊句型 `每一列都看得到工務單號`）、`steps/manager/package-info.java:3`
+  - 改句型；加完修結果標籤，對 `resolutionType`，null 時不畫。順手把 `package-info.java:3` 的舊檔名 `三類清單.feature` 改成 `主管清單.feature`。
+
+- [X] T103 [P] [BDD-ALIGN] `"{單號}" 那一列標示 "{標籤}"`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:63-66、364`
+  - `TAG_FIELD_BY_LABEL` 加已修好＝`fixed`、重修後再驗＝`wasVerificationFailed`。
+
+- [X] T104 [P] [BDD-ALIGN] `首頁沒有主管的格子`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/manager/ManagerThenSteps.java:189`（舊句型 `首頁沒有待查房、待審核、待驗收三格`）
+  - 改句型；迴圈刪 review 與「待審核」文字，涵蓋工務首頁。
+
+### App：推播、帳號與登入、系統層
+
+- [X] T105 [P] [BDD-ALIGN] `App 停在 "{畫面}"`（`specs/truth/features/ios-app/推播/dsl.md`）
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/push/PushThenSteps.java:70、146-149`
+  - 主管首頁分支改用 `ManagerHomeWait`。
+
+- [X] T106 [P] [BDD-ALIGN] `"{員工}" 登入成功，進入 "{首頁}"`（`specs/truth/features/ios-app/帳號與登入/dsl.md`）
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/account/AccountThenSteps.java:145、153、176-180`
+  - 主管首頁分支改用 `ManagerHomeWait`：房務主管兩格、工務主管一格。
+
+- [X] T107 [P] [BDD-ALIGN] `"{員工}" 在 App 離線時嘗試 "{動作}"`（`specs/truth/features/ios-app/系統層/dsl.md`）
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/system/SystemWhenSteps.java:22-26、43-51、58、93-104`、`steps/taskexecution/TaskExecutionThenSteps.java:824-830`
+  - 主管動作值改為送出查房結果、驗收通過、驗收不通過；清單列改依單號點（不再要求清單剛好一列）；不通過點 fail 鈕、走不通過面板並保留原因；刪核准、退回兩個 case 與 `REJECT_REASON`；兩處 Javadoc 跟著改。
+
+- [X] T108 [P] [BDD-ALIGN] `"{員工}" 在離線時嘗試過 "{動作}" 並被擋下`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/system/SystemGivenSteps.java:67`
+  - 委派 T107 的 When，T107 先做；值集跟著改。
+
+- [X] T109 [P] [BDD-ALIGN] `"{員工}" 已在 App 登入，停在首頁`
+  - Read: `app/bdd/src/test/java/com/athena/app/bdd/steps/system/SystemGivenSteps.java:35-41`
+  - 主管分支改用 `ManagerHomeWait`（本句不在 truth-delta，但背景含陳主管時舊寫法會等 review 格逾時）。
+
+- [X] T110 subagent review (phase quality gate)
+
+## Phase 4A: MODIFY Feature File - backend/主管工作台/主管待辦清單.feature
+
+**Goal**: `getManagerQueues` 依主管種類回類別：房務主管回待查房與待驗收，工務主管只回待驗收、沒有 `inspection` 兩個鍵；待驗收改為 `done` 且完修結果不是不需處理、含本人完修、每列帶 `wasVerificationFailed`、依最近一次完修時間排序；沒有待審核。
 
 **Shared Must Read**:
-- `specs/truth/features/backend/主管工作台/主管待辦三類清單.feature` -> `功能: 主管待辦三類清單`（9 個 Rule）
-- `specs/truth/features/backend/主管工作台/dsl.md` -> 本檔 When／Then 全部
-- `specs/truth/features/backend/dsl.md` -> 本檔實際用到的介面根 rows：`飯店有以下員工：`、`"{員工}" 名下有以下任務：`、`已有以下工務單：`、`現在時間是 "{時刻}"`、`"{員工}" 補資料再送出 "{單號}"`（工務單模組）
-- `truth-delta.md` -> `/dsl-refine` ADD `be/主管工作台/dsl.md`、ADD `主管待辦三類清單.feature`；`/api-plan` ADD `getManagerQueues`、ADD `components/schemas/主管工作台.yaml`；`/data-plan` NOOP 第一列、MODIFY `tasks` Note、MODIFY `task_events` Note、MODIFY `repair_tickets` Note、Wave 3 ADD `resolution_type`
-- `specs/truth/contracts/groups/現場作業/主管工作台.yaml` -> `getManagerQueues` 的 description（排除本人、排序鍵、不帶日期條件、不碰 `listInspections` 與 `listRepairTickets`）
-- `specs/truth/contracts/components/schemas/主管工作台.yaml` -> `ManagerQueues`、`QueueItemBase`、`InspectionQueueItem`、`ReviewQueueItem`、`VerifyQueueItem`
-- `specs/truth/data/data-model.dbml` -> `Table tasks` Note「主管待辦的三類判定」、`Table task_events` Note 的待審核排序鍵、`Table repair_tickets` Note 的待審核與待驗收段
-- `tms/src/main/java/com/athena/tms/service/TaskExecutionService.java:1020` -> `belongsToToday` 的同一把 `Clock`
+- `specs/truth/features/backend/主管工作台/主管待辦清單.feature` -> `功能: 主管待辦清單`（14 個 Rule；檔名由 `主管待辦三類清單.feature` 改名）
+- `specs/truth/features/backend/主管工作台/dsl.md` -> 模組說明、`"{員工}" 查看主管待辦`、`主管待辦的格子數字為：`、`主管待辦沒有待查房這一類`、待查房兩句、待驗收四句、兩句開始等標記
+- `specs/truth/features/backend/dsl.md` -> `飯店有以下員工：`、`已有以下工務單：`、部門用語對照（房務主管、工務主管）
+- `truth-delta.md` -> `/dsl-refine` MODIFY `主管待辦清單.feature` 與 `be/主管工作台/dsl.md` 各列；`/api-plan` MODIFY `getManagerQueues`／`ManagerQueues`、`VerifyQueueItem`／`QueueItemBase`、DELETE `ReviewQueueItem`；`/data-plan` MODIFY `tasks` Note 主管待辦判定段、`staff_accounts.dept` note
+- `specs/truth/contracts/groups/現場作業/主管工作台.yaml` -> `getManagerQueues`（依主管種類、待驗收公式、`waitingSince`）
+- `specs/truth/contracts/components/schemas/主管工作台.yaml` -> `ManagerQueues`（`required` 只剩 `counts`、`verify`）、`VerifyQueueItem`（`wasVerificationFailed`、`resolutionType` nullable）、`QueueItemBase`
+- `specs/truth/data/data-model.dbml` -> `Table tasks` Note「主管待辦判定」段、`Table staff_accounts` 的 `dept` note
+- `tms/src/main/java/com/athena/tms/service/ManagerQueueService.java:51-70、148-187`、`tms/src/main/java/com/athena/tms/dto/ManagerQueues.java`
 
 **Boundary**:
-- 不新增資料表、欄位或索引；三類都是查詢期由 `tasks`、`task_events`、`repair_tickets` 算出，走既有 `(tenant_id, dept, state)` 索引。
-- 待審核的排序鍵一律取 `task_events` 最後一筆 `created` 或 `repair_resubmitted` 的時間，不得拿 `updated_at` 或建單時間代替。
-- `waitingSinceIsToday` 用注入的 `Clock` 時區判，App 不判；`waitingSince` 帶時區位移。
-- 公共區域 `roomNo` 回 null 加 `isPublicArea=true`、地點在 `title`；不得把佔位房號「公共區域」漏出去。
-- 不動 `listInspections` 與 `listRepairTickets`。
+- 主管種類由 `role` 與 `dept` 當場推得，不存欄位；工務主管的回應**省略** `inspection` 與 `counts.inspection`，不是回空陣列或 0。
+- 待驗收公式用 `resolution_type IS DISTINCT FROM 'no_action_needed'`（舊單為 NULL 要收），不看 `verified_at`；排序鍵 `done_at`，同一時刻依房號再依單號；`wasVerificationFailed` 讀 `last_verify_failed_at` 有沒有值。
+- 回應不再帶 `review` 與 `counts.review`；`counts` 直接取各陣列長度。`reviewQueue` 方法本體若還有人引用，留給 Phase 4J 刪。
+- 待查房的公式、排除本人、跨日標記不動。
 
 **Test Scope**:
-- `specs/truth/features/backend/主管工作台/主管待辦三類清單.feature`
+- `specs/truth/features/backend/主管工作台/主管待辦清單.feature`
 
-- [ ] T133 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T134 [BDD-REFACTOR] 在綠燈下把三條判定公式收成三個可讀的查詢方法，`counts` 直接取三個陣列的長度，不另算一次
+- [X] T111 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T112 [BDD-REFACTOR] 在綠燈下把主管種類判定收成一個函式（主管待辦與 Phase 4I 的查房權限共用），兩類查詢各一個方法，回應組裝只有一處決定省略哪些鍵
 
-## Phase 4B: ADD Feature File - backend/主管工作台/主管待辦空清單與權限.feature
+## Phase 4B: MODIFY Feature File - backend/主管工作台/主管待辦空清單與權限.feature
 
-**Goal**: 沒有單的類別回 0 與空陣列（欄位不缺），非主管角色呼叫回 403。
+**Goal**: 沒有待辦時房務主管兩格為 0、工務主管唯一一格為 0；非主管呼叫回 403 `forbidden`。
 
 **Shared Must Read**:
 - `specs/truth/features/backend/主管工作台/主管待辦空清單與權限.feature` -> `功能: 主管待辦空清單與權限`（2 個 Rule）
-- `specs/truth/features/backend/主管工作台/dsl.md` -> `"{員工}" 查看主管待辦`、`主管待辦的三格數字為：`、三個 `…清單依序為`、`這次查詢被拒絕，因為呼叫者不是主管`
-- `specs/truth/features/backend/dsl.md` -> `飯店有以下員工：`（`角色` 欄）
-- `truth-delta.md` -> `/dsl-refine` ADD `主管待辦空清單與權限.feature`；`/api-plan` ADD `getManagerQueues`（只開放 `manager`，其他角色 403）
-- `specs/truth/contracts/groups/現場作業/主管工作台.yaml` -> 403 回應
-- `specs/truth/contracts/components/responses.yaml` -> 既有 403 的 `Error` 形狀
+- `specs/truth/features/backend/主管工作台/dsl.md` -> `主管待辦的格子數字為：`、`這次查詢被拒絕，因為呼叫者不是主管`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `主管待辦空清單與權限.feature`、MODIFY `這次查詢被拒絕…`；`/api-plan` MODIFY `getManagerQueues`、MODIFY `Error`（403 一律 `forbidden`）
+- `specs/truth/contracts/groups/現場作業/主管工作台.yaml` -> `getManagerQueues` 的 403
+- `specs/truth/contracts/components/schemas/shared.yaml` -> `Error.code` 的 `forbidden`
 
 **Boundary**:
-- 403 判的是 `role`，不是 `dept`；被設了部門的主管仍是主管。
-- 空清單回 `[]` 不回 null，`counts` 三個鍵都在。
+- 只處理 0 格與 403 的 `code`；不改 4A 的公式。
 
 **Test Scope**:
 - `specs/truth/features/backend/主管工作台/主管待辦空清單與權限.feature`
 
-- [ ] T135 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T136 [BDD-REFACTOR] 在綠燈下確認角色守衛與 `getMyToday` 的 `CurrentActor` 取法共用同一處
+- [X] T113 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T114 [BDD-REFACTOR] 在綠燈下確認非主管的 403 與其他端點共用同一個 `forbidden` 出口，沒有另寫錯誤組裝
 
-## Phase 4C: ADD Feature File - backend/查房/逐項判定與退回去向.feature
+## Phase 4C: MODIFY Feature File - backend/工務單/主管驗收的狀態守衛.feature
 
-**Goal**: `createInspections` 收斂後的請求形狀成立：逐項判定、回 `InspectionOutcome` 帶去向、項目集合不符回 422 帶現行集合且不推播、單非待查房回 409 只接受先到、冪等重送只判一次。
+**Goal**: `verifyRepairTicket` 改為一支帶 `{result, reason}`、回 `RepairVerificationOutcome`：只開放主管（含工務主管、含自己完修的單）、只接受 `done`、先到先決；通過 `done→closed` 並寫驗收人與時間；不通過原因空白 422；把 `done` 當已結束的讀取端一律認得 `closed`。
 
 **Shared Must Read**:
-- `specs/truth/features/backend/查房/逐項判定與退回去向.feature` -> `功能: 逐項判定與退回去向`（10 個 Rule）
-- `specs/truth/features/backend/查房/dsl.md` -> 本輪 ADD 的四個 Given、三個 When、五個 Then，以及既有 `"{任務}" 的重做次數為 {次數}`、`"{任務}" 沒有任何 SOP 勾記`
-- `specs/truth/features/backend/dsl.md` -> `"{員工}" 判定 "{任務}" 查房全部項目通過`（MODIFY）、`這次操作被拒絕，錯誤碼為 "{錯誤碼}"`、`"{房號}" 的房況為 "{房況}"`、`"{員工}" 收到推播 "{標題}"`、`"{員工}" 沒有收到任何推播`
-- `truth-delta.md` -> `/dsl-refine` ADD `be/查房/逐項判定與退回去向.feature`、ADD `be/查房/dsl.md`、ADD `be/dsl.md` 兩句、MODIFY `判定…全部項目通過`；`/api-plan` MODIFY `createInspections`、ADD 三個查房 schema、DELETE `inspectionsRequest`、MODIFY `Error` 錯誤碼清單、「破壞性變更」第一與第二點
-- `specs/truth/contracts/groups/現場作業/查房.yaml` -> `createInspections` 的 `Idempotency-Key`、201、403、404、409 `state_conflict`、422 `inspection_items_mismatch`
-- `specs/truth/contracts/components/schemas/查房.yaml` -> `CreateInspectionRequest`、`InspectionOutcome`（`destination` 三值）
-- `specs/truth/contracts/components/schemas/shared.yaml` -> `Error` 的 `inspection_items_mismatch`（`context` 帶 `missing`、`unexpected`、`currentItems`）與 `state_conflict` 補句
-- `tms/src/main/java/com/athena/tms/service/InspectionService.java:111` -> `validateCoverage`（現況只拒缺項、不拒多項、不回現行集合）
-- `tms/src/main/java/com/athena/tms/controller/InspectionApiController.java` -> T005 改過的 record 與 DTO
+- `specs/truth/features/backend/工務單/主管驗收的狀態守衛.feature` -> `功能: 主管驗收的狀態守衛`（12 個 Rule；檔名由 `主管審核與驗收的狀態守衛.feature` 改名）
+- `specs/truth/features/backend/工務單/dsl.md` -> 模組說明「報修與驗收」、`"{主管}" 驗收通過 "{單號}"`、`"{主管}" 判定 "{單號}" 驗收不通過但沒有寫原因`、`"{主管}" 已先驗收通過 "{單號}"`、`"{主管}" 已先以原因 "{原因}" 判定 "{單號}" 驗收不通過`、`"{單號}" 已由 "{工務}" 以不需處理結案`、`"{單號}" 已由 "{主管}" 驗收`、`"{單號}" 的驗收時間為現在`、`"{單號}" 的驗收人只有 "{主管}" 一人，驗收只記下一次`、`"{單號}" 尚未驗收`、`"{單號}" 的驗收不通過只記下一次`
+- `specs/truth/features/backend/dsl.md` -> `已有以下工務單：`、`"{任務}" 的狀態為 "{狀態}"`、`這次操作被拒絕，錯誤碼為 "{錯誤碼}"`、`"{員工}" 收到以下推播：`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `主管驗收的狀態守衛.feature` 與上列句；`/api-plan` MODIFY `verifyRepairTicket`、ADD `VerifyRepairTicketRequest`／`RepairVerificationOutcome`、MODIFY `RepairTicket`、MODIFY `RepairTicketSummary.state`、MODIFY `Error`；`/data-plan` MODIFY `tasks.state`、`tasks` Note 工務單狀態轉移段與已結束狀態段、`repair_tickets.verified_*` note、`task_events.type` note、「把 `done` 當作已結束、要認得 `closed` 的讀取端」清單
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `verifyRepairTicket`（200／403／409／422、`Idempotency-Key`）、`readRepairTicket`
+- `specs/truth/contracts/components/schemas/工務單.yaml` -> `VerifyRepairTicketRequest`、`RepairVerificationOutcome`、`RepairTicket`（`verifiedBy`／`verifiedAt`、`resolutionType`、`viewerIsAssignee`）
+- `specs/truth/contracts/components/schemas/shared.yaml` -> `RepairTicketSummary.state`、`Error`（`state_conflict`、`verification_reason_required`、`forbidden`）
+- `specs/truth/data/data-model.dbml` -> `Table tasks` Note 工務單狀態轉移段、已結束的狀態段；`Table repair_tickets` 的 `verified_by`、`verified_at`、`Note`
+- `tms/src/main/java/com/athena/tms/repair/RepairController.java:178-181`、`repair/RepairService.java:846-881`、`service/TaskEngine.java:502-516`、T004 的兩個 record
 
 **Boundary**:
-- 全通過結案、退回原清房者、原清房者下班回待認領三條既有規則不改，只把結果裝進 `InspectionOutcome.destination`。
-- 422 只在項目集合不符時回；缺項與多項都算，`currentItems` 是現行啟用集合；被拒時單不變、不寫查房紀錄、不推播。
-- 409 只在單已不是待查房時回，兩位主管同時送出只接受先到；後到不多推播。
-- 冪等靠既有 `processed_ops`：本 phase 把 T005 預留的 `Idempotency-Key` 參數接進回放，同一把鍵重送回放第一次回應，查房紀錄只一筆。
-- 不動 `免查房鎖定與結案.feature`、`免查抽查與合格率.feature` 的行為（NOOP）。
+- 通過與不通過共用同一道 `state='done'` 守衛 UPDATE；後到的一律 409 `state_conflict`，不覆寫 `verified_*`、不另推播。
+- 非主管 403 `forbidden`；`no_action_needed` 結案的單已是 `closed`，驗收回 409。
+- 回應一律 `RepairVerificationOutcome`；`Idempotency-Key` 必帶，接既有 `processed_ops` 回放。
+- 不通過的落地與推播在 Phase 4D；本 phase 只需讓不通過的 422 與撞單成立。
+- 讀取端認得 `closed`（`common/codes/TaskState.java:15`、`service/TaskExecutionService.java:295、822、837、871、1015-1019、1061、1087`、`repair/RepairService.java:182`）在本 phase 一次做完。
+- `RepairService.read` 補 `viewerIsAssignee`、`lastVerifyFailed*`（讀欄位），拿掉 `reviewRequestedAt`、`rejectReason`。
 
 **Test Scope**:
-- `specs/truth/features/backend/查房/逐項判定與退回去向.feature`
+- `specs/truth/features/backend/工務單/主管驗收的狀態守衛.feature`
 
-- [ ] T137 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T138 [BDD-REFACTOR] 在綠燈下讓 `validateCoverage` 回一個帶 `missing`、`unexpected`、`currentItems` 的結果物件，controller 只負責對映成 422；去向判定與推播共用既有退回路徑
+- [X] T115 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T116 [BDD-REFACTOR] 在綠燈下把「工務單已結束」收成 `TaskState` 一處的判斷（`done`、`inspected`、`closed`），讀取端不各自列值；驗收守衛與結果組裝留在 `RepairService.verify` 一處
 
-## Phase 4D: ADD Feature File - backend/工務單/主管審核與驗收的狀態守衛.feature
+## Phase 4D: ADD Feature File - backend/工務單/驗收不通過與重修.feature
 
-**Goal**: 四個既有主管動作端點的狀態守衛被 feature 釘住（退回原因空白 422、撤回後核准 409、重複核准 409、先到先驗收、維修中不能驗收、驗收記時間、驗收無法修復不改房況）；同時承接本輪契約 MODIFY 的後端面：`RepairTicket` 四個新欄位、`RepairTicketSummary` 的公共區域表達、`resolveOnComplete` 落地 `resolution_type`。
+**Goal**: 驗收不通過寫 `last_verify_failed_*`、清空完修三欄、只寫一筆 `repair_verification_failed`；原處理人在班回 `accepted` 並推播他，接不了回 `pool`（`pool_source=verification_return`）不推播；工務待認領帶驗收退回原因；重修再完修回到 `done`、推播報修人、仍要附這一次的照片。
 
 **Shared Must Read**:
-- `specs/truth/features/backend/工務單/主管審核與驗收的狀態守衛.feature` -> `功能: 主管審核與驗收的狀態守衛`（7 個 Rule）
-- `specs/truth/features/backend/工務單/dsl.md` -> 四個主管動作 When（MODIFY）、`"{主管}" 退回 "{單號}" 但沒有寫原因`、`"{主管}" 已先驗收通過 "{單號}"`、`"{員工}" 已撤回 "{單號}"`、`"{單號}" 的驗收時間為現在`、`"{單號}" 的驗收人只有 "{主管}" 一人，驗收只記下一次`、`"{單號}" 已由 "{主管}" 驗收`、`"{單號}" 尚未驗收`
-- `specs/truth/features/backend/dsl.md` -> `已有以下工務單：`（MODIFY）、`這次操作被拒絕，錯誤碼為 "{錯誤碼}"`、`"{房號}" 的房況為 "{房況}"`
-- `truth-delta.md` -> `/dsl-refine` ADD `主管審核與驗收的狀態守衛.feature`、ADD `be/工務單/dsl.md`、MODIFY `be/工務單/dsl.md` When 四句；`/api-plan` NOOP `approveRepairTicket`／`rejectRepairTicket`／`verifyRepairTicket`、MODIFY `readRepairTicket` description、MODIFY `RepairTicket`、MODIFY `RepairTicketSummary`、「破壞性變更」第三與第四點；`/data-plan` Wave 3 三列
-- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `readRepairTicket`（可查看者加主管）、`approveRepairTicket`、`rejectRepairTicket`、`verifyRepairTicket` 的 409／422
-- `specs/truth/contracts/components/schemas/工務單.yaml` -> `RepairTicket` 的 `resolutionType`、`doneAt`、`reviewRequestedAt`、`origin`、`description` 可為 null
-- `specs/truth/contracts/components/schemas/shared.yaml` -> `RepairTicketSummary` 的 `roomNo` 可為 null、`isPublicArea`、`reporterName` 可為 null
-- `specs/truth/data/data-model.dbml` -> `Table repair_tickets` 的 `resolution_type` 與「完修三選一」段、`Table task_events` 的 `completed` payload
-- `tms/src/main/java/com/athena/tms/repair/RepairService.java:376` -> `resolveOnComplete`（現況丟掉 `resolutionType`）；`read` 的回應組裝
-- `tms/src/main/java/com/athena/tms/service/TaskExecutionService.java:1044` -> `engineeringTickets` 的公共區域做法（沿用）
+- `specs/truth/features/backend/工務單/驗收不通過與重修.feature` -> `功能: 驗收不通過與重修`（9 個 Rule）
+- `specs/truth/features/backend/工務單/dsl.md` -> `"{主管}" 以原因 "{原因}" 判定 "{單號}" 驗收不通過`、`"{工務}" 今天的班已經結束`、`這次驗收的結果為 "{結果}"，去處為 "{去處}"`、`"{單號}" 最近一次驗收不通過的原因為 "{原因}"，判定人為 "{主管}"`、`工務待認領中 "{單號}" 帶驗收退回原因 "{原因}"`、`工務待認領包含 "{單號}"`、`"{工務}" 附 {張數} 張完修照片、處理說明 "{說明}" 完成 "{單號}"`、`"{工務}" 以完修結果 "{結果}" 完成 "{單號}"，處理說明 "{說明}"，不附照片`
+- `specs/truth/features/backend/dsl.md` -> `已有以下工務單：`（不通過三欄）、`"{員工}" 收到以下推播：`、`"{員工}" 沒有收到任何推播`、`"{任務}" 的狀態為 "{狀態}"`
+- `truth-delta.md` -> `/dsl-refine` ADD `驗收不通過與重修.feature` 與上列句；`/api-plan` MODIFY `verifyRepairTicket`、MODIFY `PushPayload.event`、ADD `PoolItem.verificationReturnReason`／`EngineeringTicket.verificationReturnReason`、NOOP `PoolSource`；`/data-plan` 工務單狀態轉移段、ADD 下班或請假判定段、`last_verify_failed_*`、`tasks.done_at`、`tasks.pool_source`、`repair_tickets.resolution_type`／`resolution_note`、`repair_photos` Note、`task_events.payload`、`notifications.event`、「驗收不通過的存法」
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `verifyRepairTicket` 不通過段
+- `specs/truth/contracts/components/schemas/工務單.yaml` -> `RepairVerificationOutcome`（`destination=pool` 仍帶 `assigneeName`）、`RepairTicket.completionPhotos`（只回最近一次不通過之後）
+- `specs/truth/contracts/components/schemas/shared.yaml` -> `PushPayload.event` 的 `repair_verification_failed`（title 帶房號、單號與「驗收不通過」，body 是原因，`kind=ticket`）
+- `specs/truth/contracts/components/schemas/員工工作台.yaml`、`groups/現場作業/員工工作台.yaml` -> `PoolItem`／`EngineeringTicket.verificationReturnReason`、`listDeptPool`
+- `specs/truth/data/data-model.dbml` -> `Table tasks` Note 工務單狀態轉移段與下班或請假判定段；`Table repair_tickets` 三個 `last_verify_failed_*`；`Table notifications` Note
+- `tms/src/main/java/com/athena/tms/service/InspectionService.java:218`（`cleanerUnavailable`，直接沿用）、`repair/RepairService.java:424`（完修推播冪等鍵）、`service/TaskExecutionService.java:556-589`（`PoolItem` 組裝）
 
 **Boundary**:
-- 四個端點的狀態轉移與權限不改（契約 NOOP）；只確認守衛回對的 HTTP 狀態與 `Error.code`。
-- 驗收只記一次：第二位主管撞 409，`verified_by`／`verified_at` 不被覆寫；驗收不改房況。
-- 本 phase 必做的契約 MODIFY 後端面（沒有後端 feature 直接驗，由 App 端 Phase 4H／4J 間接驗，見 Scope Note 第 2 條）：①`RepairService.read` 補 `origin`、`doneAt`（`tasks.done_at`）、`reviewRequestedAt`（`task_events` 最後一筆 `created` 或 `repair_resubmitted`）、`resolutionType`（讀欄位）；②組 `RepairTicketSummary` 時公共區域把佔位房號換成 null 並補 `isPublicArea`；③`resolveOnComplete` 同一交易寫 `repair_tickets.resolution_type`（省略時 `fixed`）與 `task_events.completed` payload 的 `resolutionType`。
-- 退回時推播報修人屬 Phase 4E，本 phase 不寫。
+- 不通過的兩條路在同一交易：清空 `done_at`、`resolution_type`、`resolution_note`，寫 `last_verify_failed_*`，一筆 `repair_verification_failed`（payload 帶 `reason`、`destination`、`assigneeId`）；`worked_sec`、`started_at`、`redo_count` 不動。
+- 換人判定直接沿用 `InspectionService.cleanerUnavailable`，不為工務另建排班。
+- 回 `pool` 時不推播原處理人，也不發 `pool_new_request`；推播只在回 `accepted` 時給原處理人。
+- 完修推播報修人的冪等鍵改帶事件序號，重修再完修照樣推播。
+- 完修照片「這一次請求至少 1 張」：舊照片不能抵用；`completionPhotos` 依 `last_verify_failed_at` 只回這一輪。
+- `PoolSource` 不加 `verification_return`；工務池的來源照舊由 `tasks.source` 換算。
 
 **Test Scope**:
-- `specs/truth/features/backend/工務單/主管審核與驗收的狀態守衛.feature`
+- `specs/truth/features/backend/工務單/驗收不通過與重修.feature`
 
-- [ ] T139 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T140 [BDD-REFACTOR] 在綠燈下把「完修結果」的讀寫收成 `repair_tickets.resolution_type` 唯一出處（`read`、待驗收清單、`resolveOnComplete` 都不翻 `task_events` 的 JSON），並確認 `RepairTicketSummary` 的公共區域組裝與 `engineeringTickets` 共用
+- [X] T117 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T118 [BDD-REFACTOR] 在綠燈下讓通過與不通過共用 4C 的守衛與 `RepairVerificationOutcome` 組裝，只分落地分支；推播 payload 與完修推播共用同一段 title／body／target 組裝
 
-## Phase 4E: MODIFY Feature File - backend/工務單/開立工務單與急件.feature
+## Phase 4E: MODIFY Feature File - backend/工務單/完修與回到原任務.feature
 
-**Goal**: 主管退回一般件時同一交易推播報修人（`repair_rejected`，title 帶房號、單號與「主管未核准」，body 帶退回原因，去處工務單詳情）；核准不推播；補資料再送出後開始等主管的時間是重送時間。
+**Goal**: 完修四選一；`no_action_needed` 不附照片也能完成、`doing→closed` 一步落地、保留處理說明、不建追蹤單、不改房況、同樣推播報修人、原任務的停住原因改為工務已修好且可以恢復；驗收通過後單已結案。
 
 **Shared Must Read**:
-- `specs/truth/features/backend/工務單/開立工務單與急件.feature` -> Rule「主管退回一般件時推播報修人，內容帶退回原因，點開進這張工務單詳情」、「主管核准一般件時不推播報修人」、「補資料再送出後，開始等主管的時間是這次重新送出的時間」
-- `specs/truth/features/backend/工務單/dsl.md` -> `"{主管}" 以原因 "{原因}" 退回 "{單號}"`、`"{主管}" 核准 "{單號}"`、`"{員工}" 補資料再送出 "{單號}"`、`"{單號}" 開始等主管的時間為現在`
-- `specs/truth/features/backend/dsl.md` -> `"{員工}" 收到以下推播：`（`內容` 欄）、`"{員工}" 沒有收到任何推播`
-- `specs/truth/features/backend/推播/dsl.md` -> 模組說明（退回報修單的推播歸 `工務單` 模組驗）
-- `truth-delta.md` -> `/dsl-refine` ADD `開立工務單與急件.feature` 三個 Rule、MODIFY `"{員工}" 收到以下推播：`、MODIFY `be/推播/dsl.md` 模組說明；`/api-plan` MODIFY `PushPayload.event` 與 `rejectRepairTicket` description；`/data-plan` MODIFY `notifications.event`
-- `specs/truth/contracts/components/schemas/shared.yaml` -> `PushPayload.event` 第 18 值 `repair_rejected` 的觸發、收件人、title、body、target
-- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `rejectRepairTicket` 的「同一交易推播報修人」
-- `specs/truth/data/data-model.dbml` -> `Table notifications` 的 `event` 與 `repair_rejected` Note
-- `tms/src/main/java/com/athena/tms/repair/RepairService.java` -> 退回流程；`tms/src/main/java/com/athena/tms/service/PushOutboxWriter.java` -> 既有 outbox push 寫法（`kind=ticket` 的 target 組裝見 002 Addendum T491 收斂的唯一出處）
+- `specs/truth/features/backend/工務單/完修與回到原任務.feature` -> `功能: 完修與回到原任務`（12 個 Rule）
+- `specs/truth/features/backend/工務單/dsl.md` -> `"{工務}" 以完修結果 "{結果}" 完成 "{單號}"，處理說明 "{說明}"，不附照片`、`"{單號}" 已由 "{工務}" 以不需處理結案`、`"{單號}" 的完修結果為 "{結果}"`、`系統沒有為 "{單號}" 建立追蹤單`、`"{房號}" 的房況沒有改變`、`"{單號}" 已由 "{主管}" 驗收`
+- `specs/truth/features/backend/dsl.md` -> `"{任務}" 的狀態為 "{狀態}"`、`"{員工}" 收到以下推播：`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `完修與回到原任務.feature` 與上列句；`/api-plan` MODIFY `CompleteTaskRequest`、`tasksComplete`／`TaskCompletion`；`/data-plan` 工務單狀態轉移段（`doing→closed`）、`repair_tickets.resolution_type`／`resolution_note`、`repair_photos` Note、`task_events.payload`（`completed` 就是結案事件）
+- `specs/truth/contracts/groups/現場作業/任務.yaml` -> `tasksComplete`
+- `specs/truth/contracts/components/schemas/任務.yaml` -> `CompleteTaskRequest`（`photoIds` `minItems` 0 與欄位說明）、`TaskCompletion.state`
+- `specs/truth/data/data-model.dbml` -> `Table repair_tickets` 的 `resolution_type`、`resolution_note` 與 `Note` 的完修四選一；`Table task_events` 的 `payload`
+- `tms/src/main/java/com/athena/tms/service/TaskEngine.java:177`、`service/TaskExecutionService.java:408-415`、`repair/RepairService.java:71、376、448`、`dto/CompleteTaskRequest.java:8`
 
 **Boundary**:
-- 推播只在退回時寫，收件人只有報修人（`repair_tickets.reporter_id`），與 `task_events.type=repair_rejected` 同一交易。
-- 核准與驗收不推播報修人；急件推播（既有）不受影響。
-- target 的 `kind=ticket` 沿用既有「任務類別對 `PushTarget.kind`」的唯一出處，不另寫 switch。
-- 既有 Rule（一般件進等主管審核、急件直接進待認領、核准後進待認領、退回須附原因等）是 NOOP，Test Scope 是整份檔案，既有場景不得變紅。
+- 完成的守衛 UPDATE 依完修結果直接寫 `closed` 或 `done`（完修結果傳進這句），不經 `done` 再轉。
+- `no_action_needed` 不寫 `repair_verified`，`verified_*` 為 NULL；不建追蹤單、不轉停用、不改 `rooms`。
+- 原任務恢復與工時接續沿用既有已修好的路徑，不另開分支。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/完修與回到原任務.feature`
+
+- [ ] T119 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T120 [BDD-REFACTOR] 在綠燈下把四種完修結果的後續動作（追蹤單、停用、照片規則、落地狀態）收成一張對照，`resolveOnComplete` 不再用 if 串
+
+## Phase 4F: MODIFY Feature File - backend/工務單/照片完整性與冪等送出.feature
+
+**Goal**: 以已修好、暫時處理或無法修復完成時，這一次請求不附照片被拒 422 `completion_photo_required`。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/照片完整性與冪等送出.feature` -> Rule「以已修好、暫時處理或無法修復完成時，必須附完修照片」（場景大綱）；其餘 6 個 Rule 照舊
+- `specs/truth/features/backend/工務單/dsl.md` -> `"{工務}" 以完修結果 "{結果}" 完成 "{單號}"，處理說明 "{說明}"，不附照片`
+- `specs/truth/features/backend/dsl.md` -> `這次操作被拒絕，錯誤碼為 "{錯誤碼}"`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `照片完整性與冪等送出.feature`；`/api-plan` MODIFY `CompleteTaskRequest`
+- `specs/truth/contracts/components/schemas/任務.yaml` -> `CompleteTaskRequest.photoIds` 欄位說明
+
+**Boundary**:
+- 照片檢查只在三種結果時要求；`no_action_needed` 的例外在 4E。既有 Rule 是 NOOP，不得變紅。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/照片完整性與冪等送出.feature`
+
+- [ ] T121 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T122 [BDD-REFACTOR] 在綠燈下確認照片規則只寫在 4E 的對照一處
+
+## Phase 4G: MODIFY Feature File - backend/工務單/開立工務單與急件.feature
+
+**Goal**: 房務報修不分一般件或急件、送出後直接進工務待認領；報修送出後不出現在任何主管的待辦；開單時系統建立工務單並記下報修人。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/開立工務單與急件.feature` -> Rule「房務報修不分一般件或急件，送出後直接進工務待認領」、「報修送出後不經主管，不會出現在任何主管的待辦」、「開單時系統建立工務單並記下報修人」；其餘 6 個 Rule 照舊
+- `specs/truth/features/backend/工務單/dsl.md` -> 三句開單 When、`工務待認領包含 "{單號}"`、`主管待辦的任何一類都不包含 "{單號}"`、`系統建立工務單 "{單號}"，房號 "{房號}"、報修人 "{員工}"`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `開立工務單與急件.feature`、MODIFY 三句開單 When；`/api-plan` MODIFY `createRepairTicket`／`CreateRepairTicketRequest.assigneeId`；`/data-plan` 工務單狀態轉移段（開單一律 `pool`）
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `createRepairTicket` 的去向說明
+- `tms/src/main/java/com/athena/tms/repair/RepairService.java:611-616、658-680`（`sourceTaskId!=null && !isUrgent → pending_review` 那一支）
+
+**Boundary**:
+- 開單去向只剩「有 `assigneeId` 為 `accepted`，其餘 `pool`」；`pool_source` 設定照舊。
+- 急件判定、排序、推播、降級是 NOOP，不得變紅。
 
 **Test Scope**:
 - `specs/truth/features/backend/工務單/開立工務單與急件.feature`
 
-- [ ] T141 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T142 [BDD-REFACTOR] 在綠燈下確認退回推播與完修推播共用同一段 payload 組裝（title／body／target），只差 `event` 與文案
+- [ ] T123 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T124 [BDD-REFACTOR] 在綠燈下確認三條開單路徑共用同一個去向判定
 
-## Phase 4F: MODIFY Feature File - ios-app/帳號與登入/登入與登出守衛.feature
+## Phase 4H: MODIFY Feature File - backend/工務單/工務視角維修與開單.feature
 
-**Goal**: 登入成功與強制改密完成兩個入口都走 `landingShellFor`，主管一律進主管首頁（含被設了部門的主管），工務進工務首頁，其餘房務首頁。
+**Goal**: 工務自開單沒有指定處理人時直接進工務待認領、不出現在任何主管待辦；工務視角今日進度的今天已完修算 `done` 或 `closed`。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature` -> Rule「登入成功後依角色進首頁，主管一律進主管首頁，不看帳號有沒有部門」、「強制改密完成後的去處與登入相同，依角色決定」，以及改句型後的既有 3 個 Example
-- `specs/truth/features/ios-app/帳號與登入/dsl.md` -> `"{員工}" 登入成功，進入 "{首頁}"`
-- `specs/truth/features/ios-app/dsl.md` -> `飯店有以下員工：`（`角色`）
-- `truth-delta.md` -> `/dsl-refine` ADD `登入與登出守衛.feature` 兩個 Rule、MODIFY 該 Then 句、MODIFY 既有 3 個 Example、MODIFY `ios/dsl.md` `飯店有以下員工：`
-- `ui/ui-plan.md` -> 介面 1「進 App 的首頁分流與推播開首頁」的判定順序表與「主管外殼」段
-- `app/mobile/lib/core/landing.dart`（T007）、`app/mobile/lib/features/login/login_screen.dart:122`、`app/mobile/lib/features/login/force_password_change_screen.dart:138`、`app/mobile/lib/features/shell/main_shell.dart`
+- `specs/truth/features/backend/工務單/工務視角維修與開單.feature` -> Rule「工務開單時沒有指定處理人，單直接進工務待認領，不經主管」、「工務視角今日進度顯示手上張數、今天已完修與急件數」；其餘 9 個 Rule 照舊
+- `specs/truth/features/backend/工務單/dsl.md` -> `"{工務}" 為 "{房號}" 開立以下工務單，不經過任何房務任務：`、`主管待辦的任何一類都不包含 "{單號}"`、`"{工務}" 的工務視角今日進度為：`
+- `truth-delta.md` -> `/dsl-refine` ADD Rule、MODIFY `"{工務}" 的工務視角今日進度為：`；`/api-plan` MODIFY `getMyToday`／`MyToday.engineeringSummary`、`EngineeringTicket.state`
+- `specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `getMyToday`
+- `specs/truth/contracts/components/schemas/員工工作台.yaml` -> `MyToday.engineeringSummary`（`completedToday`）、`EngineeringTicket`
 
 **Boundary**:
-- 兩個入口只呼叫 `landingShellFor`，不得各留一份 `dept == 'engineering'` 判斷。
-- `ManagerShell` 的首頁分頁可以先是 Phase 4G 之前的空殼，但分頁列四格與通知、我的兩分頁必須是既有的。
-- 推播開首頁的第三個入口屬 Phase 4K。
+- 讀取端認得 `closed` 已在 4C 做完；本 phase 只補這支 feature 揭露的缺口。既有 Rule 是 NOOP，不得變紅。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/工務視角維修與開單.feature`
+
+- [ ] T125 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T126 [BDD-REFACTOR] 在綠燈下確認工務單列排序與今天已完修都用 4C 收斂的已結束判斷
+
+## Phase 4I: MODIFY Feature File - backend/查房/逐項判定與退回去向.feature
+
+**Goal**: 工務主管送出查房回 403 `forbidden`（message「你沒有查房的權限」），單仍待查房、清房者沒有收到推播。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/查房/逐項判定與退回去向.feature` -> Rule「工務主管不能送出查房，即使單停在待查房」、「工務主管的查房送出被拒時，清房者沒有收到任何推播」；其餘 10 個 Rule 照舊
+- `specs/truth/features/backend/查房/dsl.md` -> `"{主管}" 判定 "{任務}" 查房如下：`
+- `specs/truth/features/backend/dsl.md` -> `"{員工}" 判定 "{任務}" 查房全部項目通過`、`這次操作被拒絕，錯誤碼為 "{錯誤碼}"`、`"{員工}" 沒有收到任何推播`
+- `truth-delta.md` -> `/dsl-refine` ADD 兩個 Rule、MODIFY 兩句查房 When；`/api-plan` MODIFY `createInspections`
+- `specs/truth/contracts/groups/現場作業/查房.yaml` -> `createInspections` 的 403
+- `tms/src/main/java/com/athena/tms/controller/InspectionApiController.java:63-68`
+
+**Boundary**:
+- 權限檢查用 4A 收斂的主管種類函式，與自清自查、無權限角色共用 `forbidden`；不另立錯誤碼。既有 Rule 是 NOOP，不得變紅。
+
+**Test Scope**:
+- `specs/truth/features/backend/查房/逐項判定與退回去向.feature`
+
+- [ ] T127 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T128 [BDD-REFACTOR] 在綠燈下確認查房的三種 403 走同一個檢查出口
+
+## Phase 4J: DELETE Feature / DSL Truth - 後端主管審核（核准、退回、補資料再送出、待審核清單、`repair_rejected`）
+
+**Goal**: 移除後端支援主管審核的產品碼，確認新版 truth 成立、沒有測試繼續保護審核行為。
+
+**Shared Must Read**:
+- `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature` -> `功能: 重複報修、補照片與撤回`（已刪 Rule「等主管審核時，報修人也可以撤回工務單」）
+- `specs/truth/features/backend/工務單/dsl.md` -> `"{員工}" 撤回 "{單號}"`；DELETE 的審核三動作與兩句 Then
+- `specs/truth/features/backend/主管工作台/dsl.md` -> DELETE 的待審核兩句
+- `truth-delta.md` -> `/dsl-refine` DELETE 各列；`/api-plan` DELETE 各列與「破壞性變更清單」後端兩點；`/data-plan` 讀取端清單末「收回相關、與 `done` 無關但同一批要動」
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `withdrawRepairTicket`（只剩 `pool→cancelled`）
+- 過期產品碼：`tms/src/main/java/com/athena/tms/repair/RepairController.java:159-176`（approve、`RejectRepairTicketRequest`、reject、resubmit）；`repair/RepairService.java:60-70`（`LAST_REVIEW_SUBMISSION_AT`）、`:257`、`:348-350`、`:784-844`（approve、reject 含 `reject_reason_required` 與 `repair_rejected` 推播、resubmit）；`service/TaskEngine.java:30-36`（`CREATABLE_STATES` 的 `pending_review`）、`:403-423`（撤回 `IN ('pool','pending_review')`）、`:458-500`（三個轉移，含寫 `repair_rejected` 事件）；`service/ManagerQueueService.java:10、57、60、64-66、105-146`（`reviewQueue`）；`dto/ManagerQueues.java:19-53`（`review`、`Counts.review`、`ReviewQueueItem`）；`service/TaskExecutionService.java:1015` 說明
+
+**Boundary**:
+- 只移除審核行為與它的型別、常數、說明；不動驗收、開單去向（4G 已改）與撤回 `pool` 的既有行為。
+- 前面 GREEN 已經拿掉的部分只確認不殘留；`tms/src/main` 對 `pending_review|rejected|repair_rejected|reject_reason|review_requested|reviewRequested|resubmit|approve` 的 grep 應只剩 migration 檔。
+
+**Test Scope**:
+- `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature`
+- `specs/truth/features/backend/工務單/開立工務單與急件.feature`
+- `specs/truth/features/backend/工務單/主管驗收的狀態守衛.feature`
+- `specs/truth/features/backend/主管工作台/主管待辦清單.feature`
+
+- [ ] T129 [CODE-REMOVE] 移除後端主管審核的端點、服務方法、狀態轉移、`repair_rejected` 推播與事件、待審核清單與型別
+- [ ] T130 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
+
+## Phase 4K: MODIFY Feature File - ios-app/帳號與登入/登入與登出守衛.feature
+
+**Goal**: 登入與強制改密完成後，房務主管進兩格的主管首頁、工務主管進一格的主管首頁；分流入口仍只有 `landingShellFor`，主管外殼內依主管種類決定格子。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature` -> `功能: 登入與登出守衛`（11 個 Rule；本輪改的是登入與強制改密兩個場景大綱各加陳主管一列、強制改密大綱補 `角色` 欄）
+- `specs/truth/features/ios-app/帳號與登入/dsl.md` -> `"{員工}" 登入成功，進入 "{首頁}"`
+- `specs/truth/features/ios-app/dsl.md` -> `飯店有以下員工：`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `登入與登出守衛.feature`、MODIFY `"{員工}" 登入成功，進入 "{首頁}"`、MODIFY `ios/dsl.md` `飯店有以下員工：`
+- `ui/ui-plan.md` -> 介面 1「進 App 的首頁分流與主管種類判定」、畫面 1 `主管首頁`
+- `ui/index.html`（王主管）、`ui/index.html?as=mg2`（陳主管）、`ui/manager.css`、`ui/manager.js`
+- `app/mobile/lib/core/landing.dart`（T006 的主管種類函式）、`app/mobile/lib/features/shell/main_shell.dart:238-248`（`ManagerShell`）
+
+**Boundary**:
+- 進主管外殼的判定不變（看 `role`）；主管種類只決定外殼內首頁的格子，由外殼往下傳，不在登入與改密畫面各判一次。
+- 首頁的格子內容屬 Phase 4L；本 phase 只需格子集合依種類正確。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/帳號與登入/登入與登出守衛.feature`
 
-- [ ] T143 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T144 [BDD-REFACTOR] 在綠燈下確認 `landingShellFor` 是三入口唯一的分流點，登入畫面與強制改密畫面沒有殘留的部門判斷；純函式可補一支 Flutter 單元測試釘住三條判定順序
+- [ ] T131 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T132 [BDD-REFACTOR] 在綠燈下確認主管種類只在 `core/landing.dart` 判一次，主管外殼、首頁與推播都讀同一個值
 
-## Phase 4G: ADD Feature File - ios-app/主管工作台/主管首頁.feature
+## Phase 4L: MODIFY Feature File - ios-app/主管工作台/主管首頁.feature
 
-**Goal**: 主管首頁三格數字與名下的單對齊雛形：三格等於清單列數、0 照常顯示、四分頁外殼、名下的單沿用房務任務卡、沒有問候列與今日進度、房務員工首頁沒有三格。
+**Goal**: 房務主管兩格（待查房、待驗收）、工務主管一格寬磚（待驗收）；格子數字等於清單列數、0 照常顯示；房務主管「我名下的單」沿用房務任務卡、工務主管改用工務單卡，點開是工務單詳情且底部動作與工務員工相同；沒有問候列與今日進度；員工首頁沒有主管的格子。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/主管工作台/主管首頁.feature` -> `功能: 主管首頁`（8 個 Rule）
-- `specs/truth/features/ios-app/主管工作台/dsl.md` -> `"{主管}" 已在 App 打開主管首頁`、`"{主管}" 在主管首頁點 "{格}"`、`三格依序顯示：`、`"{格}" 格顯示 {數字}`、`清單說明目前沒有等他處理的單，畫面不是空白`、`「我名下的單」依序列出 …`、`主管首頁沒有問候列與今日進度`、`「我名下的單」說明目前沒有名下的單`、`首頁沒有待查房、待審核、待驗收三格`、`底部分頁依序是 {分頁清單}`
-- `specs/truth/features/ios-app/dsl.md` -> `飯店有以下員工：`、`"{員工}" 名下有以下任務：`、`已有以下工務單：`、`現在時間是 "{時刻}"`、`"{員工}" 在 App 打開首頁`
-- `truth-delta.md` -> `/dsl-refine` ADD `ios/主管工作台/dsl.md`、ADD `主管首頁.feature`；`/api-plan` ADD `getManagerQueues`、MODIFY `getMyToday` 與 `MyToday.poolBadgeCount` description
-- `ui/ui-plan.md` -> 介面 2「首頁版面」「三格與清單的資料來源」「我名下的單沿用房務任務列的既有限制」、畫面 1 `主管首頁`、「前端實作切分建議」
-- `ui/index.html`、`ui/manager.css`、`ui/manager.js` -> 主管首頁雛形全文（含 `?mine=0` 的名下沒單狀態）
-- `specs/truth/contracts/groups/現場作業/主管工作台.yaml`、`specs/truth/contracts/components/schemas/主管工作台.yaml` -> `counts`
-- `specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `getMyToday` 主管呼叫時的語意（`todayTasks` 照常、`poolBadgeCount` 一律 0、`shift`／`floors`／`engineeringSummary` 為 null）
-- `app/mobile/lib/features/manager/manager_home_screen.dart`（T008）、`app/mobile/lib/features/home/home_screen.dart` -> `_TaskRow`、`app/mobile/lib/core/widgets/tms_home_cards.dart`
+- `specs/truth/features/ios-app/主管工作台/主管首頁.feature` -> `功能: 主管首頁`（11 個 Rule）
+- `specs/truth/features/ios-app/主管工作台/dsl.md` -> 模組說明、`"{主管}" 已在 App 打開主管首頁`、`"{主管}" 在主管首頁點 "{格}"`、`"{主管}" 在「我名下的單」點 "{單號}"`、`首頁的格子依序顯示：`、`首頁只有待驗收一格，數字為 {數字}`、`"{格}" 格顯示 {數字}`、`「我名下的單」依序列出…`、`「我名下的單」列出 "{單號}"，卡片與工務首頁的工務單卡一致`、`App 開啟 "{單號}" 的工務單詳情，底部動作與工務員工相同`、`「我名下的單」說明目前沒有名下的單`、`主管首頁沒有問候列與今日進度`、`首頁沒有主管的格子`、`底部分頁依序是 {分頁清單}`
+- `specs/truth/features/ios-app/dsl.md` -> `飯店有以下員工：`、`"{員工}" 名下有以下任務：`、`已有以下工務單：`、`"{員工}" 在 App 打開首頁`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `主管首頁.feature`、`ios/主管工作台/dsl.md` 各列、MODIFY `ios/dsl.md` 打開首頁；`/api-plan` MODIFY `getManagerQueues`、MODIFY `getMyToday`／`MyToday.engineeringSummary`
+- `ui/ui-plan.md` -> 介面 2「主管首頁與主管清單」、畫面 1 `主管首頁`、「前端實作切分建議」（`TmsCountTile` 寬版、工務單卡抽到 `core/widgets/`）
+- `ui/index.html`、`ui/index.html?as=mg2`、`ui/manager.css`、`ui/manager.js`
+- `specs/truth/contracts/components/schemas/主管工作台.yaml` -> `ManagerQueues.counts`（工務主管沒有 `inspection`）
+- `specs/truth/contracts/components/schemas/員工工作台.yaml` -> `MyToday.todayTasks`、`engineeringSummary.tickets`
+- `app/mobile/lib/features/manager/manager_home_screen.dart:16、27-31、120-160`、`manager_queues_store.dart`、`app/mobile/lib/core/widgets/tms_count_tile.dart`、`app/mobile/lib/features/engineering/`（工務首頁的工務單卡）
 
 **Boundary**:
-- 首頁載入只打一次 `getManagerQueues` 拿三個數字（NFR-001），名下的單走 `getMyToday.todayTasks`；三格數字直接用回應的 `counts`，不自己算。
-- 名下的單抽共用 `_TaskRow` 到 `core/widgets/`，不複製一份。
-- 不帶問候列、進度環與下一間卡；分頁列的待認領徽章讀 `poolBadgeCount`（主管為 0）。
-- 主管做完自己名下的單不會讓自己的三格變動（FR-011），不得為此加刷新邏輯。
+- 格子集合跟著回應有哪些鍵走，數字直接用 `counts`，不自己算；工務主管名下的單讀 `engineeringSummary.tickets`、房務主管讀 `todayTasks`。
+- 工務單卡抽到 `core/widgets/` 給工務首頁與工務主管首頁共用，不複製一份；點卡開工務單詳情，主管做自己名下的單時底部動作與工務員工一致（處理人視角，`viewerIsAssignee`）。
+- 不帶問候列、進度環與急件保養區。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/主管工作台/主管首頁.feature`
 
-- [ ] T145 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T146 [BDD-REFACTOR] 在綠燈下把三格磚抽成 `TmsCountTile`，首頁與清單共用同一份 `getManagerQueues` 回應的保存與重取入口
+- [ ] T133 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T134 [BDD-REFACTOR] 在綠燈下讓 `TmsCountTile` 一份元件涵蓋一般與寬版，首頁格子由同一份清單定義產生，不再寫死三格
 
-## Phase 4H: ADD Feature File - ios-app/主管工作台/三類清單.feature
+## Phase 4M: MODIFY Feature File - ios-app/主管工作台/主管清單.feature
 
-**Goal**: 同一個清單元件吃三種類別，每列顯示房號（或單號）、內容、次要字與右欄時間，跨日標日期，排序照後端，動作完成回清單後該單消失、格數減一。
+**Goal**: 清單只剩待查房與待驗收兩類；待驗收每一列看得到單號與完修結果，不含已結案、等工務接單與以不需處理結案的單；工務主管與房務主管待驗收相同；重修再完修重新出現並標「重修後再驗」。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/主管工作台/三類清單.feature` -> `功能: 三類清單`（9 個 Rule）
-- `specs/truth/features/ios-app/主管工作台/dsl.md` -> `"{主管}" 已在 App 打開 "{清單}"`、`"{主管}" 剛送出 "{任務}" 的查房，結果畫面停在畫面上`、`"{主管}" 從結果畫面回到待查房清單`、`清單依序為 {清單}`、`清單上沒有 "{單}"`、`"{單}" 那一列標出日期 … 與時刻 …`、`"{單}" 那一列只顯示時刻 …`、`每一列都看得到房號與內容`、`每一列都看得到工務單號`、`"{單號}" 那一列標示 "{標籤}"`
-- `specs/truth/features/ios-app/dsl.md` -> `"{員工}" 名下有以下任務：`（`完成時間`、操作者是別人時只建資料）、`已有以下工務單：`（新欄）、`現在時間是 "{時刻}"`、`畫面回到 "{清單}"，"{單}" 不在清單上`
-- `truth-delta.md` -> `/dsl-refine` ADD `三類清單.feature`、MODIFY `ios/dsl.md` `名下有以下任務：`；`/api-plan` ADD `components/schemas/主管工作台.yaml`（`waitingSinceIsToday` 後端給布林、公共區域 `roomNo` 為 null）
-- `ui/ui-plan.md` -> 介面 2「清單每一列要顯示什麼」的欄位表、「排序」「空狀態」「刷新時機」、畫面 2 `三類清單`
-- `ui/queue.html`、`ui/manager.css`、`ui/manager.js` -> 三種類別的雛形（`?kind=inspection|review|verify`）
-- `specs/truth/contracts/components/schemas/主管工作台.yaml` -> 三種 item 的欄位（`waitingSince`、`waitingSinceIsToday`、`isPublicArea`、`resolutionType`、`origin`、`redoCount`）
-- `app/mobile/lib/features/manager/manager_queue_screen.dart`（T008）
+- `specs/truth/features/ios-app/主管工作台/主管清單.feature` -> `功能: 主管清單`（10 個 Rule；檔名由 `三類清單.feature` 改名）
+- `specs/truth/features/ios-app/主管工作台/dsl.md` -> `"{主管}" 已在 App 打開 "{清單}"`、`清單依序為 {清單}`、`清單上沒有 "{單}"`、`每一列都看得到房號與內容`、`每一列都看得到工務單號與完修結果`、`"{單號}" 那一列標示 "{標籤}"`、`清單說明目前沒有等他處理的單，畫面不是空白`、兩句日期與時刻
+- `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`、`畫面回到 "{清單}"，"{單}" 不在清單上`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `主管清單.feature`、MODIFY 兩句列 Then；`/api-plan` MODIFY `VerifyQueueItem`
+- `ui/ui-plan.md` -> 介面 2 清單每一列的欄位、排序、空狀態、刷新時機；畫面 2 `主管清單`
+- `ui/queue.html?kind=inspection`、`ui/queue.html?kind=verify`、`ui/manager.css`、`ui/manager.js`
+- `specs/truth/contracts/components/schemas/主管工作台.yaml` -> `VerifyQueueItem`（`resolutionType` nullable、`wasVerificationFailed`）
+- `app/mobile/lib/features/manager/manager_queue_screen.dart:23-37、86-120`、`manager_queue_row.dart`、`manager_queues_store.dart`
 
 **Boundary**:
-- 排序由後端排好直接呈現，App 不重排；要不要標日期只看 `waitingSinceIsToday`，時刻直接用 `waitingSince` 字串裡的時區位移，不轉手機時區。
-- 公共區域的列用 `title` 當地點、不顯示房號；`roomNo` 為 null 不得當成錯誤。
-- 完修結果標籤用契約值對照白話（`fixed`＝已修好、`temporary`＝暫時處理、`cannot_fix`＝無法修復），無法修復用琥珀色；`origin=scheduled` 標「定期保養」。
-- 回清單時重取 `getManagerQueues`，三格同步更新；不加即時推送。
+- 完修結果標籤用契約值對白話（已修好、暫時處理、無法修復），`resolutionType` 為 null 時不畫標籤；重修後再驗只看 `wasVerificationFailed`。
+- 待驗收列點下去要能開工務單詳情（現況 `_onTapRow` 只開放待查房）；詳情內容屬 Phase 4O。
+- 排序照後端，不重排。
 
 **Test Scope**:
-- `specs/truth/features/ios-app/主管工作台/三類清單.feature`
+- `specs/truth/features/ios-app/主管工作台/主管清單.feature`
 
-- [ ] T147 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T148 [BDD-REFACTOR] 在綠燈下讓三種類別共用同一個列元件，只以 item 型別決定第三行與標籤，不寫三份清單畫面
+- [ ] T135 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T136 [BDD-REFACTOR] 在綠燈下讓兩類清單共用同一個列元件，只以 item 型別決定第三行與標籤
 
-## Phase 4I: ADD Feature File - ios-app/主管工作台/查房.feature
+## Phase 4N: MODIFY Feature File - ios-app/主管工作台/查房.feature
 
-**Goal**: 查房畫面逐項判定、全部判過才能送出、沒有備註欄；送出後結果畫面三種說法；項目集合不符時重新載入重判、單已被處理時回清單；沒有項目時可直接送出。
+**Goal**: 工務主管的首頁沒有待查房格，也沒有任何進待查房清單的入口；房務主管的查房行為照舊。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/主管工作台/查房.feature` -> `功能: 查房畫面`（8 個 Rule）
-- `specs/truth/features/ios-app/主管工作台/dsl.md` -> 查房相關 Given（`飯店目前設定的查房項目如下：`、`飯店目前沒有任何啟用的查房項目`、兩個 `已從待查房清單打開`、`飯店在 … 送出前新增了查房項目`、`"{任務}" 剛被 "{另一位主管}" 查完 …`）、When（`從待查房清單打開`、`把 … 判 …`、`把以下項目判定後送出：`、`送出查房`）、Then（`查房畫面列出以下項目 …`、`查房送出鈕為`、`查房畫面沒有備註欄`、`查房畫面說明目前沒有查房項目 …`、三句結果畫面、`查房畫面重新載入以下項目並清空判定：`）
-- `specs/truth/features/ios-app/dsl.md` -> `後端已對 "{員工}" 送出推播 "{標題}"`、`後端沒有對 "{員工}" 送出任何推播`、`後端 "{房號}" 的房況為 "{房況}"`、`畫面顯示 "這張單已被處理"，並回到 "{清單}"，"{單}" 不在清單上`、`"{任務}" 在 App 顯示為 "{狀態}"`
-- `truth-delta.md` -> `/dsl-refine` ADD `查房.feature`、ADD `ios/dsl.md` 四句 Then；`/api-plan` MODIFY `createInspections`、ADD 三個查房 schema、MODIFY `Error` 錯誤碼清單、NOOP `listSopItems`
-- `ui/ui-plan.md` -> 介面 3「版面」「沒有任何啟用項目」「查房項目的來源」「送出與結果」「送出被拒要分辨兩種拒絕」「離線」、畫面 3 `查房畫面`、畫面 4 `查房結果`
-- `ui/inspect.html`、`ui/inspect-result.html`、`ui/manager.css`、`ui/manager.js` -> 雛形全文（含 `?items=0`、303 第一次送出進重判狀態、`&offline=1`）
-- `specs/truth/contracts/groups/現場作業/查房.yaml` -> `createInspections` 的 201／409／422
-- `specs/truth/contracts/components/schemas/查房.yaml` -> `CreateInspectionRequest`、`InspectionOutcome.destination`
-- `specs/truth/contracts/components/schemas/shared.yaml` -> `Error.code` `inspection_items_mismatch` 的 `context.currentItems`、`state_conflict`
-- `specs/truth/contracts/groups/知識與通知/SOP與查房項目.yaml` -> `listSopItems` 的 `appliesTo` 與 `active`
-- `app/mobile/lib/features/manager/inspection_screen.dart`、`inspection_result_screen.dart`（T008）、`app/mobile/lib/core/api_client.dart` 的 `createInspection`（T009）
+- `specs/truth/features/ios-app/主管工作台/查房.feature` -> Rule「查房只開放給房務主管，工務主管的首頁沒有待查房格，也沒有任何進待查房清單的入口」、背景的陳主管；其餘 8 個 Rule 照舊
+- `specs/truth/features/ios-app/主管工作台/dsl.md` -> `首頁沒有待查房格，也沒有任何進待查房清單的入口`
+- `truth-delta.md` -> `/dsl-refine` ADD `查房.feature` 該 Rule、「刻意不承接」第一條（403 防禦分支不從 App 驗）
+- `ui/ui-plan.md` -> 介面 3「查房畫面與房務主管限定」、畫面 3 `查房畫面` 與 4 `查房結果`
+- `ui/index.html?as=mg2`、`ui/inspect.html`、`ui/inspect-result.html`
+- `app/mobile/lib/features/manager/manager_home_screen.dart`、`inspection_screen.dart`
 
 **Boundary**:
-- 兩種拒絕只靠 `Error.code` 分辨：`inspection_items_mismatch` 留在原畫面、項目換成 `context.currentItems`、判定清空、送出鈕回禁用、不再打 `listSopItems`；`state_conflict` 彈「這張單已被處理」回清單並重取。
-- 結案還是退回、退回去了哪裡一律看 `InspectionOutcome.result` 與 `destination`，App 不看班表。
-- 送出帶同一把 `Idempotency-Key`，重送不換鍵。
-- 沒有備註欄、沒有照片；全部判過之前是禁用態，不是按了才報錯。
-- 離線擋在送出之前、不入佇列（場景在 Phase 4M 驗，本 phase 不得讓它進佇列）。
+- 入口不存在就是全部：首頁、清單切換與推播都不得帶工務主管進待查房。既有查房 Rule 是 NOOP，不得變紅。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/主管工作台/查房.feature`
 
-- [ ] T149 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T150 [BDD-REFACTOR] 在綠燈下把「這張單已被處理」對話框抽成共用元件（查房與 Phase 4J 的四個工務單動作同一個），查房項目列與兩段切換抽成獨立元件
+- [ ] T137 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T138 [BDD-REFACTOR] 在綠燈下確認待查房入口只從主管種類一處決定
 
-## Phase 4J: ADD Feature File - ios-app/工務單/主管視角.feature
+## Phase 4O: MODIFY Feature File - ios-app/工務單/主管視角.feature
 
-**Goal**: 主管從任何入口打開工務單詳情都看到工務版為底的 `TicketView.manager`，只在等主管審核與已完修尚未驗收兩種狀態出現動作；核准、退回（必填原因，成功後推播報修人）、驗收一鍵；撞 409 顯示已被處理並回清單。
+**Goal**: 主管從待驗收清單打開工務單詳情，看得到報修內容、完修照片、完修結果與處理說明；只在已完修出現「不通過」「通過」；通過後單結案、記驗收人並回清單；不通過面板原因空白不能送，送出後結果卡說明回到原處理人名下或處理人已下班回工務待認領；撞單（通過或不通過先到）顯示已被處理並回清單；已結案與退回重修中看得到驗收人、最近一次不通過的原因與判定人；工務主管可驗收自己完修的單；沒有核准、退回、補資料再送出。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/工務單/主管視角.feature` -> `功能: 工務單詳情的主管視角`（11 個 Rule，含六狀態場景大綱）
-- `specs/truth/features/ios-app/工務單/dsl.md` -> 本輪 ADD 的三個 Given、四個 When、七個 Then，MODIFY 的 `工務單詳情顯示狀態摘要卡`、`工務單詳情顯示退回原因`，以及裁決段改寫後的「主管在 App 的工務單詳情核准、退回、驗收」
-- `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`、`後端已對 "{員工}" 送出推播 "{標題}"`、`後端 "{房號}" 的房況為 "{房況}"`、`畫面回到 "{清單}"，"{單}" 不在清單上`、`畫面顯示 "這張單已被處理"，並回到 …`
-- `truth-delta.md` -> `/dsl-refine` ADD `主管視角.feature`、ADD `ios/工務單/dsl.md`、MODIFY 裁決段 L9、MODIFY 兩句 Then；`/api-plan` MODIFY `readRepairTicket` description、MODIFY `RepairTicket`、MODIFY `RepairTicketSummary`、MODIFY `Error`（`state_conflict` 補句）、MODIFY `PushPayload.event`、NOOP 三個動作端點、「破壞性變更」第三與第四點
-- `ui/ui-plan.md` -> 介面 4 全段（狀態對照表、核准、退回、驗收、已被處理、離線、缺欄位表）、畫面 5 `工務單詳情（主管視角）`、畫面 6 `退回原因面板`
-- `ui/ticket.html`、`ui/manager.css`、`ui/manager.js` -> 六種狀態的雛形（`?no=W-0201`、`W-0108`、`W-0202`、`W-0112`、`W-0204`、`W-0109`；`W-0110` 按驗收進已被處理）
-- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `readRepairTicket`、`approveRepairTicket`、`rejectRepairTicket`、`verifyRepairTicket`
-- `specs/truth/contracts/components/schemas/工務單.yaml` -> `RepairTicket`（`resolutionType`、`doneAt`、`reviewRequestedAt`、`origin`、`verifiedBy`、`verifiedAt`、`rejectReason`）
-- `app/mobile/lib/features/ticket/ticket_screen.dart`、`ticket_detail_engineering.dart`（主管版以此為底）、`app/mobile/lib/core/push_gateway.dart:175-186`（`case 'ticket'` 改先看角色）
+- `specs/truth/features/ios-app/工務單/主管視角.feature` -> `功能: 工務單詳情的主管視角`（16 個 Rule）
+- `specs/truth/features/ios-app/工務單/dsl.md` -> 模組說明（三種視角對各狀態的呈現表、結果卡）、`"{員工}" 已在 App 打開 "{單號}" 的工務單詳情`、三句驗收 Given、`"{主管}" 在工務單詳情按通過`、兩句不通過 When、`"{主管}" 從驗收結果卡回到待驗收清單`、`工務單詳情顯示狀態摘要卡`、`工務單詳情的主管動作為`、`工務單詳情顯示報修內容：`、`工務單詳情顯示完修照片…`、`工務單詳情顯示最近一次不通過的原因…`、`工務單詳情沒有任何主管審核的狀態或動作`、`不通過面板的送出鈕為`、`後端沒有收到這次驗收不通過`、兩句結果卡 Then、`"{單號}" 已由 "{主管}" 驗收，驗收時間為現在`
+- `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`、`"{任務}" 在 App 顯示為 "{狀態}"`、`後端已對 "{員工}" 送出推播 "{標題}"`、兩句回清單 Then
+- `truth-delta.md` -> `/dsl-refine` MODIFY `主管視角.feature` 與 `ios/工務單/dsl.md` 各列；`/api-plan` MODIFY `verifyRepairTicket`、ADD `RepairVerificationOutcome`、MODIFY `RepairTicket`、MODIFY `readRepairTicket`、MODIFY `Error`（`state_conflict`、`verification_reason_required`）
+- `ui/ui-plan.md` -> 介面 4「工務單詳情的驗收動作與狀態呈現」全段、畫面 5 `工務單詳情`、「靜態雛形輸出規劃」網址表
+- `ui/ticket.html?no=W-0108`（按通過、按不通過回原處理人）、`?no=W-0111`（處理人已下班回待認領）、`?no=W-0110`（已被處理）、`?no=W-0109`、`?no=W-0114`、`?no=W-0117`、`?no=W-0115&as=mg2`、`ui/manager.css`、`ui/manager.js`
+- `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `readRepairTicket`、`verifyRepairTicket`
+- `specs/truth/contracts/components/schemas/工務單.yaml` -> `RepairTicket`、`VerifyRepairTicketRequest`、`RepairVerificationOutcome`
+- `app/mobile/lib/features/ticket/ticket_screen.dart:28-29、272`（`TicketView.manager` 目前直接共用工務版）、`ticket_detail_engineering.dart`、T006 的不通過面板與結果卡、`app/mobile/lib/features/manager/manager_conflict_alert.dart`、`app/mobile/lib/core/api_client.dart` 的 `verifyRepairTicket`（T005）
 
 **Boundary**:
-- 不做第三種版面：`TicketView.manager` 沿用工務版的滿版標題、四步步驟條、狀態列與資訊卡，只換底部動作列；房務版與工務版的呈現不動（`工務視角.feature`、`工務單房務端生命週期.feature` NOOP，不得變紅）。
-- 動作列只依 `status` 與 `verifiedAt` 決定：`pending_review` 顯示描邊「退回」加實心「核准」；`done` 且 `verifiedAt` 為 null 顯示實心「驗收」；其餘無動作。
-- 退回原因去前後空白為空時送出鈕禁用；驗收不開面板、不填任何東西、畫面上沒有「驗收不通過」「退回」與備註欄。
-- 四個動作撞 `state_conflict` 統一用 Phase 4I 抽出的「這張單已被處理」對話框，回來源清單並重取；成功後回對應清單，該單消失，首頁格數減一。
-- 主管從推播、通知中心開同一張單走同一版（`push_gateway.dart` 的 `case 'ticket'` 改成先看角色）。
-- 狀態列的「送出」時間用 `reviewRequestedAt`，完修結果用 `resolutionType` 對白話，「已驗收 · {主管}」用 `verifiedBy`。
+- 不做第三種版面：`TicketView.manager` 沿用工務版的標題、步驟條、狀態列與資訊卡，只換底部動作列；動作列只看 `state=done`（不通過描邊、通過實心），其他狀態無動作。
+- 去處說明一律看 `RepairVerificationOutcome.destination` 與 `assigneeName`，App 不看班表。
+- 送出帶同一把 `Idempotency-Key`；兩種結果撞 `state_conflict` 共用 `manager_conflict_alert.dart`，不通過面板一起收起，回待驗收清單並重取。
+- 狀態列與摘要卡依模組說明三視角表，讀 `state`、`lastVerifyFailed*`、`verifiedBy`、`resolutionType`。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/工務單/主管視角.feature`
 
-- [ ] T151 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T152 [BDD-REFACTOR] 在綠燈下把主管動作列與退回原因面板抽成獨立元件，`TicketView` 三個值的選版收在 `ticket_screen.dart` 一處，`push_gateway.dart` 與通知中心不各自判
+- [ ] T139 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T140 [BDD-REFACTOR] 在綠燈下把主管動作列、不通過面板與結果卡收成獨立元件，`TicketView` 的選版只在 `ticket_screen.dart` 一處
 
-## Phase 4K: MODIFY Feature File - ios-app/推播/點開推播的去處.feature
+## Phase 4P: MODIFY Feature File - ios-app/工務單/工務視角.feature
 
-**Goal**: 去處為首頁的推播依角色進首頁（工務員工進工務首頁、主管冷啟動進主管首頁）；主管點開帶部門的待認領推播切到該部門並標亮；主管未核准推播停在該工務單詳情。
+**Goal**: 完修回報四選一：不需處理不附照片可以送出、送出後顯示已結案，其他三種沒照片送出鈕禁用；第四步「驗收」在結案時才完成；處理人沒有通過或不通過；退回重修時狀態列寫明判定人、步驟條回到待開始、看得到原因與判定人；退回工務待認領的單卡標示驗收退回；驗收通過後顯示已結案與驗收人。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/推播/點開推播的去處.feature` -> Rule「去處為首頁的推播，點開後依角色進首頁」、「主管點開去處為待認領且帶部門的推播，切到該部門並標亮那張單」、「修繕任務（工務單）的推播點開後停在工務單詳情，不是任務頁」新增的一例、背景加王主管、既有例子「310 已改派給小陳」畫面改「房務首頁」
-- `specs/truth/features/ios-app/推播/dsl.md` -> `"{員工}" 收到一則推播 "{標題}"，去處為 "{去處}"`、`App 停在 "{畫面}"`（兩句 MODIFY 後的值集與必查）
-- `specs/truth/features/ios-app/dsl.md` -> `"{員工}" 上次在待認領停在 "{部門}"`、`已有以下工務單：`
-- `truth-delta.md` -> `/dsl-refine` ADD `點開推播的去處.feature` 三處、MODIFY 兩句推播 DSL、MODIFY 場景大綱例子；`/api-plan` NOOP `PushTarget`、MODIFY `PushPayload.event`（`repair_rejected` target `kind=ticket`）
-- `ui/ui-plan.md` -> 介面 1「推播開工務單詳情也要跟著改」、介面 5「推播」段、畫面 7 的 `?dept=engineering&highlight=306`
-- `ui/pool.html` -> 推播帶部門與標亮的雛形
-- `specs/truth/contracts/components/schemas/shared.yaml` -> `PushTarget`（`kind=pool` 的 `dept` 必填、`kind=home`）
-- `app/mobile/lib/core/push_gateway.dart:161-196`（`case 'pool'`、`case 'ticket'`、`case 'home'`）、`app/mobile/lib/core/landing.dart`
+- `specs/truth/features/ios-app/工務單/工務視角.feature` -> `功能: 工務視角`（20 個 Rule）
+- `specs/truth/features/ios-app/工務單/dsl.md` -> 模組說明三視角表、兩句完修 When、`完修回報的送出鈕為`、`工務單詳情顯示狀態摘要卡`、`工務單詳情的步驟條依序為`、`工務單詳情的步驟條第四步「驗收」為`、`工務單詳情沒有通過或不通過的動作`、`工務單詳情顯示最近一次不通過的原因…`、`工務待認領中 "{單號}" 標示驗收退回，原因 "{原因}"`
+- `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`、`"{任務}" 在 App 顯示為 "{狀態}"`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `工務視角.feature` 與相關句；`/api-plan` MODIFY `CompleteTaskRequest`、`TaskCompletion`、ADD `PoolItem.verificationReturnReason`／`EngineeringTicket.verificationReturnReason`、MODIFY `RepairTicket`
+- `ui/ui-plan.md` -> 介面 4 三視角表、介面 5「報修與完修的員工端流程」、介面 6 工務待認領單卡
+- `ui/ticket.html?no=W-0116&as=mg2`（完修選不需處理）、`?no=W-0109&as=mt1`、`?no=W-0114&as=mt1`、`?no=W-0117&as=mt1`、`ui/pool.html?dept=engineering`
+- `specs/truth/contracts/components/schemas/任務.yaml` -> `CompleteTaskRequest`、`TaskCompletion.state`
+- `app/mobile/lib/features/ticket/ticket_complete_sheet.dart:120`、`repair_labels.dart:39-74`、`ticket_detail_engineering.dart`、`app/mobile/lib/features/engineering/eng_pool_screen.dart`、`app/mobile/lib/core/api_client.dart:181-203`
 
 **Boundary**:
-- `case 'home'` 改呼叫 `landingShellFor`，順帶修掉工務員工被導進房務首頁的既有錯誤；冷啟動（`getInitialMessage`）同一條路。
-- `case 'pool'` 對主管多一步：先把 `PushTarget.dept` 寫進本機部門選擇，再切分頁並標亮；對員工行為不變。
-- 標題不驗權威文案（待認領推播文案沿用 truth 句型，急件文案不斷言）。
-- 既有 Rule 與場景（直達去處、完修提示恢復、修繕推播開詳情）是 NOOP，Test Scope 是整份檔案，不得變紅。
+- 送出鈕可按條件依結果區分，不需處理不看照片數；送出後依 `TaskCompletion.state` 決定顯示已結案還是等驗收，不自己推。
+- 驗收退回標籤只看 `verificationReturnReason` 有沒有值。
+- 退回重修提示卡（琥珀，原因、判定人、時間）三種視角共用一個元件。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/工務單/工務視角.feature`
+
+- [ ] T141 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T142 [BDD-REFACTOR] 在綠燈下把四種完修結果的白話與照片規則收在 `repair_labels.dart` 一處，步驟條第四步的完成條件與摘要卡共用同一個狀態判斷
+
+## Phase 4Q: MODIFY Feature File - ios-app/工務單/工務單房務端生命週期.feature
+
+**Goal**: 報修人看到的摘要卡改為三視角表（已修好 · 等主管驗收、退回重修中、已結案 · 驗收人、已結案 · 不需處理）；報修送出後沒有任何主管審核的狀態或動作、步驟條停在待開始；報修人沒有通過或不通過；看得到最近一次不通過的原因與判定人。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature` -> `功能: 工務單房務端生命週期`（7 個 Rule）
+- `specs/truth/features/ios-app/工務單/dsl.md` -> 模組說明三視角表、`工務單詳情顯示狀態摘要卡`、`工務單詳情沒有任何主管審核的狀態或動作`、`工務單詳情沒有通過或不通過的動作`、`工務單詳情顯示最近一次不通過的原因…`、`工務單詳情的步驟條依序為`、`工務單詳情沒有撤回按鈕`
+- `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `工務單房務端生命週期.feature`、DELETE 被退回補資料與等主管審核撤回兩個 Rule
+- `ui/ui-plan.md` -> 介面 4 三視角表、介面 5 報修送出後的去向
+- `ui/ticket.html?no=W-0109&as=hk2`、`?no=W-0114&as=hk2`、`?no=W-0117&as=hk2`
+- `app/mobile/lib/features/ticket/ticket_detail_housekeeping.dart:225-247、310-343、489-529`、`repair_labels.dart:84-87、134`
+
+**Boundary**:
+- 房務版畫面結構不動，只換摘要卡、時間軸與動作列的狀態分支；撤回鈕只在 `pool` 出現。
+- 審核分支的刪除若 GREEN 需要就做，剩下的留給 4U。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature`
+
+- [ ] T143 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T144 [BDD-REFACTOR] 在綠燈下確認房務版、工務版、主管版的摘要卡文案出自同一張三視角對照
+
+## Phase 4R: MODIFY Feature File - ios-app/推播/點開推播的去處.feature
+
+**Goal**: 阿強點開驗收不通過推播停在工務單詳情；去處為首頁的推播依主管種類進首頁（陳主管進一格的主管首頁）；沒有主管未核准的推播。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/推播/點開推播的去處.feature` -> `功能: 點開推播的去處`（5 個 Rule；背景加阿強、陳主管）
+- `specs/truth/features/ios-app/推播/dsl.md` -> `"{員工}" 收到一則推播 "{標題}"，去處為 "{去處}"`、`App 停在 "{畫面}"`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `點開推播的去處.feature`、MODIFY `App 停在 "{畫面}"`；`/api-plan` MODIFY `PushPayload.event`、NOOP `PushTarget`
+- `ui/ui-plan.md` -> 介面 1 推播開首頁、介面 4 點開驗收不通過推播
+- `ui/ticket.html?no=W-0117&as=mt1`、`ui/index.html?as=mg2`
+- `app/mobile/lib/core/push_gateway.dart`（`case 'home'`、`case 'ticket'`）、`app/mobile/lib/core/landing.dart`
+
+**Boundary**:
+- `kind=ticket` 的處理人點開走工務版，主管走主管版，選版沿用 4O 收斂的一處；`kind=home` 走 `landingShellFor`。既有 Rule 是 NOOP，不得變紅。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/推播/點開推播的去處.feature`
 
-- [ ] T153 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T154 [BDD-REFACTOR] 在綠燈下確認冷啟動與前景兩條推播路徑都只經過 `push_gateway.dart` 一個 switch，`home`、`pool`、`ticket` 三個分支都不再直接看 `dept`
+- [ ] T145 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T146 [BDD-REFACTOR] 在綠燈下確認冷啟動與前景兩條推播路徑只經過 `push_gateway.dart` 一個 switch
 
-## Phase 4L: MODIFY Feature File - ios-app/待認領/待認領列表.feature
+## Phase 4S: MODIFY Feature File - ios-app/待認領/待認領列表.feature
 
-**Goal**: 主管的待認領可在房務與工務兩個池之間切換，第一次為房務、之後停在上次的部門（只存這台手機），單卡與該部門員工一致但沒有搶單鈕。
+**Goal**: 陳主管第一次打開待認領顯示房務的池、切到工務時單卡沒有搶單鈕；主管不論部門都只看不搶。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/待認領/待認領列表.feature` -> Rule「主管第一次在這台手機打開待認領時顯示房務的池」、「主管看到的單卡與該部門員工一致，但沒有搶單鈕」、「主管可以在待認領切到另一個部門的池」、「重開 App 後待認領停在上次停留的部門」；既有場景「房務部全員停用，王主管看到空狀態」不動
-- `specs/truth/features/ios-app/待認領/dsl.md` -> `"{主管}" 第一次在這台手機打開待認領`、`"{主管}" 在待認領切到 "{部門}"`、`待認領目前的部門為 "{部門}"`、`"{任務}" 的單卡沒有搶單鈕`、MODIFY 的 `"{員工}" 在 App 打開房務待認領`、`待認領列表依序為 {房號清單}`
-- `specs/truth/features/ios-app/dsl.md` -> `"{員工}" 上次在待認領停在 "{部門}"`、`已有以下工務單：`
-- `truth-delta.md` -> `/dsl-refine` ADD `ios/待認領/dsl.md`、ADD `待認領列表.feature` 4 個 Rule、MODIFY 兩句、ADD `ios/dsl.md` Given；`/api-plan` NOOP `listDeptPool` 與 `PushTarget`
-- `ui/ui-plan.md` -> 介面 5 全段（版面、記住部門、查詢、實作切分）、畫面 7 `主管待認領`
-- `ui/pool.html`、`ui/manager.css`、`ui/manager.js` -> 雛形全文
-- `specs/truth/contracts/groups/現場作業/員工工作台.yaml` -> `listDeptPool` 的 `dept` 參數與 `dept_required`
-- `app/mobile/lib/features/manager/manager_pool_screen.dart`（T008）、`app/mobile/lib/features/pool/pool_screen.dart:75-83`、`pool_widgets.dart`、`app/mobile/lib/features/engineering/eng_pool_screen.dart`
+- `specs/truth/features/ios-app/待認領/待認領列表.feature` -> Rule「主管第一次在這台手機打開待認領時顯示房務的池」、「主管看到的單卡與該部門員工一致，但沒有搶單鈕」各加陳主管一例；其餘 10 個 Rule 照舊
+- `specs/truth/features/ios-app/待認領/dsl.md` -> `"{任務}" 的單卡沒有搶單鈕`、主管切部門與第一次打開兩句
+- `specs/truth/features/ios-app/dsl.md` -> `"{員工}" 上次在待認領停在 "{部門}"`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `待認領列表.feature`、MODIFY `"{任務}" 的單卡沒有搶單鈕`、`/implement` 回饋修正第一列（主管沒有負責樓層的排序）；`/api-plan` MODIFY `listDeptPool`
+- `ui/ui-plan.md` -> 介面 6「待認領切換部門只看不搶」、畫面 6 `主管待認領`
+- `ui/pool.html`、`ui/pool.html?dept=engineering&highlight=306`
+- `app/mobile/lib/features/manager/manager_pool_screen.dart`、`pool_dept_preference.dart`
 
 **Boundary**:
-- 不複製兩份畫面：把 `PoolScreen` 與 `EngPoolScreen` 的列表與單卡抽成「給定部門與是否可認領」的元件，主管待認領是外層容器持有部門並往下傳 `canClaim: false`。
-- 兩個池都明帶 `dept` 呼叫 `listDeptPool`；部門選擇只存 `SharedPreferences` 一把鍵（`housekeeping`／`engineering`，沒有紀錄視為 `housekeeping`），不進後端。
-- 單卡 id 沿用員工端（`pool.card.{roomNo}`、`engPool.item.{單號}`），只是沒有 `.claim-button` 節點；分類磚、空狀態、未接標籤都與員工端一致。
-- 既有 Rule 是 NOOP，Test Scope 是整份檔案，員工端場景不得變紅。
+- 是否可認領只看 `role`，不看 `dept`；工務主管不得因部門是工務就出現搶單鈕。既有 Rule 是 NOOP，不得變紅。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/待認領/待認領列表.feature`
 
-- [ ] T155 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T156 [BDD-REFACTOR] 在綠燈下確認員工端兩個待認領畫面已改用抽出的共用元件，沒有留下第三份列表實作
+- [ ] T147 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T148 [BDD-REFACTOR] 在綠燈下確認員工端與主管端待認領共用同一份列表元件
 
-## Phase 4M: MODIFY Feature File - ios-app/系統層/離線模式與連線異常.feature
+## Phase 4T: MODIFY Feature File - ios-app/系統層/離線模式與連線異常.feature
 
-**Goal**: 主管的查房送出、核准、退回、驗收在離線時一律擋在送出之前、顯示離線提示、不留在手機上等補送；恢復連線後不補送、單的狀態不變。
+**Goal**: 主管的送出查房結果、驗收通過、驗收不通過在離線時一律擋在送出之前、顯示離線提示、不留在手機上等補送；恢復連線後不補送，301 仍待查房、W-0108 與 W-0110 仍已完修。
 
 **Shared Must Read**:
-- `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature` -> Rule「離線時開始、認領、延後、開新工務單，以及主管的查房送出、核准、退回、驗收一律被擋，並顯示離線提示」（第二個場景大綱四列）、「離線被擋下的主管動作不留在手機上等補送」、「恢復連線後，離線時被擋下的主管動作不會補送，單的狀態不變」
-- `specs/truth/features/ios-app/系統層/dsl.md` -> `"{員工}" 在 App 離線時嘗試 "{動作}"`（MODIFY）、`"{員工}" 已在 App 登入，停在首頁`、`"{員工}" 在離線時嘗試過 "{動作}" 並被擋下`
-- `specs/truth/features/ios-app/dsl.md` -> `手機目前離線`（MODIFY）、`"{員工}" 的手機恢復連線`、`畫面提示 "{提示}"`、`這次操作沒有留在手機上等補送`（搬入）、`"{任務}" 在 App 顯示為 "{狀態}"`（MODIFY，工務單詳情）
-- `truth-delta.md` -> `/dsl-refine` ADD `離線模式與連線異常.feature` 三處、ADD `ios/系統層/dsl.md`、MODIFY Rule L19 標題、MODIFY `在 App 離線時嘗試`、MODIFY `手機目前離線`、MODIFY `"{任務}" 在 App 顯示為`、「DSL row 搬移」表
-- `ui/ui-plan.md` -> 介面 3「離線」段、介面 4「離線」段（四個動作按下時先檢查連線，不送請求、不入離線佇列）
-- `ui/inspect.html`、`ui/ticket.html` -> `&offline=1` 的離線擋下雛形
-- `app/mobile/lib/core/system_status.dart` -> `offlineOnlyCompleteMessage`、`app/mobile/lib/core/connection_status.dart`、Phase 4I 與 4J 的送出路徑
+- `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature` -> `功能: 離線模式與連線異常`（6 個 Rule；被擋的主管動作改三種、工務單表加 W-0110）
+- `specs/truth/features/ios-app/系統層/dsl.md` -> `"{員工}" 在 App 離線時嘗試 "{動作}"`、`"{員工}" 在離線時嘗試過 "{動作}" 並被擋下`、`"{員工}" 已在 App 登入，停在首頁`
+- `specs/truth/features/ios-app/dsl.md` -> `這次操作沒有留在手機上等補送`、`"{任務}" 在 App 顯示為 "{狀態}"`
+- `truth-delta.md` -> `/dsl-refine` MODIFY `離線模式與連線異常.feature`、MODIFY `ios/系統層/dsl.md` 離線時嘗試、MODIFY `ios/dsl.md` 兩句
+- `ui/ui-plan.md` -> 介面 3「離線」、介面 4「離線」
+- `ui/inspect.html`、`ui/ticket.html`（`&offline=1`）
+- `app/mobile/lib/core/system_status.dart`、`app/mobile/lib/core/connection_status.dart`、`app/mobile/lib/features/ticket/repair_ticket_form_sheet.dart:476`（目前唯一的離線判斷）、4N 的查房送出與 4O 的兩個驗收送出路徑
 
 **Boundary**:
-- 四個主管動作都沿用員工端同一句「目前離線，只能完成進行中的單」與同一個連線檢查入口，不得各寫一份。
-- 擋下的動作不得進離線佇列；`這次操作沒有留在手機上等補送` 會驗待同步筆數沒增加，光顯示提示不會變綠。
-- 恢復連線後畫面與後端都維持原狀：等主管審核的單仍等主管審核，待查房的單仍待查房。
-- 既有 Rule（離線完成、待同步筆數、連線異常列）是 NOOP，Test Scope 是整份檔案，不得變紅。
+- 三個主管動作沿用員工端同一句離線提示與同一個連線檢查入口，不送請求、不入離線佇列；不通過面板的原因在被擋後保留。既有 Rule 是 NOOP，不得變紅。
 
 **Test Scope**:
 - `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature`
 
-- [ ] T157 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T158 [BDD-REFACTOR] 在綠燈下確認開始、認領、延後、開單與主管四動作共用同一段「離線擋在送出之前」的判斷，沒有複製貼上
+- [ ] T149 [BDD-GREEN] 讓 Test Scope 全綠
+- [ ] T150 [BDD-REFACTOR] 在綠燈下確認員工動作與主管三動作共用同一段「離線擋在送出之前」的判斷
 
-## Phase 4N: ui 雛形 quality gate
+## Phase 4U: DELETE Feature / DSL Truth - App 主管審核（核准、退回、補資料再送出、待審核格與清單、主管未核准）
+
+**Goal**: 移除 App 支援主管審核的產品碼，確認新版 truth 成立、沒有畫面或模型繼續保留審核。
+
+**Shared Must Read**:
+- `specs/truth/features/ios-app/工務單/主管視角.feature`、`工務單房務端生命週期.feature`、`ios-app/主管工作台/主管首頁.feature`、`主管清單.feature`
+- `specs/truth/features/ios-app/工務單/dsl.md` -> DELETE 的十句（撤回撞單 Given、按核准、按退回、打開退回面板、顯示退回原因、補資料再送出鈕、沒有驗收不通過退回與備註欄、退回面板送出鈕、後端沒有收到這次退回、顯示撤回按鈕）
+- `truth-delta.md` -> `/dsl-refine` iOS DELETE 列；`/api-plan` DELETE 各列與「破壞性變更清單」App 那一點
+- 過期產品碼：`app/mobile/lib/core/api_client.dart:240、304-314、1076-1077、1100、1147-1148、1179-1180、1289-1334、1387-1436、1982`；`core/widgets/tms_callout.dart:94`、`core/widgets/tms_count_tile.dart:9`；`features/manager/manager_home_screen.dart`、`manager_queues_store.dart:27、35`、`manager_queue_screen.dart:23-37、86-87`、`manager_queue_row.dart:51-68`、`manager_ids.dart:14、47、52-58`；`features/ticket/ticket_screen.dart:28、119-121、267`、`ticket_detail_housekeeping.dart:31、42、225-247、310-343、489-529`、`ticket_detail_engineering.dart:380-382`、`repair_labels.dart:84-87、134`；`features/task/room_info_screen.dart:233、290`、`task_screen.dart:1105-1114`（`rejected` 上紅色）
+
+**Boundary**:
+- 只移除審核相關的模型、方法、分支、id 與文案；不動驗收、查房與工務版的既有行為。
+- `app/mobile/lib` 對 `review|reject|resubmit|approve|pending_review|主管未核准|待審核` 的 grep 不得再有審核語意的命中。
+- 移除後 `flutter analyze` 與 `flutter test` 要過。
+
+**Test Scope**:
+- `specs/truth/features/ios-app/工務單/主管視角.feature`
+- `specs/truth/features/ios-app/工務單/工務單房務端生命週期.feature`
+- `specs/truth/features/ios-app/主管工作台/主管首頁.feature`
+- `specs/truth/features/ios-app/主管工作台/主管清單.feature`
+
+- [ ] T151 [CODE-REMOVE] 移除 App 主管審核的模型、方法、待審核格與清單、核准退回的 id 與畫面分支、主管未核准文案
+- [ ] T152 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
+
+## Phase 4V: ui quality gate
 
 **Goal**: 產品對齊本輪回追到的 plan-side 雛形家族。`Test Scope` 全綠不能代替本題。
 
 **Read**:
-- `ui/ui-plan.md` -> 視覺方向、介面 1～5、畫面與流程 1～7、互動與假資料原則、狀態與資訊揭露、驗證與錯誤回饋、前端實作切分建議
+- `ui/ui-plan.md` -> 視覺方向、介面 1～6、畫面與流程 1～6、互動與假資料原則、狀態與資訊揭露、驗證與錯誤回饋、靜態雛形輸出規劃的網址表、前端實作切分建議
 - `ui/index.html`、`ui/queue.html`、`ui/inspect.html`、`ui/inspect-result.html`、`ui/ticket.html`、`ui/pool.html`、`ui/manager.css`、`ui/manager.js`
-- `app/mobile/lib/core/landing.dart`、`app/mobile/lib/features/shell/main_shell.dart`、`app/mobile/lib/features/manager/`、`app/mobile/lib/features/ticket/`、`app/mobile/lib/features/pool/`、`app/mobile/lib/features/engineering/eng_pool_screen.dart`、`app/mobile/lib/core/push_gateway.dart`
+- `app/mobile/lib/core/landing.dart`、`app/mobile/lib/features/shell/main_shell.dart`、`app/mobile/lib/features/manager/`、`app/mobile/lib/features/ticket/`、`app/mobile/lib/features/engineering/`、`app/mobile/lib/features/pool/`、`app/mobile/lib/core/push_gateway.dart`、`app/mobile/lib/core/widgets/`
 
 **Boundary**:
 - 不改 truth、不加 feature、不重跑 GREEN 當通過條件。
-- 重點比對：三格磚的大小與三種顏色（待查房品牌色、待審核琥珀色、待驗收品牌深色）、清單右欄等寬數字與跨日日期的琥珀色、查房項目判定後整列變色（通過淡綠、不通過淡紅）與底部固定送出列的進度字、每個畫面只有一顆實心主按鈕（查房送出、驗收、核准實心；退回描邊；回到清單文字按鈕）、工務單詳情六種狀態的狀態列文字與動作列、退回原因面板的標題與佔位字、「這張單已被處理」對話框的副文、待認領的兩段切換與沒有認領鈕、三類空狀態的三句說明與副文、名下沒單的說明與副文。
-- 用語以 truth 為準：完修結果顯示「已修好／暫時處理／無法修復」，契約值 `fixed`／`temporary`／`cannot_fix`；畫面上不得出現 `pending_review` 這類內部值或錯誤碼。
+- 重點比對：房務主管兩格與工務主管一格寬磚的大小與顏色；待驗收列的單號與完修結果標籤、重修後再驗標籤；工務主管名下的工務單卡與工務首頁一致；工務單詳情各狀態的狀態列、摘要卡、步驟條第四步與動作列（不通過描邊、通過實心）；不通過面板的標題、佔位字與禁用態；結果卡兩種去處說明；退回重修提示卡；完修回報第四個結果與照片豁免；工務待認領的驗收退回標籤；已被處理與離線對話框。
+- 用語以 truth 為準，畫面上不得出現 `closed`、`no_action_needed` 這類內部值或錯誤碼，也不得殘留等主管審核、主管未核准、待審核。
 
-- [ ] T159 subagent review (ui 雛形 quality gate)
+- [ ] T153 subagent review (ui quality gate)
+
+## Phase 4W: REGRESSION - 003 涉及的全部 feature
+
+**Goal**: 後端與 App 各跑一輪 003 涉及的全部 feature，確認各 phase 之間沒有互相弄紅。
+
+**Boundary**:
+- 只跑、只修回歸；不加 feature、不改 truth。紅了回到對應 phase 修，修完重跑整輪。
+
+**Test Scope**:
+- 後端：`specs/truth/features/backend/主管工作台/`（主管待辦清單、主管待辦空清單與權限）、`specs/truth/features/backend/工務單/`（主管驗收的狀態守衛、驗收不通過與重修、完修與回到原任務、照片完整性與冪等送出、開立工務單與急件、工務視角維修與開單、重複報修補照片與撤回）、`specs/truth/features/backend/查房/逐項判定與退回去向.feature`、`specs/truth/features/backend/推播/`（NOOP，確認推播事件值集收回後不紅）；另跑一次不帶 `-Dcucumber.features` 的後端全套件。
+- App：`帳號與登入/登入與登出守衛.feature`、`主管工作台/主管首頁.feature`、`主管工作台/主管清單.feature`、`主管工作台/查房.feature`、`工務單/主管視角.feature`、`工務單/工務視角.feature`、`工務單/工務單房務端生命週期.feature`、`推播/點開推播的去處.feature`、`待認領/待認領列表.feature`、`系統層/離線模式與連線異常.feature`，逐支以 `FEATURE=<路徑>` 跑；另跑 `app/mobile` 的 `flutter test`。
+
+- [ ] T154 [REGRESSION] 跑後端 Test Scope 與後端全套件，確認全綠
+- [ ] T155 [REGRESSION] 跑 App Test Scope 與 `flutter test`，確認全綠

@@ -2,16 +2,19 @@ package com.athena.tms.bdd.steps.inspection;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.RoomFixtures;
 import com.athena.tms.bdd.support.StaffFixtures;
 import com.athena.tms.bdd.support.TaskFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.common.UuidV7;
 import com.athena.tms.common.codes.RolePermissions;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpMethod;
@@ -34,6 +37,7 @@ public class InspectionGivenSteps {
     private final TenantFixtures tenantFixtures;
     private final BddApiClient apiClient;
     private final JdbcClient jdbcClient;
+    private final InspectionFixtures inspectionFixtures;
 
     public InspectionGivenSteps(
             ScenarioWorld world,
@@ -42,7 +46,8 @@ public class InspectionGivenSteps {
             RoomFixtures roomFixtures,
             TenantFixtures tenantFixtures,
             BddApiClient apiClient,
-            JdbcClient jdbcClient) {
+            JdbcClient jdbcClient,
+            InspectionFixtures inspectionFixtures) {
         this.world = world;
         this.staffFixtures = staffFixtures;
         this.taskFixtures = taskFixtures;
@@ -50,6 +55,7 @@ public class InspectionGivenSteps {
         this.tenantFixtures = tenantFixtures;
         this.apiClient = apiClient;
         this.jdbcClient = jdbcClient;
+        this.inspectionFixtures = inspectionFixtures;
     }
 
     @假設("飯店設定免查房開關為 {string}")
@@ -118,6 +124,90 @@ public class InspectionGivenSteps {
                     .update();
             world.rememberTask(roomNo, taskId.toString());
         }
+    }
+
+    /**
+     * 查房/dsl.md「飯店目前設定的查房項目如下：」——把租戶 applies_to=inspection 的啟用集合
+     * 整批換成表格列出的這些：先把既有的全部停用（下架用停用不刪，與 sop_items 的設計一致），
+     * 再依表格順序寫入／重新啟用，sort_order 就是列序。item key 由 label 產生，
+     * 規則集中在 {@link InspectionItemKeys}，When 句解析不到 label 時用同一條規則對回來。
+     */
+    @假設("飯店目前設定的查房項目如下：")
+    public void hotelInspectionItemsAre(DataTable table) {
+        long tenantId = tenantFixtures.testTenantId();
+        deactivateAllInspectionItems(tenantId);
+        int sortOrder = 1;
+        for (Map<String, String> row : table.asMaps(String.class, String.class)) {
+            String label = requireCell(row, "查房項目");
+            upsertInspectionItem(tenantId, label, sortOrder++);
+        }
+    }
+
+    @假設("飯店停用了全部查房項目")
+    public void hotelDeactivatesAllInspectionItems() {
+        deactivateAllInspectionItems(tenantFixtures.testTenantId());
+    }
+
+    /** 在現行集合之後再加一項：sort_order 取目前最大值加一，確保「依飯店排序」時排在最後。 */
+    @假設("飯店新增了查房項目 {string}")
+    public void hotelAddsInspectionItem(String label) {
+        long tenantId = tenantFixtures.testTenantId();
+        Integer maxOrder = jdbcClient
+                .sql("SELECT COALESCE(MAX(sort_order), 0) FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection'")
+                .params(tenantId)
+                .query(Integer.class)
+                .single();
+        upsertInspectionItem(tenantId, label, maxOrder + 1);
+    }
+
+    /**
+     * 查房/dsl.md「"{主管}" 已判定 "{任務}" 查房全部項目通過」——Arrange 用的「另一位主管先送出」。
+     * 走 {@link InspectionFixtures#submit} 真的打 createInspections，items 為現行全集且全部通過。
+     * 這是前提不是待驗證的操作，所以送出沒成功直接視為情境建不起來；回應也不存進
+     * {@code lastInspectionResponse}，留給後面的 When 句。
+     */
+    @假設("{string} 已判定 {string} 查房全部項目通過")
+    public void managerAlreadyPassedFullInspection(String managerName, String roomNo) {
+        long tenantId = tenantFixtures.testTenantId();
+        UUID taskId = UUID.fromString(world.taskId(roomNo));
+        List<Map<String, Object>> items = activeInspectionItemKeys(tenantId).stream()
+                .map(key -> Map.<String, Object>of("key", key, "pass", true))
+                .toList();
+        ScenarioWorld.ApiResponse resp = inspectionFixtures.submit(world, managerName, taskId, items);
+        if (resp.status() < 200 || resp.status() > 299) {
+            throw new IllegalStateException(
+                    "前提「" + managerName + " 已判定 " + roomNo + " 查房全部項目通過」建不起來：createInspections 回 status="
+                            + resp.status() + "，body=" + resp.body());
+        }
+    }
+
+    private List<String> activeInspectionItemKeys(long tenantId) {
+        return jdbcClient
+                .sql(
+                        "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' AND active = true ORDER BY sort_order")
+                .params(tenantId)
+                .query(String.class)
+                .list();
+    }
+
+    private void deactivateAllInspectionItems(long tenantId) {
+        jdbcClient
+                .sql("UPDATE sop_items SET active = false WHERE tenant_id = ? AND applies_to = 'inspection'")
+                .params(tenantId)
+                .update();
+    }
+
+    private void upsertInspectionItem(long tenantId, String label, int sortOrder) {
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at)
+                        VALUES (?, ?, 'inspection', ?, ?, ?, true, ?)
+                        ON CONFLICT (tenant_id, applies_to, item_key)
+                        DO UPDATE SET label = EXCLUDED.label, sort_order = EXCLUDED.sort_order, active = true
+                        """)
+                .params(UuidV7.generate(), tenantId, InspectionItemKeys.fromLabel(label), label, sortOrder, OffsetDateTime.now())
+                .update();
     }
 
     private void startStayoverWithWaiver(String staffName, String roomNo, boolean waived) {

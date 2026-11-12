@@ -71,6 +71,23 @@ public class StaffFixtures {
     }
 
     /**
+     * 被設了部門的主管（dsl.md「飯店有以下員工：」的 `角色` 欄寫主管、`部門` 寫房務或工務）：
+     * {@code staff_accounts.role}=manager、{@code dept} 仍寫該部門。這種帳號同時能走主管的
+     * 待辦與該部門的現場清單，所以樓層／班次照現場員工的方式落地。
+     */
+    public CreatedStaff createDeptManager(
+            String name, String deptCode, Integer floor, String shiftEndHHmm, String stateCode) {
+        if (!SUPPORTED_DEPTS.contains(deptCode)) {
+            throw new IllegalArgumentException(
+                    "createDeptManager 只支援現場部門代碼 housekeeping|engineering|frontdesk，收到: " + deptCode);
+        }
+        String shiftEnd = shiftEndHHmm != null ? shiftEndHHmm : DEFAULT_SHIFT_END;
+        CreatedStaff created = insertStaff(name, "manager", deptCode, stateCode);
+        assignPlanRoom(created.tenantId(), created.id(), floor, shiftEnd, OffsetDateTime.now());
+        return created;
+    }
+
+    /**
      * 改這位員工的登入帳密（dsl.md 帳號與登入「"{員工}" 的員工編號密碼為 "{員工編號}" / "{密碼}"」）：
      * 沒有對應的 admin API，直接落地權威狀態——把 {@code login_id} 設成指定值、{@code password_hash}
      * 設成指定明文密碼的雜湊，供後續登入情境用這組帳密呼叫 {@code staffAccountsLogin}。

@@ -2,6 +2,9 @@ package com.athena.app.bdd.steps.common;
 
 import com.athena.app.bdd.AppiumWorld;
 import com.athena.app.bdd.BackendChannel;
+import com.athena.app.bdd.steps.manager.ManagerContext;
+import com.athena.app.bdd.steps.repair.RepairContext;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.cucumber.java.zh_tw.那麼;
 import org.openqa.selenium.WebElement;
 
@@ -70,10 +73,50 @@ public class CommonThenSteps {
             "system.offline-blocked-alert.dismiss-button",
             "celebrate.reassigned-alert.dismiss-button");
 
-    private final AppiumWorld world;
+    /**
+     * 工務單狀態用語 → 工務單詳情狀態列（{@code ticket.status-summary-card}）該讀到的字。
+     * 工務單詳情沒有任務頁那種步驟條對照，狀態寫在摘要卡／狀態列上；主管視角與工務視角
+     * 同一塊（dsl 工務單「狀態摘要卡」那一列）。
+     *
+     * <p>「退回重修」不是狀態用語，是待開始、已接單或維修中的單被驗收不通過退回之後
+     * 狀態列的說法（{@code last_verify_failed_at} 有值）；見 {@link #expectedTicketStatusText}。
+     * 主管視角的已完修另有完整說法，見 {@link #MANAGER_TICKET_STATUS_TEXT}。
+     */
+    private static final Map<String, String> TICKET_STATUS_TEXT = Map.ofEntries(
+            Map.entry("待認領", "等工務接單"),
+            Map.entry("待開始", "已接單"),
+            Map.entry("已接單", "已接單"),
+            Map.entry("維修中", "維修中"),
+            Map.entry("已完修", "已完修"),
+            Map.entry("已結案", "已結案"),
+            Map.entry("退回重修", "退回重修"));
 
-    public CommonThenSteps(AppiumWorld world) {
+    /** 主管視角工務單詳情狀態列上，和員工視角說法不同的狀態。 */
+    private static final Map<String, String> MANAGER_TICKET_STATUS_TEXT = Map.of(
+            "已完修", "已完修 · 等主管驗收");
+
+    /** 房務端（報修人）摘要卡上已完修的說法（dsl 工務單模組說明「三種視角對各狀態的呈現」）。 */
+    private static final String REPORTER_DONE_TEXT = "已修好 · 等主管驗收";
+
+    /** 驗收不通過面板的原因欄；面板收起就找不到它。 */
+    private static final String FAIL_SHEET_REASON_FIELD = "managerTicket.fail-sheet.reason-field";
+
+    /** 工務單號的形狀（契約 {@code ^W-\d{4}$}）；用來分辨「任務」參數是房號還是單號。 */
+    private static final java.util.regex.Pattern TICKET_NO = java.util.regex.Pattern.compile("^W-\\d{4}$");
+
+    /** 清單中文 → 契約 ManagerQueues 的鍵；清單畫面導覽列標題要讀到的字。 */
+    private static final Map<String, String> QUEUE_KEY = Map.of(
+            "待查房清單", "inspection",
+            "待驗收清單", "verify");
+
+    private final AppiumWorld world;
+    private final ManagerContext managerContext;
+    private final RepairContext repairContext;
+
+    public CommonThenSteps(AppiumWorld world, ManagerContext managerContext, RepairContext repairContext) {
         this.world = world;
+        this.managerContext = managerContext;
+        this.repairContext = repairContext;
     }
 
     /**
@@ -117,7 +160,15 @@ public class CommonThenSteps {
      */
     @那麼("{string} 在 App 顯示為 {string}")
     public void taskDisplayedAs(String task, String state) {
+        if (TICKET_NO.matcher(task).matches()) {
+            ticketDisplayedAs(task, state);
+            return;
+        }
         assertBackendState(task, state);
+        if (world.loggedInStaff() != null && "manager".equals(world.loggedInStaff().role())) {
+            managerSeesTaskAs(task, state);
+            return;
+        }
 
         dismissAlertsCoveringTaskPage();
         returnToTaskDetailFromCelebration(task);
@@ -169,6 +220,288 @@ public class CommonThenSteps {
         world.waitForTestId("home.screen", SCREEN_TIMEOUT);
         world.tapTestId("home.task." + task + ".card", SCREEN_TIMEOUT);
         world.waitForTestId("task.screen", SCREEN_TIMEOUT);
+    }
+
+    /**
+     * 主管在主管工作台上看到的那一半。主管沒有房務的任務頁可進，這間房的狀態在主管這邊
+     * 只寫在他當下停留的那一頁：
+     * <ul>
+     *   <li>查房結果頁（{@code inspect.result}）：結果的說法就是這張單的去向——查房通過寫
+     *       「查房通過」；退回原清房者名下（待開始）寫「退回重做」與「名下」；回到房務待認領
+     *       （待認領）寫「退回重做」與「房務待認領」。</li>
+     *   <li>查房畫面（{@code inspect}）：還停在這張單的查房畫面上，代表它仍在等查房（待查房）。</li>
+     *   <li>待查房清單（{@code manager.queue}）：單被別人處理掉之後主管被送回清單，該列已不在
+     *       清單上，代表它已不在等查房；權威狀態以後端為準（上面已驗）。</li>
+     * </ul>
+     * 停在其他畫面、或該畫面的說法對不上這個狀態，就紅。
+     */
+    private void managerSeesTaskAs(String task, String state) {
+        if (!world.driver().findElements(world.byTestId("inspect.result")).isEmpty()) {
+            List<String> expected = MANAGER_RESULT_TEXT.get(state);
+            if (expected == null) {
+                throw new AssertionError("查房結果頁不會出現狀態「" + state + "」的單「" + task + "」");
+            }
+            String actual = world.waitForLabelOf("inspect.result", expected.get(expected.size() - 1), SCREEN_TIMEOUT);
+            if (actual == null || !actual.contains(task) || !expected.stream().allMatch(actual::contains)) {
+                throw new AssertionError("「" + task + "」的查房結果頁說法不符：預期含 " + expected
+                        + "，實際「" + actual + "」");
+            }
+            return;
+        }
+        if (!world.driver().findElements(world.byTestId("inspect")).isEmpty()) {
+            if (!"待查房".equals(state)) {
+                throw new AssertionError("主管還停在「" + task + "」的查房畫面，但預期狀態是「" + state + "」");
+            }
+            return;
+        }
+        world.waitForTestId("manager.queue", SCREEN_TIMEOUT);
+        if ("待查房".equals(state)) {
+            world.waitForTestId("manager.queue.row." + task, SCREEN_TIMEOUT);
+        } else if (!world.driver().findElements(world.byTestId("manager.queue.row." + task)).isEmpty()) {
+            throw new AssertionError("「" + task + "」預期為「" + state + "」，卻還列在待查房清單上");
+        }
+    }
+
+    /** 查房結果頁上，各狀態對應的說法：結果頁的字要全部含有這些片段。 */
+    private static final Map<String, List<String>> MANAGER_RESULT_TEXT = Map.of(
+            "查房通過", List.of("查房通過"),
+            "待開始", List.of("退回重做", "名下"),
+            "待認領", List.of("退回重做", "房務待認領"));
+
+    /**
+     * 「任務」是工務單號時的那一半：後端 {@code tasks.state} 照工務單狀態對照；畫面在工務單
+     * 詳情的狀態列（{@code ticket.status-summary-card}）讀到該狀態的字。蓋在上面的提示先關掉，
+     * 理由同任務頁那一半。
+     *
+     * <p>主管看工務單時一律在主管視角的工務單詳情讀狀態列。驗收不通過送出後畫面停在驗收結果
+     * 卡上，卡底下那張詳情被蓋住、主管看不到，所以先按卡上唯一的「回到待驗收」離開，再照
+     * {@link RepairContext#openTicketDetail} 的入口重新打開這張單，讀的是重新進入後的畫面。
+     */
+    private void ticketDisplayedAs(String ticketNo, String state) {
+        Map<String, Object> row = world.backend().repairTicketRow(ticketNo);
+        String expectedState = BackendChannel.repairTicketState(state);
+        String actualState = String.valueOf(row.get("task_state"));
+        if (!expectedState.equals(actualState)) {
+            throw new AssertionError("「" + ticketNo + "」的後端狀態不符：預期 " + expectedState
+                    + "（" + state + "），實際 " + actualState);
+        }
+        dismissAlertsCoveringTaskPage();
+        BackendChannel.CreatedStaff viewer = world.loggedInStaff();
+        boolean manager = viewer != null && "manager".equals(viewer.role());
+        if (manager) {
+            openManagerTicketDetailFresh(viewer, ticketNo);
+        }
+        world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
+        boolean reporterView = !manager && viewer != null && !"engineering".equals(viewer.dept());
+        String expectedText = reporterView && "已完修".equals(state)
+                ? REPORTER_DONE_TEXT
+                : expectedTicketStatusText(state, row, manager);
+        String actual = world.waitForLabelOf("ticket.status-summary-card", expectedText, SCREEN_TIMEOUT);
+        boolean matches = actual != null && ("已結案".equals(state) && manager
+                ? actual.startsWith(expectedText)
+                : actual.contains(expectedText));
+        if (!matches) {
+            throw new AssertionError("「" + ticketNo + "」的工務單詳情狀態列不符：預期"
+                    + ("已結案".equals(state) && manager ? "開頭為" : "含") + "「" + expectedText
+                    + "」，實際「" + actual + "」");
+        }
+    }
+
+    /**
+     * 這張單在詳情狀態列上該讀到的字。待開始、已接單、維修中的單若曾被驗收不通過
+     * （{@code last_verify_failed_at} 有值），代表它正在退回重修，狀態列寫「退回重修」
+     * （dsl 工務單「狀態摘要卡」那一列：退回重修＝accepted 或 doing 且最近一次不通過有值）。
+     */
+    private static String expectedTicketStatusText(String state, Map<String, Object> row, boolean manager) {
+        if (row.get("last_verify_failed_at") != null && List.of("待開始", "已接單", "維修中").contains(state)) {
+            return TICKET_STATUS_TEXT.get("退回重修");
+        }
+        if (manager && MANAGER_TICKET_STATUS_TEXT.containsKey(state)) {
+            return MANAGER_TICKET_STATUS_TEXT.get(state);
+        }
+        String text = TICKET_STATUS_TEXT.get(state);
+        if (text == null) {
+            throw new IllegalArgumentException("找不到「" + state + "」在工務單詳情狀態呈現對照表中的權威值");
+        }
+        return text;
+    }
+
+    /**
+     * 主管重新打開這張單的主管視角詳情。停在驗收結果卡上時先按「回到待驗收」離開；
+     * 已經停在詳情上也照樣重開一次，讀到的才是重新向後端取過的畫面。
+     */
+    private void openManagerTicketDetailFresh(BackendChannel.CreatedStaff manager, String ticketNo) {
+        for (WebElement back : world.driver().findElements(world.byTestId("managerTicket.result.back-button"))) {
+            back.click();
+            world.waitForTestId("manager.queue", SCREEN_TIMEOUT);
+        }
+        world.ensureOnScreenRoot("manager.home", SCREEN_TIMEOUT);
+        repairContext.openTicketDetail(manager, ticketNo);
+    }
+
+    /**
+     * 必查：該員工的 {@code outbox} 有一筆 kind push、title 等於標題的資料，且同一事件只有一筆。
+     * 給 App 端的主管動作（查房送出、退回）用：當事人有沒有被通知到，只有後端查得出來；
+     * 推播內容與去處的細節由後端 truth 驗。
+     *
+     * <p>「同一事件只有一筆」以標題為準：同一張單同一個事件的標題相同，App 重送（同一把
+     * Idempotency-Key）要是被後端當成兩次，這裡會看到兩筆同標題。
+     */
+    @那麼("後端已對 {string} 送出推播 {string}")
+    public void backendSentPushTo(String staffName, String title) {
+        List<String> titles = world.backend().pushTitlesSentTo(world.staff(staffName).id());
+        long matching = titles.stream().filter(title::equals).count();
+        if (matching == 0) {
+            throw new AssertionError("後端沒有對「" + staffName + "」送出標題為「" + title
+                    + "」的推播，實際送出的標題：" + titles);
+        }
+        if (matching > 1) {
+            throw new AssertionError("後端對「" + staffName + "」送出了 " + matching
+                    + " 筆標題為「" + title + "」的推播，同一事件只該有一筆");
+        }
+    }
+
+    /**
+     * 必查：該房 {@code rooms.hk_state} 等於對照值（還沒打掃好＝dirty、已查房＝inspected、
+     * 停用＝out_of_order）。給主管在 App 查房或驗收之後用：房況有沒有跟著走，畫面上看不到。
+     */
+    @那麼("後端 {string} 的房況為 {string}")
+    public void backendRoomHkStateIs(String roomNo, String hkStateChinese) {
+        String expected = BackendChannel.hkState(hkStateChinese);
+        String actual = world.backend().roomHkState(roomNo);
+        if (!expected.equals(actual)) {
+            throw new AssertionError("「" + roomNo + "」的後端房況不符：預期 " + expected
+                    + "（" + hkStateChinese + "），實際 " + actual);
+        }
+    }
+
+    /**
+     * 必查：目前畫面是主管的該類清單（導覽列標題相符），清單已重新向 {@code getManagerQueues}
+     * 取過，該單不在列上；同一次回應的 {@code counts} 對應格數比操作前少 1，回到主管首頁時該格
+     * 顯示同一個數字。給主管在工務單詳情按通過後 App 自動回待驗收清單、查房結果畫面按
+     * 「回到待查房」，以及驗收結果卡按「回到待驗收」之後用。
+     *
+     * <p>畫面有沒有重取，看的是那一列還在不在：沒重取的話列會留著。「比操作前少 1」需要操作前
+     * 的數字，由打開清單的句子記在 {@link ManagerContext}；沒有記過就略過這一項。最後按返回回
+     * 主管首頁對格子的數字，再點格子回清單，讓情境接下去的句子仍停在清單上。
+     */
+    @那麼("畫面回到 {string}，{string} 不在清單上")
+    public void backOnQueueWithoutItem(String queueChinese, String unit) {
+        String queueKey = queueKey(queueChinese);
+        world.waitForTestId("manager.queue", SCREEN_TIMEOUT);
+        world.waitForLabelContaining(queueChinese.replace("清單", ""), SCREEN_TIMEOUT);
+        world.waitForTestIdGone("manager.queue.row." + unit, SCREEN_TIMEOUT);
+
+        int count = assertQueueConsistentWithout(queueKey, unit);
+        Integer before = managerContext.queueCountBefore(queueKey);
+        if (before != null && count != before - 1) {
+            throw new AssertionError("「" + queueChinese + "」的張數應比操作前少 1：操作前 " + before
+                    + "，現在 getManagerQueues 回 " + count);
+        }
+        assertHomeTileShows(queueKey, count);
+    }
+
+    /**
+     * 必查：後端這次回 409 {@code state_conflict}，App 彈出含「這張單已被處理」的對話框
+     * （{@code manager.conflict-alert}），按「知道了」後回到來源清單，清單已重新取過且該單不在
+     * 列上；後端該單仍是別人處理完的那個狀態。驗收通過、驗收不通過與查房送出共用同一個對話框；
+     * 不通過面板開著時收到衝突，面板一起收起。
+     *
+     * <p>後端那一半查「別人處理完、而且只處理了一次」：查房與驗收都只能做一次，這位主管那一下
+     * 要是也被收下，查房紀錄會多出第二筆、驗收紀錄（通過或不通過）會多出一筆。
+     */
+    @那麼("畫面顯示 {string}，並回到 {string}，{string} 不在清單上")
+    public void conflictAlertThenBackOnQueue(String message, String queueChinese, String unit) {
+        String queueKey = queueKey(queueChinese);
+        WebElement alert = world.waitForTestId("manager.conflict-alert", SCREEN_TIMEOUT);
+        String text = alert.getText();
+        if (text == null || !text.contains(message)) {
+            throw new AssertionError("manager.conflict-alert 應顯示「" + message + "」，實際「" + text + "」");
+        }
+        world.waitForLabelContaining("知道了", SCREEN_TIMEOUT).click();
+
+        world.waitForTestId("manager.queue", SCREEN_TIMEOUT);
+        world.waitForTestIdGone(FAIL_SHEET_REASON_FIELD, SCREEN_TIMEOUT);
+        world.waitForLabelContaining(queueChinese.replace("清單", ""), SCREEN_TIMEOUT);
+        world.waitForTestIdGone("manager.queue.row." + unit, SCREEN_TIMEOUT);
+        int count = assertQueueConsistentWithout(queueKey, unit);
+        assertProcessedExactlyOnce(queueKey, unit);
+        assertHomeTileShows(queueKey, count);
+    }
+
+    private static String queueKey(String queueChinese) {
+        String key = QUEUE_KEY.get(queueChinese);
+        if (key == null) {
+            throw new IllegalArgumentException("找不到「" + queueChinese + "」在清單對照表中的權威值（合法值："
+                    + QUEUE_KEY.keySet() + "）");
+        }
+        return key;
+    }
+
+    /**
+     * 權威讀回 {@code getManagerQueues}：該類陣列裡沒有這張單（房號或單號），{@code counts}
+     * 的數字等於陣列長度。回傳那個數字。
+     */
+    private int assertQueueConsistentWithout(String queueKey, String unit) {
+        JsonNode queues = world.backend().managerQueues(world.loggedInStaff());
+        JsonNode items = queues.path(queueKey);
+        for (JsonNode item : items) {
+            if (unit.equals(item.path("roomNo").asText()) || unit.equals(item.path("ticketNo").asText())) {
+                throw new AssertionError("「" + unit + "」仍在 getManagerQueues 的 " + queueKey + " 陣列裡");
+            }
+        }
+        int count = queues.path("counts").path(queueKey).asInt(-1);
+        if (count != items.size()) {
+            throw new AssertionError("getManagerQueues 的 counts." + queueKey + "（" + count
+                    + "）與 " + queueKey + " 陣列長度（" + items.size() + "）不一致");
+        }
+        return count;
+    }
+
+    /** 回主管首頁對該格的數字，再點同一格回到清單（情境接下去的句子仍停在清單上）。 */
+    private void assertHomeTileShows(String queueKey, int count) {
+        world.ensureOnScreenRoot("manager.home", SCREEN_TIMEOUT);
+        String tileId = "manager.home.tile." + queueKey + ".count";
+        String shown = world.waitForLabelOf(tileId, String.valueOf(count), SCREEN_TIMEOUT);
+        if (!String.valueOf(count).equals(shown)) {
+            throw new AssertionError("主管首頁 " + tileId + " 應顯示 " + count + "，實際「" + shown + "」");
+        }
+        world.tapUntilVisible("manager.home.tile." + queueKey, "manager.queue", SCREEN_TIMEOUT);
+    }
+
+    /** 那張單在後端已被別人處理完，而且只處理了一次。 */
+    private void assertProcessedExactlyOnce(String queueKey, String unit) {
+        long tenantId = world.backend().ensureTenant();
+        switch (queueKey) {
+            case "inspection" -> {
+                Map<String, Object> task = world.taskRowByRoomNo(unit);
+                if ("done".equals(String.valueOf(task.get("state")))) {
+                    throw new AssertionError("「" + unit + "」在後端仍是待查房，不是被別人處理過的狀態");
+                }
+                List<Map<String, Object>> inspections = world.backend().queryRows(
+                        "SELECT id FROM inspections WHERE tenant_id = ? AND task_id = ?", tenantId, task.get("id"));
+                if (inspections.size() != 1) {
+                    throw new AssertionError("「" + unit + "」的查房紀錄應剛好一筆（別人那一次），實際 "
+                            + inspections.size() + " 筆");
+                }
+            }
+            case "verify" -> {
+                Map<String, Object> ticket = world.backend().repairTicketRow(unit);
+                if ("done".equals(String.valueOf(ticket.get("task_state")))) {
+                    throw new AssertionError("「" + unit + "」在後端仍是已完修、等主管驗收，不是被別人處理過的狀態");
+                }
+                List<Map<String, Object>> verifications = world.backend().queryRows("""
+                        SELECT type FROM task_events
+                        WHERE tenant_id = ? AND task_id = ?
+                          AND type IN ('repair_verified', 'repair_verification_failed')
+                        """, tenantId, ticket.get("task_id"));
+                if (verifications.size() != 1) {
+                    throw new AssertionError("「" + unit + "」的驗收紀錄（通過或不通過）應剛好一筆（別人那一次），實際 "
+                            + verifications.size() + " 筆：" + verifications);
+                }
+            }
+            default -> throw new IllegalArgumentException("未知的清單鍵：" + queueKey);
+        }
     }
 
     private void assertBackendState(String task, String state) {

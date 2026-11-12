@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
-import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/today_refresh.dart';
 import '../../core/tms_semantics.dart';
@@ -15,20 +14,62 @@ import '../pool/pool_widgets.dart';
 import '../ticket/repair_labels.dart';
 import '../ticket/ticket_screen.dart';
 
-/// 工務待認領（ui-plan 畫面 13 的 `engPool`）。
+/// 工務待認領（ui-plan 畫面 13 的 `engPool`）：工務看自己部門的池、可以搶單。
+///
+/// 列表本身是 [EngineeringPoolList]；工務的帳號上就有部門，查詢省略 `dept`
+/// 讓後端依登入身分分流。
+class EngPoolScreen extends StatelessWidget {
+  const EngPoolScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return TmsSemantics(
+      id: 'engPool.screen',
+      child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
+        // 沒有導覽列：這一頁的標題是內容的一部分，跟著分流磚與單卡一起捲
+        // （`Main.dc.html:975` 的 `<h1>`），而開單的入口在工務首頁的浮動按鈕
+        // 上（`Main.dc.html:4051`：待認領是接單的頁，不放開單）。
+        child: EngineeringPoolList(dept: null, canClaim: true),
+      ),
+    );
+  }
+}
+
+/// 工務待認領的分流磚＋單卡列表。
 ///
 /// 分流與排序一律交給後端：來源分流磚只是把選擇換成 `GET /pool` 的
 /// urgent／source 查詢參數重新取一次，App 不在本機重排、不在本機過濾；
 /// 列表照後端回應順序呈現。單卡與分流磚的外觀與房務待認領共用
 /// `features/pool/pool_widgets.dart` 的元件。
-class EngPoolScreen extends StatefulWidget {
-  const EngPoolScreen({super.key});
+///
+/// 工務與主管看的是同一份列表：[canClaim] 決定單卡底下有沒有「認領這單」。
+/// 主管沒有部門、後端本來就不接受主管認領，App 端直接不畫鈕，不是畫了再擋。
+class EngineeringPoolList extends StatefulWidget {
+  const EngineeringPoolList({
+    super.key,
+    required this.dept,
+    required this.canClaim,
+    this.aboveCategories,
+  });
+
+  /// 這份列表是工務部門的池，所以查哪一池只有一個答案。
+  static const String deptKey = 'engineering';
+
+  /// 查詢要帶的 `dept`；null 表示省略、讓後端依登入帳號的部門分流。
+  final String? dept;
+
+  /// 單卡底下要不要有「認領這單」。
+  final bool canClaim;
+
+  /// 夾在大標與分流磚之間的那一塊，見 [PoolScrollView.aboveCategories]。
+  final Widget? aboveCategories;
 
   @override
-  State<EngPoolScreen> createState() => _EngPoolScreenState();
+  State<EngineeringPoolList> createState() => _EngineeringPoolListState();
 }
 
-class _EngPoolScreenState extends State<EngPoolScreen> {
+class _EngineeringPoolListState extends State<EngineeringPoolList> {
   /// 分流磚：畫面文字與 accessibility id 的 {source} 段；urgent 是急件
   /// 維度、staff／desk 是來源維度（契約 listDeptPool 的兩個篩選參數）。
   /// `sourceParam` 是該磚要送給後端的 `source` 值，沒有值代表不帶這個參數。
@@ -88,6 +129,14 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
     _fetch();
   }
 
+  @override
+  void didUpdateWidget(EngineeringPoolList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dept != widget.dept) {
+      _fetch();
+    }
+  }
+
   Future<void> _fetch() async {
     // 換分流磚時先清空列表再取新資料：舊分類的單卡留在畫面上會被當成
     // 新分類的結果誤讀（列表順序與張數都是驗收點）。
@@ -100,6 +149,7 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
         (category) => category.key == _selected,
       );
       final pool = await ApiClient.instance.getPool(
+        dept: widget.dept,
         urgent: selected.key == 'urgent' ? true : null,
         source: selected.sourceParam,
       );
@@ -156,105 +206,61 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return TmsSemantics(
-      id: 'engPool.screen',
-      child: CupertinoPageScaffold(
-        backgroundColor: TmsColors.groupedBackground,
-        // 沒有導覽列：這一頁的標題是內容的一部分，跟著分流磚與單卡一起捲
-        // （`Main.dc.html:975` 的 `<h1>`），而開單的入口在工務首頁的浮動按鈕
-        // 上（`Main.dc.html:4051`：待認領是接單的頁，不放開單）。
-        // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
-        // 的那段留白由清單自己帶。
-        child: SafeArea(
-          bottom: false,
-          child: ListView(
-            padding: EdgeInsets.only(
-              top: TmsSpacing.md,
-              bottom: TmsSpacing.scrollPadBottom(
-                MediaQuery.paddingOf(context).bottom,
-              ),
-            ),
-            children: _content(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _content() {
     final pool = _pool;
-    return [
-      // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
-      // 員工要先知道現在連不上，而不是按了認領才發現。
-      const SystemStatusBar(
-        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
-      ),
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
-        child: Text('待認領', style: TmsText.largeTitle),
-      ),
-      const SizedBox(height: TmsSpacing.lg),
-      // 徽章只掛在急件、櫃檯、房務報修三格，數字一律讀後端回的 counts，
-      // 不在本機數列表：帶篩選查詢時列表只有該分流的單，本機數出來的是
-      // 「這一頁有幾張」而不是「這個分流有幾張」。「全部」那格沒有徽章，
-      // 因為下面整排單卡就是它的數字。
-      //
-      // 這三格是 0 的時候整顆徽章不畫，照原型。房務的分類磚相反，0 也照
-      // 畫——那個數字是 `待認領分類標籤顯示如下` 那句斷言要讀的節點，藏
-      // 起來就讀不到。兩邊不同是各自的理由造成的，不要為了看起來一致把
-      // 其中一邊改掉。
-      PoolFilterRow(
-        tiles: [
-          for (final category in _categories)
-            PoolFilterChip(
-              id: 'engPool.category.${category.key}.chip',
-              label: category.label,
-              icon: category.icon,
-              iconBackground: category.iconBackground,
-              iconForeground: category.iconForeground,
-              selected: _selected == category.key,
-              count: _badgeCount(category.countKey),
-              unselectedBackground: TmsCategoryTile.translucentBackground,
-              onTap: () {
-                _selected = category.key;
-                _fetch();
-              },
+    return PoolScrollView(
+      aboveCategories: widget.aboveCategories,
+      children: [
+        // 徽章只掛在急件、櫃檯、房務報修三格，數字一律讀後端回的 counts，
+        // 不在本機數列表：帶篩選查詢時列表只有該分流的單，本機數出來的是
+        // 「這一頁有幾張」而不是「這個分流有幾張」。「全部」那格沒有徽章，
+        // 因為下面整排單卡就是它的數字。
+        //
+        // 這三格是 0 的時候整顆徽章不畫，照原型。房務的分類磚相反，0 也照
+        // 畫——那個數字是 `待認領分類標籤顯示如下` 那句斷言要讀的節點，藏
+        // 起來就讀不到。兩邊不同是各自的理由造成的，不要為了看起來一致把
+        // 其中一邊改掉。
+        PoolFilterRow(
+          tiles: [
+            for (final category in _categories)
+              PoolFilterChip(
+                id: 'engPool.category.${category.key}.chip',
+                label: category.label,
+                icon: category.icon,
+                iconBackground: category.iconBackground,
+                iconForeground: category.iconForeground,
+                selected: _selected == category.key,
+                count: _badgeCount(category.countKey),
+                unselectedBackground: TmsCategoryTile.translucentBackground,
+                onTap: () {
+                  _selected = category.key;
+                  _fetch();
+                },
+              ),
+          ],
+        ),
+        if (_error != null) PoolLoadError(message: _error!),
+        if (pool == null && _error == null) const PoolLoading(),
+        if (pool != null && pool.items.isEmpty) ...[
+          const SizedBox(height: TmsSpacing.lg),
+          TmsContentUnavailable(
+            id: 'engPool.empty-state',
+            copy: TmsEmptyStates.engineeringPool(
+              filterApplied: _selected != 'all',
+              poolHasItems: pool.counts.values.any((count) => count > 0),
             ),
+            onAction: () {
+              _selected = 'all';
+              _fetch();
+            },
+          ),
+        ] else if (pool != null) ...[
+          // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分流磚與第一張卡之間才
+          // 是原型的 16（`Main.dc.html:973`）。
+          const SizedBox(height: TmsSpacing.sm),
+          for (final item in pool.items) _engPoolCard(item),
         ],
-      ),
-      if (_error != null) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: TmsSpacing.screenEdge,
-          ),
-          child: Text(_error!),
-        ),
       ],
-      if (pool == null && _error == null) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        const Center(child: CupertinoActivityIndicator()),
-      ],
-      if (pool != null && pool.items.isEmpty) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        TmsContentUnavailable(
-          id: 'engPool.empty-state',
-          copy: TmsEmptyStates.engineeringPool(
-            filterApplied: _selected != 'all',
-            poolHasItems: pool.counts.values.any((count) => count > 0),
-          ),
-          onAction: () {
-            _selected = 'all';
-            _fetch();
-          },
-        ),
-      ] else if (pool != null) ...[
-        // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分流磚與第一張卡之間才
-        // 是原型的 16（`Main.dc.html:973`）。
-        const SizedBox(height: TmsSpacing.sm),
-        for (final item in pool.items) _engPoolCard(item),
-      ],
-    ];
+    );
   }
 
   /// 替一格分流磚算出徽章上的數字；回 null 時那一格不畫徽章。
@@ -370,11 +376,13 @@ class _EngPoolScreenState extends State<EngPoolScreen> {
             ),
           ],
         ),
-        PoolClaimButton(
-          id: '$itemId.claim-button',
-          glow: TmsPillGlow.alt,
-          onPressed: () => _claim(item),
-        ),
+        // 主管只看不搶：整顆鈕不畫，而不是畫了再擋。
+        if (widget.canClaim)
+          PoolClaimButton(
+            id: '$itemId.claim-button',
+            glow: TmsPillGlow.alt,
+            onPressed: () => _claim(item),
+          ),
       ],
     );
   }

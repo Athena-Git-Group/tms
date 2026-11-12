@@ -61,7 +61,7 @@ public class AccountGivenSteps {
                 new AppiumWorld.TaskFixture(roomNo, "退房清潔", null, null, "進行中", 0, null, null, false)));
         world.ensureLoggedInAs(world.staff(staffName));
         // 「進行中」是被改種成 accepted ＋ 欠一次「在 App 按開始」的起始狀態，
-        // 不補這一步，任務停在 accepted，登出守衛看不到 doing 的單就不會攔，
+        // 不補這一步，任務停在 accepted，登出攔阻看不到 doing 的單就不會攔，
         // 而這個場景要驗的正是它會攔。
         world.settleDeferredStarts();
         openMeTab();
@@ -101,7 +101,7 @@ public class AccountGivenSteps {
         world.postBackdoorJson("/remembered-account", "{\"employee\":null}");
         world.typeInto("login.shared-device.staff-id-field", SCREEN_TIMEOUT, staff.loginId());
         world.typeInto("login.password-field", SCREEN_TIMEOUT, staff.password());
-        world.tapTestId("login.submit-button", SCREEN_TIMEOUT);
+        world.tapWhenEnabled("login.submit-button", SCREEN_TIMEOUT);
     }
 
     /**

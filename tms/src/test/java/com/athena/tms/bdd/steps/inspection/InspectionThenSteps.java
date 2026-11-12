@@ -3,9 +3,11 @@ package com.athena.tms.bdd.steps.inspection;
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.OutboxAwait;
 import com.athena.tms.bdd.support.PmsProbe;
+import com.athena.tms.bdd.support.PushPayloadView;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import com.athena.tms.service.JwtService;
@@ -13,9 +15,11 @@ import io.cucumber.java.ParameterType;
 import io.cucumber.java.zh_tw.那麼;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,6 +37,12 @@ public class InspectionThenSteps {
     // Terms 共用對照表尚未收錄，這裡只收本模組用得到的這一個值，查不到一律噴錯。
     private static final Map<String, String> ROOM_STATUS = Map.of("已整理（Inspected）", "inspected");
 
+    // 查房/dsl.md「這次查房的結果為 … 去向為 …」列：去向中文 → InspectionOutcome.destination。
+    private static final Map<String, String> DESTINATION = Map.of(
+            "結案", "closed",
+            "原清房者", "cleaner",
+            "待認領", "pool");
+
     private final ScenarioWorld world;
     private final BddApiClient apiClient;
     private final DbProbe dbProbe;
@@ -42,6 +52,7 @@ public class InspectionThenSteps {
     private final MutableClock clock;
     private final JwtService jwtService;
     private final ObjectMapper objectMapper;
+    private final LastOperationGuard lastOperationGuard;
 
     public InspectionThenSteps(
             ScenarioWorld world,
@@ -52,7 +63,8 @@ public class InspectionThenSteps {
             TenantFixtures tenantFixtures,
             MutableClock clock,
             JwtService jwtService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            LastOperationGuard lastOperationGuard) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -62,6 +74,13 @@ public class InspectionThenSteps {
         this.clock = clock;
         this.jwtService = jwtService;
         this.objectMapper = objectMapper;
+        this.lastOperationGuard = lastOperationGuard;
+    }
+
+    /** dsl.md「項目清單」：以頓號分隔、不加引號的顯示名稱清單，例如 床鋪平整、浴室無水痕。 */
+    @ParameterType(name = "項目清單", value = "[^、\\s]+(?:、[^、\\s]+)*")
+    public List<String> 項目清單(String raw) {
+        return List.of(raw.split("、"));
     }
 
     /** dsl.md「事件清單」：以頓號分隔、各自加引號的 task_events.type 清單，例如 "a"、"b"。 */
@@ -218,6 +237,225 @@ public class InspectionThenSteps {
     public void inspectorListExcludes(String staffName) {
         assertInList(staffName, false);
         assertStaffActive(staffName, false);
+    }
+
+    /**
+     * 查房/dsl.md「這次查房的結果為 "{結果}"，去向為 "{去向}"」。呈現結果看上一次 createInspections
+     * 的回應（201＋InspectionOutcome），權威狀態依 destination 分辨三種落點——不拿 assignee
+     * 是不是 null 反推去向。退回時 failedItems 要剛好是被判不通過的項目、依飯店排序，
+     * 哪些被判不通過以這次實際送出的 items 為準。
+     */
+    @那麼("這次查房的結果為 {string}，去向為 {string}")
+    public void thisInspectionResultAndDestinationAre(String resultChinese, String destinationChinese) {
+        String expectedResult = Terms.inspection(resultChinese);
+        String expectedDestination = DESTINATION.get(destinationChinese);
+        if (expectedDestination == null) {
+            throw new IllegalArgumentException("找不到「" + destinationChinese + "」在去向對照表中的權威值");
+        }
+
+        ScenarioWorld.ApiResponse resp = world.lastInspectionResponse();
+        if (resp.status() != 201 || resp.json() == null) {
+            throw new AssertionError("createInspections 預期 201，實際 status=" + resp.status() + "，body=" + resp.body());
+        }
+        JsonNode json = resp.json();
+        check("InspectionOutcome.result", expectedResult, textOrNull(json, "result"));
+        check("InspectionOutcome.destination", expectedDestination, textOrNull(json, "destination"));
+
+        LastOperationGuard.Snapshot before = lastOperationGuard.current();
+        UUID taskId = before.taskId();
+        Object cleanerId = before.taskRow() != null ? before.taskRow().get("assignee_id") : null;
+
+        List<String> failedKeys = world.lastInspectionItems().stream()
+                .filter(item -> Boolean.FALSE.equals(item.get("pass")))
+                .map(item -> String.valueOf(item.get("key")))
+                .toList();
+        List<String> expectedFailed = "failed".equals(expectedResult)
+                ? labelsInHotelOrder(failedKeys)
+                : List.of();
+        List<String> actualFailed = new ArrayList<>();
+        for (JsonNode item : json.path("failedItems")) {
+            actualFailed.add(textOrNull(item, "key") + "=" + textOrNull(item, "label"));
+        }
+        check("InspectionOutcome.failedItems", expectedFailed, actualFailed);
+        if ("failed".equals(expectedResult)) {
+            String expectedCleaner = cleanerId == null ? null : staffName(UUID.fromString(String.valueOf(cleanerId)));
+            check("InspectionOutcome.cleanerName", expectedCleaner, textOrNull(json, "cleanerName"));
+        }
+
+        Map<String, Object> row = requireTaskRow(taskId);
+        switch (expectedDestination) {
+            case "closed" -> check("tasks.state", "inspected", row.get("state"));
+            case "cleaner" -> {
+                check("tasks.state", "accepted", row.get("state"));
+                check("tasks.assignee_id", String.valueOf(cleanerId), String.valueOf(row.get("assignee_id")));
+            }
+            case "pool" -> {
+                check("tasks.state", "pool", row.get("state"));
+                check("tasks.assignee_id", null, row.get("assignee_id"));
+            }
+            default -> throw new IllegalStateException("未知去向: " + expectedDestination);
+        }
+    }
+
+    /**
+     * 查房/dsl.md「這次查房被拒絕，原因是項目集合不符，回應帶現行項目 {項目清單}」。
+     * 422 inspection_items_mismatch；currentItems 的 label 順序剛好等於清單；missing／unexpected
+     * 以「現行啟用集合」對「這次實際送出的 key」算出來比。單仍 done、事件與 inspections 列沒增加、
+     * 清房者沒有因這次送出收到任何推播（task 的 push outbox 筆數與送出前相同）。
+     */
+    @那麼("這次查房被拒絕，原因是項目集合不符，回應帶現行項目 {項目清單}")
+    public void thisInspectionRejectedForItemsMismatch(List<String> expectedLabels) {
+        ScenarioWorld.ApiResponse resp = world.lastInspectionResponse();
+        if (resp.status() != 422 || resp.json() == null) {
+            throw new AssertionError("createInspections 預期 422，實際 status=" + resp.status() + "，body=" + resp.body());
+        }
+        JsonNode json = resp.json();
+        check("Error.code", "inspection_items_mismatch", textOrNull(json, "code"));
+
+        JsonNode context = json.path("context");
+        List<String> actualLabels = new ArrayList<>();
+        List<String> currentKeys = new ArrayList<>();
+        for (JsonNode item : context.path("currentItems")) {
+            actualLabels.add(textOrNull(item, "label"));
+            currentKeys.add(textOrNull(item, "key"));
+        }
+        check("Error.context.currentItems.label", expectedLabels, actualLabels);
+
+        List<String> activeKeys = activeInspectionItemKeys();
+        check("Error.context.currentItems.key", activeKeys, currentKeys);
+
+        Set<String> sentKeys = new LinkedHashSet<>();
+        world.lastInspectionItems().forEach(item -> sentKeys.add(String.valueOf(item.get("key"))));
+        List<String> expectedMissing = activeKeys.stream().filter(k -> !sentKeys.contains(k)).toList();
+        List<String> expectedUnexpected = sentKeys.stream().filter(k -> !activeKeys.contains(k)).toList();
+        check("Error.context.missing", expectedMissing, textList(context.path("missing")));
+        check("Error.context.unexpected", expectedUnexpected, textList(context.path("unexpected")));
+
+        LastOperationGuard.Snapshot before = lastOperationGuard.current();
+        UUID taskId = before.taskId();
+        Map<String, Object> row = requireTaskRow(taskId);
+        check("tasks.state", "done", row.get("state"));
+        check("task_events 筆數", before.eventCount(), dbProbe.eventsOf(taskId).size());
+        long inspectionRows = dbProbe.count("SELECT count(*) FROM inspections WHERE task_id = ?", taskId);
+        long resultEvents = dbProbe.count(
+                "SELECT count(*) FROM task_events WHERE task_id = ? AND type IN ('inspection_passed', 'inspection_failed')",
+                taskId);
+        check("inspections 列數（應與查房結果事件數一致，沒有新增）", resultEvents, inspectionRows);
+        int outboxNow = dbProbe.outboxRows("task_event", "task:" + taskId).size()
+                + dbProbe.outboxRows("push", "task:" + taskId).size();
+        check("outbox 筆數（清房者不該因這次送出收到推播）", before.outboxCount(), outboxNow);
+    }
+
+    /** 查房/dsl.md「"{任務}" 在房務待認領」：pool／housekeeping／assignee 空／pool_source=inspection_return，房務員看 GET /pool 看得到。 */
+    @那麼("{string} 在房務待認領")
+    public void taskIsInHousekeepingPool(String roomNo) {
+        UUID taskId = UUID.fromString(world.taskId(roomNo));
+        Map<String, Object> row = requireTaskRow(taskId);
+        check("tasks.state", "pool", row.get("state"));
+        check("tasks.dept", "housekeeping", row.get("dept"));
+        check("tasks.assignee_id", null, row.get("assignee_id"));
+        check("tasks.pool_source", Terms.poolSource("查房退回"), row.get("pool_source"));
+
+        String jwt = mintJwtForAnyActiveStaff("housekeeping");
+        ScenarioWorld.ApiResponse resp = apiClient.get("/pool", BddApiClient.Auth.staff(jwt));
+        if (resp.status() != 200 || resp.json() == null) {
+            throw new AssertionError("listDeptPool 預期 200，實際 status=" + resp.status() + "，body=" + resp.body());
+        }
+        boolean found = false;
+        for (JsonNode item : resp.json().path("items")) {
+            if (taskId.toString().equals(textOrNull(item, "taskId")) || roomNo.equals(textOrNull(item, "roomNo"))) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw new AssertionError("房務員呼叫 listDeptPool 看不到「" + roomNo + "」：" + resp.body());
+        }
+    }
+
+    /** 查房/dsl.md「"{任務}" 的查房紀錄只有 {筆數} 筆」：inspections 列數與 inspection_passed＋inspection_failed 事件數都等於筆數。 */
+    @那麼("{string} 的查房紀錄只有 {int} 筆")
+    public void taskHasExactlyInspectionRecords(String roomNo, int expected) {
+        UUID taskId = UUID.fromString(world.taskId(roomNo));
+        long inspectionRows = dbProbe.count("SELECT count(*) FROM inspections WHERE task_id = ?", taskId);
+        long resultEvents = dbProbe.count(
+                "SELECT count(*) FROM task_events WHERE task_id = ? AND type IN ('inspection_passed', 'inspection_failed')",
+                taskId);
+        check("inspections 列數", (long) expected, inspectionRows);
+        check("task_events 中 inspection_passed＋inspection_failed 筆數", (long) expected, resultEvents);
+    }
+
+    /** 查房/dsl.md「"{員工}" 沒有收到查房退回的推播」：該員工的 kind push outbox 沒有任何 event=inspection_failed。 */
+    @那麼("{string} 沒有收到查房退回的推播")
+    public void staffReceivedNoInspectionFailedPush(String staffName) {
+        UUID staffId = UUID.fromString(world.staffId(staffName));
+        long count = dbProbe.outboxRows("push").stream()
+                .map(this::parsePush)
+                .filter(v -> staffId.equals(v.recipientStaffId()) && "inspection_failed".equals(v.event()))
+                .count();
+        if (count > 0) {
+            throw new AssertionError(staffName + " 預期沒有收到查房退回（event=inspection_failed）的推播，但 outbox 找到 " + count + " 筆");
+        }
+    }
+
+    private List<String> activeInspectionItemKeys() {
+        return dbProbe.queryMaps(
+                        "SELECT item_key FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' AND active = true ORDER BY sort_order",
+                        tenantFixtures.testTenantId())
+                .stream()
+                .map(r -> String.valueOf(r.get("item_key")))
+                .toList();
+    }
+
+    /** 把 key 清單換成「key=label」字串、依飯店 sort_order 排序，供 failedItems 比對。 */
+    private List<String> labelsInHotelOrder(List<String> keys) {
+        return dbProbe.queryMaps(
+                        "SELECT item_key, label FROM sop_items WHERE tenant_id = ? AND applies_to = 'inspection' ORDER BY sort_order",
+                        tenantFixtures.testTenantId())
+                .stream()
+                .filter(r -> keys.contains(String.valueOf(r.get("item_key"))))
+                .map(r -> r.get("item_key") + "=" + r.get("label"))
+                .toList();
+    }
+
+    private String staffName(UUID staffId) {
+        return dbProbe
+                .queryOne("SELECT name FROM staff_accounts WHERE id = ?", staffId)
+                .map(r -> String.valueOf(r.get("name")))
+                .orElseThrow(() -> new AssertionError("staff_accounts 查無此員工：" + staffId));
+    }
+
+    private String mintJwtForAnyActiveStaff(String dept) {
+        Map<String, Object> staff = dbProbe
+                .queryOne(
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active = true LIMIT 1",
+                        tenantFixtures.testTenantId(), dept)
+                .orElseThrow(() -> new IllegalStateException("找不到在職的「" + dept + "」員工，無法模擬跨視角呼叫"));
+        return mintJwtFor(UUID.fromString(String.valueOf(staff.get("id"))));
+    }
+
+    private PushPayloadView parsePush(Map<String, Object> outboxRow) {
+        Object payload = outboxRow.get("payload");
+        String json = payload instanceof String s ? s : String.valueOf(payload);
+        try {
+            return objectMapper.readValue(json, PushPayloadView.class);
+        } catch (RuntimeException e) {
+            throw new AssertionError("解析 push payload 失敗：" + json, e);
+        }
+    }
+
+    private static List<String> textList(JsonNode array) {
+        List<String> out = new ArrayList<>();
+        for (JsonNode n : array) {
+            out.add(n.asText());
+        }
+        return out;
+    }
+
+    private static void check(String what, Object expected, Object actual) {
+        if (!Objects.equals(expected, actual)) {
+            throw new AssertionError(what + " 預期 " + expected + "，實際 " + actual);
+        }
     }
 
     private void assertInList(String staffName, boolean shouldContain) {

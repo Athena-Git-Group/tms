@@ -2,6 +2,7 @@ package com.athena.app.bdd.steps.account;
 
 import com.athena.app.bdd.AppiumWorld;
 import com.athena.app.bdd.BackendChannel;
+import com.athena.app.bdd.steps.manager.ManagerHomeWait;
 import io.cucumber.java.zh_tw.那麼;
 import org.openqa.selenium.WebElement;
 
@@ -140,12 +141,49 @@ public class AccountThenSteps {
         }
     }
 
-    @那麼("{string} 登入成功，進入首頁")
-    public void loginSucceeds(String staffName) {
-        world.waitForTestId("home.screen", SCREEN_TIMEOUT);
-        world.waitForTestId("home.progress.cleaned-ratio", SCREEN_TIMEOUT);
-
+    /**
+     * 必查：App 停在該角色的首頁外殼——房務首頁顯示該員工的今日進度；工務首頁顯示工務今日
+     * 進度（{@code engHome}）；主管首頁（{@code manager.home}）依主管種類顯示格子數字：房務主管
+     * 是待查房與待驗收兩格，工務主管只有待驗收一格（見 {@link ManagerHomeWait}）；不是房務首頁
+     * 也不是工務首頁。分流依登入回應的 role 與 dept：role 是 manager 一律主管首頁
+     * （不看 dept），dept 是 engineering 進工務首頁，其餘進房務首頁。
+     *
+     * <p>劇本寫的首頁要先跟這位員工的角色與部門對得上：寫錯外殼的劇本不該因為 App 也分錯而
+     * 綠。另外兩個外殼的根節點不得同時在畫面上——分流錯的版本可能先推了房務首頁再疊主管
+     * 首頁，只等自己那一個會放過它。
+     */
+    @那麼("{string} 登入成功，進入 {string}")
+    public void loginSucceeds(String staffName, String homeChinese) {
         BackendChannel.CreatedStaff staff = world.staff(staffName);
+        String expectedHome = "manager".equals(staff.role()) ? "主管首頁"
+                : "engineering".equals(staff.dept()) ? "工務首頁" : "房務首頁";
+        if (!expectedHome.equals(homeChinese)) {
+            throw new AssertionError("「" + staffName + "」的角色是 " + staff.role() + "、部門是 "
+                    + staff.dept() + "，依分流應進「" + expectedHome + "」，劇本卻寫「" + homeChinese + "」");
+        }
+        switch (homeChinese) {
+            case "房務首頁" -> {
+                world.waitForTestId("home.screen", SCREEN_TIMEOUT);
+                world.waitForTestId("home.progress.cleaned-ratio", SCREEN_TIMEOUT);
+                assertAbsent("engHome.screen");
+                assertAbsent("manager.home");
+            }
+            case "工務首頁" -> {
+                world.waitForTestId("engHome.screen", SCREEN_TIMEOUT);
+                world.waitForTestId("engHome.progress.in-hand-count", SCREEN_TIMEOUT);
+                assertAbsent("home.screen");
+                assertAbsent("manager.home");
+            }
+            case "主管首頁" -> {
+                world.waitForTestId("manager.home", SCREEN_TIMEOUT);
+                ManagerHomeWait.awaitExactly(world, staffName, SCREEN_TIMEOUT);
+                assertAbsent("home.screen");
+                assertAbsent("engHome.screen");
+            }
+            default -> throw new IllegalArgumentException("首頁只收房務首頁／工務首頁／主管首頁，實際「"
+                    + homeChinese + "」");
+        }
+
         Map<String, Object> row = world.backend().staffAccountRow(staff.id());
         Object failedCount = row.get("failed_login_count");
         if (!(failedCount instanceof Number number) || number.intValue() != 0) {

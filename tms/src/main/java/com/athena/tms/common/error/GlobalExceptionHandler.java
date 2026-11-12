@@ -5,6 +5,7 @@ import com.athena.tms.common.error.ApiException;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -13,6 +14,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(value={ApiException.class})
     public ResponseEntity<ApiError> handleApiException(ApiException ex) {
         return ResponseEntity.status((int)ex.getStatus()).body(new ApiError(ex.getCode(), ex.getMessage(), null, ex.getContext()));
+    }
+
+    /** 端點宣告為必帶的標頭沒帶（例如 createInspections 的 Idempotency-Key）時，回 400 並用與其他錯誤相同的 Error 形狀。 */
+    @ExceptionHandler(value={MissingRequestHeaderException.class})
+    public ResponseEntity<ApiError> handleMissingHeader(MissingRequestHeaderException ex) {
+        return ResponseEntity.badRequest().body(new ApiError("validation_failed", "缺少必帶的標頭 " + ex.getHeaderName(), null, null));
     }
 
     @ExceptionHandler(value={MethodArgumentNotValidException.class})

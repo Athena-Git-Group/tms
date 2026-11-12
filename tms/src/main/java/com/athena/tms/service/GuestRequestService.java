@@ -12,6 +12,7 @@ import com.athena.tms.dto.GuestRequestCreate;
 import com.athena.tms.dto.GuestTaskView;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,8 +37,9 @@ public class GuestRequestService {
     private final ObjectMapper objectMapper;
     private final PushNotifier pushNotifier;
     private final JdbcTemplate jdbcTemplate;
+    private final Clock clock;
 
-    public GuestRequestService(TaskEngine taskEngine, TaskRepository taskRepository, GuestTenantConfigReader configReader, ClassificationRuleEngine ruleEngine, GuestTextAdvisor textAdvisor, RoomRequestRateLimiter roomRequestRateLimiter, ObjectMapper objectMapper, PushNotifier pushNotifier, JdbcTemplate jdbcTemplate) {
+    public GuestRequestService(TaskEngine taskEngine, TaskRepository taskRepository, GuestTenantConfigReader configReader, ClassificationRuleEngine ruleEngine, GuestTextAdvisor textAdvisor, RoomRequestRateLimiter roomRequestRateLimiter, ObjectMapper objectMapper, PushNotifier pushNotifier, JdbcTemplate jdbcTemplate, Clock clock) {
         this.taskEngine = taskEngine;
         this.taskRepository = taskRepository;
         this.configReader = configReader;
@@ -47,6 +49,7 @@ public class GuestRequestService {
         this.objectMapper = objectMapper;
         this.pushNotifier = pushNotifier;
         this.jdbcTemplate = jdbcTemplate;
+        this.clock = clock;
     }
 
     public GuestTaskView create(GuestRequestCreate request) {
@@ -116,7 +119,7 @@ public class GuestRequestService {
         }
         int effectiveQuantity = quantity != null && quantity > 0 ? quantity : 1;
         String title = effectiveQuantity > 1 ? item.label() + " ×" + effectiveQuantity : item.label();
-        return new TaskCreateCommand(tenantId, item.type(), "guest", actor.roomId(), actor.reservationId(), item.dept(), "pool", null, title, this.noteJson(Map.of("menu_key", item.key(), "quantity", effectiveQuantity)), null, null, GuestRequestService.workDateFor(item.type()), Actor.guest());
+        return new TaskCreateCommand(tenantId, item.type(), "guest", actor.roomId(), actor.reservationId(), item.dept(), "pool", null, title, this.noteJson(Map.of("menu_key", item.key(), "quantity", effectiveQuantity)), null, null, this.workDateFor(item.type()), Actor.guest());
     }
 
     private TaskCreateCommand freeTextCommand(long tenantId, CurrentActor actor, String text, String lang) {
@@ -139,11 +142,12 @@ public class GuestRequestService {
             }
         });
         String title = text.length() <= TITLE_MAX_LENGTH ? text : text.substring(0, TITLE_MAX_LENGTH) + "…";
-        return new TaskCreateCommand(tenantId, routing.type(), "guest", actor.roomId(), actor.reservationId(), routing.dept(), routing.initialState(), null, title, this.noteJson(noteFields), null, null, GuestRequestService.workDateFor(routing.type()), Actor.guest());
+        return new TaskCreateCommand(tenantId, routing.type(), "guest", actor.roomId(), actor.reservationId(), routing.dept(), routing.initialState(), null, title, this.noteJson(noteFields), null, null, this.workDateFor(routing.type()), Actor.guest());
     }
 
-    private static LocalDate workDateFor(String type) {
-        return "cleaning".equals(type) ? LocalDate.now() : null;
+    /** 住客要求的清潔歸在「今天」的工作日，「今天」以注入的時鐘為準，與班別、跨日判定同一個來源。 */
+    private LocalDate workDateFor(String type) {
+        return "cleaning".equals(type) ? LocalDate.now(this.clock) : null;
     }
 
     private void ownedTask(long tenantId, UUID taskId) {

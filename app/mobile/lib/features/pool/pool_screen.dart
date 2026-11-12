@@ -13,11 +13,10 @@ import '../shell/main_shell.dart';
 import '../task/task_screen.dart';
 import 'pool_widgets.dart';
 
-/// 待認領畫面（ui-plan 畫面 2 的 `pool`）：分類磚＋單卡列表。
+/// 待認領畫面（ui-plan 畫面 2 的 `pool`）：房務員工看自己部門的池、可以搶單。
 ///
-/// 資料來源是 [ApiClient.getPool]（`GET /pool`）。排序、分類筆數與分類篩選
-/// 全部由後端決定：點分類磚就是帶 `category` 重打一次查詢，App 不在本機重排、
-/// 不在本機重算筆數、不在本機過濾。
+/// 列表本身是 [HousekeepingPoolList]，這一層只管分頁該管的事：接推播帶來的
+/// 標亮房號，以及決定查詢要不要明帶部門。
 class PoolScreen extends StatefulWidget {
   const PoolScreen({super.key, this.highlightRoomNo});
 
@@ -30,6 +29,93 @@ class PoolScreen extends StatefulWidget {
 }
 
 class _PoolScreenState extends State<PoolScreen> {
+  /// 要不要在查詢裡帶 `dept`。房務員工的帳號上就有部門，照既有作法省略，
+  /// 讓後端用帳號上的部門分流；主管與老闆的帳號沒有部門（契約 listDeptPool
+  /// 省略 dept 時回 422 `dept_required`），要看房務池就得把部門指明。
+  String? get _deptQuery => ApiClient.instance.session?.dept == null
+      ? HousekeepingPoolList.deptKey
+      : null;
+
+  String? _highlightRoomNo;
+
+  @override
+  void initState() {
+    super.initState();
+    _highlightRoomNo =
+        widget.highlightRoomNo ?? MainShellTabRequest.poolHighlightRoomNo.value;
+    MainShellTabRequest.poolHighlightRoomNo.addListener(_applyHighlightRequest);
+  }
+
+  @override
+  void dispose() {
+    MainShellTabRequest.poolHighlightRoomNo.removeListener(
+      _applyHighlightRequest,
+    );
+    super.dispose();
+  }
+
+  /// 分頁建好後會留在樹上，之後的推播要在這裡接新的標亮房號；列表看到房號
+  /// 換了會自己重抓一次池。
+  void _applyHighlightRequest() {
+    setState(() {
+      _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TmsSemantics(
+      id: 'pool.screen',
+      child: CupertinoPageScaffold(
+        backgroundColor: TmsColors.groupedBackground,
+        child: HousekeepingPoolList(
+          dept: _deptQuery,
+          canClaim: true,
+          highlightRoomNo: _highlightRoomNo,
+        ),
+      ),
+    );
+  }
+}
+
+/// 房務待認領的分類磚＋單卡列表。
+///
+/// 資料來源是 [ApiClient.getPool]（`GET /pool`）。排序、分類筆數與分類篩選
+/// 全部由後端決定：點分類磚就是帶 `category` 重打一次查詢，App 不在本機重排、
+/// 不在本機重算筆數、不在本機過濾。
+///
+/// 房務員工與主管看的是同一份列表：[canClaim] 決定單卡底下有沒有「認領這單」。
+/// 主管沒有部門、後端本來就不接受主管認領，App 端直接不畫鈕，不是畫了再擋。
+class HousekeepingPoolList extends StatefulWidget {
+  const HousekeepingPoolList({
+    super.key,
+    required this.dept,
+    required this.canClaim,
+    this.highlightRoomNo,
+    this.aboveCategories,
+  });
+
+  /// 這份列表是房務部門的池（工務有自己的 [EngineeringPoolList]），所以查哪
+  /// 一池只有一個答案。
+  static const String deptKey = 'housekeeping';
+
+  /// 查詢要帶的 `dept`；null 表示省略、讓後端依登入帳號的部門分流。
+  final String? dept;
+
+  /// 單卡底下要不要有「認領這單」。
+  final bool canClaim;
+
+  /// 推播要標亮的房號；換了會重抓一次池。
+  final String? highlightRoomNo;
+
+  /// 夾在大標與分類磚之間的那一塊，見 [PoolScrollView.aboveCategories]。
+  final Widget? aboveCategories;
+
+  @override
+  State<HousekeepingPoolList> createState() => _HousekeepingPoolListState();
+}
+
+class _HousekeepingPoolListState extends State<HousekeepingPoolList> {
   /// 分類磚：`key` 同時是契約 `PoolCategory` 的值與 accessibility id 的
   /// `{category}` 段；`all` 是「不帶 category 參數」的彙總磚，不是任務類別。
   /// 圖示方塊的底色與圖示色照原型逐格指定，不從類別色推算：「全部」不是一個
@@ -72,39 +158,19 @@ class _PoolScreenState extends State<PoolScreen> {
   DeptPool? _pool;
   String? _error;
 
-  /// 這個畫面是房務部門的待認領池（工務有自己的 `engPool`），所以查哪一池
-  /// 的答案只有一個：房務。
-  static const String _dept = 'housekeeping';
-
-  /// 要不要在查詢裡帶 `dept`。房務員工的帳號上就有部門，照既有作法省略，
-  /// 讓後端用帳號上的部門分流；主管與老闆的帳號沒有部門（契約 listDeptPool
-  /// 省略 dept 時回 422 `dept_required`），要看房務池就得把部門指明。
-  String? get _deptQuery =>
-      ApiClient.instance.session?.dept == null ? _dept : null;
-
-  String? _highlightRoomNo;
-
   @override
   void initState() {
     super.initState();
-    _highlightRoomNo =
-        widget.highlightRoomNo ?? MainShellTabRequest.poolHighlightRoomNo.value;
-    MainShellTabRequest.poolHighlightRoomNo.addListener(_applyHighlightRequest);
     _fetch();
   }
 
   @override
-  void dispose() {
-    MainShellTabRequest.poolHighlightRoomNo.removeListener(
-      _applyHighlightRequest,
-    );
-    super.dispose();
-  }
-
-  /// 分頁建好後會留在樹上，之後的推播要在這裡接新的標亮房號並重抓一次池。
-  void _applyHighlightRequest() {
-    _highlightRoomNo = MainShellTabRequest.poolHighlightRoomNo.value;
-    _fetch();
+  void didUpdateWidget(HousekeepingPoolList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highlightRoomNo != widget.highlightRoomNo ||
+        oldWidget.dept != widget.dept) {
+      _fetch();
+    }
   }
 
   Future<void> _fetch() async {
@@ -116,7 +182,7 @@ class _PoolScreenState extends State<PoolScreen> {
     });
     try {
       final pool = await ApiClient.instance.getPool(
-        dept: _deptQuery,
+        dept: widget.dept,
         category: _selected == 'all' ? null : _selected,
       );
       if (mounted) {
@@ -155,99 +221,56 @@ class _PoolScreenState extends State<PoolScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return TmsSemantics(
-      id: 'pool.screen',
-      child: CupertinoPageScaffold(
-        backgroundColor: TmsColors.groupedBackground,
-        // 不用 CupertinoNavigationBar：這一頁的標題是內容的一部分，跟著分類磚
-        // 與單卡一起捲（`Main.dc.html:251` 的 `<h1>`）。
-        // 底部不讓 SafeArea 收邊：單卡要從浮動分頁列底下捲過去，讓開分頁列
-        // 的那段留白由清單自己帶。
-        child: SafeArea(
-          bottom: false,
-          child: ListView(
-            padding: EdgeInsets.only(
-              top: TmsSpacing.md,
-              bottom: TmsSpacing.scrollPadBottom(
-                MediaQuery.paddingOf(context).bottom,
-              ),
-            ),
-            children: _content(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _content() {
     final pool = _pool;
-    return [
-      // 連線狀態列固定在內容最上方：待認領是「搶單」的頁，離線時搶不到單，
-      // 員工要先知道現在連不上，而不是按了認領才發現。
-      const SystemStatusBar(
-        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
-      ),
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
-        child: Text('待認領', style: TmsText.largeTitle),
-      ),
-      const SizedBox(height: TmsSpacing.lg),
-      _categoryRow(pool?.counts ?? const <String, int>{}),
-      if (_error != null) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: TmsSpacing.screenEdge,
+    return PoolScrollView(
+      aboveCategories: widget.aboveCategories,
+      children: [
+        _categoryRow(pool?.counts ?? const <String, int>{}),
+        if (_error != null) PoolLoadError(message: _error!),
+        if (pool == null && _error == null) const PoolLoading(),
+        // 兩種「接不到單」要分開講。一個人都不在職時，池裡就算還躺著單也沒有人
+        // 搶得走，畫面要提示補人、而不是說「都接完了」；這時也不把單卡列出來
+        // ——卡上的「認領這單」對主管沒有意義，對停用的員工更按不得
+        // （dsl「待認領顯示空狀態」要求搶單動作不可用）。
+        if (pool != null && pool.activeStaffCount == 0) ...[
+          const SizedBox(height: TmsSpacing.lg),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: TmsSpacing.screenEdge,
+            ),
+            child: TmsSemantics(
+              id: 'pool.empty-state--no-active-staff',
+              label: _noActiveStaffMessage,
+              child: const Text(_noActiveStaffMessage),
+            ),
           ),
-          child: Text(_error!),
-        ),
+        ] else if (pool != null && pool.items.isEmpty) ...[
+          const SizedBox(height: TmsSpacing.lg),
+          TmsContentUnavailable(
+            id: 'pool.empty-state',
+            copy: TmsEmptyStates.housekeepingPool(
+              filterApplied: _selected != 'all',
+              poolHasItems: pool.counts.values.any((count) => count > 0),
+            ),
+            onAction: () {
+              _selected = 'all';
+              _fetch();
+            },
+          ),
+        ] else if (pool != null) ...[
+          // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分類磚與第一張卡之間才
+          // 是原型的 16（`Main.dc.html:249`）。
+          const SizedBox(height: TmsSpacing.sm),
+          for (final item in pool.items)
+            _HousekeepingPoolCard(
+              item: item,
+              isHighlighted: item.roomNo == widget.highlightRoomNo,
+              onTap: () => _openTask(item),
+              onClaim: widget.canClaim ? () => _claim(item) : null,
+            ),
+        ],
       ],
-      if (pool == null && _error == null) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        const Center(child: CupertinoActivityIndicator()),
-      ],
-      // 兩種「接不到單」要分開講。一個人都不在職時，池裡就算還躺著單也沒有人
-      // 搶得走，畫面要提示補人、而不是說「都接完了」；這時也不把單卡列出來
-      // ——卡上的「認領這單」對主管沒有意義，對停用的員工更按不得
-      // （dsl「待認領顯示空狀態」要求搶單動作不可用）。
-      if (pool != null && pool.activeStaffCount == 0) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: TmsSpacing.screenEdge,
-          ),
-          child: TmsSemantics(
-            id: 'pool.empty-state--no-active-staff',
-            label: _noActiveStaffMessage,
-            child: const Text(_noActiveStaffMessage),
-          ),
-        ),
-      ] else if (pool != null && pool.items.isEmpty) ...[
-        const SizedBox(height: TmsSpacing.lg),
-        TmsContentUnavailable(
-          id: 'pool.empty-state',
-          copy: TmsEmptyStates.housekeepingPool(
-            filterApplied: _selected != 'all',
-            poolHasItems: pool.counts.values.any((count) => count > 0),
-          ),
-          onAction: () {
-            _selected = 'all';
-            _fetch();
-          },
-        ),
-      ] else if (pool != null) ...[
-        // 單卡自己帶上下各 8 的外距，所以這裡只補 8，分類磚與第一張卡之間才
-        // 是原型的 16（`Main.dc.html:249`）。
-        const SizedBox(height: TmsSpacing.sm),
-        for (final item in pool.items)
-          _HousekeepingPoolCard(
-            item: item,
-            isHighlighted: item.roomNo == _highlightRoomNo,
-            onTap: () => _openTask(item),
-            onClaim: () => _claim(item),
-          ),
-      ],
-    ];
+    );
   }
 
   static const String _noActiveStaffMessage = '這個部門目前沒有在職員工可以搶單';
@@ -309,7 +332,9 @@ class _HousekeepingPoolCard extends StatelessWidget {
   final PoolItem item;
   final bool isHighlighted;
   final VoidCallback onTap;
-  final VoidCallback onClaim;
+
+  /// 按「認領這單」要做的事；null 時整顆鈕不畫（主管只看不搶）。
+  final VoidCallback? onClaim;
 
   @override
   Widget build(BuildContext context) {
@@ -343,6 +368,7 @@ class _HousekeepingPoolCard extends StatelessWidget {
       label: categoryAppearance.label,
       palette: categoryAppearance.palette,
     );
+    final onClaim = this.onClaim;
 
     return PoolCard(
       id: isHighlighted ? '$cardId--highlighted' : cardId,
@@ -410,7 +436,8 @@ class _HousekeepingPoolCard extends StatelessWidget {
             id: '$cardId.handoff-progress',
             text: item.handoverNote!,
           ),
-        PoolClaimButton(id: '$cardId.claim-button', onPressed: onClaim),
+        if (onClaim != null)
+          PoolClaimButton(id: '$cardId.claim-button', onPressed: onClaim),
       ],
     );
   }
