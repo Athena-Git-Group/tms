@@ -60,15 +60,15 @@
       並且 任務 "t-305-2" 的事件 "answered" 的 answer 應為 "早餐 07:00–10:00"
       並且 任務 "t-305-2" 的 note 應為 "早餐 07:00–10:00"
 
-  Rule: 櫃檯看得到本店所有單，才能避免重複建單
+  Rule: 櫃檯看得到本店今天所有的單，才能避免重複建單
 
     @happy
     場景: 多筆任務清單
       假設 系統中存在以下任務:
-        | id      | tenant_id | type    | source | room_id | dept         | state    | title    | assignee_id |
-        | t-305-3 | 1         | amenity | guest  | r-305   | housekeeping | pool     | 加毛巾   |             |
-        | t-305-4 | 1         | amenity | guest  | r-305   | housekeeping | accepted | 礦泉水   | s-hk1       |
-        | t-305-5 | 1         | amenity | guest  | r-305   | housekeeping | done     | 補牙刷   | s-hk1       |
+        | id      | tenant_id | type    | source | room_id | dept         | state    | title    | assignee_id | done_at              |
+        | t-305-3 | 1         | amenity | guest  | r-305   | housekeeping | pool     | 加毛巾   |             |                      |
+        | t-305-4 | 1         | amenity | guest  | r-305   | housekeeping | accepted | 礦泉水   | s-hk1       |                      |
+        | t-305-5 | 1         | amenity | guest  | r-305   | housekeeping | done     | 補牙刷   | s-hk1       | 2026-10-19T10:00:00Z |
       當 櫃檯查詢任務清單
       那麼 清單含標題「房間有怪聲」且其狀態為 "triage"
       並且 清單含標題「加毛巾」且其狀態為 "pool"

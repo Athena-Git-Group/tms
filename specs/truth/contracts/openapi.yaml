@@ -134,7 +134,9 @@ paths:
   /task-events:
     $ref: './groups/知識與通知/任務事件流水帳.yaml#/listTaskEvents'
   /tasks:
-    $ref: './groups/現場作業/任務.yaml#/listTasksAndcreateTasks'
+    $ref: './groups/現場作業/任務.yaml#/createTasks'
+  /desk/tasks:
+    $ref: './groups/現場作業/任務.yaml#/listDeskTasks'
   /tasks/{id}:
     $ref: './groups/現場作業/任務.yaml#/readTasks'
   /tasks/{id}/claim:
