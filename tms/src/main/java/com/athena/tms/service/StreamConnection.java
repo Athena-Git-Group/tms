@@ -64,6 +64,10 @@ final class StreamConnection {
         };
     }
 
+    boolean belongsTo(long tenantId) {
+        return this.tenantId == tenantId;
+    }
+
     boolean wantsIntegration(long tenantId) {
         return this.audience == Audience.INTEGRATION && this.tenantId == tenantId;
     }

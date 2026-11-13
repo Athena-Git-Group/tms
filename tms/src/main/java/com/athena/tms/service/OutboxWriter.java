@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.codes.TaskEventType;
 import com.athena.tms.dao.OutboxMessageRepository;
 import com.athena.tms.entity.OutboxMessage;
 import com.athena.tms.entity.TaskEvent;
@@ -21,7 +22,10 @@ public class OutboxWriter {
         this.objectMapper = objectMapper;
     }
 
-    public OutboxMessage enqueueTaskEvent(TaskEvent event) {
+    public void enqueueTaskEvent(TaskEvent event) {
+        if (!TaskEventType.isStreamed(event.getType())) {
+            return;
+        }
         ObjectNode envelope = this.objectMapper.createObjectNode();
         envelope.put("tenant_id", event.getTenantId());
         envelope.put("task_id", event.getTaskId().toString());
@@ -35,7 +39,7 @@ public class OutboxWriter {
             envelope.set("payload", this.readTree(event.getPayload()));
         }
         envelope.put("occurred_at", event.getCreatedAt().toString());
-        return this.enqueue(event.getTenantId(), "task_event", "task:" + String.valueOf(event.getTaskId()), "task:" + String.valueOf(event.getTaskId()) + ":seq:" + event.getSeq(), envelope.toString());
+        this.enqueue(event.getTenantId(), "task_event", "task:" + String.valueOf(event.getTaskId()), "task:" + String.valueOf(event.getTaskId()) + ":seq:" + event.getSeq(), envelope.toString());
     }
 
     public OutboxMessage enqueuePush(long tenantId, UUID taskId, String idempotencyKey, String payloadJson) {

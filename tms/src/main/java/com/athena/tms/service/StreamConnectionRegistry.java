@@ -55,6 +55,15 @@ public class StreamConnectionRegistry {
         return emitter;
     }
 
+    /** 這個 instance 有沒有任何屬於該租戶的連線。沒有的話，該租戶的事件不必為了推送去查資料庫。 */
+    public boolean hasConnection(long tenantId) {
+        return this.connections.stream().anyMatch(connection -> connection.belongsTo(tenantId));
+    }
+
+    public boolean hasIntegrationConnection(long tenantId) {
+        return this.connections.stream().anyMatch(connection -> connection.wantsIntegration(tenantId));
+    }
+
     public void broadcastRoomStatus(long tenantId, IntegrationRoomStatusEvent event) {
         for (StreamConnection connection : this.connections) {
             if (!connection.wantsIntegration(tenantId) || connection.sendRoomStatus(event, this.objectMapper)) continue;
