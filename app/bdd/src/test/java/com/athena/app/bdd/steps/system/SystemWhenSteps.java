@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.system;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import io.appium.java_client.AppiumBy;
 import io.cucumber.java.zh_tw.當;
 

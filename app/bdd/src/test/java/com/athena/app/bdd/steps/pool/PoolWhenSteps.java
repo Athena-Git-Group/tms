@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.pool;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import io.cucumber.java.zh_tw.當;
 
 import java.time.Duration;

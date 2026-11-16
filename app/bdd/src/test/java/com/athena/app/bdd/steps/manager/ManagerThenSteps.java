@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.manager;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.appium.java_client.AppiumBy;
 import io.cucumber.datatable.DataTable;

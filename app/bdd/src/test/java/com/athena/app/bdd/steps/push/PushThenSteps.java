@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.push;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import com.athena.app.bdd.steps.common.CommonGivenSteps;
 import com.athena.app.bdd.steps.manager.ManagerHomeWait;
 import io.appium.java_client.AppiumBy;

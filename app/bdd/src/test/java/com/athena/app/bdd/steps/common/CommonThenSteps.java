@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.common;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import com.athena.app.bdd.steps.manager.ManagerContext;
 import com.athena.app.bdd.steps.repair.RepairContext;
 import com.fasterxml.jackson.databind.JsonNode;

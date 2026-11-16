@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/*
+ * 設計變數：顏色與字型取自設計雛形的變數，名稱沿用雛形。
+ * 用法例：bg-brand、text-text-2、border-line-soft、font-sans。
+ */
+@theme {
+  --color-brand: #0C7680;
+  --color-brand-container: #C8E8ED;
+  --color-brand-on-container: #2F5357;
+  --color-bg: #F2F2F7;
+  --color-surface: #FFFFFF;
+  --color-text: #000000;
+  --color-text-2: #3C3C43;
+  --color-text-3: #6C6C70;
+  --color-text-4: #8E8E93;
+  --color-line: #C6C6C8;
+  --color-line-soft: #E5E5EA;
+  --color-fill: rgba(118, 118, 128, .12);
+  --color-warm-bg: #FFDCC5;
+  --color-warm-fg: #703700;
+  --color-amber: #944B00;
+  --color-err-bg: #FFE4E1;
+  --color-err-fg: #B42318;
+  --color-ok-bg: #DDF3E4;
+  --color-ok-fg: #1A6B34;
+  --color-yellow-bg: #FFF1C2;
+  --color-yellow-fg: #6B4E00;
+  --color-danger: #FF3B30;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+}

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.athena</groupId>
+	<artifactId>app-web-bdd</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+	<name>app-web-bdd</name>
+	<description>櫃檯 Web（app/web/，React）驗收測試線：Cucumber-JVM ＋ Playwright for Java 直讀
+		specs/truth/features/frontdesk-web/。獨立 Maven module，不掛進 tms/ 或 app/bdd/ 的 pom；
+		glue 套件是 com.athena.web.bdd，不載入員工 App 測試線的 Appium。</description>
+
+	<properties>
+		<maven.compiler.release>25</maven.compiler.release>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<!-- 與 app/bdd/pom.xml、tms/pom.xml 同一組 -->
+		<cucumber.version>7.22.1</cucumber.version>
+		<junit-bom.version>6.0.3</junit-bom.version>
+		<!-- 瀏覽器的版本跟著這個版號走：改版號之後要重跑一次下面的瀏覽器安裝指令 -->
+		<playwright.version>1.65.0</playwright.version>
+
+		<!-- 瀏覽器設定：desktop＝Chromium 1280×720 滑鼠；ipad＝WebKit 1180×820 觸控。
+			指令列用 -Dweb.profile=ipad 切換（見 WebProfile） -->
+		<web.profile>desktop</web.profile>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.junit</groupId>
+				<artifactId>junit-bom</artifactId>
+				<version>${junit-bom.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+		<dependency>
+			<groupId>io.cucumber</groupId>
+			<artifactId>cucumber-java</artifactId>
+			<version>${cucumber.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- 本模組沒有 Spring，step 類別之間用建構子注入共用狀態，靠 PicoContainer -->
+		<dependency>
+			<groupId>io.cucumber</groupId>
+			<artifactId>cucumber-picocontainer</artifactId>
+			<version>${cucumber.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.cucumber</groupId>
+			<artifactId>cucumber-junit-platform-engine</artifactId>
+			<version>${cucumber.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-suite</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- 只給 SmokeTest 用（一般的 JUnit 測試）；Cucumber 那條線不靠它 -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.microsoft.playwright</groupId>
+			<artifactId>playwright</artifactId>
+			<version>${playwright.version}</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- 後端資料準備（BackendChannel）：與員工 App 測試線共用，住在獨立模組 app/bdd-support/。
+			本 repo 沒有上層 pom：要先 `mvn -q -f app/bdd-support/pom.xml install` 才解析得到。 -->
+		<dependency>
+			<groupId>com.athena</groupId>
+			<artifactId>app-bdd-support</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.14.0</version>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.5.2</version>
+				<configuration>
+					<!-- 只讓 RunFrontdeskWebFeaturesTest（suite）去跑 Cucumber。不排除的話 surefire 還會直接
+						叫起 Cucumber engine 再跑一遍，而且那一遍不帶 runner 上的 glue 與報表設定。 -->
+					<excludeJUnit5Engines>
+						<engine>cucumber</engine>
+					</excludeJUnit5Engines>
+					<!-- SmokeTest 要開發伺服器與 8080 後端都開著才跑得過，平常的 mvn test（含 dry-run）不跑它；
+						指名 -Dtest=SmokeTest 時 surefire 不看這個排除，照跑 -->
+					<excludes>
+						<exclude>**/SmokeTest.java</exclude>
+					</excludes>
+					<!-- Playwright 預設會在第一次啟動時把三種瀏覽器全部下載一遍；本模組只用 Chromium 與 WebKit，
+						改成只靠下面那條安裝指令，跑測試時不自動下載 -->
+					<environmentVariables>
+						<PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD>1</PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD>
+					</environmentVariables>
+					<systemPropertyVariables>
+						<web.profile>${web.profile}</web.profile>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
+			<!-- 安裝 Playwright 的瀏覽器（裝在 Playwright 預設的快取位置，不進專案）：
+				mvn -q -f app/web-bdd/pom.xml exec:java -Dexec.args="install chromium webkit" -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.6.3</version>
+				<configuration>
+					<mainClass>com.microsoft.playwright.CLI</mainClass>
+					<classpathScope>test</classpathScope>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

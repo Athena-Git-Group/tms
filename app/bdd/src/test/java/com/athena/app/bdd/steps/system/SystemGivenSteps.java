@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.system;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import com.athena.app.bdd.steps.manager.ManagerHomeWait;
 import io.cucumber.java.zh_tw.假設;
 import org.openqa.selenium.WebElement;

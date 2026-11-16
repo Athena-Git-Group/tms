@@ -1,4 +1,4 @@
-package com.athena.app.bdd;
+package com.athena.bddsupport;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

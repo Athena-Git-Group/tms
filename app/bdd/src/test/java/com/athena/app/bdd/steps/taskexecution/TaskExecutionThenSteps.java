@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.taskexecution;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 import io.cucumber.java.zh_tw.那麼;
 import org.openqa.selenium.WebElement;
 

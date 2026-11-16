@@ -108,3 +108,12 @@ start_appium() {
   log "Appium server 沒有如期起來，看 $APPIUM_LOG"
   return 1
 }
+
+# BackendChannel 住在獨立模組 app/bdd-support/（與櫃檯 Web 測試線共用）。本 repo 沒有上層 pom，
+# app/bdd/pom.xml 要從本機 Maven 倉庫解析 app-bdd-support，所以每次 source 都先 install 一次；
+# 三支 run-*.sh 都會 source 本檔，放這一處就夠。
+# 不經腳本、直接下 `mvn -f app/bdd/pom.xml …` 的人要自己先跑一次：
+#   JAVA_HOME="$(/usr/libexec/java_home -v 25)" mvn -q -f app/bdd-support/pom.xml install
+# 否則會找不到 com.athena:app-bdd-support；改過 app/bdd-support/ 之後也要重跑才會生效。
+log "install app-bdd-support 到本機 Maven 倉庫"
+JAVA_HOME="$(/usr/libexec/java_home -v 25)" mvn -q -f "$REPO_ROOT/app/bdd-support/pom.xml" install

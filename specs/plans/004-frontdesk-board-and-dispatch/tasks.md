@@ -54,7 +54,7 @@
 
 **Goal**: 本輪新增櫃檯 Web 這一端與它的驗收測試線。先把三個新目錄（`app/web/`、`app/bdd-support/`、`app/web-bdd/`）的套件、設定與執行環境備好，用兩個半天的 spike 把「拖曳用哪個套件」「觸控拖曳能不能自動化」從文件上的推測換成實跑的結論，最後用 smoke-test 確認三條測試線都起得來。不寫任何 DSL 語意，不寫任何產品行為。
 
-- [ ] T001 建立 `app/web/`：`React` ＋ `TypeScript` ＋ `Vite` 單頁應用，並裝好本輪要用的前端套件
+- [X] T001 建立 `app/web/`：`React` ＋ `TypeScript` ＋ `Vite` 單頁應用，並裝好本輪要用的前端套件
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的櫃檯 Web 九列（框架與建置、換頁、後端資料、畫面狀態、樣式與版面、多語系、登入憑證、連後端、即時更新）、`測試與驗證` 的「櫃檯 Web 單元測試」、`本次開發不引入的技術`
     - `research.md` -> 決策 2、決策 7
@@ -62,7 +62,7 @@
   - 設定：`vite.config.ts` 的開發伺服器把 `/api` 與 `/staff/stream` 代理到 `http://localhost:8080`；API 位址用建置時的環境變數設定，預設相對路徑（同源部署）。`tailwind` 接上 `ui/desk.css` 用到的設計變數（顏色、圓角、字級只搬變數，不搬雛形的版面）。
   - 不裝：`next`、任何元件測試套件、`playwright-bdd`、`cucumber-js`、建在 HTML Drag and Drop API 上的拖曳套件、Service Worker 相關套件；不用瀏覽器內建的 `EventSource`。不拿 `~/IdeaProjects/tms-web` 的程式、設定或版本當基底。
 
-- [ ] T002 建立 Maven 模組 `app/bdd-support/`，把 `BackendChannel` 從員工 App 測試線搬出來
+- [X] T002 建立 Maven 模組 `app/bdd-support/`，把 `BackendChannel` 從員工 App 測試線搬出來
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證` 的「BDD 共用的後端資料準備」
     - `research.md` -> 決策 5
@@ -72,7 +72,7 @@
   - 因為沒有上層 pom，`mvn -q -f app/bdd-support/pom.xml install` 這一步放進 `app/bdd/lib/env.sh`（`run-all.sh`、`run-f3.sh`、`run-module.sh` 三支腳本都會 source 它，放一處就夠）。不經腳本、直接下 `mvn -f app/bdd/pom.xml …` 的人要自己先 install 一次，否則會找不到 `app-bdd-support`；這一點寫進 `env.sh` 的註解與 `implement-notes.md`。
   - 只搬家、不改行為：方法簽章、SQL、用語對照都原樣搬。開工前確認 `app/bdd/` 的工作樹是乾淨的（見 Scope Note 第 7 條）。
 
-- [ ] T003 建立 Maven 模組 `app/web-bdd/`：`Cucumber-JVM` ＋ `Playwright for Java`
+- [X] T003 建立 Maven 模組 `app/web-bdd/`：`Cucumber-JVM` ＋ `Playwright for Java`
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證` 的「櫃檯 Web BDD techstack」「櫃檯 Web 驗收的視窗與輸入」
     - `specs/truth/features/frontdesk-web/dsl.md` -> 開頭的 BDD techstack 與「共通實作約定」的「瀏覽器設定」
@@ -80,7 +80,7 @@
   - 相依：`io.cucumber:cucumber-java`、`io.cucumber:cucumber-picocontainer`、`io.cucumber:cucumber-junit-platform-engine`、`org.junit.platform:junit-platform-suite`、`com.microsoft.playwright:playwright`、`app-bdd-support`（T002）。glue 套件是 `com.athena.web.bdd`，不在 `com.athena.app.bdd` 底下，執行時不得載入 `AppiumWorld`。
   - 設定：runner `RunFrontdeskWebFeaturesTest` 讀 `specs/truth/features/frontdesk-web/`（`# language: zh-TW`）；用系統屬性 `web.profile` 選兩組瀏覽器設定：`desktop`＝Chromium、視窗 1280 × 720、滑鼠；`ipad`＝WebKit、視窗 1180 × 820、開啟觸控。安裝 Playwright 的瀏覽器（Chromium 與 WebKit）。
 
-- [ ] T004 半天 spike：拖曳函式庫選型（`@dnd-kit/core` 或 `@dnd-kit/react`）
+- [X] T004 半天 spike：拖曳函式庫選型（`@dnd-kit/core` 或 `@dnd-kit/react`）
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「櫃檯 Web 拖曳派單」
     - `research.md` -> 決策 4、「建立專案時要先做的 spike」第 1、3、5、6 點
@@ -89,7 +89,7 @@
   - 產出：選定其中一個套件，裝進 `app/web/` 並鎖版本；把選擇、理由與版本記在 `specs/plans/004-frontdesk-board-and-dispatch/implement-notes.md`。兩個都不可行時，結論是「自己用 Pointer Events 寫拖曳」，同樣記下來。
   - 只花半天；spike 的程式不進產品（`app/web/spikes/` 不被 `src/` 引用），不寫看板、不寫派單。
 
-- [ ] T005 半天 spike：觸控拖曳的自動化測試可行性，以及瀏覽器時鐘
+- [X] T005 半天 spike：觸控拖曳的自動化測試可行性，以及瀏覽器時鐘
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證` 的「櫃檯 Web 驗收的視窗與輸入」
     - `research.md` -> 決策 5、「建立專案時要先做的 spike」第 2 至 6 點
@@ -99,7 +99,7 @@
   - 產出：在 `implement-notes.md` 記下觸控拖曳在自動化裡是怎麼驅動的（用哪一組 API、要不要補送中間的移動事件）；不可行時寫明走退路（iPad 尺寸的拖曳改用滑鼠事件驅動，觸控拖曳列為真機人工驗收）。兩個結論都要回交 `/technical-research` 改 `techstack.md`（Scope Note 第 15 條）。
   - 只花半天；不寫任何正式的 stepdef 或 page object。
 
-- [ ] T006 事件串流的端到端連線試驗
+- [X] T006 事件串流的端到端連線試驗
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「櫃檯 Web 即時更新」
     - `research.md` -> 決策 8、「建立專案時要先做的 spike」最後兩段
@@ -107,7 +107,7 @@
   - 用 `frontdesk` 帳號，瀏覽器經 Vite 代理以 `fetch` 連上 `GET /staff/stream`（帶 `Authorization: Bearer`），確認依序收到 `init`、`resync`、每 15 秒的 `heartbeat`；由住客送一張會進待派單的需求，確認收到 `task` 並量從送出到收到的秒數；把後端停掉再啟動，確認前端偵測得到斷線並能重新連上。
   - 產出：把量到的延遲、代理要不要關緩衝之類的設定記在 `implement-notes.md`，需要的代理設定直接寫進 `vite.config.ts`。不改後端的收件範圍（那是 Phase 4-B12），不寫產品的串流客戶端。
 
-- [ ] T007 smoke-test：三條測試線都起得來
+- [X] T007 smoke-test：三條測試線都起得來
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證`
   - 依序確認並停手：①`cd app/web && npx vitest run` 跑過一支只斷言 `1 + 1` 的測試、`npm run build` 產出靜態檔；②`app/web-bdd/` 在 `desktop` 與 `ipad` 兩組設定下各開一次瀏覽器，載入 `app/web/` 開發伺服器的首頁，並經代理打到 8080 後端的一支既有端點（例如 `POST /api/v1/staff-accounts/login` 回 401）；③`app/bdd/` 的 dry-run（指令見上）在 `BackendChannel` 搬家後仍然編得過、沒有 undefined。

@@ -1,7 +1,7 @@
 package com.athena.app.bdd.steps.repair;
 
 import com.athena.app.bdd.AppiumWorld;
-import com.athena.app.bdd.BackendChannel;
+import com.athena.bddsupport.BackendChannel;
 
 import java.time.Duration;
 import java.util.List;

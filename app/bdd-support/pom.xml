@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.athena</groupId>
+	<artifactId>app-bdd-support</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+	<name>app-bdd-support</name>
+	<description>BDD 共用的後端資料準備（BackendChannel）：員工 App 測試線（app/bdd/）與櫃檯 Web 測試線（app/web-bdd/）
+		各自引用。不放任何 Cucumber 步驟或 @Before，Java 套件也不落在任何一條測試線的 glue 套件底下。
+		獨立 Maven module，沒有上層 pom：引用它的模組要先對本模組跑一次 mvn install。</description>
+
+	<properties>
+		<maven.compiler.release>25</maven.compiler.release>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+	</properties>
+
+	<dependencies>
+		<!-- 後端沒有測試資料 REST 端點，fixture 走 JDBC 直接落地（SQL 對照 tms/src/test 的 bdd/support），
+			讀回與狀態轉移走正式 REST。 -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>42.7.13</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.19.4</version>
+		</dependency>
+		<!-- bcrypt：fixture 員工帳號的 password_hash 要與後端 SecurityConfig 的
+			BCryptPasswordEncoder 同格式，直接用同一套實作，不自己拼雜湊 -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+			<version>6.5.10</version>
+		</dependency>
+		<!-- spring-security-crypto 內部用 commons-logging 介面寫 log，spring-jcl 是它的橋接實作 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-jcl</artifactId>
+			<version>6.2.18</version>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- 避免引用端（Appium/Selenium 等）在跑 dry-run 時印出「No SLF4J providers were found」警告 -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-simple</artifactId>
+			<version>2.0.17</version>
+			<scope>runtime</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.14.0</version>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
