@@ -26,6 +26,19 @@ Error:
     inspection_items_mismatch（422，createInspections 送出的項目集合與飯店現行啟用的查房項目全集不符，少項或多項都算；
     context 帶 missing（少的鍵）、unexpected（多的鍵）與 currentItems（現行集合，每筆 key、label、sortOrder），
     App 用 currentItems 換掉畫面上的項目讓主管重判）。
+    櫃檯看板與派單 API 的 code：
+    task_not_in_triage（409，deskAssignTask 或 deskAnswerTask 送到時這張單已經不是待派單。context 帶
+    resolution（這張單怎麼離開待派單的：assigned 被派走、answered 被當場回答、guest_withdrew 住客自己收回、other 其他）、
+    state（現在的狀態）、roomNo；resolution 為 assigned 時另帶 actorName（派單的人）與 dept（派去的部門），
+    為 answered 時另帶 actorName（回答的人）。畫面依 resolution 選提示，例如「{actorName} 剛剛把 {roomNo} 派給{dept}」）；
+    undo_claimed（409，deskUndoAssign 時這張單已有負責人，context 帶 assigneeName、dept、roomNo）；
+    undo_guest_withdrew（409，deskUndoAssign 時住客已經自己收回這張需求，context 帶 roomNo）；
+    undo_expired（409，deskUndoAssign 送到時距離派出已超過 10 秒，context 帶 roomNo、dept）；
+    undo_unavailable（409，deskUndoAssign 的其他情形：派出之後這張單又發生了別的事，或它不是櫃檯派出的，context 帶 state、roomNo）；
+    answer_invalid（422，deskAnswerTask 的回覆去掉頭尾空白後是空的或超過 120 字，context 帶 maxLength）；
+    idempotency_key_required（400，櫃檯的三個寫入沒有帶 Idempotency-Key）；
+    new_password_too_weak（422，新密碼不符合至少 8 碼、含英文字母、含數字，context.failedRules 列出沒過的規則
+    min_length、letter_required、digit_required）。
     違反狀態機守衛時沿用 state_conflict（409）：工務單的驗收（通過或不通過）與查房送出撞到單已不在預期狀態
     （另一位主管先處理、單被改派或作廢）都回這一個 code，App 顯示「這張單已被處理」並刷新清單。
     角色或身分不符一律回 403 forbidden，message 是業務原文、App 直接顯示，例如員工呼叫 verifyRepairTicket、

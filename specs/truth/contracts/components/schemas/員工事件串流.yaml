@@ -1,0 +1,83 @@
+StaffStreamInit:
+  type: object
+  description: 事件名稱 init。連上後的第一則。
+  required:
+  - stream_pos
+  properties:
+    stream_pos:
+      type: integer
+      format: int64
+      description: 這條連線目前送到第幾則 task，剛連上是 0。只在這條連線內有意義，不能拿來跨連線續傳。
+StaffStreamResync:
+  type: object
+  description: 事件名稱 resync。連上後緊接在 init 之後送一次，意思是「連線期間以外的變化不會補送，請把畫面上的資料重抓一次」。
+  required:
+  - reason
+  - refetch
+  properties:
+    reason:
+      type: string
+      enum:
+      - connected
+    refetch:
+      type: string
+      description: >-
+        建議重抓的路徑。frontdesk、manager、duty_manager 的連線是 /api/v1/desk/board；housekeeping、engineering 的連線是 /api/v1/pool。
+        只是提示：櫃檯 Web 不看這個值，一律重抓自己畫面上正在顯示的資料（看板，以及開著的詳情面板）。
+      example: /api/v1/desk/board
+StaffStreamTask:
+  type: object
+  description: 事件名稱 task。某一張單發生了一則事件。只說是哪一張單、哪一種事件，不帶單的內容。
+  required:
+  - stream_pos
+  - task_id
+  - seq
+  - type
+  properties:
+    stream_pos:
+      type: integer
+      format: int64
+      description: 這條連線的第幾則 task，從 1 開始遞增。
+    task_id:
+      type: string
+      format: uuid
+    seq:
+      type: integer
+      format: int32
+      description: 這張單的第幾步（task_events.seq）。
+    type:
+      type: string
+      description: 事件種類，值同 task_events.type，例如 created、triaged、triage_undone、answered、claimed、started、completed、cancelled。
+    occurred_at:
+      type: string
+      format: date-time
+      description: 事件發生的時間；來源沒有帶時不出現。
+StaffStreamHeartbeat:
+  type: object
+  description: 事件名稱 heartbeat。每 15 秒一則，讓客戶端知道連線還活著，並對齊目前是不是降級。
+  required:
+  - stream_pos
+  - degraded
+  properties:
+    stream_pos:
+      type: integer
+      format: int64
+    degraded:
+      type: boolean
+      description: 後端現在是不是處於降級。true 時客戶端應改成定時重抓；false 表示訊號即時可信。
+StaffStreamDegraded:
+  type: object
+  description: 事件名稱 degraded。後端宣告接下來的訊號可能延遲或漏掉；進入降級時對所有連線送一次，降級期間新連上的連線也會在 resync 之後收到一次。
+  required:
+  - reason
+  properties:
+    reason:
+      type: string
+      enum:
+      - kafka_consumer_lag
+      - kafka_unavailable
+      description: kafka_consumer_lag＝處理事件落後超過 10 秒；kafka_unavailable＝連不上事件來源或消費者停止。
+StaffStreamRecovered:
+  type: object
+  description: 事件名稱 recovered。後端離開降級、回到正常時對所有連線送一次。客戶端收到後先重抓一次，再回到「收到訊號才重抓」。
+  properties: {}

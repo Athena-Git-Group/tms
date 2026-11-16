@@ -120,6 +120,12 @@ GuestRequest:
       - deferred
       - interrupted
       - cancelled
+    answer:
+      type: string
+      nullable: true
+      description: >-
+        櫃檯當場回答的回覆全文（tasks.answer）。有值表示櫃檯已經直接回覆這則需求並結案（state 為 done），
+        住客的進度頁顯示這段文字；其他需求為 null。
     createdAt:
       type: string
       format: date-time

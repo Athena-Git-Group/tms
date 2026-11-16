@@ -231,6 +231,11 @@ tasksTriage:
   post:
     operationId: tasksTriage
     summary: triage
+    deprecated: true
+    description: >-
+      這個路徑沒有實作，也沒有任何客戶端呼叫，保留只為了不讓既有路徑消失。
+      櫃檯處理待派單的單一律用櫃檯看板與派單 API：派給房務或工務用 deskAssignTask，派出後復原用 deskUndoAssign，
+      當場回答用 deskAnswerTask。
     tags:
     - 任務 API
     parameters:

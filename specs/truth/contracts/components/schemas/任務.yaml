@@ -38,7 +38,15 @@ tasks:
       type: string
     note:
       type: string
-      description: 住客原文/翻譯/交代/當場回答——PII 去識別化範圍
+      description: 住客原文/翻譯/交代——PII 去識別化範圍。建單後不因派單、復原或當場回答而改寫；櫃檯當場回答的回覆在 answer。
+    taskNo:
+      type: string
+      nullable: true
+      description: 給人看的單號，T- 加 4 位數（例 T-1040），建單時取號、之後不改。type 為 repair 的單為 null，工務單的單號是 RepairTicket 的 W- 單號。
+    answer:
+      type: string
+      nullable: true
+      description: 櫃檯當場回答給住客的回覆全文（1–120 字）。有值表示這張單是當場回答結案的；其他單為 null。PII 去識別化範圍。
     estMin:
       type: integer
       format: int32
@@ -55,6 +63,13 @@ tasks:
       type: string
       format: date-time
       description: 完成時間。實際分鐘改以 accumulatedMinutes 為準（不含中斷期間）。
+    endedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: >-
+        這張單走到終點的時間；還沒結束為 null。終點有四種：查房通過或免查結案（inspected）、取消（cancelled）、
+        工務單結案（closed）、完成即結束的 done（備品與其他類的完成、當場回答）。打掃單與工務單的 done 還在等查房或驗收，為 null。
     redoCount:
       type: integer
       format: int32
@@ -162,7 +177,7 @@ tasksRequest:
       type: string
     note:
       type: string
-      description: 住客原文/翻譯/交代/當場回答——PII 去識別化範圍
+      description: 住客原文/翻譯/交代——PII 去識別化範圍
     estMin:
       type: integer
       format: int32

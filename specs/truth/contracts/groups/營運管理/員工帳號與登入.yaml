@@ -24,6 +24,17 @@ staffAccountsLogin:
       （context 帶 lockedUntil、remainingMinutes）。帳號停用（active=false）一律回 403 account_disabled，
       即使密碼正確也不放行，歷史資料保留。臨時密碼登入成功仍回 200，body 的 mustChangePassword=true，
       完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
+      員工 App 與櫃檯 Web 都用這一個端點登入；六種角色（含 duty_manager）都能登入。
+      回應帶員工編號（loginId）與飯店名稱（hotelName），不必另外查。
+      櫃檯 Web 登入時請求帶 client=frontdesk_web，後端多做一步角色檢查，順序在停用、鎖定、密碼比對之後：
+      角色是 frontdesk、manager、duty_manager 的照常登入。
+      角色是 housekeeping、engineering、owner，而且密碼不是臨時密碼的，回 401 credentials_invalid，
+      狀態碼、code、message 與密碼錯誤完全相同，看不出帳號密碼其實是對的；這一次不發憑證，也不計入連續輸入錯誤的次數。
+      角色是這三種、但密碼是臨時密碼的，登入成功回 200，mustChangePassword=true 並帶 role：
+      櫃檯 Web 先帶他去設定新密碼，改完後依回應的 role 告知這個帳號不能使用櫃檯畫面，並丟掉憑證。
+      請求不帶 client 時不做這一步，行為與原本相同。
+      這一步由後端把關而不只靠畫面，是因為只靠畫面時回應本身就說出了「密碼是對的」；
+      櫃檯看板與派單 API 另外各自檢查角色，拿到憑證的其他角色一樣進不去。
     tags:
     - 員工帳號與登入 API
     requestBody:
@@ -59,8 +70,10 @@ changeOwnPassword:
       但這條是完成改密的唯一合法路徑，必須放行，否則員工會卡死在改密畫面。
       強制改密情境（mustChangePassword=true）身分已由登入換得的 token 證明，不需要帶 currentPassword；
       自願變更情境必須帶，省略或空白回 422 current_password_required，比對不符回 401 current_password_invalid。
-      新密碼與目前密碼相同回 422 new_password_invalid；密碼強度規則（長度下限、字元組成）
-      truth 目前沒有定義，待 `/dsl-refine` 補口徑後再加，不在此處發明門檻。
+      新密碼必須至少 8 碼、含英文字母、含數字，不符合回 422 new_password_too_weak
+      （context.failedRules 列出沒過的規則）；與目前密碼相同回 422 new_password_invalid。
+      這組規則跟著帳號走，員工 App 與櫃檯 Web 改密碼都適用，只在改密碼當下檢查，既有的密碼不受影響。
+      六種角色（含 duty_manager）都能呼叫。
       改密成功後舊 token 立即失效，其他裝置上的既有登入要重新登入。
     tags:
     - 員工帳號與登入 API

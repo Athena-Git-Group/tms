@@ -60,6 +60,15 @@ tags:
   description: >-
     主管首頁的待辦：房務主管看待查房與待驗收，工務主管只看待驗收；格子數字與清單同一次往返、由舊到新排好、
     待查房排除主管本人清的房。主管動作本身沿用查房 API（createInspections）與工務單 API（verifyRepairTicket）。
+- name: 櫃檯看板與派單 API
+  description: >-
+    櫃檯 Web 專用，路徑都在 /desk 底下，只有 frontdesk、manager、duty_manager 可以呼叫。
+    讀取：全館看板（含待派單、樓層、本人今日張數、後端時間）、單筆詳情與歷程、當場回答的常用回覆。
+    寫入：把待派單的單派給房務或工務、派出後復原、當場回答並結案；三個寫入都必須帶 Idempotency-Key。
+- name: 員工事件串流 API
+  description: >-
+    伺服器推送的長連線，只送「哪一張單有變化」的訊號。櫃檯、主管、值班主管收全館，房務與工務收自己部門與自己名下的單；
+    含降級與恢復的訊號。路徑是 /staff/stream，不在 /api/v1 底下。
 paths:
   /alerts:
     $ref: './groups/營運管理/主管手動上報.yaml#/createAlerts'
@@ -205,6 +214,20 @@ paths:
     $ref: './groups/現場作業/主管工作台.yaml#/getManagerQueues'
   /desk-notes:
     $ref: './groups/現場作業/房間交辦.yaml#/createDeskNote'
+  /desk/board:
+    $ref: './groups/現場作業/櫃檯看板與派單.yaml#/getDeskBoard'
+  /desk/tasks/{id}:
+    $ref: './groups/現場作業/櫃檯看板與派單.yaml#/readDeskTask'
+  /desk/quick-replies:
+    $ref: './groups/現場作業/櫃檯看板與派單.yaml#/listDeskQuickReplies'
+  /desk/tasks/{id}/assign:
+    $ref: './groups/現場作業/櫃檯看板與派單.yaml#/deskAssignTask'
+  /desk/tasks/{id}/assign/undo:
+    $ref: './groups/現場作業/櫃檯看板與派單.yaml#/deskUndoAssign'
+  /desk/tasks/{id}/answer:
+    $ref: './groups/現場作業/櫃檯看板與派單.yaml#/deskAnswerTask'
+  /staff/stream:
+    $ref: './groups/現場作業/員工事件串流.yaml#/staffStream'
   /inspections/spot-checks:
     $ref: './groups/現場作業/查房.yaml#/createSpotCheck'
   /inspections/pass-rate:
@@ -464,6 +487,36 @@ components:
       $ref: './components/schemas/房間記憶與問一下.yaml#/KbEscalation'
     KbReplyRequest:
       $ref: './components/schemas/房間記憶與問一下.yaml#/KbReplyRequest'
+    DeskBoard:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskBoard'
+    DeskMyToday:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskMyToday'
+    DeskTask:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskTask'
+    DeskGuestText:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskGuestText'
+    DeskTaskDetail:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskTaskDetail'
+    DeskTimelineEntry:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskTimelineEntry'
+    DeskQuickReply:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskQuickReply'
+    DeskAssignRequest:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskAssignRequest'
+    DeskAnswerRequest:
+      $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskAnswerRequest'
+    StaffStreamInit:
+      $ref: './components/schemas/員工事件串流.yaml#/StaffStreamInit'
+    StaffStreamResync:
+      $ref: './components/schemas/員工事件串流.yaml#/StaffStreamResync'
+    StaffStreamTask:
+      $ref: './components/schemas/員工事件串流.yaml#/StaffStreamTask'
+    StaffStreamHeartbeat:
+      $ref: './components/schemas/員工事件串流.yaml#/StaffStreamHeartbeat'
+    StaffStreamDegraded:
+      $ref: './components/schemas/員工事件串流.yaml#/StaffStreamDegraded'
+    StaffStreamRecovered:
+      $ref: './components/schemas/員工事件串流.yaml#/StaffStreamRecovered'
   responses:
     BadRequest:
       $ref: './components/responses.yaml#/BadRequest'

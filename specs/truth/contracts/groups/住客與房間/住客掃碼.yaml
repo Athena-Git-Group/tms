@@ -25,7 +25,9 @@ listGuestRequestsAndcreateGuestRequest:
   get:
     operationId: listGuestRequests
     summary: 住客查看自己本次住宿的需求
-    description: 只用 session 綁定的 reservation_id 過濾，不按房號查（基線 FR-005）。
+    description: >-
+      只用 session 綁定的 reservation_id 過濾，不按房號查（基線 FR-005）。
+      櫃檯當場回答的需求，回應的 answer 帶回覆全文，住客的進度頁據此顯示櫃檯的回覆。
     tags:
     - 住客掃碼 API
     parameters:

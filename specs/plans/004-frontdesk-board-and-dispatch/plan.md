@@ -174,7 +174,7 @@ tms/                             # 既有後端，這一包直接共用
 - **平行分析介面**：
   - 介面 1 至 7（七個畫面介面）→ 合併成一次 `/ui-plan` 委派。七個介面寫進同一份畫面規劃（`ui/`），分開委派會互相覆寫。
   - 介面 8（資料）→ 一次 `/data-plan` 委派。
-- **輸入**：`spec.md`、`research.md`、`features/acceptance/`、原型；`/data-plan` 另讀 `specs/truth/data/data-model.dbml` 與本檔「後端現況的落差」。
+- **輸入**：`spec.md`、`research.md`、`features/acceptance/`、原型（https://claude.ai/artifact/5XBxgcmdJoaXxqSSRxcbek 的「櫃檯 APP」頁，不在 repo 裡）；`/data-plan` 另讀 `specs/truth/data/data-model.dbml` 與本檔「後端現況的落差」。
 - **輸出**：`ui/`（畫面清單、每個畫面的文字與狀態、每個畫面要哪些資料）；更新後的 `data-model.dbml` 與 `truth-delta.md` 的 `/data-plan` 段。
 - **分析重點**（`/ui-plan`）：
   - C-01 至 C-16、C-18 各自的畫面文字與行為是什麼？（C-17 是驗收門檻，不在這裡定字句）
@@ -229,7 +229,7 @@ tms/                             # 既有後端，這一包直接共用
 1. `/dsl-refine`：把 `features/acceptance/` 的 12 份驗收劇本整理成行為規格，櫃檯 Web 的寫進 `specs/truth/features/frontdesk-web/`，後端補的行為（復原、撞單細節、全館事件、角色放行、密碼規則）寫進 `specs/truth/features/backend/`。輸入是三輪的全部產出。
 2. `/tasks`：依 truth 與 `research.md` 排出實作工作，含兩個半日 spike（拖曳套件選型、觸控拖曳的自動化）。
 
-Wave 1 完成前不能跑 `/dsl-refine` 或 `/tasks`。
+Wave 2 完成之前（Wave 3 若啟動，則連同 Wave 3）不能跑 `/dsl-refine` 或 `/tasks`。
 
 ---
 
@@ -237,11 +237,11 @@ Wave 1 完成前不能跑 `/dsl-refine` 或 `/tasks`。
 
 以下逐項對過原始碼。後端路徑省略前綴 `tms/src/main/java/com/athena/tms/`。
 
-### 已知的 13 項
+### 畫面與規則直接要用到的落差
 
 | # | 落差 | 現況（檔案:行號） | 歸屬 |
 | --- | --- | --- | --- |
-| 1 | 看板查詢不分日期；飯店沒有時區設定 | `service/DeskService.java:36-39` 回全館所有單、新的在上；`service/DeskService.java:31-34` 待派單最舊在上。時區：程式與 migration 都沒有每家飯店的時區，`config/AdjustableClock.java:13` 用伺服器預設時區；`specs/truth/data/data-model.dbml:267` 明寫資料層沒有每租戶時區 | 查詢範圍 → `/api-plan`（介面 9）；時區 → `/data-plan`（介面 8），見待決第 1 題 |
+| 1 | 看板查詢不分日期；飯店沒有時區設定 | `service/DeskService.java:36-39` 回全館所有單、新的在上；`service/DeskService.java:31-34` 待派單最舊在上。時區：程式與 migration 都沒有每家飯店的時區，`config/AdjustableClock.java:13` 用伺服器預設時區；`specs/truth/data/data-model.dbml:267` 明寫資料層沒有每租戶時區 | 查詢範圍 → `/api-plan`（介面 9）；時區 → `/data-plan`（介面 8），見「已定的三件事」第 1 項 |
 | 2 | 回傳的單缺少畫面要的資料 | `dto/TaskResponse.java:8` 只有 20 個欄位，沒有房號、樓層、住客名、VIP、負責人姓名、取消原因、SOP 進度、單號。資料本身大多已存在：`data-model.dbml:150,152,193,590` | `/api-plan`（介面 9） |
 | 3 | 單的歷程沒有讀取端點 | `controller/` 下沒有任何讀取 `task_events` 的端點。契約有 `/task-events`（`specs/truth/contracts/openapi.yaml:134`），但不分單、也沒有實作 | `/api-plan`（介面 9） |
 | 4 | 沒有派出後復原 | `dto/TriageDecisionRequest.java:3` 只有 `action`、`dept`、`note`；`service/DeskService.java:46-59` 只接受 `assign` 與 `answer`；`service/TaskEngine.java:93-96` 只有 `triage` 到 `pool`；`common/codes/TaskEventType.java:6-25` 沒有復原的事件值，也沒有拖曳標記 | 轉移與事件值 → `/data-plan`（介面 8）；動作與回應 → `/api-plan`（介面 10） |
@@ -249,13 +249,13 @@ Wave 1 完成前不能跑 `/dsl-refine` 或 `/tasks`。
 | 6 | 當場回答蓋掉住客原文；沒有 120 字上限；住客拿不到回覆 | `service/TaskEngine.java:100` 把回覆整個寫進 `tasks.note`，原本存在裡面的原文、語言、翻譯一起被蓋掉；`service/DeskService.java:53-55` 只檢查不是空白；`dto/GuestTaskView.java:7` 沒有回覆欄位 | 回覆存哪裡 → `/data-plan`（介面 8）；上限與住客讀取 → `/api-plan`（介面 10） |
 | 7 | 常用回覆只有住客讀得到；今日張數沒有端點 | 住客資訊頁只經 `controller/GuestController.java:46` 回傳（`dto/GuestHomeView.java:7`），`config/SecurityConfig.java:47` 限住客身分。`controller/TaskExecutionController.java:102` 的 `/me/today` 是同仁自己的單，不是派單張數 | `/api-plan`（介面 9）；張數怎麼算由 `/data-plan` 先確認 |
 | 8 | 非工務單沒有單號；三個時間只存在事件裡 | 單號只有工務單有：`data-model.dbml:590`。`tasks` 的時間欄位只有開工與完成（`data-model.dbml:185`）；查房時間在 `inspections`，取消與結案時間只在 `task_events` | `/data-plan`（介面 8） |
-| 9 | 登入回應沒有飯店名稱；新密碼規則後端沒有 | `dto/StaffLoginResponse.java:8-15` 七個欄位，沒有飯店名稱（資料在 `data-model.dbml:18`）。`service/StaffAccountLoginService.java:65-67,77-79` 只檢查必填與不能和目前密碼相同，沒有長度與字元規則 | `/api-plan`（介面 11） |
-| 10 | 事件串流不推全館事件 | `service/StreamConnection.java:57-61` 只推「同部門」或「被指派者」。**與線索的出入**：櫃檯不是完全收不到，待派單的單掛在 `frontdesk` 部門，所以櫃檯收得到住客新送單；但單一派出去，部門就換了，收件判斷讀的是單現在的部門（`service/TaskEventsSseConsumer.java:155`），連「派出」這一筆櫃檯自己都收不到，之後的認領、完成也收不到。主管的部門欄可以是空的，空的時候一筆都收不到 | `/api-plan`（介面 12） |
-| 11 | `duty_manager` 沒有放行 | `common/codes/StaffRole.java:11` 的清單沒有它；`config/SecurityConfig.java:48-51,59-60,69-71` 的每一條規則都沒有它。資料庫允許這個值：`tms/src/main/resources/db/migration/V7__duty_manager_role.sql:6` | `/api-plan`（介面 11），見待決第 3 題 |
+| 9 | 登入回應沒有飯店名稱；新密碼規則後端沒有 | `dto/StaffLoginResponse.java:8-15` 七個欄位，沒有飯店名稱（資料在 `data-model.dbml:18`）。`service/StaffAccountLoginService.java:65-66,77-78` 只檢查必填與不能和目前密碼相同，沒有長度與字元規則 | `/api-plan`（介面 11） |
+| 10 | 事件串流不推全館事件 | `service/StreamConnection.java:57-61` 只推「同部門」或「被指派者」。櫃檯不是完全收不到：待派單的單掛在 `frontdesk` 部門，所以櫃檯收得到住客新送單；但單一派出去，部門就換了，收件判斷讀的是單現在的部門（`service/TaskEventsSseConsumer.java:155`），連「派出」這一筆櫃檯自己都收不到，之後的認領、完成也收不到。主管的部門欄可以是空的，空的時候一筆都收不到 | `/api-plan`（介面 12） |
+| 11 | `duty_manager` 沒有放行 | `common/codes/StaffRole.java:11` 的清單沒有它；`config/SecurityConfig.java:48-51,59-60,69-71` 的每一條規則都沒有它。資料庫允許這個值：`tms/src/main/resources/db/migration/V7__duty_manager_role.sql:6`。唯一已經認得它的地方是查房提交：`common/codes/RolePermissions.java:7` 讓它通過 `controller/InspectionReviewController.java:55` 的權限檢查 | `/api-plan`（介面 11），見「已定的三件事」第 3 項 |
 | 12 | 櫃檯端點不在契約裡；契約有而程式沒有的端點 | `controller/DeskController.java:16,24,29,34` 是 `/desk/triage`、`/desk/triage/{taskId}`、`/desk/tasks`，不在 `/api/v1` 下；契約寫的是 `/tasks/{id}/triage`（`openapi.yaml:150`）。契約有而程式沒有：`/alerts`（`openapi.yaml:64`）、`/tasks` 清單（`:136`）、`/reservations`（`:106`）、`/rooms` 清單（`:120`）；`/rooms/{id}` 有實作（`controller/RoomController.java:25`） | 櫃檯會用到的 → `/api-plan`（介面 9、10）。`/alerts`、`/reservations`、`/rooms` 清單這一包用不到，**不在 004** |
-| 13 | 翻譯沒有來源 | `service/NoopGuestTextAdvisor.java:11-13` 永遠回空。**與線索的出入**：資料模型沒有翻譯欄位，但有位置：翻譯若存在，會以 `llm_translated` 這個鍵存在 `tasks.note` 的 JSON 裡（`service/GuestRequestService.java:134-137`），目前不會有任何一張單帶這個鍵 | 讓回傳帶出既有翻譯資料 → `/api-plan`（介面 9）；翻譯服務本身**不在 004** |
+| 13 | 翻譯沒有來源 | `service/NoopGuestTextAdvisor.java:11-13` 永遠回空。資料模型沒有翻譯欄位，但有位置：翻譯若存在，會以 `llm_translated` 這個鍵存在 `tasks.note` 的 JSON 裡（`service/GuestRequestService.java:134-137`），目前不會有任何一張單帶這個鍵 | 讓回傳帶出既有翻譯資料 → `/api-plan`（介面 9）；翻譯服務本身**不在 004** |
 
-### 這一輪新發現的落差
+### 登入、歷程與連線周邊的落差
 
 | # | 落差 | 現況（檔案:行號） | 歸屬 |
 | --- | --- | --- | --- |
@@ -268,14 +268,15 @@ Wave 1 完成前不能跑 `/dsl-refine` 或 `/tasks`。
 | N7 | 登入回應沒有員工編號 | `dto/StaffLoginResponse.java:8-15`。帳號卡與身分卡要顯示（FR-011、FR-012）；畫面可以用登入時輸入的值，但重新整理後要有來源 | `/api-plan`（介面 11）；`/ui-plan` 註明畫面怎麼保留 |
 | N8 | 回應沒有後端現在的時間 | 等待時間以瀏覽器時鐘計算時，櫃檯電腦時間不準就會算錯 | `/ui-plan` 先定算法，`/api-plan`（介面 9）決定要不要回傳 |
 | N9 | 事件值清單漏了工務單驗收的事件值 | `common/codes/TaskEventType.java:24-25` 宣告了 `repair_verification_failed` 卻沒放進清單。新增復原事件值時會動到同一份清單 | 不屬於 004 的需求；`/data-plan` 新增事件值時一併留意，實作時不要順手改掉既有行為 |
-| N10 | 住客進度頁的前端不在這個儲存庫 | `app/` 下只有 `bdd` 與 `mobile`。FR-073 要住客看得到回覆 | 後端回傳 → `/api-plan`（介面 10）；住客頁面本身見待決第 2 題 |
+| N10 | 住客進度頁的前端不在這個儲存庫 | `app/` 下只有 `bdd` 與 `mobile`。FR-073 要住客看得到回覆 | 後端回傳 → `/api-plan`（介面 10）；住客頁面本身見「已定的三件事」第 2 項 |
+| N11 | 主管延後沒有「延後到的時間」與「原因」 | `service/TaskEngine.java:243-245` 的主管延後只把狀態改成 `deferred`，不收時間也不收原因，`deferred` 事件的內容是空的；`data-model.dbml` 的 `tasks` 只有本人延後用的 `hold_reason` 與 `deferred_by_self`。延後中的卡片副標「{主管} 延後到 {時間}（{原因}）」、膠囊「到 {時間}」與狀態訊息卡（FR-035、FR-079）沒有資料來源。待認領的等待起算時間不在此列：既有事件推得出來（`service/TaskExecutionService.java:517`、`service/UnclaimedReminderScanJob.java:59`） | 不在 004：延後中卡片只顯示誰延後的；時間與原因隨延後功能在 005 處理 |
 
 ---
 
-## 需要使用者決定的事
+## 已定的三件事
 
-以下三題規劃 skill 自己定不了。沒有答覆時，各輪照「預設」進行。
+以下三件事規劃 skill 自己定不了，已由使用者決定，各輪照此進行。
 
-1. **飯店的時區要不要在這一包做成每家飯店一個設定？** FR-041 的「今天」以飯店當地日期為界，但後端目前所有「今天」都用同一個伺服器時區（`data-model.dbml:267`），003 的主管待辦也是這把尺。預設：沿用伺服器時區，不新增設定；多家飯店跨時區時再處理。
-2. **住客進度頁顯示回覆（FR-073）這一包做到哪裡？** 住客頁面的前端不在這個儲存庫。預設：這一包只做到「後端回給住客的資料帶得出回覆」，並以後端層級的驗收證明；住客頁面的顯示不排工作。
-3. **`duty_manager` 放行到哪裡？** FR-007 說值班主管在櫃檯畫面的權限與主管相同。預設：只放行櫃檯 Web 用到的介面（登入、改密碼、櫃檯讀寫、事件串流）；手機 App 的主管功能（查房、驗收、主管待辦）不在這一包放行。
+1. **飯店的時區沿用伺服器時區，不做成每家飯店一個設定。** FR-041 的「今天」以飯店當地日期為界，後端目前所有「今天」都用同一個伺服器時區（`data-model.dbml:267`），003 的主管待辦也是這把尺。多家飯店跨時區時再處理。
+2. **住客進度頁顯示回覆（FR-073）只做到後端。** 住客頁面的前端不在這個儲存庫。這一包只做到「後端回給住客的資料帶得出回覆」，並以後端層級的驗收證明；住客頁面的顯示不排工作。
+3. **`duty_manager` 只放行櫃檯 Web 用到的介面。** FR-007 說值班主管在櫃檯畫面的權限與主管相同，所以放行登入、改密碼、櫃檯讀寫、事件串流；手機 App 的主管功能（驗收、主管待辦）不在這一包放行，既有的查房提交維持現況不動。

@@ -1,0 +1,48 @@
+staffStream:
+  servers:
+  - url: /
+    description: 這條串流不在 /api/v1 底下，完整路徑就是 /staff/stream。
+  get:
+    operationId: staffStream
+    summary: 員工事件串流
+    description: >-
+      伺服器推送（Server-Sent Events）的長連線，告訴客戶端「哪一張單剛剛有變化」。訊號不帶單的內容，客戶端收到後自己重抓畫面上的資料。
+      以 Authorization: Bearer 帶登入憑證；瀏覽器內建的 EventSource 不能帶這個標頭，櫃檯 Web 用 fetch 讀回應串流。
+      housekeeping、engineering、frontdesk、manager、duty_manager 可以連線。
+
+
+      收得到哪些單的訊號，看連線者的角色：
+      frontdesk、manager、duty_manager 收全館（同一家飯店）每一張單的每一則事件，不看部門；
+      housekeeping、engineering 只收「單現在的部門等於自己的部門」或「單指派給自己」的事件。
+      另外，櫃檯派出後復原（triage_undone）的訊號也送給被收回的那個部門的連線，因為復原之後這張單已經不屬於該部門。
+
+
+      連上之後依序收到：一則 init、一則 resync；後端當下若處於降級，緊接著再收到一則 degraded。之後有事件就收到 task，
+      每 15 秒收到一則 heartbeat。各種訊號的內容見 StaffStreamInit、StaffStreamResync、StaffStreamTask、StaffStreamHeartbeat、
+      StaffStreamDegraded、StaffStreamRecovered。
+
+
+      降級與恢復：後端處理事件落後超過 10 秒，或連不上事件來源時，對所有連線送一則 degraded，表示接下來的訊號可能延遲或漏掉；
+      回到正常時送一則 recovered。每一則 heartbeat 也帶目前是不是降級，中途才連上或漏接 recovered 的客戶端靠它對齊。
+
+
+      櫃檯 Web 的用法：收到 task、resync、recovered 就重抓。出現下列任一情形就顯示「即時連線異常」並改成每 5 秒重抓一次：
+      連線中斷、超過 35 秒沒有收到任何訊號、收到 degraded、收到 degraded 為 true 的 heartbeat。
+      回到即時的條件是連線在線，而且收到 recovered 或 degraded 為 false 的 heartbeat；這時停止每 5 秒重抓，提醒自己消失。
+      斷線後客戶端自己重連，重連成功會再收到 init 與 resync。
+    tags:
+    - 員工事件串流 API
+    responses:
+      '200':
+        description: >-
+          事件串流。每一則是「event: 名稱」加「data: 一行 JSON」，名稱是 init、resync、task、heartbeat、degraded、recovered 其中之一，
+          data 的形狀見對應的 StaffStream* schema。
+        content:
+          text/event-stream:
+            schema:
+              type: string
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+    x-realtime-note: 這個操作本身就是即時通道；事件來自任務事件的訊息佇列，從發生到送達通常在幾秒內。

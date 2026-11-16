@@ -18,7 +18,7 @@ staff_accounts:
       description: bcrypt/argon2，絕不存明文
     role:
       type: string
-      description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 是值班主管）'
     dept:
       type: string
       description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
@@ -73,7 +73,7 @@ staff_accountsRequest:
       description: bcrypt/argon2，絕不存明文
     role:
       type: string
-      description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 是值班主管）'
     dept:
       type: string
       description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
@@ -100,6 +100,14 @@ LoginRequest:
     password:
       type: string
       description: 明文密碼，後端以 bcrypt/argon2 雜湊後比對 staff_accounts.passwordHash，絕不回傳或落地明文。
+    client:
+      type: string
+      enum:
+      - frontdesk_web
+      description: >-
+        從哪一個畫面登入，選填。員工 App 不帶，登入規則與不帶時完全相同、不看角色。
+        櫃檯 Web 一律帶 frontdesk_web：這時後端在密碼比對正確之後再看角色，只有 frontdesk、manager、duty_manager 能用櫃檯畫面
+        （規則見 staffAccountsLogin）。
 ChangePasswordRequest:
   type: object
   description: >-
@@ -121,9 +129,10 @@ ChangePasswordRequest:
       type: string
       description: >-
         新的明文密碼，後端以 bcrypt/argon2 重新雜湊寫入 staff_accounts.passwordHash。
+        必須至少 8 碼、含英文字母、含數字，任何一條不符合回 422 new_password_too_weak
+        （context.failedRules 列出沒過的規則：min_length、letter_required、digit_required）。
         與目前密碼相同回 422 new_password_invalid，message 為「新密碼不能和目前密碼相同」。
-        密碼強度規則（長度下限、字元組成）truth 目前沒有定義，後端實作前需由 `/dsl-refine`
-        補口徑；在那之前這條端點只擋「與目前密碼相同」這一種，不自行發明長度門檻。
+        兩種都不符合時回 new_password_too_weak。
 LoginResponse:
   type: object
   description: 登入成功的回應形狀，銜接 techstack 已拍板的 JWT（TTL 12h）。
@@ -132,6 +141,8 @@ LoginResponse:
   - expiresAt
   - staffId
   - name
+  - loginId
+  - hotelName
   - role
   - mustChangePassword
   properties:
@@ -147,13 +158,19 @@ LoginResponse:
       format: uuid
     name:
       type: string
+    loginId:
+      type: string
+      description: 員工編號（staff_accounts.login_id），就是帳號上存的值。櫃檯 Web 的帳號卡與身分卡用它，重新整理後不必靠使用者當初輸入的字。
+    hotelName:
+      type: string
+      description: 這個帳號所屬飯店的名稱（tenants.name）。櫃檯 Web 的側欄副標與身分卡用它。
     dept:
       type: string
       nullable: true
       description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
     role:
       type: string
-      description: 'CHECK: frontdesk|housekeeping|engineering|manager|owner'
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 是值班主管）'
     mustChangePassword:
       type: boolean
       description: true 表示這是臨時密碼登入，必須先設定新密碼才能繼續使用；完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
