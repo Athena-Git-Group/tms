@@ -38,6 +38,14 @@ abstract final class TmsColors {
 
   static const Color onOtherContainer = Color(0xFF6B4E00);
 
+  static const Color redoContainer = Color(0xFFFFF1C2);
+
+  static const Color onRedoContainer = Color(0xFF6B4E00);
+
+  static const Color scheduledContainer = Color(0xFFEDE7FF);
+
+  static const Color onScheduledContainer = Color(0xFF4B2FA6);
+
   static const Color neutralContainer = Color(0xFFE5E5EA);
 
   static const Color onNeutralContainer = Color(0xFF3C3C43);

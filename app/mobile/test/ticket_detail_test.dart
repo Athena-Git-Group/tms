@@ -27,6 +27,8 @@ void main() {
     String? resolutionNote,
     bool isUrgent = false,
     DateTime? createdAt,
+    String origin = 'reported',
+    String? reporterName = '阿美',
   }) {
     return RepairTicketDetail(
       taskId: 't-1',
@@ -36,7 +38,8 @@ void main() {
       category: 'air_conditioning',
       isUrgent: isUrgent,
       state: state,
-      reporterName: '阿美',
+      reporterName: reporterName,
+      origin: origin,
       createdAt: createdAt,
       description: description,
       assigneeName: assigneeName,
@@ -492,6 +495,40 @@ void main() {
 
       expect(find.text('已完修 · 等主管驗收'), findsOneWidget);
       expect(find.textContaining('急件 · VIP'), findsNothing);
+    });
+
+    testWidgets('定期保養單寫系統排程，不把資料側掛著的那位員工當成報修人', (tester) async {
+      await tester.pumpWidget(
+        engineering(
+          ticket(state: 'accepted', origin: 'scheduled', reporterName: null),
+        ),
+      );
+
+      // 標題列那一段與資訊卡的「報修人」兩處都要寫系統排程。
+      expect(find.textContaining('系統排程'), findsWidgets);
+      // 資料側掛著的那位員工不能出現，也不能退成沒有值的破折號。
+      expect(find.textContaining('阿美'), findsNothing);
+      expect(find.text('—'), findsNothing);
+    });
+
+    testWidgets('一般報修單照常寫報修人', (tester) async {
+      await tester.pumpWidget(engineering(ticket(state: 'accepted')));
+
+      expect(find.textContaining('阿美 報修'), findsWidgets);
+      expect(find.textContaining('系統排程'), findsNothing);
+    });
+
+    testWidgets('還沒有人接的單用等待的灰色，不跟進行中的品牌色混在一起', (tester) async {
+      await tester.pumpWidget(engineering(ticket(state: 'pool')));
+
+      final slot = tester.widget<TmsCalloutSlot>(find.byType(TmsCalloutSlot));
+      final spec = TmsCalloutSlot.highestPriority(slot.candidates);
+      expect(spec, isA<TmsStatusCallout>());
+      expect((spec! as TmsStatusCallout).tone, TmsCalloutTone.neutral);
+      expect(
+        TmsCalloutTone.neutral.background,
+        TmsColors.neutralContainer,
+      );
     });
 
     testWidgets('沒有任何一條狀態列成立時那一塊不佔空間', (tester) async {

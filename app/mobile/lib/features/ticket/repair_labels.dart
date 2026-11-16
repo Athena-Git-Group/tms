@@ -149,6 +149,12 @@ TmsStatusAppearance repairStatusAppearance({
         background: TmsColors.successContainer,
         foreground: TmsColors.onSuccessContainer,
       );
+    case 'closed':
+      return TmsStatusAppearance(
+        text: _repairChipText(state),
+        background: TmsColors.brandPrimaryDark,
+        foreground: TmsColors.brandOnPrimary,
+      );
     default:
       return TmsStatusAppearance(
         text: _repairChipText(state),
@@ -211,6 +217,15 @@ enum RepairSummaryAudience {
 
   statusLine,
 }
+
+/// 定期保養單由排程建立，沒有真實報修人（後端 `reporterName` 回 null），
+/// 依雛形 `ui/ticket.html:90` 一律顯示「系統排程」而不是資料側掛著的那位員工。
+String repairReporterText(RepairTicketDetail ticket) =>
+    ticket.origin == 'scheduled' ? '系統排程' : ticket.reporterNameText;
+
+/// 標題列與時間軸用的那一段：有報修人時寫「{姓名} 報修」，定期保養單只寫「系統排程」。
+String repairReporterMetaText(RepairTicketDetail ticket) =>
+    ticket.origin == 'scheduled' ? '系統排程' : '${ticket.reporterNameText} 報修';
 
 String repairStatusSummaryText(
   RepairTicketDetail ticket, {

@@ -6,6 +6,7 @@ import 'package:tms_staff_app/core/push_gateway.dart';
 import 'package:tms_staff_app/features/home/home_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
+import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
 void main() {
@@ -109,6 +110,11 @@ void main() {
     expect(find.bySemanticsIdentifier('ticket.screen'), findsOneWidget);
     expect(find.textContaining('W-0620'), findsWidgets);
     expect(find.bySemanticsIdentifier('task.screen'), findsNothing);
+    // 從推播進來的單，驗收通過後要留在詳情頁，不能被當成「從待驗收清單進來」。
+    expect(
+      tester.widget<TicketScreen>(find.byType(TicketScreen)).entry,
+      TicketEntry.elsewhere,
+    );
 
     handle.dispose();
   });

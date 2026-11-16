@@ -158,8 +158,8 @@ void main() {
     expectChip(
       'closed',
       '已結案',
-      TmsColors.neutralContainer,
-      TmsColors.onNeutralContainer,
+      TmsColors.brandPrimaryDark,
+      TmsColors.brandOnPrimary,
     );
   });
 
@@ -229,5 +229,59 @@ void main() {
       paddingOf(TmsTag),
       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     );
+  });
+
+  testWidgets('重修與定期保養各有自己的色票，不跟琥珀色的提醒標籤混在一起', (tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Column(
+          children: const [
+            TmsTag(label: '重修後再驗', tone: TmsTagTone.redo),
+            TmsTag(label: '定期保養', tone: TmsTagTone.scheduled),
+            TmsTag(label: '無法修復', tone: TmsTagTone.warn),
+          ],
+        ),
+      ),
+    );
+
+    ({Color background, Color foreground}) tagColors(String label) {
+      final tag = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(TmsTag),
+      );
+      final container = tester.widget<Container>(
+        find.descendant(of: tag, matching: find.byType(Container)),
+      );
+      final text = tester.widget<Text>(find.text(label));
+      return (
+        background: (container.decoration! as BoxDecoration).color!,
+        foreground: text.style!.color!,
+      );
+    }
+
+    expect(tagColors('重修後再驗'), (
+      background: TmsColors.redoContainer,
+      foreground: TmsColors.onRedoContainer,
+    ));
+    expect(tagColors('定期保養'), (
+      background: TmsColors.scheduledContainer,
+      foreground: TmsColors.onScheduledContainer,
+    ));
+    expect(tagColors('無法修復'), (
+      background: TmsColors.brandAccentContainer,
+      foreground: TmsColors.brandOnAccentContainer,
+    ));
+  });
+
+  test('標籤色票的值逐字對上雛形 manager.css', () {
+    // .chip.redo（manager.css:71）
+    expect(TmsColors.redoContainer, const Color(0xFFFFF1C2));
+    expect(TmsColors.onRedoContainer, const Color(0xFF6B4E00));
+    // .chip.scheduled（manager.css:69）
+    expect(TmsColors.scheduledContainer, const Color(0xFFEDE7FF));
+    expect(TmsColors.onScheduledContainer, const Color(0xFF4B2FA6));
+    // .chip.closed（manager.css:73）＝ --brand-primary-dark（manager.css:2）
+    expect(TmsColors.brandPrimaryDark, const Color(0xFF0A5C64));
   });
 }

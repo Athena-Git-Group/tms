@@ -9,6 +9,10 @@ enum TmsTagTone {
 
   warn,
 
+  redo,
+
+  scheduled,
+
   danger,
 
   neutral,
@@ -32,6 +36,10 @@ class TmsTag extends StatelessWidget {
         return TmsColors.brandContainer;
       case TmsTagTone.warn:
         return TmsColors.brandAccentContainer;
+      case TmsTagTone.redo:
+        return TmsColors.redoContainer;
+      case TmsTagTone.scheduled:
+        return TmsColors.scheduledContainer;
       case TmsTagTone.danger:
         return TmsColors.errorContainer;
       case TmsTagTone.neutral:
@@ -49,6 +57,10 @@ class TmsTag extends StatelessWidget {
         return TmsColors.brandOnContainerStrong;
       case TmsTagTone.warn:
         return TmsColors.brandOnAccentContainer;
+      case TmsTagTone.redo:
+        return TmsColors.onRedoContainer;
+      case TmsTagTone.scheduled:
+        return TmsColors.onScheduledContainer;
       case TmsTagTone.danger:
         return TmsColors.onErrorContainer;
       case TmsTagTone.neutral:

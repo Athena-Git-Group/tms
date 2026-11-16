@@ -309,7 +309,9 @@ class TicketDetailHousekeeping extends StatelessWidget {
     } else if (downgrade != null) {
       firstNote = '主管改為一般件：$downgrade';
     } else {
-      firstNote = '房務 ${detail.reporterNameText} 報修';
+      firstNote = detail.origin == 'scheduled'
+          ? '系統排程'
+          : '房務 ${detail.reporterNameText} 報修';
     }
     final notes = <String?>[
       firstNote,
@@ -453,9 +455,10 @@ class TicketDetailHousekeeping extends StatelessWidget {
 
   String _reporterValue(RepairTicketDetail detail) {
     final createdAt = detail.createdAt;
+    final reporter = repairReporterText(detail);
     return createdAt == null
-        ? detail.reporterNameText
-        : '${detail.reporterNameText} · ${repairClockText(createdAt)}';
+        ? reporter
+        : '$reporter · ${repairClockText(createdAt)}';
   }
 
   String? _actionNote(RepairTicketDetail detail) {
