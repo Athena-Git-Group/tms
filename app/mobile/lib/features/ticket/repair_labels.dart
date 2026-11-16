@@ -91,10 +91,6 @@ String repairResolutionText(String resolutionType) =>
 
 String repairStateText(String state) {
   switch (state) {
-    case 'pending_review':
-      return '等主管審核';
-    case 'rejected':
-      return '主管未核准';
     case 'pool':
       return '待認領';
     case 'accepted':
@@ -124,12 +120,6 @@ TmsStatusAppearance repairStatusAppearance({
     );
   }
   switch (state) {
-    case 'pending_review':
-      return TmsStatusAppearance(
-        text: _repairChipText(state),
-        background: TmsColors.otherContainer,
-        foreground: TmsColors.onOtherContainer,
-      );
     case 'pool':
       return TmsStatusAppearance(
         text: _repairChipText(state),

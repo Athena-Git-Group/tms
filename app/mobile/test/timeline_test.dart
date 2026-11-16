@@ -58,9 +58,9 @@ void main() {
       host([
         step('房務送出', TmsTimelineStatus.done, time: '09:12'),
         step(
-          '主管審核',
+          '工務接單',
           TmsTimelineStatus.done,
-          note: '系統判定急件（規則），略過審核直接送工務，已同步通知主管',
+          note: '系統判定急件（規則），直接送工務，已同步通知主管',
           time: '09:12',
         ),
         step('工務處理', TmsTimelineStatus.current, time: '09:30'),
@@ -70,7 +70,7 @@ void main() {
 
     expect(find.text('房務送出'), findsOneWidget);
     expect(find.text('完修'), findsOneWidget);
-    expect(find.text('系統判定急件（規則），略過審核直接送工務，已同步通知主管'), findsOneWidget);
+    expect(find.text('系統判定急件（規則），直接送工務，已同步通知主管'), findsOneWidget);
     expect(find.text('09:30'), findsOneWidget);
     expect(find.text('11:00'), findsNothing);
   });
@@ -79,7 +79,7 @@ void main() {
     await tester.pumpWidget(
       host([
         step('房務送出', TmsTimelineStatus.done, time: '09:12'),
-        step('主管未核准', TmsTimelineStatus.failed, note: '這間房本週已修過兩次', time: '09:20'),
+        step('驗收不通過', TmsTimelineStatus.failed, note: '這間房本週已修過兩次', time: '09:20'),
         step('工務處理', TmsTimelineStatus.pending),
       ]),
     );
@@ -93,7 +93,7 @@ void main() {
       TmsColors.quaternaryLabel,
     );
     expect(
-      tester.widget<Text>(find.text('主管未核准')).style!.color,
+      tester.widget<Text>(find.text('驗收不通過')).style!.color,
       TmsColors.label,
     );
   });
@@ -102,7 +102,7 @@ void main() {
     await tester.pumpWidget(
       host([
         step('房務送出', TmsTimelineStatus.done, time: '09:12'),
-        step('主管審核', TmsTimelineStatus.done, time: '09:18'),
+        step('工務接單', TmsTimelineStatus.done, time: '09:18'),
         step('工務處理', TmsTimelineStatus.current, time: '09:30'),
         step('完修', TmsTimelineStatus.pending),
       ]),
@@ -117,7 +117,7 @@ void main() {
     final wrapped = <String>[];
     await tester.pumpWidget(
       host([
-        for (final label in const ['房務送出', '主管審核', '工務處理', '完修'])
+        for (final label in const ['房務送出', '工務接單', '工務處理', '完修'])
           TmsTimelineStep(
             label: label,
             status: TmsTimelineStatus.pending,
@@ -129,7 +129,7 @@ void main() {
       ]),
     );
 
-    expect(wrapped, ['房務送出', '主管審核', '工務處理', '完修']);
+    expect(wrapped, ['房務送出', '工務接單', '工務處理', '完修']);
     expect(tester.takeException(), isNull);
   });
 }

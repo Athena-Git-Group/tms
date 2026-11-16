@@ -12,12 +12,11 @@ import 'package:tms_staff_app/features/ticket/ticket_detail_housekeeping.dart';
 
 void main() {
   RepairTicketDetail ticket({
-    String state = 'pending_review',
+    String state = 'pool',
     String? roomNo = '305',
     bool isPublicArea = false,
     String? assigneeName,
     String? description,
-    String? rejectReason,
     String? urgentDowngradeReason,
     String? urgentRule,
     String? verifiedBy,
@@ -46,7 +45,6 @@ void main() {
       lastVerifyFailedReason: lastVerifyFailedReason,
       lastVerifyFailedBy: lastVerifyFailedBy,
       lastVerifyFailedAt: lastVerifyFailedAt,
-      rejectReason: rejectReason,
       urgentDowngradeReason: urgentDowngradeReason,
     );
   }

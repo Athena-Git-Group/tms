@@ -56,7 +56,7 @@ void main() {
               roomNo: '305',
               category: 'plumbing_electrical',
               isUrgent: false,
-              state: 'rejected',
+              state: 'pool',
               reporterName: '阿美',
             ),
           ],
@@ -69,6 +69,6 @@ void main() {
     expect(find.text('W-0410 · 冷氣'), findsOneWidget);
     expect(find.text('急件'), findsOneWidget);
     expect(find.text('W-0411 · 水電'), findsOneWidget);
-    expect(find.text('主管未核准'), findsOneWidget);
+    expect(find.text('待認領'), findsOneWidget);
   });
 }

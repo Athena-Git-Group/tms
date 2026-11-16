@@ -318,7 +318,7 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
             ],
           ),
         ),
-        if (_photos.isEmpty)
+        if (_photos.isEmpty && repairResolutionNeedsPhoto(_selectedResolution))
           const Padding(
             padding: EdgeInsets.only(
               top: TmsSpacing.sm,

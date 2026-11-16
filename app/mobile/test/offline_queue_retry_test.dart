@@ -181,7 +181,7 @@ class _FakeBackend {
         'roomNo': '310',
         'category': 'air_conditioning',
         'isUrgent': false,
-        'state': 'pending_review',
+        'state': 'pool',
         'reporterName': '阿美',
       }));
       await request.response.close();

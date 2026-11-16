@@ -68,6 +68,18 @@ void main() {
     expect(find.text('修繕完成必須拍照。沒有相機權限時，可以從相簿選擇。'), findsOneWidget);
   });
 
+  testWidgets('選不需處理時不講「修繕完成必須拍照」', (tester) async {
+    await tester.pumpWidget(host());
+
+    expect(find.text('修繕完成必須拍照。沒有相機權限時，可以從相簿選擇。'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('不需處理'));
+    await tester.tap(find.text('不需處理'));
+    await tester.pump();
+
+    expect(find.text('修繕完成必須拍照。沒有相機權限時，可以從相簿選擇。'), findsNothing);
+  });
+
   testWidgets('置底鈕寫「送出完修」，照片還沒拍時按不下去（Main.dc.html:3995）', (
     tester,
   ) async {

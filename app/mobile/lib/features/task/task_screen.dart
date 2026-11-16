@@ -902,18 +902,13 @@ class _TaskScreenState extends State<TaskScreen> {
       );
     }
     if (_repairTickets.isNotEmpty) {
-      final rejected = _repairTickets.any(
-        (ticket) => ticket.state == 'rejected',
-      );
       rows.add(
         TmsSemantics(
           id: 'task.info-row.repair-tickets',
           child: _InfoRow(
             label: '工務單',
             value: _repairTicketsValue(),
-            valueColor: rejected
-                ? TmsColors.onErrorContainer
-                : TmsColors.quaternaryLabel,
+            valueColor: TmsColors.quaternaryLabel,
             onTap: () {
               if (_repairTickets.length == 1) {
                 _openTicket(_repairTickets.single.taskId);

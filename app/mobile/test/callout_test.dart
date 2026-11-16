@@ -215,7 +215,7 @@ void main() {
   });
 
   testWidgets('文字鍵可以按，只有會換頁的那一顆帶箭頭', (tester) async {
-    var resubmitted = 0;
+    var retried = 0;
     var opened = 0;
     await tester.pumpWidget(
       slot([
@@ -224,7 +224,7 @@ void main() {
           TmsCalloutTone.warn,
           '請勿打擾',
           actions: [
-            TmsCalloutAction(label: '補資料再送出', onPressed: () => resubmitted++),
+            TmsCalloutAction(label: '補拍照片', onPressed: () => retried++),
             TmsCalloutAction(
               label: '查看工務單',
               showsChevron: true,
@@ -235,9 +235,9 @@ void main() {
       ]),
     );
 
-    await tester.tap(find.text('補資料再送出'));
+    await tester.tap(find.text('補拍照片'));
     await tester.tap(find.text('查看工務單'));
-    expect(resubmitted, 1);
+    expect(retried, 1);
     expect(opened, 1);
     expect(paintedShapes, findsNWidgets(2));
   });
