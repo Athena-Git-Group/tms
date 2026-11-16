@@ -103,3 +103,27 @@ T150 成立：員工四個動作（`task_screen.dart:256、284、301`、`pool_sc
 1. **殘留「主管審核」文案要改，而且本來就在 003 範圍內**（依據 `plan.md:108`），不是待決上游。`repair_sheet.dart:240` 的送出鈕改成「送出給工務」／「送出急件」（急件那句的「直接給工務」拿掉「直接」——沒有審核之後不存在「不直接」的另一條路）；`repair_ticket_form_sheet.dart:499、507` 兩句說明拿掉「不經主管審核」「不用主管審核」。連帶改 `task_sheets_parity_test.dart`、`eng_create_ticket_test.dart` 的對應斷言。
 2. **主管版工務單詳情不該有自己的畫面根 id**。truth 寫明主管視角「以工務視角的版面為底，只換底部動作列」，是同一張畫面同一個根。所以刪掉宣告了卻從未畫出來的 `ManagerIds.ticket = 'managerTicket'`，`PushThenSteps.java:82` 等它的那段一併拿掉（改前那段跑不到，所以 4R 才會綠；truth 一旦加主管點推播進工務單的場景就會必紅）。
 3. **開放 actuator**（使用者 2026-11-16 裁示）。`SecurityConfig.java:46` 加 `GET /actuator/health`、`/actuator/health/**` 的 `permitAll()`，其餘 actuator 端點仍被 `anyRequest().denyAll()` 擋住。
+
+## 後端回歸（T154）：Testcontainers 的真正死因與 003 的判定
+
+**Testcontainers 連不上 Docker 的根因不是 OrbStack 不相容。** 錯誤訊息是 `client version 1.32 is too old. Minimum supported API version is 1.40`：OrbStack 帶的 Docker 是 29.8.2，已移除 API 1.40 以下，而 docker-java 在沒被告知版本時會退回 1.32。試過 `DOCKER_HOST`、`DOCKER_API_VERSION`、升 Testcontainers 到 1.21.3 都無效，**解法是把 `-Dapi.version=1.44` 傳進 surefire 的 forked JVM**：
+
+```
+JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
+  ./tms/mvnw -f tms/pom.xml test -Dtest=RunTruthFeaturesTest \
+  -DargLine="-Dapi.version=1.44"
+```
+
+**不能用 `-Dcucumber.features` 只跑 003 的目錄。** `RunTruthFeaturesTest` 用 `@SelectDirectories` 選檔，外部一旦塞 `cucumber.features`，glue 限制就失效，`BddSpringConfiguration` 與 `integration.stepdefs.CucumberSpringConfiguration` 兩個 `@CucumberContextConfiguration` 會相撞。只能跑全套再過濾。
+
+**003 的後端範圍判定：乾淨。** 全套 97 個紅場景裡，落在 003 Test Scope 的只有 4 個，而且同一個根因——004 的 commit `ff4909e` 在 `主管待辦空清單與權限.feature:11` 與 `推播/員工推播事件.feature:5` 加了「值班主管」，但 `Terms.java:140` 的部門對照表還不認識它，Background 就炸了，整支檔被拖下水。truth 那邊其實已經寫好（`backend/dsl.md:44` 訂了「值班主管 → role `duty_manager`」、`:59` 說明它沒有部門），只是 stepdef 沒跟上。其餘 93 個紅全在 004 新建的 `櫃檯看板與派單/`、`員工事件串流/` 底下。**這 4 筆是 004 的待辦，不是 003 的退步。**
+
+## 回交上游：BDD harness 的測試時鐘 bug
+
+`首頁今日進度.feature` 的「預估剩餘工時」必紅（期望 135、實際 145），**不是產品缺陷，也不是 flake**。
+
+算術：未完成的單扣掉已做分鐘是 135，完全不扣是 150，實際 145 = 150 − 5。也就是 310（已中斷，已做 5 分）有扣，305（進行中，已做 10 分）沒扣。
+
+根因：`app/bdd-support/.../BackendChannel.java:668` 在建 `doing` 狀態的任務時，用 **`OffsetDateTime.now()` 真實牆鐘**回推 `segment_started_at`；而後端 `TaskExecutionService.java:807` 的 `remainingMinutesOf()` 用的是被 `/api/v1/test/clock` 撥到劇本時間（10:00）的 `Clock`。於是 `segmentStartedAt.isBefore(now)` 為 false，那段 live segment 整個被跳過。310 是 `interrupted`，走 `:671` 那一支（`worked_sec = ?, segment_started_at = NULL`），不依賴時鐘，所以正常。
+
+只要牆鐘晚於劇本的「現在時間是 10:00」就必紅，只有早上 10 點前跑才會碰巧綠。修法在 harness：`:668` 與 `:449` 的 `backdateWorkStart()` 都要改成以後端測試時鐘為基準回推。這支 feature 不在 003 Test Scope 內，`app/bdd-support/**` 又是 004 的地盤，所以 003 不處理。
