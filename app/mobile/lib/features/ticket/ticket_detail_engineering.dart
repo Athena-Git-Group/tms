@@ -25,6 +25,7 @@ class TicketDetailEngineering extends StatelessWidget {
     required this.onReleaseToPool,
     required this.onComplete,
     required this.onOpenPhoto,
+    this.managerView = false,
     this.showWorkerActions = true,
     this.bottomBar,
   });
@@ -40,6 +41,8 @@ class TicketDetailEngineering extends StatelessWidget {
   final VoidCallback onReleaseToPool;
   final VoidCallback onComplete;
   final void Function(int index) onOpenPhoto;
+
+  final bool managerView;
 
   final bool showWorkerActions;
 
@@ -320,10 +323,10 @@ class TicketDetailEngineering extends StatelessWidget {
           TmsStatusCallout(
             kind: TmsCalloutKind.ticketInPool,
             tone: TmsCalloutTone.info,
-            title: repairStateText(detail.state),
+            title: repairStatusSummaryText(detail),
             body: '還沒有人認領這張單，其他工務同仁都接得到。',
             idPrefix: 'ticket.status-summary-card',
-            wrap: (node) => _summaryWrap(node, repairStateText(detail.state)),
+            wrap: (node) => _summaryWrap(node, repairStatusSummaryText(detail)),
           ),
         if (detail.isUrgent)
           TmsStatusCallout(
@@ -339,19 +342,28 @@ class TicketDetailEngineering extends StatelessWidget {
   }
 
   TmsCalloutSpec? _fixedCallout(RepairTicketDetail detail) {
-    if (repairCompletionStage(detail) == RepairCompletionStage.notCompleted) {
+    final stage = repairCompletionStage(detail);
+    if (stage == RepairCompletionStage.notCompleted) {
       return null;
     }
-    final title = repairStatusSummaryText(detail);
     final resolutionType = detail.resolutionType;
+    final shortResult = repairResolutionShortText(resolutionType);
+    final managerAwaiting =
+        managerView && stage == RepairCompletionStage.awaitingVerification;
+    final summary = repairStatusSummaryText(detail);
+    final title = managerAwaiting && shortResult.isNotEmpty
+        ? '$summary · $shortResult'
+        : summary;
     final result =
         resolutionLabel ??
         (resolutionType == null ? null : repairResolutionText(resolutionType));
     final parts = <String>[
-      if (result != null) '$result。',
+      if (!managerAwaiting && result != null && result.isNotEmpty) '$result。',
       if (detail.resolutionNote != null) '說明：${detail.resolutionNote}。',
     ];
-    final fallback = detail.state == 'done' ? '等主管驗收後這張單就結案。' : '這張單已結案。';
+    final fallback = stage == RepairCompletionStage.awaitingVerification
+        ? '等主管驗收後這張單就結案。'
+        : '這張單已結案。';
     return TmsStatusCallout(
       kind: TmsCalloutKind.ticketFixed,
       tone: TmsCalloutTone.success,

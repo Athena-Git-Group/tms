@@ -162,8 +162,8 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
           ),
         ),
         children: [
-          _photoCard(),
           _resultList(),
+          _photoCard(),
           _noteCard(),
           if (hint != null)
             Padding(
@@ -222,6 +222,10 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
     );
   }
 
+  String get _notePlaceholder => _selectedResolution == 'no_action_needed'
+      ? '寫下為什麼不需要處理，例如：燈正常，開關在門邊'
+      : '例如：更換冷氣濾網、補充冷媒';
+
   Widget _noteCard() {
     const label = '處理說明（選填）';
     return TmsCard(
@@ -246,7 +250,7 @@ class _TicketCompleteSheetState extends State<TicketCompleteSheet> {
             id: 'completeSheet.note-field',
             child: CupertinoTextField(
               controller: _noteController,
-              placeholder: '例如：更換冷氣濾網、補充冷媒',
+              placeholder: _notePlaceholder,
               maxLines: 2,
               maxLength: _maxNoteLength,
               padding: EdgeInsets.zero,

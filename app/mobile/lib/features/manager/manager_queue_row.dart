@@ -5,6 +5,7 @@ import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_tag.dart';
+import '../ticket/repair_labels.dart';
 import 'manager_ids.dart';
 
 class ManagerQueueTag {
@@ -53,10 +54,11 @@ class ManagerQueueRowData {
       title: item.title,
       details: [if (item.assigneeName != null) '${item.assigneeName} 完修'],
       tags: [
-        if (item.resolutionType case final resolutionType?)
+        if (repairResolutionShortText(item.resolutionType) case final label
+            when label.isNotEmpty)
           ManagerQueueTag(
-            _resolutionText[resolutionType] ?? resolutionType,
-            resolutionType == 'cannot_fix'
+            label,
+            item.resolutionType == 'cannot_fix'
                 ? TmsTagTone.warn
                 : TmsTagTone.neutralStrong,
           ),
@@ -94,12 +96,6 @@ class ManagerQueueRowData {
 
   static String _where(String? roomNo, bool isPublicArea, String title) =>
       isPublicArea || roomNo == null ? title : roomNo;
-
-  static const Map<String, String> _resolutionText = {
-    'fixed': '已修好',
-    'temporary': '暫時處理',
-    'cannot_fix': '無法修復',
-  };
 }
 
 class ManagerQueueRow extends StatelessWidget {

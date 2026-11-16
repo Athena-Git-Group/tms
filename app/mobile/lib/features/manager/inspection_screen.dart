@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/connection_status.dart';
+import '../../core/system_status.dart';
 import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
@@ -86,6 +88,10 @@ class _InspectionScreenState extends State<InspectionScreen> {
   Future<void> _submit() async {
     final items = _items;
     if (items == null || !_allJudged || _submitting) {
+      return;
+    }
+    if (ConnectionStatus.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
       return;
     }
     final key = _idempotencyKey ??= ApiClient.newIdempotencyKey();

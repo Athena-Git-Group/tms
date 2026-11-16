@@ -185,9 +185,9 @@ void main() {
     }
   });
 
-  test('工務單認不得的狀態值原樣顯示並配中性色', () {
+  test('工務單認不得的狀態值不上畫面，只留中性色', () {
     final appearance = repairStatusAppearance(state: 'brand-new-state');
-    expect(appearance.text, 'brand-new-state');
+    expect(appearance.text, '');
     expect(appearance.background, TmsColors.neutralContainer);
     expect(appearance.foreground, TmsColors.onNeutralContainer);
   });

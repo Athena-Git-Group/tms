@@ -24,6 +24,7 @@ void main() {
     String? lastVerifyFailedReason,
     String? lastVerifyFailedBy,
     String? lastVerifyFailedAt,
+    String? resolutionNote,
     bool isUrgent = false,
     DateTime? createdAt,
   }) {
@@ -42,6 +43,7 @@ void main() {
       urgentRule: urgentRule,
       verifiedBy: verifiedBy,
       resolutionType: resolutionType,
+      resolutionNote: resolutionNote,
       lastVerifyFailedReason: lastVerifyFailedReason,
       lastVerifyFailedBy: lastVerifyFailedBy,
       lastVerifyFailedAt: lastVerifyFailedAt,
@@ -61,12 +63,17 @@ void main() {
     );
   }
 
-  Widget engineering(RepairTicketDetail detail, {String? resolutionLabel}) {
+  Widget engineering(
+    RepairTicketDetail detail, {
+    String? resolutionLabel,
+    bool managerView = false,
+  }) {
     return CupertinoApp(
       home: TicketDetailEngineering(
         ticket: detail,
         errorMessage: null,
         resolutionLabel: resolutionLabel,
+        managerView: managerView,
         onClaim: () {},
         onStart: () {},
         onReleaseToPool: () {},
@@ -350,13 +357,105 @@ void main() {
               find.bySemanticsIdentifier('ticket.status-summary-card'),
             )
             .label,
-        '待認領',
+        '等工務接單',
       );
 
       await tester.pumpWidget(engineering(ticket(state: 'accepted')));
       expect(
         find.bySemanticsIdentifier('ticket.status-summary-card'),
         findsNothing,
+      );
+
+      handle.dispose();
+    });
+
+    testWidgets('待認領的單步驟條停在第一步「待開始」，四步不會全暗', (tester) async {
+      await tester.pumpWidget(engineering(ticket(state: 'pool')));
+
+      final track = tester.widget<TmsStepTrack>(find.byType(TmsStepTrack));
+      expect(track.steps[0].status, TmsStepStatus.current);
+      expect(track.steps[1].status, TmsStepStatus.pending);
+      expect(track.steps[2].status, TmsStepStatus.pending);
+      expect(track.steps[3].status, TmsStepStatus.pending);
+    });
+
+    testWidgets('工務視角已完修的狀態列只寫等主管驗收，完修結果寫在說明裡', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        engineering(
+          ticket(state: 'done', assigneeName: '阿強', resolutionType: 'fixed'),
+        ),
+      );
+
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsIdentifier('ticket.status-summary-card'),
+            )
+            .label,
+        '已完修 · 等主管驗收',
+      );
+      expect(find.textContaining('已修好，房間可正常使用'), findsOneWidget);
+
+      handle.dispose();
+    });
+
+    testWidgets('主管視角已完修的狀態列接完修結果簡稱，說明欄只留處理說明', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        engineering(
+          ticket(
+            state: 'done',
+            assigneeName: '阿強',
+            resolutionType: 'fixed',
+            resolutionNote: '更換四顆三號電池',
+          ),
+          managerView: true,
+        ),
+      );
+
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsIdentifier('ticket.status-summary-card'),
+            )
+            .label,
+        '已完修 · 等主管驗收 · 已修好',
+      );
+      expect(find.text('說明：更換四顆三號電池。'), findsOneWidget);
+      expect(find.textContaining('已修好，房間可正常使用'), findsNothing);
+
+      handle.dispose();
+    });
+
+    testWidgets('主管視角已結案的狀態列不接完修結果', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        engineering(
+          ticket(
+            state: 'closed',
+            assigneeName: '阿強',
+            resolutionType: 'fixed',
+            verifiedBy: '王主管',
+          ),
+          managerView: true,
+        ),
+      );
+
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsIdentifier('ticket.status-summary-card'),
+            )
+            .label,
+        '已結案 · 王主管驗收',
       );
 
       handle.dispose();

@@ -87,7 +87,10 @@ String repairCompletionPhotoLabel(String? resolutionType) =>
     : '完修照片（不需處理可以不附照片）';
 
 String repairResolutionText(String resolutionType) =>
-    repairResolutionOf(resolutionType)?.label ?? resolutionType;
+    repairResolutionOf(resolutionType)?.label ?? '';
+
+String repairResolutionShortText(String? resolutionType) =>
+    repairResolutionOf(resolutionType)?.shortLabel ?? '';
 
 String repairStateText(String state) {
   switch (state) {
@@ -103,8 +106,10 @@ String repairStateText(String state) {
       return '已結案';
     case 'cancelled':
       return '已撤回';
+    case 'paused':
+      return '已暫停';
     default:
-      return state;
+      return '';
   }
 }
 
@@ -227,6 +232,9 @@ String repairStatusSummaryText(
       final by = ticket.verifiedBy;
       return by == null ? '已結案' : '已結案 · $by驗收';
     case RepairCompletionStage.notCompleted:
+      if (ticket.state == 'pool') {
+        return '等工務接單';
+      }
       return reporter
           ? _reporterOpenText(ticket)
           : repairStateText(ticket.state);
@@ -236,8 +244,6 @@ String repairStatusSummaryText(
 String _reporterOpenText(RepairTicketDetail ticket) {
   final who = ticket.assigneeName;
   switch (ticket.state) {
-    case 'pool':
-      return '等工務接單';
     case 'accepted':
       return who == null ? '已接單' : '工務 $who 已接單';
     case 'doing':
@@ -258,6 +264,7 @@ int repairCurrentStepIndex(RepairTicketDetail ticket) {
     return 3;
   }
   switch (ticket.state) {
+    case 'pool':
     case 'accepted':
       return 0;
     case 'doing':

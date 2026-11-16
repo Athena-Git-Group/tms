@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
+import '../../core/connection_status.dart';
 import '../../core/repair_photo_capture.dart';
+import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_alert.dart';
@@ -204,6 +206,10 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Future<void> _pass() async {
+    if (ConnectionStatus.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
+      return;
+    }
     final error = await _sendVerify('passed');
     if (!mounted) {
       return;
@@ -338,6 +344,7 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Widget _engineeringLayout({
+    bool managerView = false,
     bool showWorkerActions = true,
     Widget? bottomBar,
   }) {
@@ -345,6 +352,7 @@ class _TicketScreenState extends State<TicketScreen> {
       ticket: _ticket,
       errorMessage: _error,
       resolutionLabel: _resolutionLabel,
+      managerView: managerView,
       onClaim: _claim,
       onStart: _start,
       onReleaseToPool: _releaseToPool,
@@ -367,6 +375,7 @@ class _TicketScreenState extends State<TicketScreen> {
     final verifying =
         ticket != null && TicketManagerActionBar.shows(ticket.state);
     return _engineeringLayout(
+      managerView: true,
       showWorkerActions: ticket?.viewerIsAssignee ?? false,
       bottomBar: verifying
           ? TicketManagerActionBar(onPass: _pass, onFail: _openFailSheet)

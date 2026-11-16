@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/connection_status.dart';
+import '../../core/system_status.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
@@ -42,6 +44,10 @@ class _TicketVerifyFailSheetState extends State<TicketVerifyFailSheet> {
 
   Future<void> _submit() async {
     if (_reason.isEmpty || _submitting) {
+      return;
+    }
+    if (ConnectionStatus.instance.isOffline) {
+      await showOfflineBlockedAlert(context);
       return;
     }
     setState(() {

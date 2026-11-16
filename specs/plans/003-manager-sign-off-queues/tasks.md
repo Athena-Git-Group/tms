@@ -918,8 +918,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/推播/點開推播的去處.feature`
 
-- [ ] T145 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T146 [BDD-REFACTOR] 在綠燈下確認冷啟動與前景兩條推播路徑只經過 `push_gateway.dart` 一個 switch
+- [x] T145 [BDD-GREEN] 讓 Test Scope 全綠
+- [x] T146 [BDD-REFACTOR] 在綠燈下確認冷啟動與前景兩條推播路徑只經過 `push_gateway.dart` 一個 switch
 
 ## Phase 4S: MODIFY Feature File - ios-app/待認領/待認領列表.feature
 

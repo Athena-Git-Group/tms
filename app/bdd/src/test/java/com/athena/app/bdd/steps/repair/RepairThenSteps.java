@@ -446,8 +446,8 @@ public class RepairThenSteps {
     public void ticketBackToPoolUnassigned(String ticketNo) {
         WebElement summary = world.waitForTestId("ticket.status-summary-card", SCREEN_TIMEOUT);
         String text = summary.getText();
-        if (text == null || !text.contains("待認領")) {
-            throw new AssertionError("狀態摘要卡應顯示「待認領」，畫面上是「" + text + "」");
+        if (text == null || !text.contains("等工務接單")) {
+            throw new AssertionError("狀態摘要卡應顯示「等工務接單」，畫面上是「" + text + "」");
         }
 
         Map<String, Object> row = singleTicketRow(

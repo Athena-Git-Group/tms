@@ -97,6 +97,26 @@ void main() {
     expect(row.label, 'W-0116 312 門把鬆動 已修好 重修後再驗 阿強 完修');
   });
 
+  test('待驗收列：認不得的完修結果不把內部值搬上畫面', () {
+    final row = ManagerQueueRowData.verify(
+      const VerifyQueueItem(
+        taskId: 't5',
+        roomNo: '210',
+        isPublicArea: false,
+        title: '冷氣不冷',
+        waitingSince: '2026-11-10T11:25:00+08:00',
+        waitingSinceIsToday: true,
+        ticketNo: 'W-0117',
+        category: 'air_conditioning',
+        origin: 'reported',
+        resolutionType: 'brand_new_resolution',
+        assigneeName: '阿強',
+      ),
+    );
+    expect(row.tags, isEmpty);
+    expect(row.label, isNot(contains('brand_new_resolution')));
+  });
+
   test('待驗收列：沒有完修結果的舊單不畫結果標籤', () {
     final row = ManagerQueueRowData.verify(
       const VerifyQueueItem(

@@ -290,7 +290,7 @@ class TicketDetailHousekeeping extends StatelessWidget {
     final who = detail.assigneeName;
     final createdAt = detail.createdAt;
     final sentTime = createdAt == null ? null : repairClockText(createdAt);
-    final current = state == 'pool' ? 0 : repairCurrentStepIndex(detail);
+    final current = repairCurrentStepIndex(detail);
     final stage = repairCompletionStage(detail);
 
     TmsTimelineStatus statusOf(int index) {

@@ -56,6 +56,53 @@ void main() {
     expect(find.byType(CupertinoTextField), findsOneWidget);
   });
 
+  testWidgets('面板由上而下是完修結果、完修照片、處理說明', (tester) async {
+    await tester.pumpWidget(host());
+
+    final result = tester.getTopLeft(find.text('處理結果')).dy;
+    final photos = tester
+        .getTopLeft(
+          find.bySemanticsIdentifier('completeSheet.photo.count-label'),
+        )
+        .dy;
+    final note = tester.getTopLeft(find.text('處理說明（選填）')).dy;
+    expect(result, lessThan(photos));
+    expect(photos, lessThan(note));
+  });
+
+  testWidgets('處理說明的佔位字跟著處理結果換：不需處理時問為什麼不用處理', (tester) async {
+    await tester.pumpWidget(host());
+
+    expect(
+      tester
+          .widget<CupertinoTextField>(find.byType(CupertinoTextField))
+          .placeholder,
+      '例如：更換冷氣濾網、補充冷媒',
+    );
+
+    await tester.ensureVisible(find.text('不需處理'));
+    await tester.tap(find.text('不需處理'));
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<CupertinoTextField>(find.byType(CupertinoTextField))
+          .placeholder,
+      '寫下為什麼不需要處理，例如：燈正常，開關在門邊',
+    );
+
+    await tester.ensureVisible(find.text('已修好，房間可正常使用'));
+    await tester.tap(find.text('已修好，房間可正常使用'));
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<CupertinoTextField>(find.byType(CupertinoTextField))
+          .placeholder,
+      '例如：更換冷氣濾網、補充冷媒',
+    );
+  });
+
   testWidgets('一張照片都沒有時不講送出後果，講的是還缺照片（Main.dc.html:3994）', (
     tester,
   ) async {
