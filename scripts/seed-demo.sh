@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 用法： ./scripts/seed-demo.sh
 #   只需要 docker compose 的 postgres 起著，後端不必起。
+#   資料庫要先套到最新的遷移（後端啟動一次就會套）：這支腳本會寫飯店代碼、任務單號與結束時間這幾個欄位。
 #   連線帳號要用管理帳號 tms：業務表有 row level security，tms_app 沒設 app.tenant_id 時讀寫不到任何一列。
 
 set -euo pipefail
@@ -23,8 +24,10 @@ PGPASSWORD="$DB_PASSWORD" psql \
   --quiet --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
 
-INSERT INTO tenants (id, name, created_at) OVERRIDING SYSTEM VALUE
-VALUES (1, '示範飯店', now())
+-- 飯店代碼是櫃檯畫面網址上用來認飯店的那一段，發出去之後不能改。
+-- 所以飯店已經存在時只更新名稱，代碼維持資料庫裡原本的值。
+INSERT INTO tenants (id, name, code, created_at) OVERRIDING SYSTEM VALUE
+VALUES (1, '示範飯店', 'demo-hotel', now())
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 DO $$ BEGIN PERFORM setval(pg_get_serial_sequence('tenants', 'id'), GREATEST(1, (SELECT max(id) FROM tenants)), true); END $$;
 
@@ -65,7 +68,8 @@ INSERT INTO staff_accounts (id, tenant_id, name, login_id, password_hash, role, 
   ('00000000-0000-7000-8000-00000000a004', 1, '林櫃檯', 'fd1', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'frontdesk',    'frontdesk',    true, 'active', now(), now()),
   ('00000000-0000-7000-8000-00000000a005', 1, '阿芳',   'hk2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'housekeeping', 'housekeeping', true, 'active', now(), now()),
   ('00000000-0000-7000-8000-00000000a006', 1, '阿義',   'mt2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'engineering',  'engineering',  true, 'active', now(), now()),
-  ('00000000-0000-7000-8000-00000000a007', 1, '陳主管', 'mg2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'manager',      'engineering',  true, 'active', now(), now());
+  ('00000000-0000-7000-8000-00000000a007', 1, '陳主管', 'mg2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'manager',      'engineering',  true, 'active', now(), now()),
+  ('00000000-0000-7000-8000-00000000a008', 1, '吳家豪', 'dm1', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'duty_manager', NULL,           true, 'active', now(), now());
 
 INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at) VALUES
   ('00000000-0000-7000-8000-000000000202', 1, '202', 2, 'standard_double', 'dirty',     'vacant',   now()),
@@ -278,6 +282,36 @@ UPDATE repair_tickets
    SET verified_by = '00000000-0000-7000-8000-00000000a003', verified_at = now() - interval '30 minutes'
  WHERE tenant_id = 1 AND ticket_no = 'W-0109';
 
+-- 工務單以外的單都要有給人看的單號（T- 加 4 位數）：依建立時間由舊到新，從 T-0001 編起。
+-- 工務單不領這種單號，它的單號是上面的 W-。
+WITH numbered AS (
+  SELECT id, row_number() OVER (ORDER BY created_at, id) AS no
+    FROM tasks
+   WHERE tenant_id = 1 AND type <> 'repair'
+)
+UPDATE tasks t
+   SET task_no = 'T-' || lpad(n.no::text, 4, '0')
+  FROM numbered n
+ WHERE t.tenant_id = 1 AND t.id = n.id;
+
+-- 取號表記到上面編出的最後一號，之後從畫面新開的單才會接著編、不會撞號。
+INSERT INTO task_counters (tenant_id, last_no)
+SELECT 1, count(*) FROM tasks WHERE tenant_id = 1 AND type <> 'repair'
+ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no;
+
+-- 已經結束的單要有結束時間：櫃檯看板只列「還沒結束的單」與「今天結束的單」，
+-- 沒寫的話這些單會被當成還沒結束，一直留在看板上。
+-- 打掃單與工務單的「完成」還在等查房或驗收，不算結束。
+-- 工務單結案取主管驗收的時間；其餘（含判斷不需處理而直接結案的）取完成的時間。
+UPDATE tasks t
+   SET ended_at = COALESCE(
+         (SELECT r.verified_at FROM repair_tickets r WHERE r.tenant_id = t.tenant_id AND r.task_id = t.id),
+         t.done_at,
+         t.updated_at)
+ WHERE t.tenant_id = 1
+   AND (t.state IN ('inspected', 'cancelled', 'closed')
+        OR (t.state = 'done' AND t.type IN ('amenity', 'other')));
+
 INSERT INTO repair_photos (id, tenant_id, ticket_task_id, purpose, status, storage_ref, taken_at, uploaded_by, created_at, uploaded_at) VALUES
   ('00000000-0000-7000-8000-00000000e601', 1, '00000000-0000-7000-8000-00000000d032', 'completion', 'uploaded',
    'upload:00000000-0000-7000-8000-00000000e601', now() - interval '105 minutes', '00000000-0000-7000-8000-00000000a002',
@@ -349,12 +383,19 @@ PGPASSWORD="$DB_PASSWORD" psql \
   --host "$DB_HOST" --port "$DB_PORT" --username "$DB_USER" --dbname "$DB_NAME" \
   --quiet --no-psqlrc --set ON_ERROR_STOP=1 --tuples-only <<'SQL'
 \echo '[seed-demo] 種好了。清點：'
+SELECT '  飯店 ' || name || '（代碼 ' || code || '）' FROM tenants WHERE id = 1;
 SELECT '  員工 ' || count(*) || ' 位' FROM staff_accounts WHERE tenant_id = 1;
 SELECT '  房間 ' || count(*) || ' 間' FROM rooms WHERE tenant_id = 1;
 SELECT '  任務 ' || count(*) || ' 張（房務待認領 '
        || count(*) FILTER (WHERE state = 'pool' AND dept = 'housekeeping') || '、工務待認領 '
        || count(*) FILTER (WHERE state = 'pool' AND dept = 'engineering') || '）'
   FROM tasks WHERE tenant_id = 1;
+SELECT '  有 T- 單號的 ' || count(task_no) || ' 張（取號表記到 '
+       || (SELECT last_no FROM task_counters WHERE tenant_id = 1) || ' 號）、已結束 '
+       || count(ended_at) || ' 張'
+  FROM tasks WHERE tenant_id = 1;
+SELECT '  住客資訊頁 ' || jsonb_array_length(value) || ' 頁（櫃檯當場回答的常用回覆）'
+  FROM tenant_config WHERE tenant_id = 1 AND key = 'guest_info_pages';
 SELECT '  工務單 ' || count(*) || ' 張' FROM repair_tickets WHERE tenant_id = 1;
 SELECT '  主管首頁：王主管 待查房 '
        || (SELECT count(*) FROM tasks WHERE tenant_id = 1 AND type = 'cleaning' AND state = 'done'
@@ -377,5 +418,8 @@ cat <<'EOF'
   mt1  阿強    工務員工
   mg1  王主管  房務主管
   mg2  陳主管  工務主管
+  fd1  林櫃檯  櫃檯
+  dm1  吳家豪  值班主管
+[seed-demo] 櫃檯 Web 只有櫃檯、主管、值班主管進得去（fd1、mg1、mg2、dm1）；飯店代碼見上面清點的第一行。
 [seed-demo] 跑過 app/bdd 的 BDD 之後這份資料會被清掉，想再玩就再跑一次這支腳本。
 EOF

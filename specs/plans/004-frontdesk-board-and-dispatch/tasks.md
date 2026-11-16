@@ -19,14 +19,14 @@
 - T 編號從 T001 起，004 自成一份（003 也是自己從 T001 編到 T155，沒有全專案連號）。
 
 **測試指令**（每個 Feature phase 的 Test Scope 用這幾組跑）：
-- 後端（`tms/`，JDK 25、Testcontainers、Docker Desktop）：
+- 後端（`tms/`，JDK 25、Testcontainers、OrbStack；在 repo 根目錄執行）：
   ```
-  export JAVA_HOME=/Users/Caresys/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home
-  export DOCKER_HOST=unix:///Users/Caresys/.docker/run/docker.sock
-  export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-  cd tms && mvn -q test -Dtest=RunTruthFeaturesTest -Dcucumber.features=../specs/truth/features/backend/<模組>/<檔名>.feature
+  JAVA_HOME=/Users/Caresys/Library/Java/JavaVirtualMachines/openjdk-25.0.2/Contents/Home TESTCONTAINERS_RYUK_DISABLED=true \
+    ./tms/mvnw -f tms/pom.xml test -Dtest=RunTruthFeaturesTest -DargLine="-Dapi.version=1.44" \
+    -Dsurefire.excludeJUnit5Engines=cucumber \
+    "-Dcucumber.features=../specs/truth/features/backend/<模組>/<檔名>.feature"
   ```
-  undefined 檢查加 `-Dcucumber.execution.dry-run=true`。帶 `-Dcucumber.features` 時會多 1 個 CucumberTestEngine discovery 假影 error，忽略。Cucumber Expression 中文句含 `/` 要寫 `\\/`。
+  undefined 檢查加 `-Dcucumber.execution.dry-run=true`。`-Dapi.version=1.44` 是讓 Testcontainers 連得上 OrbStack 的 Docker；`-Dsurefire.excludeJUnit5Engines=cucumber` 一定要帶，否則 surefire 會多跑一次不受 glue 限制的 Cucumber 引擎，兩組 Spring 設定相撞而以失敗收場。`cucumber.features` 可以給單一檔或整個模組目錄；不帶就跑全套（約 3 分鐘）。Cucumber Expression 中文句含 `/` 要寫 `\\/`。
 - 櫃檯 Web 驗收（`app/web-bdd/`，Cucumber-JVM ＋ Playwright for Java）：`bash app/web-bdd/run-feature.sh <frontdesk-web 下的路徑，例如 待派單/待派單清單.feature> [desktop|ipad]`（T021 建立；內含啟動可撥時鐘的 8080 後端、`app/web/` 的開發伺服器與瀏覽器）。第二個參數不給時是 `desktop`（電腦 1280 × 720 滑鼠）；`ipad` 是 iPad 橫向 1180 × 820、WebKit、觸控。後端產品碼改過就要重啟 8080。
   undefined 檢查：`cd app/web-bdd && mvn -q test -Dcucumber.execution.dry-run=true -Dcucumber.features=../../specs/truth/features/frontdesk-web/<路徑>`。
 - 櫃檯 Web 單元測試（只測純計算）：`cd app/web && npx vitest run`。
@@ -117,7 +117,7 @@
 
 **Goal**: 只建立後續要用的 migration 與回填、示範資料、後端的列舉與型別落點、兩條測試線的 fixture 與 helper、櫃檯 Web 與它的測試模組的骨架。不寫派單、復原、當場回答、看板查詢、收件範圍這些規則，不寫任何畫面行為。
 
-- [ ] T008 新增 Flyway migration `V24`：飯店識別代碼 `tenants.code`，並替既有飯店補代碼
+- [X] T008 新增 Flyway migration `V24`：飯店識別代碼 `tenants.code`，並替既有飯店補代碼
   - Read:
     - `truth-delta.md` -> `/data-plan` ADD `tenants.code`（含實作須知的順序）
     - `specs/truth/data/data-model.dbml` -> `Table tenants` 的 `code`（格式、保留字清單、唯一、寫入後不改）
@@ -126,7 +126,7 @@
   - 不做：不改 `V2__seed_dev.sql`；不做修改代碼的功能或舊代碼轉址；不寫查飯店名稱的端點（Phase 4-B01）。
   - 備註：這一支一上去，`code` 就是必有值。T013（後端 `TenantFixtures`）與 T016（`BackendChannel` 建飯店）完成前，後端 BDD 與員工 App 測試線會因 `INSERT INTO tenants` 缺 `code` 而紅，這是預期；T008、T013、T016 三題都做完才回到綠，中間不要回頭放寬 `NOT NULL`。
 
-- [ ] T009 新增 Flyway migration `V25`：`tasks.task_no`、`task_counters`、`tasks.answer`、`tasks.ended_at`，並回填既有的單
+- [X] T009 新增 Flyway migration `V25`：`tasks.task_no`、`task_counters`、`tasks.answer`、`tasks.ended_at`，並回填既有的單
   - Read:
     - `truth-delta.md` -> `/data-plan` ADD `tasks.task_no`、`Table task_counters`、`tasks.answer`、`tasks.ended_at` 四列的「實作須知」
     - `specs/truth/data/data-model.dbml` -> `Table tasks` 的 `task_no`、`answer`、`ended_at` 與兩個索引、`Table task_counters`
@@ -134,7 +134,7 @@
   - 只做：一支 `V25__task_no_answer_ended_at.sql`。①`task_counters`（每租戶一列、`last_no`）。②`tasks.task_no`：先加欄位；替既有 `type` 不是 `repair` 的單回填（每租戶依 `created_at`、再依 `id` 由舊到新編號，格式 `T-` 加 4 位數）；把 `task_counters.last_no` 設成該租戶回填到的最後一號；再加 `(tenant_id, task_no)` 唯一索引；`type=repair` 維持 NULL。③`tasks.answer`：加欄位；替既有的當場回答單回填（有 `answered` 事件的單，取該事件的 `payload.answer`）。④`tasks.ended_at`：加欄位；回填已結束的單（`inspected`、`cancelled`、`closed` 取進入該狀態那筆事件的 `created_at`；`done` 且 `type` 為 `amenity`、`other` 或有 `answered` 事件的取 `done_at`，沒有時取那筆事件的 `created_at`）；再加 `(tenant_id, ended_at)` 索引。四件事的回填都在這一支裡做完。
   - 不做：不還原舊當場回答單被蓋掉的 `note`（truth 只要求回填 `answer`）；不改建單取號、不改任何狀態轉移寫 `ended_at` 或 `answer`（Phase 4-B06、4-B07）；不讓工務單領 `T-` 單號。
 
-- [ ] T010 新增 Flyway migration `V26`：`task_events.actor_role` 加 `duty_manager`，加張數查詢用的索引
+- [X] T010 新增 Flyway migration `V26`：`task_events.actor_role` 加 `duty_manager`，加張數查詢用的索引
   - Read:
     - `truth-delta.md` -> `/data-plan` ADD `task_events.actor_role` 值 `duty_manager`、ADD `task_events` 索引 `(tenant_id, actor_id, created_at)`
     - `specs/truth/data/data-model.dbml` -> `Table task_events` 的 `actor_role` 與索引
@@ -142,7 +142,7 @@
   - 只做：一支 `V26__task_events_actor_role_duty_manager.sql`：`DROP CONSTRAINT chk_task_events_actor_role` 後以同名重建，值集加上 `duty_manager`（其餘值照 V1 原樣）；加 `(tenant_id, actor_id, created_at)` 索引。
   - 不做：不動 `V1__schema.sql`；不對 `task_events.type` 加 CHECK（資料庫本來就沒有）；不寫張數查詢（Phase 4-B07）。
 
-- [ ] T011 調整 `scripts/seed-demo.sh`：飯店代碼與櫃檯 Web 用得到的示範資料
+- [X] T011 調整 `scripts/seed-demo.sh`：飯店代碼與櫃檯 Web 用得到的示範資料
   - Read:
     - `truth-delta.md` -> `/data-plan` ADD `tenants.code`（「開發種子資料與測試裡建立飯店的地方都要補代碼」）
     - `scripts/seed-demo.sh:20-40`（`INSERT INTO tenants` 與示範帳號段）
@@ -150,7 +150,7 @@
   - 只做：`INSERT INTO tenants` 帶 `code='demo-hotel'`（`ON CONFLICT` 不改既有的 `code`）；確認示範飯店有 `frontdesk`、`manager`、`duty_manager` 各一個可登入的帳號與幾頁住客資訊頁（常用回覆的來源），沒有就補。
   - 不做：不放 `tasks`／`task_events` 以外規則的新資料表；不改 seed 的其他段落。它不是任何 Feature 的 Test Scope，驗法是 seed 跑完後三種角色都能從櫃檯 Web 登入、登入頁顯示「示範飯店」。
 
-- [ ] T012 後端的列舉與型別落點
+- [X] T012 後端的列舉與型別落點
   - Read:
     - `truth-delta.md` -> `/api-plan` ADD 櫃檯看板與派單 API 各列、ADD `GET /staff/stream` 的 schema；`/data-plan` ADD `triage_undone`
     - `specs/truth/contracts/components/schemas/櫃檯看板與派單.yaml`、`員工事件串流.yaml`、`shared.yaml`（新的 `Error.code`）
@@ -158,21 +158,21 @@
   - 只做：`TaskEventType` 加 `triage_undone`；`StaffRole` 加常數 `DUTY_MANAGER`；在 `dto/desk/` 建 `DeskBoard`、`DeskMyToday`、`DeskTask`、`DeskGuestText`、`DeskTaskDetail`、`DeskTimelineEntry`、`DeskQuickReply`、`DeskAssignRequest`、`DeskAnswerRequest`、`PublicHotel` 的 record（欄位名與型別照契約）；新的錯誤碼常數；新控制器 `controller/DeskBoardController.java` 掛在 `/api/v1/desk`，六支操作先回 501。
   - 不做：不改 `StaffRole.ALL` 與任何權限規則（Phase 4-B10）；不把 `repair_verification_failed` 補進 `TaskEventType` 的清單；不寫任何查詢或狀態轉移；不動舊的 `controller/DeskController.java`（Phase 4-B16）。
 
-- [ ] T013 後端測試 fixture：飯店代碼與三種新角色的建立入口
+- [X] T013 後端測試 fixture：飯店代碼與三種新角色的建立入口
   - Read:
     - `specs/truth/features/backend/dsl.md` -> 部門用語對照、`飯店有以下員工：`
     - `tms/src/test/java/com/athena/tms/bdd/support/TenantFixtures.java:20-40`、`support/StaffFixtures.java:39-66、95-126`
   - 只做：`TenantFixtures` 建「測試飯店」時帶 `code='test-hotel'`，並加一個「另建一家飯店（名稱、代碼）」的入口；`StaffFixtures` 加建立 `frontdesk`（`dept=frontdesk`）、`duty_manager`、`owner` 帳號的入口與「把帳號設成臨時密碼」之外需要的讀寫（連續錯誤次數、鎖定到期時間）。
   - 不做：不改 `CommonGivenSteps` 的 `飯店有以下員工：`（T022）；不寫任何斷言。
 
-- [ ] T014 後端測試 helper 與 stepdef 落點：櫃檯看板與派單
+- [X] T014 後端測試 helper 與 stepdef 落點：櫃檯看板與派單
   - Read:
     - `specs/truth/features/backend/櫃檯看板與派單/dsl.md` -> 模組說明與用語對照
     - `tms/src/test/java/com/athena/tms/bdd/support/BddApiClient.java:62-90`、`support/TaskFixtures.java`、`support/ReservationFixtures.java`、`support/LastOperationGuard.java`
   - 只做：建 `steps/desk/` 套件（`package-info.java`、`DeskCommonSteps.java` 放介面根的 5 句、`DeskGivenSteps.java`、`DeskWhenSteps.java`、`DeskThenSteps.java` 的空殼）與 `support/DeskContext.java`（記最近一次派單用的 `Idempotency-Key`、最近一次看板與詳情回應）；`support/DeskApi.java` 包六支 `/api/v1/desk/**` 的呼叫（帶或不帶 `Idempotency-Key` 兩種）與以住客 session 呼叫 `createGuestRequest`、`cancelGuestRequest`、`listGuestRequests` 的入口。
   - 不做：不寫任何句型的語意（Phase 3）；不直接寫資料庫假造 `triage` 以外的狀態。
 
-- [ ] T015 後端測試 helper 與 stepdef 落點：員工事件串流
+- [X] T015 後端測試 helper 與 stepdef 落點：員工事件串流
   - Read:
     - `specs/truth/features/backend/員工事件串流/dsl.md` -> 模組說明
     - `specs/truth/contracts/groups/現場作業/員工事件串流.yaml`、`specs/truth/contracts/components/schemas/員工事件串流.yaml`
@@ -180,21 +180,21 @@
   - 只做：`support/StaffStreamClient.java`：以某位員工的憑證連 `GET /staff/stream`、把收到的事件依序收進清單、提供「等到某種事件出現，上限 N 秒」與關線；scenario 結束自動關線。`support/StreamFaults.java`：讓串流進入與離開兩種降級原因的測試入口（事件落後、`kafka_unavailable`）。建 `steps/staffstream/` 套件與三個空殼檔。
   - 不做：不斷言誰收得到什麼；不改 `StreamConnection` 或 `TaskEventsSseConsumer`。
 
-- [ ] T016 `app/bdd-support/` 的 `BackendChannel`：飯店代碼、角色用語與櫃檯 Web 的預設資料
+- [X] T016 `app/bdd-support/` 的 `BackendChannel`：飯店代碼、角色用語與櫃檯 Web 的預設資料
   - Read:
     - `specs/truth/features/frontdesk-web/dsl.md` -> 「共通實作約定」的飯店與帳號、時間、常用回覆
     - `app/bdd-support/` 的 `BackendChannel`（T002 搬過來的；建飯店在原檔 219 行附近、角色用語對照在 64 行附近）
   - 只做：建飯店時帶 `code`（員工 App 測試線既有的飯店給固定代碼，維持它原本的行為）；用語對照加「值班主管」＝`duty_manager`、「老闆」＝`owner`（「值班經理」保留給員工 App 測試線）；加 `ensureFrontdeskDefaults()`：預設飯店「雅典娜酒店」（代碼 `athena`、2 至 5 樓的客房）、12 個預設帳號（密碼 `Tms12345`）、住客資訊頁五頁；加「以某位員工身分取得登入回應」的入口。
   - 不做：不寫任何 Cucumber 步驟；不改員工 App 測試線既有方法的行為。
 
-- [ ] T017 `app/bdd-support/` 的 `BackendChannel`：各種狀況的單的建立入口
+- [X] T017 `app/bdd-support/` 的 `BackendChannel`：各種狀況的單的建立入口
   - Read:
     - `specs/truth/features/frontdesk-web/dsl.md` -> 「單的狀況對照」與 `全館有以下的單：` 那一列
     - `BackendChannel` 既有的建單與推進狀態方法、撥後端時鐘的方法
   - 只做：替「單的狀況對照」的每一種狀況留一個建立入口的方法殼（待派單、待認領、已接四種、進行中、待查房、已完修、已完成、中斷兩種、延後中兩種、查房通過、免查房、已結案兩種、已取消四種、已回答），既有方法做得到的直接接上；加「以櫃檯身分派單／復原／當場回答」「以住客身分送單／收回」的入口。
   - 不做：不解析 Data Table、不決定預設值（那是 T139 `全館有以下的單：` 的事）。後端端點還沒做出來的狀況（已回答）先留殼，等 Phase 4-B06 後由用到它的 Feature phase 接上。
 
-- [ ] T018 `app/web/` 的骨架：四條路徑、外框、守門、API client、登入狀態、多語系
+- [X] T018 `app/web/` 的骨架：四條路徑、外框、守門、API client、登入狀態、多語系
   - Read:
     - `ui/ui-plan.md` -> 「前端實作切分建議」（頁面／容器切分、重新整理後保留什麼）、「給 `/api-plan` 的資料需求」
     - `specs/truth/techstack.md` -> `前端` 的櫃檯 Web 各列
@@ -202,14 +202,14 @@
   - 只做：目錄 `pages/login/`、`pages/change-password/`、`pages/board/`、`pages/triage/`、`shell/`（外框容器）、`features/{account,detail,answer,dispatch,realtime}/`、`api/`、`stores/`、`i18n/`、`lib/`。四條路徑各接一個空白頁；三條守門的殼（沒登入、還沒改密碼、角色不在三種之內）；`api/client.ts`：以 `fetch` 帶 `Authorization: Bearer`、寫入時產生並帶 `Idempotency-Key`、把契約的 `Error` 轉成型別；`api/types.ts` 照契約寫 `DeskBoard`、`DeskTask`、`DeskTaskDetail` 等型別；`stores/session.ts`（`sessionStorage`）與 `stores/board-view.ts`（泳道、篩選、房號搜尋、側欄）的殼；`i18n/` 四種語言的資源檔殼（繁體中文、英文、日文、越南文）與初始化。
   - 不做：畫面可以是空白；不寫任何規則、文案、看板或面板；登入憑證不放 cookie、`localStorage` 或網址。
 
-- [ ] T019 `app/web/` 的純計算落點與 `Vitest` 檔殼
+- [X] T019 `app/web/` 的純計算落點與 `Vitest` 檔殼
   - Read:
     - `ui/ui-plan.md` -> 「前端實作切分建議」的共用元件或區塊
     - `specs/truth/techstack.md` -> `測試與驗證` 的「櫃檯 Web 單元測試」
   - 只做：在 `lib/` 留出檔案與函式簽章（回傳先丟 `not implemented`）：`board-columns.ts`（單落在哪一欄、未結案張數）、`wait-pill.ts`（等待膠囊的文字與顏色）、`status-card.ts`（狀態標籤與狀態訊息卡）、`timeline-sentence.ts`（歷程句子）、`browser-language.ts`（瀏覽器語言比對）、`server-clock.ts`（用 `serverTime` 校正現在）；每個檔旁邊一支 `*.test.ts` 空殼。
   - 不做：不實作任何一個函式；不寫元件測試。
 
-- [ ] T020 `app/web-bdd/` 的骨架：World、兩組瀏覽器設定、時鐘、網路攔截、登入狀態、page object 與 stepdef 落點
+- [X] T020 `app/web-bdd/` 的骨架：World、兩組瀏覽器設定、時鐘、網路攔截、登入狀態、page object 與 stepdef 落點
   - Read:
     - `specs/truth/features/frontdesk-web/dsl.md` -> 「共通實作約定」全部九條
     - `implement-notes.md` -> T005 的結論（觸控拖曳怎麼驅動、瀏覽器時鐘）

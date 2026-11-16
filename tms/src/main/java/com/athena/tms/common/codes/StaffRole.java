@@ -8,6 +8,7 @@ public final class StaffRole {
     public static final String ENGINEERING = "engineering";
     public static final String MANAGER = "manager";
     public static final String OWNER = "owner";
+    public static final String DUTY_MANAGER = "duty_manager";
     public static final List<String> ALL = List.of("frontdesk", "housekeeping", "engineering", "manager", "owner");
 
     private StaffRole() {

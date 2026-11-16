@@ -241,3 +241,119 @@
 - `SmokeTest` 只確認首頁回 200 且有 `#root`；`App` 目前回 `null`，畫面是空的，沒有任何可看的內容。
 - `app/web-bdd/run-feature.sh`（T021）還不存在，後端與開發伺服器是手動起的；8080 後端不是可撥時鐘的那一種。
 - 觸控是用頁面的 `'ontouchstart' in window` 判斷的（T005 記過 WebKit 的 `navigator.maxTouchPoints` 是 0，不能用）。
+
+## T012 後端的列舉與型別落點：給 Phase 4 的注意事項
+
+- `ActorRole` 還沒有 `duty_manager`，`tasks.md` 也沒有哪一題指名要加；資料庫（V26）已允許。第一個要讓值班主管寫任務事件的 Feature phase（4-B04 派單）要補上，否則事件會記錯角色或寫不進去。
+- `/api/v1/desk/**` 目前套用既有的通用權限規則：`frontdesk` 打三支寫入會先拿到 403，`duty_manager` 全部 403，到不了控制器。放行是 4-B10 的事；在那之前，測試不要把 501 當成這兩種角色的預期結果。
+- `DeskTaskDetail` 用 `@JsonUnwrapped` 把 `DeskTask` 攤平到同一層。專案沒有別處這樣用，實際輸出的 JSON 形狀還沒有實跑確認；4-B08（單筆詳情）第一次轉綠時要看一眼回應。
+- 歷程每一筆的 `detail` 是「值為 null 的欄位不輸出」，卡片與詳情的可空欄位則是輸出 `null`。前端判斷歷程欄位有沒有值時，不要用 `=== null`。
+- 三支寫入的 `Idempotency-Key` 在控制器宣告成非必帶，沒帶時要由功能程式回 `idempotency_key_required`（交給 Spring 會變成 `validation_failed`）。
+- 六支都實作完後，把控制器裡過渡用的 `NotImplementedYet` 一起刪掉；`not_implemented` 這個錯誤碼不在契約裡。
+
+## T014 後端「櫃檯看板與派單」的測試落點：給 Phase 3 的注意事項
+
+- stepdef 各寫各的檔：介面根的 5 句（T025–T029）在 `steps/desk/DeskCommonSteps.java`，Given（T054–T068）在 `DeskGivenSteps.java`，When（T069–T080）在 `DeskWhenSteps.java`，Then（T081–T121）在 `DeskThenSteps.java`。四個檔目前是空殼，還沒有被 Cucumber 實際建立過；第一個填步驟的題一跑就會知道注入有沒有問題。
+- 呼叫端點一律走 `support/DeskApi`，它會自動把最近一次的派單鍵、看板回應、詳情回應記進 `DeskContext`。
+- `DeskApi.guestSessionToken(房號)`：房間沒有入住中的訂房時，會建一筆 30 天前入住、隔天退房的訂房來掛住客連線，房間仍算空房。要留意三件事：有填住客的案例要**先建訂房再送單**（後來才建在住訂房會換一個連線，看不到先前那張單）；這筆舊訂房沒有住客姓名；案例若把後端時鐘撥到 30 天前，同房的在住訂房會和它撞住期。
+- 住客的三支呼叫與建連線都會蓋掉 `world.lastResponse()`；在 Then 裡呼叫它們之後，別再讀 `lastResponse` 當成前一個動作的回應。
+- `DeskApi.assign` 沒給 `via` 時送的是 `"via": null`，不是省略這一欄；後端對兩者的處理相同。
+
+## T015 後端「員工事件串流」的測試落點：給 Phase 3 與 Phase 4 的注意事項
+
+- stepdef 的落點：Given（T122、T123）在 `steps/staffstream/StaffStreamGivenSteps.java`，When（T124–T128）在 `StaffStreamWhenSteps.java`，Then（T129–T136）在 `StaffStreamThenSteps.java`。
+- 連線與收事件走 `support/StaffStreamClient`；讓後端進出降級走 `support/StreamFaults`。`reportLag`／`reportCaughtUp` 只等到 Kafka 收下訊息，**要以「後端已經處理到」為前提時，接著呼叫 `awaitProcessed()`**，否則結果看運氣。
+- 心跳不必等 15 秒，用 `JobTrigger.run("stream-heartbeat")` 立刻觸發一次。但真實的 15 秒心跳仍會隨機夾進任何連線的紀錄，比對事件順序前要先濾掉 `heartbeat`。
+- 後端要到第二次往連線寫資料才會發現客戶端已關。`StaffStreamClient` 在場景結束時會觸發兩次心跳讓後端放掉連線；場景中途自己關的連線不會，要等之後的寫入。後端寫進已關的連線時會印一段 `response is already committed` 的錯誤，是產品既有行為，不影響結果。
+- 場景結束時 `StreamFaults` 會把後端還原成正常。還原失敗只會在 `System.err` 印「場景結束時還原串流狀態失敗」加一行警告，當下那個場景不會因此失敗；後面場景莫名變紅時先找這一行。這條失敗路徑沒有實跑過。
+- 現行產品還沒有的行為，要到 4-B13 做完相關的題才會綠：降級期間才連上的連線補收 `degraded`、`recovered`、`heartbeat.degraded`、`kafka_unavailable`。`StreamFaults.disconnectEventSource()` 是停掉事件消費者，能不能觸發產品之後的 `kafka_unavailable` 要看 4-B13 怎麼偵測。
+- 產品程式目前讀不到「是否降級」與「目前連線數」；測試只能間接判斷。
+
+## T018 `app/web/` 的骨架：給 Phase 4 各畫面 phase 的指引
+
+- **東西放哪**：頁面內容填進 `src/pages/<頁>/` 的元件（保留根元素的 `data-page`）；側欄、工具列、提醒列位置、對話框放 `src/shell/`；帳號面板與語言在 `features/account/`、詳情面板 `features/detail/`、當場回答 `features/answer/`、派單與復原 `features/dispatch/`、事件串流與輪詢 `features/realtime/`；端點函式在 `src/api/` 下開新檔並一律經 `api/client.ts`，契約型別加在 `api/types.ts`；只存在畫面的狀態放 `src/stores/`；純計算放 `src/lib/`。
+- **tasks.md 寫的「路由守門」就是這兩個檔**：規則在 `src/lib/route-access.ts` 的 `decideRoute`（純函式），接線在 `src/router.tsx` 的 `Gate`。不要另起一份。
+- **四條路徑**是 `/login`、`/change-password`、`/board`、`/triage`（常數在 `src/lib/paths.ts`）。規格沒有指定字面，取自雛形的檔名。
+- **換頁不必自己 navigate**：登入、登出、改完密碼只要更新 `stores/session.ts`，`Gate` 會自動導到該去的頁。
+- **規格沒寫、骨架先這樣做的**：已登入、已改密碼、可用櫃檯的人打開 `/login` 或 `/change-password` 會被導去 `/board`。
+- **被擋的角色改完密碼之後**：不要先 `setSession` 再導頁。這時他是「不需改密碼、但不是櫃檯角色」，`Gate` 會把他送回登入頁，而登入頁的提示卡要求這個分頁已經沒有登入狀態。設定新密碼的畫面應該 `clearSession()` 再顯示提示卡。
+- **登出要多清一樣東西**：`clearSession()` 不會清看板的選擇（泳道、篩選、房號搜尋、側欄），登出時要另外呼叫 `useBoardViewStore.getState().reset()`。
+- **儲存的鍵**（驗收測試塞資料要照這些鍵）：登入狀態在 `sessionStorage` 的 `tms.frontdesk.session`，值是登入回應的 JSON 原樣；看板選擇在 `sessionStorage` 的 `tms.frontdesk.board-view`；語言在 `localStorage`，登入頁一筆 `tms.frontdesk.language.login-page`，每人一筆 `tms.frontdesk.language.staff.<員工編號>`，值是語言代碼。
+- **語言的決定規則還沒有實作**，初始化固定用繁體中文，留給介面語言那個 phase。英文、日文、越南文的資源檔目前是空的，缺的鍵會退回繁體中文。
+- **還沒有處理的**：憑證過期或後端回 401 時要不要回登入頁；轉址時不會保留網址上的查詢參數。
+
+## T019 `app/web/src/lib/` 的純計算殼：給 Phase 4 的注意事項
+
+- 殼的函式呼叫時會丟 `not implemented: lib/<檔> <函式>`；填內容時把參數名前面的底線拿掉，簽章不必改。測試檔裡的 `it.todo` 換成真的測試。
+- **等待時間只算一份**：數量卡「等最久」、欄頭「逾 20 分」、待派單頁與詳情的「已等 N 分」、膠囊，都用 `wait-pill.ts` 的 `waitingMinutes` 與 `waitTone`，不要各自再算。4-W09 排在 4-W11 之前，先用到的那一題就把這兩個填起來。
+- **純計算不碰翻譯**：要顯示的字一律回 `DisplayText`（哪一句加代入值），由畫面用 `t()` 轉成字。句子裡嵌著另一段要翻譯的字時（例如「派給{部門}」的部門），代入值放另一個 `DisplayText`；負責遞迴轉換的函式還沒有，第一個用到的 phase 要寫。
+- `status-card.ts` 是兩個函式：`statusTag` 只要卡片資料，詳情還在載入時就能先顯示；`statusCard` 要詳情資料。`tasks.md` 的 4-W21 寫「一個純函式」，以這裡為準。
+- `board-columns.ts` 的 `BoardColumn` 裡 `done`、`closed` 指的是看板的欄，和任務狀態的同名值不是同一件事（例如查房通過、已取消、已回答的單都在 `closed` 這一欄）。欄的顯示順序還沒有常數，4-W08 填的時候加。
+- 歷程每一筆下面的「時間 · 操作者」（不是今天的要寫日期）不在 `timelineSentence` 的回傳裡，`tasks.md` 也沒有哪一題指名要抽它。4-W22 做歷程時另開一個純函式並補測試。
+- `tasks.md` 其他 REFACTOR 題要抽的純計算（密碼規則、卡片副標、篩選組合、連線狀態機）沒有預留檔，由各自的 phase 在 `src/lib/` 開新檔。
+
+## 004 的 worktree：Maven 本機倉庫要和主工作目錄隔開
+
+004 在 git worktree `.claude/worktrees/004-frontdesk-web`（分支 `feature/004-frontdesk-web`）做，主工作目錄同時有別的工作在跑員工 App 的驗收，兩邊都會用到 `com.athena:app-bdd-support:0.0.1-SNAPSHOT`。004 改過的 `BackendChannel` 預期資料庫已套 V24，裝進 `~/.m2` 會弄壞另一邊。所以**這個分支合併之前，worktree 裡凡是會解析或安裝 `app-bdd-support` 的 mvn（`app/bdd-support`、`app/bdd`、`app/web-bdd`，含 `app/bdd/lib/env.sh` 與之後的 `run-feature.sh`）都要先設**：
+
+```
+export MAVEN_ARGS="-Dmaven.repo.local=/Users/Caresys/.m2-004/repository -Dmaven.repo.local.tail=/Users/Caresys/.m2/repository -Dmaven.repo.local.tail.ignoreAvailability=true"
+```
+
+004 自己 install 的東西進 `~/.m2-004`，其餘相依從 `~/.m2` 唯讀取用。沒設這個變數時行為和平常一樣（會裝進 `~/.m2`）。`tms/` 的測試不依賴 `app-bdd-support`，不需要這組參數。
+
+## T016 `BackendChannel`：給後面的題的注意事項
+
+- 櫃檯 Web 驗收的預設資料用 `ensureFrontdeskDefaults()` 建：飯店「雅典娜酒店」（代碼 `athena`）、12 個帳號（密碼都是 `Tms12345`）、五頁住客資訊頁、2–5 樓每層 01–16 號共 64 間房。每次呼叫都會把帳號寫回預設狀態（未鎖定、啟用、非臨時密碼），可以每個場景開頭都呼叫；先 `resetBusinessData()` 再呼叫也會重建。
+- **呼叫 `ensureFrontdeskDefaults()` 之後，同一個 `BackendChannel` 物件之後所有的資料準備都改成對雅典娜酒店做。** 員工 App 測試線不呼叫它，行為不變。
+- 預設帳號的員工編號（`F0101`、`M0001`、`D0001`、`H0201`…）和 V2 種子、`scripts/seed-demo.sh`、員工 App 測試飯店的都不相撞。之後新增帳號要維持這一點，原因見「待使用者決定」的登入不帶飯店那一條。
+- 住客資訊頁的 `key`（`breakfast`、`wifi`、`checkout`、`gym`、`taxi`）是自取的，truth 沒有規定。
+
+## T017 `BackendChannel` 建各種狀況的單：給 Phase 3（T139 一帶）的注意事項
+
+- **入口只有一個**：`createTaskInSituation(TaskSituation, TaskSituationSpec)`。規格表格的「狀況」欄用 `TaskSituation.ofTerm(字串)` 查，23 種用語和 `dsl.md` 逐字相同；住客、VIP、入住日、退房日用 `createReservation`。
+- **狀況是直接寫資料庫造出來的**，因為後端的動作都以「現在」記時間，排不出「25 分鐘前」「昨天結案」，而且有幾種狀況後端沒有對應的動作。直接寫的單不會發即時訊號，開著的櫃檯畫面不會自己更新；「畫面還沒跟上」那幾句要用走後端的五個入口（`deskAssign`、`deskUndoAssign`、`deskAnswer`、`guestSubmitRequest`、`guestWithdrawRequest`）。
+- **走後端的五個入口還沒有對真的後端跑過**。派單、復原、當場回答三支要等 4-B04、4-B05、4-B06 做完才不是 501，櫃檯與值班主管還要等 4-B10 放行；`guestSubmitRequest` 建的單在 4-B07 之前沒有 `task_no`。
+- **時刻**：`at` 是該狀況的計時起點，沒給時取後端測試時鐘的現在。比它早的時刻沒給就沿用後一個。
+- **待認領的單「時間」晚於「建立」時，會被建成退回過的單**：沒指定誰退回時當成班末自動退回，並自動挑該部門員工編號最前面的在職同仁當退回前的負責人，所以這張單的歷程會多一筆那位同仁認領。要主管退回就給 `returnedBy` 加 `handoverNote`；請假退回給 `poolSource("leave_return")` 加 `returnedBy`。
+- **「經手人」要由步驟分派到對的欄位**：依狀況對到 `triagedBy`、`assignedBy`、`actedBy` 或 `createdBy`。查房通過、已回答、延後中（主管延後）、已取消（同仁撤回）都必須給人，表格沒寫時步驟要自己定預設（`dsl.md` 沒寫）。「已取消（同仁撤回）」的報修人對到 `createdBy`，這個狀況不收負責人。
+- **住客的單要帶在住訂房的 `reservationId`**，之後 `guestWithdrawRequest` 才收得回。
+- **打掃單的 SOP「已做／總數」**：總數是飯店啟用了幾項清潔 SOP，要先用 `ensureCleaningSopItemId` 建到那個數，再給 `sopCheckedCount`。
+- 同一位同仁同時只能有一張進行中，資料庫會擋；這是正確行為。**表格沒有「負責人」欄而有兩張以上進行中時，步驟要替每一張挑不同的同仁**（照該部門預設名單輪流），不能一律給同一個人。目前有兩處：`總覽看板/數量卡與欄頭.feature:7`（510、511 房）與 `總覽看板/看板分欄與範圍.feature:127`（305、306 房）。
+- 主管延後的歷程事件沒有 `bySelf` 這個鍵，讀的一方要把沒有當成否。
+
+## T020 `app/web-bdd/` 的骨架：給 Phase 3 與 Phase 4 的注意事項
+
+- **stepdef 的落點**：`steps/common/Common{Given,When,Then}Steps`（介面根共用句）、`steps/account/`、`steps/shell/`、`steps/board/`、`steps/triage/`、`steps/answer/`、`steps/detail/`、`steps/realtime/`，各有 Given、When、Then 三個類別，建構子只收 `WebWorld`。畫面的操作與讀取寫進 `pages/` 下對應的 page object（`LoginPage`、`ChangePasswordPage`、`ShellFrame`、`BoardPage`、`TriagePage`、`AnswerPanel`、`DetailPanel`、`AccountPanel`）；這幾個檔多組共用，改之前重新讀檔、只做最小追加。`support/` 下六個檔當唯讀。
+- **每個場景開頭**會清空開發資料庫（5433）的業務資料、重建雅典娜酒店的預設資料、把後端與瀏覽器時鐘撥到 2026-10-26 14:10；結束時關掉這個場景開的所有分頁並把後端時鐘還原。
+- **「已登入」的場景在 4-B02 做完之前一定是紅的，不是注入寫錯。** 後端現在的登入回應還沒有 `loginId` 與 `hotelName`（契約有、4-B02 才補），而櫃檯 Web 檢查登入狀態時兩個都要，所以 `SessionInjector.loginAs` 原樣注入後會被導回登入頁。4-B02 排在所有櫃檯 Web 的 Feature phase 之前，屆時就會通；Phase 3 寫步驟時看到被導回登入頁不要去改 `SessionInjector`。
+- **等待一律用 Playwright 的等待**（`page.waitForCondition`、`waitForTimeout`、`network.waitUntilHeld`）。Playwright for Java 只在呼叫它的 API 時才處理瀏覽器事件，用 `Thread.sleep` 迴圈等請求或畫面永遠等不到。
+- **時間以秒或整分為界的場景，用 `Clocks.advance`／`moveTo` 撥到位，不要靠真實時間流逝。** 瀏覽器時鐘照真實速度走、後端時鐘固定，場景每多跑一秒瀏覽器就比後端快一秒；`moveTo` 會重新對齊。排「N 分鐘前」的單時避開離整分不到 30 秒的時刻。真的出現跨分抖動時，備案是兩邊都凍結（`setFixedTime`，T005 實測過拖曳仍可用）。不要用 `pauseAt`。
+- **已連上的事件串流，一般的路由攔截與離線模擬切不斷**，要用 `Network.cutLiveStream()`／`pauseLiveUpdates()`。它靠每個場景常駐的一段腳本包住 `fetch`；副作用是產品拿到的串流回應 `url` 是空字串，串流客戶端不要依賴 `response.url`。
+- **登入憑證的效期跟著後端時鐘走**：後端時鐘固定在 10/26 時簽的憑證，把時鐘撥得很遠之後可能過期；撥大幅度時間的場景在撥完之後再登入。
+- **「房號對應到哪一張單」的場景內紀錄還沒有共用類別**，做 `全館有以下的單：` 那一題時要開，其他組都會讀。
+- **拖曳的 helper 還沒有寫**。做拖曳派單的步驟時照 T005 的結論：`desktop` 用 `page.mouse()` 分兩段；`ipad` 在頁面裡送 `pointerType=touch` 的指標事件，並先讓 `setPointerCapture`／`releasePointerCapture` 略過測試專用的指標編號。
+- 失敗的場景會在 `app/web-bdd/target/failure-screenshots/` 留截圖，每個開著的分頁一張。
+
+## 待使用者決定
+
+- **V25 回填在三種少見情況的取法，請確認（目前沒有客戶資料，只影響開發資料）。** 回填已用一萬多張單的既有資料實測，與手寫的預期值逐列相符；下面三種是規格沒說、實測量到的行為：
+  - 工務單已結案（`closed`）但沒有 `repair_verified` 事件：有 `completed` 事件就取它的時間（也就是完修時間，不是驗收時間），都沒有才用 `updated_at`；不讀 `repair_tickets.verified_at`。若要改成「只有不需處理結案才採用 `completed`，其餘依序取 `verified_at`、`updated_at`」，要改 V25；開發資料庫（5433）已經套過 V25，改檔後那個資料庫要重建或修復 Flyway 紀錄。
+  - 查房通過（`inspected`）但沒有 `inspection_passed` 事件：同樣會取任何一筆 `completed` 事件，不分是不是免查結案。
+  - 有 `answered` 事件但事件內容沒有回覆文字：`answer` 留空、`ended_at` 照補。現行程式寫這種事件時一定帶回覆文字，實務上不會出現；要不要退而取舊單寫在 `note` 的回覆，請決定。
+  - 已結束但找不到任何對應事件的舊單，`ended_at` 用 `updated_at`。
+- **V26 上線時會短暫鎖住 `task_events`。** 重建角色約束要在獨占鎖下把整張表掃一遍，建索引期間也會擋寫入。專案既有的遷移都是這種寫法，示範與測試的資料量沒有問題；正式環境的事件量若已經很大，要不要拆成不鎖表的寫法（約束先 `NOT VALID` 再另一支 `VALIDATE`、索引改 `CONCURRENTLY` 且不放在交易裡），請決定。
+- **既有狀況，不是 004 造成的：** `staff_accounts.role` 允許 `owner`，但 `task_events.actor_role` 的清單沒有它；`owner` 帳號若走到會寫任務事件的操作，會被資料庫擋下。要不要處理請決定。
+- **示範資料裡有一張類型是工務、卻沒有工務單的任務**（「202 浴室置物架鬆動」，部門是房務）。它既沒有 `T-` 單號也沒有 `W-` 單號。這是 T011 之前就有的示範資料，沒有動；要不要修正這一筆，請決定。
+- **T011 的示範值班主管帳號用 `dm1`／`demo1234`，沒有照 truth 的 `D0001`／`Tms12345`。** 理由見下一條；示範飯店所有帳號本來就共用 `demo1234`。請確認。
+- **登入要帶飯店（使用者 2026-11-16 裁決：帳號以飯店加員工編號識別，`tenant_id` 是複合鍵之一）。** 現況是後端登入不帶飯店，`StaffAccountLoginService.resolveTenantId` 逐家找第一個有這個員工編號的飯店，兩家飯店有相同員工編號時第二家的人登不進自己的飯店。這要改登入的契約、後端登入邏輯、後端與櫃檯 Web 的登入規格，走 `/api-plan` 與 `/dsl-refine`，並在後端登入那一組 Feature phase（4-B02、4-B03）之前定案。還沒決定的是手機 App 登入時怎麼帶飯店（同一支登入端點）。在那之前 004 的測試資料用不相撞的員工編號避開。
+- **飯店代碼放在櫃檯 Web 網址的路徑裡（使用者 2026-11-16 裁決）。** 目前的理解是放在最前面，四條路徑都掛在飯店代碼底下，例如 `/athena/login`、`/athena/board`；位置待使用者確認。T018 建的路由（`src/router.tsx`、`src/lib/paths.ts`、`src/lib/route-access.ts` 的轉址）與 `app/web-bdd` 的 `WebApp` 路徑常數還是沒有飯店代碼的版本，要在登入頁那個 phase（4-W01）之前改，和上一條登入帶飯店一起處理。
+- **三處規格、資料模型、後端現況互相對不上，要上游裁決（測試資料目前照資料模型與契約寫）：**
+  - 工務單的來源欄 `repair_tickets.origin`：`data-model.dbml` 有這一欄，migration 與程式都沒有；後端目前用任務的 `source=system` 推導。要補 migration，還是改資料模型。
+  - 主管延後的單有沒有負責人：資料模型說沒有；`狀態標籤與狀態訊息卡.feature` 的 502 房填了負責人；後端現有的延後動作會把負責人設成按延後的主管本人。
+  - 員工請假造成的「中斷」：規格與契約有這種狀況（`interruption.bySelf=false`）；後端現有的請假處理是把單退回待認領，沒有由系統中斷的路徑。要改規格，還是補後端。
+- **「已取消（同仁撤回）」的報修人，兩份規格填在不同欄**：`狀態標籤與狀態訊息卡.feature:135` 填在「負責人」欄，`歷程.feature:121` 填在「經手人」欄。測試步驟會兩種都接受；要不要統一請決定。
+- **「被同仁退回」在產品裡沒有對應的動作。** `等待膠囊與逾時.feature` 有一條規則說待認領的單被同仁退回後重新起算等待。後端會把單退回待認領的路有班末自動退回、主管附交代退回、請假退回等，但沒有「房務同仁自己把還沒開工的單退回」。測試資料目前把它當成班末自動退回。要改規格的用語，還是補這個動作，請決定。
+- **資料模型與後端對延後事件的內容說法不同**：`data-model.dbml` 寫 `deferred` 事件帶原因與是否本人延後；後端主管延後時這筆事件不帶內容。測試資料照後端寫。
+- **本機開發資料庫（5433）的示範資料已被櫃檯 Web 的驗收測試清空。** 驗收測試連的就是這個資料庫，每個場景開頭都會清掉業務資料。現在示範飯店、示範二店、測試飯店都是 0 個帳號、0 張單，只剩雅典娜酒店的預設資料；資料庫已套到 V26。要示範資料得重跑 `scripts/seed-demo.sh`（T011，還沒有實跑過），而且下一次跑驗收又會被清掉。要不要讓驗收測試改用另一個資料庫，請決定。
+- **V25 上線順序：** 遷移套上去之後、新版程式啟動之前，舊版程式建的單不會有 `task_no`。上線時要避免這段時間有人建單，或事後補號。

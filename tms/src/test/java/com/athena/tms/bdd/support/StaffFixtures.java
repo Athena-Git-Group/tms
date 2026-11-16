@@ -4,6 +4,7 @@ import com.athena.tms.common.UuidV7;
 import com.athena.tms.service.JwtService;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -64,6 +65,24 @@ public class StaffFixtures {
         return created;
     }
 
+    /**
+     * 建立櫃檯人員：角色與部門都是 {@code frontdesk}。
+     * 今日班次與負責樓層都照其他現場人員沒指定時的預設建立。
+     */
+    public CreatedStaff createFrontdeskStaff(String name, String stateCode) {
+        return createFieldStaff(name, "frontdesk", null, null, stateCode);
+    }
+
+    /** 建立值班主管：角色是 {@code duty_manager}，沒有部門。 */
+    public CreatedStaff createDutyManager(String name, String stateCode) {
+        return insertStaff(name, "duty_manager", null, stateCode);
+    }
+
+    /** 建立老闆：角色是 {@code owner}，沒有部門。 */
+    public CreatedStaff createOwner(String name, String stateCode) {
+        return insertStaff(name, "owner", null, stateCode);
+    }
+
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {
         long tenantId = tenantFixtures.testTenantId();
         String passwordHash = passwordEncoder.encode(rawPassword);
@@ -99,6 +118,46 @@ public class StaffFixtures {
                         "UPDATE staff_accounts SET must_change_password = true, updated_at = ?"
                                 + " WHERE tenant_id = ? AND id = ?")
                 .params(OffsetDateTime.now(), tenantId, staffId)
+                .update();
+    }
+
+    /** 讀這個帳號目前累計的連續輸入錯誤密碼次數。 */
+    public int failedLoginCount(UUID staffId) {
+        long tenantId = tenantFixtures.testTenantId();
+        return jdbcClient
+                .sql("SELECT failed_login_count FROM staff_accounts WHERE tenant_id = ? AND id = ?")
+                .params(tenantId, staffId)
+                .query(Integer.class)
+                .single();
+    }
+
+    /** 直接把連續輸入錯誤密碼的次數寫成指定的值，不經過登入。 */
+    public void setFailedLoginCount(UUID staffId, int count) {
+        long tenantId = tenantFixtures.testTenantId();
+        jdbcClient
+                .sql(
+                        "UPDATE staff_accounts SET failed_login_count = ?, updated_at = ?"
+                                + " WHERE tenant_id = ? AND id = ?")
+                .params(count, OffsetDateTime.now(), tenantId, staffId)
+                .update();
+    }
+
+    /** 讀這個帳號鎖定到什麼時候；沒有被鎖定時是空的。 */
+    public Optional<OffsetDateTime> lockedUntil(UUID staffId) {
+        long tenantId = tenantFixtures.testTenantId();
+        return jdbcClient
+                .sql("SELECT locked_until FROM staff_accounts WHERE tenant_id = ? AND id = ?")
+                .params(tenantId, staffId)
+                .query((rs, rowNum) -> Optional.ofNullable(rs.getObject("locked_until", OffsetDateTime.class)))
+                .single();
+    }
+
+    /** 直接寫入鎖定到期時間；傳 {@code null} 代表解除鎖定。 */
+    public void setLockedUntil(UUID staffId, OffsetDateTime lockedUntil) {
+        long tenantId = tenantFixtures.testTenantId();
+        jdbcClient
+                .sql("UPDATE staff_accounts SET locked_until = ?, updated_at = ? WHERE tenant_id = ? AND id = ?")
+                .params(lockedUntil, OffsetDateTime.now(), tenantId, staffId)
                 .update();
     }
 
