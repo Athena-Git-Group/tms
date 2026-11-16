@@ -202,3 +202,12 @@ PushTokenRevokeRequest:
   properties:
     deviceFingerprint:
       type: string
+PublicHotel:
+  type: object
+  description: 不用登入就看得到的飯店資料，只有名稱一項。
+  required:
+  - name
+  properties:
+    name:
+      type: string
+      description: 飯店名稱（tenants.name），例如「雅典娜酒店」。

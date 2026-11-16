@@ -52,24 +52,26 @@
 | ADD | `specs/truth/contracts/openapi.yaml` -> `GET /desk/tasks/{id}`（`readDeskTask`）、schema `DeskTaskDetail`、`DeskTimelineEntry` | 單筆詳情：卡片資料加上回覆與回答者、住客與入住日期、開單人、已接的來由、取消與工務單結案的說明，以及歷程。歷程略過被復原的派單與復原那一對，也略過 `sop_checked`；句子由畫面依事件種類與 `detail` 組。 | FR-076 至 FR-085；落差表 3。歷程併進詳情，不另開按單查事件的端點：面板本來就要整份一起顯示，少一次往返。既有的 `/task-events` 不分單、沒有實作，櫃檯用不到，維持原狀。不帶住客人數：訂房資料沒有這一欄。 |
 | ADD | `specs/truth/contracts/openapi.yaml` -> `GET /desk/quick-replies`（`listDeskQuickReplies`）、schema `DeskQuickReply` | 回飯店住客資訊頁的每一頁（鍵、標題、全文），照設定的順序；沒有設定回空陣列。 | FR-066；落差表 7。住客資訊頁原本只有住客身分讀得到，`/tenant-configs/**` 又只開放 `manager`，所以給櫃檯一個唯讀入口。 |
 | ADD | `specs/truth/contracts/openapi.yaml` -> `POST /desk/tasks/{id}/assign`（`deskAssignTask`）、schema `DeskAssignRequest` | 派給房務或工務，帶 `dept` 與 `via`（`button`、`drag`）；成功回派出後的 `DeskTask`。派單與當場回答拆成兩個端點，不沿用程式現況「同一個端點用 `action` 分」的形狀。 | FR-053 至 FR-060、FR-087 至 FR-091；落差表 4、12。兩個動作的請求內容與驗證規則不同，分開後各自的錯誤才說得清楚。 |
-| ADD | `specs/truth/contracts/openapi.yaml` -> `POST /desk/tasks/{id}/assign/undo`（`deskUndoAssign`） | 派出後復原，沒有請求內容。後端擋兩件事：距離那筆 `triaged` 事件超過 10 秒就拒絕；派出後這張單沒有再發生任何事（資料層的守衛條件）。 | FR-054、FR-055、NFR-004；落差表 4。資料層不擋時間，所以由這裡擋：畫面的時限是 5 秒，另留 5 秒給網路往返與逾時後重送一次，合計 10 秒，避免很久之後還把單拉回來。 |
+| ADD | `specs/truth/contracts/openapi.yaml` -> `POST /desk/tasks/{id}/assign/undo`（`deskUndoAssign`） | 派出後復原，沒有請求內容。後端擋兩件事：距離那筆 `triaged` 事件超過 10 秒就拒絕；派出後這張單沒有再發生任何事（資料層的守衛條件）。 | FR-054、FR-055、NFR-004；落差表 4。資料層不擋時間，所以由這裡擋：使用者能復原的時間是 5 秒（畫面上的復原按鈕只出現 5 秒）；後端多留 5 秒只是給網路延遲與重送用，所以後端的上限是 10 秒，避免很久之後還把單拉回來。 |
 | ADD | `specs/truth/contracts/openapi.yaml` -> `POST /desk/tasks/{id}/answer`（`deskAnswerTask`）、schema `DeskAnswerRequest` | 當場回答並結案，回覆去掉頭尾空白後 1–120 字；成功回結案後的 `DeskTask`。沒有復原。 | FR-067 至 FR-075；落差表 6。 |
 | ADD | `specs/truth/contracts/components/schemas/shared.yaml` -> `Error` 的 code `task_not_in_triage` | 409。派單或當場回答送到時單已不是待派單；`context` 帶 `resolution`（`assigned`、`answered`、`guest_withdrew`、`other`）、`state`、`roomNo`，被派走或被回答時另帶 `actorName`，被派走時再帶 `dept`。 | FR-059、FR-075；落差表 5。沿用 `StateConflictException` 帶代碼與附帶資訊的既有機制，畫面才說得出「誰把哪一間派給哪個部門」。 |
 | ADD | `specs/truth/contracts/components/schemas/shared.yaml` -> `Error` 的 code `undo_claimed`、`undo_guest_withdrew`、`undo_expired`、`undo_unavailable` | 409。復原失敗的四種原因各一個 code：已有負責人（帶 `assigneeName`、`dept`、`roomNo`）、住客已收回、超過 10 秒、其他。判斷順序是先看單現在的樣子、再看時間。 | FR-055、NFR-004：兩種提示要分得出來，逾時與其他也要有去處。 |
 | ADD | `specs/truth/contracts/components/schemas/shared.yaml` -> `Error` 的 code `answer_invalid`、`idempotency_key_required` | `answer_invalid`（422）：回覆是空的或超過 120 字。`idempotency_key_required`（400）：櫃檯的三個寫入沒有帶 `Idempotency-Key`。 | FR-067、FR-068；落差表 N3。三個寫入是新端點、沒有既有呼叫者，強制帶不會影響任何人；其他端點「有帶才生效」的現況不動。 |
 | ADD | `specs/truth/contracts/openapi.yaml` -> `GET /staff/stream`（`staffStream`）、tag `員工事件串流 API`、`groups/現場作業/員工事件串流.yaml`、schema `StaffStreamInit`、`StaffStreamResync`、`StaffStreamTask`、`StaffStreamHeartbeat`、`StaffStreamDegraded`、`StaffStreamRecovered` | 把既有的事件串流寫進契約，並定下：`frontdesk`、`manager`、`duty_manager` 收全館，`housekeeping`、`engineering` 維持同部門或自己名下；`triage_undone` 另外送給被收回的部門；`resync.refetch` 對全館角色是 `/api/v1/desk/board`；新增 `recovered` 事件、`heartbeat.degraded`、降級期間新連線補送 `degraded`、降級原因多一個 `kafka_unavailable`。 | FR-092 至 FR-095、NFR-005；落差表 10、N4、N5。收件範圍依角色定，不用連線時聲明用途：手機 App 不是這條串流的客戶端，沒有相容問題，也少一個參數。恢復訊號用事件加心跳兩條路，中途連上或漏接的客戶端也對得齊。 |
-| MODIFY | `specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `staffAccountsLogin`、schema `LoginRequest.client` | 請求多一個選填的 `client`（值 `frontdesk_web`）。帶了才檢查角色：`housekeeping`、`engineering`、`owner` 密碼正確且不是臨時密碼時回與密碼錯誤完全相同的 401 `credentials_invalid`，不計入連續錯誤次數；是臨時密碼時照常登入成功並回 `mustChangePassword=true` 與角色。不帶時行為不變。 | FR-005、FR-006；落差表 N1、N6。使用者已定「登入本身要成功並回角色與必須改密碼」。由後端擋，是因為只靠畫面時回應本身就說出密碼是對的。櫃檯 Web 用這一個登入端點；`/auth/login` 不在契約，櫃檯不用。手機 App 不帶 `client`，不受影響。 |
+| MODIFY | `specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `staffAccountsLogin`、schema `LoginRequest.client` | 請求多一個選填的 `client`（值 `frontdesk_web`）。帶了才檢查角色：`housekeeping`、`engineering`、`owner` 密碼正確且不是臨時密碼時回與密碼錯誤完全相同的 401 `credentials_invalid`，連續錯誤次數不增加也不清零；是臨時密碼時照常登入成功並回 `mustChangePassword=true` 與角色。不帶時行為不變。 | FR-005、FR-006；落差表 N1、N6。使用者已定「登入本身要成功並回角色與必須改密碼」。由後端擋，是因為只靠畫面時回應本身就說出密碼是對的。櫃檯 Web 用這一個登入端點；`/auth/login` 不在契約，櫃檯不用。手機 App 不帶 `client`，不受影響。次數不增加的理由：`client` 只是讓櫃檯 Web 擋錯角色的便利機制，不是安全邊界（同一組帳密不帶 `client` 就登得進去），不值得為了看不出來而鎖住同仁在手機 App 的帳號。 |
 | ADD | `specs/truth/contracts/components/schemas/員工帳號與登入.yaml` -> `LoginResponse.loginId`、`LoginResponse.hotelName` | 登入與改密碼的回應多帶員工編號與飯店名稱，兩個都是必回。 | FR-011、FR-012、FR-096；落差表 9、N7。只加欄位，手機 App 不讀就沒有影響。 |
+| ADD | `specs/truth/contracts/openapi.yaml` -> `GET /public/hotels/{hotelCode}`（`readPublicHotel`）、parameter `HotelCode`、schema `PublicHotel` | 新增不用登入就能呼叫的端點：以飯店識別代碼查詢，只回飯店名稱（`tenants.name`）一項；查不到或格式不對回 404。識別代碼是飯店主檔的公開代碼 `tenants.code`（例如 `athena`），不是內部編號 `tenants.id`；參數的長度（3–32）與格式限制和資料模型一致。 | FR-001：登入頁要顯示飯店名稱，但登入前沒有身分。登入頁以網址上的飯店識別代碼查名稱；代碼怎麼放進網址屬於前端實作，契約不規定。登入後以登入回應的 `hotelName` 為準。內部編號是流水號，可以被逐一猜出，拿來查等於不登入就能列出所有飯店名稱，所以用 `/data-plan` 在飯店主檔新增的公開代碼。 |
 | MODIFY | `specs/truth/contracts/components/schemas/員工帳號與登入.yaml` -> `staff_accounts.role`、`staff_accountsRequest.role`、`LoginResponse.role` | 角色的可用值寫明含 `duty_manager`。 | 落差表 11。資料庫本來就允許這個值，是把契約寫成與資料一致。`duty_manager` 能用的介面只有登入、改密碼、櫃檯看板與派單 API、員工事件串流（使用者已定）。 |
 | MODIFY | `specs/truth/contracts/groups/營運管理/員工帳號與登入.yaml` -> `changeOwnPassword`、schema `ChangePasswordRequest.newPassword`、`Error` 的 code `new_password_too_weak` | 新密碼必須至少 8 碼、含英文字母、含數字，不符合回 422 `new_password_too_weak`（`context.failedRules`）；拿掉「強度規則尚未定義」的說明。規則對所有呼叫者適用。 | FR-016；落差表 9。使用者已定這三條規則。規則跟著帳號走：同一組密碼兩個端都用，只擋櫃檯 Web 沒有意義。手機 App 的改密碼畫面本來就先檢查同一組規則（`app/mobile/lib/features/login/password_rules.dart`），既有密碼不受影響。 |
 | ADD | `specs/truth/contracts/components/schemas/住客掃碼.yaml` -> `GuestRequest.answer` | 住客視角的需求多一個可為空的 `answer`，帶櫃檯當場回答的回覆全文。 | FR-073；落差表 6、N10。使用者已定：住客進度頁只做到後端回得出回覆。 |
+| MODIFY | `specs/truth/contracts/groups/住客與房間/住客掃碼.yaml` -> `GET /guest-requests`（`listGuestRequests`） | 操作說明補一句：櫃檯當場回答的需求，回應的 `answer` 帶回覆全文。路徑、參數、既有回應欄位都沒動。 | FR-073。讓讀這個端點的人知道回覆從哪裡讀；行為的改變就是上一列多回的那個欄位。 |
 | ADD | `specs/truth/contracts/components/schemas/任務.yaml` -> `tasks.taskNo`、`tasks.answer`、`tasks.endedAt` | 任務本體多三個可為空的欄位，對應資料模型新增的 `task_no`、`answer`、`ended_at`。 | 契約的任務本體要與資料模型一致。只加欄位，手機 App 用的 `TaskDetail` 既有欄位都沒動。 |
 | MODIFY | `specs/truth/contracts/components/schemas/任務.yaml` -> `tasks.note`、`tasksRequest.note` | 欄位說明拿掉「當場回答」，寫明建單後不因派單、復原或當場回答而改寫。 | `/data-plan` 已把回覆移到 `tasks.answer`；只改說明，形狀不變。 |
 | MODIFY | `specs/truth/contracts/components/schemas/任務事件流水帳.yaml` -> `task_events.type`、`task_events.actorRole`、`task_events.payload` | 說明改成 25 個事件值（含 `triage_undone`）、操作者角色含 `duty_manager`、`triaged` 與 `triage_undone`、`answered` 各帶什麼。 | 與 `/data-plan` 更新後的資料模型對齊；只改說明，形狀不變。 |
-| MODIFY | `specs/truth/contracts/groups/現場作業/任務.yaml` -> `POST /tasks/{id}/triage`（`tasksTriage`） | 標成不再使用（`deprecated`）並加一句說明：沒有實作、沒有呼叫者，櫃檯處理待派單改用 `deskAssignTask`、`deskUndoAssign`、`deskAnswerTask`。路徑、請求與回應形狀都沒動。 | 落差表 12：契約與程式的路徑不一致要有一個答案。這條路徑原本只有骨架、沒有行為說明，也沒有任何客戶端用它；不刪除是因為刪既有路徑需要使用者確認。 |
+| DELETE | `specs/truth/contracts/openapi.yaml` -> `POST /tasks/{id}/triage`（`tasksTriage`）、`groups/現場作業/任務.yaml` 的同名操作 | 移除這個端點；`任務 API` 的 tag 說明改成指向櫃檯看板與派單 API。它用到的 `tasksRequest`、`tasks` 兩個 schema 還有其他端點在用，保留不動。 | 使用者決定刪除。這條路徑只有骨架、沒有實作；`app/`、`tms/`、`specs/truth/features/` 都查無呼叫者與引用（程式的 `/desk/triage/{taskId}` 是另一條路徑）。櫃檯處理待派單一律用 `deskAssignTask`、`deskUndoAssign`、`deskAnswerTask`，契約與程式路徑不一致的問題（落差表 12）到此只剩一個答案。 |
 | NOOP | `specs/truth/contracts/openapi.yaml` -> `GET /tasks`（`listTasks`）、`GET /task-events`（`listTaskEvents`）、`GET /tenant-configs/guest-home`、`POST /alerts`、`GET /reservations`、`GET /rooms` | 已檢查，不修改。 | 櫃檯的清單、歷程、常用回覆都有自己的端點，用不到這幾個；它們有契約、沒有實作的狀況不在 004。 |
 | NOOP | `specs/truth/contracts/openapi.yaml` -> `GET /tasks/{id}`（`readTasks`）、`GET /pool`（`listDeptPool`）、`GET /me/today`、`GET /me/manager-queues`、`POST /tasks/{id}/defer`、`POST /tasks/{id}/cancel`、`POST /guest-requests/{id}/cancel`、`PUT /me/push-token` | 已檢查，不修改；`duty_manager` 也不加進這些端點。 | 手機 App 用的端點維持原狀。延後動作不收「延後到幾點」與原因（N11 屬於 005）。住客收回的既有規則足以支撐復原失敗的判斷。手機 App 的主管功能不對 `duty_manager` 放行（使用者已定）。 |
-| NOOP | `specs/truth/contracts/components/parameters.yaml`、`specs/truth/contracts/components/responses.yaml` | 已檢查，不修改。櫃檯的端點沿用既有的 `TaskId`、`IdempotencyKey` 與各種錯誤回應。 | 既有定義夠用。 |
+| NOOP | `specs/truth/contracts/components/parameters.yaml` 的既有參數、`specs/truth/contracts/components/responses.yaml` | 已檢查，既有定義不修改（`parameters.yaml` 只多了上面那列的 `HotelCode`）。櫃檯的端點沿用既有的 `TaskId`、`IdempotencyKey` 與各種錯誤回應。 | 既有定義夠用。 |
 
 ## /data-plan
 
@@ -86,9 +88,128 @@
 | ADD | `specs/truth/data/data-model.dbml` -> `tasks.ended_at`、索引 `(tenant_id, ended_at)` | 新增欄位：這張單走到終點的時間（`inspected`、`cancelled`、`closed`、完成即結束的 `done` 與當場回答），抽查退回時清空。Note 寫明櫃檯看板的範圍＝`ended_at IS NULL` 加上今天結束的單。實作須知：新 migration 要替既有已結束的單回填 `ended_at`（`inspected`、`cancelled`、`closed` 取進入該狀態那筆事件的 `created_at`；`done` 且 `type` 為 `amenity`、`other` 或有 `answered` 事件的取 `done_at`，沒有時取那筆事件的 `created_at`），否則歷史單全部會被 `ended_at IS NULL` 當成未結束、出現在看板上。回填在同一支 migration 內完成，上線後「還沒結束為 NULL」才成立。 | FR-041、FR-076 至 FR-082。查房通過、取消、結案三個時間原本只在事件或 `inspections`。選擇加欄位而不從事件推導：看板每次重抓都要判斷「是不是今天結束」，事件沒有可用索引。三種終點互斥，所以一個欄位而不是三個。 |
 | ADD | `specs/truth/data/data-model.dbml` -> `task_events.actor_role` 值 `duty_manager` | 可用值加上 `duty_manager`，並標明是 CHECK（資料庫本來就有這條限制：`tms/src/main/resources/db/migration/V1__schema.sql:256-257` 的 `chk_task_events_actor_role`，是如實描述）；記操作者當下的角色，不借用 `manager`。實作須知：需要一支新 migration 重建這條 CHECK 加入 `duty_manager`（不動 V1），不補的話值班主管派單、復原、當場回答寫事件會被資料庫擋下。 | FR-007、FR-057、FR-100：值班主管在櫃檯畫面派單、復原、當場回答，歷程要記得下來。 |
 | ADD | `specs/truth/data/data-model.dbml` -> `Table tasks` Note「櫃檯的今日已派單與當場回答張數」、`task_events` 索引 `(tenant_id, actor_id, created_at)` | 寫明兩個張數一律從事件算：今日已派單＝本人今天的 `triaged` 扣掉緊接著被 `triage_undone` 的；今日當場回答＝本人今天的 `answered`。新增一個索引支撐這條查詢，不新增計數欄位。 | FR-061、FR-054。既有事件就夠；計數欄位要在復原時減回、跨日歸零，會與事件變成兩份數字。 |
+| ADD | `specs/truth/data/data-model.dbml` -> `tenants.code`（全系統唯一） | 新增欄位：飯店識別代碼，對外公開、放在發給飯店的網址裡，登入前用它查飯店名稱。必有值、全系統唯一；長度 3–32，小寫英文字母、數字與連字號，第一個字是英文字母，不以連字號結尾、不連用連字號；只存小寫、比對分大小寫；有一份保留字清單；寫入後不改。欄位說明寫明 `id` 只在系統內使用、對外一律用 `code`。實作須知：需要一支新的 migration，不動舊的 migration 檔；既有飯店要回填代碼（代碼由營運逐家指定，不能從飯店名自動產生），順序是先加可為空的欄位、回填、再加上必有值、唯一與格式和保留字的 CHECK；開發種子資料與測試裡建立飯店的地方都要補代碼。 | FR-001：登入頁在登入前要用網址上的代碼查飯店名稱。使用者已定：飯店主檔加一個公開的識別代碼。否決沿用內部編號（流水號可被逐一猜出，不登入就能列出所有飯店名稱）。代碼放在網址的路徑或子網域由前端與部署決定，所以格式取兩邊都能用的寫法。 |
 | NOOP | `specs/truth/data/data-model.dbml` -> `Table tenants`、`Table tenant_config` | 已檢查，不新增每家飯店的時區設定；櫃檯看板與張數的「今天」沿用後端注入的 Clock 時區。 | 使用者已定：飯店時區沿用伺服器時區。 |
 | NOOP | `specs/truth/data/data-model.dbml` -> `tasks.state`、`tasks.cancel_reason`、`Table staff_accounts`、`rooms`、`reservations_cache`、`repair_tickets`、`inspections`、`task_sop_checks` | 已檢查，不需變更。狀態維持十值，取消原因維持四值；房號、樓層、住客名、VIP、SOP 進度、角色與 `duty_manager` 的資料都已存在。 | 畫面缺的是後端回傳，不是資料；由 `/api-plan` 處理。 |
 
 ## /dsl-refine
 
-_尚未執行。_
+路徑縮寫：`fw/`＝`specs/truth/features/frontdesk-web/`；`be/`＝`specs/truth/features/backend/`。依據欄引用驗收例子的檔名（省略 `.feature`）、FR 編號、契約的操作名稱或 `ui-plan.md` 的題號。`specs/truth/features/ios-app/**` 不在這一趟範圍，沒有檢查也沒有改動。依賴 `ui-plan.md`「預設，待使用者確認」的 Example 上方都有 `# [need clarification]` 並註明題號。
+
+### 櫃檯 Web
+
+| 動作 | Truth 規格 | 改動摘要 | 原因 |
+| --- | --- | --- | --- |
+| ADD | `fw/dsl.md` -> 共通實作約定、「單的狀況對照」、50 個共用句型 | 新的介面根。定下預設飯店與帳號、時間、兩組瀏覽器設定（電腦 1280 × 720 滑鼠、iPad 橫向 1180 × 820 觸控，整套各跑一次）、畫面與後端都要成立的斷言方式，以及跨模組共用的 Given／When／Then。 | `techstack.md` 已定名介面根與 `Cucumber-JVM` ＋ `Playwright for Java`；FR-103 的滑鼠與觸控以兩組設定各跑一次驗收。 |
+| ADD | `fw/帳號與登入/登入頁.feature`（12 條 Rule） | 登入頁的欄位與按鈕、兩欄有內容才能登入、員工編號轉大寫、欄位長度、顯示與隱藏密碼、三種角色進看板、三種失敗共用一句、鎖定與停用各自的提示卡、忘記密碼只給提示、飯店名稱查不到就不顯示。 | `櫃檯人員在共用裝置上登入改密碼與登出` Rule 1 至 3；FR-001 至 FR-009；使用者決定的飯店名稱查法；C-01。 |
+| ADD | `fw/帳號與登入/設定新密碼畫面.feature`（12 條 Rule） | 拿臨時密碼先進設定新密碼畫面、不必再輸入臨時密碼、改完前進不了其他頁、四條規則、不能與臨時密碼相同、改完直接進看板、被擋角色改完回登入頁並被告知、之後登入照常被擋、可以登出離開、重新整理仍停在這一頁。 | 同檔 Rule 4；FR-014 至 FR-016；C-02、C-16、C-18。 |
+| ADD | `fw/帳號與登入/帳號面板與登出.feature`（8 條 Rule） | 帳號卡與身分卡的文字、面板只有三項、身分卡點了沒反應、完成關閉、登出先確認、取消不登出、登出後不留上一位的資訊。 | 同檔 Rule 5、6；FR-010 至 FR-013、NFR-001。 |
+| ADD | `fw/帳號與登入/登入狀態跟著分頁.feature`（9 條 Rule） | 重新整理不用再登入並停在原頁、篩選搜尋泳道保留、面板不保留、側欄選擇保留、關掉分頁或瀏覽器要重新登入、每個分頁各自登入與登出。 | 同檔 Rule 7、8；FR-008；`research.md` 決策 9；C-18。 |
+| ADD | `fw/帳號與登入/介面語言.feature`（14 條 Rule） | 沒人選過時跟瀏覽器、登入頁語言選單、每人一筆記在裝置上、沒選過的人沿用登入頁語言、登出後停在上一位的語言、不跟到別台裝置、分頁之間共用、關掉瀏覽器後還在、帳號面板語言頁、只換介面文字不換輸入的內容。 | `介面語言跟著瀏覽器與個人在這台裝置上的選擇` 全部 4 條 Rule；NFR-008。 |
+| ADD | `fw/共用外框/側欄與工具列.feature`（7 條 Rule） | 側欄的內容、待派單徽章、兩頁切換時外框不變、側欄各頁的預設、打開與收合、自己選過之後維持。 | `共用外框與尚未開放的入口` Rule 1；FR-038、FR-039、FR-102。 |
+| ADD | `fw/共用外框/尚未開放的入口.feature`（3 條 Rule） | 「通知板」「遺失物」「代開單」點了沒反應、只有主管與值班主管有「設定」、「設定」點了不展開。 | 同檔 Rule 4；FR-096、FR-097。 |
+| ADD | `fw/共用外框/支援的視窗與輸入方式.feature`（8 條 Rule） | 兩種尺寸下五個畫面都不用縮放與整頁捲動、「還有 N 個狀態」與往右捲一欄、捲到底消失、視窗變寬欄跟著變寬、比支援的小就出現捲軸、只用手指能派單、沒有只靠游標才看得到的東西。 | 同檔 Rule 2、3；FR-098 至 FR-103、NFR-006；`ui-plan.md` 版面尺寸表。 |
+| ADD | `fw/總覽看板/看板分欄與範圍.feature`（8 條 Rule） | 8 個欄與版面順序、每種狀況落在哪一欄、當場回答在「已結案」、只顯示今天結束的、還沒結束的不限日期、頁副標未結案張數、空欄文字、欄內順序。 | `總覽看板把全館的單依狀態分欄並算出未結案` Rule 1、2、5；FR-017 至 FR-025、FR-041。 |
+| ADD | `fw/總覽看板/數量卡與欄頭.feature`（10 條 Rule） | 四張數量卡、「等最久」的挑選範圍與顏色、點它是開詳情、沒有在等的單時的樣子、欄頭的數量與兩種警示。 | 同檔 Rule 3、4；FR-026 至 FR-028、FR-037。 |
+| ADD | `fw/總覽看板/卡片內容.feature`（9 條 Rule） | 部門、類型、來源與 VIP 標、住客打字的標題與翻譯、副標的五種情形、本人暫停與本人延後的副標、SOP 進度、負責人頭像。 | 同檔 Rule 6；FR-030 至 FR-035；C-03、C-04、C-07。 |
+| ADD | `fw/總覽看板/等待膠囊與逾時.feature`（9 條 Rule） | 待認領 10 分起逾時、待派單只寫等幾分、已接與進行中不判斷逾時、等待的起算時間、四處用同一個時間、不顯示急件、後四欄的膠囊。 | `等待時間與逾時只判斷待認領` 全部 5 條 Rule；FR-033、FR-034、FR-036。 |
+| ADD | `fw/總覽看板/篩選搜尋與泳道.feature`（15 條 Rule） | 數量卡篩選、房號開頭比對、只收數字最多 4 碼、兩種篩選併成一顆膠囊、點膠囊全部清掉、不影響未結案張數、換頁後的保留規則、三種泳道與副標。 | `用數量卡房號與泳道在看板上找到已存在的單` Rule 1、2；FR-029、FR-040。 |
+| ADD | `fw/總覽看板/拖曳派單.feature`（14 條 Rule） | 平時與拖曳中的提示、拖放區與說明、放開就派單並註明拖曳、浮條、5 秒內復原、在別處放開沒事、其他欄拖不動、拖放區跟著泳道、用手指拖、撞單、送出失敗。 | `在看板拖曳待派單卡片完成派單` 全部 4 條 Rule；`同一張單同時被處理時先送出的為準` Rule 1、3 的拖曳例子；FR-087 至 FR-091；C-11。 |
+| ADD | `fw/總覽看板/載入與讀取失敗.feature`（4 條 Rule） | 載入中是骨架、讀取失敗的訊息與「重試」、每 5 秒自動再試。 | `總覽看板…` Rule 7；FR-042；C-08、C-09、C-10。 |
+| ADD | `fw/待派單/待派單清單.feature`（16 條 Rule） | 清單順序、頁副標、頁首與頁尾、每一列的內容、不到 1 分、翻譯與原文列、VIP 與空房、只有三顆動作、沒有建議文字、點列開詳情、「當場回答…」開面板、直接進部門的需求不會來。 | `在待派單頁派給房務或工務並在五秒內復原` Rule 1、5；FR-043 至 FR-052、FR-058。 |
+| ADD | `fw/待派單/按鈕派單與復原.feature`（12 條 Rule） | 點部門就送出、浮條、徽章、操作者是登入的人（三種角色）、不拆單、5 秒內復原回原位、超過 5 秒沒有復原、浮條換成新的那一張、復原失敗兩種、復原沒送成功。 | 同檔 Rule 2、3、4；`櫃檯人員在共用裝置上…` Rule 1 的主管與值班主管；FR-053 至 FR-057；C-15；`ui-plan.md` 待決事項 2。 |
+| ADD | `fw/待派單/空狀態與載入.feature`（8 條 Rule） | 兩種空狀態與今日張數、被復原的不算、頁副標、空的時候沒有頁首頁尾、載入中與讀取失敗不顯示成沒有單。 | 同檔 Rule 6；`總覽看板…` Rule 7；FR-061、FR-042；C-08 至 C-10。 |
+| ADD | `fw/待派單/撞單與送出失敗.feature`（6 條 Rule） | 被另一台派走、被另一台回答、住客收回三種撞單的對話框與畫面更新；送出失敗時列留在原位、徽章不變。 | `同一張單同時被處理時先送出的為準` 全部 3 條 Rule；FR-059、FR-060；C-11、C-13、C-14。 |
+| ADD | `fw/當場回答/當場回答面板.feature`（13 條 Rule） | 面板的內容、常用回覆帶入與選中的樣子、空白不能送、最多 120 字、送出後結案並從清單消失、去掉前後空白、沒有復原、看板上的位置與副標、取消不變。 | `資訊類問題當場回答住客並結案` Rule 1、2、3；FR-062 至 FR-074。 |
+| ADD | `fw/當場回答/撞單與送出失敗.feature`（6 條 Rule） | 當場回答送出時的三種撞單、按「好」後面板關閉、送出失敗時單不變、面板與已填的回覆都留著。 | `同一張單同時被處理…` Rule 2、3；FR-075；C-11 至 C-14。 |
+| ADD | `fw/單筆詳情/詳情面板內容.feature`（16 條 Rule） | 面板滑出與側欄收起、任何欄的卡片都能點開、版面順序、單號、「內容」六列、不顯示人數、建立時間寫法、負責人與空房、翻譯與原文列、清潔 SOP、來源列、沒有急件標記、關閉、讓位給側欄。 | `住客來電時打開單筆詳情照現況回答` Rule 1、3；`用數量卡…` Rule 3；FR-076 至 FR-078、FR-085；使用者決定的單號規則；C-07。 |
+| ADD | `fw/單筆詳情/狀態標籤與狀態訊息卡.feature`（11 條 Rule） | 十二種已定的標籤與訊息卡、待認領、已接的四種說明、待派單沒有訊息卡、本人暫停、本人延後、另外兩種取消、免查房，以及面板開著時認領與完成的即時更新。 | 同檔 Rule 1、2；FR-079 至 FR-081、FR-084；C-03 至 C-06。 |
+| ADD | `fw/單筆詳情/歷程.feature`（9 條 Rule） | 歷程的標題與每筆的樣子、按鈕與拖曳派單的句子、當場回答、住客收回、其他已定案的句子、被復原的派單不出現、只增不改、暫定句子、不是今天的寫日期。 | 同檔 Rule 3；FR-054、FR-056、FR-071、FR-082、FR-091；`ui-plan.md` 待決事項 1 與「找不到出處的文字」。沒有句子的事件種類不寫行為。 |
+| ADD | `fw/單筆詳情/派單區與單據管理動作列.feature`（8 條 Rule） | 待派單的派單區三格、從面板派單與之後的樣子、「當場回答…」開面板、其他狀態沒有派單區、動作列依狀態與角色、點了沒反應、主管取消與延後櫃檯只看得到。 | 同檔 Rule 4、5；`共用外框…` Rule 5；`資訊類問題…` Rule 4；FR-083、FR-086。 |
+| ADD | `fw/即時更新/現場變化即時跟上.feature`（8 條 Rule） | 住客送單、另一台派單、同仁認領開始完成、主管查房通過、住客收回時，看板、徽章、數量卡與待派單清單在 5 秒內跟上。 | `現場變化即時跟上與連線異常提醒` Rule 1；FR-092；C-17（上限照 `ui-plan.md` 建議的 5 秒）。 |
+| ADD | `fw/即時更新/連線異常提醒列.feature`（7 條 Rule） | 三種情形出現提醒列、沒有按鈕、期間每 5 秒更新且照常可以派單、恢復後自己消失並回到即時、重讀失敗留著舊資料。 | 同檔 Rule 2；FR-093 至 FR-095；`staffStream` 契約；C-09。 |
+| ADD | `fw/{帳號與登入、共用外框、總覽看板、待派單、當場回答、單筆詳情、即時更新}/dsl.md` -> 模組專屬句型共 252 個 | 七個模組各自的 Given／When／Then 與實作語意。 | 每個 step 合併介面根與同模組 DSL 後恰好命中一個句型。 |
+
+### 後端
+
+| 動作 | Truth 規格 | 改動摘要 | 原因 |
+| --- | --- | --- | --- |
+| MODIFY | `be/dsl.md` -> 狀態用語對照、部門用語對照 | 新增「待派單＝`triage`」。「值班經理」改稱「值班主管」，權威值仍是 role `duty_manager`；新增「老闆＝role `owner`」。 | 使用者已定 `duty_manager` 的中文是「值班主管」；被擋角色的案例需要老闆帳號。只改用語，權威值不變。 |
+| MODIFY | `be/dsl.md` -> Given `飯店有以下員工：` | `部門` 的可用值改成含值班主管與老闆，並寫明櫃檯、值班主管、老闆各自寫入的 role。句型與其他欄位不變。 | 同上。 |
+| MODIFY | `be/推播/員工推播事件.feature` -> 背景員工表 | 「李經理」的部門由「值班經理」改寫成「值班主管」。行為與驗證都沒有變。 | 跟著上一列的用語一次改完。 |
+| ADD | `be/dsl.md` -> Given `待派單有以下住客打字的需求：`、`"{櫃檯}" 已把 "{任務}" 派給 "{部門}"`；When `"{員工}" 讀取櫃檯看板`、`"{櫃檯}" 把 "{任務}" 派給 "{部門}"`、`"{櫃檯}" 復原 "{任務}" 的派單` | 五個跨模組共用句型（櫃檯看板與派單、員工事件串流、帳號與登入都用到）。 | `getDeskBoard`、`deskAssignTask`、`deskUndoAssign` 契約。 |
+| MODIFY | `be/dsl.md` -> Then `這次操作被拒絕，錯誤碼為 "{錯誤碼}"` | 舉例多列 `idempotency_key_required`、`answer_invalid`。契約不變。 | 櫃檯三個寫入的新錯誤碼。 |
+| ADD | `be/櫃檯看板與派單/櫃檯看板讀取.feature`（17 條 Rule） | 看板範圍（還沒結束的加今天結束的）、當場回答的標示、單號、等待起算的三種情形、已接的來由、不帶急件、住客原文與既有翻譯、住客與 VIP、後端時間、樓層、本人今日張數、打字需求命中與不命中規則的去向、系統不自己派單。 | `總覽看板…` Rule 1、2；`等待時間…` Rule 3、4；`在待派單頁…` Rule 1、5、6；`getDeskBoard`、`DeskTask`、`DeskMyToday`。 |
+| ADD | `be/櫃檯看板與派單/櫃檯介面的角色權限.feature`（7 條 Rule） | 三種角色讀得到看板；房務、工務、老闆讀不到也不能派單與回答；主管與值班主管的派單記本人與當下角色；值班主管可以復原與當場回答。 | `櫃檯人員在共用裝置上…` Rule 1；FR-007、FR-057、FR-100；`actor_role` 加 `duty_manager`。 |
+| ADD | `be/櫃檯看板與派單/櫃檯派單.feature`（11 條 Rule） | 派出後進部門待認領、歷程記部門與方式、拖曳與按鈕結果相同、不拆單、只能派房務或工務、三種撞單的拒絕與說明、被拒的不改單、必須帶防重複鍵、重送不會派兩次。 | `在待派單頁…` Rule 2、5；`在看板拖曳…` Rule 1；`同一張單同時被處理…` Rule 1、2；`deskAssignTask`、`task_not_in_triage`。 |
+| ADD | `be/櫃檯看板與派單/派出後復原.feature`（10 條 Rule） | 復原後回到還沒分部門、給人看的歷程回到派單前、事件各留一筆、10 秒內接受、超過拒絕、已被認領、已被住客收回、不是剛派出的不能復原、當場回答沒有復原、必須帶防重複鍵。 | `在待派單頁…` Rule 3、4；FR-054、FR-055、NFR-004；`deskUndoAssign` 與四個 `undo_*` 錯誤碼。 |
+| ADD | `be/櫃檯看板與派單/當場回答並結案.feature`（14 條 Rule） | 結案與回覆落地（`tasks.answer`）、狀態仍是既有的完成、不蓋掉住客原文、不算部門做掉的單、歷程、住客進度頁讀得到、去掉前後空白、120 字可以、空的與超過被拒、三種撞單、只有待派單可以回答、必須帶防重複鍵。 | `資訊類問題…` 全部 4 條 Rule；`同一張單同時被處理…` Rule 2；FR-067 至 FR-075；`deskAnswerTask`、`GuestRequest.answer`。 |
+| ADD | `be/櫃檯看板與派單/單筆詳情與歷程.feature`（11 條 Rule） | 詳情帶住客與日期、空房、開單人、回覆與回答者、已接的來由、取消的說明、工務單的完修結果與驗收主管；歷程由舊到新、只增不改、不含逐項勾選；找不到單。 | `住客來電時…` Rule 1 至 3；FR-076 至 FR-082；`readDeskTask`、`DeskTaskDetail`、`DeskTimelineEntry`。 |
+| ADD | `be/櫃檯看板與派單/常用回覆.feature`（3 條 Rule） | 回住客資訊頁的每一頁與順序、沒有設定時是空的、其他角色讀不到。 | `資訊類問題…` Rule 1；FR-066；`listDeskQuickReplies`。 |
+| ADD | `be/櫃檯看板與派單/dsl.md` -> 用語對照與 68 個句型 | 新模組的專屬句型。新增模組的理由：這是櫃檯視角的讀寫，既有的 `待認領`（部門同仁視角）、`任務執行`（負責人視角）、`主管工作台` 都承接不了待派單與看板。 | 契約 tag `櫃檯看板與派單 API`。 |
+| ADD | `be/員工事件串流/收得到哪些單的訊號.feature`（6 條 Rule）、`降級與恢復訊號.feature`（5 條 Rule）、`dsl.md`（15 個句型） | 三種角色收全館、房務與工務的範圍不變、派單訊號的收件範圍、復原訊號送給被收回的部門、連上後的起始與重抓通知、老闆不能連線；兩種降級原因、恢復訊號、降級期間新連線補送、心跳帶降級旗標。新增模組的理由：串流原本沒有任何行為規格。 | `現場變化即時跟上與連線異常提醒` 全部 2 條 Rule 的後端責任；FR-092 至 FR-095；`staffStream` 契約。 |
+| ADD | `be/帳號與登入/櫃檯畫面登入只放行三種角色.feature`（8 條 Rule） | 帶 `client`=`frontdesk_web` 的登入：三種角色成功；房務、工務、老闆密碼正確也回與密碼錯誤相同的回應；錯誤次數不增加也不清零；不帶 `client` 不受影響；臨時密碼先成功並要求改密；鎖定與停用的回應各自不同。 | `櫃檯人員在共用裝置上…` Rule 1、2、4；FR-005、FR-006；使用者已定；`staffAccountsLogin`。 |
+| ADD | `be/帳號與登入/設定新密碼.feature`（7 條 Rule） | 不必帶臨時密碼、改完直接拿到憑證、臨時密碼失效、三條強度規則、不能與目前密碼相同、沒改完讀不到看板、被擋角色改完新密碼生效並回角色、之後照常被擋。 | 同檔 Rule 4；FR-014 至 FR-016；`changeOwnPassword`、`new_password_too_weak`。既有 truth 沒有任何改密碼的後端行為，所以是新增。 |
+| ADD | `be/帳號與登入/登入前查飯店名稱.feature`（3 條 Rule） | 不用登入查得到名稱且只有名稱、對不到一律查不到、拿內部編號查不到。 | FR-001；使用者決定；`readPublicHotel`。 |
+| ADD | `be/帳號與登入/員工登入.feature` -> Rule「登入成功的回應帶員工編號與飯店名稱，不必另外查」 | 既有 6 條 Rule 不動，多一條。 | `LoginResponse.loginId`、`hotelName`。 |
+| ADD | `be/主管工作台/主管待辦空清單與權限.feature` -> Example「值班主管想查看主管待辦」 | 既有 Rule「主管待辦只開放主管角色查看」多一個例子；背景多一位值班主管。既有例子不動。 | 使用者已定：`duty_manager` 只放行櫃檯 Web 用到的介面，手機 App 的主管功能不對它放行（`/api-plan` 的 NOOP 列）。 |
+| MODIFY | `be/帳號與登入/dsl.md` -> 模組說明、既有 3 個 Given、1 個 When、5 個 Then 的實作語意 | 拿掉「已知的 truth 領先現況」一段與各列的「待 `/api-plan`」字樣，改寫成契約現在的樣子：`LoginRequest`、`LoginResponse`、401 `credentials_invalid`、429 `account_locked`、403 `account_disabled`、`mustChangePassword`。句型文字與驗證的業務事實都沒有變，驗證只有變得更明確。 | 那些落差契約都已補齊（003 與這一包的 `/api-plan`）；不屬於削弱驗證。 |
+| ADD | `be/帳號與登入/dsl.md` -> 3 個 Given、4 個 When、12 個 Then | 櫃檯畫面登入、設定新密碼、查飯店名稱用的句型。 | 上面三份新 feature。 |
+| NOOP | `be/待認領/**`、`be/任務執行/**`、`be/工務單/**`、`be/查房/**`、`be/推播/dsl.md` 與其餘模組 | 已檢查，不修改。既有 feature 沒有任何一處描述 `/desk/triage`、`/tasks/{id}/triage`、當場回答寫 `note` 或改密碼，所以沒有要對齊的舊行為。`be/待認領` 背景資料裡的來源值「櫃檯轉單」維持原樣。 | 以 `/desk/triage`、`triage`、`當場回答`、`改密`、`新密碼` 全文搜尋 `be/` 的結果。 |
+
+### 驗收例子承接對照
+
+每一列是 `features/acceptance/` 的一條 Rule（依檔內順序編號），右邊是承接它的介面 feature。56 條都有承接，沒有被漏掉的。
+
+| 驗收例子 | Rule | 櫃檯 Web | 後端 |
+| --- | --- | --- | --- |
+| 櫃檯人員在共用裝置上登入改密碼與登出 | 1 只有三種角色進得來 | `帳號與登入/登入頁`、`待派單/按鈕派單與復原`、`共用外框/尚未開放的入口` | `帳號與登入/櫃檯畫面登入只放行三種角色`、`櫃檯看板與派單/櫃檯介面的角色權限` |
+| 同上 | 2 鎖定與停用 | `帳號與登入/登入頁` | `帳號與登入/櫃檯畫面登入只放行三種角色`、`員工登入` |
+| 同上 | 3 登入頁的欄位與忘記密碼 | `帳號與登入/登入頁` | — |
+| 同上 | 4 臨時密碼先改密碼 | `帳號與登入/設定新密碼畫面` | `帳號與登入/設定新密碼`、`櫃檯畫面登入只放行三種角色` |
+| 同上 | 5 帳號卡與帳號面板 | `帳號與登入/帳號面板與登出` | `帳號與登入/員工登入`（回應帶員工編號與飯店名稱） |
+| 同上 | 6 登出 | `帳號與登入/帳號面板與登出` | — |
+| 同上 | 7 重新整理與關掉分頁 | `帳號與登入/登入狀態跟著分頁`、`介面語言` | — |
+| 同上 | 8 每個分頁各自登入 | `帳號與登入/登入狀態跟著分頁`、`介面語言` | — |
+| 介面語言跟著瀏覽器與個人在這台裝置上的選擇 | 1 至 4 | `帳號與登入/介面語言` | — |
+| 住客來電時打開單筆詳情照現況回答 | 1 點卡片滑出詳情、現場有變化自己更新 | `單筆詳情/詳情面板內容`、`狀態標籤與狀態訊息卡`、`歷程` | `櫃檯看板與派單/單筆詳情與歷程` |
+| 同上 | 2 狀態標籤與狀態訊息卡 | `單筆詳情/狀態標籤與狀態訊息卡` | `櫃檯看板與派單/單筆詳情與歷程`、`櫃檯看板讀取` |
+| 同上 | 3 內容、原文與歷程 | `單筆詳情/詳情面板內容`、`歷程` | `櫃檯看板與派單/單筆詳情與歷程` |
+| 同上 | 4 待派單的派單區 | `單筆詳情/派單區與單據管理動作列` | `櫃檯看板與派單/櫃檯派單` |
+| 同上 | 5 單據管理動作列 | `單筆詳情/派單區與單據管理動作列` | — |
+| 共用外框與尚未開放的入口 | 1 同一個外框 | `共用外框/側欄與工具列` | — |
+| 同上 | 2 兩種尺寸不破版 | `共用外框/支援的視窗與輸入方式` | — |
+| 同上 | 3 滑鼠與觸控 | `共用外框/支援的視窗與輸入方式`、`總覽看板/拖曳派單`；`dsl.md` 的兩組瀏覽器設定 | — |
+| 同上 | 4 尚未開放的入口 | `共用外框/尚未開放的入口` | — |
+| 同上 | 5 櫃檯只有派單與當場回答兩種寫入 | `單筆詳情/派單區與單據管理動作列` | — |
+| 同一張單同時被處理時先送出的為準 | 1 兩台同時派 | `待派單/撞單與送出失敗`、`總覽看板/拖曳派單` | `櫃檯看板與派單/櫃檯派單` |
+| 同上 | 2 已不在待派單時不生效 | `待派單/撞單與送出失敗`、`當場回答/撞單與送出失敗` | `櫃檯看板與派單/櫃檯派單`、`當場回答並結案` |
+| 同上 | 3 送出失敗 | `待派單/撞單與送出失敗`、`總覽看板/拖曳派單`、`當場回答/撞單與送出失敗` | `櫃檯看板與派單/櫃檯派單`（重送不會派兩次） |
+| 在待派單頁派給房務或工務並在五秒內復原 | 1 清單 | `待派單/待派單清單` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 2 點部門就送出 | `待派單/按鈕派單與復原`、`待派單清單` | `櫃檯看板與派單/櫃檯派單` |
+| 同上 | 3 5 秒內復原 | `待派單/按鈕派單與復原`、`單筆詳情/歷程` | `櫃檯看板與派單/派出後復原`、`櫃檯看板讀取`（今日張數） |
+| 同上 | 4 復原失敗 | `待派單/按鈕派單與復原` | `櫃檯看板與派單/派出後復原` |
+| 同上 | 5 只有三種處理方式、不建議不自派不拆單 | `待派單/待派單清單`、`按鈕派單與復原` | `櫃檯看板與派單/櫃檯派單`、`櫃檯看板讀取` |
+| 同上 | 6 空狀態 | `待派單/空狀態與載入` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 在看板拖曳待派單卡片完成派單 | 1 至 4 | `總覽看板/拖曳派單`、`單筆詳情/歷程` | `櫃檯看板與派單/櫃檯派單` |
+| 現場變化即時跟上與連線異常提醒 | 1 不用重新整理就跟著變 | `即時更新/現場變化即時跟上`、`單筆詳情/狀態標籤與狀態訊息卡` | `員工事件串流/收得到哪些單的訊號` |
+| 同上 | 2 連線異常提醒 | `即時更新/連線異常提醒列` | `員工事件串流/降級與恢復訊號` |
+| 用數量卡房號與泳道在看板上找到已存在的單 | 1 數量卡與房號篩選 | `總覽看板/篩選搜尋與泳道` | — |
+| 同上 | 2 三種泳道 | `總覽看板/篩選搜尋與泳道` | `櫃檯看板與派單/櫃檯看板讀取`（樓層） |
+| 同上 | 3 點卡片開詳情 | `單筆詳情/詳情面板內容` | — |
+| 等待時間與逾時只判斷待認領 | 1 待認領逾時、待派單只是等 | `總覽看板/等待膠囊與逾時`、`數量卡與欄頭` | — |
+| 同上 | 2 已接與進行中不判斷逾時 | `總覽看板/等待膠囊與逾時`、`單筆詳情/狀態標籤與狀態訊息卡` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 3 等待從哪裡起算 | `總覽看板/等待膠囊與逾時` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 4 不顯示急件 | `總覽看板/等待膠囊與逾時`、`單筆詳情/詳情面板內容` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 5 後四欄的膠囊 | `總覽看板/等待膠囊與逾時` | — |
+| 總覽看板把全館的單依狀態分欄並算出未結案 | 1 固定 8 個欄 | `總覽看板/看板分欄與範圍` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 2 只顯示今天結束的 | `總覽看板/看板分欄與範圍` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 3 四張數量卡 | `總覽看板/數量卡與欄頭` | — |
+| 同上 | 4 欄頭數量與警示 | `總覽看板/數量卡與欄頭` | — |
+| 同上 | 5 欄內順序 | `總覽看板/看板分欄與範圍` | — |
+| 同上 | 6 卡片上的文字 | `總覽看板/卡片內容` | `櫃檯看板與派單/櫃檯看板讀取` |
+| 同上 | 7 載入與讀取失敗 | `總覽看板/載入與讀取失敗`、`待派單/空狀態與載入`、`即時更新/連線異常提醒列` | — |
+| 資訊類問題當場回答住客並結案 | 1 送出後結案 | `當場回答/當場回答面板`、`單筆詳情/狀態標籤與狀態訊息卡`、`歷程` | `櫃檯看板與派單/當場回答並結案`、`常用回覆` |
+| 同上 | 2 回覆的規則 | `當場回答/當場回答面板` | `櫃檯看板與派單/當場回答並結案` |
+| 同上 | 3 取消不變 | `當場回答/當場回答面板` | — |
+| 同上 | 4 只有待派單可以回答 | `單筆詳情/派單區與單據管理動作列` | `櫃檯看板與派單/當場回答並結案` |

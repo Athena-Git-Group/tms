@@ -33,7 +33,7 @@ Error:
     為 answered 時另帶 actorName（回答的人）。畫面依 resolution 選提示，例如「{actorName} 剛剛把 {roomNo} 派給{dept}」）；
     undo_claimed（409，deskUndoAssign 時這張單已有負責人，context 帶 assigneeName、dept、roomNo）；
     undo_guest_withdrew（409，deskUndoAssign 時住客已經自己收回這張需求，context 帶 roomNo）；
-    undo_expired（409，deskUndoAssign 送到時距離派出已超過 10 秒，context 帶 roomNo、dept）；
+    undo_expired（409，deskUndoAssign 送到時距離派出已超過 10 秒；畫面的復原按鈕只出現 5 秒，多的 5 秒留給網路延遲與重送，context 帶 roomNo、dept）；
     undo_unavailable（409，deskUndoAssign 的其他情形：派出之後這張單又發生了別的事，或它不是櫃檯派出的，context 帶 state、roomNo）；
     answer_invalid（422，deskAnswerTask 的回覆去掉頭尾空白後是空的或超過 120 字，context 帶 maxLength）；
     idempotency_key_required（400，櫃檯的三個寫入沒有帶 Idempotency-Key）；

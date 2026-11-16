@@ -126,6 +126,7 @@
     /* 打開登入頁就清掉這個分頁的登入狀態，登入頁才不會留著上一位的身分。 */
     ss.del('deskSession'); ss.del('deskUi'); ss.del('deskUndo'); ss.del('deskData');
     LANG = Lang.page();
+    if (Q.get('hotel') === 'none') { const h = $('.auth-hotel'); if (h) h.hidden = true; }
     const id = $('#empNo'), pw = $('#pw'), btn = $('#submit'), err = $('#err'), card = $('#notice');
     langMenu(); eyeToggle($('#eye'), pw);
     const clear = () => { err.hidden = true; card.hidden = true; };
@@ -191,13 +192,13 @@
     ['done', '已完成', '#1A6B34', '—'], ['interrupted', '中斷', '#FF3B30', '沒有中斷的單'], ['deferred', '延後中', '#8E8E93', '沒有延後的單'], ['closed', '已結案', '#AEAEB2', '—']
   ];
   const GUESTS = {
-    305: { name: '王小明', meta: '2 人 · 10/25–10/27' }, 507: { name: 'Sato Kenji', meta: '1 人 · 10/24–10/28', vip: true }, 412: { name: '田中優子', meta: '2 人 · 10/26–10/29' },
-    508: { name: 'Emily Clark', meta: '2 人 · 10/25–10/28' }, 311: { name: '林志偉', meta: '1 人 · 10/26–10/27' }, 214: { name: '陳美玲', meta: '2 人 · 10/24–10/27', vip: true },
-    506: { name: '黃建國', meta: '2 人 · 10/26–10/28' }, 402: { name: '李雅婷', meta: '3 人 · 10/25–10/27' }, 318: { name: '吳宗翰', meta: '1 人 · 10/26–10/27' },
-    409: { name: '許文傑', meta: '2 人 · 10/25–10/26' }, 510: { name: '鄭家豪', meta: '2 人 · 10/26–10/30' }, 408: { name: '蔡宜君', meta: '2 人 · 10/25–10/27' },
-    405: { name: '劉怡如', meta: '1 人 · 10/23–10/27' }, 306: { name: '張育誠', meta: '2 人 · 10/26–10/27' }, 410: { name: '楊淑芬', meta: '2 人 · 10/25–10/27' },
-    215: { name: '周冠宇', meta: '1 人 · 10/26–10/28' }, 216: { name: '謝佩珊', meta: '2 人 · 10/24–10/27' }, 209: { name: '高志明', meta: '2 人 · 10/24–10/28' },
-    502: { name: '羅曉雯', meta: '1 人 · 10/26–10/27' }, 312: { name: '簡宏達', meta: '2 人 · 10/25–10/27' }, 316: { name: '江欣怡', meta: '2 人 · 10/26–10/28' }
+    305: { name: '王小明', meta: '10/25–10/27' }, 507: { name: 'Sato Kenji', meta: '10/24–10/28', vip: true }, 412: { name: '田中優子', meta: '10/26–10/29' },
+    508: { name: 'Emily Clark', meta: '10/25–10/28' }, 311: { name: '林志偉', meta: '10/26–10/27' }, 214: { name: '陳美玲', meta: '10/24–10/27', vip: true },
+    506: { name: '黃建國', meta: '10/26–10/28' }, 402: { name: '李雅婷', meta: '10/25–10/27' }, 318: { name: '吳宗翰', meta: '10/26–10/27' },
+    409: { name: '許文傑', meta: '10/25–10/26' }, 510: { name: '鄭家豪', meta: '10/26–10/30' }, 408: { name: '蔡宜君', meta: '10/25–10/27' },
+    405: { name: '劉怡如', meta: '10/23–10/27' }, 306: { name: '張育誠', meta: '10/26–10/27' }, 410: { name: '楊淑芬', meta: '10/25–10/27' },
+    215: { name: '周冠宇', meta: '10/26–10/28' }, 216: { name: '謝佩珊', meta: '10/24–10/27' }, 209: { name: '高志明', meta: '10/24–10/28' },
+    502: { name: '羅曉雯', meta: '10/26–10/27' }, 312: { name: '簡宏達', meta: '10/25–10/27' }, 316: { name: '江欣怡', meta: '10/26–10/28' }
   };
   const hk = 'housekeeping', eng = 'engineering', fd = 'frontdesk';
   /* 時間欄位用「幾分鐘前」寫，載入時才換成時刻，示範資料才不會綁死在某一天：c 建立、w 待認領的等待起算、a 認領、s 開始、d 完成、e 最後一步。 */

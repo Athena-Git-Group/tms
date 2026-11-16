@@ -16,6 +16,7 @@ Project tms {
 Table tenants {
   id         bigint      [pk, increment, note: '即各表 tenant_id（docs/12 例外二：集中開設、量少，8 bytes 省索引）']
   name       text        [not null, note: '飯店名']
+  code       text        [not null, unique, note: '飯店識別代碼：對外公開、放在發給飯店的網址裡的那一段（例如 athena），登入前用它查飯店名稱；id 是內部流水號、不對外，對外辨認飯店一律用 code。全系統唯一。格式 CHECK：長度 3–32；只能用小寫英文字母、數字與連字號；第一個字必須是英文字母；不以連字號結尾、不連用兩個連字號（即 ^[a-z][a-z0-9]*(-[a-z0-9]+)*$）。這一段會放進網址的路徑或子網域，所以只收兩邊都安全的字元；子網域一段最長 63 字，上限取 32 是為了念得出來、打得出來，下限 3 是為了不和常見縮寫撞名；第一個字限英文字母，代碼就不會長得像流水號；不連用連字號是避開子網域保留的 xn-- 開頭。大小寫：一律存小寫，比對時要一字不差、分大小寫，帶大寫的寫法視為查不到，這樣不會出現看起來一樣、其實是另一家的兩個代碼。保留字 CHECK，不得使用（會和前端路徑、後端路徑或常見子網域撞名）：api|public|login|logout|password|www|admin|app|desk|staff|guest|board|triage|static|assets|auth|health|actuator|status|docs|help|support|mail|cdn|dev|test|staging|tms|index|change-password。飯店是人工開設的，所以格式與保留字都由資料庫把關，不只靠程式檢查。開設飯店時寫入，寫入後不改：代碼已經在發給飯店的網址與書籤上，改了舊網址就全部失效，所以沒有修改代碼的功能，也不做舊代碼轉址；飯店改名只改 name；真的非換不可時由營運人工處理並通知飯店換網址，換下來的舊代碼不再發給別家飯店。對應 contracts 的 hotelCode 參數']
   created_at timestamptz [not null]
   Note: '租戶（飯店）主檔。v1 由營運人工開設。'
 }

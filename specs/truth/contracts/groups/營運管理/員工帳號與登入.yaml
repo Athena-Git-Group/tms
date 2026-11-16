@@ -13,6 +13,29 @@ listStaffAccounts:
               type: array
               items:
                 $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accounts'
+readPublicHotel:
+  get:
+    operationId: readPublicHotel
+    summary: 登入前查飯店名稱
+    description: >-
+      不需要登入、不帶任何憑證就能呼叫。櫃檯 Web 的登入頁用網址上的飯店識別代碼（tenants.code）查這家飯店的名稱，顯示在登入頁上。
+      只回飯店名稱一項，不回其他任何資料。代碼對不到飯店（含格式不對、大小寫不符、拿飯店主檔的內部編號來查）一律回 404，不區分原因。
+      登入之後，畫面上的飯店名稱以登入回應的 hotelName 為準。
+    tags:
+    - 員工帳號與登入 API
+    security: []
+    parameters:
+    - $ref: '../../components/parameters.yaml#/HotelCode'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/PublicHotel'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+    x-realtime-note: 不需要即時同步；登入頁載入時讀一次。
 staffAccountsLogin:
   post:
     operationId: staffAccountsLogin
@@ -29,10 +52,12 @@ staffAccountsLogin:
       櫃檯 Web 登入時請求帶 client=frontdesk_web，後端多做一步角色檢查，順序在停用、鎖定、密碼比對之後：
       角色是 frontdesk、manager、duty_manager 的照常登入。
       角色是 housekeeping、engineering、owner，而且密碼不是臨時密碼的，回 401 credentials_invalid，
-      狀態碼、code、message 與密碼錯誤完全相同，看不出帳號密碼其實是對的；這一次不發憑證，也不計入連續輸入錯誤的次數。
+      狀態碼、code、message 與密碼錯誤完全相同，看不出帳號密碼其實是對的；這一次不發憑證，
+      連續輸入錯誤的次數不增加、也不清零，鎖定狀態不變。不增加的理由：client 只是讓櫃檯 Web 擋下不該進來的角色，
+      不是安全邊界（同一組員工編號與密碼不帶 client 就登得進去），不值得為了讓人看不出來而把同仁在員工 App 的帳號鎖住。
       角色是這三種、但密碼是臨時密碼的，登入成功回 200，mustChangePassword=true 並帶 role：
       櫃檯 Web 先帶他去設定新密碼，改完後依回應的 role 告知這個帳號不能使用櫃檯畫面，並丟掉憑證。
-      請求不帶 client 時不做這一步，行為與原本相同。
+      請求不帶 client 時不做這一步，不看角色。
       這一步由後端把關而不只靠畫面，是因為只靠畫面時回應本身就說出了「密碼是對的」；
       櫃檯看板與派單 API 另外各自檢查角色，拿到憑證的其他角色一樣進不去。
     tags:

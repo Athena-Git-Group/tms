@@ -39,7 +39,7 @@ tags:
 - name: 任務事件流水帳 API
   description: 只進不改的事件歷程查詢（單任務歷程、全序排查）。增量訂閱一律走 Kafka，本 API 僅供查閱。
 - name: 任務 API
-  description: 任務建立、認領/開始/完成兩段回報、櫃檯判讀、住客收回與評分、主管改派/退池/延後/取消。所有狀態轉移經任務引擎守衛（非法轉移 409 state_conflict）。
+  description: 任務建立、認領/開始/完成兩段回報、住客收回與評分、主管改派/退池/延後/取消。所有狀態轉移經任務引擎守衛（非法轉移 409 state_conflict）。櫃檯處理待派單的單（派單、復原、當場回答）在櫃檯看板與派單 API。
 - name: 租戶設定 API
   description: 封閉鍵集合的讀寫（含住客資訊頁 guest-home 的前台讀取面）；sop_items/inspection_items 兩鍵為 sop_items 表的門面。
 - name: 工務單 API
@@ -134,6 +134,8 @@ paths:
     $ref: './groups/知識與通知/SOP與查房項目.yaml#/listSopItems'
   /staff-accounts:
     $ref: './groups/營運管理/員工帳號與登入.yaml#/listStaffAccounts'
+  /public/hotels/{hotelCode}:
+    $ref: './groups/營運管理/員工帳號與登入.yaml#/readPublicHotel'
   /staff-accounts/login:
     $ref: './groups/營運管理/員工帳號與登入.yaml#/staffAccountsLogin'
   /staff-accounts/change-password:
@@ -156,8 +158,6 @@ paths:
     $ref: './groups/現場作業/任務.yaml#/tasksCancel'
   /tasks/{id}/rate:
     $ref: './groups/現場作業/任務.yaml#/tasksRate'
-  /tasks/{id}/triage:
-    $ref: './groups/現場作業/任務.yaml#/tasksTriage'
   /tasks/{id}/sop-check:
     $ref: './groups/現場作業/任務.yaml#/tasksSopCheck'
   /tasks/{id}/requeue:
@@ -262,6 +262,8 @@ components:
       $ref: './components/parameters.yaml#/EscalationId'
     NotificationId:
       $ref: './components/parameters.yaml#/NotificationId'
+    HotelCode:
+      $ref: './components/parameters.yaml#/HotelCode'
   schemas:
     Error:
       $ref: './components/schemas/shared.yaml#/Error'
@@ -437,6 +439,8 @@ components:
       $ref: './components/schemas/員工帳號與登入.yaml#/LoginResponse'
     ChangePasswordRequest:
       $ref: './components/schemas/員工帳號與登入.yaml#/ChangePasswordRequest'
+    PublicHotel:
+      $ref: './components/schemas/員工帳號與登入.yaml#/PublicHotel'
     notifications:
       $ref: './components/schemas/通知中心.yaml#/notifications'
     MyToday:
