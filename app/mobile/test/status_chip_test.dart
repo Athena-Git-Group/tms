@@ -126,12 +126,6 @@ void main() {
     }
 
     expectChip(
-      'pending_review',
-      '等主管審核',
-      TmsColors.otherContainer,
-      TmsColors.onOtherContainer,
-    );
-    expectChip(
       'pool',
       '待認領',
       TmsColors.brandContainer,
@@ -161,6 +155,12 @@ void main() {
       TmsColors.successContainer,
       TmsColors.onSuccessContainer,
     );
+    expectChip(
+      'closed',
+      '已結案',
+      TmsColors.neutralContainer,
+      TmsColors.onNeutralContainer,
+    );
   });
 
   test('急件在還沒動工與已暫停時併進狀態標籤，成為一顆紅標籤', () {
@@ -175,8 +175,8 @@ void main() {
     }
   });
 
-  test('急件在審核中、待認領、維修中與已完修時不併進狀態標籤', () {
-    for (final state in ['pending_review', 'pool', 'doing', 'done']) {
+  test('急件在待認領、維修中與已完修時不併進狀態標籤', () {
+    for (final state in ['pool', 'doing', 'done']) {
       final urgent = repairStatusAppearance(state: state, isUrgent: true);
       final plain = repairStatusAppearance(state: state);
       expect(urgent.text, plain.text);

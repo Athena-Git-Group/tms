@@ -325,13 +325,6 @@ class TicketDetailEngineering extends StatelessWidget {
             idPrefix: 'ticket.status-summary-card',
             wrap: (node) => _summaryWrap(node, repairStateText(detail.state)),
           ),
-        if (detail.state == 'pending_review')
-          const TmsStatusCallout(
-            kind: TmsCalloutKind.ticketAwaitingReview,
-            tone: TmsCalloutTone.info,
-            title: '等主管審核',
-            body: '房務報修的一般件，主管核准後才會進待認領。現在先讓你知道。',
-          ),
         if (detail.isUrgent)
           TmsStatusCallout(
             kind: TmsCalloutKind.ticketUrgent,

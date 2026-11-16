@@ -208,7 +208,6 @@ class _RepairTicketRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rejected = ticket.state == 'rejected';
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -265,9 +264,7 @@ class _RepairTicketRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TmsText.subheadline.copyWith(
-                        color: rejected
-                            ? TmsColors.onErrorContainer
-                            : TmsColors.secondaryLabel,
+                        color: TmsColors.secondaryLabel,
                       ),
                     ),
                   ],

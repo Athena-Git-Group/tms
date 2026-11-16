@@ -33,13 +33,6 @@ abstract final class ManagerIds {
   static const String conflictAlert = 'manager.conflict-alert';
 
   static const String ticket = 'managerTicket';
-  static const String ticketApproveButton = 'managerTicket.approve-button';
-  static const String ticketRejectButton = 'managerTicket.reject-button';
-  static const String ticketVerifyButton = 'managerTicket.verify-button';
-  static const String ticketRejectSheetReasonField =
-      'managerTicket.reject-sheet.reason-field';
-  static const String ticketRejectSheetSubmitButton =
-      'managerTicket.reject-sheet.submit-button';
 
   static const String ticketPassButton = 'managerTicket.pass-button';
   static const String ticketFailButton = 'managerTicket.fail-button';

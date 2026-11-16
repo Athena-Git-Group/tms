@@ -57,8 +57,6 @@ enum TmsCalloutKind {
 
   ticketFixed(TmsCalloutSurface.ticket),
 
-  ticketAwaitingReview(TmsCalloutSurface.ticket),
-
   ticketRoomNotEnterable(TmsCalloutSurface.ticket),
 
   ticketUrgent(TmsCalloutSurface.ticket);

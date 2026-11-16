@@ -209,15 +209,6 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  Future<RepairTicketDetail> resubmitRepairTicket(String taskId) async {
-    final json = await _requestJson(
-      'POST',
-      '/repair-tickets/$taskId/resubmit',
-      idempotent: true,
-    );
-    return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
-  }
-
   Future<RepairTicketDetail> releaseRepairTicketToPool(String taskId) async {
     final json = await _requestJson(
       'POST',
@@ -833,8 +824,6 @@ class RepairTicketDetail {
     this.resolutionNote,
     this.resolutionType,
     this.doneAt,
-    this.reviewRequestedAt,
-    this.rejectReason,
     this.urgentDowngradeReason,
     this.originTicketNo,
     this.photos = const [],
@@ -883,8 +872,6 @@ class RepairTicketDetail {
 
   final String? doneAt;
 
-  final String? reviewRequestedAt;
-  final String? rejectReason;
   final String? urgentDowngradeReason;
   final String? originTicketNo;
 
@@ -922,8 +909,6 @@ class RepairTicketDetail {
       resolutionNote: json['resolutionNote'] as String?,
       resolutionType: json['resolutionType'] as String?,
       doneAt: json['doneAt'] as String?,
-      reviewRequestedAt: json['reviewRequestedAt'] as String?,
-      rejectReason: json['rejectReason'] as String?,
       urgentDowngradeReason: json['urgentDowngradeReason'] as String?,
       originTicketNo: json['originTicketNo'] as String?,
       photos: [
@@ -1028,13 +1013,11 @@ class ManagerQueues {
   const ManagerQueues({
     required this.counts,
     required this.inspection,
-    required this.review,
     required this.verify,
   });
 
   final ManagerQueueCounts counts;
   final List<InspectionQueueItem> inspection;
-  final List<ReviewQueueItem> review;
   final List<VerifyQueueItem> verify;
 
   factory ManagerQueues.fromJson(Map<String, dynamic> json) {
@@ -1045,10 +1028,6 @@ class ManagerQueues {
       inspection: [
         for (final item in (json['inspection'] as List<dynamic>? ?? const []))
           InspectionQueueItem.fromJson(item as Map<String, dynamic>),
-      ],
-      review: [
-        for (final item in (json['review'] as List<dynamic>? ?? const []))
-          ReviewQueueItem.fromJson(item as Map<String, dynamic>),
       ],
       verify: [
         for (final item in (json['verify'] as List<dynamic>? ?? const []))
@@ -1061,18 +1040,15 @@ class ManagerQueues {
 class ManagerQueueCounts {
   const ManagerQueueCounts({
     required this.inspection,
-    required this.review,
     required this.verify,
   });
 
   final int inspection;
-  final int review;
   final int verify;
 
   factory ManagerQueueCounts.fromJson(Map<String, dynamic> json) {
     return ManagerQueueCounts(
       inspection: (json['inspection'] as num?)?.toInt() ?? 0,
-      review: (json['review'] as num?)?.toInt() ?? 0,
       verify: (json['verify'] as num?)?.toInt() ?? 0,
     );
   }
@@ -1114,53 +1090,6 @@ class InspectionQueueItem {
       waitingSinceIsToday: json['waitingSinceIsToday'] as bool? ?? false,
       cleanerName: json['cleanerName'] as String? ?? '',
       redoCount: (json['redoCount'] as num?)?.toInt() ?? 0,
-    );
-  }
-}
-
-class ReviewQueueItem {
-  const ReviewQueueItem({
-    required this.taskId,
-    required this.roomNo,
-    required this.isPublicArea,
-    required this.title,
-    required this.waitingSince,
-    required this.waitingSinceIsToday,
-    required this.ticketNo,
-    required this.category,
-    required this.reporterName,
-    this.description,
-    this.photoCount = 0,
-  });
-
-  final String taskId;
-  final String? roomNo;
-  final bool isPublicArea;
-  final String title;
-
-  final String waitingSince;
-  final bool waitingSinceIsToday;
-  final String ticketNo;
-  final String category;
-
-  final String? description;
-  final String reporterName;
-
-  final int photoCount;
-
-  factory ReviewQueueItem.fromJson(Map<String, dynamic> json) {
-    return ReviewQueueItem(
-      taskId: json['taskId'] as String,
-      roomNo: json['roomNo'] as String?,
-      isPublicArea: json['isPublicArea'] as bool? ?? false,
-      title: json['title'] as String? ?? '',
-      waitingSince: json['waitingSince'] as String,
-      waitingSinceIsToday: json['waitingSinceIsToday'] as bool? ?? false,
-      ticketNo: json['ticketNo'] as String,
-      category: json['category'] as String,
-      description: json['description'] as String?,
-      reporterName: json['reporterName'] as String? ?? '',
-      photoCount: (json['photoCount'] as num?)?.toInt() ?? 0,
     );
   }
 }

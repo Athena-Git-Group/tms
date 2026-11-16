@@ -111,7 +111,9 @@ class MeScreen extends StatelessWidget {
                 CupertinoPageRoute<void>(
                   builder: (_) => task.type == 'repair'
                       ? TicketScreen(
-                          view: TicketView.engineering,
+                          view: TicketView.forSession(
+                            ApiClient.instance.session,
+                          ),
                           taskId: task.taskId,
                         )
                       : TaskScreen(roomNo: task.roomNo, taskId: task.taskId),
