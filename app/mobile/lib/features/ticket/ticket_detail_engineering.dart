@@ -366,7 +366,9 @@ class TicketDetailEngineering extends StatelessWidget {
         : '這張單已結案。';
     return TmsStatusCallout(
       kind: TmsCalloutKind.ticketFixed,
-      tone: TmsCalloutTone.success,
+      tone: stage == RepairCompletionStage.awaitingVerification
+          ? TmsCalloutTone.info
+          : TmsCalloutTone.closed,
       title: title,
       body: parts.isEmpty ? fallback : parts.join(''),
       wrap: (node) => _summaryWrap(

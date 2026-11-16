@@ -372,6 +372,7 @@ TmsNotificationKind _kindOf(NotificationItem item) {
     case 'leave_takeover':
     case 'inspection_failed':
     case 'spot_check_failed':
+    case 'repair_verification_failed':
       return TmsNotificationKind.newRequest;
     case 'kb_reply':
     case 'kb_unhelpful':

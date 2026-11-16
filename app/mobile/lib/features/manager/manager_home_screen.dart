@@ -24,19 +24,28 @@ class ManagerHomeScreen extends StatefulWidget {
 
   final ManagerKind kind;
 
-  static const Map<String, ({String title, String hint})> _tileCopy = {
-    'inspection': (title: '待查房', hint: '別人清好的房'),
-    'verify': (title: '待驗收', hint: '已完修的工務單'),
+  static const Map<String, ({String title, String hint, Color countColor})>
+  _tileCopy = {
+    'inspection': (
+      title: '待查房',
+      hint: '別人清好的房',
+      countColor: TmsColors.brandPrimary,
+    ),
+    'verify': (
+      title: '待驗收',
+      hint: '已完修的工務單',
+      countColor: TmsColors.brandPrimaryDark,
+    ),
   };
 
-  static List<({String queue, String title, String? hint})> tilesFor(
-    ManagerKind kind,
-  ) => [
+  static List<({String queue, String title, String? hint, Color countColor})>
+  tilesFor(ManagerKind kind) => [
     for (final queue in kind.queues)
       (
         queue: queue,
         title: _tileCopy[queue]!.title,
         hint: kind.queues.length > 1 ? _tileCopy[queue]!.hint : null,
+        countColor: _tileCopy[queue]!.countColor,
       ),
   ];
 
@@ -123,6 +132,7 @@ class _ManagerHomeScreenState extends State<ManagerHomeScreen> {
                               hint: tile.hint,
                               wide: wide,
                               count: _store.countOf(tile.queue),
+                              countColor: tile.countColor,
                               onTap: () => _openQueue(tile.queue),
                             ),
                           ),
@@ -189,11 +199,13 @@ class _MineSection extends StatelessWidget {
           ),
         ),
         if (cards.isEmpty)
-          const TmsContentUnavailable.inCard(
+          TmsContentUnavailable.inCard(
             id: ManagerIds.homeMineEmpty,
             copy: TmsEmptyCopy(
               icon: CupertinoIcons.tray,
-              title: '今天沒有名下的單',
+              title: kind == ManagerKind.engineering
+                  ? '目前沒有名下的工務單'
+                  : '今天沒有名下的單',
               description: '有需要時可以到待認領看看兩個部門的單',
             ),
           )

@@ -16,7 +16,7 @@
 	<properties>
 		<java.version>25</java.version>
 		<cucumber.version>7.22.1</cucumber.version>
-		<testcontainers.version>1.20.4</testcontainers.version>
+		<testcontainers.version>1.21.3</testcontainers.version>
 	</properties>
 	<dependencies>
 		<!-- core web / persistence / messaging / scheduling, per HELP.md initializr selection -->

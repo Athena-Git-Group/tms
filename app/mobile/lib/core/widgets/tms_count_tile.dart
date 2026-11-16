@@ -13,6 +13,7 @@ class TmsCountTile extends StatelessWidget {
     this.hint,
     this.wide = false,
     required this.count,
+    required this.countColor,
     required this.onTap,
   });
 
@@ -25,6 +26,9 @@ class TmsCountTile extends StatelessWidget {
   final bool wide;
 
   final int? count;
+
+  final Color countColor;
+
   final VoidCallback onTap;
 
   @override
@@ -81,7 +85,14 @@ class TmsCountTile extends StatelessWidget {
   Widget _count(String countText) => TmsSemantics(
     id: countId,
     label: countText,
-    child: ExcludeSemantics(child: Text(countText, style: TmsText.displayStat)),
+    child: ExcludeSemantics(
+      child: Text(
+        countText,
+        style:
+            (wide ? TmsText.displayTileCountWide : TmsText.displayTileCount)
+                .copyWith(color: countColor),
+      ),
+    ),
   );
 
   Widget _hint(String text) => Text(

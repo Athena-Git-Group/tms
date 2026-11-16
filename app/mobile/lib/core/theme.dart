@@ -7,6 +7,8 @@ abstract final class TmsColors {
 
   static const Color brandPrimary = Color(0xFF0C7680);
 
+  static const Color brandPrimaryDark = Color(0xFF0A5C64);
+
   static const Color brandOnPrimary = Color(0xFFFFFFFF);
 
   static const Color brandContainer = Color(0xFFC8E8ED);
@@ -342,6 +344,24 @@ abstract final class TmsText {
     fontWeight: FontWeight.w700,
     fontFeatures: tabularNumbers,
     color: TmsColors.label,
+  );
+
+  static const TextStyle displayTileCount = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 44,
+    height: 1,
+    fontWeight: FontWeight.w800,
+    fontFeatures: tabularNumbers,
+    color: TmsColors.brandPrimary,
+  );
+
+  static const TextStyle displayTileCountWide = TextStyle(
+    fontFamilyFallback: fontFamilyStack,
+    fontSize: 56,
+    height: 1,
+    fontWeight: FontWeight.w800,
+    fontFeatures: tabularNumbers,
+    color: TmsColors.brandPrimary,
   );
 
   static const TextStyle displayStat = TextStyle(

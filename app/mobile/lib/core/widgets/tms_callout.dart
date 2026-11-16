@@ -7,6 +7,13 @@ import 'tms_grouped_list.dart';
 enum TmsCalloutTone {
   error(symbol: TmsColors.systemRed, background: TmsColors.errorContainer),
 
+  closed(
+    symbol: TmsColors.brandOnPrimary,
+    background: TmsColors.brandPrimaryDark,
+    title: TmsColors.brandOnPrimary,
+    body: TmsColors.brandOnPrimary,
+  ),
+
   warn(
     symbol: TmsColors.systemOrange,
     background: TmsColors.brandAccentContainer,
@@ -29,11 +36,20 @@ enum TmsCalloutTone {
     background: TmsColors.neutralContainer,
   );
 
-  const TmsCalloutTone({required this.symbol, required this.background});
+  const TmsCalloutTone({
+    required this.symbol,
+    required this.background,
+    this.title = TmsColors.label,
+    this.body = TmsColors.secondaryLabel,
+  });
 
   final Color symbol;
 
   final Color background;
+
+  final Color title;
+
+  final Color body;
 }
 
 enum TmsCalloutKind {
@@ -205,7 +221,7 @@ class TmsCalloutSlot extends StatelessWidget {
                     spec.title,
                     Text(
                       spec.title,
-                      style: TmsText.headline,
+                      style: TmsText.headline.copyWith(color: spec.tone.title),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -218,7 +234,7 @@ class TmsCalloutSlot extends StatelessWidget {
                       reason,
                       Text(
                         reason,
-                        style: _bodyStyle.copyWith(color: TmsColors.label),
+                        style: _bodyStyle.copyWith(color: spec.tone.title),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -229,7 +245,10 @@ class TmsCalloutSlot extends StatelessWidget {
                     spec.idPrefix,
                     'body',
                     spec.body,
-                    Text(spec.body, style: _bodyStyle),
+                    Text(
+                      spec.body,
+                      style: _bodyStyle.copyWith(color: spec.tone.body),
+                    ),
                   ),
                   if (spec.actions.isNotEmpty) ...[
                     const SizedBox(height: TmsSpacing.xs2),
@@ -419,6 +438,14 @@ class _ToneIconPainter extends CustomPainter {
             ..lineTo(10.5, 15.5)
             ..lineTo(16.6, 8.9),
           stroke,
+        );
+      case TmsCalloutTone.closed:
+        canvas.drawPath(
+          Path()
+            ..moveTo(7.4, 12.4)
+            ..lineTo(10.5, 15.5)
+            ..lineTo(16.6, 8.9),
+          stroke..color = TmsColors.brandPrimaryDark,
         );
       case TmsCalloutTone.neutral:
         canvas.drawLine(
