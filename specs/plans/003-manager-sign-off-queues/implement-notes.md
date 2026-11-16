@@ -120,10 +120,36 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
 
 ## 回交上游：BDD harness 的測試時鐘 bug
 
-`首頁今日進度.feature` 的「預估剩餘工時」必紅（期望 135、實際 145），**不是產品缺陷，也不是 flake**。
+`首頁今日進度.feature` 的「預估剩餘工時」會紅（期望 135、實際 145），**不是產品缺陷**。
 
 算術：未完成的單扣掉已做分鐘是 135，完全不扣是 150，實際 145 = 150 − 5。也就是 310（已中斷，已做 5 分）有扣，305（進行中，已做 10 分）沒扣。
 
 根因：`app/bdd-support/.../BackendChannel.java:668` 在建 `doing` 狀態的任務時，用 **`OffsetDateTime.now()` 真實牆鐘**回推 `segment_started_at`；而後端 `TaskExecutionService.java:807` 的 `remainingMinutesOf()` 用的是被 `/api/v1/test/clock` 撥到劇本時間（10:00）的 `Clock`。於是 `segmentStartedAt.isBefore(now)` 為 false，那段 live segment 整個被跳過。310 是 `interrupted`，走 `:671` 那一支（`worked_sec = ?, segment_started_at = NULL`），不依賴時鐘，所以正常。
 
-只要牆鐘晚於劇本的「現在時間是 10:00」就必紅，只有早上 10 點前跑才會碰巧綠。修法在 harness：`:668` 與 `:449` 的 `backdateWorkStart()` 都要改成以後端測試時鐘為基準回推。這支 feature 不在 003 Test Scope 內，`app/bdd-support/**` 又是 004 的地盤，所以 003 不處理。
+**原本推論「只要牆鐘晚於劇本的 10:00 就必紅」已被實測推翻。** 2026-11-16 傍晚（牆鐘遠晚於 10:00）用 `run-all-app.sh` 跑同一支，5/5 綠。程式碼位置與算術觀察照留，但判定改為**間歇性、觸發條件未明**：可能 `run-all-app.sh` 這條路徑有重設測試時鐘的步驟，或建資料與讀進度之間的時鐘關係與推論不同。要動 harness 之前得先找出它何時會紅，不要照「必紅」去改。這支 feature 不在 003 Test Scope 內，`app/bdd-support/**` 又是 004 的地盤，所以 003 不處理。
+
+## T155（App 回歸）結果：兩輪全綠
+
+第一輪 11 支、176 個場景，零紅。binary 是 `2aaa2bb` 之後重新 build 的。
+
+| Feature | 場景 |
+|---|---|
+| `帳號與登入/登入與登出守衛` | 18 |
+| `主管工作台/主管首頁` | 15 |
+| `主管工作台/主管清單` | 13 |
+| `主管工作台/查房` | 11 |
+| `工務單/主管視角` | 23 |
+| `工務單/工務視角` | 27 |
+| `工務單/工務單房務端生命週期` | 13 |
+| `推播/點開推播的去處` | 19 |
+| `待認領/待認領列表` | 16 |
+| `系統層/離線模式與連線異常` | 16 |
+| `今日進度/首頁今日進度`（範圍外，另行確認） | 5 |
+
+第二輪只跑 `工務單/主管視角`（23）與 `系統層/離線模式與連線異常`（16），仍然全綠。兩輪的 log 裡 `grep _dependents.isEmpty` 都是零命中，所以 `ef22e09` 對驗收不通過紅屏的修法成立（那條是間歇性的，一輪綠不足以判定，故跑兩輪）。
+
+`flutter analyze` 0 error、0 warning、9 個既有 info；`flutter test` 498 綠。
+
+## T154 的狀態：未勾，不是 003 的問題
+
+003 的後端範圍乾淨，但 Test Scope 裡有 4 個場景被 004 的 `值班主管` 卡住（見上一節），所以「全綠」這個條件在 004 補上 `Terms.java` 的對照之前達不到。不自行放寬判準、也不代為修改 004 的地盤，留白等上游。

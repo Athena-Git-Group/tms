@@ -987,7 +987,7 @@
 - `specs/truth/features/ios-app/主管工作台/主管清單.feature`
 
 - [X] T151 [CODE-REMOVE] 移除 App 主管審核的模型、方法、待審核格與清單、核准退回的 id 與畫面分支、主管未核准文案
-- [ ] T152 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
+- [X] T152 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
 
 ## Phase 4V: ui quality gate
 
@@ -1017,4 +1017,4 @@
 - App：`帳號與登入/登入與登出守衛.feature`、`主管工作台/主管首頁.feature`、`主管工作台/主管清單.feature`、`主管工作台/查房.feature`、`工務單/主管視角.feature`、`工務單/工務視角.feature`、`工務單/工務單房務端生命週期.feature`、`推播/點開推播的去處.feature`、`待認領/待認領列表.feature`、`系統層/離線模式與連線異常.feature`，逐支以 `FEATURE=<路徑>` 跑；另跑 `app/mobile` 的 `flutter test`。
 
 - [ ] T154 [REGRESSION] 跑後端 Test Scope 與後端全套件，確認全綠
-- [ ] T155 [REGRESSION] 跑 App Test Scope 與 `flutter test`，確認全綠
+- [X] T155 [REGRESSION] 跑 App Test Scope 與 `flutter test`，確認全綠
