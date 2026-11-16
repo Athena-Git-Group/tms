@@ -309,6 +309,31 @@ public class BackendChannel {
         requireTestClock(response, "後端時鐘回到系統時間");
     }
 
+    /**
+     * 後端此刻認定的「現在」。
+     *
+     * <p>回推「這段工作從幾點開始做」一定要用這個時刻，不能用測試機自己的時間：後端算已做工時是拿
+     * 「它的現在」減掉開始時刻，劇本把後端時鐘撥到 10:00、測試機卻已是下午時，用測試機時間回推出來的
+     * 開始時刻會落在後端的「現在」之後，那段工時就整段不算。
+     *
+     * <p>後端時鐘沒被撥定、或後端根本沒開放撥時鐘端點時，後端用的就是系統時間，這裡回測試機的現在。
+     */
+    private OffsetDateTime backendNow() {
+        HttpResponse<String> response = send(request("GET", "/test/clock", null).GET());
+        int status = response.statusCode();
+        if (status == 404 || status == 401 || status == 403) {
+            return OffsetDateTime.now();
+        }
+        if (status != 200) {
+            throw new IllegalStateException("讀後端時鐘失敗：HTTP " + status + " " + response.body());
+        }
+        JsonNode clock = parseJson(response.body());
+        if (!clock.path("fixed").asBoolean(false)) {
+            return OffsetDateTime.now();
+        }
+        return OffsetDateTime.parse(clock.path("isoTime").asText());
+    }
+
     private static void requireTestClock(HttpResponse<String> response, String what) {
         int status = response.statusCode();
         if (status == 404 || status == 401 || status == 403) {
@@ -448,7 +473,7 @@ public class BackendChannel {
 
     public void backdateWorkStart(UUID taskId, int workedMinutes) {
         execute("UPDATE tasks SET worked_sec = 0, segment_started_at = ? WHERE tenant_id = ? AND id = ?",
-                OffsetDateTime.now().minusMinutes(workedMinutes), ensureTenant(), taskId);
+                backendNow().minusMinutes(workedMinutes), ensureTenant(), taskId);
     }
 
     public void backdateTaskTimeline(UUID taskId, int minutes) {
@@ -666,7 +691,7 @@ public class BackendChannel {
         if (workedMinutes != null) {
             if ("doing".equals(stateCode)) {
                 execute("UPDATE tasks SET worked_sec = 0, segment_started_at = ? WHERE tenant_id = ? AND id = ?",
-                        OffsetDateTime.now().minusMinutes(workedMinutes), tenantId, taskId);
+                        backendNow().minusMinutes(workedMinutes), tenantId, taskId);
             } else if (List.of("interrupted", "done", "inspected").contains(stateCode)) {
                 execute("UPDATE tasks SET worked_sec = ?, segment_started_at = NULL WHERE tenant_id = ? AND id = ?",
                         workedMinutes * 60, tenantId, taskId);
