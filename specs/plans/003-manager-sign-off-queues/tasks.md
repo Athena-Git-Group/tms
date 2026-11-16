@@ -986,7 +986,7 @@
 - `specs/truth/features/ios-app/主管工作台/主管首頁.feature`
 - `specs/truth/features/ios-app/主管工作台/主管清單.feature`
 
-- [ ] T151 [CODE-REMOVE] 移除 App 主管審核的模型、方法、待審核格與清單、核准退回的 id 與畫面分支、主管未核准文案
+- [X] T151 [CODE-REMOVE] 移除 App 主管審核的模型、方法、待審核格與清單、核准退回的 id 與畫面分支、主管未核准文案
 - [ ] T152 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
 
 ## Phase 4V: ui quality gate
