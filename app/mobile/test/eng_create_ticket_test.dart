@@ -134,7 +134,7 @@ void main() {
       expect(find.text('誰來處理'), findsOneWidget);
       expect(_byId('repair.who.pool.segment'), findsOneWidget);
       expect(
-        find.text('工務自己開的單不用主管審核。公共區域的單可以放進待認領，其他工務同仁也接得到。'),
+        find.text('公共區域的單可以放進待認領，其他工務同仁也接得到。'),
         findsOneWidget,
       );
     });

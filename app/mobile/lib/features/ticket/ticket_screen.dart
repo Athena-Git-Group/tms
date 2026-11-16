@@ -55,6 +55,8 @@ class _TicketScreenState extends State<TicketScreen> {
 
   RepairVerificationOutcome? _verifyOutcome;
 
+  RepairVerificationOutcome? _pendingVerifyOutcome;
+
   bool _verifyConflicted = false;
 
   final Map<String, String> _verifyKeys = {};
@@ -189,8 +191,8 @@ class _TicketScreenState extends State<TicketScreen> {
         idempotencyKey: key,
       );
       _verifyKeys.clear();
-      if (mounted && outcome.result == 'failed') {
-        setState(() => _verifyOutcome = outcome);
+      if (outcome.result == 'failed') {
+        _pendingVerifyOutcome = outcome;
       }
       return null;
     } on ApiException catch (e) {
@@ -237,7 +239,15 @@ class _TicketScreenState extends State<TicketScreen> {
         onSubmit: (reason) => _sendVerify('failed', reason: reason),
       ),
     );
-    if (mounted && _verifyConflicted) {
+    if (!mounted) {
+      return;
+    }
+    final outcome = _pendingVerifyOutcome;
+    if (outcome != null) {
+      _pendingVerifyOutcome = null;
+      setState(() => _verifyOutcome = outcome);
+    }
+    if (_verifyConflicted) {
       await _showVerifyConflict();
     }
   }

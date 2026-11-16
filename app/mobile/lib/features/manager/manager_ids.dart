@@ -32,8 +32,6 @@ abstract final class ManagerIds {
 
   static const String conflictAlert = 'manager.conflict-alert';
 
-  static const String ticket = 'managerTicket';
-
   static const String ticketPassButton = 'managerTicket.pass-button';
   static const String ticketFailButton = 'managerTicket.fail-button';
 

@@ -940,8 +940,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/待認領/待認領列表.feature`
 
-- [ ] T147 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T148 [BDD-REFACTOR] 在綠燈下確認員工端與主管端待認領共用同一份列表元件
+- [X] T147 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T148 [BDD-REFACTOR] 在綠燈下確認員工端與主管端待認領共用同一份列表元件
 
 ## Phase 4T: MODIFY Feature File - ios-app/系統層/離線模式與連線異常.feature
 
@@ -962,8 +962,8 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/系統層/離線模式與連線異常.feature`
 
-- [ ] T149 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T150 [BDD-REFACTOR] 在綠燈下確認員工動作與主管三動作共用同一段「離線擋在送出之前」的判斷
+- [X] T149 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T150 [BDD-REFACTOR] 在綠燈下確認員工動作與主管三動作共用同一段「離線擋在送出之前」的判斷
 
 ## Phase 4U: DELETE Feature / DSL Truth - App 主管審核（核准、退回、補資料再送出、待審核格與清單、主管未核准）
 

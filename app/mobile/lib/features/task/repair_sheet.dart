@@ -237,7 +237,7 @@ class _RepairSheetState extends State<RepairSheet> {
     }
     final urgent = _urgent;
     return _SubmitAction(
-      label: urgent ? '送出急件（直接給工務）' : '送出給主管審核',
+      label: urgent ? '送出急件' : '送出給工務',
       enabled: _category != null && _photos.isNotEmpty,
       style: urgent
           ? TmsPillButtonStyle.urgentFilled

@@ -78,9 +78,6 @@ public class PushThenSteps {
         } else if (ticketMatcher.matches()) {
             String ticketNo = ticketMatcher.group(1);
             world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
-            if ("manager".equals(world.loggedInStaff().role())) {
-                world.waitForTestId("managerTicket", SCREEN_TIMEOUT);
-            }
             String roomNo = roomNoOf(ticketNo);
             String onScreen = world.waitForLabelOf("ticket.hero.where", roomNo, SCREEN_TIMEOUT);
             if (!roomNo.equals(onScreen)) {

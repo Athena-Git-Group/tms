@@ -21,6 +21,8 @@ public class SystemWhenSteps {
 
     private static final String INSPECT_ITEM_PREFIX = "inspect.item.";
 
+    private static final String TICKET_SCREEN = "ticket.screen";
+
     private static final String VERIFY_FAIL_REASON = "水龍頭仍在滴";
 
     private final AppiumWorld world;
@@ -60,11 +62,11 @@ public class SystemWhenSteps {
                 world.tapTestId("inspect.submit-button", SCREEN_TIMEOUT);
             }
             case "驗收通過" -> {
-                openManagerQueueRow(staff, "verify", firstResolvedTicketNo(), "managerTicket");
+                openManagerQueueRow(staff, "verify", firstResolvedTicketNo(), TICKET_SCREEN);
                 world.tapTestId("managerTicket.pass-button", SCREEN_TIMEOUT);
             }
             case "驗收不通過" -> {
-                openManagerQueueRow(staff, "verify", temporaryResolvedTicketNo(), "managerTicket");
+                openManagerQueueRow(staff, "verify", temporaryResolvedTicketNo(), TICKET_SCREEN);
                 world.tapTestId("managerTicket.fail-button", SCREEN_TIMEOUT);
                 world.typeInto("managerTicket.fail-sheet.reason-field", SCREEN_TIMEOUT, VERIFY_FAIL_REASON);
                 world.tapTestId("managerTicket.fail-sheet.submit-button", SCREEN_TIMEOUT);

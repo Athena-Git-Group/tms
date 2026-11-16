@@ -123,7 +123,7 @@ void main() {
       expect(find.textContaining('至少 1 張照片才能送出'), findsOneWidget);
     });
 
-    testWidgets('一般件的置底鈕寫送出給主管審核，底色是品牌色', (tester) async {
+    testWidgets('一般件的置底鈕寫送出給工務，底色是品牌色', (tester) async {
       await _pumpRepairSheet(
         tester,
         precheck: const RepairTicketPrecheck(urgent: false),
@@ -133,7 +133,7 @@ void main() {
         },
       );
 
-      expect(find.text('送出給主管審核'), findsOneWidget);
+      expect(find.text('送出給工務'), findsOneWidget);
       expect(
         tester.widget<TmsSheetButton>(find.byType(TmsSheetButton)).style,
         TmsPillButtonStyle.filled,
@@ -154,7 +154,7 @@ void main() {
         },
       );
 
-      expect(find.text('送出急件（直接給工務）'), findsOneWidget);
+      expect(find.text('送出急件'), findsOneWidget);
       expect(
         tester.widget<TmsSheetButton>(find.byType(TmsSheetButton)).style,
         TmsPillButtonStyle.urgentFilled,

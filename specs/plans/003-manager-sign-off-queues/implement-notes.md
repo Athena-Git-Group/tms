@@ -55,3 +55,24 @@
 - App BDD 需要 Docker（Postgres 5434 + Kafka 9094 + 隔離後端 8081）。原本的 `bdd-backend.sh`／`run-4i.sh` 放在 scratchpad，已隨 tmp 清理遺失，需重建。
 - simulator udid `79F32D5C-7A71-47D6-AA8D-8142E68CFF48`，一次只能跑一個測試。
 - 絕不停止或重啟使用者的 8080。
+
+## 4R（T145、T146）結果
+
+| 項目 | 結果 |
+|---|---|
+| `ios-app/推播/點開推播的去處.feature` | 19/19 綠 |
+| 回歸 `ios-app/主管工作台/主管首頁.feature` | 15/15 綠 |
+| 回歸 `ios-app/工務單/主管視角.feature` | 23/23 綠 |
+| `flutter analyze` | 0 error、0 warning（9 個 info 是 `api_client.dart` 的 `use_null_aware_elements` 建議） |
+| `flutter test` | 498 綠 |
+
+4R 沒有改任何 App 程式碼。四個推播入口（冷啟動 `main.dart:37`、前景／背景 MethodChannel `push_gateway.dart:33`、FCM `firebase_push_messaging.dart:87`、通知中心列 `notification_screen.dart:76`）全部收斂到 `push_gateway.dart` 的 `_navigate` 單一 switch，T146 成立。
+
+### 新增一筆回交上游
+
+13. ~~`/actuator/health` 回 401~~ **已裁決並實作**：2026-11-16 使用者裁示開放 actuator。`SecurityConfig.java:46` 加入 `GET /actuator/health`、`/actuator/health/**` 的 `permitAll()`，只開 health，其餘 actuator 端點維持被 `anyRequest().denyAll()` 擋住（actuator starter 的預設 HTTP 曝光本來就只有 health）。待 4W 重啟後端時實測確認。
+
+### 已知測試環境 flake
+
+- `AppiumWorld.tapPushNotification()` 的通知橫幅點擊＋通知中心備援偶爾失手（19 個場景中約 1 次），症狀是 App 停在 iOS 的 `SBCoverSheetWindow`／`NotificationShortLookView`。重跑即綠，不是產品缺陷。
+- `test/offline_queue_retry_test.dart` 在與 `flutter analyze`／BDD build 搶資源時會 timing flake，單獨重跑 4/4 綠。

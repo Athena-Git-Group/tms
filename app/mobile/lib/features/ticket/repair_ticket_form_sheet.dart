@@ -496,7 +496,7 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
       padding: EdgeInsets.symmetric(horizontal: TmsSpacing.screenEdge),
       child: TmsSemantics(
         id: 'repair.room-only-note',
-        child: Text('客房的單由開單的人自己處理，不經主管審核、也不放進待認領。', style: TmsText.footnote),
+        child: Text('客房的單由開單的人自己處理，不放進待認領。', style: TmsText.footnote),
       ),
     );
   }
@@ -504,7 +504,7 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
   Widget _whoControl() {
     return _LabelledBlock(
       label: '誰來處理',
-      footnote: '工務自己開的單不用主管審核。公共區域的單可以放進待認領，其他工務同仁也接得到。',
+      footnote: '公共區域的單可以放進待認領，其他工務同仁也接得到。',
       child: TmsSegmentedControl<_Who>(
         value: _who,
         onChanged: (value) => setState(() => _who = value),
