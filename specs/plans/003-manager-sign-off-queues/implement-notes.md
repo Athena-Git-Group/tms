@@ -153,3 +153,24 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
 ## T154 的狀態：未勾，不是 003 的問題
 
 003 的後端範圍乾淨，但 Test Scope 裡有 4 個場景被 004 的 `值班主管` 卡住（見上一節），所以「全綠」這個條件在 004 補上 `Terms.java` 的對照之前達不到。不自行放寬判準、也不代為修改 004 的地盤，留白等上游。
+
+## T153（ui quality gate）：第二次判定通過
+
+第一次不通過的四件（D1 格子數字、D3 已結案狀態列、D4 通知中心分類、D6 工務主管空狀態）由 fresh-context agent 逐項複驗，全部成立且與雛形逐值對齊：`displayTileCount` 44／`displayTileCountWide` 56（雛形 `manager.css:49`、`:56`），`brandPrimaryDark = #0A5C64` 與 `manager.css:2` 逐字相同。
+
+**最高風險的那題已排除**：為了做「已結案實底白字」而在 `TmsCalloutTone` 加的 `title`／`body` 欄位，預設值與原本寫死的 `TmsColors.label`／`secondaryLabel` 完全相同，所以既有六個 tone 的渲染結果等價，沒有任何畫面變色。全專案也沒有任何地方依賴 `TmsCalloutTone` 的 index 或 `.values`，把 `closed` 插在第二位是安全的。`TmsText.displayStat` 未被動到，房務／工務首頁與兩個釘樁不受影響。
+
+複驗後補上的三件（commit 見下）：
+- `callout_test.dart` 的 tone 色表補 `closed` 一列
+- `manager_home_tiles_test.dart` 補格子數字 44／56 與兩個分色的斷言（原本這兩項視覺要求完全沒有測試釘樁，下次很容易退回去）
+- `tms_callout.dart` 的 closed 圖示改用自己的 `Paint`，不再在 switch 裡就地改共用的 `stroke`
+
+## 回交上游：UI 尾巴待辦（003 刻意不做，需要裁決或設計定案）
+
+1. **驗收通過完全沒有成功回饋。** `ticket_screen.dart:226` 通過後只 `Navigator.maybePop()`，API 回的 `outcome` 在 `result == 'passed'` 時被丟掉（`:193-196`），主管只能靠清單少一列推測。ui-plan:108 要的「頂部短暫提示『W-0108 已結案』」在現有元件庫沒有低成本解：`core/widgets/` 34 支裡只有 modal 對話框、錨定教學泡泡與面板，沒有任何 transient banner。**而且不能改用全頁結果卡**——`ticket_verify_result_card.dart` 的標題寫死「退回重修」，套到通過上會違反 truth。
+2. **ui-plan:108 後半「從推播或通知中心進來的，成功後留在詳情、狀態列換成已結案」未實作**，`_pass()` 一律 pop。要做得在畫面之間傳入口來源。
+3. **文案衝突待裁決**：ui-plan:51 要工務單卡標籤寫「已完修 · 等驗收」，truth 與 `repair_labels.dart` 只寫「已完修」，`status_chip_test.dart:152-157` 釘著短版。
+4. **「已結案」在狀態列是品牌深色實底、在卡片標籤卻是灰底**（`repair_labels.dart:152-157` 走 `neutralContainer`，`status_chip_test.dart:158-163` 釘著）。雛形 `manager.css:76` 兩處都是深底。這是 CLAUDE.md「風格修改要全文一次掃完」的同一組。
+5. **「無法修復」與「重修後再驗」目前同為琥珀**（`manager_queue_row.dart:56-69`），同一列同時出現會是兩顆一樣的色；雛形對這兩者是分色的（`.chip.cannot` vs `.chip.redo`）。
+6. **定期保養標籤的紫色**（雛形 `manager.css:69` 的 `#EDE7FF`/`#4B2FA6`）未採用，App 色票沒有紫色 token。ui-plan 本體只要求「有一個標籤」，沒寫顏色，等設計定案。
+7. **ui-plan:20 四種語氣裡的「等待（灰）」仍未落地**：雛形對 `pool` 與未重修的 `accepted` 用灰（`ui/ticket.html:112-113`），App 的 pool 用品牌淺底（`ticket_detail_engineering.dart:325`）、`accepted` 根本不畫狀態列。

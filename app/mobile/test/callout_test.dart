@@ -142,6 +142,10 @@ void main() {
       TmsColors.neutralContainer,
       TmsColors.quaternaryLabel,
     ],
+    TmsCalloutTone.closed: [
+      TmsColors.brandPrimaryDark,
+      TmsColors.brandOnPrimary,
+    ],
   };
 
   for (final entry in tones.entries) {
