@@ -76,3 +76,30 @@
 
 - `AppiumWorld.tapPushNotification()` 的通知橫幅點擊＋通知中心備援偶爾失手（19 個場景中約 1 次），症狀是 App 停在 iOS 的 `SBCoverSheetWindow`／`NotificationShortLookView`。重跑即綠，不是產品缺陷。
 - `test/offline_queue_retry_test.dart` 在與 `flutter analyze`／BDD build 搶資源時會 timing flake，單獨重跑 4/4 綠。
+
+## 4S（T147、T148）、4T（T149、T150）結果
+
+| Feature | 結果 |
+|---|---|
+| `ios-app/待認領/待認領列表.feature` | 16/16 綠，一次就過，不需要改任何程式 |
+| `ios-app/系統層/離線模式與連線異常.feature` | 16/16 綠（第三輪；前兩輪的紅全是測試層缺口，產品碼一行沒改） |
+| 回歸 `ios-app/工務單/主管視角.feature` | 23/23 綠 |
+| `flutter analyze` / `flutter test` | 0 error 0 warning / 498 綠 |
+
+4S 本來就綠的原因：`landing.dart:6` 的 `landingShellFor` 只看 `role == 'manager'`，`dept` 只決定 `ManagerKind`（首頁格數），不影響待認領；`ManagerPoolScreen` 對兩個部門都傳 `canClaim: false`（`manager_pool_screen.dart:81、89`）。T148 成立：房務池員工端與主管端共用 `HousekeepingPoolList`、工務池共用 `EngineeringPoolList`，`canClaim` 各自只控制一個 `onClaim`／`if`。
+
+T150 成立：員工四個動作（`task_screen.dart:256、284、301`、`pool_screen.dart:165`、`hold_sheet.dart:130`）與主管三個動作（`inspection_screen.dart:93`、`ticket_screen.dart:209`、`ticket_verify_fail_sheet.dart:49`）走的都是 `ConnectionStatus.instance.isOffline` + `showOfflineBlockedAlert()`（`system_status.dart:218`）同一個入口。
+
+## /implement 期間的第五筆產品修正
+
+**驗收不通過送出後偶發 Flutter 紅屏** `'_dependents.isEmpty': is not true`（`framework.dart:6281`，`InheritedElement.debugDeactivated()` 的 assert）。線上與離線路徑都會發生，間歇性。
+
+成因：`ticket_screen.dart` 原本在 `_sendVerify` 裡就 `setState(() => _verifyOutcome = outcome)`，那時不通過面板還蓋在上面、原因輸入框還有 focus，底下那層卻已經被換成 `TicketVerifyResultCard`，面板才 `Navigator.pop()`。
+
+修法（commit `ef22e09`）：新增 `_pendingVerifyOutcome` 欄位，`_sendVerify` 只暫存不 `setState`；`_openFailSheet` 等 `TmsSheetRoute.show` 回來、面板確定關掉之後，才 `setState` 套用。契約與 truth 都沒變。
+
+## 本輪裁決的三件事
+
+1. **殘留「主管審核」文案要改，而且本來就在 003 範圍內**（依據 `plan.md:108`），不是待決上游。`repair_sheet.dart:240` 的送出鈕改成「送出給工務」／「送出急件」（急件那句的「直接給工務」拿掉「直接」——沒有審核之後不存在「不直接」的另一條路）；`repair_ticket_form_sheet.dart:499、507` 兩句說明拿掉「不經主管審核」「不用主管審核」。連帶改 `task_sheets_parity_test.dart`、`eng_create_ticket_test.dart` 的對應斷言。
+2. **主管版工務單詳情不該有自己的畫面根 id**。truth 寫明主管視角「以工務視角的版面為底，只換底部動作列」，是同一張畫面同一個根。所以刪掉宣告了卻從未畫出來的 `ManagerIds.ticket = 'managerTicket'`，`PushThenSteps.java:82` 等它的那段一併拿掉（改前那段跑不到，所以 4R 才會綠；truth 一旦加主管點推播進工務單的場景就會必紅）。
+3. **開放 actuator**（使用者 2026-11-16 裁示）。`SecurityConfig.java:46` 加 `GET /actuator/health`、`/actuator/health/**` 的 `permitAll()`，其餘 actuator 端點仍被 `anyRequest().denyAll()` 擋住。
