@@ -231,3 +231,7 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
 1. `backend/工務單/dsl.md:79` 的「`"{單號}" 共有 {張數} 張照片`」只查 `photoCount`，不查 `photos` 明細——所以「只回 count 不回明細」這個缺陷跑再多次 truth 都不會紅。
 2. `工務單/` 底下**完全沒有定期保養的場景**，`reporterName` 為 null 這件事同樣沒有任何斷言（只有 `主管工作台/主管待辦清單.feature:31,67` 有一張 scheduled 單，但只斷言 origin 與完修結果）。
 3. `backend/dsl.md:65`「已有以下工務單：」沒有寫明 fixture 在定期保養單上掛替身報修人這件事（`RepairGivenSteps.java:131-137`）。
+
+## 新增一筆已知測試環境 flake：跨午夜
+
+`工務單` 模組跑到 `工務視角.feature:185`（王主管驗收通過後阿德打開詳情）時剛好壓在 00:00，工務首頁整個空的（只有 `engHome.empty-state`，手上 0 張），畫面標題已經跳成隔天。前一天建的 fixture 資料換日後不算今天的單，所以找不到 `engHome.in-hand.W-0410.card`。單獨重跑該 feature 27/27 綠。**不是產品缺陷**，但長批次（一輪 26 分鐘）排在午夜前會踩到。
