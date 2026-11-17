@@ -3,6 +3,7 @@ package com.athena.tms.service;
 import com.athena.tms.common.codes.TaskState;
 import com.athena.tms.common.codes.TaskType;
 import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.ManagerKind;
 import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.ForbiddenException;
@@ -27,6 +28,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -107,11 +109,29 @@ public class TaskExecutionService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         try {
+            String claimDept = claimDept(tenantId, taskId, actor);
             return transition(tenantId, taskId, actor,
-                    (actorRef) -> taskEngine.claim(tenantId, taskId, actor.dept(), actorRef));
+                    (actorRef) -> taskEngine.claim(tenantId, taskId, claimDept, actorRef));
         } catch (StateConflictException conflict) {
             throw claimConflictWithClaimerName(tenantId, taskId, conflict);
         }
+    }
+
+    /**
+     * 決定操作者從哪個部門的待認領認領。現場員工就是自己的部門。主管依主管種類對應房務池或工務池，
+     * 讓人手不夠時主管能自己下場做。主管認領另一個部門的單在這裡直接回 403；如果讓它進到條件式更新，
+     * 部門不符會一列也不改而變成 409，畫面就會誤以為單被別人搶走。
+     */
+    private String claimDept(long tenantId, UUID taskId, CurrentActor actor) {
+        Optional<ManagerKind> managerKind = ManagerKind.of(actor);
+        if (managerKind.isEmpty()) {
+            return actor.dept();
+        }
+        String poolDept = managerKind.get().poolDept();
+        if (!poolDept.equals(taskRowLookup.require(tenantId, taskId).get("dept"))) {
+            throw new ForbiddenException("主管只能認領自己部門的待認領單");
+        }
+        return poolDept;
     }
 
     private StateConflictException claimConflictWithClaimerName(
