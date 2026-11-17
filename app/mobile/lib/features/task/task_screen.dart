@@ -224,7 +224,8 @@ class _TaskScreenState extends State<TaskScreen> {
                     padding: EdgeInsets.all(16),
                     child: Text('載入失敗，請稍後再試'),
                   );
-                } else if (snapshot.connectionState != ConnectionState.done) {
+                } else if (snapshot.connectionState != ConnectionState.done &&
+                    !snapshot.hasData) {
                   content = const Center(child: CupertinoActivityIndicator());
                 } else {
                   content = _buildTask(snapshot.data, topInset: navTopInset);
