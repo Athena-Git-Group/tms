@@ -126,10 +126,11 @@ public class IntegrationThenSteps {
         assertTrue(received.isEmpty(), "白名單外事件不得外流到整合連線: " + received);
     }
 
-    @Then("^outbox 中不存在 kind 為 \"([a-z_]+)\" 的訊息$")
-    public void outboxHasNoKind(String kind) {
-        Integer count = db.admin().queryForObject("SELECT count(*) FROM outbox WHERE kind = ?", Integer.class, kind);
-        assertEquals(0, count, "outbox 不得再出現 kind=" + kind + " 的訊息（已退場）");
+    @Then("^outbox 有一筆房 \"(\\d+)\" 的 \"pms_status\" 回寫訊息$")
+    public void outboxHasOnePmsStatusForRoom(String roomNo) {
+        List<String> roomNos = db.admin().queryForList(
+                "SELECT payload ->> 'roomNo' FROM outbox WHERE tenant_id = 1 AND kind = 'pms_status'", String.class);
+        assertEquals(List.of(roomNo), roomNos, "查房通過該排入一筆該房的 PMS 房況回寫: " + roomNos);
     }
 
     private void assertEventFields(JsonNode event, DataTable table) {

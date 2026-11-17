@@ -170,10 +170,10 @@
       那麼 員工連線收到該任務的變化事件
       但是 整合連線未收到任何 "room_status" 事件
 
-  Rule: 查房通過交易不再落 pms_status outbox，其餘交易行為不變
+  Rule: 查房通過交易同時排入任務事件、清房者推播與 PMS 房況回寫
 
     @happy
-    場景: 查房全項通過後 outbox 僅有任務事件
+    場景: 查房全項通過後 outbox 排入任務事件、推播與 PMS 房況回寫
       假設 系統中存在以下員工:
         | id    | tenant_id | name   | login_id | password_hash | role         | dept         |
         | s-mgr | 1         | 王主管 | mgr1     | hash-mgr1     | manager      |              |
@@ -194,5 +194,5 @@
       並且 房間 "r-305" 的資料應為:
         | hk_state  |
         | inspected |
-      並且 outbox 排入的訊息 kind 僅有 "task_event"
-      並且 outbox 中不存在 kind 為 "pms_status" 的訊息
+      並且 outbox 排入的訊息 kind 恰為 "pms_status"、"push"、"task_event"
+      並且 outbox 有一筆房 "305" 的 "pms_status" 回寫訊息

@@ -77,10 +77,15 @@ public class StaffDeskThenSteps {
         assertEquals("done", json(last).get("state").asText());
     }
 
-    @Then("^勾記共 (\\d+) 筆且「([^」]+)」留痕為跳過，記錄操作者、時間與 label 快照$")
-    public void sopChecksRecorded(int expected, String skippedLabel) {
+    @Then("^每個啟用的打掃 SOP 項各有一筆勾記、沒勾的記為跳過，「([^」]+)」留痕為跳過，記錄操作者、時間與 label 快照$")
+    public void sopChecksRecorded(String skippedLabel) {
+        int activeItems = db.admin().queryForObject(
+                "SELECT count(*) FROM sop_items WHERE tenant_id = 1 AND applies_to = 'cleaning' AND active", Integer.class);
         int total = db.admin().queryForObject("SELECT count(*) FROM task_sop_checks WHERE task_id = ?", Integer.class, ctx.taskId());
-        assertEquals(expected, total, "三勾一跳共 " + expected + " 筆勾記");
+        assertEquals(activeItems, total, "完成時每個啟用的打掃 SOP 項都要有一筆勾記");
+        int untouchedNotSkipped = db.admin().queryForObject(
+                "SELECT count(*) FROM task_sop_checks WHERE task_id = ? AND NOT checked AND NOT skipped", Integer.class, ctx.taskId());
+        assertEquals(0, untouchedNotSkipped, "沒勾的 SOP 項在完成時記為跳過");
         Map<String, Object> skipped = db.admin().queryForMap(
                 "SELECT checked, skipped, checked_by, checked_at, label FROM task_sop_checks WHERE task_id = ? AND item_key = ?",
                 ctx.taskId(), ctx.sopItemKey(skippedLabel));
