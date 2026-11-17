@@ -23,9 +23,21 @@ PGPASSWORD="$DB_PASSWORD" psql \
   --quiet --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
 
-INSERT INTO tenants (id, name, created_at) OVERRIDING SYSTEM VALUE
-VALUES (1, '示範飯店', now())
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+-- 004 的 V24 起 tenants 多了必填的飯店代碼 code；這個資料庫可能被 004 的後端遷移過，也可能還沒有，兩種都要能種。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tenants' AND column_name = 'code') THEN
+    EXECUTE $q$
+      INSERT INTO tenants (id, name, code, created_at) OVERRIDING SYSTEM VALUE
+      VALUES (1, '示範飯店', 'demo-hotel', now())
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+    $q$;
+  ELSE
+    INSERT INTO tenants (id, name, created_at) OVERRIDING SYSTEM VALUE
+    VALUES (1, '示範飯店', now())
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+  END IF;
+END $$;
 DO $$ BEGIN PERFORM setval(pg_get_serial_sequence('tenants', 'id'), GREATEST(1, (SELECT max(id) FROM tenants)), true); END $$;
 
 DELETE FROM task_sop_checks            WHERE tenant_id = 1;
@@ -252,6 +264,25 @@ FROM tasks WHERE tenant_id = 1;
 INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at) VALUES
   (1, '00000000-0000-7000-8000-00000000d034', 2, 'completed', 'engineering', '00000000-0000-7000-8000-00000000a002',
    '{"resolutionType": "no_action_needed"}'::jsonb, now() - interval '110 minutes');
+
+-- 004 的 V25 起非工務單有單號 task_no（T-0001 起跳），取號計數在 task_counters；資料庫還沒有這兩樣就跳過。
+DO $$
+BEGIN
+  IF to_regclass('task_counters') IS NOT NULL THEN
+    EXECUTE $q$
+      UPDATE tasks t
+         SET task_no = 'T-' || lpad(n.no::text, 4, '0')
+        FROM (SELECT id, row_number() OVER (ORDER BY created_at, id) AS no
+                FROM tasks WHERE tenant_id = 1 AND type <> 'repair') n
+       WHERE t.tenant_id = 1 AND t.id = n.id
+    $q$;
+    EXECUTE $q$
+      INSERT INTO task_counters (tenant_id, last_no)
+      SELECT 1, count(*) FROM tasks WHERE tenant_id = 1 AND type <> 'repair'
+      ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no
+    $q$;
+  END IF;
+END $$;
 
 INSERT INTO repair_tickets (task_id, tenant_id, ticket_no, room_id, category, description, reporter_id, source_task_id, resolution_note, created_at, is_urgent) VALUES
   ('00000000-0000-7000-8000-00000000d020', 1, 'W-0101', '00000000-0000-7000-8000-000000000306', 'air_conditioning',    '房客反映冷氣只出風不冷，設到 18 度也一樣',   '00000000-0000-7000-8000-00000000a001', NULL, NULL, now() - interval '8 minutes',  true),
