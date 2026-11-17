@@ -13,6 +13,7 @@
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | StepDef 實作語意 |
 | --- | --- | --- | --- | --- |
 | `飯店設定免查房開關為 "{開關}"` | `開關`：字串；開、關。 | 不支援 | 無 | `怎麼做`：以主管身分呼叫 `updateTenantConfig`（`PUT /tenant-configs/{id}`），key 為 `inspection_waived_enabled`。免查房是全域開關，不分打掃種類。`權威狀態落地`：`tenant_config` 的該鍵已更新，並留下設定變更事件。 |
+| `飯店設定允許主管查自己清的房為 "{開關}"` | `開關`：字串；開、關。 | 不支援 | 沒有宣告此句型時該鍵未設定，視為開。 | `怎麼做`：以主管身分呼叫 `updateTenantConfig`（`PUT /tenant-configs/{id}`），key 為 `self_inspection_allowed`。`權威狀態落地`：`tenant_config` 的該鍵已更新。開時查房送出不擋清房者本人，`主管工作台` 模組的待查房清單與格數也包含呼叫者本人清的房；關時查房送出回 403，清單與格數排除呼叫者本人清的房。這一句在 `主管工作台` 模組共用。 |
 | `"{員工}" 在免查房開關開啟時開始了 "{任務}" 的續住整理` | `員工`：字串。<br>`任務`：字串；房號。 | 不支援 | 無 | `怎麼做`：先把免查房開關設為開，建立該員工名下 accepted 的續住整理任務，再呼叫 `tasksStart`。`權威狀態落地`：任務為 doing，`tasks.inspection_waived`=true（開工當下鎖定）。 |
 | `"{員工}" 在免查房開關關閉時開始了 "{任務}" 的續住整理` | `員工`：字串。<br>`任務`：字串；房號。 | 不支援 | 無 | `怎麼做`：先把免查房開關設為關，建立 accepted 的續住整理任務，再呼叫 `tasksStart`。`權威狀態落地`：任務為 doing，`tasks.inspection_waived`=false（開工當下鎖定）。 |
 | `飯店的「回寫房態」開關為 "{開關}"` | `開關`：字串；開、關。 | 不支援 | 無 | `怎麼做`：以主管身分更新 PMS 整合設定的房態回寫開關（`pms.writeback.room_status`）。`權威狀態落地`：`tenant_config` 的該鍵已更新。 |

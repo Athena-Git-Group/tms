@@ -47,8 +47,9 @@ public class InspectionService {
     private final PushOutboxWriter pushOutboxWriter;
     private final ObjectMapper objectMapper;
     private final StaffAccountRepository staffAccountRepository;
+    private final SelfInspectionSetting selfInspectionSetting;
 
-    public InspectionService(TaskRepository taskRepository, SopItemRepository sopItemRepository, InspectionRepository inspectionRepository, TaskSopCheckRepository taskSopCheckRepository, RoomRepository roomRepository, StaffAvailability staffAvailability, TaskEngine taskEngine, OutboxWriter outboxWriter, PushOutboxWriter pushOutboxWriter, ObjectMapper objectMapper, StaffAccountRepository staffAccountRepository) {
+    public InspectionService(TaskRepository taskRepository, SopItemRepository sopItemRepository, InspectionRepository inspectionRepository, TaskSopCheckRepository taskSopCheckRepository, RoomRepository roomRepository, StaffAvailability staffAvailability, TaskEngine taskEngine, OutboxWriter outboxWriter, PushOutboxWriter pushOutboxWriter, ObjectMapper objectMapper, StaffAccountRepository staffAccountRepository, SelfInspectionSetting selfInspectionSetting) {
         this.taskRepository = taskRepository;
         this.sopItemRepository = sopItemRepository;
         this.inspectionRepository = inspectionRepository;
@@ -60,6 +61,7 @@ public class InspectionService {
         this.pushOutboxWriter = pushOutboxWriter;
         this.objectMapper = objectMapper;
         this.staffAccountRepository = staffAccountRepository;
+        this.selfInspectionSetting = selfInspectionSetting;
     }
 
     public record Judged(
@@ -73,14 +75,16 @@ public class InspectionService {
             OffsetDateTime createdAt,
             int redoCount) {}
 
-    private static void requireMayInspect(CurrentActor inspector, Task task) {
+    private void requireMayInspect(long tenantId, CurrentActor inspector, Task task) {
         if (!RolePermissions.canInspectSubmit(inspector.role())) {
             throw new ForbiddenException("此角色沒有查房判定（inspect_submit）權限");
         }
         if (ManagerKind.of(inspector).filter(kind -> !kind.inspects()).isPresent()) {
             throw new ForbiddenException("你沒有查房的權限");
         }
-        if (inspector.staffId() != null && inspector.staffId().equals(task.getAssigneeId())) {
+        // 飯店允許主管查自己清的房時，只放寬清房者與查房者是同一人這一條，上面的權限檢查照舊。
+        if (inspector.staffId() != null && inspector.staffId().equals(task.getAssigneeId())
+                && !this.selfInspectionSetting.allowed(tenantId)) {
             throw new ForbiddenException("查房者不得為原清房者");
         }
     }
@@ -90,7 +94,7 @@ public class InspectionService {
         long tenantId = TenantContext.require();
         CurrentActor inspector = CurrentActor.require();
         Task task = this.taskRepository.findByTenantIdAndId(tenantId, taskId).orElseThrow(() -> new NotFoundException("查無此任務"));
-        requireMayInspect(inspector, task);
+        requireMayInspect(tenantId, inspector, task);
         if (!"cleaning".equals(task.getType())) {
             throw new UnprocessableEntityException("查房只適用打掃任務，此單種類為 " + task.getType());
         }

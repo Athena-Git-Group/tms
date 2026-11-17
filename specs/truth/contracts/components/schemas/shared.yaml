@@ -42,7 +42,7 @@ Error:
     違反狀態機守衛時沿用 state_conflict（409）：工務單的驗收（通過或不通過）與查房送出撞到單已不在預期狀態
     （另一位主管先處理、單被改派或作廢）都回這一個 code，App 顯示「這張單已被處理」並刷新清單。
     角色或身分不符一律回 403 forbidden，message 是業務原文、App 直接顯示，例如員工呼叫 verifyRepairTicket、
-    工務主管呼叫 createInspections、主管查自己清的房；這幾種 App 不需要依 code 分辨。
+    工務主管呼叫 createInspections、飯店關掉「允許主管查自己清的房」時主管查自己清的房；這幾種 App 不需要依 code 分辨。
   required:
   - code
   - message

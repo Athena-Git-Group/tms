@@ -511,7 +511,7 @@
 - 主管種類由 `role` 與 `dept` 當場推得，不存欄位；工務主管的回應**省略** `inspection` 與 `counts.inspection`，不是回空陣列或 0。
 - 待驗收公式用 `resolution_type IS DISTINCT FROM 'no_action_needed'`（舊單為 NULL 要收），不看 `verified_at`；排序鍵 `done_at`，同一時刻依房號再依單號；`wasVerificationFailed` 讀 `last_verify_failed_at` 有沒有值。
 - 回應不再帶 `review` 與 `counts.review`；`counts` 直接取各陣列長度。`reviewQueue` 方法本體若還有人引用，留給 Phase 4J 刪。
-- 待查房的公式、排除本人、跨日標記不動。
+- 待查房的公式、飯店關掉「允許主管查自己清的房」時排除本人、跨日標記不動。
 
 **Test Scope**:
 - `specs/truth/features/backend/主管工作台/主管待辦清單.feature`
@@ -697,7 +697,7 @@
 - `tms/src/main/java/com/athena/tms/controller/InspectionApiController.java:63-68`
 
 **Boundary**:
-- 權限檢查用 4A 收斂的主管種類函式，與自清自查、無權限角色共用 `forbidden`；不另立錯誤碼。既有 Rule 是 NOOP，不得變紅。
+- 權限檢查用 4A 收斂的主管種類函式，與飯店關掉「允許主管查自己清的房」時的自清自查、無權限角色共用 `forbidden`；不另立錯誤碼。既有 Rule 是 NOOP，不得變紅。
 
 **Test Scope**:
 - `specs/truth/features/backend/查房/逐項判定與退回去向.feature`

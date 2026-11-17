@@ -6,7 +6,7 @@ tenant_config:
       format: int64
     key:
       type: string
-      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）
+      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）|self_inspection_allowed（允許主管查自己清的房，值為 boolean，未設定時視為 true。true 時房務主管可以查自己清的房，查房送出與待查房清單都把它當一般的待查房，只有一位房務主管的飯店不必設定也查得到自己清的房；飯店設為 false 時清房者不能查自己清的房：查房送出回 403，自己清的房也不出現在自己的待查房清單與格數。這一鍵只管清房者與查房者是同一人這一條，沒有查房權限的角色不論設定如何都不能送出查房）
     value:
       type: string
       description: 結構依 key 而異
@@ -31,7 +31,7 @@ tenant_configRequest:
       format: int64
     key:
       type: string
-      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）
+      description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，預設 [stayover]）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）|self_inspection_allowed（允許主管查自己清的房，值為 boolean，未設定時視為 true。true 時房務主管可以查自己清的房，查房送出與待查房清單都把它當一般的待查房，只有一位房務主管的飯店不必設定也查得到自己清的房；飯店設為 false 時清房者不能查自己清的房：查房送出回 403，自己清的房也不出現在自己的待查房清單與格數。這一鍵只管清房者與查房者是同一人這一條，沒有查房權限的角色不論設定如何都不能送出查房）
     value:
       type: string
       description: 結構依 key 而異

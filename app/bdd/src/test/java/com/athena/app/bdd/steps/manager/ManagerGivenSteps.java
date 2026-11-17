@@ -53,6 +53,16 @@ public class ManagerGivenSteps {
         backend.replaceInspectionItems(labels);
     }
 
+    @假設("飯店設定允許主管查自己清的房為 {string}")
+    public void hotelSetsSelfInspectionAllowed(String onOff) {
+        boolean allowed = switch (onOff) {
+            case "開" -> true;
+            case "關" -> false;
+            default -> throw new IllegalArgumentException("開關只支援「開」「關」，收到: " + onOff);
+        };
+        backend.setTenantConfig(backend.ensureTenant(), "self_inspection_allowed", allowed);
+    }
+
     @假設("飯店目前沒有任何啟用的查房項目")
     public void hotelHasNoActiveInspectionItems() {
         backend.disableAllInspectionItems();

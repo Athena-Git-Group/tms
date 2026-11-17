@@ -86,13 +86,21 @@ public class ManagerQueueThenSteps {
         }
     }
 
+    /** 飯店沒有關掉「允許主管查自己清的房」時（沒有設定視為允許），待查房清單與格數都包含呼叫者本人清的房。 */
+    private boolean selfInspectionAllowed() {
+        return dbProbe.count(
+                "SELECT count(*) FROM tenant_config WHERE tenant_id = ? AND key = 'self_inspection_allowed'"
+                        + " AND value #>> '{}' = 'false'",
+                tenantFixtures.testTenantId()) == 0;
+    }
+
     private long recount(String slot) {
         long tenantId = tenantFixtures.testTenantId();
         return switch (slot) {
             case "inspection" -> dbProbe.count(
                     "SELECT count(*) FROM tasks WHERE tenant_id = ? AND type = 'cleaning' AND state = 'done'"
-                            + " AND assignee_id IS DISTINCT FROM ?",
-                    tenantId, whenSteps.lastCallerStaffId());
+                            + " AND assignee_id IS DISTINCT FROM ?::uuid",
+                    tenantId, selfInspectionAllowed() ? null : whenSteps.lastCallerStaffId());
             case "verify" -> dbProbe.count(
                     "SELECT count(*) FROM tasks t JOIN repair_tickets r ON r.task_id = t.id"
                             + " WHERE t.tenant_id = ? AND t.type = 'repair' AND t.state = 'done'"
@@ -123,6 +131,7 @@ public class ManagerQueueThenSteps {
         assertOrder("inspection[].roomNo", "roomNo", rows, split(roomList));
 
         UUID caller = whenSteps.lastCallerStaffId();
+        boolean selfAllowed = selfInspectionAllowed();
         Instant previous = null;
         for (JsonNode row : rows) {
             Map<String, Object> task = taskRow(row);
@@ -130,7 +139,8 @@ public class ManagerQueueThenSteps {
             check(roomNo + " tasks.type", "cleaning", task.get("type"));
             check(roomNo + " tasks.state", "done", task.get("state"));
             Object assigneeId = task.get("assignee_id");
-            if (assigneeId == null || caller.toString().equalsIgnoreCase(assigneeId.toString())) {
+            if (assigneeId == null
+                    || (!selfAllowed && caller.toString().equalsIgnoreCase(assigneeId.toString()))) {
                 throw new AssertionError("待查房 " + roomNo + " 的負責人是呼叫者本人（assignee_id=" + assigneeId + "）");
             }
             check(roomNo + " title", task.get("title"), text(row, "title"));

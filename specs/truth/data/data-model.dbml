@@ -23,7 +23,7 @@ Table tenants {
 
 Table tenant_config {
   tenant_id  bigint      [not null, ref: > tenants.id]
-  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）|completion_celebration_enabled（002 新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力。這一鍵只影響呈現，不影響 tasks 的任何欄位，也不影響「今天第幾單」與「完成後的接續去向」兩個衍生值的計算）']
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）|completion_celebration_enabled（002 新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力。這一鍵只影響呈現，不影響 tasks 的任何欄位，也不影響「今天第幾單」與「完成後的接續去向」兩個衍生值的計算）|self_inspection_allowed（允許主管查自己清的房，值為 boolean，未設定時視為 true。true 時房務主管可以查自己清的房，查房送出與待查房清單都把它當一般的待查房，只有一位房務主管的飯店不必設定也查得到自己清的房；飯店設為 false 時清房者不能查自己清的房：查房送出回 403，自己清的房也不出現在自己的待查房清單與格數。這一鍵只管清房者與查房者是同一人這一條，沒有查房權限的角色不論設定如何都不能送出查房）']
   value      jsonb       [not null, note: '結構依 key 而異']
   updated_at timestamptz [not null]
   updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
@@ -260,7 +260,7 @@ Table tasks {
     已結束（done、inspected、closed）看 done_at 是否落在今天；兩個新值與 todayTasks／nextTasks 必須共用這一套，否則同一張單會在不同畫面有兩種歸屬。
   主管待辦的兩類判定（衍生值：不新增欄位、不新增資料表、不新增索引；只看單目前的狀態，不帶日期條件，每格數字與清單列數出自同一條查詢）：
     誰看得到：主管種類由 staff_accounts.role 與 dept 推得（見 staff_accounts.dept）。房務主管看待查房與待驗收，工務主管只看待驗收；查房送出也只開放房務主管。
-    待查房＝type=cleaning 且 state=done 且 assignee_id 不是正在查看的主管本人（主管不能查自己清的房，E-07；另一位房務主管看得到這張單）。
+    待查房＝type=cleaning 且 state=done；飯店的 tenant_config.self_inspection_allowed 為 false 時再加上 assignee_id 不是正在查看的主管本人（主管不能查自己清的房；另一位房務主管看得到這張單）。未設定視為 true，不排除查看者本人清的房，主管可以查自己清的房。
       免查房的單完成時直接落在 inspected（inspection=waived），本來就不會停在 done，不需另加條件；也不看 inspection 欄位，
       因為抽查退回重做的單在重做完成後可能還留著上一次的 failed。排序鍵＝done_at，即最近一次完成的時間（退回重做後再完成會重寫）。
     待驗收＝type=repair 且 state=done 且 repair_tickets.resolution_type IS DISTINCT FROM 'no_action_needed'。對所有主管是同一份，
@@ -447,7 +447,7 @@ Table inspections {
   id           uuid        [pk]
   tenant_id    bigint      [not null, ref: > tenants.id]
   task_id      uuid        [not null]
-  inspector_id uuid        [not null, note: '守衛：inspector ≠ 原清房者（403）']
+  inspector_id uuid        [not null, note: '查房者。飯店的 tenant_config.self_inspection_allowed 為 false 時，查房者不能是原清房者，送出回 403；未設定或為 true 時可以是原清房者']
   result       text        [not null, note: 'CHECK: passed|failed']
   items        jsonb       [not null, note: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）']
   created_at   timestamptz [not null]

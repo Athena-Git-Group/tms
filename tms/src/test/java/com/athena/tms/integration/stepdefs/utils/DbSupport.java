@@ -44,6 +44,7 @@ public class DbSupport {
         adminJdbc.update("UPDATE staff_accounts SET active = true WHERE active = false");
         adminJdbc.update("UPDATE tenant_config SET value = '10' WHERE tenant_id = 1 AND key = 'scan_fail_threshold' AND value <> '10'");
         adminJdbc.update("UPDATE tenant_config SET value = ?::jsonb WHERE tenant_id = 1 AND key = 'shift_times'", DEFAULT_SHIFT_TIMES);
+        adminJdbc.update("DELETE FROM tenant_config WHERE key = 'self_inspection_allowed'");
     }
 
     private void deleteOutboxRetryingOnDeadlock() {
