@@ -6,6 +6,7 @@ import com.athena.app.bdd.steps.manager.ManagerHomeWait;
 import io.cucumber.java.zh_tw.當;
 
 import java.time.Duration;
+import org.openqa.selenium.By;
 
 public class CommonWhenSteps {
 
@@ -21,6 +22,7 @@ public class CommonWhenSteps {
     public void openHome(String staffName) {
         BackendChannel.CreatedStaff staff = world.staff(staffName);
         world.ensureLoggedInAs(staff);
+        leavePoolTab();
         if ("manager".equals(staff.role())) {
             world.ensureOnScreenRoot("manager.home", SCREEN_TIMEOUT);
             ManagerHomeWait.await(world, staffName, SCREEN_TIMEOUT);
@@ -31,6 +33,16 @@ public class CommonWhenSteps {
             world.ensureOnHome(SCREEN_TIMEOUT);
             world.waitForTestId("home.progress.cleaned-ratio", SCREEN_TIMEOUT);
         }
+    }
+
+    /** 停在待認領分頁時，往回點找不到首頁，要點底部分頁列的「首頁」切回去。 */
+    private void leavePoolTab() {
+        if (world.driver().findElements(world.byTestId("pool.screen")).isEmpty()) {
+            return;
+        }
+        world.driver().findElements(By.xpath("//*[@label='首頁']")).stream()
+                .findFirst()
+                .ifPresent(tab -> tab.click());
     }
 
     @當("{string} 在 App 開始 {string}")
