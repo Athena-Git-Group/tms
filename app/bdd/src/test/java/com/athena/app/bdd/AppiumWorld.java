@@ -117,6 +117,8 @@ public class AppiumWorld {
 
     @After(order = 0)
     public void after() {
+        backend.resetBackendClock();
+        postBackdoorJson("/clock", "{\"isoTime\":null}");
     }
 
     public synchronized void start() {
