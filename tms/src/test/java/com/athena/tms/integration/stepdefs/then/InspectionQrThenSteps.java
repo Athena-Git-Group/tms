@@ -10,6 +10,7 @@ import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Then;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,7 +52,9 @@ public class InspectionQrThenSteps {
         assertEquals("inspected", body.get("taskState").asText());
         assertEquals(false, body.get("returnedToPool").asBoolean());
         assertEquals("inspected", db.taskRow(ctx.taskId()).get("state"), "FR-031：done→inspected");
-        assertEquals("inspection_passed", db.eventTypes(ctx.taskId()).getLast(), "最後一筆事件是 inspection_passed");
+        List<String> types = db.eventTypes(ctx.taskId());
+        assertEquals(List.of("inspection_passed", "pms_writeback"), types.subList(types.size() - 2, types.size()),
+                "查房通過之後緊接一筆 PMS 回寫: " + types);
     }
 
     @Then("^回應的查房結果為 \"([a-z]+)\" 且任務狀態為 \"([a-z_]+)\"$")
@@ -63,10 +66,15 @@ public class InspectionQrThenSteps {
         assertEquals(taskState, body.get("taskState").asText(), "任務狀態（回應）");
     }
 
-    @Then("^outbox 排入的訊息 kind 僅有 \"([a-z_]+)\"$")
-    public void outboxContainsOnlyKind(String expectedKind) {
-        List<String> kinds = db.admin().queryForList("SELECT DISTINCT kind FROM outbox WHERE tenant_id = ?", String.class, 1L);
-        assertEquals(List.of(expectedKind), kinds, "outbox 僅允許 kind=" + expectedKind + "，實際: " + kinds);
+    @Then("^outbox 排入的訊息 kind 恰為 (\"[a-z_]+\"(?:、\"[a-z_]+\")*)$")
+    public void outboxContainsExactlyKinds(String quotedKinds) {
+        List<String> expected = Arrays.stream(quotedKinds.split("、"))
+                .map(kind -> kind.replace("\"", ""))
+                .sorted()
+                .toList();
+        List<String> kinds = db.admin().queryForList(
+                "SELECT DISTINCT kind FROM outbox WHERE tenant_id = ? ORDER BY kind", String.class, 1L);
+        assertEquals(expected, kinds, "outbox 排入的 kind 應恰為 " + expected + "，實際: " + kinds);
     }
 
     @Then("^inspections 留下一列 passed、items 完整存下每個查房項目的判定$")
@@ -178,6 +186,8 @@ public class InspectionQrThenSteps {
     @Then("^寫入被 partial unique 約束以 (\\d+) 拒絕$")
     public void insertRejectedByPartialUnique(String sqlState) {
         assertEquals(sqlState, ctx.get("sqlState"), "必須是唯一約束違反（23505）");
+        String message = ctx.get("sqlMessage");
+        assertTrue(message.contains("uq_room_qr_tokens_one_active"), "擋下的必須是同房只能一枚 active 的約束: " + message);
     }
 
     @Then("^舊 token 標 \"revoked\"、新 token version \\+1 生效$")

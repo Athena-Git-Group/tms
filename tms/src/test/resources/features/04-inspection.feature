@@ -93,7 +93,7 @@
   Rule: 兩分支——全過可賣、任一不過整間退回
 
     @happy
-    場景: 全過即可賣且 outbox 僅落任務事件
+    場景: 全過即可賣，並排入任務事件、清房者推播與 PMS 房況回寫
       假設 系統中存在以下任務:
         | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
         | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
@@ -102,7 +102,7 @@
       並且 房間 "r-301" 的資料應為:
         | hk_state  |
         | inspected |
-      並且 outbox 排入的訊息 kind 僅有 "task_event"
+      並且 outbox 排入的訊息 kind 恰為 "pms_status"、"push"、"task_event"
       並且 inspections 留下一列 passed、items 完整存下每個查房項目的判定
 
     @boundary

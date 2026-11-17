@@ -88,10 +88,12 @@ public class InspectionQrWhenSteps {
             Assertions.fail("同房第二枚 active 該被 partial unique 擋下");
         } catch (DataAccessException expected) {
             Throwable cause = expected.getMostSpecificCause();
-            if (cause instanceof SQLException sqlException) {
-                ctx.put("sqlState", sqlException.getSQLState());
+            if (!(cause instanceof SQLException sqlException)) {
+                Assertions.fail("該是 SQLException 根因: " + cause);
+                return;
             }
-            Assertions.fail("該是 SQLException 根因: " + cause);
+            ctx.put("sqlState", sqlException.getSQLState());
+            ctx.put("sqlMessage", sqlException.getMessage());
         }
     }
 

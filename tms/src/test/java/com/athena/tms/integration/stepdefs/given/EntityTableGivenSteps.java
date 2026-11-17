@@ -209,13 +209,17 @@ public class EntityTableGivenSteps {
     public void sopChecksExist(DataTable table) {
         for (Map<String, String> row : table.asMaps()) {
             boolean checked = Boolean.parseBoolean(value(row, "checked"));
-            UUID id = UUID.randomUUID();
-            db.admin().update("""
+            UUID id = db.admin().queryForObject("""
                     INSERT INTO task_sop_checks (id, tenant_id, task_id, item_key, label,
                                                  checked, skipped, checked_at)
                     VALUES (?, ?, ?, ?, ?, ?, false, ?)
+                    ON CONFLICT (tenant_id, task_id, item_key) DO UPDATE SET
+                        label = excluded.label, checked = excluded.checked,
+                        skipped = false, checked_at = excluded.checked_at
+                    RETURNING id
                     """,
-                    id, tenantOf(row), ctx.entityId(value(row, "task_id")),
+                    UUID.class,
+                    UUID.randomUUID(), tenantOf(row), ctx.entityId(value(row, "task_id")),
                     value(row, "item_key"), value(row, "label"), checked,
                     checked ? OffsetDateTime.now() : null);
             ctx.registerEntity(value(row, "id"), id);
