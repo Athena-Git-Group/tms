@@ -333,7 +333,7 @@ Table outbox {
   id              bigint      [pk, increment]
   tenant_id       bigint      [not null, ref: > tenants.id]
   aggregate_key   text        [not null, note: 'Kafka 分區鍵：task_event/push 用 task:<uuid>；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）']
-  kind            text        [not null, note: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）。push 的 payload 形狀＝contracts PushPayload（event、title、target）；pms_status 的值為 vacant_clean（查房通過）或 occupied_clean（免查結案，OC）']
+  kind            text        [not null, note: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）。push 的 payload 形狀＝contracts PushPayload（event、title、target）；pms_status 的值為 inspected（查房通過）；免查結案不回寫']
   payload         jsonb       [not null]
   idempotency_key text        [not null, note: '下游去重：重送不重做']
   status          text        [not null, default: 'pending', note: 'CHECK: pending|sent|failed（重試用盡等人工）']

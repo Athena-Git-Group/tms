@@ -39,7 +39,7 @@
 | MODIFY | `.../groups/現場作業/任務.yaml` -> `tasksStart` | 允許本人延後的 deferred→doing；開工時鎖定免查並記交辦已讀；另一筆 doing 時回 409 `doing_task_exists`，context 帶 `{taskId, roomNo}`；回應改為 `TaskDetail`。 | FR-001、FR-004、FR-023、FR-038；D2。 |
 | MODIFY | `.../任務.yaml` -> `tasksDefer` | 新增負責人本人延後（accepted→deferred，保留負責人）；request 改為 `HoldReasonRequest`（1–60 字，422 `reason_invalid`）。主管延後語意不變。 | FR-002、FR-003、FR-010；D2。 |
 | MODIFY | `.../任務.yaml` -> `tasksUndefer` | 限定只能處理主管延後（沒有負責人）的單；本人延後回 409。 | FR-010。 |
-| MODIFY | `.../任務.yaml` -> `tasksComplete` | 新增 `CompleteTaskRequest`（修繕任務必附完修照片 photoIds，否則 422 `completion_photo_required`；另有 resolutionNote）；免查直接結案 inspected/waived 並回寫 OC；未勾的 SOP 項記跳過；實際工時改為各段累計；完修推播報修人，原任務停住原因改為工務已修好。 | FR-007、FR-008、FR-019、FR-020、FR-024；D1、D5、D13。 |
+| MODIFY | `.../任務.yaml` -> `tasksComplete` | 新增 `CompleteTaskRequest`（修繕任務必附完修照片 photoIds，否則 422 `completion_photo_required`；另有 resolutionNote）；免查直接結案 inspected/waived，不回寫 PMS 房況；未勾的 SOP 項記跳過；實際工時改為各段累計；完修推播報修人，原任務停住原因改為工務已修好。 | FR-007、FR-008、FR-019、FR-020、FR-024；D1、D5、D13。 |
 | MODIFY | `.../任務.yaml` -> `tasksCancel` | request 改為 `CancelTaskRequest`（reason 為 manager_void 或 plan_superseded，加 note）；明訂推播負責人與工務單維持原狀（推定）。 | FR-047；spec 邊界情況。 |
 | MODIFY | `.../任務.yaml` -> `tasksSopCheck` | request 改為 `SopCheckRequest`，result 為 checked 或 skipped。 | FR-008、FR-040（剛跳過的 SOP 項）。 |
 | MODIFY | `.../任務.yaml` -> `readTasks` | 回應改為 `TaskDetail`：已做分鐘、勾記與跳過項、合併交辦、已讀、退回資訊、同房工務單。 | FR-021、FR-036、FR-038、FR-039。 |
@@ -53,7 +53,7 @@
 | MODIFY | `.../groups/知識與通知/房間記憶與問一下.yaml` -> `roomMemoryAsk` | request 改為 `KbAskRequest`（taskId、question）；回應改為 `KbAnswer`（found、只用原文、附出處、查不到時明說）；每次提問寫稽核紀錄。 | FR-041、FR-042、FR-045、FR-046；D3。 |
 | ADD | `.../房間記憶與問一下.yaml` -> `listKbSuggestions`、`submitKbFeedback`、`escalateKbQuestion`、`listKbEscalations`、`replyKbEscalation` 與 7 個 schema | 推薦問題；有沒有幫助的回饋（沒幫助時通知 SOP 管理者）；轉問主管與主管回覆推播。 | FR-040、FR-043、FR-044。 |
 | MODIFY | `components/schemas/shared.yaml` -> `Error` | 新增 `context` 欄位，並列出本 plan 新增的錯誤碼（doing_task_exists、reason_invalid、photo_required、photo_limit、photo_not_uploaded、completion_photo_required、already_claimed、ticket_closed）。 | NFR-006；驗收要求拒絕時帶業務提示文字。 |
-| ADD | `components/schemas/shared.yaml` -> `RepairTicketSummary`、`PushPayload`、`PushTarget`、`PmsRoomStatusWriteback` | 跨 group 的工務單摘要；推播的非同步契約（15 種 event，去處為任務、待接池加標亮，或首頁）；PMS 回寫值（vacant_clean、occupied_clean）。 | FR-047（每則推播帶可直達識別）、FR-024（免查回寫 OC）。 |
+| ADD | `components/schemas/shared.yaml` -> `RepairTicketSummary`、`PushPayload`、`PushTarget`、`PmsRoomStatusWriteback` | 跨 group 的工務單摘要；推播的非同步契約（15 種 event，去處為任務、待接池加標亮，或首頁）；PMS 回寫值（查房通過回寫 inspected；免查結案不回寫）。 | FR-047（每則推播帶可直達識別）、FR-024（免查結案不回寫 PMS 房況）。 |
 | ADD | `components/parameters.yaml` -> `TaskId`、`IdempotencyKey`、`PhotoId`、`RepairTicketId`、`AnswerId`、`EscalationId`；`components/responses.yaml` -> `Forbidden`、`UnprocessableEntity` | 新操作共用的參數與錯誤回應。 | NFR-005（冪等寫入）。 |
 | MODIFY | `components/schemas/租戶設定.yaml` -> `tenant_config.key`、`tenant_configRequest.key` | 封閉鍵集合新增 `inspection_waived_cleaning_types`（預設 stayover）。 | FR-022；D1。 |
 | ADD | `.../groups/住客與房間/住客掃碼.yaml` -> `listGuestRequests`、`createGuestRequest`（`/guest-requests`）、`cancelGuestRequest`（`POST /guest-requests/{id}/cancel`）；`components/schemas/住客掃碼.yaml` -> `CreateGuestRequestRequest`、`GuestRequest` | 補上基線 spec 有定義、但基線 OpenAPI 漏掉的住客需求操作：建單（勾選單直接進 pool，自由文字經規則引擎進 pool 或 triage；同房 10 分鐘第 4 筆回 429；進 pool 時推播部門員工）、查看本次住宿的需求（依 reservation 過濾）、撤回（只限 triage 或 pool，轉 cancelled 且原因 guest_withdrew，否則 409；推播部門員工）。路徑沿用基線 OpenAPI 的資源式命名（`/guest/scan` 對應 `/guest-sessions/scan`）。 | 基線 FR-003、FR-005、FR-006、E-01、E-04；本 plan FR-047 的「新需求」與「住客撤回」推播需要入口。`/dsl-refine` 回補時發現的缺口。 |
@@ -134,7 +134,7 @@
 | MODIFY | `.../data-model.dbml` -> `Table tasks` 索引 | 新增 partial UNIQUE `uq_tasks_one_doing_per_staff`（tenant_id、assignee_id，WHERE state='doing'），以及待接池排序索引（dept、state、urgent、priority_notify）。 | FR-001 一次一間，由資料庫做第二道守衛；SC-001。 |
 | MODIFY | `.../data-model.dbml` -> `Table tasks` Note 的狀態轉移 | 補上本 plan 的合法轉移：本人延後與開工、本人中斷與恢復、免查結案、抽查退回、工務單撤回；以及班末掃描的規則。 | 基線 GR-001 的 MODIFY（spec「對既有行為的影響」）。 |
 | MODIFY | `.../data-model.dbml` -> `Table task_events.type`、`payload` | 事件類型新增 resumed、inspection_waived、repair_photos_appended（18→21）；payload 新增 staff_withdrew、by_self、spot_check，照片只記張數。 | FR-006、FR-024、FR-026、NFR-004。 |
-| MODIFY | `.../data-model.dbml` -> `Table outbox.kind` note | 明訂 push 的 payload 形狀等於 contracts 的 PushPayload；pms_status 的值為 vacant_clean 或 occupied_clean（OC）。 | FR-024、FR-047；對齊 API truth。 |
+| MODIFY | `.../data-model.dbml` -> `Table outbox.kind` note | 明訂 push 的 payload 形狀等於 contracts 的 PushPayload；pms_status 的值為 inspected（查房通過）；免查結案不回寫。 | FR-024、FR-047；對齊 API truth。 |
 | MODIFY | `.../data-model.dbml` -> `Table tenant_config.key` | 封閉鍵集合新增 `inspection_waived_cleaning_types`（預設 ["stayover"]）。 | FR-022；D1。 |
 | MODIFY | `.../data-model.dbml` -> `Table rooms` 不變條件 | 免查結案時 hk_state 改為 cleaned；抽查退回時改為 dirty。 | FR-024、FR-026。 |
 | MODIFY | `.../data-model.dbml` -> `Table room_memory` Note | 工務單完修以 kind=repair 寫入；查一下不得帶出住客身分。 | FR-041、FR-046。 |
@@ -176,7 +176,7 @@
 | ADD | `specs/truth/features/backend/任務執行/` -> `本人延後與開工.feature`、`一次只做一間.feature`、`中斷恢復與實際工時.feature`、`dsl.md` | 共 11 條規則：延後原因、延後仍歸本人、60 字上限、延後單可開工、一次一間、中斷停表、保留勾記、恢復接續、實際工時、未勾記跳過。 | 承接 acceptance「房務員自行延後中斷與一次一間」規則 1（US1，D2）。 |
 | ADD | `specs/truth/features/backend/班末掃描/` -> `班末掃描與中斷單交接.feature`、`dsl.md` | 共 7 條規則：退池並標班末退池、進行中留給本人、中斷維持、員工推播、主管推播、主管附交代退池、同樓層推播。`房務待接池包含以下任務：` 只有本模組使用，所以從介面根下放到這裡，語意不變。 | 承接同一 acceptance 規則 2（FR-009，D11）。 |
 | ADD | `specs/truth/features/backend/工務單/` -> `開立工務單與急件.feature`、`重複報修補照片與撤回.feature`、`照片完整性與冪等送出.feature`、`完修與回到原任務.feature`、`dsl.md` | 共 24 條規則：免審核進池、中斷模式、不中斷模式、急件建議、急件排序、急件推播、重複提示、補照片、撤回限認領前、照片 1–3 張、上傳完整性、重試、完修照片、冪等、完修推播、不自動恢復、不需維修結案。 | 承接 acceptance「工務單從報修到完修」（US2，D9、D10、D12、D13）。 |
-| ADD | `specs/truth/features/backend/查房/` -> `免查房鎖定與結案.feature`、`免查抽查與合格率.feature`、`dsl.md` | 共 11 條規則：開工鎖定免查、免查結案、PMS 回寫 OC、未免查待查房、通過、PMS 可售、合格率排除免查、抽查退回、歸零、結果改為退回、推播、計入合格率。 | 承接 acceptance「續住清免查房」（US3，D1）。 |
+| ADD | `specs/truth/features/backend/查房/` -> `免查房鎖定與結案.feature`、`免查抽查與合格率.feature`、`dsl.md` | 共 11 條規則：開工鎖定免查、免查結案、免查不回寫 PMS、未免查待查房、通過、查房通過回寫 PMS、合格率排除免查、抽查退回、歸零、結果改為退回、推播、計入合格率。 | 承接 acceptance「續住清免查房」（US3，D1）。 |
 | ADD | `specs/truth/features/backend/今日進度/` -> `今日進度與下一間.feature`、`dsl.md` | 共 6 條規則：完成與總數、完成單數、臨時需求、剩餘工時 135 分、下一間順序、連續零退回（待 clarify）。 | 承接 acceptance「今日進度與待接池排序」規則 1（FR-028–031）。 |
 | ADD | `specs/truth/features/backend/待接池/` -> `待接池排序與篩選.feature`、`系統準備工單派給負責人.feature`、`dsl.md` | 共 7 條規則：排序、同樓層標示、來源與接手進度、分類筆數、篩選、準備工單派給負責人或進池。 | 承接同一 acceptance 規則 2 與 3（FR-032–035，D6）。 |
 | ADD | `specs/truth/features/backend/房間交辦/` -> `交辦合併與已讀.feature`、`查房退回資訊.feature`、`dsl.md` | 共 8 條規則：交班單只併該房、櫃檯備註、接手進度、打開不算已讀、開始即已讀、不重複記錄、退回資訊合併、不另列主管交代。 | 承接 acceptance「房間交辦合併與已讀」（US5）。 |

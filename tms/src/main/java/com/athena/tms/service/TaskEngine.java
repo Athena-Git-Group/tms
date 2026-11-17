@@ -149,17 +149,8 @@ public class TaskEngine {
             payload = payload == null ? new LinkedHashMap<>() : payload;
             payload.putAll(extraPayload);
         }
-        int completedSeq = this.recordEvent(tenantId, taskId, seq, "completed", actor, payload);
-        if (this.isWaivedClosed(tenantId, taskId)) {
-            this.writebackRoomStatusIfEnabled(tenantId, taskId, actor);
-        }
-        return completedSeq;
-    }
-
-    private boolean isWaivedClosed(long tenantId, UUID taskId) {
-        Map<String, Object> row = this.jdbcTemplate.queryForMap(
-                "SELECT state, inspection FROM tasks WHERE tenant_id = ? AND id = ?", tenantId, taskId);
-        return "inspected".equals(row.get("state")) && "waived".equals(row.get("inspection"));
+        // 免查結案不回寫 PMS 房況。沒有人查過這間房，回寫會讓 PMS 把續住房當成可售；只有查房通過才回寫。
+        return this.recordEvent(tenantId, taskId, seq, "completed", actor, payload);
     }
 
     private List<String> markUncheckedSopAsSkipped(long tenantId, UUID taskId, OffsetDateTime now) {
