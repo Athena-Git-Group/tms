@@ -1188,13 +1188,13 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget _buildStepTrack(TaskDetail task, {required bool onDark}) {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
-    final currentIndex = steps.indexOf(current);
+    final currentIndex = current == null ? -1 : steps.indexOf(current);
     final allDone = task.state == 'inspected';
     return Padding(
       padding: const EdgeInsets.only(top: TmsSpacing.md2),
       child: TmsSemantics(
         id: 'task.step-track',
-        label: current,
+        label: current ?? '待認領',
         explicitChildNodes: true,
         child: TmsStepTrack(
           onDark: onDark,
@@ -1245,9 +1245,12 @@ class _TaskScreenState extends State<TaskScreen> {
     return <String>['已接', '進行中', '完成', waived ? '免查房' : '查房'];
   }
 
-  static String _currentStep(TaskDetail task) {
+  /// 還在待認領的單沒有人接，回 null：步驟條每一步都未到，不把「已接」標成目前步驟。
+  static String? _currentStep(TaskDetail task) {
     final steps = _stepsOf(task);
     switch (task.state) {
+      case 'pool':
+        return null;
       case 'doing':
       case 'interrupted':
         return '進行中';
