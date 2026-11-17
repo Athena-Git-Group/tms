@@ -3,7 +3,6 @@ package com.athena.tms.integration.stepdefs.given;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Given;
-import java.time.LocalTime;
 
 public class InspectionQrGivenSteps {
 
@@ -22,8 +21,8 @@ public class InspectionQrGivenSteps {
 
     @Given("^照租戶班次設定「小美」已下班$")
     public void shiftTimesExcludeNow() {
-        LocalTime now = LocalTime.now();
-        setShiftTimes(hhmm(now.minusHours(3)), hhmm(now.minusHours(2)));
+        // 後端時鐘固定在 12:00（見 CucumberSpringConfiguration 的 fixedClock），班次訂在它之前就一定已下班，不受實際跑測試的時刻影響。
+        setShiftTimes("08:00", "10:00");
     }
 
     @Given("^租戶 1 (允許|不允許)主管查自己清的房$")
@@ -45,9 +44,5 @@ public class InspectionQrGivenSteps {
         db.admin().update(
                 "UPDATE tenant_config SET value = ?::jsonb WHERE tenant_id = 1 AND key = 'shift_times'",
                 "{\"morning\": {\"start\": \"" + start + "\", \"end\": \"" + end + "\"}}");
-    }
-
-    private static String hhmm(LocalTime time) {
-        return String.format("%02d:%02d", time.getHour(), time.getMinute());
     }
 }
