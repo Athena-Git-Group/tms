@@ -126,11 +126,12 @@ public class IntegrationThenSteps {
         assertTrue(received.isEmpty(), "白名單外事件不得外流到整合連線: " + received);
     }
 
-    @Then("^outbox 有一筆房 \"(\\d+)\" 的 \"pms_status\" 回寫訊息$")
-    public void outboxHasOnePmsStatusForRoom(String roomNo) {
-        List<String> roomNos = db.admin().queryForList(
-                "SELECT payload ->> 'roomNo' FROM outbox WHERE tenant_id = 1 AND kind = 'pms_status'", String.class);
-        assertEquals(List.of(roomNo), roomNos, "查房通過該排入一筆該房的 PMS 房況回寫: " + roomNos);
+    @Then("^outbox 有一筆房 \"(\\d+)\" 的 \"pms_status\" 回寫訊息，房況為 \"(\\w+)\"$")
+    public void outboxHasOnePmsStatusForRoom(String roomNo, String status) {
+        List<String> rows = db.admin().queryForList(
+                "SELECT (payload ->> 'roomNo') || ':' || (payload ->> 'status') FROM outbox WHERE tenant_id = 1 AND kind = 'pms_status'",
+                String.class);
+        assertEquals(List.of(roomNo + ":" + status), rows, "查房通過該排入一筆該房的 PMS 房況回寫: " + rows);
     }
 
     private void assertEventFields(JsonNode event, DataTable table) {

@@ -872,7 +872,7 @@ PmsRoomStatusWriteback:
   type: object
   description: >-
     非同步契約：outbox kind=pms_status 的內容，由 PMS 回寫消費者送到 PMS adapter。
-    查房通過時回寫 vacant_clean（可售）；免查結案時回寫 occupied_clean（OC，住客房・已整理），不得回寫為可售。
+    查房通過時回寫 inspected（已整理）。免查結案不回寫：沒有人查過這間房，回寫會讓 PMS 把續住房當成可售。
   required:
   - roomNo
   - status
@@ -882,5 +882,4 @@ PmsRoomStatusWriteback:
     status:
       type: string
       enum:
-      - vacant_clean
-      - occupied_clean
+      - inspected

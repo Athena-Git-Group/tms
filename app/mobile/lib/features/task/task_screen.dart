@@ -789,7 +789,7 @@ class _TaskScreenState extends State<TaskScreen> {
           tone: TmsCalloutTone.success,
           title: waived ? '完成 · 免查房' : '查房通過',
           body: waived
-              ? '房況已回寫 PMS：住客房・已整理（OC）。主管抽查若有問題，仍可退回重做。'
+              ? '這單免查房，直接結案，房況沒有回寫 PMS。主管抽查若有問題，仍可退回重做。'
               : '房況已回寫 PMS，這間可以賣了。',
           idPrefix: 'task.status-row.finished',
           wrap: (node) => TmsSemantics(

@@ -147,6 +147,19 @@ public class InspectionThenSteps {
         }
     }
 
+    @那麼("{string} 沒有回寫 PMS 房況，任務事件也沒有 PMS 回寫")
+    public void taskHasNoPmsWritebackAtAll(String roomNo) {
+        taskDoesNotWriteBackPms(roomNo);
+
+        UUID taskId = UUID.fromString(world.taskId(roomNo));
+        List<String> actualTypes = dbProbe.eventsOf(taskId).stream()
+                .map(e -> (String) e.get("type"))
+                .toList();
+        if (actualTypes.contains("pms_writeback")) {
+            throw new AssertionError("「" + roomNo + "」預期沒有 pms_writeback 事件，實際事件：" + actualTypes);
+        }
+    }
+
     @那麼("{string} 的任務事件依序包含 {事件清單}")
     public void taskEventsInOrderInclude(String roomNo, List<String> eventKinds) {
         UUID taskId = UUID.fromString(world.taskId(roomNo));

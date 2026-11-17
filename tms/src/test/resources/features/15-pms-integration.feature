@@ -195,4 +195,4 @@
         | hk_state  |
         | inspected |
       並且 outbox 排入的訊息 kind 恰為 "pms_status"、"push"、"task_event"
-      並且 outbox 有一筆房 "305" 的 "pms_status" 回寫訊息
+      並且 outbox 有一筆房 "305" 的 "pms_status" 回寫訊息，房況為 "inspected"
