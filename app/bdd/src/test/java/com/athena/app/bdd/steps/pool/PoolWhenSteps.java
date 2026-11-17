@@ -51,6 +51,20 @@ public class PoolWhenSteps {
         context.selectCategory(key);
     }
 
+    @當("{string} 在 App 認領房務待認領的 {string}")
+    public void claimHousekeepingPoolTask(String staffName, String roomNo) {
+        world.staff(staffName);
+        world.tapTestId("pool.card." + roomNo + ".claim-button", SCREEN_TIMEOUT);
+    }
+
+    @當("{string} 在待認領點開 {string} 的單卡")
+    public void openPoolCard(String staffName, String roomNo) {
+        world.staff(staffName);
+        world.tapTestId("pool.card." + roomNo, SCREEN_TIMEOUT);
+        world.waitForTestId("task.step-track", SCREEN_TIMEOUT);
+        world.enteredTaskDetail(roomNo);
+    }
+
     @當("{string} 點待認領空狀態的動作鈕")
     public void tapPoolEmptyStateAction(String staffName) {
         world.ensureOnPool(world.staff(staffName));

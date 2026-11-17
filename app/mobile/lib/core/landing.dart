@@ -15,13 +15,18 @@ Widget landingShellFor({required String role, String? dept}) {
 }
 
 enum ManagerKind {
-  housekeeping(['inspection', 'verify']),
+  housekeeping(['inspection', 'verify'], 'housekeeping'),
 
-  engineering(['verify']);
+  engineering(['verify'], 'engineering');
 
-  const ManagerKind(this.queues);
+  const ManagerKind(this.queues, this.poolDept);
 
   final List<String> queues;
+
+  /// 主管只能認領自己這個部門的待認領單，切到另一個部門的池時只看不搶。
+  final String poolDept;
+
+  bool canClaimFrom(String dept) => dept == poolDept;
 }
 
 ManagerKind? managerKindOf({required String role, String? dept}) {
