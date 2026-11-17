@@ -239,6 +239,20 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    now() - interval '2 hours', now() - interval '110 minutes', NULL, now() - interval '150 minutes', now(), 600, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
 
+  -- 住客打字的需求沒有命中分類規則，停在待派單，等櫃檯判斷派給哪個部門或當場回答。
+  ('00000000-0000-7000-8000-00000000d050', 1, 'other', 'guest', '00000000-0000-7000-8000-000000000305', 'frontdesk', 'triage', 1,
+   NULL, '可以幫我們訂明天早上七點的機場接送嗎？', '{"text": "可以幫我們訂明天早上七點的機場接送嗎？", "lang": "zh-TW"}', NULL,
+   NULL, NULL, NULL, now() - interval '6 minutes', now(), 0, NULL,
+   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
+  ('00000000-0000-7000-8000-00000000d051', 1, 'other', 'guest', '00000000-0000-7000-8000-000000000402', 'frontdesk', 'triage', 1,
+   NULL, 'Could we get a late checkout at 2pm?', '{"text": "Could we get a late checkout at 2pm?", "lang": "en"}', NULL,
+   NULL, NULL, NULL, now() - interval '14 minutes', now(), 0, NULL,
+   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
+  ('00000000-0000-7000-8000-00000000d052', 1, 'other', 'guest', '00000000-0000-7000-8000-000000000308', 'frontdesk', 'triage', 1,
+   NULL, '隔壁房間一直有聲音，睡不著', '{"text": "隔壁房間一直有聲音，睡不著", "lang": "zh-TW"}', NULL,
+   NULL, NULL, NULL, now() - interval '22 minutes', now(), 0, NULL,
+   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
+
   ('00000000-0000-7000-8000-00000000d040', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000403', 'housekeeping', 'doing', 1,
    '00000000-0000-7000-8000-00000000a003', '403 退房打掃', NULL, 30,
    now() - interval '15 minutes', NULL, current_date, now() - interval '2 hours', now(), 0, now() - interval '10 minutes',
@@ -256,7 +270,7 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
 INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
 SELECT 1, id, 1, 'created', 'system', NULL,
        jsonb_build_object('type', type, 'source', source, 'room_id', room_id::text, 'dept', dept,
-                          'state', 'pool', 'title', title, 'est_min', est_min,
+                          'state', CASE WHEN state = 'triage' THEN 'triage' ELSE 'pool' END, 'title', title, 'est_min', est_min,
                           'work_date', work_date),
        created_at
 FROM tasks WHERE tenant_id = 1;
@@ -280,6 +294,19 @@ BEGIN
       INSERT INTO task_counters (tenant_id, last_no)
       SELECT 1, count(*) FROM tasks WHERE tenant_id = 1 AND type <> 'repair'
       ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no
+    $q$;
+  END IF;
+END $$;
+
+-- 004 的 V25 起 tasks 多了 ended_at（走到終點的時間），櫃檯看板只列還沒結束或今天才結束的單。
+-- 示範資料沒有結案事件可以推算，已結案的單用完成時間代替；留空的話會永遠掛在已結案欄。
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'ended_at') THEN
+    EXECUTE $q$
+      UPDATE tasks
+         SET ended_at = COALESCE(done_at, updated_at)
+       WHERE tenant_id = 1 AND state IN ('inspected', 'closed', 'cancelled')
     $q$;
   END IF;
 END $$;
