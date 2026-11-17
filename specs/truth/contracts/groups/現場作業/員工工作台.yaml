@@ -24,7 +24,7 @@ getMyToday:
       與對應員工首頁同一個口徑；
       打掃進度六個數字（cleaningDone、cleaningTotal、inspectedCount、completedCount、adHocCompleted、remainingMinutes）
       依同一套公式對本人名下的單計算，主管沒有名下的單時都是 0，主管首頁不顯示這些數字；
-      poolBadgeCount 一律為 0（主管不屬於任何部門池、搶不到單，待認領徽章不顯示）；
+      poolBadgeCount 一律為 0（主管的待認領分頁可以在房務與工務之間切換，分頁列不顯示待認領徽章）；
       unreadNotificationBadgeCount 照常；shift 與 floors 為 null（排班只存在房務的排房計畫）；
       engineeringSummary 只有工務主管有值，房務主管為 null。
       主管首頁的待查房、待驗收格子不在這支端點，走 getManagerQueues。
@@ -52,7 +52,7 @@ listDeptPool:
       被驗收不通過退回工務待認領的單照常列在工務池，source 仍依開單路徑換算，PoolItem.verificationReturnReason 帶不通過原因。
       要看的是哪個部門的池由 dept 參數決定：現場員工（房務、工務、櫃檯）省略它，看自己部門的池；
       主管與老闆不屬於單一部門，必須帶 dept 才知道要看哪一池，省略時回 422；
-      主管不論部門（房務主管或工務主管）都可以帶 housekeeping 或 engineering，只看不搶；
+      主管不論部門（房務主管或工務主管）都可以帶 housekeeping 或 engineering 查看；認領只限自己那個部門的池（房務主管＝housekeeping，含沒有部門的主管；工務主管＝engineering），規則見 tasksClaim；
       現場員工帶了自己部門以外的 dept 回 403 forbidden_dept_pool。
       回應另外帶 activeStaffCount＝該部門目前在職、可以搶單的員工數（在職定義見
       `員工工作台.yaml` 的 DeptPool.activeStaffCount：帳號啟用且已開通，待開通與停用不計），
