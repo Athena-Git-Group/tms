@@ -10,8 +10,10 @@ getManagerQueues:
       工務主管（dept=engineering）只回待驗收，inspection 與 counts.inspection 兩個鍵不出現（見 ManagerQueues）。
       主管種類只決定看得到哪幾類，不影響誰能驗收。
       兩類都只看單目前的狀態、不帶任何日期條件，判定公式與資料側 tasks 表的 Note 同一份：
-      待查房（inspection）＝type=cleaning 且 state=done 且負責人不是呼叫者本人。主管不能查自己清的房，
-      自己清的房不出現在他的清單與數字裡，另一位房務主管看得到；免查房的單完成時直接落在 inspected，本來就不在這裡。
+      待查房（inspection）＝type=cleaning 且 state=done；飯店把「允許主管查自己清的房」（租戶設定 self_inspection_allowed）設為 false 時，
+      再加上負責人不是呼叫者本人。預設（未設定視為允許）主管自己清的房也出現在他的清單與數字裡；
+      飯店設為 false 時主管不能查自己清的房，自己清的房不出現在他的清單與數字裡，另一位房務主管看得到。
+      清單與查房送出讀同一個設定，不會出現清單上看得到卻送不出去；免查房的單完成時直接落在 inspected，本來就不在這裡。
       待驗收（verify）＝type=repair 且 state=done 且完修結果不是不需處理（no_action_needed），
       含完修結果為暫時處理（temporary）、無法修復（cannot_fix）的單與定期保養單（origin=scheduled），
       也含呼叫者本人完修的單；維修中、退回重修中與已結案（closed）的單不在內。所有主管拿到同一份。

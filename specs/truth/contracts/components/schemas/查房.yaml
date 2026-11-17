@@ -13,7 +13,7 @@ inspections:
     inspectorId:
       type: string
       format: uuid
-      description: 守衛：inspector ≠ 原清房者（403）
+      description: 查房者。飯店把「允許主管查自己清的房」（self_inspection_allowed）設為 false 時，查房者不能是原清房者，送出回 403；未設定或為 true 時可以是原清房者。
     result:
       type: string
       description: 'CHECK: passed|failed'

@@ -26,6 +26,16 @@ public class InspectionQrGivenSteps {
         setShiftTimes(hhmm(now.minusHours(3)), hhmm(now.minusHours(2)));
     }
 
+    @Given("^租戶 1 (允許|不允許)主管查自己清的房$")
+    public void selfInspectionAllowed(String allowOrNot) {
+        db.admin().update(
+                """
+                INSERT INTO tenant_config (tenant_id, key, value, updated_at)
+                VALUES (1, 'self_inspection_allowed', ?::jsonb, now())
+                ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+                """, "允許".equals(allowOrNot) ? "true" : "false");
+    }
+
     @Given("^房 301 尚無任何 QR token$")
     public void room301HasNoQrToken() {
         db.admin().update("DELETE FROM room_qr_tokens WHERE room_id = ?", ctx.entityId("r-301"));

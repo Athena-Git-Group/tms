@@ -91,7 +91,7 @@ InspectionQueueItem:
     properties:
       cleanerName:
         type: string
-        description: 原清房者（這張單的負責人）顯示名稱。主管要知道退回會回到誰名下；也用來理解為什麼自己清的房不在這裡。
+        description: 原清房者（這張單的負責人）顯示名稱。主管要知道退回會回到誰名下；也用來理解為什麼飯店關掉「允許主管查自己清的房」時，自己清的房不在這裡。
       redoCount:
         type: integer
         format: int32

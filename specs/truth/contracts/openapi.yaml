@@ -17,7 +17,7 @@ tags:
 - name: 交班單 API
   description: 查看凍結快照（班末排程產生、之後任務再變快照不變）與簽收。
 - name: 查房 API
-  description: 房務主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；自清自查 403；工務主管送出 403；原清房者已下班→連動退池。
+  description: 房務主管逐項判定（items 須涵蓋租戶查房項目全集）。全過→inspected＋排 PMS 回寫；任一不過→退回 accepted（redo+1、清計時與 SOP）；預設允許主管查自己清的房，飯店把 self_inspection_allowed 設為 false 時自清自查 403；工務主管送出 403；原清房者已下班→連動退池。
 - name: 請假 API
   description: 登記請假即觸發連鎖：該員 accepted 單自動退池、doing 單標中斷並回傳受影響清單給主管收尾。
 - name: 遺失物 API
@@ -59,7 +59,7 @@ tags:
 - name: 主管工作台 API
   description: >-
     主管首頁的待辦：房務主管看待查房與待驗收，工務主管只看待驗收；格子數字與清單同一次往返、由舊到新排好、
-    待查房排除主管本人清的房。主管動作本身沿用查房 API（createInspections）與工務單 API（verifyRepairTicket）。
+    飯店把「允許主管查自己清的房」（self_inspection_allowed）設為 false 時，待查房才排除主管本人清的房。主管動作本身沿用查房 API（createInspections）與工務單 API（verifyRepairTicket）。
 - name: 櫃檯看板與派單 API
   description: >-
     櫃檯 Web 專用，路徑都在 /desk 底下，只有 frontdesk、manager、duty_manager 可以呼叫。

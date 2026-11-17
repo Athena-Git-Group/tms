@@ -55,6 +55,11 @@ public class InspectionGivenSteps {
         updateTenantConfig("inspection_waived_enabled", parseSwitch(onOff));
     }
 
+    @假設("飯店設定允許主管查自己清的房為 {string}")
+    public void hotelSetsSelfInspectionAllowedSwitch(String onOff) {
+        updateTenantConfig("self_inspection_allowed", parseSwitch(onOff));
+    }
+
     @假設("{string} 在免查房開關開啟時開始了 {string} 的續住整理")
     public void staffStartsStayoverWithWaiverEnabled(String staffName, String roomNo) {
         startStayoverWithWaiver(staffName, roomNo, true);

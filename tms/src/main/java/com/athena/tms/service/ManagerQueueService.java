@@ -23,10 +23,12 @@ public class ManagerQueueService {
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+    private final SelfInspectionSetting selfInspectionSetting;
 
-    public ManagerQueueService(JdbcTemplate jdbcTemplate, Clock clock) {
+    public ManagerQueueService(JdbcTemplate jdbcTemplate, Clock clock, SelfInspectionSetting selfInspectionSetting) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
+        this.selfInspectionSetting = selfInspectionSetting;
     }
 
     @Transactional(readOnly = true)
@@ -43,6 +45,8 @@ public class ManagerQueueService {
     }
 
     private List<InspectionQueueItem> inspectionQueue(long tenantId, UUID callerStaffId, LocalDate today) {
+        // 清單與查房判定讀同一個設定：飯店允許主管查自己清的房時，清單不再排除呼叫者本人清的房。
+        UUID excludedCleanerId = selfInspectionSetting.allowed(tenantId) ? null : callerStaffId;
         return jdbcTemplate.queryForList(
                 """
                 SELECT t.id, t.title, t.done_at AS waiting_since, t.redo_count, r.room_no,
@@ -51,10 +55,10 @@ public class ManagerQueueService {
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
                   JOIN staff_accounts s ON s.tenant_id = t.tenant_id AND s.id = t.assignee_id
                  WHERE t.tenant_id = ? AND t.type = 'cleaning' AND t.state = 'done'
-                   AND t.assignee_id IS DISTINCT FROM ?
+                   AND t.assignee_id IS DISTINCT FROM ?::uuid
                  ORDER BY t.done_at, r.room_no, t.id
                 """,
-                tenantId, callerStaffId).stream()
+                tenantId, excludedCleanerId).stream()
                 .map(row -> {
                     Base base = base(row, today);
                     return new InspectionQueueItem(
