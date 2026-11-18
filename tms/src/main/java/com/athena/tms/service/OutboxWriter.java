@@ -5,6 +5,8 @@ import com.athena.tms.entity.OutboxMessage;
 import com.athena.tms.entity.TaskEvent;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -15,10 +17,14 @@ import tools.jackson.databind.node.ObjectNode;
 public class OutboxWriter {
     private final OutboxMessageRepository outboxMessageRepository;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public OutboxWriter(OutboxMessageRepository outboxMessageRepository, ObjectMapper objectMapper) {
+    public OutboxWriter(OutboxMessageRepository outboxMessageRepository, ObjectMapper objectMapper, JdbcTemplate jdbcTemplate, ApplicationEventPublisher eventPublisher) {
         this.outboxMessageRepository = outboxMessageRepository;
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     public OutboxMessage enqueueTaskEvent(TaskEvent event) {
@@ -54,7 +60,23 @@ public class OutboxWriter {
         message.setIdempotencyKey(idempotencyKey);
         message.setPayload(payload);
         message.setCreatedAt(OffsetDateTime.now());
-        return (OutboxMessage)this.outboxMessageRepository.save(message);
+        OutboxMessage saved = (OutboxMessage)this.outboxMessageRepository.save(message);
+        this.eventPublisher.publishEvent(new OutboxEnqueued());
+        return saved;
+    }
+
+    /**
+     * 以 idempotency_key 去重寫入一筆 outbox，同鍵已存在就不寫。
+     *
+     * <p>所有寫入 outbox 的程式都要走這個類別，因為 relay 靠這裡發出的 {@link OutboxEnqueued} 才會在交易提交後立刻送出；
+     * 繞過這裡直接 INSERT 的訊息只能等 relay 的定時輪詢。
+     */
+    public boolean enqueueIfAbsent(long tenantId, String kind, String aggregateKey, String payloadJson, String idempotencyKey, OffsetDateTime createdAt) {
+        int inserted = this.jdbcTemplate.update("INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)\nVALUES (?, ?, ?, ?::jsonb, ?, 'pending', 0, ?)\nON CONFLICT (tenant_id, kind, idempotency_key) DO NOTHING\n", tenantId, aggregateKey, kind, payloadJson, idempotencyKey, createdAt);
+        if (inserted > 0) {
+            this.eventPublisher.publishEvent(new OutboxEnqueued());
+        }
+        return inserted > 0;
     }
 
     private JsonNode readTree(String json) {

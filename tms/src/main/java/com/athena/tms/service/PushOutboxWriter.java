@@ -15,21 +15,18 @@ public class PushOutboxWriter {
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+    private final OutboxWriter outboxWriter;
 
-    public PushOutboxWriter(JdbcTemplate jdbcTemplate, Clock clock) {
+    public PushOutboxWriter(JdbcTemplate jdbcTemplate, Clock clock, OutboxWriter outboxWriter) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
+        this.outboxWriter = outboxWriter;
     }
 
     public void enqueue(long tenantId, String aggregateKey, ObjectNode payload, String idempotencyKey) {
-        int inserted = jdbcTemplate.update(
-                """
-                INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)
-                VALUES (?, ?, 'push', ?::jsonb, ?, 'pending', 0, ?)
-                ON CONFLICT (tenant_id, kind, idempotency_key) DO NOTHING
-                """,
-                tenantId, aggregateKey, payload.toString(), idempotencyKey, OffsetDateTime.now(clock));
-        if (inserted > 0) {
+        boolean inserted = outboxWriter.enqueueIfAbsent(
+                tenantId, "push", aggregateKey, payload.toString(), idempotencyKey, OffsetDateTime.now(clock));
+        if (inserted) {
             writeNotification(tenantId, payload);
         }
     }
