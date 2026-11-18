@@ -1,0 +1,284 @@
+package com.athena.tms.service;
+
+import com.athena.tms.common.CredentialFingerprint;
+import com.athena.tms.common.HotelCode;
+import com.athena.tms.common.NewPasswordStrength;
+import com.athena.tms.common.codes.RolePermissions;
+import com.athena.tms.common.error.AccountDisabledException;
+import com.athena.tms.common.error.AccountLockedException;
+import com.athena.tms.common.error.CredentialsInvalidException;
+import com.athena.tms.common.error.CurrentPasswordInvalidException;
+import com.athena.tms.common.error.UnprocessableEntityException;
+import com.athena.tms.dao.StaffAccountRepository;
+import com.athena.tms.dao.TenantRepository;
+import com.athena.tms.dto.StaffChangePasswordRequest;
+import com.athena.tms.dto.StaffLoginRequest;
+import com.athena.tms.dto.StaffLoginResponse;
+import com.athena.tms.entity.StaffAccount;
+import com.athena.tms.entity.Tenant;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+public class StaffAccountLoginService {
+
+    private static final int LOCKOUT_THRESHOLD = 5;
+
+    private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
+
+    private static final String CREDENTIALS_INVALID_MESSAGE = "員工編號或密碼不正確";
+
+    private static final String FRONTDESK_WEB_CLIENT = "frontdesk_web";
+
+    private final StaffAccountRepository staffAccountRepository;
+    private final TenantRepository tenantRepository;
+    private final TenantScopedExecutor tenantScopedExecutor;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    public StaffAccountLoginService(
+            StaffAccountRepository staffAccountRepository,
+            TenantRepository tenantRepository,
+            TenantScopedExecutor tenantScopedExecutor,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService) {
+        this.staffAccountRepository = staffAccountRepository;
+        this.tenantRepository = tenantRepository;
+        this.tenantScopedExecutor = tenantScopedExecutor;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+    }
+
+    public StaffLoginResponse login(StaffLoginRequest request) {
+        validate(request);
+        if (request.hotelCode() != null) {
+            return loginAtHotel(request);
+        }
+        List<Long> candidates = tenantsHavingLoginId(request.loginId());
+        if (candidates.isEmpty()) {
+            throw new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE);
+        }
+        Long tenantId = candidates.size() == 1
+                ? candidates.get(0)
+                : firstTenantWithMatchingPassword(candidates, request).orElse(null);
+        if (tenantId == null) {
+            // 每一家的帳號都比對不上密碼時，這次輸入對每個帳號都算一次密碼錯誤，再回密碼錯誤。
+            // 只記在其中一個帳號的話，其他同編號的帳號可以被反覆猜密碼而不會鎖定。
+            // 已停用或鎖定中的帳號照單一帳號時的規則處理，不增加次數。
+            for (long candidate : candidates) {
+                evaluateInTenant(candidate, request);
+            }
+            throw new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE);
+        }
+        Outcome outcome = evaluateInTenant(tenantId, request);
+        if (outcome.failure() != null) {
+            throw outcome.failure();
+        }
+        return outcome.response();
+    }
+
+    // 帶了飯店代碼就只在那一家找帳號，別家相同員工編號的帳號完全不碰：不比對密碼、不記錯誤次數、不鎖定。
+    // 代碼格式不對、對不到飯店，都回和密碼錯誤相同的內容，看不出這家飯店存不存在。
+    // 格式不對的代碼資料庫裡不可能有，先擋掉、不查資料庫。飯店主檔不受列層級權限限制，所以查代碼不必先切換飯店身分。
+    private StaffLoginResponse loginAtHotel(StaffLoginRequest request) {
+        long tenantId = Optional.of(request.hotelCode())
+                .filter(HotelCode::isWellFormed)
+                .flatMap(tenantRepository::findByCode)
+                .map(Tenant::getId)
+                .orElseThrow(() -> new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
+        Outcome outcome = evaluateInTenant(tenantId, request);
+        if (outcome.failure() != null) {
+            throw outcome.failure();
+        }
+        return outcome.response();
+    }
+
+    // TransactionTemplate 遇到往外拋的 RuntimeException 會整筆 rollback，失敗次數與鎖定就寫不進去，
+    // 所以 evaluate() 回傳 Outcome，等交易 commit 之後才由呼叫端拋。
+    private Outcome evaluateInTenant(long tenantId, StaffLoginRequest request) {
+        return tenantScopedExecutor.callAsTenant(tenantId, () -> evaluate(tenantId, request));
+    }
+
+    public StaffLoginResponse changePassword(long tenantId, UUID staffId, StaffChangePasswordRequest request) {
+        StaffAccount account = staffAccountRepository
+                .findByTenantIdAndId(tenantId, staffId)
+                .orElseThrow(() -> new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
+        if (!account.isActive()) {
+            throw new AccountDisabledException("帳號已停用，登入被拒");
+        }
+        if (request == null || request.newPassword() == null || request.newPassword().isBlank()) {
+            throw new UnprocessableEntityException("newPassword 必填");
+        }
+        if (!account.isMustChangePassword()) {
+            String currentPassword = request.currentPassword();
+            if (currentPassword == null || currentPassword.isBlank()) {
+                throw new UnprocessableEntityException("current_password_required", "請輸入目前密碼");
+            }
+            if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
+                throw new CurrentPasswordInvalidException("目前密碼不正確");
+            }
+        }
+        List<String> failedRules = NewPasswordStrength.failedRules(request.newPassword());
+        if (!failedRules.isEmpty()) {
+            throw new UnprocessableEntityException(
+                    "new_password_too_weak",
+                    "新密碼至少 8 碼，而且要有英文字母和數字",
+                    Map.of("failedRules", failedRules));
+        }
+        if (passwordEncoder.matches(request.newPassword(), account.getPasswordHash())) {
+            throw new UnprocessableEntityException("new_password_invalid", "新密碼不能和目前密碼相同");
+        }
+
+        account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        account.setMustChangePassword(false);
+        account.setUpdatedAt(OffsetDateTime.now());
+        staffAccountRepository.save(account);
+
+        return issueLoginResponse(tenantId, account);
+    }
+
+    // 列出有這個員工編號的飯店，按飯店編號由小到大。登入請求沒帶飯店代碼（員工 App）時才走這裡，逐家查，
+    // 每一家都把飯店編號寫進查詢條件。只靠列層級安全限定範圍的話，資料庫帳號不受這層限制時
+    // 會查到別家的同編號帳號，憑證帶錯飯店，之後每個請求都被拒。
+    private List<Long> tenantsHavingLoginId(String loginId) {
+        return tenantScopedExecutor.tenantIds().stream()
+                .sorted()
+                .filter(tenantId -> tenantScopedExecutor.callAsTenant(
+                        tenantId,
+                        () -> staffAccountRepository.findByTenantIdAndLoginId(tenantId, loginId).isPresent()))
+                .toList();
+    }
+
+    // 不同飯店可以有相同的員工編號。這時登入密碼比對得上的那一家；
+    // 不只一家比對得上時，取飯店編號最小的一家，結果不會隨查詢順序改變。
+    // 從櫃檯畫面登入時，先挑能用櫃檯畫面的那一家，免得編號較小那一家的房務把另一家的櫃檯擋在門外；
+    // 都不能用時才取密碼對得上、編號最小的一家，由後面的角色檢查擋下。
+    private Optional<Long> firstTenantWithMatchingPassword(List<Long> tenantIds, StaffLoginRequest request) {
+        List<Long> matching = tenantIds.stream()
+                .filter(tenantId -> accountInTenant(tenantId, request)
+                        .map(account -> passwordEncoder.matches(request.password(), account.getPasswordHash()))
+                        .orElse(false))
+                .toList();
+        return matching.stream()
+                .filter(tenantId -> accountInTenant(tenantId, request)
+                        .map(account -> canUseRequestedClient(request, account))
+                        .orElse(false))
+                .findFirst()
+                .or(() -> matching.stream().findFirst());
+    }
+
+    private Optional<StaffAccount> accountInTenant(long tenantId, StaffLoginRequest request) {
+        return tenantScopedExecutor.callAsTenant(
+                tenantId, () -> staffAccountRepository.findByTenantIdAndLoginId(tenantId, request.loginId()));
+    }
+
+    // 不帶 client 時不看角色。帶 frontdesk_web 時只放行櫃檯、主管、值班主管，
+    // 其他角色只有拿臨時密碼時放行，讓他先設定新密碼。
+    private static boolean canUseRequestedClient(StaffLoginRequest request, StaffAccount account) {
+        if (!FRONTDESK_WEB_CLIENT.equals(request.client())) {
+            return true;
+        }
+        return account.isMustChangePassword() || RolePermissions.canUseFrontdeskWeb(account.getRole());
+    }
+
+    private Outcome evaluate(long tenantId, StaffLoginRequest request) {
+        StaffAccount account = staffAccountRepository
+                .findByTenantIdAndLoginId(tenantId, request.loginId())
+                .orElse(null);
+        if (account == null) {
+            return Outcome.failure(new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
+        }
+
+        if (!account.isActive()) {
+            return Outcome.failure(new AccountDisabledException("帳號已停用，登入被拒"));
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime lockedUntil = account.getLockedUntil();
+        if (lockedUntil != null && lockedUntil.isAfter(now)) {
+            long remainingMinutes = Duration.between(now, lockedUntil).toMinutes() + 1;
+            return Outcome.failure(new AccountLockedException(
+                    "帳號已鎖定，請稍後再試",
+                    Map.of("lockedUntil", lockedUntil.toString(), "remainingMinutes", remainingMinutes)));
+        }
+
+        if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
+            recordFailedAttempt(account, now);
+            return Outcome.failure(new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
+        }
+
+        // 櫃檯畫面只給櫃檯、主管、值班主管用。其他角色密碼對了也回與密碼錯誤相同的內容，
+        // 而且不動連續錯誤次數：不帶 client 就登得進去，這一步只是把人擋在櫃檯畫面外，
+        // 不值得因此把同仁在員工 App 的帳號鎖住。臨時密碼照常放行，先去設定新密碼。
+        if (!canUseRequestedClient(request, account)) {
+            return Outcome.failure(new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
+        }
+
+        account.setFailedLoginCount(0);
+        account.setLockedUntil(null);
+        staffAccountRepository.save(account);
+
+        return Outcome.success(issueLoginResponse(tenantId, account));
+    }
+
+    // 登入成功與改密碼成功回同一種內容：新發的憑證、帳號資料、所屬飯店名稱、是否還要改密碼。
+    // 改密碼時已先把「要改密碼」清掉並存檔，所以這裡讀到的一定是否。
+    private StaffLoginResponse issueLoginResponse(long tenantId, StaffAccount account) {
+        JwtService.IssuedToken issued = jwtService.issue(
+                tenantId,
+                account.getId(),
+                account.getRole(),
+                account.getDept(),
+                CredentialFingerprint.of(account.getPasswordHash()));
+        return new StaffLoginResponse(
+                issued.token(),
+                issued.expiresAt(),
+                account.getId(),
+                account.getName(),
+                account.getLoginId(),
+                hotelName(tenantId),
+                account.getDept(),
+                account.getRole(),
+                account.isMustChangePassword());
+    }
+
+    private String hotelName(long tenantId) {
+        return tenantRepository.findById(tenantId)
+                .map(Tenant::getName)
+                .orElseThrow(() -> new IllegalStateException("找不到飯店 " + tenantId));
+    }
+
+    private record Outcome(StaffLoginResponse response, RuntimeException failure) {
+        static Outcome success(StaffLoginResponse response) {
+            return new Outcome(response, null);
+        }
+
+        static Outcome failure(RuntimeException failure) {
+            return new Outcome(null, failure);
+        }
+    }
+
+    private void recordFailedAttempt(StaffAccount account, OffsetDateTime now) {
+        int newCount = account.getFailedLoginCount() + 1;
+        account.setFailedLoginCount(newCount);
+        if (newCount >= LOCKOUT_THRESHOLD) {
+            account.setLockedUntil(now.plus(LOCKOUT_DURATION));
+        }
+        staffAccountRepository.save(account);
+    }
+
+    private void validate(StaffLoginRequest request) {
+        if (request.loginId() == null || request.loginId().isBlank()) {
+            throw new UnprocessableEntityException("loginId 必填");
+        }
+        if (request.password() == null || request.password().isBlank()) {
+            throw new UnprocessableEntityException("password 必填");
+        }
+    }
+}

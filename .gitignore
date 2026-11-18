@@ -1,14 +1,22 @@
 # macOS
 .DS_Store
 
+# IDE
+.idea/
+
 # Claude / Athena 工作目錄（本機工具狀態，不進 repo）
 .agents/
-.athena/
+.athena/*
+!.athena/handoff/
 .claude/
 CLAUDE.md
 DISCOVERY-PLAN.md
 INDEX.md
 skills-lock.json
-plans/
+/plans/
 points/
 reviews/
+
+# Maven 建置產物（app/bdd 等 Java 模組）
+target/
+.tms-parity/

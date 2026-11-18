@@ -1,0 +1,37 @@
+rooms:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    roomNo:
+      type: string
+      description: 房號「305」
+    floor:
+      type: integer
+      format: int32
+      description: v1 排房演算法排序鍵
+    roomType:
+      type: string
+      description: 平均打掃分鐘按它統計
+    hkState:
+      type: string
+      description: 'TMS 擁有。CHECK: dirty|cleaned|inspected|out_of_order'
+    occupancy:
+      type: string
+      description: 'PMS 擁有（同步唯讀）。CHECK: occupied|vacant'
+    updatedAt:
+      type: string
+      format: date-time
+  required:
+  - id
+  - tenantId
+  - roomNo
+  - floor
+  - roomType
+  - hkState
+  - occupancy
+  - updatedAt

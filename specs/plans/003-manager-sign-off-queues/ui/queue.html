@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>等主管處理的單</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+  <div class="navbar"><button class="back" onclick="go('index.html')">首頁</button><span id="title"></span></div>
+  <div class="content">
+    <div class="offlinebar"><span>目前離線</span><span>待同步 0 筆</span></div>
+    <div class="sectionlabel"><span id="caption"></span><span>最早開始等的在最上面</span></div>
+    <div id="list"></div>
+  </div>
+  <div class="tabbar">
+    <a class="tab active" href="index.html"><span class="glyph"></span>首頁</a>
+    <a class="tab" href="pool.html"><span class="glyph"></span>待認領</a>
+    <a class="tab" href="#"><span class="glyph"></span>通知<span class="badge">2</span></a>
+    <a class="tab" href="#" onclick="openMe();return false"><span class="glyph"></span>我的</a>
+  </div>
+</div>
+<script src="manager.js"></script>
+<script>
+applyOffline();
+const kind = Q.get('kind') === 'inspection' ? 'inspection' : 'verify';
+if (kind === 'inspection' && isEngineeringManager()) location.replace('index.html');
+const META = {
+  inspection: { title: '待查房', caption: '別人清好、等你查的房', empty: '目前沒有等你查的房' },
+  verify: { title: '待驗收', caption: '已完修、還沒有人驗收', empty: '目前沒有等你驗收的工務單' },
+};
+const meta = META[kind];
+document.getElementById('title').textContent = meta.title;
+document.title = meta.title;
+const rows = kind === 'inspection' ? inspectionQueue() : verifyQueue();
+document.getElementById('caption').textContent = rows.length ? `${meta.caption} · ${rows.length} 張` : meta.caption;
+function when(date, time) {
+  return `<span class="when">${date !== TODAY ? `<div class="date">${date}</div>` : ''}<div class="time">${time}</div><div class="wait">${date !== TODAY ? '昨天開始等' : '開始等'}</div></span>`;
+}
+const list = document.getElementById('list');
+if (!rows.length) {
+  list.innerHTML = `<div class="empty"><div class="t">${meta.empty}</div><div class="s">有新的單進來時會出現在這裡</div></div>`;
+} else if (kind === 'inspection') {
+  list.innerHTML = '<div class="rows">' + rows.map(r => `
+    <button class="row" onclick="go('inspect.html?room=${r.room}')">
+      <span class="main">
+        <div class="room">${r.room}<small>${r.title}</small></div>
+        <div class="sub"><span>${r.cleaner} 清的</span>${r.redo ? '<span class="chip redo">重做後再查</span>' : ''}</div>
+      </span>${when(r.date, r.time)}
+    </button>`).join('') + '</div>';
+} else {
+  list.innerHTML = '<div class="rows">' + rows.map(t => `
+    <button class="row" onclick="go('ticket.html?no=${t.no}&from=verify')">
+      <span class="main">
+        <div class="ticketno">${t.no}</div>
+        <div class="room">${t.room}<small>${t.title}</small></div>
+        <div class="sub">
+          <span class="chip ${t.result === '無法修復' ? 'cannot' : ''}">${t.result}</span>
+          ${t.scheduled ? '<span class="chip scheduled">定期保養</span>' : ''}
+          ${t.lastFail ? '<span class="chip returned">重修後再驗</span>' : ''}
+          <span>${t.assignee} 完修</span>
+        </div>
+      </span>${when(t.doneDate, t.doneTime)}
+    </button>`).join('') + '</div>';
+}
+const closed = Q.get('closed');
+if (closed) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = `${closed} 已結案`;
+  document.getElementById('phone').appendChild(toast);
+  setTimeout(() => toast.classList.add('hide'), 2200);
+  history.replaceState(null, '', location.pathname + '?kind=' + kind + (isOffline() ? '&offline=1' : ''));
+}
+</script>
+</body>
+</html>

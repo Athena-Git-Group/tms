@@ -1,0 +1,41 @@
+task_events:
+  type: object
+  properties:
+    id:
+      type: integer
+      format: int64
+      description: 全館依序，但非訂閱書籤（增量一律走 Kafka）；僅離線重放/排查排序用
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    seq:
+      type: integer
+      format: int32
+      description: 這個任務的第幾步；取自 tasks.event_seq 的 RETURNING
+    type:
+      type: string
+      description: '25 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled|resumed|inspection_waived|repair_photos_appended|urgent_downgraded|repair_verified|repair_verification_failed|triage_undone（可擴充，加值不改表）。triage_undone 是櫃檯派出後復原，只接在 triaged 之後。'
+    actorRole:
+      type: string
+      description: guest|frontdesk|housekeeping|engineering|manager|duty_manager|system。記操作者當下的角色；值班主管記 duty_manager，不借用 manager。
+    actorId:
+      type: string
+      format: uuid
+      description: 住客與系統為空
+    payload:
+      type: string
+      description: 會改 tasks 欄位的事件必填帶齊（created 帶建立快照）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；triaged 帶 dept 與 via（button|drag，沒有這個鍵視為 button）；triage_undone 帶 dept（被收回的部門）；answered 帶 answer（回覆全文）
+    createdAt:
+      type: string
+      format: date-time
+  required:
+  - id
+  - tenantId
+  - taskId
+  - seq
+  - type
+  - actorRole
+  - createdAt

@@ -1,0 +1,99 @@
+package com.athena.tms.auth;
+
+import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.TenantContext;
+import com.athena.tms.common.error.NotFoundException;
+import com.athena.tms.dao.RoomRepository;
+import com.athena.tms.entity.Room;
+import java.util.Map;
+import java.util.UUID;
+import javax.sql.DataSource;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@TestConfiguration(proxyBeanMethods = false)
+public class AuthTestEndpointsConfiguration {
+
+    @RestController
+    static class ProbeController {
+
+        private final RoomRepository roomRepository;
+        private final JdbcTemplate jdbcTemplate;
+
+        ProbeController(RoomRepository roomRepository, DataSource dataSource) {
+            this.roomRepository = roomRepository;
+            this.jdbcTemplate = new JdbcTemplate(dataSource);
+        }
+
+        @GetMapping("/staff/probe")
+        Map<String, String> staffRead() {
+            return Map.of("probe", "staff-read");
+        }
+
+        @PostMapping("/staff/probe")
+        Map<String, String> staffWrite() {
+            return Map.of("probe", "staff-write");
+        }
+
+        @GetMapping("/api/v1/desk/probe")
+        Map<String, String> deskRead() {
+            return Map.of("probe", "desk-read");
+        }
+
+        @PostMapping("/api/v1/desk/probe")
+        Map<String, String> deskWrite() {
+            return Map.of("probe", "desk-write");
+        }
+
+        @GetMapping("/admin/probe")
+        Map<String, String> adminRead() {
+            return Map.of("probe", "admin-read");
+        }
+
+        @PostMapping("/admin/probe")
+        Map<String, String> adminWrite() {
+            return Map.of("probe", "admin-write");
+        }
+
+        @GetMapping("/owner/probe")
+        Map<String, String> ownerRead() {
+            return Map.of("probe", "owner-read");
+        }
+
+        @PostMapping("/owner/probe")
+        Map<String, String> ownerWrite() {
+            return Map.of("probe", "owner-write");
+        }
+
+        @PostMapping("/guest/probe")
+        Map<String, String> guestWrite() {
+            return Map.of("probe", "guest-write");
+        }
+
+        @GetMapping("/guest/context")
+        Map<String, Object> guestContext() {
+            CurrentActor actor = CurrentActor.require();
+            return Map.of(
+                    "tenantId", actor.tenantId(),
+                    "roomId", String.valueOf(actor.roomId()),
+                    "reservationId", String.valueOf(actor.reservationId()));
+        }
+
+        @GetMapping("/staff/rooms/{id}")
+        Map<String, String> room(@PathVariable UUID id) {
+            Room room = roomRepository.findByTenantIdAndId(TenantContext.require(), id)
+                    .orElseThrow(() -> new NotFoundException("房間不存在"));
+            return Map.of("id", room.getId().toString(), "roomNo", room.getRoomNo());
+        }
+
+        @GetMapping("/staff/rls-room-count")
+        Map<String, Object> rlsRoomCount() {
+            Integer visible = jdbcTemplate.queryForObject("SELECT count(*) FROM rooms", Integer.class);
+            return Map.of("visibleRooms", visible);
+        }
+    }
+}

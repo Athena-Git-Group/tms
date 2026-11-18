@@ -1,0 +1,162 @@
+package com.athena.tms.integration.stepdefs.when;
+
+import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.utils.ApiClient;
+import com.athena.tms.integration.stepdefs.utils.DbSupport;
+import io.cucumber.java.en.Given;
+import io.cucumber.java.en.When;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Assertions;
+
+public class StaffDeskWhenSteps {
+
+    private final ScenarioContext ctx;
+    private final ApiClient api;
+    private final DbSupport db;
+
+    public StaffDeskWhenSteps(ScenarioContext ctx, ApiClient api, DbSupport db) {
+        this.ctx = ctx;
+        this.api = api;
+        this.db = db;
+    }
+
+    @Given("^「([^」]+)」已認領任務 \"([^\"]+)\"$")
+    public void taskAlreadyClaimed(String name, String taskSymbol) {
+        UUID taskId = ctx.entityId(taskSymbol);
+        ScenarioContext.HttpResult claimed = claim(taskId, ctx.staffLogin(name));
+        Assertions.assertEquals(200, claimed.status(), "前置認領必須成功: " + claimed.body());
+        ctx.taskId(taskId);
+    }
+
+    @When("^(?:另一位)?(?:房務|工務)?「(小美|小華|阿強)」認領任務 \"([^\"]+)\"$")
+    public void staffClaimsTask(String name, String taskSymbol) {
+        UUID taskId = ctx.entityId(taskSymbol);
+        ctx.taskId(taskId);
+        ctx.lastResponse(claim(taskId, ctx.staffLogin(name)));
+    }
+
+    @When("^「小美」與「小華」同秒對任務 \"([^\"]+)\" 送出認領$")
+    public void concurrentClaims(String taskSymbol) throws Exception {
+        UUID taskId = ctx.entityId(taskSymbol);
+        List<String> tokens = List.of(
+                api.staffToken(1L, ctx.staffLogin("小美")),
+                api.staffToken(1L, ctx.staffLogin("小華")));
+        CountDownLatch go = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (String token : tokens) {
+                futures.add(pool.submit(() -> {
+                    go.await();
+                    return api.post("/api/v1/tasks/" + taskId + "/claim", token, newIdempotencyKey()).status();
+                }));
+            }
+            go.countDown();
+            for (Future<Integer> future : futures) {
+                ctx.rejectionStatuses().add(future.get(60, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        ctx.taskId(taskId);
+    }
+
+    @When("^「(小美|小華|阿強)」對任務 \"([^\"]+)\" 執行 (claim|start|complete)$")
+    public void staffPerformsAction(String name, String taskSymbol, String action) {
+        UUID taskId = ctx.entityId(taskSymbol);
+        ctx.taskId(taskId);
+        ctx.lastResponse(api.post("/api/v1/tasks/" + taskId + "/" + action,
+                api.staffToken(1L, ctx.staffLogin(name)), newIdempotencyKey()));
+    }
+
+    @When("^「小美」按「開始」再按「完成」$")
+    public void startsThenCompletes() {
+        String token = api.staffToken(1L, ctx.staffLogin("小美"));
+        ScenarioContext.HttpResult started = api.post("/api/v1/tasks/" + ctx.taskId() + "/start", token, newIdempotencyKey());
+        Assertions.assertEquals(200, started.status(), "開始該成功: " + started.body());
+        ctx.put("startedResponse", started);
+        ScenarioContext.HttpResult completed = api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey());
+        ctx.put("completedResponse", completed);
+        ctx.lastResponse(completed);
+    }
+
+    @When("^「小美」勾選「([^」]+)」「([^」]+)」「([^」]+)」並跳過「([^」]+)」再按完成$")
+    public void checksThreeSkipsOneThenCompletes(String first, String second, String third, String skipped) {
+        String token = api.staffToken(1L, ctx.staffLogin("小美"));
+        ctx.put("sopActorId", staffIdOf(ctx.staffLogin("小美")));
+        for (String label : List.of(first, second, third)) {
+            ScenarioContext.HttpResult checked = sop(ctx.taskId(), Map.of("sopItemId", ctx.sopItemId(label), "result", "checked"), token);
+            Assertions.assertEquals(200, checked.status(), "勾選「" + label + "」該成功: " + checked.body());
+        }
+        ScenarioContext.HttpResult skippedResult =
+                sop(ctx.taskId(), Map.of("sopItemId", ctx.sopItemId(skipped), "result", "skipped"), token);
+        Assertions.assertEquals(200, skippedResult.status(), "跳過「" + skipped + "」該成功: " + skippedResult.body());
+        ctx.put("skippedLabel", skipped);
+        ctx.lastResponse(api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey()));
+    }
+
+    @When("^「小美」對任務 \"([^\"]+)\" 的「([^」]+)」送出 result \"([^\"]+)\"$")
+    public void sopCheckWithResult(String taskSymbol, String label, String result) {
+        ctx.lastResponse(sop(ctx.entityId(taskSymbol),
+                Map.of("sopItemId", ctx.sopItemId(label), "result", result),
+                api.staffToken(1L, ctx.staffLogin("小美"))));
+    }
+
+    @When("^「小美」對任務 \"([^\"]+)\" 的「([^」]+)」送出空白動作$")
+    public void neitherCheckedNorSkipped(String taskSymbol, String label) {
+        ctx.lastResponse(sop(ctx.entityId(taskSymbol),
+                Map.of("sopItemId", ctx.sopItemId(label)), api.staffToken(1L, ctx.staffLogin("小美"))));
+    }
+
+    @When("^「小美」對任務 \"([^\"]+)\" 的未知 SOP 項送出勾選$")
+    public void unknownSopItem(String taskSymbol) {
+        ctx.lastResponse(sop(ctx.entityId(taskSymbol),
+                Map.of("sopItemId", UUID.randomUUID(), "result", "checked"),
+                api.staffToken(1L, ctx.staffLogin("小美"))));
+    }
+
+    @When("^「(小美|阿強)」查詢待認領$")
+    public void staffListsPool(String name) {
+        ScenarioContext.HttpResult pool = api.get("/api/v1/pool", api.staffToken(1L, ctx.staffLogin(name)));
+        Assertions.assertEquals(200, pool.status(), "查池該成功: " + pool.body());
+        ctx.put("poolBody:" + name, pool.body());
+        ctx.lastResponse(pool);
+    }
+
+    @When("^「小美」認領一個不存在的任務$")
+    public void claimUnknownTask() {
+        ctx.lastResponse(claim(UUID.randomUUID(), ctx.staffLogin("小美")));
+    }
+
+    @When("^「小美」對不存在的任務勾選 SOP 項目$")
+    public void sopCheckUnknownTask() {
+        ctx.lastResponse(sop(UUID.randomUUID(),
+                Map.of("sopItemId", ctx.sopItemId("床鋪"), "result", "checked"),
+                api.staffToken(1L, ctx.staffLogin("小美"))));
+    }
+
+    private ScenarioContext.HttpResult claim(UUID taskId, String loginId) {
+        return api.post("/api/v1/tasks/" + taskId + "/claim", api.staffToken(1L, loginId), newIdempotencyKey());
+    }
+
+    private ScenarioContext.HttpResult sop(UUID taskId, Map<String, Object> body, String token) {
+        return api.postJson("/api/v1/tasks/" + taskId + "/sop-check", token, body, null);
+    }
+
+    private UUID staffIdOf(String loginId) {
+        return db.admin().queryForObject(
+                "SELECT id FROM staff_accounts WHERE tenant_id = ? AND login_id = ?", UUID.class, 1L, loginId);
+    }
+
+    private static String newIdempotencyKey() {
+        return "bdd-" + UUID.randomUUID();
+    }
+}

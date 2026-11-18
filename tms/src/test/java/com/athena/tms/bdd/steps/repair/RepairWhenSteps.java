@@ -1,0 +1,404 @@
+package com.athena.tms.bdd.steps.repair;
+
+import com.athena.tms.bdd.ScenarioWorld;
+import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.LastOperationGuard;
+import com.athena.tms.bdd.support.RepairCountGuard;
+import com.athena.tms.bdd.support.MutableClock;
+import com.athena.tms.bdd.support.RoomFixtures;
+import com.athena.tms.bdd.support.TenantFixtures;
+import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.bdd.support.VerifyFixtures;
+import io.cucumber.datatable.DataTable;
+import io.cucumber.java.zh_tw.當;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.http.HttpMethod;
+
+public class RepairWhenSteps {
+
+    private final ScenarioWorld world;
+    private final BddApiClient apiClient;
+    private final LastOperationGuard lastOperationGuard;
+    private final RepairCountGuard repairCountGuard;
+    private final MutableClock clock;
+    private final RoomFixtures roomFixtures;
+    private final VerifyFixtures verifyFixtures;
+    private final DbProbe dbProbe;
+    private final TenantFixtures tenantFixtures;
+
+    public RepairWhenSteps(
+            ScenarioWorld world,
+            BddApiClient apiClient,
+            LastOperationGuard lastOperationGuard,
+            RepairCountGuard repairCountGuard,
+            MutableClock clock,
+            RoomFixtures roomFixtures,
+            VerifyFixtures verifyFixtures,
+            DbProbe dbProbe,
+            TenantFixtures tenantFixtures) {
+        this.world = world;
+        this.apiClient = apiClient;
+        this.lastOperationGuard = lastOperationGuard;
+        this.repairCountGuard = repairCountGuard;
+        this.clock = clock;
+        this.roomFixtures = roomFixtures;
+        this.verifyFixtures = verifyFixtures;
+        this.dbProbe = dbProbe;
+        this.tenantFixtures = tenantFixtures;
+    }
+
+    @當("{string} 中斷 {string} 並開立以下工務單：")
+    public void interruptAndOpenTicket(String staffName, String taskKey, DataTable table) {
+        createTicket(staffName, taskKey, table, true, null);
+    }
+
+    @當("{string} 從 {string} 開立以下工務單：")
+    public void openTicketWithoutInterrupt(String staffName, String taskKey, DataTable table) {
+        createTicket(staffName, taskKey, table, false, null);
+    }
+
+    @當("{string} 從 {string} 開立以下工務單，同一請求共送出 {int} 次：")
+    public void openTicketRepeatedly(String staffName, String taskKey, int times, DataTable table) {
+        String idempotencyKey = UUID.randomUUID().toString();
+        for (int i = 0; i < times; i++) {
+            createTicket(staffName, taskKey, table, false, idempotencyKey);
+        }
+    }
+
+    @當("{string} 中斷 {string} 並以已準備的照片開立水電工務單")
+    public void interruptAndOpenTicketWithPreparedPhotos(String staffName, String taskKey) {
+        UUID sourceTaskId = UUID.fromString(world.taskId(taskKey));
+        lastOperationGuard.captureFor(sourceTaskId);
+        repairCountGuard.capture();
+
+        Map<String, Object> body = Map.of(
+                "sourceTaskId", sourceTaskId.toString(),
+                "category", Terms.repairCategory("水電"),
+                "photoIds", world.photoIds(),
+                "interruptSourceTask", true);
+        ScenarioWorld.ApiResponse resp =
+                apiClient.post("/repair-tickets", BddApiClient.Auth.staff(world.jwt(staffName)), body);
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
+    }
+
+    @當("{string} 為 {string} 開立以下工務單，不經過任何房務任務：")
+    public void engineeringStaffOpensTicketDirectly(String engineerName, String roomNo, DataTable table) {
+        Map<String, String> row = table.asMaps(String.class, String.class).get(0);
+        String categoryChinese = requireCell(row, "類別");
+        String description = blankToNull(row.get("說明"));
+        int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
+        String assigneeName = blankToNull(row.get("處理人"));
+
+        repairCountGuard.capture();
+
+        String jwt = world.jwt(engineerName);
+        List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        if ("公共區域".equals(roomNo)) {
+            body.put("isPublicArea", true);
+        } else {
+            body.put("roomId", roomFixtures.roomId(roomNo).toString());
+        }
+        body.put("category", Terms.repairCategory(categoryChinese));
+        if (description != null) {
+            body.put("description", description);
+        }
+        body.put("photoIds", photoIds);
+        if (assigneeName != null) {
+            body.put("assigneeId", world.staffId(assigneeName));
+        }
+
+        ScenarioWorld.ApiResponse resp = apiClient.post("/repair-tickets", BddApiClient.Auth.staff(jwt), body);
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
+    }
+
+    @當("{string} 為 {string} 交辦工務部門，開立以下工務單：")
+    public void deskStaffForwardsTicketToEngineering(String deskStaffName, String roomNo, DataTable table) {
+        Map<String, String> row = table.asMaps(String.class, String.class).get(0);
+        String categoryChinese = requireCell(row, "類別");
+        String description = blankToNull(row.get("說明"));
+        int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
+        String assigneeName = blankToNull(row.get("處理人"));
+
+        repairCountGuard.capture();
+
+        String jwt = world.jwt(deskStaffName);
+        List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        if ("公共區域".equals(roomNo)) {
+            body.put("isPublicArea", true);
+        } else {
+            roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
+            body.put("roomId", roomFixtures.roomId(roomNo).toString());
+        }
+        body.put("category", Terms.repairCategory(categoryChinese));
+        if (description != null) {
+            body.put("description", description);
+        }
+        body.put("photoIds", photoIds);
+        if (assigneeName != null) {
+            body.put("assigneeId", world.staffId(assigneeName));
+        }
+
+        ScenarioWorld.ApiResponse resp = apiClient.post("/repair-tickets", BddApiClient.Auth.staff(jwt), body);
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
+    }
+
+    @當("{string} 查看工務視角今日進度")
+    public void engineeringStaffViewsToday(String staffName) {
+        apiClient.get("/me/today", BddApiClient.Auth.staff(world.jwt(staffName)));
+    }
+
+    @當("{string} 以原因 {string} 將 {string} 降級為一般件")
+    public void downgradeTicketUrgency(String managerName, String reason, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+
+        Map<String, Object> body = Map.of("note", reason);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/downgrade-urgency",
+                BddApiClient.Auth.staff(world.jwt(managerName)),
+                body);
+    }
+
+    @當("{string} 對 {string} 選擇工務單類別 {string}")
+    public void selectCategoryForPrecheck(String staffName, String roomNo, String categoryChinese) {
+        UUID sourceTaskId = UUID.fromString(world.taskId(roomNo));
+        repairCountGuard.capture();
+
+        Map<String, Object> body =
+                Map.of("sourceTaskId", sourceTaskId.toString(), "category", Terms.repairCategory(categoryChinese));
+        apiClient.post("/repair-tickets/precheck", BddApiClient.Auth.staff(world.jwt(staffName)), body);
+    }
+
+    @當("{string} 補 {int} 張照片到 {string}")
+    public void appendPhotosToTicket(String staffName, int count, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "report", count);
+
+        Map<String, Object> body = Map.of("photoIds", photoIds);
+        apiClient.post("/repair-tickets/" + ticketTaskId + "/photos", BddApiClient.Auth.staff(jwt), body);
+    }
+
+    @當("{string} 驗收通過 {string}")
+    public void verifyTicket(String managerName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        world.setLastVerifyRequest(managerName, null);
+        world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "passed", null));
+    }
+
+    @當("{string} 以原因 {string} 判定 {string} 驗收不通過")
+    public void failVerification(String managerName, String reason, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        world.setLastVerifyRequest(managerName, reason);
+        world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "failed", reason));
+    }
+
+    @當("{string} 判定 {string} 驗收不通過但沒有寫原因")
+    public void failVerificationWithoutReason(String managerName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        world.setLastVerifyRequest(managerName, "");
+        world.setLastVerifyResponse(verifyFixtures.send(world, managerName, ticketNo, "failed", ""));
+    }
+
+    @當("{string} 把 {string} 放回工務待認領")
+    public void releaseTicketToPool(String staffName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/release-to-pool",
+                BddApiClient.Auth.staff(world.jwt(staffName)),
+                null);
+    }
+
+    @當("{string} 只看 {string} 的工務待認領")
+    public void staffViewsEngineeringPoolByTriage(String staffName, String triageChinese) {
+        apiClient.get(
+                "/pool?category=repair" + triageQueryString(triageChinese),
+                BddApiClient.Auth.staff(world.jwt(staffName)));
+    }
+
+    private static String triageQueryString(String triageChinese) {
+        return switch (triageChinese) {
+            case "全部" -> "";
+            case "急件" -> "&urgent=true";
+            case "房務報修" -> "&source=staff_report";
+            case "櫃檯" -> "&source=desk_forward";
+            default -> throw new IllegalArgumentException("「只看…的工務待認領」不支援的分流: " + triageChinese);
+        };
+    }
+
+    @當("{string} 撤回 {string}")
+    public void withdrawTicket(String staffName, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        apiClient.post(
+                "/repair-tickets/" + ticketTaskId + "/withdraw", BddApiClient.Auth.staff(world.jwt(staffName)), null);
+    }
+
+    @當("{string} 附 {int} 張完修照片、處理說明 {string} 完成 {string}")
+    public void completeWithPhotosAndNote(String staffName, int photoCount, String note, String ticketNo) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
+
+        Map<String, Object> body = Map.of(
+                "resolutionType", "fixed",
+                "resolutionNote", note,
+                "photoIds", photoIds);
+        apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
+    }
+
+    @當("{string} 附 {int} 張完修照片，回報 {string} 暫時處理，說明 {string}")
+    public void completeWithTemporaryResolution(String staffName, int photoCount, String ticketNo, String note) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        repairCountGuard.capture();
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
+
+        Map<String, Object> body = Map.of(
+                "photoIds", photoIds,
+                "resolutionType", "temporary",
+                "resolutionNote", note);
+        apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
+    }
+
+    @當("{string} 附 {int} 張完修照片，回報 {string} 無法修復，說明 {string}")
+    public void completeWithCannotFixResolution(String staffName, int photoCount, String ticketNo, String note) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "completion", photoCount);
+
+        Map<String, Object> body = Map.of(
+                "photoIds", photoIds,
+                "resolutionType", "cannot_fix",
+                "resolutionNote", note);
+        apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), body);
+    }
+
+    @當("{string} 以完修結果 {string} 完成 {string}，處理說明 {string}，不附照片")
+    public void completeWithResolutionWithoutPhotos(
+            String staffName, String resolutionChinese, String ticketNo, String note) {
+        UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        lastOperationGuard.captureFor(ticketTaskId);
+        repairCountGuard.capture();
+        dbProbe.queryOne(
+                        "SELECT r.room_no FROM tasks t JOIN rooms r ON r.id = t.room_id AND r.tenant_id = t.tenant_id WHERE t.id = ?",
+                        ticketTaskId)
+                .map(row -> (String) row.get("room_no"))
+                .ifPresent(roomNo -> lastOperationGuard.captureRoom(tenantFixtures.testTenantId(), roomNo));
+
+        Map<String, Object> body = Map.of(
+                "resolutionType", Terms.resolutionType(resolutionChinese),
+                "resolutionNote", note,
+                "photoIds", List.of());
+        apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), body);
+    }
+
+
+    private void createTicket(
+            String staffName, String taskKey, DataTable table, boolean interrupt, String idempotencyKey) {
+        Map<String, String> row = table.asMaps(String.class, String.class).get(0);
+        String categoryChinese = requireCell(row, "類別");
+        String description = blankToNull(row.get("說明"));
+        int photoCount = Integer.parseInt(requireCell(row, "照片張數"));
+
+        UUID sourceTaskId = UUID.fromString(world.taskId(taskKey));
+        lastOperationGuard.captureFor(sourceTaskId);
+        repairCountGuard.capture();
+
+        String jwt = world.jwt(staffName);
+        List<String> photoIds = uploadPhotos(jwt, "report", photoCount);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("sourceTaskId", sourceTaskId.toString());
+        body.put("category", Terms.repairCategory(categoryChinese));
+        if (description != null) {
+            body.put("description", description);
+        }
+        body.put("photoIds", photoIds);
+        body.put("interruptSourceTask", interrupt);
+
+        ScenarioWorld.ApiResponse resp = idempotencyKey != null
+                ? apiClient.post("/repair-tickets", BddApiClient.Auth.staff(jwt), body, idempotencyKey)
+                : apiClient.post("/repair-tickets", BddApiClient.Auth.staff(jwt), body);
+
+        if (resp.status() == 201 && resp.json() != null) {
+            String ticketNo = resp.json().path("ticketNo").asText(null);
+            String taskId = resp.json().path("taskId").asText(null);
+            if (ticketNo != null && taskId != null) {
+                world.rememberRepairTicket(ticketNo, UUID.fromString(taskId).toString());
+            }
+        }
+    }
+
+    private List<String> uploadPhotos(String jwt, String purpose, int count) {
+        List<String> ids = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            Map<String, Object> photoBody = Map.of("purpose", purpose, "takenAt", OffsetDateTime.now(clock).toString());
+            ScenarioWorld.ApiResponse createResp =
+                    apiClient.post("/repair-photos", BddApiClient.Auth.staff(jwt), photoBody);
+            String photoId = createResp.json() != null ? createResp.json().path("id").asText(null) : null;
+            if (photoId != null) {
+                apiClient.exchange(
+                        HttpMethod.PUT,
+                        "/repair-photos/" + photoId + "/content",
+                        BddApiClient.Auth.staff(jwt),
+                        "fixture-jpeg-bytes",
+                        null);
+                ids.add(photoId);
+            }
+        }
+        return ids;
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
+    }
+
+    private static String requireCell(Map<String, String> row, String column) {
+        String v = row.get(column);
+        if (v == null || v.isBlank()) {
+            throw new IllegalArgumentException("Data Table 缺少必填欄位「" + column + "」：" + row);
+        }
+        return v;
+    }
+}

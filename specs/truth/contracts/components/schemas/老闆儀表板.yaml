@@ -1,0 +1,45 @@
+stats_daily:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    statDate:
+      type: string
+      format: date
+    sellable:
+      type: integer
+      format: int32
+      description: 可賣房數
+    avgResponseMin:
+      type: number
+      format: decimal
+      description: 平均回應分鐘
+    ratingAvg:
+      type: number
+      format: decimal
+      description: 住客評分均值
+    inspectionReturns:
+      type: integer
+      format: int32
+      description: 查房退回次數
+    completedCount:
+      type: integer
+      format: int32
+    summary:
+      type: string
+      description: 一行當日摘要
+    updatedAt:
+      type: string
+      format: date-time
+  description: 投影（worker 預算好，API 只讀不現算）。不變條件：取消單一律排除（E-15/SC-007）。
+  required:
+  - tenantId
+  - statDate
+  - sellable
+  - avgResponseMin
+  - ratingAvg
+  - inspectionReturns
+  - completedCount
+  - summary
+  - updatedAt

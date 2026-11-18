@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工務單詳情</title>
+<link rel="stylesheet" href="manager.css">
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+  <div class="navbar"><button class="back" id="back"></button><span>工務單詳情</span></div>
+  <div class="content" id="content"></div>
+  <div class="actionbar" id="actionbar" style="display:none"><div class="actions" id="actions"></div></div>
+
+  <div class="sheetscrim" id="failSheet">
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="t" id="failTitle"></div>
+      <div class="s">原因會推播給處理人，也會留在這張單上</div>
+      <textarea id="reason" placeholder="寫下沒有修好的地方，例如：刷卡仍偶爾無反應" oninput="onReason()"></textarea>
+      <div class="actions"><button class="pill outlined" onclick="hideDialog('failSheet')">取消</button><button class="pill" id="failSubmit" disabled onclick="doFail()">送出不通過</button></div>
+    </div>
+  </div>
+
+  <div class="sheetscrim" id="completeSheet">
+    <div class="sheet" id="completeBody"></div>
+  </div>
+
+  <div class="resultlayer" id="resultLayer">
+    <div class="statusbar"><span>10:22</span><span>▮▮▮ ▰</span></div>
+    <div class="result">
+      <div class="mark back">↺</div>
+      <div class="room" id="resNo"></div>
+      <div class="headline">退回重修</div>
+      <div class="sub" id="resSub"></div>
+      <div class="reason" id="resReason"></div>
+    </div>
+    <div class="actionbar"><div class="actions"><button class="pill" onclick="go('queue.html?kind=verify')">回到待驗收</button></div></div>
+  </div>
+
+  <div class="scrim" id="offlineDialog"><div class="dialog"><div class="t">目前離線，只能完成進行中的單</div><div class="s">這個動作不會留在手機上補送，恢復連線後請再做一次。</div><button class="ok" onclick="hideDialog('offlineDialog')">知道了</button></div></div>
+  <div class="scrim" id="handledDialog"><div class="dialog"><div class="t">這張單已被處理</div><div class="s">可能是另一位主管剛驗收過。</div><button class="ok" onclick="go('queue.html?kind=verify')">知道了</button></div></div>
+</div>
+<script src="manager.js"></script>
+<script>
+applyOffline();
+const asParam = Q.get('as');
+const viewer = (asParam === 'mt1' || asParam === 'hk2') ? ACCOUNTS[asParam] : me();
+const view = viewer.role === 'manager' ? 'manager' : viewer.dept === 'engineering' ? 'engineering' : 'housekeeping';
+const no = BASE_TICKETS[Q.get('no')] ? Q.get('no') : 'W-0108';
+const from = Q.get('from');
+const back = document.getElementById('back');
+if (from === 'verify') { back.textContent = '待驗收'; back.onclick = () => go('queue.html?kind=verify'); }
+else if (view === 'manager') { back.textContent = '首頁'; back.onclick = () => go('index.html'); }
+else { back.textContent = '通知'; back.onclick = () => history.back(); }
+document.title = `${no} 工務單詳情`;
+
+function toast(text) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = text;
+  document.getElementById('phone').appendChild(el);
+  setTimeout(() => el.classList.add('hide'), 2200);
+  setTimeout(() => el.remove(), 2800);
+}
+function photos(n, stamp) {
+  return n ? Array.from({ length: n }, () => `<div class="photo" data-stamp="${stamp}"></div>`).join('') : '';
+}
+function completionCard(c, verified) {
+  return `<div class="card">
+    ${c.completionPhotos ? `<div class="photos">${photos(c.completionPhotos, c.doneAt)}</div>` : '<div class="kv"><span class="k">完修照片</span><span class="v">沒有附照片</span></div>'}
+    <div class="kv"><span class="k">完修結果</span><span class="v">${c.result}</span></div>
+    ${c.note ? `<div class="note">${c.note}</div>` : ''}
+    <div class="kv"><span class="k">完修人</span><span class="v">${c.assignee}</span></div>
+    <div class="kv"><span class="k">完修時間</span><span class="v">${c.doneAt}</span></div>
+    ${verified ? `<div class="kv"><span class="k">驗收</span><span class="v">${verified}</span></div>` : ''}
+  </div>`;
+}
+
+function render() {
+  const t = ticket(no);
+  const isAssignee = t.assignee === viewer.name;
+  const reworking = t.lastFail && ['pool', 'accepted', 'doing'].includes(t.state);
+  const closedNoAction = t.state === 'closed' && t.result === '不需處理';
+  let html = `<div class="tickethead">
+      <div class="no">${no}</div>
+      <div class="room">${t.room}</div>
+      <div class="title">${t.publicArea ? '' : t.room + ' '}${t.title}</div>
+      <div class="sub">${t.urgent ? '<span class="chip urgent">急件</span>' : ''}${t.scheduled ? '<span class="chip scheduled">定期保養</span>' : ''}${reworking ? '<span class="chip returned">驗收退回</span>' : ''}<span>${t.scheduled ? '系統排程' : t.reporter === viewer.name ? '自己開的單' : t.reporter + ' 報修'}</span><span>·</span><span>${t.category}</span></div>`;
+
+  if (view !== 'housekeeping') {
+    const STEP = ['待開始', '維修中', '完修', '驗收'];
+    const c = { pool: -1, accepted: 0, doing: 1, verify: 3, closed: 4 }[t.state];
+    html += '<div class="steps">' + STEP.map((s, i) => {
+      const dot = i < c ? '<div class="dot">✓</div>' : i === c ? '<div class="dot current"></div>' : '<div class="dot pending"></div>';
+      return `<div class="step ${i > c ? 'pending' : ''}">${dot}<span>${s}</span></div>` + (i < 3 ? `<div class="bar ${i < c ? '' : 'pending'}"></div>` : '');
+    }).join('') + '</div>';
+  }
+  html += '</div><div class="offlinebar"><span>目前離線</span><span>待同步 0 筆</span></div>';
+
+  if (view === 'housekeeping') {
+    let h, d, cls = '';
+    if (t.state === 'pool') { h = '等工務接單'; d = t.lastFail ? '上一次修完沒有通過驗收，等工務重新接單' : '工務接單後會開始處理'; cls = t.lastFail ? 'returned' : ''; }
+    else if (t.state === 'accepted') { h = reworking ? '退回重修中' : '已接單'; d = `工務 ${t.assignee} ${reworking ? '處理中' : '已接單'}`; cls = reworking ? 'returned' : ''; }
+    else if (t.state === 'doing') { h = reworking ? '退回重修中' : '維修中'; d = `工務 ${t.assignee} 正在處理`; cls = reworking ? 'returned' : ''; }
+    else if (t.state === 'verify') { h = `${t.result} · 等主管驗收`; d = `工務 ${t.assignee} ${t.doneDate} ${t.doneTime} 完修`; }
+    else if (closedNoAction) { h = '已結案 · 不需處理'; d = `工務 ${t.assignee} 到場確認不需要處理`; cls = 'closed'; }
+    else { h = `已結案 · ${t.verifiedBy}驗收`; d = `${t.verifiedAt} 驗收通過`; cls = 'closed'; }
+    html += `<div class="summarycard ${cls}"><div class="h">${h}</div><div class="d">${d}</div></div>`;
+  } else {
+    let cls, text;
+    if (t.state === 'pool') { cls = 'neutral'; text = '等工務接單'; }
+    else if (t.state === 'accepted') { cls = reworking ? 'warn' : 'neutral'; text = reworking ? `退回重修 · ${t.lastFail.by}判定不通過` : `待開始 · ${t.assignee}`; }
+    else if (t.state === 'doing') { cls = reworking ? 'warn' : ''; text = `${reworking ? '重修中' : '維修中'} · ${t.assignee}`; }
+    else if (t.state === 'verify') { cls = ''; text = `已完修 · 等主管驗收 · ${t.result}`; }
+    else { cls = 'closed'; text = closedNoAction ? '已結案 · 不需處理' : `已結案 · ${t.verifiedBy}驗收`; }
+    html += `<div class="statusline ${cls}">${text}</div>`;
+  }
+
+  if (t.lastFail && t.state !== 'closed') {
+    html += `<div class="failcard"><div class="h">${t.state === 'verify' ? '上一次驗收不通過' : '驗收不通過'}</div><div class="r">${t.lastFail.reason}</div><div class="m">${t.lastFail.by} · ${t.lastFail.at}</div></div>`;
+  }
+
+  html += `<div class="sectionlabel"><span>報修內容</span></div>
+    <div class="card">
+      ${t.photos ? `<div class="photos">${photos(t.photos, t.created)}</div>` : ''}
+      <div class="kv"><span class="k">類別</span><span class="v">${t.category}</span></div>
+      <div class="kv"><span class="k">說明</span><span class="v">${t.desc}</span></div>
+      <div class="kv"><span class="k">報修人</span><span class="v">${t.scheduled ? '系統排程' : t.reporter}</span></div>
+      <div class="kv"><span class="k">報修時間</span><span class="v">${t.created}</span></div>
+    </div>`;
+
+  if (t.state === 'verify' || t.state === 'closed') {
+    html += '<div class="sectionlabel"><span>完修回報</span></div>' + completionCard(
+      { completionPhotos: t.completionPhotos, result: t.result, note: t.note, assignee: t.assignee, doneAt: `${t.doneDate} ${t.doneTime}` },
+      t.state === 'closed' && t.verifiedBy ? `${t.verifiedBy} · ${t.verifiedAt}` : '');
+  } else if (t.prev) {
+    html += `<details class="prev"><summary>上一次完修回報</summary>${completionCard(Object.assign({ assignee: t.origAssignee || t.assignee }, t.prev), '')}</details>`;
+  }
+  document.getElementById('content').innerHTML = html;
+
+  const bar = document.getElementById('actionbar'), actions = document.getElementById('actions');
+  let buttons = '';
+  if (view === 'manager' && t.state === 'verify') {
+    buttons = `<button class="pill outlined" onclick="openFail()">不通過</button><button class="pill" onclick="doPass()">通過</button>`;
+  } else if (isAssignee && view !== 'housekeeping') {
+    if (t.state === 'accepted') buttons = `<button class="pill" onclick="startRepair()">開始維修</button>`;
+    if (t.state === 'doing') buttons = `<button class="pill" onclick="openComplete()">完修回報</button>`;
+  }
+  bar.style.display = buttons ? '' : 'none';
+  actions.innerHTML = buttons;
+}
+
+/* 驗收 */
+function guard() {
+  if (isOffline()) { showDialog('offlineDialog'); return false; }
+  const t = ticket(no);
+  if (t.conflictOnAction && t.state === 'verify') {
+    const other = viewer.name === '陳主管' ? '王主管' : '陳主管';
+    patchTicket(no, { state: 'accepted', lastFail: { by: other, reason: '滴水仍在，止水閥沒鎖緊', at: '今天 ' + nowHM() },
+      prev: { result: t.result, note: t.note, completionPhotos: t.completionPhotos, doneAt: `${t.doneDate} ${t.doneTime}` } });
+    hideDialog('failSheet');
+    showDialog('handledDialog');
+    return false;
+  }
+  return true;
+}
+function doPass() {
+  if (!guard()) return;
+  patchTicket(no, { state: 'closed', verifiedBy: viewer.name, verifiedAt: `${TODAY} ${nowHM()}` });
+  if (from === 'verify') { go(`queue.html?kind=verify&closed=${no}`); return; }
+  render();
+  toast(`${no} 已結案`);
+}
+function openFail() {
+  document.getElementById('failTitle').textContent = `${no} 不通過`;
+  showDialog('failSheet');
+  setTimeout(() => document.getElementById('reason').focus(), 50);
+}
+function onReason() { document.getElementById('failSubmit').disabled = !document.getElementById('reason').value.trim(); }
+function doFail() {
+  if (!guard()) return;
+  const t = ticket(no);
+  const reason = document.getElementById('reason').value.trim();
+  const lastFail = { by: viewer.name, reason, at: '今天 ' + nowHM() };
+  const prev = { result: t.result, note: t.note, completionPhotos: t.completionPhotos, doneAt: `${t.doneDate} ${t.doneTime}` };
+  const cleared = { result: null, note: null, completionPhotos: 0, doneDate: null, doneTime: null };
+  if (t.onShift) patchTicket(no, Object.assign({ state: 'accepted', lastFail, prev }, cleared));
+  else patchTicket(no, Object.assign({ state: 'pool', assignee: null, origAssignee: t.assignee, lastFail, prev }, cleared));
+  hideDialog('failSheet');
+  document.getElementById('resNo').textContent = no;
+  document.getElementById('resSub').textContent = t.onShift
+    ? `回到${t.assignee}名下，${t.assignee}會收到推播`
+    : `${t.assignee}已下班，這張單回到了工務待認領`;
+  document.getElementById('resReason').textContent = `不通過原因：${reason}`;
+  document.getElementById('resultLayer').classList.add('show');
+}
+
+/* 處理人：開始與完修回報 */
+function startRepair() {
+  if (isOffline()) { showDialog('offlineDialog'); return; }
+  patchTicket(no, { state: 'doing' });
+  render();
+}
+const RESULTS = ['已修好', '暫時處理', '無法修復', '不需處理'];
+let sel = null, shots = 0, note = '';
+function openComplete() { sel = null; shots = 0; note = ''; renderComplete(); showDialog('completeSheet'); }
+function renderComplete() {
+  const noPhoto = sel === '不需處理';
+  const can = sel && (noPhoto || shots >= 1);
+  document.getElementById('completeBody').innerHTML = `
+    <div class="grab"></div>
+    <div class="t">完修回報 · ${no}</div>
+    <div class="fieldlabel">完修結果</div>
+    <div class="resopts">${RESULTS.map(r => `<button class="resopt ${r === sel ? 'on' : ''}" onclick="pick('${r}')">${r}</button>`).join('')}</div>
+    <div class="fieldlabel">完修照片</div>
+    <div class="photorow">${photos(shots, TODAY + ' ' + nowHM())}${shots < 3 ? '<button class="addphoto" onclick="addShot()" aria-label="加照片">＋</button>' : ''}</div>
+    <div class="fieldhint ${!noPhoto && sel && !shots ? 'need' : ''}">${noPhoto ? '不需處理可以不附照片' : '至少附 1 張完修照片'}</div>
+    <div class="fieldlabel">處理說明</div>
+    <textarea class="short" id="note" placeholder="${noPhoto ? '寫下為什麼不需要處理，例如：燈正常，開關在門邊' : '寫下做了什麼，例如：更換濾網'}" oninput="note=this.value">${note}</textarea>
+    <div class="actions"><button class="pill outlined" onclick="hideDialog('completeSheet')">取消</button><button class="pill" ${can ? '' : 'disabled'} onclick="doComplete()">送出</button></div>`;
+}
+function pick(r) { note = document.getElementById('note').value; sel = r; renderComplete(); }
+function addShot() { note = document.getElementById('note').value; shots += 1; renderComplete(); }
+function doComplete() {
+  note = document.getElementById('note').value.trim();
+  const done = { result: sel, note, completionPhotos: shots, doneDate: TODAY, doneTime: nowHM() };
+  patchTicket(no, Object.assign({ state: sel === '不需處理' ? 'closed' : 'verify' }, done));
+  hideDialog('completeSheet');
+  render();
+  toast(sel === '不需處理' ? `${no} 已結案` : sel === '暫時處理' ? '已送出完修回報，已建立追蹤單' : '已送出完修回報，等主管驗收');
+}
+render();
+</script>
+</body>
+</html>

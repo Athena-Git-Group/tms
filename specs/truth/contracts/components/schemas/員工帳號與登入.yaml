@@ -1,0 +1,228 @@
+staff_accounts:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    name:
+      type: string
+      description: PII：離職去識別化換不可回推代號
+    loginId:
+      type: string
+      description: PII；UNIQUE (tenant_id, login_id)
+    passwordHash:
+      type: string
+      description: bcrypt/argon2，絕不存明文
+    role:
+      type: string
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 是值班主管）'
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+    active:
+      type: boolean
+      description: 停用=不能登入，歷史保留
+    mustChangePassword:
+      type: boolean
+      description: 臨時密碼登入成功後為 true；完成改密前不得用這組憑證呼叫其他需要身分的 API。本 plan 新增，待 /data-plan 補 staff_accounts.must_change_password 欄位。
+    failedLoginCount:
+      type: integer
+      format: int32
+      description: 連續輸入錯誤密碼的次數；登入成功即清零。本 plan 新增，待 /data-plan 補 staff_accounts.failed_login_count 欄位。
+    lockedUntil:
+      type: string
+      format: date-time
+      nullable: true
+      description: 連續輸入錯誤密碼達 5 次時鎖定 15 分鐘的到期時間；未鎖定為 null。本 plan 新增，待 /data-plan 補 staff_accounts.locked_until 欄位。
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time
+  description: 員工帳號。角色×動作矩陣在程式/設定，不在表裡（docs/11 需求 15）。
+  required:
+  - id
+  - tenantId
+  - name
+  - loginId
+  - passwordHash
+  - role
+  - active
+  - mustChangePassword
+  - failedLoginCount
+  - createdAt
+  - updatedAt
+staff_accountsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    name:
+      type: string
+      description: PII：離職去識別化換不可回推代號
+    loginId:
+      type: string
+      description: PII；UNIQUE (tenant_id, login_id)
+    passwordHash:
+      type: string
+      description: bcrypt/argon2，絕不存明文
+    role:
+      type: string
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 是值班主管）'
+    dept:
+      type: string
+      description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+    active:
+      type: boolean
+      description: 停用=不能登入，歷史保留
+  required:
+  - tenantId
+  - name
+  - loginId
+  - passwordHash
+  - role
+  - active
+LoginRequest:
+  type: object
+  description: 登入專屬請求形狀，與「建立員工帳號」的 staff_accountsRequest 分開——明文密碼只用於登入比對，不落地存儲。
+  required:
+  - loginId
+  - password
+  properties:
+    loginId:
+      type: string
+      description: 對應 staff_accounts.login_id；畫面與推播文案一律用「員工編號」。
+    password:
+      type: string
+      description: 明文密碼，後端以 bcrypt/argon2 雜湊後比對 staff_accounts.passwordHash，絕不回傳或落地明文。
+    client:
+      type: string
+      enum:
+      - frontdesk_web
+      description: >-
+        從哪一個畫面登入，選填。員工 App 不帶，登入規則與不帶時完全相同、不看角色。
+        櫃檯 Web 一律帶 frontdesk_web：這時後端在密碼比對正確之後再看角色，只有 frontdesk、manager、duty_manager 能用櫃檯畫面
+        （規則見 staffAccountsLogin）。
+    hotelCode:
+      type: string
+      minLength: 3
+      maxLength: 32
+      pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+      example: athena
+      description: >-
+        要登入哪一家飯店的識別代碼（tenants.code），選填；格式與比對方式和 readPublicHotel 的路徑參數 hotelCode 相同
+        （一字不差、分大小寫，保留字不會是任何飯店的代碼）。
+        帶了就只在這家飯店找這個員工編號的帳號，停用、鎖定、密碼、角色的檢查照常，別家飯店相同員工編號的帳號完全不碰
+        （不比對密碼、不記連續錯誤次數、不鎖定）。
+        代碼格式不對、對不到飯店、這家飯店沒有這個員工編號，一律回與密碼錯誤相同的 401 credentials_invalid，
+        看不出飯店是否存在；格式不對時也不回 400。
+        櫃檯 Web 一律帶網址上的飯店代碼。員工 App 目前不帶，不帶時維持原本的做法：逐家找有這個員工編號的帳號，
+        登入密碼對得上的那一家。
+ChangePasswordRequest:
+  type: object
+  description: >-
+    本人設定新密碼的請求形狀。明文密碼只用於這次比對與重新雜湊，不回傳也不落地存明文。
+    兩種情境共用這個形狀：①臨時密碼登入後被強制改密（mustChangePassword=true），
+    此時身分已由登入換得的 token 證明，不必再帶 currentPassword；
+    ②自願變更密碼（mustChangePassword=false），必須帶 currentPassword 再確認一次本人。
+  required:
+  - newPassword
+  properties:
+    currentPassword:
+      type: string
+      nullable: true
+      description: >-
+        目前使用中的明文密碼。強制改密情境（mustChangePassword=true）不需要帶，帶了也會被忽略；
+        自願變更情境必填，省略或空白回 422 current_password_required，
+        比對不符回 401 current_password_invalid，提示「目前密碼不正確」。
+    newPassword:
+      type: string
+      description: >-
+        新的明文密碼，後端以 bcrypt/argon2 重新雜湊寫入 staff_accounts.passwordHash。
+        必須至少 8 碼、含英文字母、含數字，任何一條不符合回 422 new_password_too_weak
+        （context.failedRules 列出沒過的規則：min_length、letter_required、digit_required）。
+        與目前密碼相同回 422 new_password_invalid，message 為「新密碼不能和目前密碼相同」。
+        兩種都不符合時回 new_password_too_weak。
+LoginResponse:
+  type: object
+  description: 登入成功的回應形狀，銜接 techstack 已拍板的 JWT（TTL 12h）。
+  required:
+  - token
+  - expiresAt
+  - staffId
+  - name
+  - loginId
+  - hotelName
+  - role
+  - mustChangePassword
+  properties:
+    token:
+      type: string
+      description: JWT，後續請求帶 Authorization 標頭使用。
+    expiresAt:
+      type: string
+      format: date-time
+      description: token 到期時間，登入當下 + 12h。
+    staffId:
+      type: string
+      format: uuid
+    name:
+      type: string
+    loginId:
+      type: string
+      description: 員工編號（staff_accounts.login_id），就是帳號上存的值。櫃檯 Web 的帳號卡與身分卡用它，重新整理後不必靠使用者當初輸入的字。
+    hotelName:
+      type: string
+      description: 這個帳號所屬飯店的名稱（tenants.name）。櫃檯 Web 的側欄副標與身分卡用它。
+    dept:
+      type: string
+      nullable: true
+      description: 'CHECK: housekeeping|engineering|frontdesk；主管/老闆可空'
+    role:
+      type: string
+      description: 'CHECK: frontdesk|housekeeping|engineering|manager|duty_manager|owner（duty_manager 是值班主管）'
+    mustChangePassword:
+      type: boolean
+      description: true 表示這是臨時密碼登入，必須先設定新密碼才能繼續使用；完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
+PushTokenRegisterRequest:
+  type: object
+  description: registerPushToken（PUT /me/push-token）的請求：App 回報這台手機的推播地址。
+  required:
+  - deviceFingerprint
+  - pushToken
+  - platform
+  properties:
+    deviceFingerprint:
+      type: string
+      description: App 自行產生並保存的裝置識別碼，對應 staff_devices.device_fingerprint；同一台手機每次都送同一個值。
+    pushToken:
+      type: string
+      description: FCM 給的推播地址（iOS 也經 FCM 轉 APNS，一律送 FCM token），對應 staff_devices.push_token。
+    platform:
+      type: string
+      enum:
+      - ios
+      - android
+      description: 對應 staff_devices.platform；iOS 的推播會額外附 APNS 的 alert 與 content-available。
+PushTokenRevokeRequest:
+  type: object
+  description: revokePushToken（DELETE /me/push-token）的請求：登出時解除這台手機。
+  required:
+  - deviceFingerprint
+  properties:
+    deviceFingerprint:
+      type: string
+PublicHotel:
+  type: object
+  description: 不用登入就看得到的飯店資料，只有名稱一項。
+  required:
+  - name
+  properties:
+    name:
+      type: string
+      description: 飯店名稱（tenants.name），例如「雅典娜酒店」。

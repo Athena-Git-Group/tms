@@ -1,0 +1,570 @@
+DeskBoard:
+  type: object
+  description: >-
+    櫃檯看板的一次讀取：全館看板範圍內的每一張單、飯店有哪些樓層、登入者自己今天的派單與當場回答張數，以及後端現在的時間。
+    總覽看板、待派單頁、側欄徽章、數量卡、欄頭數量與警示、未結案張數都從這一份算，不另有統計介面。
+  required:
+  - serverTime
+  - businessDate
+  - floors
+  - tasks
+  - myToday
+  properties:
+    serverTime:
+      type: string
+      format: date-time
+      description: >-
+        後端產生這份回應的時間。畫面記下「這個時間 − 裝置時間」的差，之後所有「等 N 分」「N 分鐘前」都用校正後的現在去算，
+        櫃檯電腦的時鐘不準也不會算錯。
+    businessDate:
+      type: string
+      format: date
+      description: 後端認定的「今天」（飯店當地日期，目前等於伺服器時區的日期）。看板範圍、今日張數與頁副標的日期都以它為準。
+    floors:
+      type: array
+      items:
+        type: integer
+        format: int32
+      description: 這家飯店有的樓層，由低到高、不重複（取自房間主檔）。樓層泳道照它列出每一層，那一層沒有單也要有一列。
+    tasks:
+      type: array
+      items:
+        $ref: '#/DeskTask'
+      description: >-
+        看板範圍內的全部單，一次回完、不分頁。範圍＝還沒結束的單（tasks.ended_at 為空，不限日期）加上今天結束的單（ended_at 落在 businessDate）。
+        備品、其他類的完成與當場回答在完成當下就算結束，所以昨天完成的備品單不會出現；等查房的打掃單與等驗收的工務單還沒結束，不限日期。
+        回傳順序是建立時間新的在前，只為了讓每次回應穩定；各欄的顯示順序由畫面自己排。
+    myToday:
+      $ref: '#/DeskMyToday'
+DeskMyToday:
+  type: object
+  description: 登入者本人今天的兩個張數，待派單頁的空狀態用。「今天」同 DeskBoard.businessDate。
+  required:
+  - assignedCount
+  - answeredCount
+  properties:
+    assignedCount:
+      type: integer
+      format: int32
+      minimum: 0
+      description: 今天派出的張數：本人今天的 triaged 事件，扣掉緊接著被 triage_undone 復原的。同一張單派出、復原、再派出只算最後那一次。
+    answeredCount:
+      type: integer
+      format: int32
+      minimum: 0
+      description: 今天當場回答的張數：本人今天的 answered 事件。
+DeskTask:
+  type: object
+  description: >-
+    櫃檯視角的一張單，看板卡片與待派單列用。時間一律是時刻，畫面自己換算成「等 N 分」「接 N 分」「做 N 分」「停 N 分」。
+    不帶急件標記，櫃檯畫面不顯示急件、也不依急件改變任何規則。
+  required:
+  - id
+  - displayNo
+  - state
+  - answered
+  - dept
+  - type
+  - source
+  - roomNo
+  - floor
+  - vip
+  - title
+  - guestTyped
+  - createdAt
+  - updatedAt
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: 任務 id。開詳情、派單、復原、當場回答都用它。
+    displayNo:
+      type: string
+      description: 給人看的單號，一張單只有一個。type 為 repair 的單是工務單號（repair_tickets.ticket_no，例 W-0132），其餘類型是 tasks.task_no（例 T-1053）。
+      example: T-1053
+    state:
+      type: string
+      enum:
+      - triage
+      - pool
+      - accepted
+      - doing
+      - done
+      - inspected
+      - closed
+      - deferred
+      - interrupted
+      - cancelled
+      description: 任務的狀態，就是資料上的十個值。看板的 8 個欄與 13 種狀態標籤由畫面依 state、type、answered、inspection 分組，不是新的狀態值。
+    answered:
+      type: boolean
+      description: 這張單是不是櫃檯當場回答結案的（tasks.answer 有值）。true 時 state 一定是 done，畫面把它放進「已結案」欄、標成「已回答」。
+    dept:
+      type: string
+      enum:
+      - housekeeping
+      - engineering
+      - frontdesk
+      description: 目前歸屬的部門。待派單與當場回答的單是 frontdesk，畫面顯示成「未分部門」。
+    type:
+      type: string
+      enum:
+      - amenity
+      - repair
+      - cleaning
+      - other
+    source:
+      type: string
+      enum:
+      - guest
+      - desk
+      - system
+      - staff
+      description: 來源。guest 住客掃碼、desk 櫃檯開單、system 系統建立（排房或自動化規則）、staff 同仁報修。
+    roomNo:
+      type: string
+      example: '305'
+    floor:
+      type: integer
+      format: int32
+    vip:
+      type: boolean
+      description: 這張單的住客是不是 VIP。住客的認定見 guestName。
+    guestName:
+      type: string
+      nullable: true
+      description: >-
+        這張單的住客姓名。單有連結訂房（tasks.reservation_id）時取那筆訂房；沒有連結時取這間房現在住著的訂房
+        （入住時間已到、退房時間未到、沒有被取代）。兩者都沒有就是 null，畫面顯示「空房」。
+    title:
+      type: string
+      description: 任務標題（tasks.title）。住客打字的需求請看 guestText。
+    guestTyped:
+      type: boolean
+      description: 是不是住客自己打字送出的需求（不是點選單）。true 時畫面把標題用「」包起來，並且一定帶 guestText。
+    guestText:
+      type: object
+      nullable: true
+      allOf:
+      - $ref: '#/DeskGuestText'
+    assigneeId:
+      type: string
+      format: uuid
+      nullable: true
+    assigneeName:
+      type: string
+      nullable: true
+      description: 負責人姓名；沒有負責人為 null。
+    createdAt:
+      type: string
+      format: date-time
+      description: 建立時間。待派單的等待時間從這裡起算。
+    waitingSince:
+      type: string
+      format: date-time
+      nullable: true
+      description: >-
+        等待時間的起算時刻，只有 triage 與 pool 有值。triage 等於 createdAt。pool 是這張單 created 與 returned_to_pool
+        兩種事件中最新一筆的時間，與待認領清單（listDeptPool）、未接提醒同一把尺；櫃檯派單記的是 triaged、不在這兩種之內，
+        所以櫃檯派出的單仍從住客送出起算。等待膠囊、逾時、欄頭警示、「等最久」與待認領欄的排序都用它。
+    acceptedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: 這張單到目前負責人手上的時間（最近一筆 claimed、assigned 或 reassigned 事件的時間）。state 為 accepted 時必有值，「接 N 分」用它。
+    acceptedVia:
+      type: string
+      nullable: true
+      enum:
+      - plan_assigned
+      - self_claimed
+      - manager_assigned
+      - reassigned
+      description: >-
+        這張單怎麼到目前負責人手上，state 為 accepted 時必有值，依最近一筆 claimed、assigned 或 reassigned 事件判定：
+        plan_assigned＝系統指派（assigned 事件的操作者是系統，例如班前排房），膠囊顯示「今日排房」；
+        self_claimed＝同仁自己認領；manager_assigned＝主管從待認領指派給他；reassigned＝被轉派給他。後三種膠囊顯示「接 N 分」。
+        不能用 source 是不是 system 來猜：系統建的單退回待認領後被人認領，就不是系統指派。
+    startedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: 第一次開工的時間。進行中的「做 N 分」與「開始於 HH:mm」用它。
+    doneAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: 完成時間。「已完成」欄的膠囊用它。
+    interruptedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: 最近一次中斷的時間，state 為 interrupted 時必有值，「停 N 分」用它。
+    endedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: 這張單走到終點的時間（tasks.ended_at）；還沒結束為 null。「已結案」欄的膠囊與取消時間用它。
+    updatedAt:
+      type: string
+      format: date-time
+      description: 最後更新時間。待派單、待認領以外的欄用它排序。
+    inspection:
+      type: string
+      nullable: true
+      enum:
+      - passed
+      - waived
+      - failed
+      description: 打掃單的查房結果。state 為 inspected 時，passed 顯示「查房通過」，waived 顯示「免查房」。
+    sop:
+      type: object
+      nullable: true
+      description: 清潔 SOP 的進度。只有 type 為 cleaning 且 state 為 accepted、doing 或 interrupted、飯店又有啟用的清潔 SOP 項目時有值，其餘為 null。
+      required:
+      - done
+      - total
+      properties:
+        done:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 已勾選的項數；跳過的不算。
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 這張單適用的清潔 SOP 總項數。
+    interruption:
+      type: object
+      nullable: true
+      description: 中斷的說明，state 為 interrupted 時必有值。
+      required:
+      - bySelf
+      properties:
+        bySelf:
+          type: boolean
+          description: true＝負責人自己暫停；false＝其他原因造成（例如請假）。
+        reason:
+          type: string
+          nullable: true
+          description: 停住原因（tasks.hold_reason）：本人填的原因，或系統記的「等工務：<類別>」「工務已修好：<類別>」。
+        handoverNote:
+          type: string
+          nullable: true
+          description: 交代做到哪（tasks.requeue_note）；沒有交代為 null，畫面顯示「—」。
+    deferral:
+      type: object
+      nullable: true
+      description: >-
+        延後的說明，state 為 deferred 時必有值。主管延後只有「誰延後的」；不帶延後到幾點，也不帶主管延後的原因，
+        膠囊一律是「待重排」。
+      required:
+      - bySelf
+      properties:
+        bySelf:
+          type: boolean
+          description: true＝負責人自己延後；false＝主管延後。
+        byName:
+          type: string
+          nullable: true
+          description: 延後的人的姓名（最近一筆 deferred 事件的操作者）。
+        reason:
+          type: string
+          nullable: true
+          description: 本人延後時填的原因（tasks.hold_reason）；主管延後為 null。
+DeskGuestText:
+  type: object
+  description: 住客打字的需求原文，以及單上既有的翻譯內容。後端不產生翻譯，只把單上已經有的帶出來。
+  required:
+  - original
+  properties:
+    original:
+      type: string
+      description: 住客打的原文全文。
+    lang:
+      type: string
+      nullable: true
+      description: 原文的語言代碼，例如 ja、en；單上沒有記為 null。
+      example: ja
+    translated:
+      type: string
+      nullable: true
+      description: >-
+        翻譯後的文字，取自 tasks.note 裡既有的 llm_translated；單上沒有就是 null。有值時畫面用它當標題、
+        另外顯示原文列與「已翻譯」；null 時只顯示原文。
+DeskTaskDetail:
+  description: 櫃檯視角的單筆詳情：卡片上已有的資料，加上詳情面板與當場回答面板才需要的內容與歷程。
+  allOf:
+  - $ref: '#/DeskTask'
+  - type: object
+    required:
+    - serverTime
+    - timeline
+    properties:
+      serverTime:
+        type: string
+        format: date-time
+        description: 後端產生這份回應的時間，用途同 DeskBoard.serverTime。
+      answer:
+        type: string
+        nullable: true
+        description: 櫃檯當場回答的回覆全文（tasks.answer）；不是當場回答的單為 null。
+      answeredByName:
+        type: string
+        nullable: true
+        description: 當場回答的櫃檯人員姓名（answered 事件的操作者）。
+      guest:
+        type: object
+        nullable: true
+        description: 這張單的住客（認定方式同 DeskTask.guestName）；空房為 null。訂房資料沒有住客人數，所以不帶人數。
+        required:
+        - name
+        - checkinDate
+        - checkoutDate
+        properties:
+          name:
+            type: string
+          checkinDate:
+            type: string
+            format: date
+          checkoutDate:
+            type: string
+            format: date
+      createdByName:
+        type: string
+        nullable: true
+        description: 開單人姓名（created 事件的操作者）。source 為 desk 或 staff 時有值，「櫃檯代開（姓名）」「同仁報修（姓名）」用它；住客與系統建的單為 null。
+      accepted:
+        type: object
+        nullable: true
+        description: 已接的說明要用的資料，state 為 accepted 時必有值；via 與 at 等於 DeskTask 的 acceptedVia、acceptedAt。
+        required:
+        - via
+        - at
+        properties:
+          via:
+            type: string
+            enum:
+            - plan_assigned
+            - self_claimed
+            - manager_assigned
+            - reassigned
+          at:
+            type: string
+            format: date-time
+          byName:
+            type: string
+            nullable: true
+            description: 指派或轉派的操作者姓名；via 為 manager_assigned 或 reassigned 時有值。
+          previousAssigneeName:
+            type: string
+            nullable: true
+            description: 轉派前的負責人姓名；via 為 reassigned 時有值。
+      cancellation:
+        type: object
+        nullable: true
+        description: 取消的說明，state 為 cancelled 時必有值。取消的時間是 endedAt。
+        required:
+        - reason
+        properties:
+          reason:
+            type: string
+            enum:
+            - guest_withdrew
+            - manager_void
+            - plan_superseded
+            - staff_withdrew
+          byName:
+            type: string
+            nullable: true
+            description: 取消的人的姓名（cancelled 事件的操作者）：主管作廢是那位主管，同仁撤回是報修人；住客收回與排房被取代為 null。
+      repair:
+        type: object
+        nullable: true
+        description: 工務單才有的兩項，type 為 repair 時有值。
+        properties:
+          resolutionType:
+            type: string
+            nullable: true
+            enum:
+            - fixed
+            - temporary
+            - cannot_fix
+            - no_action_needed
+            description: 完修結果；還沒完修為 null。closed 且為 no_action_needed 時顯示「已結案 · 不需處理」。
+          verifiedByName:
+            type: string
+            nullable: true
+            description: 驗收通過的主管姓名；還沒驗收通過為 null。closed 且有值時顯示「已結案 · {主管}驗收」。
+      timeline:
+        type: array
+        items:
+          $ref: '#/DeskTimelineEntry'
+        description: >-
+          這張單的歷程，由舊到新。來源是 task_events，但有兩種不回：被復原的派單與那一筆復原（triaged 與緊接其後的 triage_undone
+          成對略過，讀起來就是派單前的樣子）；逐項勾 SOP 的 sop_checked（進度看 sop）。其餘事件照實回，畫面依 type 與 detail 組成各語言的句子；
+          畫面沒有對應句子的事件種類就不顯示那一筆。
+DeskTimelineEntry:
+  type: object
+  description: 歷程的一筆。句子由畫面組，後端只給組句子要的資料；住客與同仁輸入的文字原樣帶出。
+  required:
+  - seq
+  - at
+  - type
+  - actor
+  properties:
+    seq:
+      type: integer
+      format: int32
+      description: 這張單的第幾步（task_events.seq）。被略過的事件會留下跳號。
+    at:
+      type: string
+      format: date-time
+    type:
+      type: string
+      description: 事件種類，值同 task_events.type（例如 created、triaged、answered、claimed、started、completed、inspection_passed、cancelled）。
+    actor:
+      type: object
+      required:
+      - kind
+      properties:
+        kind:
+          type: string
+          enum:
+          - guest
+          - system
+          - staff
+          description: 操作者是住客、系統還是同仁。
+        role:
+          type: string
+          nullable: true
+          enum:
+          - frontdesk
+          - housekeeping
+          - engineering
+          - manager
+          - duty_manager
+          description: kind 為 staff 時是他當下的角色，其餘為 null。
+        name:
+          type: string
+          nullable: true
+          description: kind 為 staff 時是同仁姓名；guest 時是住客姓名（空房為 null）；system 為 null。
+    detail:
+      type: object
+      description: 組句子要的內容，依事件種類帶其中幾項，用不到的不出現。
+      properties:
+        dept:
+          type: string
+          enum:
+          - housekeeping
+          - engineering
+          - frontdesk
+          description: created：建立後歸屬的部門。triaged：派去的部門。
+        initialState:
+          type: string
+          enum:
+          - triage
+          - pool
+          - accepted
+          description: created：建立後落在哪個狀態。triage＝規則沒有命中、等櫃檯派單；pool＝直接進部門待認領；accepted＝建立時就指派給人。
+        guestTyped:
+          type: boolean
+          description: created：是不是住客打字的需求。
+        ruleLabel:
+          type: string
+          nullable: true
+          description: created：住客打的字命中分類規則時，那條規則的說明文字；沒有命中或取不到為 null。
+        via:
+          type: string
+          enum:
+          - button
+          - drag
+          description: triaged：按鈕派單還是拖曳派單。事件上沒有記的舊資料視為 button。
+        answer:
+          type: string
+          description: answered：回覆全文。
+        assigneeName:
+          type: string
+          nullable: true
+          description: assigned、claimed、reassigned：接手的人。
+        previousAssigneeName:
+          type: string
+          nullable: true
+          description: reassigned：原負責人。
+        reason:
+          type: string
+          nullable: true
+          description: interrupted、deferred：本人填的原因。returned_to_pool：退回的原因。repair_verification_failed：不通過原因。
+        bySelf:
+          type: boolean
+          description: interrupted、deferred：是不是負責人自己做的。
+        note:
+          type: string
+          nullable: true
+          description: returned_to_pool：交代做到哪。inspection_failed：查房的說明。
+        cancelReason:
+          type: string
+          enum:
+          - guest_withdrew
+          - manager_void
+          - plan_superseded
+          - staff_withdrew
+          description: cancelled：取消原因。
+        resolutionType:
+          type: string
+          enum:
+          - fixed
+          - temporary
+          - cannot_fix
+          - no_action_needed
+          description: 工務單的 completed：完修結果。
+        rating:
+          type: integer
+          format: int32
+          description: rated：住客給的分數。
+DeskQuickReply:
+  type: object
+  description: 當場回答面板的一則常用回覆，內容就是住客資訊頁的一頁。
+  required:
+  - key
+  - title
+  - body
+  properties:
+    key:
+      type: string
+      description: 這一頁在飯店設定裡的鍵，例如 breakfast。
+    title:
+      type: string
+      description: 膠囊上的字，例如「早餐時間」。
+    body:
+      type: string
+      description: 點了之後帶進回覆框的整段文字。超過 120 字時畫面只帶前 120 字。
+DeskAssignRequest:
+  type: object
+  required:
+  - dept
+  properties:
+    dept:
+      type: string
+      enum:
+      - housekeeping
+      - engineering
+      description: 派給哪個部門。
+    via:
+      type: string
+      enum:
+      - button
+      - drag
+      default: button
+      description: 怎麼派的：按鈕或在看板上拖曳。只影響歷程文字，狀態變化完全相同。
+DeskAnswerRequest:
+  type: object
+  required:
+  - answer
+  properties:
+    answer:
+      type: string
+      minLength: 1
+      maxLength: 120
+      description: 給住客的回覆。後端先去掉頭尾空白，之後必須是 1–120 字，否則回 422 answer_invalid。存下來與住客看到的都是去掉空白後的字。

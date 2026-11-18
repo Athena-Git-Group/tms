@@ -1,0 +1,168 @@
+listRoomMemory:
+  get:
+    operationId: listRoomMemory
+    summary: list room_memory
+    tags:
+    - 房間記憶與問一下 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/房間記憶與問一下.yaml#/room_memory'
+roomMemoryAsk:
+  post:
+    operationId: roomMemoryAsk
+    summary: 查一下（提問）
+    description: >-
+      依任務提問。回答只由 SOP 或房間記錄的原文組成，套用固定模板，並附出處；MVP 不經 LLM 改寫。
+      查不到時 found=false，answer 與 sources 都是空的，不回傳任何沒有出處的答案。
+      每次提問都寫一筆稽核紀錄，包含提問者、任務、問題、引用來源（sop、room_memory 或 none）與回答。
+      住客需求不顯示住客身分。
+    tags:
+    - 房間記憶與問一下 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbAskRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbAnswer'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+listKbSuggestions:
+  get:
+    operationId: listKbSuggestions
+    summary: 查一下的推薦問題
+    description: >-
+      依任務情境回傳推薦問題。
+      打掃類：有跳過的 SOP 項時推薦該項做法；否則是 VIP 房時推薦 VIP 備品；否則推薦一則一般 SOP 問題。
+      非打掃類：推薦送物注意事項。
+      每張任務都再推薦「<房號> 最近修過什麼？」與「<房號> 的住客有沒有特別要求？」。
+    tags:
+    - 房間記憶與問一下 API
+    parameters:
+    - name: taskId
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbSuggestion'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+submitKbFeedback:
+  post:
+    operationId: submitKbFeedback
+    summary: 對回答回饋有幫助或沒幫助
+    description: 回饋寫進稽核紀錄。選沒幫助時，通知 SOP 管理者檢查被引用的 SOP（SOP 管理者推定為主管，FR-044 NEEDS CLARIFICATION）。
+    tags:
+    - 房間記憶與問一下 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/AnswerId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbFeedbackRequest'
+    responses:
+      '204':
+        description: 已記錄
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+escalateKbQuestion:
+  post:
+    operationId: escalateKbQuestion
+    summary: 把問題轉問主管
+    description: 員工把查不到的問題轉給主管，建立一筆待回覆的提問，稽核紀錄標示已轉問主管。
+    tags:
+    - 房間記憶與問一下 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/AnswerId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    responses:
+      '201':
+        description: 已建立
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbEscalation'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+listKbEscalations:
+  get:
+    operationId: listKbEscalations
+    summary: 主管查看待回覆的提問
+    description: 主管回覆的入口（後台清單或從推播直接回覆）待 clarify（FR-043）；兩種入口都使用這組 API。
+    tags:
+    - 房間記憶與問一下 API
+    parameters:
+    - name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+        - pending
+        - answered
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbEscalation'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+replyKbEscalation:
+  post:
+    operationId: replyKbEscalation
+    summary: 主管回覆提問
+    description: 回覆寫進稽核紀錄，並推播提問的員工，推播內容是主管回覆的全文。
+    tags:
+    - 房間記憶與問一下 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/EscalationId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbReplyRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間記憶與問一下.yaml#/KbEscalation'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

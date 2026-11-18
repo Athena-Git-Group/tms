@@ -1,0 +1,497 @@
+package com.athena.tms.bdd.steps.common;
+
+import com.athena.tms.bdd.ScenarioWorld;
+import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.LastOperationGuard;
+import com.athena.tms.bdd.support.MutableClock;
+import com.athena.tms.bdd.support.OutboxAwait;
+import com.athena.tms.bdd.support.PushPayloadView;
+import com.athena.tms.bdd.support.StaffFixtures;
+import com.athena.tms.bdd.support.TenantFixtures;
+import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.service.JwtService;
+import io.cucumber.datatable.DataTable;
+import io.cucumber.java.zh_tw.那麼;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+public class CommonThenSteps {
+
+    private final ScenarioWorld world;
+    private final BddApiClient apiClient;
+    private final DbProbe dbProbe;
+    private final LastOperationGuard lastOperationGuard;
+    private final OutboxAwait outboxAwait;
+    private final MutableClock clock;
+    private final JwtService jwtService;
+    private final TenantFixtures tenantFixtures;
+    private final ObjectMapper objectMapper;
+    private final StaffFixtures staffFixtures;
+
+    public CommonThenSteps(
+            ScenarioWorld world,
+            BddApiClient apiClient,
+            DbProbe dbProbe,
+            LastOperationGuard lastOperationGuard,
+            OutboxAwait outboxAwait,
+            MutableClock clock,
+            JwtService jwtService,
+            TenantFixtures tenantFixtures,
+            ObjectMapper objectMapper,
+            StaffFixtures staffFixtures) {
+        this.world = world;
+        this.apiClient = apiClient;
+        this.dbProbe = dbProbe;
+        this.lastOperationGuard = lastOperationGuard;
+        this.outboxAwait = outboxAwait;
+        this.clock = clock;
+        this.jwtService = jwtService;
+        this.tenantFixtures = tenantFixtures;
+        this.objectMapper = objectMapper;
+        this.staffFixtures = staffFixtures;
+    }
+
+    @那麼("這次操作被拒絕")
+    public void operationRejected() {
+        assertRejectedResponse();
+        assertAuthoritativeStateUnchanged();
+    }
+
+    @那麼("這次操作被拒絕，提示 {string}")
+    public void operationRejectedWithHint(String hint) {
+        assertRejectedResponse();
+        String message = textOrNull(world.lastResponse().json(), "message");
+        if (message == null || !message.contains(hint)) {
+            throw new AssertionError("預期錯誤訊息包含「" + hint + "」，實際 message=" + message);
+        }
+        assertAuthoritativeStateUnchanged();
+    }
+
+    @那麼("這次操作被拒絕，錯誤碼為 {string}")
+    public void operationRejectedWithCode(String errorCode) {
+        assertRejectedResponse();
+        ScenarioWorld.ApiResponse resp = world.lastResponse();
+        String code = textOrNull(resp.json(), "code");
+        if (!errorCode.equals(code)) {
+            throw new AssertionError("預期 Error.code=" + errorCode + "，實際 code=" + code + "，body=" + resp.body());
+        }
+        Integer expectedStatus = ERROR_CODE_HTTP_STATUS.get(errorCode);
+        if (expectedStatus != null && resp.status() != expectedStatus) {
+            throw new AssertionError("Error.code=" + errorCode + " 依 shared.yaml 應回 " + expectedStatus
+                    + "，實際狀態碼=" + resp.status());
+        }
+        assertAuthoritativeStateUnchanged();
+    }
+
+    private static final Map<String, Integer> ERROR_CODE_HTTP_STATUS = Map.ofEntries(
+            Map.entry("state_conflict", 409),
+            Map.entry("doing_task_exists", 409),
+            Map.entry("already_claimed", 409),
+            Map.entry("ticket_closed", 409),
+            Map.entry("room_ticket_not_requeueable", 409),
+            Map.entry("reason_invalid", 422),
+            Map.entry("photo_required", 422),
+            Map.entry("photo_limit", 422),
+            Map.entry("photo_not_uploaded", 422),
+            Map.entry("completion_photo_required", 422),
+            Map.entry("verification_reason_required", 422),
+            Map.entry("repair_source_missing", 422),
+            Map.entry("repair_source_conflict", 422),
+            Map.entry("current_password_required", 422),
+            Map.entry("new_password_invalid", 422),
+            Map.entry("dept_required", 422),
+            Map.entry("inspection_items_mismatch", 422),
+            Map.entry("credentials_invalid", 401),
+            Map.entry("current_password_invalid", 401),
+            Map.entry("account_disabled", 403),
+            Map.entry("forbidden", 403),
+            Map.entry("forbidden_dept_pool", 403),
+            Map.entry("account_locked", 429),
+            Map.entry("idempotency_key_required", 400),
+            Map.entry("answer_invalid", 422),
+            Map.entry("task_not_in_triage", 409),
+            Map.entry("undo_claimed", 409),
+            Map.entry("undo_guest_withdrew", 409),
+            Map.entry("undo_expired", 409),
+            Map.entry("undo_unavailable", 409),
+            Map.entry("new_password_too_weak", 422));
+
+    private static final Map<String, String> HK_STATE = Map.of(
+            "還沒打掃好", "dirty",
+            "已查房", "inspected",
+            "停用", "out_of_order");
+
+    @那麼("{string} 的房況為 {string}")
+    public void roomHkStateIs(String roomNo, String hkStateChinese) {
+        String expected = HK_STATE.get(hkStateChinese);
+        if (expected == null) {
+            throw new IllegalArgumentException("找不到「" + hkStateChinese + "」在房況用語對照（還沒打掃好／已查房／停用）中的權威值");
+        }
+        long tenantId = tenantFixtures.testTenantId();
+        Map<String, Object> room = dbProbe
+                .queryOne("SELECT id, hk_state FROM rooms WHERE tenant_id = ? AND room_no = ?", tenantId, roomNo)
+                .orElseThrow(() -> new AssertionError("rooms 查無房號「" + roomNo + "」"));
+        check("rooms.hk_state", expected, room.get("hk_state"));
+
+        dbProbe.queryOne(
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND active = true ORDER BY role = 'manager' DESC LIMIT 1",
+                        tenantId)
+                .ifPresent(staff -> {
+                    String jwt = mintJwtFor(UUID.fromString(String.valueOf(staff.get("id"))));
+                    ScenarioWorld.ApiResponse resp = apiClient.get("/rooms/" + room.get("id"), BddApiClient.Auth.staff(jwt));
+                    if (resp.status() != 200 || resp.json() == null) {
+                        throw new AssertionError("readRooms(" + room.get("id") + ") 預期 200，實際 status=" + resp.status()
+                                + "，body=" + resp.body());
+                    }
+                    check("readRooms.hkState", expected, textOrNull(resp.json(), "hkState"));
+                });
+    }
+
+    @那麼("{string} 的狀態為 {string}")
+    public void taskStateIs(String taskKey, String stateChinese) {
+        UUID taskId = resolveTaskId(taskKey);
+        final ExpectedTaskState expected = resolveExpectedState(stateChinese);
+        Map<String, Object> row = requireTaskRow(taskId);
+        check("tasks.state", expected.state(), row.get("state"));
+        if (expected.inspection() != null) {
+            check("tasks.inspection", expected.inspection(), row.get("inspection"));
+        }
+        if (expected.cancelReason() != null) {
+            check("tasks.cancel_reason", expected.cancelReason(), row.get("cancel_reason"));
+        }
+        if (expected.dept() != null) {
+            check("tasks.dept", expected.dept(), row.get("dept"));
+        }
+
+        // 待派單、待認領的單沒有負責人，只用負責人再讀會整段跳過，所以改由同飯店的主管再讀一次
+        Object assigneeId = row.get("assignee_id");
+        String readerJwt = assigneeId != null
+                ? mintJwtFor(UUID.fromString(String.valueOf(assigneeId)))
+                : supervisorJwt();
+        check("readTasks.state", expected.state(), textOrNull(readTasks(taskId, readerJwt), "state"));
+    }
+
+    /**
+     * 只找部門主管：值班主管不能用員工 App 的端點，拿它讀單會被擋成 403。
+     * 案例裡沒有部門主管時另外建一位，避免沒有負責人的單因為找不到讀的人而略過再讀確認。
+     */
+    private String supervisorJwt() {
+        return dbProbe.queryOne(
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND active = true"
+                                + " AND role = 'manager' LIMIT 1",
+                        tenantFixtures.testTenantId())
+                .map(staff -> mintJwtFor(UUID.fromString(String.valueOf(staff.get("id")))))
+                .orElseGet(() -> staffFixtures.createManagerLikeStaff("再讀確認用主管", "manager", "active").jwt());
+    }
+
+    private record ExpectedTaskState(String state, String inspection, String cancelReason, String dept) {}
+
+    private static ExpectedTaskState resolveExpectedState(String stateChinese) {
+        if ("查房通過".equals(stateChinese)) {
+            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("通過"), null, null);
+        }
+        if ("完成 · 免查房".equals(stateChinese)) {
+            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("免查"), null, null);
+        }
+        if ("待派單".equals(stateChinese)) {
+            // 待派單是還在櫃檯手上、等派單或當場回答的單，部門一定是櫃檯
+            return new ExpectedTaskState(Terms.taskState(stateChinese), null, null, Terms.dept("櫃檯"));
+        }
+        try {
+            return new ExpectedTaskState(Terms.taskState(stateChinese), null, null, null);
+        } catch (IllegalArgumentException notPlainTaskState) {
+            String cancelReason = "已撤回".equals(stateChinese) ? Terms.repairTicketWithdrawnReason() : null;
+            return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason, null);
+        }
+    }
+
+    @那麼("{string} 的負責人是 {string}")
+    public void taskAssigneeIs(String taskKey, String staffName) {
+        UUID taskId = resolveTaskId(taskKey);
+        UUID expected = UUID.fromString(world.staffId(staffName));
+        Map<String, Object> row = requireTaskRow(taskId);
+        if (!sameUuid(row.get("assignee_id"), expected)) {
+            throw new AssertionError("tasks.assignee_id 預期 " + expected + "，實際 " + row.get("assignee_id"));
+        }
+
+        JsonNode json = readTasks(taskId, world.jwt(staffName));
+        String assigneeId = textOrNull(json, "assigneeId");
+        if (assigneeId == null || !expected.toString().equalsIgnoreCase(assigneeId)) {
+            throw new AssertionError(
+                    staffName + " 呼叫 readTasks 看不到「" + taskKey + "」是自己的單（assigneeId=" + assigneeId + "）");
+        }
+    }
+
+    @那麼("{string} 的停住原因為 {string}")
+    public void taskHoldReasonIs(String taskKey, String reason) {
+        UUID taskId = resolveTaskId(taskKey);
+        Map<String, Object> row = requireTaskRow(taskId);
+        check("tasks.hold_reason", reason, row.get("hold_reason"));
+
+        withAssigneeReadTasks(
+                taskId, row, json -> check("readTasks.holdReason", reason, textOrNull(json, "holdReason")));
+    }
+
+    @那麼("{string} 的已做時間為 {int} 分鐘")
+    public void taskElapsedMinutesIs(String taskKey, int minutes) {
+        UUID taskId = resolveTaskId(taskKey);
+        Map<String, Object> row = requireTaskRow(taskId);
+        long elapsedSec = toLong(row.getOrDefault("worked_sec", 0));
+        Object segmentStarted = row.get("segment_started_at");
+        if (segmentStarted != null) {
+            elapsedSec += Duration.between(toInstant(segmentStarted), clock.instant()).getSeconds();
+        }
+        long actualMinutes = elapsedSec / 60;
+        if (actualMinutes != minutes) {
+            throw new AssertionError("已做時間預期 " + minutes + " 分鐘，實際 " + actualMinutes + " 分鐘（worked_sec="
+                    + row.get("worked_sec") + ", segment_started_at=" + segmentStarted + "）");
+        }
+
+        withAssigneeReadTasks(taskId, row, json -> {
+            int actual = json.path("elapsedMinutes").asInt(-1);
+            if (actual != minutes) {
+                throw new AssertionError("readTasks.elapsedMinutes 預期 " + minutes + "，實際 " + actual);
+            }
+        });
+    }
+
+    @那麼("{string} 收到推播 {string}")
+    public void staffReceivedPush(String staffName, String title) {
+        UUID staffId = UUID.fromString(world.staffId(staffName));
+        outboxAwait.waitForPush(
+                v -> staffId.equals(v.recipientStaffId()) && title.equals(v.title()),
+                staffName + " 收到標題「" + title + "」的推播");
+
+        long count = dbProbe.outboxRows("push").stream()
+                .map(this::parsePush)
+                .filter(v -> staffId.equals(v.recipientStaffId()) && title.equals(v.title()))
+                .count();
+        if (count != 1) {
+            throw new AssertionError(staffName + " 的標題「" + title + "」推播預期恰好一筆（同一事件不推兩次），實際 outbox 有 "
+                    + count + " 筆");
+        }
+    }
+
+    @那麼("{string} 收到以下推播：")
+    public void staffReceivedPushes(String staffName, DataTable table) {
+        UUID staffId = UUID.fromString(world.staffId(staffName));
+        for (Map<String, String> row : table.asMaps(String.class, String.class)) {
+            String title = blankToNull(row.get("標題"));
+            String body = blankToNull(row.get("內容"));
+            String destination = blankToNull(row.get("去處"));
+            PushPayloadView push = outboxAwait.waitForPush(
+                    v -> staffId.equals(v.recipientStaffId())
+                            && (title == null || title.equals(v.title()))
+                            && (body == null || body.equals(v.body())),
+                    staffName + " 收到" + (title != null ? "標題「" + title + "」" : "")
+                            + (body != null ? "內容「" + body + "」" : "") + "的推播");
+            if (destination != null) {
+                assertDestinationMatches(push.target(), destination);
+            }
+        }
+    }
+
+    @那麼("{string} 沒有收到任何推播")
+    public void staffReceivedNoPush(String staffName) {
+        UUID staffId = UUID.fromString(world.staffId(staffName));
+        boolean found = dbProbe.outboxRows("push").stream()
+                .map(this::parsePush)
+                .anyMatch(v -> staffId.equals(v.recipientStaffId()));
+        if (found) {
+            throw new AssertionError(staffName + " 預期沒有收到任何推播，但 outbox 裡找到至少一筆");
+        }
+    }
+
+    private void assertRejectedResponse() {
+        ScenarioWorld.ApiResponse resp = world.lastResponse();
+        if (resp.status() < 400 || resp.status() > 499) {
+            throw new AssertionError("預期 4xx 回應，實際狀態碼=" + resp.status() + "，body=" + resp.body());
+        }
+        JsonNode json = resp.json();
+        if (json == null || !json.has("code") || !json.has("message")) {
+            throw new AssertionError("4xx 回應不符合 contracts Error（需要 code 與 message）：" + resp.body());
+        }
+    }
+
+    private void assertAuthoritativeStateUnchanged() {
+        LastOperationGuard.Snapshot before = lastOperationGuard.current();
+        Map<String, Object> afterRow = dbProbe.taskRow(before.taskId()).orElse(null);
+        if (!Objects.equals(before.taskRow(), afterRow)) {
+            throw new AssertionError("操作被拒絕後 tasks 仍被改動：操作前=" + before.taskRow() + "，操作後=" + afterRow);
+        }
+        int afterEvents = dbProbe.eventsOf(before.taskId()).size();
+        if (afterEvents != before.eventCount()) {
+            throw new AssertionError("操作被拒絕後仍新增了 task_events：操作前 " + before.eventCount() + " 筆，操作後 "
+                    + afterEvents + " 筆");
+        }
+        String aggregateKey = "task:" + before.taskId();
+        int afterOutbox = dbProbe.outboxRows("task_event", aggregateKey).size()
+                + dbProbe.outboxRows("push", aggregateKey).size();
+        if (afterOutbox != before.outboxCount()) {
+            throw new AssertionError("操作被拒絕後仍新增了 outbox：操作前 " + before.outboxCount() + " 筆，操作後 "
+                    + afterOutbox + " 筆");
+        }
+        Map<String, Object> afterTicket = dbProbe
+                .queryOne("SELECT * FROM repair_tickets WHERE task_id = ?", before.taskId())
+                .orElse(null);
+        if (!Objects.equals(before.repairTicketRow(), afterTicket)) {
+            throw new AssertionError("操作被拒絕後 repair_tickets 仍被改動：操作前=" + before.repairTicketRow()
+                    + "，操作後=" + afterTicket);
+        }
+        long afterInspections = dbProbe.count("SELECT count(*) FROM inspections WHERE task_id = ?", before.taskId());
+        if (afterInspections != before.inspectionCount()) {
+            throw new AssertionError("操作被拒絕後仍新增了 inspections：操作前 " + before.inspectionCount()
+                    + " 筆，操作後 " + afterInspections + " 筆");
+        }
+    }
+
+    private void withAssigneeReadTasks(
+            UUID taskId, Map<String, Object> taskRow, java.util.function.Consumer<JsonNode> check) {
+        Object assigneeId = taskRow.get("assignee_id");
+        if (assigneeId == null) {
+            return;
+        }
+        String jwt = mintJwtFor(UUID.fromString(String.valueOf(assigneeId)));
+        check.accept(readTasks(taskId, jwt));
+    }
+
+    private JsonNode readTasks(UUID taskId, String jwt) {
+        ScenarioWorld.ApiResponse resp = apiClient.get("/tasks/" + taskId, BddApiClient.Auth.staff(jwt));
+        if (resp.status() != 200 || resp.json() == null) {
+            throw new AssertionError("readTasks(" + taskId + ") 預期 200，實際 status=" + resp.status()
+                    + "，body=" + resp.body());
+        }
+        return resp.json();
+    }
+
+    private String mintJwtFor(UUID staffId) {
+        Map<String, Object> staff = dbProbe
+                .queryOne("SELECT role, dept FROM staff_accounts WHERE id = ?", staffId)
+                .orElseThrow(() -> new IllegalStateException("staff_accounts 找不到 id=" + staffId));
+        return jwtService
+                .issue(tenantFixtures.testTenantId(), staffId, (String) staff.get("role"), (String) staff.get("dept"))
+                .token();
+    }
+
+    private void assertDestinationMatches(PushPayloadView.Target target, String destination) {
+        if ("待認領".equals(destination)) {
+            requireKind(target, "pool");
+            requirePoolDept(target);
+        } else if ("首頁".equals(destination)) {
+            requireKind(target, "home");
+        } else if (destination.startsWith("待認領並標亮 ")) {
+            requireKind(target, "pool");
+            requirePoolDept(target);
+            String label = destination.substring("待認領並標亮 ".length());
+            if (world.hasTask(label)) {
+                requireUuidEquals("highlightTaskId", target.highlightTaskId(), UUID.fromString(world.taskId(label)));
+            }
+        } else if (destination.endsWith(" 的任務頁")) {
+            requireKind(target, "task");
+            String label = destination.substring(0, destination.length() - " 的任務頁".length());
+            if (world.hasTask(label)) {
+                requireUuidEquals("taskId", target.taskId(), UUID.fromString(world.taskId(label)));
+            }
+        } else if (destination.endsWith(" 的工務單詳情")) {
+            requireKind(target, "ticket");
+            String ticketNo = destination.substring(0, destination.length() - " 的工務單詳情".length());
+            if (world.hasRepairTicket(ticketNo)) {
+                requireUuidEquals("taskId", target.taskId(), UUID.fromString(world.repairTicketTaskId(ticketNo)));
+            }
+        } else {
+            throw new AssertionError("無法解析的推播去處格式（不在 dsl.md PushTarget 對照範圍內）：" + destination);
+        }
+    }
+
+    private static void requirePoolDept(PushPayloadView.Target target) {
+        if (!"housekeeping".equals(target.dept()) && !"engineering".equals(target.dept())) {
+            throw new AssertionError("去處為待認領的推播 target.dept 應為 housekeeping 或 engineering，實際 "
+                    + target.dept());
+        }
+    }
+
+    private static void requireKind(PushPayloadView.Target target, String expectedKind) {
+        if (!expectedKind.equals(target.kind())) {
+            throw new AssertionError("PushTarget.kind 預期 " + expectedKind + "，實際 " + target.kind());
+        }
+    }
+
+    private static void requireUuidEquals(String field, UUID actual, UUID expected) {
+        if (!expected.equals(actual)) {
+            throw new AssertionError("PushTarget." + field + " 預期 " + expected + "，實際 " + actual);
+        }
+    }
+
+    private PushPayloadView parsePush(Map<String, Object> outboxRow) {
+        Object payload = outboxRow.get("payload");
+        String json = payload instanceof String s ? s : String.valueOf(payload);
+        try {
+            return objectMapper.readValue(json, PushPayloadView.class);
+        } catch (RuntimeException e) {
+            throw new AssertionError("解析 push payload 失敗：" + json, e);
+        }
+    }
+
+    private UUID resolveTaskId(String key) {
+        if (key.startsWith("W-")) {
+            return UUID.fromString(world.repairTicketTaskId(key));
+        }
+        return UUID.fromString(world.taskId(key));
+    }
+
+    private Map<String, Object> requireTaskRow(UUID taskId) {
+        return dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此任務：" + taskId));
+    }
+
+    private static void check(String what, Object expected, Object actual) {
+        if (!Objects.equals(expected, actual)) {
+            throw new AssertionError(what + " 預期 " + expected + "，實際 " + actual);
+        }
+    }
+
+    private static boolean sameUuid(Object dbValue, UUID expected) {
+        if (dbValue == null || expected == null) {
+            return dbValue == expected;
+        }
+        return expected.toString().equalsIgnoreCase(String.valueOf(dbValue));
+    }
+
+    private static long toLong(Object v) {
+        if (v instanceof Number n) {
+            return n.longValue();
+        }
+        throw new IllegalStateException("預期數字型別，實際 " + (v == null ? "null" : v.getClass()));
+    }
+
+    private static Instant toInstant(Object v) {
+        if (v instanceof Timestamp ts) {
+            return ts.toInstant();
+        }
+        if (v instanceof OffsetDateTime odt) {
+            return odt.toInstant();
+        }
+        if (v instanceof Instant i) {
+            return i;
+        }
+        throw new IllegalStateException("預期時間型別，實際 " + (v == null ? "null" : v.getClass()));
+    }
+
+    private static String textOrNull(JsonNode node, String field) {
+        if (node == null || !node.has(field) || node.get(field).isNull()) {
+            return null;
+        }
+        return node.get(field).asText();
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
+    }
+}

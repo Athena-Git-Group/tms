@@ -1,0 +1,89 @@
+lost_items:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    roomId:
+      type: string
+      format: uuid
+      description: 公共區拾獲可空
+    location:
+      type: string
+      description: 房外位置描述
+    itemDesc:
+      type: string
+    photoRef:
+      type: string
+      description: 照片外存引用；事件 payload 只記 hasPhoto
+    status:
+      type: string
+      description: 'CHECK: held|returned'
+    foundBy:
+      type: string
+      format: uuid
+      description: 拾獲人（追責與對帳）
+    foundAt:
+      type: string
+      format: date-time
+    returnedAt:
+      type: string
+      format: date-time
+    returnedTo:
+      type: string
+      description: PII：領回人稱謂——去識別化範圍
+    createdAt:
+      type: string
+      format: date-time
+  description: 遺失物：櫃檯登記、歸還結案。
+  required:
+  - id
+  - tenantId
+  - itemDesc
+  - status
+  - foundBy
+  - foundAt
+  - createdAt
+lost_itemsRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    roomId:
+      type: string
+      format: uuid
+      description: 公共區拾獲可空
+    location:
+      type: string
+      description: 房外位置描述
+    itemDesc:
+      type: string
+    photoRef:
+      type: string
+      description: 照片外存引用；事件 payload 只記 hasPhoto
+    status:
+      type: string
+      description: 'CHECK: held|returned'
+    foundBy:
+      type: string
+      format: uuid
+      description: 拾獲人（追責與對帳）
+    foundAt:
+      type: string
+      format: date-time
+    returnedAt:
+      type: string
+      format: date-time
+    returnedTo:
+      type: string
+      description: PII：領回人稱謂——去識別化範圍
+  required:
+  - tenantId
+  - itemDesc
+  - status
+  - foundBy
+  - foundAt

@@ -1,0 +1,476 @@
+MyToday:
+  type: object
+  required:
+  - cleaningDone
+  - cleaningTotal
+  - inspectedCount
+  - completedCount
+  - adHocCompleted
+  - remainingMinutes
+  - todayTasks
+  - nextTasks
+  properties:
+    cleaningDone:
+      type: integer
+      format: int32
+    cleaningTotal:
+      type: integer
+      format: int32
+    inspectedCount:
+      type: integer
+      format: int32
+      description: >-
+        查房通過數。計算口徑：本人今日 inspection=passed 的任務數（排除免查，只計通過查房的單）。
+        首頁今日進度第四格顯示這個值。
+    completedCount:
+      type: integer
+      format: int32
+      description: >-
+        今天完成單數：本人 done、inspected 或 closed 的任務數。首頁四格不顯示，供完成慶祝頁「第 N 單」使用。
+    adHocCompleted:
+      type: integer
+      format: int32
+    remainingMinutes:
+      type: integer
+      format: int32
+    todayTasks:
+      type: array
+      description: >-
+        本人今日的全部任務，供首頁任務列與「繼續處理」使用。
+        收錄口徑：負責人是本人、屬於今天、狀態不是 cancelled 的任務。
+        「屬於今天」依 work_date 有無分兩種算法：有 work_date 的（排房建出來的打掃類）比
+        work_date 等於今天；work_date 為 null 的（備品、其他、修繕這幾類建單時不填工作日）
+        改看狀態——未結束（accepted、doing、deferred、interrupted）就算今天手上的單，
+        已結束（done、inspected、closed）看 done_at 是否落在今天。
+        這兩把尺與同一支端點的其他欄位一致：未結束的那把與 nextTasks、remainingMinutes 相同，
+        已結束的那把與今日完成單數相同。只比 work_date 會讓不填工作日的三類任務永遠不在清單裡，
+        與「nextTasks 是 todayTasks 的子集」這條契約自相矛盾。
+        因此 accepted（已接單）、doing（進行中）、deferred（已延後）、interrupted（已中斷）、
+        done（今天已完成）、inspected（今天已查房通過）、closed（今天完修、已結案的工務單）全部都在裡面；池中還沒人接的單不在這裡（見 listDeptPool）。
+        排序口徑與首頁任務列呈現順序一致，由後端排好後直接依序呈現，App 不再重排：
+        未結束的單（accepted、doing、deferred、interrupted）排在已結束的單（done、inspected、closed）之前；
+        同一組內 doing 最前，其餘依房號遞增；已結束的單依完成時間由新到舊。
+        和 nextTasks 的關係：nextTasks 是本陣列中 accepted 那些單的推薦子集，另有自己的推薦排序，
+        只用於首頁「下一間」卡；需要列出或進入今天任何一張單一律用 todayTasks。
+      items:
+        $ref: '#/TodayTask'
+    nextTasks:
+      type: array
+      description: 待開始的單，已依推薦順序排好。
+      items:
+        $ref: '#/NextTask'
+    shift:
+      type: string
+      nullable: true
+      description: >-
+        呼叫者今天的班別值，與排房計畫的 shift 同一套——值域從租戶設定 shift_times 的鍵來
+        （dev seed 是 morning／afternoon）。**不是中文顯示名稱**：系統裡沒有任何地方存班別的
+        中文說法，後端不自行發明對照，翻成白話由畫面處理（與任務來源、工務單類別同一套做法）。
+        來源是今天那份已發佈（status=published）的排房計畫；查不到時為 null，畫面就只顯示日期。
+        排班資料目前只存在於房務的排房計畫裡，所以工務與櫃檯帳號必然為 null。
+    floors:
+      type: array
+      nullable: true
+      description: >-
+        呼叫者今天負責的樓層，例如 [3, 4]。首頁問候列接在班別後面。
+        沒有指定樓層時為 null 或空陣列，畫面略過這一段。
+      items:
+        type: integer
+        format: int32
+    poolBadgeCount:
+      type: integer
+      format: int32
+      minimum: 0
+      description: >-
+        分頁列「待認領」那一格的紅色數量徽章要顯示的數字：呼叫者**現在搶得到**的待認領單數，
+        口徑與 listDeptPool 不帶篩選時回的 items 筆數一致。
+        放在這支端點而不是另開一支，是因為外殼層只為了畫兩個徽章不該多打讀取端點。
+        為 0 時畫面不顯示徽章。主管與老闆不屬於任何部門池、搶不到單，一律為 0。
+    unreadNotificationBadgeCount:
+      type: integer
+      format: int32
+      minimum: 0
+      description: >-
+        分頁列「通知」那一格的紅色數量徽章要顯示的數字：呼叫者未讀（readAt 為 null）的通知筆數。
+        口徑與通知中心清單的未讀列數一致。為 0 時畫面不顯示徽章。
+    engineeringSummary:
+      type: object
+      nullable: true
+      description: >-
+        只有部門是工務（dept=engineering）的呼叫者才有值，包含工務員工與工務主管；其他呼叫者為 null。
+        供工務首頁今日進度卡使用；工務主管首頁的「我名下的單」讀這裡的 tickets。
+      required:
+      - openCount
+      - completedToday
+      - urgentCount
+      - tickets
+      properties:
+        openCount:
+          type: integer
+          format: int32
+          description: 手上張數：本人目前 accepted／doing 的工務單筆數。
+        completedToday:
+          type: integer
+          format: int32
+          description: 今天已完修：處理人是本人、完修時間落在今天、狀態為 done 或 closed 的工務單筆數（驗收通過或不需處理結案後仍計入）。
+        urgentCount:
+          type: integer
+          format: int32
+          description: >-
+            急件數：手上單（accepted／doing）中 isUrgent=true 的筆數。
+            急不急的權威欄位是 repair_tickets.is_urgent；沒有對應工務單列的 repair 任務
+            （見 EngineeringTicket.ticketNo 的 null 情形）退回讀 tasks.urgent。
+            本欄與 tickets[].isUrgent 必須同源，不得各讀各的欄位。
+        plannedToday:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: >-
+            今天預計要修的工務單總數，供工務首頁進度環當分母（「{completedToday} / {plannedToday} 張已完修」）。
+            沒有這個欄位時 App 只能拿 completedToday＋openCount 相加當分母，那是畫面自己湊的、
+            會隨著新單進來而變動。排不出預計量時為 null，畫面退回用相加的口徑。
+        maintenanceDone:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: >-
+            今日保養已完成張數，供工務首頁「今日保養 {maintenanceDone} / {maintenanceTotal}」那一格。
+            保養指排程建立的定期保養工單，與報修單分開計。沒有保養維度時為 null，該格整個不畫。
+        maintenanceTotal:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: 今日保養總張數。與 maintenanceDone 同時有值或同時為 null。
+        tickets:
+          type: array
+          description: >-
+            本人手上與今天完修的工務單清單，供工務首頁（以及工務主管首頁的「我名下的單」）的單列與進入工務單詳情使用。
+            收錄口徑：處理人是本人且狀態為 accepted 或 doing 的工務單（含驗收不通過退回本人名下重修的單），
+            加上處理人是本人、今天完修、狀態為 done 或 closed 的工務單。
+            今天已完修的也要給，工務才能打開它看主管驗收狀態。
+            還在待認領（pool）、已撤回（cancelled）的單不在這裡。
+            排序：急件（isUrgent=true）在前，其次未完修（accepted、doing）在已完修（done、closed）之前，
+            同組內依開單時間由舊到新。
+            筆數關係：openCount 等於本陣列中 accepted 與 doing 的筆數，completedToday 等於其中 done 與 closed 的筆數。
+          items:
+            $ref: '#/EngineeringTicket'
+TodayTask:
+  type: object
+  description: >-
+    首頁任務列的一張單。欄位與任務詳情（TaskDetail）共用同一組名稱與值，
+    App 可以直接拿 taskId 呼叫 readTasks 進入任務頁。
+  required:
+  - taskId
+  - roomNo
+  - title
+  - type
+  - state
+  - redoCount
+  - inspectionWaived
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    roomNo:
+      type: string
+    title:
+      type: string
+    type:
+      type: string
+      enum:
+      - cleaning
+      - amenity
+      - repair
+      - other
+    state:
+      type: string
+      enum:
+      - accepted
+      - doing
+      - deferred
+      - interrupted
+      - done
+      - inspected
+      - closed
+      description: >-
+        與 tasks.state 同一套值；本陣列只會出現有負責人且今日有效的這七個值，closed 只有工務單會出現。
+        cancelled 不收錄，還在池中（pool）的單也不在這裡。
+    redoCount:
+      type: integer
+      format: int32
+      description: 被查房退回重做的次數；大於 0 時單卡標示「重做第 N 次」。
+    estMin:
+      type: integer
+      format: int32
+      nullable: true
+      description: 預估分鐘，由排房計畫帶入；沒有預估值時為 null。與 TaskDetail.estMin 同一個值。
+    workedMinutes:
+      type: integer
+      format: int32
+      description: >-
+        已做分鐘，等同 TaskDetail.elapsedMinutes 的口徑：accepted 與 deferred 為 0，
+        doing 為目前累計，interrupted 為中斷前累計，done、inspected 與 closed 為完成時的累計（不含中斷期間）。
+    holdReason:
+      type: string
+      nullable: true
+      description: >-
+        停住原因，與 tasks.holdReason 同一個值。延後（deferred）或中斷（interrupted）時帶本人填的原因
+        或「等工務：<類別>」、「工務已修好：<類別>」；其他狀態為 null。單卡直接顯示這段文字。
+    inspection:
+      type: string
+      nullable: true
+      enum:
+      - passed
+      - waived
+      - failed
+      description: >-
+        查房結果，與 tasks.inspection 同一套值：全部通過 passed、免查結案 waived、查房或抽查退回 failed；
+        還沒有查房結果為 null。
+    inspectionWaived:
+      type: boolean
+      description: 開工當下鎖定的是否免查房，與 tasks.inspectionWaived 同一個值；完成後據此決定要不要顯示等待查房。
+EngineeringTicket:
+  type: object
+  description: >-
+    工務首頁單列的一張工務單。欄位名與 RepairTicketSummary 一致，
+    App 可以直接拿 taskId 呼叫 readRepairTicket 進入工務單詳情，或呼叫 tasksStart／tasksComplete。
+  required:
+  - taskId
+  - isPublicArea
+  - title
+  - state
+  - isUrgent
+  - source
+  properties:
+    ticketNo:
+      type: string
+      nullable: true
+      pattern: ^W-\d{4}$
+      example: W-0412
+      description: >-
+        工務單號。為 null 的情況：type=repair 的任務不保證有對應的 repair_tickets 列
+        （排程規則可以建出沒有工務單的 repair 任務），而 tickets 的筆數必須與
+        openCount＋今天完修數一致，所以這種邊角任務仍然收進清單、單號留空。
+        App 遇到 null 時以房號或標題指認該列，不要據此把它從清單裡濾掉。
+    taskId:
+      type: string
+      format: uuid
+      description: 工務單本身就是一筆修繕任務，這個 id 可以直接用在任務 API 上。
+    workedMinutes:
+      type: integer
+      format: int32
+      minimum: 0
+      nullable: true
+      description: >-
+        這張單已做幾分鐘，口徑同 TaskDetail.elapsedMinutes。工務首頁「維修中」那張主卡右側顯示它。
+        還沒開工的單為 0，取不到時為 null、畫面不顯示計時。
+    roomNo:
+      type: string
+      nullable: true
+      description: 客房單的房號；開給公共區域的單沒有房號，為 null。
+    isPublicArea:
+      type: boolean
+      description: true 表示這張單開給公共區域（沒有房號），此時 roomNo 為 null。
+    title:
+      type: string
+    state:
+      type: string
+      enum:
+      - accepted
+      - doing
+      - done
+      - closed
+      description: >-
+        與 RepairTicketSummary.state 同一套值；本陣列只會出現已接單（accepted）、維修中（doing）、
+        今天已完修等驗收（done）與今天完修且已結案（closed）這四個值。
+    isUrgent:
+      type: boolean
+      description: 目前是否仍視為急件；主管降級後為 false，口徑與 RepairTicketSummary.isUrgent 相同。
+    source:
+      $ref: '#/PoolSource'
+    verificationReturnReason:
+      type: string
+      nullable: true
+      description: >-
+        這張單正處於驗收不通過、退回重修中時，最近一次不通過的原因（RepairTicket.lastVerifyFailedReason），
+        單卡據此標「驗收退回」並把原因當副文。「退回重修中」指 state 為 accepted 或 doing、
+        而且最近一次不通過之後還沒再完修；再完修（done）或結案（closed）後為 null，從沒被退回過也是 null。
+        判定人與時間打開詳情才取。
+NextTask:
+  type: object
+  required:
+  - taskId
+  - roomNo
+  - title
+  - type
+  - redoCount
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    roomNo:
+      type: string
+    title:
+      type: string
+    type:
+      type: string
+      enum:
+      - cleaning
+      - amenity
+      - repair
+      - other
+    redoCount:
+      type: integer
+      format: int32
+PoolCategory:
+  type: string
+  description: 打掃 cleaning、備品 amenity、修繕 repair（工務池）、其他 other。
+  enum:
+  - cleaning
+  - amenity
+  - repair
+  - other
+PoolSource:
+  type: string
+  description: 來源標籤，依序對應：住客掃碼、櫃檯轉單、主管退回、請假退回、班末退池、查房退回、房務報修、系統準備。
+  enum:
+  - guest_scan
+  - desk_forward
+  - manager_requeue
+  - leave_return
+  - shift_end_return
+  - inspection_return
+  - staff_report
+  - system
+PoolItem:
+  type: object
+  required:
+  - taskId
+  - roomNo
+  - floor
+  - title
+  - category
+  - source
+  - urgent
+  - priorityNotify
+  - sameFloor
+  - createdAt
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    ticketNo:
+      type: string
+      nullable: true
+      description: 只有工務單有值，例如 W-0412。
+    roomNo:
+      type: string
+    floor:
+      type: integer
+      format: int32
+    title:
+      type: string
+    category:
+      $ref: '#/PoolCategory'
+    source:
+      $ref: '#/PoolSource'
+    urgent:
+      type: boolean
+    priorityNotify:
+      type: boolean
+    sameFloor:
+      type: boolean
+    reminderStage:
+      type: string
+      nullable: true
+      enum:
+      - staff_reminded
+      - manager_notified
+      description: >-
+        未接提醒已到達的階段；還沒進入提醒階段為 null。排序時依優先序排在最前（彼此間依房號），
+        App 單卡標示為「未接 · 已提醒同仁」或「未接 · 已通知主管」。
+    waitedMinutes:
+      type: integer
+      format: int32
+      minimum: 0
+      description: >-
+        這張單進入待認領池之後已經等了幾分鐘，由後端依回應當下的時間算好。
+        待認領單卡顯示成「等 N 分」標籤。由後端算而不是 App 依 createdAt 自己算，
+        是為了讓等待時間有單一權威口徑、也不必讓畫面跟著裝置時鐘跳動。
+    returnReason:
+      type: string
+      nullable: true
+      description: 退池原因，例如「小陳請假」、「班末退池 · 交給下一班」。
+    handoverNote:
+      type: string
+      nullable: true
+      description: 接手進度交代，例如「浴室已刷完，還沒換床單」。
+    verificationReturnReason:
+      type: string
+      nullable: true
+      description: >-
+        只有工務池的工務單會有值：這張單是被驗收不通過退回工務待認領、還沒再完修時，最近一次不通過的原因
+        （RepairTicket.lastVerifyFailedReason），單卡據此標「驗收退回」並把原因當副文；其他單為 null。
+        工務池的 source 仍依開單路徑換算（staff_report 或 desk_forward），不因驗收退回而改變，分流磚的張數也不變。
+    createdAt:
+      type: string
+      format: date-time
+DeptPool:
+  type: object
+  required:
+  - items
+  - counts
+  - activeStaffCount
+  properties:
+    activeStaffCount:
+      type: integer
+      format: int32
+      minimum: 0
+      description: >-
+        這個部門目前在職、可以搶單的員工數。在職的定義沿用 `specs/truth/features/backend/dsl.md`
+        的狀態對照：帳號啟用（active=true）且已開通；待開通與停用的員工不能搶單，不計入。
+        主管與老闆的部門為 null，本來就不屬於任何部門池，同樣不計入。
+        用途是讓畫面分辨兩種都「沒有單可以接」的情況：
+        activeStaffCount 大於 0 而 items 是空的＝池是空的（單都被接走了）；
+        activeStaffCount 等於 0＝這個部門沒有在職員工，沒有人可以搶單，畫面要提示主管補人而不是提示「都接完了」。
+    items:
+      type: array
+      items:
+        $ref: '#/PoolItem'
+    counts:
+      type: object
+      required:
+      - all
+      properties:
+        all:
+          type: integer
+          format: int32
+        cleaning:
+          type: integer
+          format: int32
+        amenity:
+          type: integer
+          format: int32
+        repair:
+          type: integer
+          format: int32
+        other:
+          type: integer
+          format: int32
+        urgent:
+          type: integer
+          format: int32
+          description: >-
+            急件張數。只有工務池（dept=engineering）有值，房務池為 null 或缺席。
+            工務待認領的分流磚就是依急件與來源分格，不是依房務的任務類別分格。
+        staffReport:
+          type: integer
+          format: int32
+          description: 來源是房務報修（PoolSource 的 staff_report）的張數；同上，只有工務池有值。
+        deskForward:
+          type: integer
+          format: int32
+          description: 來源是櫃檯交辦（PoolSource 的 desk_forward）的張數；同上，只有工務池有值。

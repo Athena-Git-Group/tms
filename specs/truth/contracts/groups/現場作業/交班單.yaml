@@ -1,0 +1,67 @@
+listHandovers:
+  get:
+    operationId: listHandovers
+    summary: list handovers
+    tags:
+    - 交班單 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/交班單.yaml#/handovers'
+readHandovers:
+  get:
+    operationId: readHandovers
+    summary: read handovers
+    tags:
+    - 交班單 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/交班單.yaml#/handovers'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+handoversSign:
+  post:
+    operationId: handoversSign
+    summary: sign
+    tags:
+    - 交班單 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/交班單.yaml#/handoversRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/交班單.yaml#/handovers'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

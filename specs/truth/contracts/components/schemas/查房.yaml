@@ -1,0 +1,164 @@
+inspections:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    taskId:
+      type: string
+      format: uuid
+    inspectorId:
+      type: string
+      format: uuid
+      description: 查房者。飯店把「允許主管查自己清的房」（self_inspection_allowed）設為 false 時，查房者不能是原清房者，送出回 403；未設定或為 true 時可以是原清房者。
+    result:
+      type: string
+      description: 'CHECK: passed|failed'
+    items:
+      type: string
+      description: '[{key, pass}]；鍵集=租戶查房項目全集（缺項 422）'
+    createdAt:
+      type: string
+      format: date-time
+  description: 查房記錄（history，一次查房一列；退回重查會有多列）。
+  required:
+  - id
+  - tenantId
+  - taskId
+  - inspectorId
+  - result
+  - items
+  - createdAt
+InspectionItemJudgement:
+  type: object
+  description: 一個查房項目的判定。key 是 sop_items.item_key，pass 為 true 通過、false 不通過；沒有備註欄。
+  required:
+  - key
+  - pass
+  properties:
+    key:
+      type: string
+    pass:
+      type: boolean
+CreateInspectionRequest:
+  type: object
+  description: >-
+    createInspections 的請求。只帶任務 id 與逐項判定；租戶與查房者由登入權杖推導，通過或退回由後端依 items 算，
+    請求不接受 tenantId、inspectorId 與 result。items 的鍵集必須等於飯店目前啟用的查房項目全集，缺項或多項都回
+    422 inspection_items_mismatch；飯店沒有任何啟用項目時送空陣列。
+  required:
+  - taskId
+  - items
+  properties:
+    taskId:
+      type: string
+      format: uuid
+      description: 要查的打掃單，必須停在 done（待查房）。
+    items:
+      type: array
+      minItems: 0
+      description: 每個啟用的查房項目一筆，鍵不得重複。
+      items:
+        $ref: '#/InspectionItemJudgement'
+InspectionOutcome:
+  type: object
+  description: >-
+    createInspections 的回應：這次查房的結果與單的去向，供結果畫面三種說法使用。
+    result 與 destination 一起看：passed 時 destination 一定是 closed；failed 時是 cleaner（回到原清房者名下）
+    或 pool（原清房者已下班或請假，回到房務待認領）。退回的原因就是 failedItems，沒有另外的備註。
+  required:
+  - inspectionId
+  - taskId
+  - roomNo
+  - result
+  - destination
+  - failedItems
+  - createdAt
+  properties:
+    inspectionId:
+      type: string
+      format: uuid
+      description: 這次查房紀錄的 id（inspections 一列）。
+    taskId:
+      type: string
+      format: uuid
+    roomNo:
+      type: string
+    result:
+      type: string
+      enum:
+      - passed
+      - failed
+      description: 全部通過為 passed，任一項不通過為 failed。
+    destination:
+      type: string
+      enum:
+      - closed
+      - cleaner
+      - pool
+      description: >-
+        單的去向。closed：已結案（任務 inspected）。cleaner：退回原清房者名下重做（任務 accepted、負責人不變）。
+        pool：原清房者已下班或請假，依既有換人規則退回房務待認領（任務 pool）。
+    cleanerName:
+      type: string
+      nullable: true
+      description: 原清房者顯示名稱，供結果畫面「回到小美名下」「小美會收到通知」「小美已下班」三種說法使用。
+    failedItems:
+      type: array
+      description: 被判不通過的項目，依飯店設定的排序；passed 時為空陣列。
+      items:
+        type: object
+        required:
+        - key
+        - label
+        properties:
+          key:
+            type: string
+          label:
+            type: string
+            description: 項目顯示名稱，例如「浴室無水痕」。
+    createdAt:
+      type: string
+      format: date-time
+SpotCheckRequest:
+  type: object
+  required:
+  - taskId
+  - items
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    items:
+      type: array
+      minItems: 1
+      description: 抽查判定的項目；不需要涵蓋查房項目全集。
+      items:
+        type: object
+        required:
+        - key
+        - pass
+        properties:
+          key:
+            type: string
+          pass:
+            type: boolean
+PassRate:
+  type: object
+  required:
+  - passed
+  - failed
+  properties:
+    passed:
+      type: integer
+      format: int32
+    failed:
+      type: integer
+      format: int32
+    rate:
+      type: number
+      nullable: true
+      description: passed /（passed + failed）；分母為 0 時為 null。

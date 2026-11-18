@@ -1,0 +1,36 @@
+listRooms:
+  get:
+    operationId: listRooms
+    summary: list rooms
+    tags:
+    - 房間 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/房間.yaml#/rooms'
+readRooms:
+  get:
+    operationId: readRooms
+    summary: read rooms
+    tags:
+    - 房間 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間.yaml#/rooms'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'

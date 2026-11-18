@@ -1,0 +1,179 @@
+listStaffAccounts:
+  get:
+    operationId: listStaffAccounts
+    summary: list staff_accounts
+    tags:
+    - 員工帳號與登入 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/員工帳號與登入.yaml#/staff_accounts'
+readPublicHotel:
+  get:
+    operationId: readPublicHotel
+    summary: 登入前查飯店名稱
+    description: >-
+      不需要登入、不帶任何憑證就能呼叫。櫃檯 Web 的登入頁用網址上的飯店識別代碼（tenants.code）查這家飯店的名稱，顯示在登入頁上。
+      只回飯店名稱一項，不回其他任何資料。代碼對不到飯店（含格式不對、大小寫不符、拿飯店主檔的內部編號來查）一律回 404，不區分原因。
+      登入之後，畫面上的飯店名稱以登入回應的 hotelName 為準。
+    tags:
+    - 員工帳號與登入 API
+    security: []
+    parameters:
+    - $ref: '../../components/parameters.yaml#/HotelCode'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/PublicHotel'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+    x-realtime-note: 不需要即時同步；登入頁載入時讀一次。
+staffAccountsLogin:
+  post:
+    operationId: staffAccountsLogin
+    summary: 員工登入
+    description: >-
+      用員工編號（loginId）＋明文密碼登入，後端雜湊比對 staff_accounts.passwordHash，換發 JWT（TTL 12h）。
+      密碼錯誤或員工編號不存在一律回 401 credentials_invalid，提示「員工編號或密碼不正確」，不洩漏員工編號是否存在。
+      連續輸入錯誤密碼達 5 次鎖定 15 分鐘，鎖定期間即使密碼正確也回 429 account_locked
+      （context 帶 lockedUntil、remainingMinutes）。帳號停用（active=false）一律回 403 account_disabled，
+      即使密碼正確也不放行，歷史資料保留。臨時密碼登入成功仍回 200，body 的 mustChangePassword=true，
+      完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
+      員工 App 與櫃檯 Web 都用這一個端點登入；六種角色（含 duty_manager）都能登入。
+      回應帶員工編號（loginId）與飯店名稱（hotelName），不必另外查。
+      飯店是彼此隔離的單位，帳號以飯店加員工編號識別，不同飯店可以有相同員工編號。
+      請求帶 hotelCode 時只在那家飯店找帳號，下面停用、鎖定、密碼、角色的規則都只作用在那家的帳號，別家相同員工編號的帳號不受影響；
+      代碼格式不對、對不到飯店或那家沒有這個員工編號，一律回 401 credentials_invalid，與密碼錯誤相同，不洩漏飯店是否存在。
+      櫃檯 Web 一律帶網址上的飯店代碼；員工 App 目前不帶，不帶時逐家找有這個員工編號的帳號、登入密碼對得上的那一家（規則見 LoginRequest.hotelCode）。
+      櫃檯 Web 登入時請求帶 client=frontdesk_web，後端多做一步角色檢查，順序在停用、鎖定、密碼比對之後：
+      角色是 frontdesk、manager、duty_manager 的照常登入。
+      角色是 housekeeping、engineering、owner，而且密碼不是臨時密碼的，回 401 credentials_invalid，
+      狀態碼、code、message 與密碼錯誤完全相同，看不出帳號密碼其實是對的；這一次不發憑證，
+      連續輸入錯誤的次數不增加、也不清零，鎖定狀態不變。不增加的理由：client 只是讓櫃檯 Web 擋下不該進來的角色，
+      不是安全邊界（同一組員工編號與密碼不帶 client 就登得進去），不值得為了讓人看不出來而把同仁在員工 App 的帳號鎖住。
+      角色是這三種、但密碼是臨時密碼的，登入成功回 200，mustChangePassword=true 並帶 role：
+      櫃檯 Web 先帶他去設定新密碼，改完後依回應的 role 告知這個帳號不能使用櫃檯畫面，並丟掉憑證。
+      請求不帶 client 時不做這一步，不看角色。
+      這一步由後端把關而不只靠畫面，是因為只靠畫面時回應本身就說出了「密碼是對的」；
+      櫃檯看板與派單 API 另外各自檢查角色，拿到憑證的其他角色一樣進不去。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/LoginRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/LoginResponse'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '429':
+        $ref: '../../components/responses.yaml#/TooManyRequests'
+changeOwnPassword:
+  post:
+    operationId: changeOwnPassword
+    summary: 設定新密碼
+    description: >-
+      本人變更自己的密碼：後端重新雜湊 newPassword 寫入 staff_accounts.passwordHash，
+      清掉 must_change_password 旗標，並換發一組新的 JWT（TTL 12h）回傳，
+      App 直接拿換發的 token 進首頁，不必再跑一次登入。
+      這條端點在 mustChangePassword=true 時一定要能用——臨時密碼登入後其他需要身分的業務端點一律被拒（403），
+      但這條是完成改密的唯一合法路徑，必須放行，否則員工會卡死在改密畫面。
+      強制改密情境（mustChangePassword=true）身分已由登入換得的 token 證明，不需要帶 currentPassword；
+      自願變更情境必須帶，省略或空白回 422 current_password_required，比對不符回 401 current_password_invalid。
+      新密碼必須至少 8 碼、含英文字母、含數字，不符合回 422 new_password_too_weak
+      （context.failedRules 列出沒過的規則）；與目前密碼相同回 422 new_password_invalid。
+      這組規則跟著帳號走，員工 App 與櫃檯 Web 改密碼都適用，只在改密碼當下檢查，既有的密碼不受影響。
+      六種角色（含 duty_manager）都能呼叫。
+      改密成功後舊 token 立即失效，其他裝置上的既有登入要重新登入。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/ChangePasswordRequest'
+    responses:
+      '200':
+        description: 成功。形狀與登入相同，帶換發的 token，且 mustChangePassword 必為 false。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/員工帳號與登入.yaml#/LoginResponse'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+registerPushTokenAndRevokePushToken:
+  put:
+    operationId: registerPushToken
+    summary: 登記本人這台手機的推播地址
+    description: >-
+      App 向 FCM 取得推播地址（token）後回報給後端，之後 outbox 的推播事件由推播消費者送到這台手機。
+      身分取自登入憑證，請求不帶員工 id。以 deviceFingerprint 認「哪一台手機」：同一台重複登記只更新
+      pushToken 與 platform、並清掉 revoked_at，不新增列（staff_devices 一台手機一列）。
+      地址會因為 App 重裝、FCM 輪替而變，App 每次啟動與 token 更新時都應呼叫一次，
+      登出時呼叫 DELETE 解除。缺 deviceFingerprint、pushToken 或 platform，或 platform 不是 ios／android，回 422。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/PushTokenRegisterRequest'
+    responses:
+      '204':
+        description: 已登記
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+  delete:
+    operationId: revokePushToken
+    summary: 解除本人這台手機的推播
+    description: >-
+      App 登出時呼叫：把 staff_devices 該列的 revoked_at 標上，之後的推播不再送這台手機。
+      只標記不刪列，之後同一台重新登入再 PUT 一次即恢復。沒有這台手機的登記也回 204。
+    tags:
+    - 員工帳號與登入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/員工帳號與登入.yaml#/PushTokenRevokeRequest'
+    responses:
+      '204':
+        description: 已解除
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'

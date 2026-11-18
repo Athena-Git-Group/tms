@@ -1,0 +1,81 @@
+TaskId:
+  name: id
+  in: path
+  required: true
+  description: 任務 id。工務單也是任務，可以用同一個 id。
+  schema:
+    type: string
+    format: uuid
+IdempotencyKey:
+  name: Idempotency-Key
+  in: header
+  required: true
+  description: 冪等鍵。同一個鍵重送時回放第一次的回應（processed_ops），不重複寫入。
+  schema:
+    type: string
+PhotoId:
+  name: photoId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+RepairTicketId:
+  name: ticketId
+  in: path
+  required: true
+  description: 工務單的任務 id（不是 W- 單號）。
+  schema:
+    type: string
+    format: uuid
+AnswerId:
+  name: answerId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+EscalationId:
+  name: escalationId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+GuestSession:
+  name: X-Guest-Session
+  in: header
+  required: true
+  description: guestSessionsScan 回傳的 sessionToken。驗證條件為 expires_at > now() 而且 revoked_at 為空，缺一就回 401（基線 E-17）。
+  schema:
+    type: string
+GuestRequestId:
+  name: id
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+NotificationId:
+  name: id
+  in: path
+  required: true
+  description: 通知中心單筆通知 id。
+  schema:
+    type: string
+    format: uuid
+HotelCode:
+  name: hotelCode
+  in: path
+  required: true
+  description: >-
+    飯店的識別代碼（tenants.code）：每家飯店一個、全系統唯一、對外公開，例如 athena。不是飯店主檔的內部編號。
+    長度 3–32，只能用小寫英文字母、數字與連字號，第一個字必須是英文字母，不以連字號結尾、不連用兩個連字號。
+    比對時要一字不差、分大小寫；帶大寫或其他不合格式的寫法一律當作查不到。
+    代碼開設飯店時定下、之後不改。代碼怎麼放進櫃檯 Web 的網址（路徑或子網域）由前端與部署決定，契約不規定。
+  schema:
+    type: string
+    minLength: 3
+    maxLength: 32
+    pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+  example: athena

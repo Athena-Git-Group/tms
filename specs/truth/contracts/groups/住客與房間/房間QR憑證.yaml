@@ -1,0 +1,67 @@
+listRoomQrTokens:
+  get:
+    operationId: listRoomQrTokens
+    summary: list room_qr_tokens
+    tags:
+    - 房間 QR 憑證 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/房間QR憑證.yaml#/room_qr_tokens'
+readRoomQrTokens:
+  get:
+    operationId: readRoomQrTokens
+    summary: read room_qr_tokens
+    tags:
+    - 房間 QR 憑證 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間QR憑證.yaml#/room_qr_tokens'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+roomQrTokensRotate:
+  post:
+    operationId: roomQrTokensRotate
+    summary: rotate
+    tags:
+    - 房間 QR 憑證 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/房間QR憑證.yaml#/room_qr_tokensRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/房間QR憑證.yaml#/room_qr_tokens'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

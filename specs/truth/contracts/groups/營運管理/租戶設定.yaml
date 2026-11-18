@@ -1,0 +1,61 @@
+listTenantConfig:
+  get:
+    operationId: listTenantConfig
+    summary: list tenant_config
+    tags:
+    - 租戶設定 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/租戶設定.yaml#/tenant_config'
+updateTenantConfig:
+  put:
+    operationId: updateTenantConfig
+    summary: update tenant_config
+    tags:
+    - 租戶設定 API
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/租戶設定.yaml#/tenant_configRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/租戶設定.yaml#/tenant_config'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+tenantConfigGuestHome:
+  get:
+    operationId: tenantConfigGuestHome
+    summary: guest home
+    tags:
+    - 租戶設定 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/租戶設定.yaml#/tenant_config'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

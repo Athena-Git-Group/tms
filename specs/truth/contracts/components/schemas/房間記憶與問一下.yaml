@@ -1,0 +1,181 @@
+room_memory:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    roomId:
+      type: string
+      format: uuid
+    kind:
+      type: string
+      description: 'CHECK: repair|preference|incident'
+    summary:
+      type: string
+      description: 可能含住客線索——去識別化範圍
+    sourceTaskId:
+      type: string
+      format: uuid
+      description: 追溯來源任務
+    occurredAt:
+      type: string
+      format: date-time
+  description: 投影（可重算）：這間房的往事，餵「問一下」。
+  required:
+  - id
+  - tenantId
+  - roomId
+  - kind
+  - summary
+  - occurredAt
+room_memoryRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    roomId:
+      type: string
+      format: uuid
+    kind:
+      type: string
+      description: 'CHECK: repair|preference|incident'
+    summary:
+      type: string
+      description: 可能含住客線索——去識別化範圍
+    sourceTaskId:
+      type: string
+      format: uuid
+      description: 追溯來源任務
+    occurredAt:
+      type: string
+      format: date-time
+  required:
+  - tenantId
+  - roomId
+  - kind
+  - summary
+  - occurredAt
+KbAskRequest:
+  type: object
+  required:
+  - taskId
+  - question
+  properties:
+    taskId:
+      type: string
+      format: uuid
+    question:
+      type: string
+      minLength: 1
+KbSource:
+  type: object
+  required:
+  - kind
+  - title
+  - excerpt
+  - updatedOn
+  properties:
+    kind:
+      type: string
+      enum:
+      - sop
+      - room_memory
+    title:
+      type: string
+      description: 例如「工務單 · 冷氣」、「補齊迎賓備品 · VIP 加項」。
+    excerpt:
+      type: string
+      description: 原文摘要，不含住客身分。
+    updatedOn:
+      type: string
+      format: date
+KbAnswer:
+  type: object
+  required:
+  - answerId
+  - found
+  - sources
+  properties:
+    answerId:
+      type: string
+      format: uuid
+      description: 稽核紀錄 id，用於回饋與轉問主管。
+    found:
+      type: boolean
+    answer:
+      type: string
+      nullable: true
+      description: found=false 時為 null。
+    notFoundMessage:
+      type: string
+      nullable: true
+      description: found=false 時的訊息，例如「查不到 308 的相關記錄」。
+    sources:
+      type: array
+      items:
+        $ref: '#/KbSource'
+KbSuggestion:
+  type: object
+  required:
+  - question
+  - scope
+  properties:
+    question:
+      type: string
+    scope:
+      type: string
+      description: 例如「SOP · 您剛剛跳過這項」、「房間記錄」。
+KbFeedbackRequest:
+  type: object
+  required:
+  - helpful
+  properties:
+    helpful:
+      type: boolean
+KbEscalation:
+  type: object
+  required:
+  - id
+  - answerId
+  - question
+  - askedBy
+  - status
+  properties:
+    id:
+      type: string
+      format: uuid
+    answerId:
+      type: string
+      format: uuid
+    question:
+      type: string
+    taskId:
+      type: string
+      format: uuid
+    askedBy:
+      type: string
+      format: uuid
+    status:
+      type: string
+      enum:
+      - pending
+      - answered
+    reply:
+      type: string
+      nullable: true
+    repliedBy:
+      type: string
+      format: uuid
+      nullable: true
+KbReplyRequest:
+  type: object
+  required:
+  - reply
+  properties:
+    reply:
+      type: string
+      minLength: 1

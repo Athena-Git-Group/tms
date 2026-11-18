@@ -1,0 +1,34 @@
+sop_items:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    appliesTo:
+      type: string
+      description: 'CHECK: cleaning|inspection——SOP 項目與查房項目同構共表'
+    itemKey:
+      type: string
+    label:
+      type: string
+    sortOrder:
+      type: integer
+      format: int32
+    active:
+      type: boolean
+    createdAt:
+      type: string
+      format: date-time
+  description: 每家飯店自設的 SOP/查房項目（reference）。/admin/settings 的 sop_items/inspection_items 鍵為本表門面。
+  required:
+  - id
+  - tenantId
+  - appliesTo
+  - itemKey
+  - label
+  - sortOrder
+  - active
+  - createdAt

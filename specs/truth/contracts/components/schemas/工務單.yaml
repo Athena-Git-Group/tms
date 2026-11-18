@@ -1,0 +1,361 @@
+RepairCategory:
+  type: string
+  description: 冷氣、水電、家具／設備、門鎖、其他。
+  enum:
+  - air_conditioning
+  - plumbing_electrical
+  - furniture_equipment
+  - door_lock
+  - other
+CreateRepairPhotoRequest:
+  type: object
+  required:
+  - purpose
+  - takenAt
+  properties:
+    purpose:
+      type: string
+      enum:
+      - report
+      - completion
+      description: report 是報修照片；completion 是完修照片。
+    roomId:
+      type: string
+      format: uuid
+    takenAt:
+      type: string
+      format: date-time
+      description: 拍攝時間。從相簿選取的照片用檔案時間；這個值和 App 加上的浮水印一致。
+RepairPhoto:
+  type: object
+  required:
+  - id
+  - status
+  properties:
+    id:
+      type: string
+      format: uuid
+    status:
+      type: string
+      enum:
+      - pending
+      - uploaded
+    takenAt:
+      type: string
+      format: date-time
+RepairTicketPrecheckRequest:
+  type: object
+  required:
+  - sourceTaskId
+  - category
+  properties:
+    sourceTaskId:
+      type: string
+      format: uuid
+    category:
+      $ref: '#/RepairCategory'
+UrgentJudgement:
+  type: object
+  description: >-
+    系統依飯店設定規則判定急件的結果（例如 VIP 或今日入住）。房務不能更改這個判定，只能由主管事後降級。
+    suggested=false 時 rule 為 null；沒有命中任何規則時判定為一般件。
+  required:
+  - suggested
+  properties:
+    suggested:
+      type: boolean
+      description: true 表示系統判定為急件。
+    rule:
+      type: string
+      nullable: true
+      description: 命中的判定規則說明，例如「VIP · 15:00 入住」；判定為一般件時為 null。
+RepairTicketPrecheckResponse:
+  type: object
+  required:
+  - urgentJudgement
+  properties:
+    duplicate:
+      type: object
+      allOf:
+      - $ref: './shared.yaml#/RepairTicketSummary'
+      nullable: true
+      description: 同房、同類別、未結案的工務單；沒有時為 null。
+    urgentJudgement:
+      $ref: '#/UrgentJudgement'
+CreateRepairTicketRequest:
+  type: object
+  description: >-
+    不接受急件欄位：急件由系統依飯店設定規則判定（UrgentJudgement），房務不能在開單時指定或更改。
+    三種開單路徑擇一：①房務從自己未取消的任務開單，帶 sourceTaskId，房號由原任務帶入；
+    ②工務不經過任何房務任務直接開單，或櫃檯交辦開單，sourceTaskId 留空，改帶 roomId 或 isPublicArea=true
+    （兩者擇一，不可同時帶 sourceTaskId 與 roomId／isPublicArea，否則回 422 repair_source_conflict；
+    三者都沒帶回 422 repair_source_missing）。呼叫者部門決定 tasks.source：房務報修與工務自開都是 staff，
+    櫃檯交辦是 desk。
+  required:
+  - category
+  - photoIds
+  properties:
+    sourceTaskId:
+      type: string
+      format: uuid
+      nullable: true
+      description: 原任務。提供時房號由原任務帶入；與 roomId／isPublicArea 互斥。
+    roomId:
+      type: string
+      format: uuid
+      nullable: true
+      description: 工務自開或櫃檯交辦時指定客房；與 sourceTaskId、isPublicArea 互斥。
+    isPublicArea:
+      type: boolean
+      description: true 表示開給公共區域（無房號），省略視為 false；與 sourceTaskId、roomId 互斥。
+    category:
+      $ref: '#/RepairCategory'
+    description:
+      type: string
+    photoIds:
+      type: array
+      minItems: 1
+      maxItems: 3
+      items:
+        type: string
+        format: uuid
+      description: 0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；有任一張還沒上傳回 422 photo_not_uploaded。
+    interruptSourceTask:
+      type: boolean
+      description: true 表示「中斷 → 需要工務協助」模式；只有帶 sourceTaskId 時才有意義，省略視為 false。
+    assigneeId:
+      type: string
+      format: uuid
+      nullable: true
+      description: >-
+        只用於工務自開或櫃檯交辦路徑：直接指定處理人，略過工務待認領，單直接轉為 accepted 給該人。
+        房務報修路徑（帶 sourceTaskId）不支援這個欄位。
+AppendRepairPhotosRequest:
+  type: object
+  required:
+  - photoIds
+  properties:
+    photoIds:
+      type: array
+      minItems: 1
+      maxItems: 3
+      items:
+        type: string
+        format: uuid
+RepairTicket:
+  description: >-
+    工務單詳情。工務單本身就是一筆修繕任務，taskId 可以直接用在 tasksClaim、tasksStart、tasksComplete、verifyRepairTicket。
+    畫面上的驗收狀態由 state 加三組欄位組成：state=done 是已完修、等主管驗收；state=closed 是已結案，
+    resolutionType=no_action_needed 表示以「不需處理」完修直接結案（verifiedBy 為 null），其他完修結果表示驗收通過結案
+    （verifiedBy／verifiedAt 有值）；state 為 accepted 或 pool 且 lastVerifyFailedAt 有值，而完修時間為 null，
+    表示驗收不通過、退回重修中。
+  allOf:
+  - $ref: './shared.yaml#/RepairTicketSummary'
+  - type: object
+    required:
+    - photoCount
+    - urgentJudgement
+    - origin
+    - viewerIsAssignee
+    properties:
+      description:
+        type: string
+        nullable: true
+        description: 報修說明，報修人沒填為 null；定期保養單是保養說明。
+      photos:
+        type: array
+        items:
+          $ref: '#/RepairPhoto'
+      photoCount:
+        type: integer
+        format: int32
+      sourceTaskId:
+        type: string
+        format: uuid
+        nullable: true
+      assigneeName:
+        type: string
+        nullable: true
+        description: >-
+          處理人（也是完修人）顯示名稱。驗收不通過退回工務待認領時處理人清空，這裡為 null，
+          原處理人只留在任務事件與驗收回應（RepairVerificationOutcome.assigneeName）。
+      viewerIsAssignee:
+        type: boolean
+        description: >-
+          目前登入者是不是這張單的處理人。主管打開自己名下的工務單時為 true，App 在主管動作之外同時給處理人的動作；
+          由後端比對而不是讓 App 拿顯示名稱比對，因為顯示名稱可能重名。
+      completionPhotos:
+        type: array
+        description: >-
+          這一輪完修附的照片。單被驗收不通過退回過時，只回最近一次不通過之後上傳的完修照片
+          （上傳時間晚於 lastVerifyFailedAt）；退回重修中、還沒再完修時為空陣列。
+          上一輪的完修照片不對外提供，畫面不顯示「上一次完修」區段。
+        items:
+          $ref: '#/RepairPhoto'
+      resolutionNote:
+        type: string
+        nullable: true
+        description: >-
+          工務的處理說明，例如「更換四顆三號電池，刷卡測試三次正常」，選填，四種完修結果都一樣。
+          尚未完修、沒填，或驗收不通過退回重修中（退回時清空）為 null；再完修時寫這一次的說明。
+      resolutionType:
+        type: string
+        nullable: true
+        enum:
+        - fixed
+        - temporary
+        - cannot_fix
+        - no_action_needed
+        description: >-
+          完修結果四選一，與 CompleteTaskRequest.resolutionType 同一套值：fixed 已修好、temporary 暫時處理
+          （系統已另建追蹤單）、cannot_fix 無法修復（該房 hk_state 已轉 out_of_order）、no_action_needed 不需處理
+          （沒有完修照片、不建追蹤單、不改房況，完成當下直接結案）。來源 repair_tickets.resolution_type。
+          state 為 done 或 closed 時有值（完修時同交易寫入，省略送出的寫 fixed）；其他狀態為 null，
+          包含驗收不通過退回重修中（退回時清空，再完修時寫這一次的結果）。這個欄位出現之前就完修的舊單也可能為 null。
+          state=closed 時，App 依它分辨「不需處理結案」與「驗收通過結案」。
+      doneAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: >-
+          最近一次完修的時間（tasks.done_at），也是待驗收清單的排序鍵。尚未完修為 null；
+          驗收不通過時清空，再完修時重寫；驗收通過與不需處理結案後保留。
+      origin:
+        type: string
+        enum:
+        - reported
+        - scheduled
+        description: >-
+          來源：reported 是有人報修（房務報修、工務自開、櫃檯交辦三條路徑都算），scheduled 是每日排程建出的定期保養。
+          定期保養直接進工務待認領，完修後一樣要驗收，待驗收清單要能看出它是保養單。
+      urgentJudgement:
+        allOf:
+        - $ref: '#/UrgentJudgement'
+        description: >-
+          開單當下系統判定的原始結果與理由；主管降級後這筆紀錄仍保留（追溯用），目前是否仍視為急件看 isUrgent。
+      urgentDowngradeReason:
+        type: string
+        nullable: true
+        description: 主管將急件降級為一般件時附的原因；未降級為 null。
+      verifiedBy:
+        type: string
+        nullable: true
+        description: >-
+          驗收通過的主管顯示名稱（repair_tickets.verified_by JOIN staff_accounts），只記通過的那一次，房務主管或工務主管都可能；
+          尚未驗收通過，或以不需處理結案時為 null。三種視角的狀態列「已結案 · <主管> 驗收」都顯示它。
+      verifiedAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: 主管驗收通過的時間，與 verifiedBy 同時有值或同時為 null。
+      lastVerifyFailedReason:
+        type: string
+        nullable: true
+        description: >-
+          最近一次驗收不通過的原因（repair_tickets.last_verify_failed_reason），例如「刷卡仍偶爾無反應」。
+          沒有被判過不通過時為 null。每次不通過覆寫；重修、再完修、驗收通過結案後都保留，
+          讓詳情能說明這張單曾被退回過。與 lastVerifyFailedBy、lastVerifyFailedAt 同時有值或同時為 null。
+      lastVerifyFailedBy:
+        type: string
+        nullable: true
+        description: 最近一次判不通過的主管顯示名稱（repair_tickets.last_verify_failed_by JOIN staff_accounts）。
+      lastVerifyFailedAt:
+        type: string
+        format: date-time
+        nullable: true
+        description: 最近一次判不通過的時間（repair_tickets.last_verify_failed_at），也是完修照片分輪次的界線。
+      originTicketNo:
+        type: string
+        pattern: ^W-\d{4}$
+        nullable: true
+        description: >-
+          若本單是完修回報「暫時處理」時系統自動建立的追蹤單，這裡是原單的單號；非追蹤單為 null。
+DowngradeRepairTicketUrgencyRequest:
+  type: object
+  required:
+  - note
+  properties:
+    note:
+      type: string
+      minLength: 1
+      description: 降級原因，必填，例如「已確認不影響入住」。
+VerifyRepairTicketRequest:
+  type: object
+  description: 主管對一張已完修（done）工務單的驗收結果。通過不必填任何內容；不通過必須附原因。
+  required:
+  - result
+  properties:
+    result:
+      type: string
+      enum:
+      - passed
+      - failed
+      description: passed 驗收通過（單結案）；failed 驗收不通過（單退回工務重修）。
+    reason:
+      type: string
+      nullable: true
+      description: >-
+        不通過的原因，例如「刷卡仍偶爾無反應」。result=failed 時必填，去掉頭尾空白後為空回 422 verification_reason_required；
+        result=passed 時不收，帶了也不寫入。
+RepairVerificationOutcome:
+  type: object
+  description: >-
+    verifyRepairTicket 的回應：這次驗收的結果與單的去處，供驗收結果畫面使用。
+    result 與 destination 一起看：passed 時 destination 一定是 closed；failed 時是 assignee（回到原處理人名下待開始，
+    原處理人收到推播）或 pool（原處理人接不了，回到工務待認領）。去處由後端依換人判定算出，App 不自己看班表。
+  required:
+  - taskId
+  - ticketNo
+  - isPublicArea
+  - result
+  - destination
+  - decidedBy
+  - decidedAt
+  properties:
+    taskId:
+      type: string
+      format: uuid
+      description: 工務單的任務 id，與 readRepairTicket 的路徑參數同一個值。
+    ticketNo:
+      type: string
+      pattern: ^W-\d{4}$
+      example: W-0108
+    roomNo:
+      type: string
+      nullable: true
+      description: 房號；公共區域的單為 null，此時 isPublicArea 為 true。
+    isPublicArea:
+      type: boolean
+    result:
+      type: string
+      enum:
+      - passed
+      - failed
+      description: 這次的結果，與請求的 result 相同。
+    destination:
+      type: string
+      enum:
+      - closed
+      - assignee
+      - pool
+      description: >-
+        單的去處。closed：已結案（任務 closed）。assignee：退回原處理人名下待開始（任務 accepted、處理人不變）。
+        pool：原處理人請假或已下班，退回工務待認領（任務 pool、處理人清空）。
+        assignee 與 pool 和任務事件 repair_verification_failed 的 payload.destination 同一套值。
+    assigneeName:
+      type: string
+      nullable: true
+      description: >-
+        原處理人（完修人）顯示名稱，供結果畫面「回到阿強名下」「阿強會收到通知」「阿強已下班，單回到工務待認領」使用；
+        destination=pool 時也帶，因為那時工務單本身的處理人已清空。
+    reason:
+      type: string
+      nullable: true
+      description: 不通過的原因（去掉頭尾空白後的值）；passed 時為 null。
+    decidedBy:
+      type: string
+      description: 這次驗收的主管顯示名稱。passed 時等於 RepairTicket.verifiedBy，failed 時等於 RepairTicket.lastVerifyFailedBy。
+    decidedAt:
+      type: string
+      format: date-time
+      description: 這次驗收的時間。passed 時等於 RepairTicket.verifiedAt，failed 時等於 RepairTicket.lastVerifyFailedAt。

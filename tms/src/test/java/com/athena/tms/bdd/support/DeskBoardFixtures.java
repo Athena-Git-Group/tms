@@ -1,0 +1,553 @@
+package com.athena.tms.bdd.support;
+
+import com.athena.tms.common.TenantContext;
+import com.athena.tms.dto.Actor;
+import com.athena.tms.dto.TaskCreateCommand;
+import com.athena.tms.service.TaskEngine;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import tools.jackson.databind.ObjectMapper;
+
+/**
+ * 櫃檯看板的測試資料：照「現況」建出一張單，並讓它的任務列與事件歷程和產品真的走過那條路時一樣。
+ *
+ * <p>看板與詳情讀的不只是 {@code tasks.state}：到手方式看最近一筆到手事件的種類與操作者，
+ * 等待起算看建立與退回待認領事件的時間，看板範圍看 {@code ended_at}，單號看 {@code task_no}。
+ * 所以每張單都盡量經由 {@link TaskEngine} 的狀態轉移建立，事件的種類、順序與內容才會和線上一致；
+ * 產品還沒有入口的轉移（主管從待認領指派、當場回答寫進 {@code answer}）才照資料模型直接寫。
+ * 只改 {@code tasks.state} 的捷徑會讓看板把單算對、歷程卻是空的，詳情與到手方式的檢查就失去意義。
+ *
+ * <p>所有事件都先以現在的時鐘寫入，最後再整批改成表格指定的時間：最後一筆事件落在指定時間，
+ * 之前的每一筆往前各錯開一分鐘。任務列上由事件推得的時間欄位（建立、開始、完成、結束）一併改成對應事件的時間。
+ *
+ * <p>建單取號與寫入結束時間在產品裡尚未完成，這裡照資料模型自己補上；
+ * 產品補上之後，單號沿用產品取到的那一號，結束時間仍以表格指定的時間為準。
+ */
+public class DeskBoardFixtures {
+
+    /** 走到這些現況就算結束，要寫 {@code ended_at}。待查房與已完修還在等查房或驗收，不算。 */
+    private static final Set<String> ENDED_SITUATIONS = Set.of(
+            "已送達", "查房通過", "已當場回答", "已取消（主管取消）", "已取消（住客收回）");
+
+    private static final Pattern TASK_NO = Pattern.compile("^T-(\\d{4,})$");
+
+    /** 已當場回答的單在表格裡沒有寫回覆內容，用這段固定的文字代表櫃檯回給住客的話。 */
+    private static final String DEFAULT_ANSWER = "櫃檯已當場回覆";
+
+    private final TaskEngine engine;
+    private final JdbcClient jdbcClient;
+    private final TenantFixtures tenantFixtures;
+    private final RoomFixtures roomFixtures;
+    private final DeskApi deskApi;
+    private final ObjectMapper objectMapper;
+    private final MutableClock clock;
+
+    public DeskBoardFixtures(
+            TaskEngine engine,
+            JdbcClient jdbcClient,
+            TenantFixtures tenantFixtures,
+            RoomFixtures roomFixtures,
+            DeskApi deskApi,
+            ObjectMapper objectMapper,
+            MutableClock clock) {
+        this.engine = engine;
+        this.jdbcClient = jdbcClient;
+        this.tenantFixtures = tenantFixtures;
+        this.roomFixtures = roomFixtures;
+        this.deskApi = deskApi;
+        this.objectMapper = objectMapper;
+        this.clock = clock;
+    }
+
+    /**
+     * 一張單的規格。欄位都已換成資料庫的值，只有現況與到手方式保留表格的用語，因為它們決定的是要走哪幾步轉移。
+     *
+     * @param type 任務類型（{@code cleaning}、{@code amenity}、{@code repair}、{@code other}）
+     * @param situation 現況用語，例如「待開始」「已取消（主管取消）」
+     * @param at 最後一筆事件的時間
+     * @param assigneeId 負責人；沒寫時，需要負責人的現況會找該部門第一位同仁頂上
+     * @param taskNo 指定的任務單號；null 時照取號規則取下一號
+     * @param acceptedVia 到手方式用語；null 視為自己認領
+     * @param managerId 指派、轉派或取消的主管；可為 null
+     * @param previousAssigneeId 被轉派前的負責人
+     */
+    public record Spec(
+            String roomNo,
+            String content,
+            String type,
+            String situation,
+            Instant at,
+            UUID assigneeId,
+            String taskNo,
+            String acceptedVia,
+            UUID managerId,
+            UUID previousAssigneeId) {
+    }
+
+    /** 建出一張單，回傳任務 id；修繕單另外回傳它的工務單號，見 {@link Created}。 */
+    public Created create(Spec spec) {
+        validate(spec);
+        long tenantId = tenantFixtures.testTenantId();
+        UUID roomId = roomFixtures.ensureRoom(spec.roomNo(), RoomFixtures.floorFromRoomNo(spec.roomNo()));
+        LocalDate workDate = "cleaning".equals(spec.type())
+                ? spec.at().atZone(clock.getZone()).toLocalDate()
+                : null;
+
+        UUID taskId = withTenant(tenantId, () -> build(tenantId, roomId, workDate, spec));
+
+        String ticketNo = null;
+        if ("repair".equals(spec.type())) {
+            ticketNo = insertRepairTicket(tenantId, taskId, roomId, spec);
+        } else {
+            assignTaskNo(tenantId, taskId, spec.taskNo());
+        }
+        backdate(tenantId, taskId, spec.at(), ENDED_SITUATIONS.contains(spec.situation()));
+        return new Created(taskId, ticketNo);
+    }
+
+    public record Created(UUID taskId, String repairTicketNo) {
+    }
+
+    /**
+     * 讓一張待認領的單在指定時刻被同仁退回待認領：補一筆認領，緊接著一筆退回待認領，退回落在指定時刻。
+     *
+     * <p>等待起算看的是最新一筆退回待認領事件，所以兩筆事件的時間都要對；
+     * 認領排在退回的前一分鐘。同仁取該部門第一位現場人員，因為句型只關心退回的時間，不關心是誰。
+     */
+    public void returnToPoolByColleague(UUID taskId, Instant at) {
+        long tenantId = tenantFixtures.testTenantId();
+        Map<String, Object> task = taskRow(tenantId, taskId);
+        if (!"pool".equals(task.get("state"))) {
+            throw new IllegalStateException("只有待認領的單能被同仁退回待認領，這張單目前是 " + task.get("state"));
+        }
+        String dept = String.valueOf(task.get("dept"));
+        Actor colleague = Actor.staff(dept, firstFieldStaff(tenantId, dept));
+        withTenant(tenantId, () -> {
+            engine.claim(tenantId, taskId, dept, colleague);
+            engine.releaseToPool(tenantId, taskId, colleague);
+            return null;
+        });
+
+        List<Map<String, Object>> lastTwo = jdbcClient
+                .sql("SELECT id FROM task_events WHERE tenant_id = ? AND task_id = ? ORDER BY seq DESC LIMIT 2")
+                .params(tenantId, taskId)
+                .query()
+                .listOfRows();
+        setEventTime(lastTwo.get(0).get("id"), at);
+        setEventTime(lastTwo.get(1).get("id"), at.minusSeconds(60));
+        jdbcClient
+                .sql("UPDATE tasks SET updated_at = ? WHERE tenant_id = ? AND id = ?")
+                .params(offset(at), tenantId, taskId)
+                .update();
+    }
+
+    private void validate(Spec spec) {
+        String situation = spec.situation();
+        if (spec.acceptedVia() != null && !"待開始".equals(situation)) {
+            throw new IllegalArgumentException("「到手方式」只用於待開始的單，收到現況「" + situation + "」");
+        }
+        if (spec.previousAssigneeId() != null && !"被轉派".equals(spec.acceptedVia())) {
+            throw new IllegalArgumentException("「原負責人」只用於到手方式是被轉派的單");
+        }
+        if ("被轉派".equals(spec.acceptedVia()) && spec.previousAssigneeId() == null) {
+            throw new IllegalArgumentException("到手方式是被轉派時「原負責人」必填");
+        }
+        if (spec.taskNo() != null && "repair".equals(spec.type())) {
+            throw new IllegalArgumentException("「單號」只用於非修繕單；修繕單的單號是工務單號");
+        }
+        if (spec.taskNo() != null && !TASK_NO.matcher(spec.taskNo()).matches()) {
+            throw new IllegalArgumentException("「單號」要是 T- 加至少 4 位數字，收到「" + spec.taskNo() + "」");
+        }
+        Map<String, Set<String>> typesBySituation = Map.of(
+                "待查房", Set.of("cleaning"),
+                "查房通過", Set.of("cleaning"),
+                "已送達", Set.of("amenity", "other"),
+                "已完修", Set.of("repair"));
+        Set<String> allowed = typesBySituation.get(situation);
+        if (allowed != null && !allowed.contains(spec.type())) {
+            throw new IllegalArgumentException("現況「" + situation + "」不會出現在類型 " + spec.type() + " 的單上");
+        }
+        if (("待派單".equals(situation) || "已當場回答".equals(situation)) && "repair".equals(spec.type())) {
+            throw new IllegalArgumentException("住客打字的待派單不會是修繕單");
+        }
+    }
+
+    private UUID build(long tenantId, UUID roomId, LocalDate workDate, Spec spec) {
+        return switch (spec.situation()) {
+            case "待派單" -> createGuestTyped(tenantId, roomId, workDate, spec, "triage");
+            case "已當場回答" -> {
+                UUID id = createGuestTyped(tenantId, roomId, workDate, spec, "triage");
+                answerOnTheSpot(tenantId, id);
+                yield id;
+            }
+            case "待認領" -> createInPool(tenantId, roomId, workDate, spec, deptOf(tenantId, spec));
+            case "待開始" -> accept(tenantId, roomId, workDate, spec);
+            case "進行中", "待查房", "已送達", "已完修", "查房通過" -> work(tenantId, roomId, workDate, spec);
+            case "已取消（主管取消）" -> {
+                UUID id = createInPool(tenantId, roomId, workDate, spec, deptOf(tenantId, spec));
+                engine.cancel(tenantId, id, "manager_void", Actor.staff("manager", spec.managerId()));
+                yield id;
+            }
+            case "已取消（住客收回）" -> {
+                UUID id = createGuestTyped(tenantId, roomId, workDate, spec, "pool");
+                jdbcClient
+                        .sql("UPDATE tasks SET pool_source = 'guest_scan' WHERE tenant_id = ? AND id = ?")
+                        .params(tenantId, id)
+                        .update();
+                engine.cancelByGuest(tenantId, id);
+                yield id;
+            }
+            default -> throw new IllegalArgumentException("不支援的現況「" + spec.situation() + "」");
+        };
+    }
+
+    /**
+     * 住客打字送出的單：來源是住客、掛在該房住客工作階段的訂單上，原文照產品的格式存成 JSON。
+     * 訂單與工作階段沿用 {@link DeskApi#guestSessionToken(String)} 那一份，之後同房住客收回或看進度時才認得這張單。
+     */
+    private UUID createGuestTyped(long tenantId, UUID roomId, LocalDate workDate, Spec spec, String initialState) {
+        String sessionToken = deskApi.guestSessionToken(spec.roomNo());
+        UUID reservationId = jdbcClient
+                .sql("SELECT reservation_id FROM guest_sessions WHERE session_token = ?")
+                .params(sessionToken)
+                .query(UUID.class)
+                .single();
+        String dept = "triage".equals(initialState) ? "frontdesk" : deptOf(tenantId, spec);
+        String note = objectMapper.writeValueAsString(Map.of("text", spec.content()));
+        return engine.create(new TaskCreateCommand(
+                        tenantId, spec.type(), "guest", roomId, reservationId, dept, initialState, null,
+                        spec.content(), note, null, null, workDate, Actor.guest()))
+                .getId();
+    }
+
+    private UUID createInPool(long tenantId, UUID roomId, LocalDate workDate, Spec spec, String dept) {
+        return engine.create(new TaskCreateCommand(
+                        tenantId, spec.type(), "repair".equals(spec.type()) ? "staff" : "desk", roomId, null, dept,
+                        "pool", null, spec.content(), null, null, null, workDate, Actor.system()))
+                .getId();
+    }
+
+    /** 待開始的單依到手方式走不同的路，最近一筆到手事件的種類與操作者才會對得上到手方式。 */
+    private UUID accept(long tenantId, UUID roomId, LocalDate workDate, Spec spec) {
+        String via = spec.acceptedVia() == null ? "自己認領" : spec.acceptedVia();
+        UUID assigneeId = assigneeOrFirstOfDept(tenantId, spec);
+        String dept = staffDept(tenantId, assigneeId);
+        switch (via) {
+            case "班前排房" -> {
+                // 班前排房發佈時就是建立在已接狀態，系統同時寫建立與指派兩筆事件。
+                return engine.create(new TaskCreateCommand(
+                                tenantId, spec.type(), "system", roomId, null, dept, "accepted", assigneeId,
+                                spec.content(), null, null, null, workDate, Actor.system()))
+                        .getId();
+            }
+            case "自己認領" -> {
+                UUID id = createInPool(tenantId, roomId, workDate, spec, dept);
+                engine.claim(tenantId, id, dept, Actor.staff(dept, assigneeId));
+                return id;
+            }
+            case "主管指派" -> {
+                UUID id = createInPool(tenantId, roomId, workDate, spec, dept);
+                managerAssignsFromPool(tenantId, id, assigneeId, spec.managerId());
+                return id;
+            }
+            case "被轉派" -> {
+                UUID id = createInPool(tenantId, roomId, workDate, spec, dept);
+                UUID previous = spec.previousAssigneeId();
+                engine.claim(tenantId, id, staffDept(tenantId, previous), Actor.staff(dept, previous));
+                engine.reassign(tenantId, id, assigneeId, Actor.staff("manager", spec.managerId()));
+                return id;
+            }
+            default -> throw new IllegalArgumentException(
+                    "到手方式只支援 班前排房、自己認領、主管指派、被轉派，收到「" + via + "」");
+        }
+    }
+
+    /**
+     * 主管從待認領直接指派給同仁。產品目前沒有這個入口，照資料模型寫：
+     * 一筆操作者是主管的 {@code assigned} 事件，內容與排房指派相同，只帶負責人。
+     * 前提條件寫在 UPDATE 的 WHERE 裡，單不在待認領就一列也不改，這時直接失敗，免得建出事件與任務列對不上的單。
+     */
+    private void managerAssignsFromPool(long tenantId, UUID taskId, UUID assigneeId, UUID managerId) {
+        int seq = jdbcClient
+                .sql(
+                        """
+                        UPDATE tasks SET state = 'accepted', assignee_id = ?, event_seq = event_seq + 1, updated_at = now()
+                         WHERE tenant_id = ? AND id = ? AND state = 'pool'
+                        RETURNING event_seq
+                        """)
+                .params(assigneeId, tenantId, taskId)
+                .query(Integer.class)
+                .single();
+        insertEvent(tenantId, taskId, seq, "assigned", "manager", managerId,
+                Map.of("assignee_id", assigneeId.toString()));
+    }
+
+    /** 認領、開始，再依現況完成、查房；進行中停在開始之後。 */
+    private UUID work(long tenantId, UUID roomId, LocalDate workDate, Spec spec) {
+        UUID assigneeId = assigneeOrFirstOfDept(tenantId, spec);
+        String dept = staffDept(tenantId, assigneeId);
+        Actor worker = Actor.staff(dept, assigneeId);
+        UUID id = createInPool(tenantId, roomId, workDate, spec, dept);
+        engine.claim(tenantId, id, dept, worker);
+        engine.start(tenantId, id, worker);
+        switch (spec.situation()) {
+            case "進行中" -> {
+            }
+            case "已完修" -> engine.complete(tenantId, id, worker, Map.of("resolutionType", "fixed"), false);
+            case "查房通過" -> {
+                engine.complete(tenantId, id, worker);
+                engine.passInspection(tenantId, id, Actor.staff("manager", spec.managerId()));
+            }
+            default -> engine.complete(tenantId, id, worker);
+        }
+        return id;
+    }
+
+    /**
+     * 當場回答：待派單直接結案成完成，回覆寫進 {@code answer}，住客原文 {@code note} 不動，部門維持未分部門。
+     * 這裡照資料模型直接寫，不經由產品的回答入口，前置資料才能指定任何時間與狀態。
+     * 操作者取飯店第一位櫃檯人員；表格沒有寫是誰回答的。
+     */
+    private void answerOnTheSpot(long tenantId, UUID taskId) {
+        UUID frontdeskId = jdbcClient
+                .sql(
+                        """
+                        SELECT id FROM staff_accounts
+                         WHERE tenant_id = ? AND role = 'frontdesk' AND active = true
+                         ORDER BY created_at, id LIMIT 1
+                        """)
+                .params(tenantId)
+                .query(UUID.class)
+                .optional()
+                .orElse(null);
+        int seq = jdbcClient
+                .sql(
+                        """
+                        UPDATE tasks
+                           SET state = 'done', answer = ?, done_at = now(), ended_at = now(),
+                               event_seq = event_seq + 1, updated_at = now()
+                         WHERE tenant_id = ? AND id = ? AND state = 'triage'
+                        RETURNING event_seq
+                        """)
+                .params(DEFAULT_ANSWER, tenantId, taskId)
+                .query(Integer.class)
+                .single();
+        insertEvent(tenantId, taskId, seq, "answered", "frontdesk", frontdeskId, Map.of("answer", DEFAULT_ANSWER));
+    }
+
+    /**
+     * 修繕單的單號只有工務單號，所以每張修繕單都要有一列工務單，否則看板與詳情找不到它的單號。
+     * 工務單號照產品的取號方式接續下一號；報修人用負責人，沒有負責人時用工務第一位同仁。
+     */
+    private String insertRepairTicket(long tenantId, UUID taskId, UUID roomId, Spec spec) {
+        int n = jdbcClient
+                .sql(
+                        """
+                        INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
+                        ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
+                        RETURNING last_no
+                        """)
+                .param(tenantId)
+                .query(Integer.class)
+                .single();
+        String ticketNo = String.format("W-%04d", n);
+        Map<String, Object> task = taskRow(tenantId, taskId);
+        Object assignee = task.get("assignee_id");
+        UUID reporterId = assignee != null ? (UUID) assignee : firstFieldStaff(tenantId, "engineering");
+        String state = String.valueOf(task.get("state"));
+        String resolutionType = "done".equals(state) || "closed".equals(state) ? "fixed" : null;
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO repair_tickets
+                            (task_id, tenant_id, ticket_no, room_id, category, reporter_id, created_at, is_urgent,
+                             resolution_type)
+                        VALUES (?, ?, ?, ?, 'other', ?, ?, false, ?)
+                        """)
+                .params(taskId, tenantId, ticketNo, roomId, reporterId, offset(spec.at()), resolutionType)
+                .update();
+        return ticketNo;
+    }
+
+    /**
+     * 非修繕單要有任務單號。表格有指定就用指定的號碼，並把序號推到至少這一號，之後取號才不會撞號；
+     * 沒指定時，產品已經取過號就沿用，還沒取過就照取號規則取下一號。
+     * 建立事件的快照也帶單號，因為重放時單號從那裡還原。
+     */
+    private void assignTaskNo(long tenantId, UUID taskId, String requested) {
+        String taskNo;
+        if (requested != null) {
+            Matcher m = TASK_NO.matcher(requested);
+            m.matches();
+            jdbcClient
+                    .sql(
+                            """
+                            INSERT INTO task_counters (tenant_id, last_no) VALUES (?, ?)
+                            ON CONFLICT (tenant_id) DO UPDATE SET last_no = GREATEST(task_counters.last_no, EXCLUDED.last_no)
+                            """)
+                    .params(tenantId, Integer.parseInt(m.group(1)))
+                    .update();
+            taskNo = requested;
+        } else {
+            Object existing = taskRow(tenantId, taskId).get("task_no");
+            if (existing != null) {
+                taskNo = String.valueOf(existing);
+            } else {
+                int n = jdbcClient
+                        .sql(
+                                """
+                                INSERT INTO task_counters (tenant_id, last_no) VALUES (?, 1)
+                                ON CONFLICT (tenant_id) DO UPDATE SET last_no = task_counters.last_no + 1
+                                RETURNING last_no
+                                """)
+                        .param(tenantId)
+                        .query(Integer.class)
+                        .single();
+                taskNo = String.format("T-%04d", n);
+            }
+        }
+        jdbcClient
+                .sql("UPDATE tasks SET task_no = ? WHERE tenant_id = ? AND id = ?")
+                .params(taskNo, tenantId, taskId)
+                .update();
+        jdbcClient
+                .sql(
+                        """
+                        UPDATE task_events
+                           SET payload = COALESCE(payload, '{}'::jsonb) || jsonb_build_object('task_no', ?::text)
+                         WHERE tenant_id = ? AND task_id = ? AND type = 'created'
+                        """)
+                .params(taskNo, tenantId, taskId)
+                .update();
+    }
+
+    /**
+     * 把整段事件歷程搬到指定時間：最後一筆落在 {@code at}，之前每一筆往前一分鐘。
+     * 任務列上建立、開始、完成與結束的時間改成對應事件的時間；進行中的單，這一段工作從開始事件起算。
+     */
+    private void backdate(long tenantId, UUID taskId, Instant at, boolean ended) {
+        List<Map<String, Object>> events = jdbcClient
+                .sql("SELECT id, type FROM task_events WHERE tenant_id = ? AND task_id = ? ORDER BY seq")
+                .params(tenantId, taskId)
+                .query()
+                .listOfRows();
+        int n = events.size();
+        Map<String, Instant> timeOfType = new LinkedHashMap<>();
+        for (int i = 0; i < n; i++) {
+            Instant t = at.minusSeconds(60L * (n - 1 - i));
+            setEventTime(events.get(i).get("id"), t);
+            timeOfType.put(String.valueOf(events.get(i).get("type")), t);
+        }
+        Instant first = at.minusSeconds(60L * (n - 1));
+        Instant started = timeOfType.get("started");
+        Instant done = timeOfType.containsKey("completed") ? timeOfType.get("completed") : timeOfType.get("answered");
+        jdbcClient
+                .sql(
+                        """
+                        UPDATE tasks
+                           SET created_at = ?,
+                               updated_at = ?,
+                               started_at = ?,
+                               segment_started_at = CASE WHEN state = 'doing' THEN ? ELSE segment_started_at END,
+                               done_at = ?,
+                               ended_at = ?
+                         WHERE tenant_id = ? AND id = ?
+                        """)
+                .params(
+                        offset(first),
+                        offset(at),
+                        started == null ? null : offset(started),
+                        started == null ? null : offset(started),
+                        done == null ? null : offset(done),
+                        ended ? offset(at) : null,
+                        tenantId,
+                        taskId)
+                .update();
+    }
+
+    private void insertEvent(
+            long tenantId, UUID taskId, int seq, String type, String actorRole, UUID actorId, Map<String, ?> payload) {
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, now())
+                        """)
+                .params(tenantId, taskId, seq, type, actorRole, actorId, objectMapper.writeValueAsString(payload))
+                .update();
+    }
+
+    private void setEventTime(Object eventId, Instant at) {
+        jdbcClient.sql("UPDATE task_events SET created_at = ? WHERE id = ?").params(offset(at), eventId).update();
+    }
+
+    private String deptOf(long tenantId, Spec spec) {
+        if (spec.assigneeId() != null) {
+            return staffDept(tenantId, spec.assigneeId());
+        }
+        return "repair".equals(spec.type()) ? "engineering" : "housekeeping";
+    }
+
+    private UUID assigneeOrFirstOfDept(long tenantId, Spec spec) {
+        if (spec.assigneeId() != null) {
+            return spec.assigneeId();
+        }
+        return firstFieldStaff(tenantId, deptOf(tenantId, spec));
+    }
+
+    private String staffDept(long tenantId, UUID staffId) {
+        return jdbcClient
+                .sql("SELECT dept FROM staff_accounts WHERE tenant_id = ? AND id = ?")
+                .params(tenantId, staffId)
+                .query(String.class)
+                .optional()
+                .orElseThrow(() -> new IllegalStateException("找不到員工 " + staffId + " 的部門"));
+    }
+
+    private UUID firstFieldStaff(long tenantId, String dept) {
+        return jdbcClient
+                .sql(
+                        """
+                        SELECT id FROM staff_accounts
+                         WHERE tenant_id = ? AND dept = ? AND role = ? AND active = true
+                         ORDER BY created_at, id LIMIT 1
+                        """)
+                .params(tenantId, dept, dept)
+                .query(UUID.class)
+                .optional()
+                .orElseThrow(() -> new IllegalStateException(
+                        "飯店沒有部門 " + dept + " 的在職同仁可以當負責人；請在表格寫「負責人」或先建立員工"));
+    }
+
+    private Map<String, Object> taskRow(long tenantId, UUID taskId) {
+        return jdbcClient
+                .sql("SELECT * FROM tasks WHERE tenant_id = ? AND id = ?")
+                .params(tenantId, taskId)
+                .query()
+                .singleRow();
+    }
+
+    private OffsetDateTime offset(Instant at) {
+        return OffsetDateTime.ofInstant(at, clock.getZone());
+    }
+
+    /** 任務引擎依目前租戶判斷資料歸屬，呼叫它之前要先設定租戶，呼叫完一定清掉，免得影響同一條執行緒的下一個案例。 */
+    private static <T> T withTenant(long tenantId, Supplier<T> action) {
+        TenantContext.set(tenantId);
+        try {
+            return action.get();
+        } finally {
+            TenantContext.clear();
+        }
+    }
+}

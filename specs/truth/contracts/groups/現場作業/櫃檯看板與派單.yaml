@@ -1,0 +1,210 @@
+getDeskBoard:
+  get:
+    operationId: getDeskBoard
+    summary: 櫃檯看板
+    description: >-
+      櫃檯 Web 的總覽看板與待派單頁共用的一次讀取，回全館看板範圍內的每一張單（見 DeskBoard.tasks 的範圍）、
+      飯店的樓層、登入者今天的派單與當場回答張數，以及後端現在的時間。一次回完、不分頁、沒有查詢參數：
+      篩選、房號搜尋、泳道、各欄排序、數量卡與徽章都由畫面從這一份算，這樣畫面上每個數字一定對得起來。
+      待派單頁就是其中 state 為 triage 的單。
+      只有 frontdesk、manager、duty_manager 可以呼叫，其他角色回 403 forbidden。
+      事件串流正常時，畫面收到訊號才重抓；串流異常時每 5 秒抓一次。
+    tags:
+    - 櫃檯看板與派單 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskBoard'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+    x-realtime-note: 員工事件串流（staffStream）每送來一則 task、resync 或 recovered，櫃檯 Web 就重抓這一份。
+readDeskTask:
+  get:
+    operationId: readDeskTask
+    summary: 櫃檯看單筆詳情與歷程
+    description: >-
+      詳情面板與當場回答面板用：卡片上已有的資料，加上住客與入住日期、開單人、已接的來由、取消與工務單結案的說明、
+      當場回答的回覆，以及這張單的歷程。歷程併在這裡回，不另開按單查事件的端點。
+      不受看板範圍限制：昨天結束的單只要知道 id 仍然讀得到。
+      只有 frontdesk、manager、duty_manager 可以呼叫。員工 App 的任務詳情仍是 readTasks，兩者互不影響。
+    tags:
+    - 櫃檯看板與派單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskTaskDetail'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+    x-realtime-note: 面板開著時，員工事件串流送來這張單的 task 訊號就重抓。
+listDeskQuickReplies:
+  get:
+    operationId: listDeskQuickReplies
+    summary: 當場回答的常用回覆
+    description: >-
+      回飯店住客資訊頁（tenant_config 的 guest_info_pages）的每一頁，照飯店設定的順序，當成當場回答面板的常用回覆。
+      飯店沒有設定時回空陣列，畫面就不顯示那一排。
+      住客資訊頁的其他讀取入口只開放住客身分與主管；這個端點讓 frontdesk、manager、duty_manager 以唯讀方式取得同一份內容。
+    tags:
+    - 櫃檯看板與派單 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskQuickReply'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+    x-realtime-note: 不需要即時同步；開當場回答面板時讀一次。
+deskAssignTask:
+  post:
+    operationId: deskAssignTask
+    summary: 櫃檯派單給房務或工務
+    description: >-
+      把待派單（state 為 triage）的單派給房務或工務：triage→pool，部門改成指定的部門，歷程記一筆 triaged
+      （帶部門與 via），操作者記實際登入的那一位（值班主管記 duty_manager）。該部門的同仁立刻在待認領看得到。
+      按鈕派與拖曳派是同一個動作，只差 via。
+      兩台櫃檯同時處理同一張單時先送到的生效；後到的回 409 task_not_in_triage，context 說明這張單被誰、怎麼處理掉
+      （見 Error 的 task_not_in_triage），畫面據此顯示「這單已經被派走了」等提示並重抓看板。
+      dept 不是 housekeeping 或 engineering、via 不是 button 或 drag 時回 422。
+      必須帶 Idempotency-Key，沒帶回 400 idempotency_key_required：網路逾時後畫面不知道有沒有成功，
+      用同一把鍵重送會拿到第一次的回應，不會派兩次。每按一次（或拖一次）產生一把新的鍵。
+      只有 frontdesk、manager、duty_manager 可以呼叫。
+    tags:
+    - 櫃檯看板與派單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskAssignRequest'
+    responses:
+      '200':
+        description: 派出成功。回派出後的這張單（state 為 pool）。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskTask'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+    x-realtime-note: 派出後員工事件串流送出這張單的 task 訊號（type 為 triaged），其他櫃檯與該部門的連線都收得到。
+deskUndoAssign:
+  post:
+    operationId: deskUndoAssign
+    summary: 櫃檯派出後復原
+    description: >-
+      把剛派出的單收回待派單：pool→triage，部門回到 frontdesk，未接提醒階段與進池來源清空，歷程記一筆 triage_undone；
+      給人看的歷程把這一筆與被收回的那筆派單一起略過，今天的派單張數也減回去。復原是獨立的動作，不是另一種派單；
+      當場回答沒有復原。
+      後端把關兩件事，缺一就不復原。
+      第一，時間：使用者能復原的時間是 5 秒，畫面上的「復原」按鈕派出後只出現 5 秒，之後就按不到。
+      後端以那筆 triaged 事件的時間為準，收到請求時已超過 10 秒就拒絕；後端多留的 5 秒只是給網路延遲與逾時後重送用的，
+      不是讓使用者有 10 秒。這道時限是為了避免很久之後還把單拉回來。
+      第二，派出之後這張單沒有再發生任何事：還在待認領、沒有負責人、最新一筆事件就是那筆 triaged。
+      請假退回、班末退回、驗收不通過回到待認領的單不是「剛派出」，不能被復原。
+      失敗一律回 409，用 code 分原因，判斷順序是先看單現在的樣子、再看時間：
+      undo_claimed（已有負責人，context 帶 assigneeName、dept、roomNo）；
+      undo_guest_withdrew（住客已經自己收回，context 帶 roomNo）；
+      undo_expired（超過 10 秒，context 帶 roomNo、dept）；
+      undo_unavailable（其他：例如已經復原過、已被主管作廢、這張單不是櫃檯派出的）。
+      失敗時單維持原狀。必須帶 Idempotency-Key，沒帶回 400 idempotency_key_required。
+      只有 frontdesk、manager、duty_manager 可以呼叫；不限定是派出的那一位，但畫面只把「復原」給派出的人。
+    tags:
+    - 櫃檯看板與派單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    responses:
+      '200':
+        description: 復原成功。回復原後的這張單（state 為 triage、dept 為 frontdesk）。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskTask'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+    x-realtime-note: >-
+      復原後員工事件串流送出這張單的 task 訊號（type 為 triage_undone）；除了全館範圍的連線，被收回的那個部門的連線也收得到，
+      讓他們的待認領把這張單拿掉。
+deskAnswerTask:
+  post:
+    operationId: deskAnswerTask
+    summary: 櫃檯當場回答並結案
+    description: >-
+      對待派單（state 為 triage）的單回一句話並結案：triage→done，回覆寫進 tasks.answer，住客原文不動，
+      同時記下完成與結束時間，歷程記一筆 answered（帶回覆全文），操作者記實際登入的那一位。部門維持 frontdesk，
+      所以不算房務或工務做掉的單。住客在自己的進度頁讀得到這段回覆（GuestRequest.answer）。送出後沒有復原。
+      回覆去掉頭尾空白後必須是 1–120 字，空白或超過回 422 answer_invalid。
+      這張單已經不是待派單時回 409 task_not_in_triage，規則與 deskAssignTask 相同。
+      必須帶 Idempotency-Key，沒帶回 400 idempotency_key_required。
+      只有 frontdesk、manager、duty_manager 可以呼叫。
+    tags:
+    - 櫃檯看板與派單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/TaskId'
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskAnswerRequest'
+    responses:
+      '200':
+        description: 已回覆並結案。回結案後的這張單（state 為 done、answered 為 true）。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskTask'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+    x-realtime-note: 結案後員工事件串流送出這張單的 task 訊號（type 為 answered）；住客事件串流也會通知這位住客。

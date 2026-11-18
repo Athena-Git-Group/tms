@@ -1,0 +1,38 @@
+listReservationsCache:
+  get:
+    operationId: listReservationsCache
+    summary: list reservations_cache
+    tags:
+    - 訂房檔副本與房態匯入 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/訂房檔副本與房態匯入.yaml#/reservations_cache'
+reservationsCacheImportOccupancy:
+  post:
+    operationId: reservationsCacheImportOccupancy
+    summary: import occupancy
+    tags:
+    - 訂房檔副本與房態匯入 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/訂房檔副本與房態匯入.yaml#/reservations_cacheRequest'
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/訂房檔副本與房態匯入.yaml#/reservations_cache'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'

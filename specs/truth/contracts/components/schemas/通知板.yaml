@@ -1,0 +1,53 @@
+notices:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    tenantId:
+      type: integer
+      format: int64
+    senderId:
+      type: string
+      format: uuid
+    title:
+      type: string
+    body:
+      type: string
+    recipients:
+      type: string
+      description: 部門/個人混選 {"depts":[…],"staff_ids":[…]}；推播經 outbox 展開一人一封
+    createdAt:
+      type: string
+      format: date-time
+  description: 通知板。逾時未讀升級屬 SLA 家族，v1 不做。
+  required:
+  - id
+  - tenantId
+  - senderId
+  - title
+  - body
+  - recipients
+  - createdAt
+noticesRequest:
+  type: object
+  properties:
+    tenantId:
+      type: integer
+      format: int64
+    senderId:
+      type: string
+      format: uuid
+    title:
+      type: string
+    body:
+      type: string
+    recipients:
+      type: string
+      description: 部門/個人混選 {"depts":[…],"staff_ids":[…]}；推播經 outbox 展開一人一封
+  required:
+  - tenantId
+  - senderId
+  - title
+  - body
+  - recipients

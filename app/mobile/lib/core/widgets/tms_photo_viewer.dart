@@ -1,0 +1,302 @@
+import 'package:flutter/cupertino.dart';
+
+import '../theme.dart';
+import '../tms_semantics.dart';
+import 'tms_motion.dart';
+
+class TmsViewerPhoto {
+  const TmsViewerPhoto({this.image, required this.description});
+
+  final ImageProvider<Object>? image;
+
+  final String description;
+}
+
+Future<void> showTmsPhotoViewer(
+  BuildContext context, {
+  required String title,
+  required List<TmsViewerPhoto> photos,
+  int initialIndex = 0,
+}) {
+  return Navigator.of(context, rootNavigator: true).push<void>(
+    PageRouteBuilder<void>(
+      opaque: true,
+      transitionDuration: Duration.zero,
+      pageBuilder: (context, _, _) => TmsPhotoViewer(
+        title: title,
+        photos: photos,
+        initialIndex: initialIndex,
+      ),
+    ),
+  );
+}
+
+class TmsPhotoViewer extends StatefulWidget {
+  const TmsPhotoViewer({
+    super.key,
+    required this.title,
+    required this.photos,
+    this.initialIndex = 0,
+  });
+
+  final String title;
+
+  final List<TmsViewerPhoto> photos;
+
+  final int initialIndex;
+
+  @override
+  State<TmsPhotoViewer> createState() => _TmsPhotoViewerState();
+}
+
+class _TmsPhotoViewerState extends State<TmsPhotoViewer> {
+  late final PageController _pages;
+  late int _index;
+
+  static const double _headerHeight = 52;
+
+  static const double _navButtonSize = TmsSize.minTouchTarget;
+  static const double _navButtonInset = TmsSpacing.sm;
+
+  static const double _fallbackBottomInset = TmsSpacing.lg;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, widget.photos.length - 1);
+    _pages = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  void _goTo(int index) {
+    _pages.animateToPage(
+      index,
+      duration: TmsMotion.slide.duration,
+      curve: TmsMotion.slide.curve,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final padding = MediaQuery.paddingOf(context);
+    final total = widget.photos.length;
+    return TmsSemantics(
+      id: 'photoViewer.screen',
+      explicitChildNodes: true,
+      child: TmsMotionView(
+        spec: TmsMotion.pop,
+        child: ColoredBox(
+          color: const Color(0xFF000000),
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  TmsSpacing.sm,
+                  padding.top,
+                  TmsSpacing.sm,
+                  0,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: _headerHeight),
+                  child: Row(
+                    children: [
+                      Expanded(child: _doneButton()),
+                      _titleBlock(total),
+                      const Expanded(child: SizedBox.shrink()),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(child: _stage(total)),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  TmsSpacing.lg,
+                  TmsSpacing.md,
+                  TmsSpacing.lg,
+                  padding.bottom > 0 ? padding.bottom : _fallbackBottomInset,
+                ),
+                child: const Text(
+                  '雙指縮放查看細節 · 左右滑動切換',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamilyFallback: TmsText.fontFamilyStack,
+                    fontSize: 13,
+                    color: _secondaryOnBlack,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _doneButton() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TmsSemantics(
+        id: 'photoViewer.done-button',
+        label: '完成',
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            constraints: const BoxConstraints(
+              minHeight: TmsSize.minTouchTarget,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: TmsSpacing.md),
+            alignment: Alignment.center,
+            child: const ExcludeSemantics(
+              child: Text(
+                '完成',
+                style: TextStyle(
+                  fontFamilyFallback: TmsText.fontFamilyStack,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: TmsColors.brandOnPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _titleBlock(int total) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TmsSemantics(
+          id: 'photoViewer.title-label',
+          label: widget.title,
+          child: ExcludeSemantics(
+            child: Text(
+              widget.title,
+              style: const TextStyle(
+                fontFamilyFallback: TmsText.fontFamilyStack,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: TmsColors.brandOnPrimary,
+              ),
+            ),
+          ),
+        ),
+        TmsSemantics(
+          id: 'photoViewer.count-label',
+          label: '${_index + 1} / $total',
+          child: ExcludeSemantics(
+            child: Text(
+              '${_index + 1} / $total',
+              style: const TextStyle(
+                fontFamilyFallback: TmsText.fontFamilyStack,
+                fontSize: 13,
+                color: _secondaryOnBlack,
+                fontFeatures: TmsText.tabularNumbers,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stage(int total) {
+    return Stack(
+      children: [
+        PageView.builder(
+          controller: _pages,
+          itemCount: total,
+          onPageChanged: (index) => setState(() => _index = index),
+          itemBuilder: (context, index) {
+            final photo = widget.photos[index];
+            final image = photo.image;
+            return TmsSemantics(
+              id: 'photoViewer.photo.${index + 1}',
+              label: photo.description,
+              child: InteractiveViewer(
+                maxScale: 4,
+                child: image == null
+                    ? const SizedBox.expand()
+                    : Image(image: image, fit: BoxFit.contain),
+              ),
+            );
+          },
+        ),
+        if (_index > 0)
+          _NavButton(
+            id: 'photoViewer.prev-button',
+            label: '上一張',
+            icon: CupertinoIcons.chevron_back,
+            alignment: Alignment.centerLeft,
+            onTap: () => _goTo(_index - 1),
+          ),
+        if (_index < total - 1)
+          _NavButton(
+            id: 'photoViewer.next-button',
+            label: '下一張',
+            icon: CupertinoIcons.chevron_forward,
+            alignment: Alignment.centerRight,
+            onTap: () => _goTo(_index + 1),
+          ),
+      ],
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.alignment,
+    required this.onTap,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final Alignment alignment;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: _TmsPhotoViewerState._navButtonInset,
+        ),
+        child: TmsSemantics(
+          id: id,
+          label: label,
+          child: GestureDetector(
+            onTap: onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: _TmsPhotoViewerState._navButtonSize,
+              height: _TmsPhotoViewerState._navButtonSize,
+              decoration: const BoxDecoration(
+                color: Color(0x993C3C43),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: TmsSpacing.xl,
+                color: TmsColors.brandOnPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const Color _secondaryOnBlack = Color(0x99EBEBF5);

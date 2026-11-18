@@ -1,0 +1,5 @@
+/**
+ * 當場回答面板的落點：回覆框、常用回覆、送出，以及撞單與送出失敗的處理。
+ * 面板掛在外框（`shell/DeskShell.tsx`）上，待派單頁的列與詳情面板的派單區都從這裡打開。
+ */
+export { AnswerPanel } from './AnswerPanel';
