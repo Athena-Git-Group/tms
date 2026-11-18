@@ -208,10 +208,11 @@ public class BddSpringConfiguration {
                 TenantFixtures tenantFixtures,
                 RoomFixtures roomFixtures,
                 ReservationFixtures reservationFixtures,
-                MutableClock mutableClock) {
+                MutableClock mutableClock,
+                StaffFixtures staffFixtures) {
             return new DeskApi(
                     bddApiClient, scenarioWorld, deskContext, dbProbe,
-                    tenantFixtures, roomFixtures, reservationFixtures, mutableClock);
+                    tenantFixtures, roomFixtures, reservationFixtures, mutableClock, staffFixtures);
         }
 
         // destroyMethod：案例結束時 Spring 會呼叫它關掉這個案例開過的串流連線，不必另外寫 @After。

@@ -79,8 +79,18 @@ public class BddApiClient {
         return exchange(HttpMethod.PATCH, path, auth, body, idempotencyKey);
     }
 
+    /** 打不在 {@code /api/v1} 底下的舊端點，例如住客評分 {@code /guest/requests/{taskId}/rating}。 */
+    public ScenarioWorld.ApiResponse postUnversioned(String path, Auth auth, Object body) {
+        return exchange(HttpMethod.POST, "", path, auth, body, UUID.randomUUID().toString());
+    }
+
     public ScenarioWorld.ApiResponse exchange(HttpMethod method, String path, Auth auth, Object body, String idempotencyKey) {
-        RestClient.RequestBodySpec spec = restClient.method(method).uri(url(path));
+        return exchange(method, BASE_PATH, path, auth, body, idempotencyKey);
+    }
+
+    private ScenarioWorld.ApiResponse exchange(
+            HttpMethod method, String basePath, String path, Auth auth, Object body, String idempotencyKey) {
+        RestClient.RequestBodySpec spec = restClient.method(method).uri(url(basePath, path));
 
         if (auth instanceof Auth.Staff staff) {
             spec = spec.header(HttpHeaders.AUTHORIZATION, "Bearer " + staff.jwt());
@@ -110,9 +120,9 @@ public class BddApiClient {
         return result;
     }
 
-    private String url(String path) {
+    private String url(String basePath, String path) {
         String port = environment.getRequiredProperty("local.server.port");
-        return "http://localhost:" + port + BASE_PATH + path;
+        return "http://localhost:" + port + basePath + path;
     }
 
     private static String readBody(RestClient.RequestHeadersSpec.ConvertibleClientHttpResponse response) {

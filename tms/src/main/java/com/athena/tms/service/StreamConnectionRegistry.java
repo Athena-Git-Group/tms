@@ -2,6 +2,7 @@ package com.athena.tms.service;
 
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
 import com.athena.tms.dto.TaskChange;
+import com.athena.tms.dto.desk.DeskBoardChange;
 import com.athena.tms.service.StreamConnection;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -17,6 +18,7 @@ import org.springframework.boot.convert.DurationStyle;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @Component
 public class StreamConnectionRegistry {
@@ -88,9 +90,24 @@ public class StreamConnectionRegistry {
         return emitter;
     }
 
-    public void broadcastTask(TaskChange change) {
+    /** 這家飯店現在有沒有連線要收櫃檯看板上的卡片。沒有就不必為這則事件組卡片。 */
+    public boolean hasDeskBoardViewer(long tenantId) {
         for (StreamConnection connection : this.connections) {
-            if (!connection.wants(change) || connection.sendTask(change, this.objectMapper)) continue;
+            if (connection.seesDeskBoardOf(tenantId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 送出一則單的變化。{@code board} 只送給櫃檯角色的連線，其他連線只收訊號；是 null 時所有連線都只收訊號。
+     * 看板內容先轉成 JSON 一次，每條連線共用，不隨連線數重複轉換。
+     */
+    public void broadcastTask(TaskChange change, DeskBoardChange board) {
+        ObjectNode boardFields = board == null ? null : StreamConnection.boardFields(board, this.objectMapper);
+        for (StreamConnection connection : this.connections) {
+            if (!connection.wants(change) || connection.sendTask(change, boardFields, this.objectMapper)) continue;
             this.drop(connection);
         }
     }

@@ -334,7 +334,7 @@ public class CommonThenSteps {
         }
         String aggregateKey = "task:" + before.taskId();
         int afterOutbox = dbProbe.outboxRows("task_event", aggregateKey).size()
-                + dbProbe.outboxRows("push", aggregateKey).size();
+                + dbProbe.outboxRows("push", "push:" + aggregateKey).size();
         if (afterOutbox != before.outboxCount()) {
             throw new AssertionError("操作被拒絕後仍新增了 outbox：操作前 " + before.outboxCount() + " 筆，操作後 "
                     + afterOutbox + " 筆");

@@ -12,6 +12,7 @@ import java.util.UUID;
  */
 public record DeskTask(
         UUID id,
+        int seq,
         String displayNo,
         String state,
         boolean answered,

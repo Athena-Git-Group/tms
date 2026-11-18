@@ -53,6 +53,14 @@ record StreamSubscriber(Audience audience, long tenantId, UUID reservationId, UU
         return this.dept != null && this.dept.equals(change.dept()) || this.staffId != null && this.staffId.equals(change.assigneeId());
     }
 
+    /**
+     * 這條連線的 {@code task} 訊號要不要帶櫃檯看板上的卡片。只有用櫃檯畫面的員工角色帶：
+     * 卡片是櫃檯視角，含住客姓名與 VIP，房務與工務本來就讀不到櫃檯看板，串流不該從旁邊送出同樣的內容。
+     */
+    boolean seesDeskBoard() {
+        return this.audience == Audience.STAFF && RolePermissions.canUseFrontdeskWeb(this.role);
+    }
+
     // 連上之後建議客戶端重抓的資料：住客重抓首頁，用櫃檯畫面的角色重抓櫃檯看板，房務與工務重抓部門待認領。
     String refetchPath() {
         if (this.audience == Audience.GUEST) {

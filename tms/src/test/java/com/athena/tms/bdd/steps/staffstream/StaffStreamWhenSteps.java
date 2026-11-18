@@ -1,12 +1,15 @@
 package com.athena.tms.bdd.steps.staffstream;
 
 import com.athena.tms.bdd.ScenarioWorld;
+import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.DeskApi;
 import com.athena.tms.bdd.support.JobTrigger;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.StaffStreamClient;
 import com.athena.tms.bdd.support.StreamFaults;
 import io.cucumber.java.zh_tw.當;
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * 本模組 {@code 員工事件串流/dsl.md} 的 When 句型。
@@ -21,18 +24,35 @@ public class StaffStreamWhenSteps {
     private final StreamFaults streamFaults;
     private final JobTrigger jobTrigger;
     private final MutableClock clock;
+    private final BddApiClient apiClient;
+    private final DeskApi deskApi;
 
     public StaffStreamWhenSteps(
             ScenarioWorld world,
             StaffStreamClient streamClient,
             StreamFaults streamFaults,
             JobTrigger jobTrigger,
-            MutableClock clock) {
+            MutableClock clock,
+            BddApiClient apiClient,
+            DeskApi deskApi) {
         this.world = world;
         this.streamClient = streamClient;
         this.streamFaults = streamFaults;
         this.jobTrigger = jobTrigger;
         this.clock = clock;
+        this.apiClient = apiClient;
+        this.deskApi = deskApi;
+    }
+
+    /** 住客工作階段掛在這間房現在住著的那筆訂房上，和單上連結的是同一筆，評分才認得這張單。 */
+    @當("{string} 的住客給了評分")
+    public void guestRates(String roomNo) {
+        String path = "/guest/requests/" + world.taskId(roomNo) + "/rating";
+        ScenarioWorld.ApiResponse response = apiClient.postUnversioned(
+                path, BddApiClient.Auth.guest(deskApi.guestSessionToken(roomNo)), Map.of("rating", 5));
+        if (response.status() < 200 || response.status() > 299) {
+            throw new IllegalStateException(roomNo + " 的住客評分失敗，狀態碼=" + response.status() + "，body=" + response.body());
+        }
     }
 
     /** 連上或被拒絕都照樣記下，由 Then 判斷結果；所以這裡不等任何訊號。 */

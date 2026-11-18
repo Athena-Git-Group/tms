@@ -345,6 +345,30 @@ public class TaskEngine {
         return this.recordEvent(tenantId, taskId, seq, "returned_to_pool", actor, TaskEngine.payload("reason", "leave_return"));
     }
 
+    /**
+     * 班末把這位員工名下還沒開始的單退回待認領，回傳退回幾張。已接與本人延後的退回，進行中與中斷的不動。
+     * 每一張都和其他轉換一樣寫事件、在同一個交易寫進待送匣，員工事件串流才會送出這則訊號，同一張單的步數不跳號。
+     */
+    @Transactional
+    public int returnNotStartedAtShiftEnd(long tenantId, UUID staffId) {
+        List<Map.Entry<UUID, Integer>> returned = this.jdbcTemplate.query(
+                """
+                UPDATE tasks
+                   SET state = 'pool', assignee_id = NULL, pool_source = 'shift_end_return',
+                       return_reason = '班末退池 · 交給下一班', deferred_by_self = false,
+                       hold_reason = NULL, event_seq = event_seq + 1, updated_at = now()
+                 WHERE tenant_id = ? AND assignee_id = ?
+                   AND (state = 'accepted' OR (state = 'deferred' AND deferred_by_self))
+                RETURNING id, event_seq
+                """,
+                (rs, i) -> Map.entry(rs.getObject(1, UUID.class), rs.getInt(2)),
+                tenantId, staffId);
+        for (Map.Entry<UUID, Integer> entry : returned) {
+            this.recordEvent(tenantId, entry.getKey(), entry.getValue(), "returned_to_pool", Actor.system(), TaskEngine.payload("reason", "shift_end_return"));
+        }
+        return returned.size();
+    }
+
     @Transactional
     public int cancelByGuest(long tenantId, UUID taskId) {
         return this.reachEnd(tenantId, taskId, "收回", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = 'guest_withdrew', ended_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('triage', 'pool')\nRETURNING event_seq\n",

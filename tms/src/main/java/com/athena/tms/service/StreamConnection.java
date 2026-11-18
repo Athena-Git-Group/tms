@@ -2,6 +2,7 @@ package com.athena.tms.service;
 
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
 import com.athena.tms.dto.TaskChange;
+import com.athena.tms.dto.desk.DeskBoardChange;
 import java.util.UUID;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.ObjectMapper;
@@ -59,7 +60,19 @@ final class StreamConnection {
         return this.write("resync", data.toString());
     }
 
-    synchronized boolean sendTask(TaskChange change, ObjectMapper mapper) {
+    boolean seesDeskBoard() {
+        return this.subscriber.seesDeskBoard();
+    }
+
+    boolean seesDeskBoardOf(long tenantId) {
+        return this.subscriber.seesDeskBoard() && this.subscriber.tenantId() == tenantId;
+    }
+
+    /**
+     * {@code boardFields} 是 {@link #boardFields} 組好的看板內容，同一則事件的每條連線共用同一份；
+     * 是 null 時表示後端沒組出來，訊號照送、不帶看板內容，畫面就會重抓整份看板。
+     */
+    synchronized boolean sendTask(TaskChange change, ObjectNode boardFields, ObjectMapper mapper) {
         if (this.closed) {
             return false;
         }
@@ -71,7 +84,24 @@ final class StreamConnection {
         if (change.occurredAt() != null) {
             data.put("occurred_at", change.occurredAt());
         }
+        if (boardFields != null && this.seesDeskBoard()) {
+            data.setAll(boardFields);
+        }
         return this.write("task", data.toString());
+    }
+
+    static ObjectNode boardFields(DeskBoardChange change, ObjectMapper mapper) {
+        ObjectNode fields = mapper.createObjectNode();
+        switch (change) {
+            case DeskBoardChange.Upsert upsert -> {
+                fields.put("board", "upsert");
+                fields.set("card", mapper.valueToTree(upsert.card()));
+            }
+            case DeskBoardChange.Remove remove -> fields.put("board", "remove");
+        }
+        fields.put("card_seq", change.cardSeq());
+        fields.put("business_date", change.businessDate().toString());
+        return fields;
     }
 
     synchronized boolean sendRoomStatus(IntegrationRoomStatusEvent event, ObjectMapper mapper) {

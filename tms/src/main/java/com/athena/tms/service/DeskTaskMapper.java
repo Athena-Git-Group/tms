@@ -34,6 +34,7 @@ public class DeskTaskMapper {
         boolean deferredBySelf = Boolean.TRUE.equals(row.get("deferred_by_self"));
         return new DeskTask(
                 (UUID) row.get("id"),
+                ((Number) row.get("event_seq")).intValue(),
                 (String) row.get("repair".equals(type) ? "ticket_no" : "task_no"),
                 state,
                 row.get("answer") != null,

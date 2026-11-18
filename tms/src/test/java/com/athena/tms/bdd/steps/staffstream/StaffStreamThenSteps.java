@@ -2,6 +2,7 @@ package com.athena.tms.bdd.steps.staffstream;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.DeskApi;
 import com.athena.tms.bdd.support.OutboxAwait;
 import com.athena.tms.bdd.support.StaffStreamClient;
 import com.athena.tms.bdd.support.StaffStreamClient.Connection;
@@ -30,8 +31,11 @@ public class StaffStreamThenSteps {
     /** 模組用語對照：訊號名稱對到 {@code task} 訊號的 {@code type}。 */
     private static final Map<String, String> SIGNAL_TYPE = Map.of(
             "認領", "claimed",
+            "開始", "started",
             "派單", "triaged",
-            "復原派單", "triage_undone");
+            "復原派單", "triage_undone",
+            "評分", "rated",
+            "班末退回", "returned_to_pool");
 
     /** 模組用語對照：建議重抓的資料對到 {@code resync.refetch}。 */
     private static final Map<String, String> REFETCH = Map.of(
@@ -48,7 +52,7 @@ public class StaffStreamThenSteps {
             "正常", false,
             "降級", true);
 
-    /** 契約裡 {@code task} 訊號允許出現的欄位；多出任何一欄就代表帶了單的內容。 */
+    /** 不帶卡片的連線，{@code task} 訊號只會有這幾個欄位；多出任何一欄就代表帶了單的內容。 */
     private static final Set<String> TASK_SIGNAL_FIELDS = Set.of("stream_pos", "task_id", "seq", "type", "occurred_at");
 
     /** 收得到全館每一張單訊號的角色。 */
@@ -69,6 +73,7 @@ public class StaffStreamThenSteps {
     private final OutboxAwait outboxAwait;
     private final StreamFaults streamFaults;
     private final ObjectMapper objectMapper;
+    private final DeskApi deskApi;
 
     public StaffStreamThenSteps(
             ScenarioWorld world,
@@ -76,17 +81,174 @@ public class StaffStreamThenSteps {
             DbProbe dbProbe,
             OutboxAwait outboxAwait,
             StreamFaults streamFaults,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            DeskApi deskApi) {
         this.world = world;
         this.streamClient = streamClient;
         this.dbProbe = dbProbe;
         this.outboxAwait = outboxAwait;
         this.streamFaults = streamFaults;
         this.objectMapper = objectMapper;
+        this.deskApi = deskApi;
     }
 
     /**
-     * 保證員工收到的是那一筆事件本身，而且只收到一次、不夾帶單的內容。
+     * 保證訊號帶的卡片就是看板上的那一張：同一張單在看板讀取裡的每個欄位都和卡片相同，營業日也相同。
+     * 比對的是這張單目前最後一步的訊號，所以先等到 {@code seq} 追上 {@code tasks.event_seq} 的那一則。
+     */
+    @那麼("{string} 收到的 {string} 訊號帶著它在櫃檯看板上的卡片，和他讀到的櫃檯看板上那一張一模一樣")
+    public void signalCarriesBoardCard(String staffName, String taskKey) {
+        UUID taskId = resolveTaskId(taskKey);
+        JsonNode signal = latestSignal(staffName, taskKey, taskId);
+        if (!"upsert".equals(text(signal, "board")) || !signal.path("card").isObject()) {
+            throw new AssertionError(taskKey + " 的訊號應帶 board=upsert 與 card：" + signal);
+        }
+        JsonNode card = signal.get("card");
+        int cardSeq = requireInt(signal, "card_seq");
+        if (!taskId.toString().equalsIgnoreCase(text(card, "id"))
+                || card.path("seq").asInt(-1) != cardSeq
+                || cardSeq < signal.path("seq").asInt()
+                || text(signal, "business_date") == null) {
+            throw new AssertionError(taskKey + " 的訊號卡片應是這張單、card_seq 等於 card.seq 且不小於 seq、帶 business_date：" + signal);
+        }
+        int eventSeq = taskEventSeq(taskId);
+        if (cardSeq != eventSeq) {
+            throw new AssertionError(taskKey + " 的卡片步數 " + cardSeq + " 應等於 tasks.event_seq " + eventSeq);
+        }
+
+        JsonNode board = readBoard(staffName);
+        JsonNode onBoard = boardTask(board, taskId)
+                .orElseThrow(() -> new AssertionError("「" + staffName + "」讀到的看板上沒有 " + taskKey + "：" + board));
+        if (!onBoard.equals(card)) {
+            throw new AssertionError(taskKey + " 的訊號卡片和看板上那一張不同。\n訊號：" + card + "\n看板：" + onBoard);
+        }
+        if (!text(board, "businessDate").equals(text(signal, "business_date"))) {
+            throw new AssertionError("訊號的 business_date " + text(signal, "business_date")
+                    + " 應等於看板的 businessDate " + text(board, "businessDate"));
+        }
+    }
+
+    @那麼("{string} 收到的 {string} 訊號說這張單不在櫃檯看板上")
+    public void signalSaysOffBoard(String staffName, String taskKey) {
+        UUID taskId = resolveTaskId(taskKey);
+        JsonNode signal = latestSignal(staffName, taskKey, taskId);
+        if (!"remove".equals(text(signal, "board")) || signal.has("card") || text(signal, "business_date") == null) {
+            throw new AssertionError(taskKey + " 的訊號應帶 board=remove 與 business_date、不帶 card：" + signal);
+        }
+        int eventSeq = taskEventSeq(taskId);
+        if (requireInt(signal, "card_seq") != eventSeq) {
+            throw new AssertionError(taskKey + " 的 card_seq 應等於 tasks.event_seq " + eventSeq + "：" + signal);
+        }
+        JsonNode board = readBoard(staffName);
+        if (boardTask(board, taskId).isPresent()) {
+            throw new AssertionError("「" + staffName + "」讀到的看板上不該有 " + taskKey + "：" + board);
+        }
+    }
+
+    @那麼("{string} 收到的 {string} 訊號不帶卡片")
+    public void signalCarriesNoCard(String staffName, String taskKey) {
+        UUID taskId = resolveTaskId(taskKey);
+        Connection connection = streamClient.connection(staffName);
+        List<Event> signals = connection.events().stream().filter(e -> isTaskSignal(e, taskId)).toList();
+        if (signals.isEmpty()) {
+            throw new AssertionError("「" + staffName + "」沒有收到 " + taskKey + " 的任何訊號：" + connection.describe());
+        }
+        for (Event signal : signals) {
+            List<String> extraFields = new ArrayList<>();
+            for (String field : signal.data().propertyNames()) {
+                if (!TASK_SIGNAL_FIELDS.contains(field)) {
+                    extraFields.add(field);
+                }
+            }
+            if (!extraFields.isEmpty()) {
+                throw new AssertionError("「" + staffName + "」的 task 訊號不該帶卡片，多出欄位 " + extraFields + "：" + signal.data());
+            }
+        }
+    }
+
+    /**
+     * 保證連上之後這張單的每一步都有訊號：收到的 {@code seq} 依序剛好連續，最後一則就是單目前的步數。
+     * 連上之前就寫進去的事件可能還在路上、也可能早已送完，所以從收到的第一則開始算，不要求從第 1 步開始。
+     */
+    @那麼("{string} 收到的 {string} 訊號一步一步往上加，沒有跳號")
+    public void signalsAreConsecutive(String staffName, String taskKey) {
+        UUID taskId = resolveTaskId(taskKey);
+        latestSignal(staffName, taskKey, taskId);
+        int eventSeq = taskEventSeq(taskId);
+        List<JsonNode> signals = streamClient.connection(staffName).events().stream()
+                .filter(e -> isTaskSignal(e, taskId))
+                .map(Event::data)
+                .toList();
+        Integer previousSeq = null;
+        Integer previousCardSeq = null;
+        for (JsonNode signal : signals) {
+            int seq = requireInt(signal, "seq");
+            int cardSeq = requireInt(signal, "card_seq");
+            if (previousSeq != null && seq != previousSeq + 1) {
+                throw new AssertionError(taskKey + " 的訊號步數跳號或重複：" + seqsOf(signals));
+            }
+            if (cardSeq < seq || (previousCardSeq != null && cardSeq < previousCardSeq)) {
+                throw new AssertionError(taskKey + " 的 card_seq 應不小於自己的 seq、也不小於前一則：" + signals);
+            }
+            previousSeq = seq;
+            previousCardSeq = cardSeq;
+        }
+        if (previousSeq == null || previousSeq != eventSeq) {
+            throw new AssertionError(taskKey + " 最後一則訊號的步數應是 tasks.event_seq " + eventSeq + "：" + seqsOf(signals));
+        }
+    }
+
+    /**
+     * 這張單最後一步的訊號。先等到 {@code seq} 等於 {@code tasks.event_seq} 的那一則出現，
+     * 同一張單的訊號依步數順序送達，所以它就是最新的一則。
+     */
+    private JsonNode latestSignal(String staffName, String taskKey, UUID taskId) {
+        int eventSeq = taskEventSeq(taskId);
+        Connection connection = streamClient.connection(staffName);
+        return connection.awaitEvent(
+                        event -> isTaskSignal(event, taskId) && event.data().path("seq").asInt() == eventSeq,
+                        StaffStreamClient.DEFAULT_WAIT)
+                .map(Event::data)
+                .orElseThrow(() -> new AssertionError("「" + staffName + "」的串流 " + StaffStreamClient.DEFAULT_WAIT.toSeconds()
+                        + " 秒內沒有收到 " + taskKey + " 第 " + eventSeq + " 步的訊號：" + connection.describe()));
+    }
+
+    private JsonNode readBoard(String staffName) {
+        ScenarioWorld.ApiResponse response = deskApi.getBoard(staffName);
+        if (response.status() != 200 || response.json() == null) {
+            throw new AssertionError("「" + staffName + "」讀櫃檯看板預期 200，實際 " + response.status() + "：" + response.body());
+        }
+        return response.json();
+    }
+
+    private static Optional<JsonNode> boardTask(JsonNode board, UUID taskId) {
+        for (JsonNode task : board.path("tasks")) {
+            if (taskId.toString().equalsIgnoreCase(text(task, "id"))) {
+                return Optional.of(task);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private int taskEventSeq(UUID taskId) {
+        return dbProbe.queryOne("SELECT event_seq FROM tasks WHERE id = ?", taskId)
+                .map(row -> ((Number) row.get("event_seq")).intValue())
+                .orElseThrow(() -> new AssertionError("查無任務 " + taskId));
+    }
+
+    private static int requireInt(JsonNode signal, String field) {
+        if (!signal.path(field).isNumber()) {
+            throw new AssertionError("訊號缺 " + field + "：" + signal);
+        }
+        return signal.get(field).asInt();
+    }
+
+    private static List<Integer> seqsOf(List<JsonNode> signals) {
+        return signals.stream().map(signal -> signal.path("seq").asInt()).toList();
+    }
+
+    /**
+     * 保證員工收到的是那一筆事件本身，而且只收到一次。
      * 先等連線上出現這張單、這種類型的訊號，再拿它的 {@code seq} 回頭對 {@code task_events}；
      * 只看類型的話，同一張單較早的同類事件也會被誤當成這一次的訊號。
      */
@@ -111,15 +273,6 @@ public class StaffStreamThenSteps {
                     + "（task_events 那一筆），實際 " + received.data());
         }
 
-        List<String> extraFields = new ArrayList<>();
-        for (String field : received.data().propertyNames()) {
-            if (!TASK_SIGNAL_FIELDS.contains(field)) {
-                extraFields.add(field);
-            }
-        }
-        if (!extraFields.isEmpty()) {
-            throw new AssertionError("task 訊號不該帶單的內容，多出欄位 " + extraFields + "：" + received.data());
-        }
 
         pause(DUPLICATE_SETTLE);
         long copies = connection.events().stream()
