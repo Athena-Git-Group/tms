@@ -81,7 +81,6 @@ final class StreamConnection {
         return this.write("room_status", event.eventId(), mapper.writeValueAsString((Object)event));
     }
 
-    // 員工的心跳另外帶後端目前是不是降級，漏接 degraded 或 recovered 的客戶端靠它對齊；住客與對接系統的心跳維持原樣。
     synchronized boolean sendHeartbeat(ObjectMapper mapper, boolean degraded) {
         if (this.closed) {
             return false;

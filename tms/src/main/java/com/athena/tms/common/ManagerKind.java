@@ -25,7 +25,6 @@ public enum ManagerKind {
         return of(actor.role(), actor.dept());
     }
 
-    /** 這種主管可以認領哪個部門的待認領單。沒有部門的主管算房務主管，認領房務池。 */
     public String poolDept() {
         return poolDept;
     }

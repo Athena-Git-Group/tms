@@ -26,7 +26,6 @@ const state = (link: LiveLink, trusted: boolean, overrides: Partial<LiveState> =
 
 const LINKS: readonly LiveLink[] = ['connecting', 'connected', 'disconnected', 'reconnecting'];
 
-/** 只當作「收過訊號」、不影響可不可信的訊號與讀不懂的心跳。 */
 const NEUTRAL_SIGNALS: Record<string, LiveEvent> = {
   init: signal('init'),
   resync: signal('resync'),
@@ -36,7 +35,6 @@ const NEUTRAL_SIGNALS: Record<string, LiveEvent> = {
   不是JSON的心跳: signal('heartbeat', 'not json'),
 };
 
-/** 會改變可不可信的訊號，以及收到後應該是可信還是不可信。 */
 const TRUST_SIGNALS: [string, LiveEvent, boolean][] = [
   ['degraded', signal('degraded', '{"reason":"kafka_consumer_lag"}'), false],
   ['degraded 為 true 的心跳', heartbeat(true), false],

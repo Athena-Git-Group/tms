@@ -2,18 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { StaffRole, TaskState } from '../api/types';
 import { hasDispatchArea, managementActions } from './detail-actions';
 
-/**
- * 期待值照 `派單區與單據管理動作列.feature` 的動作列表格（`:79-93`、`:120-125`）
- * 與 `ui/ui-plan.md` 的角色表（`:437-439`），不照對照表抄：
- * 待認領櫃檯「取消」「延後…」、主管多「指派…」；已接、進行中、中斷、延後中只有主管看得到「取消」「延後…」「轉派…」；
- * 待派單（底部是派單區）、已完成、已結案欄、已取消都整列不出現。
- */
 const NONE: string[] = [];
 const FRONTDESK_POOL = ['cancel', 'defer'];
 const MANAGER_POOL = ['cancel', 'defer', 'assign'];
 const MANAGER_IN_HAND = ['cancel', 'defer', 'reassign'];
 
-/** 對照表的每一列：狀態、櫃檯看到的、主管看到的。 */
 const ROWS: [TaskState, string[], string[]][] = [
   ['triage', NONE, NONE],
   ['pool', FRONTDESK_POOL, MANAGER_POOL],

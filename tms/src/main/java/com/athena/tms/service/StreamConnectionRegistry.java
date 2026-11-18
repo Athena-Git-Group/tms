@@ -70,7 +70,6 @@ public class StreamConnectionRegistry {
                 this.drop(connection);
                 return emitter;
             }
-            // 降級期間才連上的員工錯過了進入降級時的那則廣播，在重抓通知之後補送一則。
             StreamDegradation.Reason reason = this.degradation.current();
             if (reason != null && connection.isStaff() && !connection.sendDegraded(reason.code(), this.objectMapper)) {
                 this.drop(connection);
@@ -103,11 +102,6 @@ public class StreamConnectionRegistry {
         }
     }
 
-    /**
-     * 進入降級，並對連線宣告接下來的訊號可能延遲。已經在降級時什麼都不做，同一次降級只宣告一次，原因也維持第一次的。
-     *
-     * <p>處理事件落後送給所有連線；連不上事件來源只送員工連線，住客與對接系統的連線不送。
-     */
     public void enterDegraded(StreamDegradation.Reason reason) {
         this.degradation.enter(reason, this::announceDegraded);
     }
@@ -122,15 +116,10 @@ public class StreamConnectionRegistry {
         }
     }
 
-    /** 不論原因，回到正常並對員工連線送 recovered。不在降級時什麼都不做。 */
     public void leaveDegraded() {
         this.degradation.leave(this::announceRecovered);
     }
 
-    /**
-     * 只有目前的降級原因是 {@code reason} 時才回到正常。事件消費者重新啟動只代表事件來源接回來了，
-     * 不代表落後已經追上，所以不能讓它把處理事件落後的降級一併解除。
-     */
     public void leaveDegradedIf(StreamDegradation.Reason reason) {
         this.degradation.leaveIf(reason, this::announceRecovered);
     }

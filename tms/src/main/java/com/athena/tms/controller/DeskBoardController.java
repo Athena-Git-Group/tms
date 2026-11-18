@@ -19,9 +19,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 櫃檯 Web 的看板與派單入口，六支操作都在 {@code /api/v1/desk} 底下。
- */
 @RestController
 @RequestMapping("/api/v1/desk")
 public class DeskBoardController {

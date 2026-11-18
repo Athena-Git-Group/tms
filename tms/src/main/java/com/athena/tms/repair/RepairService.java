@@ -493,13 +493,6 @@ public class RepairService {
         return body;
     }
 
-    /**
-     * 排程建立的定期保養單沒有真實報修人（{@code repair_tickets.reporter_id} 是 NOT NULL，
-     * 資料側只能先掛一位員工），呈現時一律不顯示那個名字。
-     *
-     * <p>暫時處理後自動建立的追蹤單同樣是 {@code tasks.source = 'system'}，但它承接原單的
-     * 報修人、也不是定期保養，所以用 {@code origin_ticket_task_id} 把它排除在外。
-     */
     private static boolean isScheduled(Map<String, Object> row) {
         return "system".equals(row.get("source")) && row.get("origin_ticket_task_id") == null;
     }

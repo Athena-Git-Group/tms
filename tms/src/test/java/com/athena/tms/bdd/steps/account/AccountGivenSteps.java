@@ -66,8 +66,6 @@ public class AccountGivenSteps {
         }
     }
 
-    // 後面的步驟要驗證「還沒改密碼的人讀不到櫃檯看板」，必須拿登入真正發的憑證去試；
-    // 案例一開始替員工簽的憑證不帶「必須先改密碼」的狀態，用它去試會被後端放行而測不出問題。
     @假設("{string} 已用臨時密碼從櫃檯畫面登入，還沒設定新密碼")
     public void loggedInFromFrontdeskWithTemporaryPassword(String staffName) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
@@ -88,8 +86,6 @@ public class AccountGivenSteps {
         world.rememberTemporaryPassword(staffName, temporaryPassword);
     }
 
-    // 登入不帶 client，因為房務、工務、老闆從櫃檯畫面登入會被擋，走不到改密碼這一步。
-    // 後端在改密碼成功後會讓舊憑證失效，所以之後以這位員工名義呼叫時要用改密碼時換發的憑證。
     @假設("{string} 已把臨時密碼改成 {string}")
     public void changedTemporaryPassword(String staffName, String newPassword) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
@@ -128,14 +124,12 @@ public class AccountGivenSteps {
         world.rememberStaffPassword(staffName, newPassword);
     }
 
-    // 另建一家而不改「測試飯店」，因為其他員工與單都掛在測試飯店，改了它的名稱會讓別的步驟對不上。
     @假設("有一家飯店的識別代碼是 {string}，名稱是 {string}")
     public void hotelWithCode(String code, String name) {
         long tenantId = tenantFixtures.createTenant(name, code);
         world.rememberTenant(code, tenantId);
     }
 
-    // 飯店要先用「有一家飯店的識別代碼是…」建好。
     @假設("飯店 {string} 有房務員工 {string}，員工編號密碼為 {string} \\/ {string}")
     public void housekeeperInHotel(String code, String staffName, String loginId, String password) {
         StaffFixtures.CreatedStaff created =
@@ -144,7 +138,6 @@ public class AccountGivenSteps {
         world.rememberStaffPassword(staffName, password);
     }
 
-    // 案例沒指定過密碼的員工，密碼就是建立帳號時給的預設密碼。
     private String currentPassword(String staffName) {
         return world.staffPassword(staffName).orElse(StaffFixtures.DEFAULT_PASSWORD);
     }

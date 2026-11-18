@@ -117,11 +117,6 @@ public class TaskExecutionService {
         }
     }
 
-    /**
-     * 決定操作者從哪個部門的待認領認領。現場員工就是自己的部門。主管依主管種類對應房務池或工務池，
-     * 讓人手不夠時主管能自己下場做。主管認領另一個部門的單在這裡直接回 403；如果讓它進到條件式更新，
-     * 部門不符會一列也不改而變成 409，畫面就會誤以為單被別人搶走。
-     */
     private String claimDept(long tenantId, UUID taskId, CurrentActor actor) {
         Optional<ManagerKind> managerKind = ManagerKind.of(actor);
         if (managerKind.isEmpty()) {

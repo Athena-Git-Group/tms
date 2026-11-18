@@ -21,7 +21,6 @@ public class InspectionQrGivenSteps {
 
     @Given("^照租戶班次設定「小美」已下班$")
     public void shiftTimesExcludeNow() {
-        // 後端時鐘固定在 12:00（見 CucumberSpringConfiguration 的 fixedClock），班次訂在它之前就一定已下班，不受實際跑測試的時刻影響。
         setShiftTimes("08:00", "10:00");
     }
 

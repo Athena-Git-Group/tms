@@ -38,26 +38,12 @@ import java.util.function.Supplier;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 本模組 {@code 櫃檯看板與派單/dsl.md} 的 Then 句型。
- *
- * <p>每一句照該列的「必查」做三件事：比對畫面拿到的回應、比對資料庫裡的權威狀態（{@code tasks}、
- * {@code task_events} 等），以及需要時以別人的身分再讀一次，確認別的畫面看到的也一樣。
- * 回應與資料庫只要有一邊對不上就算失敗，因為只看回應會放過「回應寫對、資料沒存」的錯。
- *
- * <p>這個類別裡的再讀都不會改動場景記著的回應。{@link ScenarioWorld#lastResponse()} 與 {@link DeskContext}
- * 只留最後一次呼叫，若再讀蓋掉它們，接在後面的 Then（例如「這次操作被拒絕」）會把再讀的結果當成 When 的結果而誤判。
- *
- * <p>「操作前」的單與事件取自 When 送出寫入前記下的 {@link LastOperationGuard}；
- * 這個模組會改單的 When 都會先記，句型只負責比對。
- */
 public class DeskThenSteps {
 
     private static final String FRONTDESK = "frontdesk";
     private static final String HOUSEKEEPING = "housekeeping";
     private static final String ENGINEERING = "engineering";
 
-    /** 本模組用語對照的「歷程事件」。 */
     private static final Map<String, String> TIMELINE_EVENT = Map.of(
             "建立", "created",
             "派單", "triaged",
@@ -68,31 +54,26 @@ public class DeskThenSteps {
             "完成", "completed",
             "勾選清潔項目", "sop_checked");
 
-    /** 本模組用語對照的「到手方式」。 */
     private static final Map<String, String> ACCEPTED_VIA = Map.of(
             "班前排房", "plan_assigned",
             "自己認領", "self_claimed",
             "主管指派", "manager_assigned",
             "被轉派", "reassigned");
 
-    /** 本模組用語對照的「派單方式」。 */
     private static final Map<String, String> ASSIGN_VIA = Map.of("按鈕", "button", "拖曳", "drag");
 
-    /** 本模組用語對照的「取消原因」。 */
     private static final Map<String, String> CANCEL_REASON = Map.of(
             "住客收回", "guest_withdrew",
             "主管取消", "manager_void",
             "排房被取代", "plan_superseded",
             "同仁撤回", "staff_withdrew");
 
-    /** 本模組用語對照的「來源」。 */
     private static final Map<String, String> SOURCE = Map.of(
             "住客掃碼", "guest",
             "櫃檯開單", "desk",
             "系統排房", "system",
             "同仁報修", "staff");
 
-    /** 歷程操作者身分與派單操作者角色共用的對照；住客與系統不在這裡，因為他們沒有角色。 */
     private static final Map<String, String> ACTOR_ROLE = Map.of(
             "櫃檯", "frontdesk",
             "房務", "housekeeping",
@@ -140,8 +121,6 @@ public class DeskThenSteps {
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
-
-    // ---------------------------------------------------------------- 看板
 
     @那麼("櫃檯看板剛好有這些房號的單：{}")
     public void boardHasExactlyTheseRooms(String roomList) {
@@ -267,7 +246,6 @@ public class DeskThenSteps {
             }
         }
 
-        // 急件單的等待起算必須和一般單用同一把尺，不能因為急件另外算。
         DeskTask card = toRecord(node, DeskTask.class);
         if ("triage".equals(card.state()) || "pool".equals(card.state())) {
             checkInstant("「" + taskKey + "」的 DeskTask.waitingSince", latestWaitingEventAt(taskId),
@@ -298,7 +276,6 @@ public class DeskThenSteps {
                 check(roomNo + " 的 guestText.lang", lang, card.guestText().lang());
             }
 
-            // 翻譯只能來自單上原有的 llm_translated；單上沒有時回應也必須是 null，代表後端沒有自己去翻。
             JsonNode note = noteOf(taskRow(taskId));
             check(roomNo + " 的 tasks.note 原文", original, textOrNull(note, "text"));
             check(roomNo + " 的 tasks.note llm_translated", translated, textOrNull(note, "llm_translated"));
@@ -356,7 +333,6 @@ public class DeskThenSteps {
         check("DeskBoard.myToday.assignedCount", assignedCount, myToday.assignedCount());
         check("DeskBoard.myToday.answeredCount", answeredCount, myToday.answeredCount());
 
-        // 只數讀看板那一位自己的事件，別人派的、別人回答的都不能算進來。
         String reader = deskContext.lastBoardReader();
         LocalDate businessDate = businessDateOf(board);
         int dbAssigned = 0;
@@ -380,8 +356,6 @@ public class DeskThenSteps {
         check(reader + " 今天的 triaged 事件扣掉緊接著被復原的", assignedCount, dbAssigned);
         check(reader + " 今天的 answered 事件", answeredCount, dbAnswered);
     }
-
-    // ---------------------------------------------------------------- 派單
 
     @那麼("{string} 仍是待派單，歷程沒有任何派單紀錄")
     public void stillAwaitingTriage(String taskKey) {
@@ -460,7 +434,6 @@ public class DeskThenSteps {
                 .orElseThrow(() -> new AssertionError("「" + taskKey + "」沒有任何 triaged 事件"));
         check("triaged 事件的 actor_role", role, triaged.get("actor_role"));
 
-        // 記的必須是他派單當下的角色，值班主管要記成 duty_manager，不能借用 manager。
         Map<String, Object> staff = staffRow(triaged.get("actor_id"));
         check("派單的人在 staff_accounts 的角色", role, staff.get("role"));
 
@@ -548,8 +521,6 @@ public class DeskThenSteps {
         assertUnchangedSinceWhen(taskId);
     }
 
-    // ---------------------------------------------------------------- 復原
-
     @那麼("{string} 回到待派單，還沒分部門")
     public void backToAwaitingTriage(String taskKey) {
         UUID taskId = taskIdOf(taskKey);
@@ -584,7 +555,6 @@ public class DeskThenSteps {
                 throw new AssertionError("復原後的 timeline 不應有 " + entry.type() + "（seq=" + entry.seq() + "）");
             }
         }
-        // 派單與復原兩筆以外的每一筆都照實留著，讀起來就是派單前的樣子。
         assertTimelineMatchesEvents("復原後的 timeline", timeline, visibleTimelineEvents(dbProbe.eventsOf(taskId)));
     }
 
@@ -608,7 +578,6 @@ public class DeskThenSteps {
         check("緊接 triaged 的事件種類", "triage_undone", next.get("type"));
         check("triage_undone 事件 payload.dept（被收回的部門）", dept, textOrNull(payloadOf(next), "dept"));
 
-        // seq 從 1 起連續不跳號，代表沒有任何一筆被刪掉。
         for (int i = 0; i < events.size(); i++) {
             check("task_events 第 " + (i + 1) + " 筆的 seq", i + 1, seqOf(events.get(i)));
         }
@@ -659,8 +628,6 @@ public class DeskThenSteps {
         check("context.roomNo", roomNoOf(taskId), textOrNull(context, "roomNo"));
         assertUnchangedSinceWhen(taskId);
     }
-
-    // ---------------------------------------------------------------- 當場回答
 
     @那麼("{string} 已由 {string} 當場回答結案，回覆為 {string}")
     public void answeredAndClosedBy(String taskKey, String deskStaff, String answer) {
@@ -715,7 +682,6 @@ public class DeskThenSteps {
         check("tasks.assignee_id", null, row.get("assignee_id"));
         check("「" + taskKey + "」的 completed 事件筆數", 0, eventsOfType(taskId, "completed").size());
 
-        // 回答前後同仁的完成數相同，而且這張單不在任何人的 todayTasks 裡，才算沒有被算進任何人的今日完成。
         Map<String, Integer> before = deskContext.completedCountsBeforeAnswer();
         for (Map<String, Object> staff : fieldStaff()) {
             String name = String.valueOf(staff.get("name"));
@@ -763,8 +729,6 @@ public class DeskThenSteps {
         }
         check("GuestRequest.answer", answer, textOrNull(request, "answer"));
     }
-
-    // ---------------------------------------------------------------- 詳情與歷程
 
     @那麼("櫃檯詳情的資料如下：")
     public void detailFieldsAre(DataTable table) {
@@ -845,13 +809,10 @@ public class DeskThenSteps {
                 throw new AssertionError("timeline 不應有 " + type + "，卻出現在 seq=" + entry.seq());
             }
         }
-        // 必須是讀取時略過，而不是根本沒記，否則這句驗不到任何東西。
         if (eventsOfType(taskId, type).isEmpty()) {
             throw new AssertionError("task_events 沒有任何 " + type + "，無法確認是讀取時略過");
         }
     }
-
-    // ---------------------------------------------------------------- 常用回覆
 
     @那麼("常用回覆的標題依序為 {}")
     public void quickReplyTitlesAre(String titleList) {
@@ -892,8 +853,6 @@ public class DeskThenSteps {
             throw new AssertionError("常用回覆應是空陣列，實際 " + response.body());
         }
     }
-
-    // ================================================================ 詳情各項的比對
 
     private void checkDetailItem(String name, String value, JsonNode detail, UUID taskId, Map<String, Object> row) {
         JsonNode guest = detail.path("guest");
@@ -996,7 +955,6 @@ public class DeskThenSteps {
         }
     }
 
-    /** 訂房資料沒有住客人數，回應也不該冒出人數，免得畫面顯示一個沒有來源的數字。 */
     private static void assertNoGuestHeadcount(JsonNode detail) {
         JsonNode guest = detail.path("guest");
         if (!isAbsent(guest)) {
@@ -1014,8 +972,6 @@ public class DeskThenSteps {
             }
         }
     }
-
-    // ================================================================ 回應讀取
 
     private JsonNode boardJson() {
         ScenarioWorld.ApiResponse response = deskContext.lastBoardResponse();
@@ -1041,7 +997,6 @@ public class DeskThenSteps {
         return Optional.empty();
     }
 
-    /** 以櫃檯介面的身分重新讀一次看板，取這張單；呼叫端負責包在 {@link #sideRead(Supplier)} 裡。 */
     private DeskTask cardOnFreshBoard(String reader, UUID taskId) {
         ScenarioWorld.ApiResponse response = deskApi.getBoard(reader);
         requireOk("getDeskBoard（再讀）", response);
@@ -1090,7 +1045,6 @@ public class DeskThenSteps {
         return replies;
     }
 
-    /** 被拒絕的回應必須是 409 與指定的 {@code Error.code}，回傳 {@code context} 給句型逐欄比對。 */
     private JsonNode rejectionContext(String code) {
         ScenarioWorld.ApiResponse response = world.lastResponse();
         check("被拒絕的狀態碼", 409, response.status());
@@ -1114,7 +1068,6 @@ public class DeskThenSteps {
         return Optional.empty();
     }
 
-    /** 以該部門一位在職同仁的身分呼叫 listDeptPool，看這個部門的待認領。 */
     private List<JsonNode> poolItemsSeenBy(String dept) {
         Map<String, Object> staff = dbProbe
                 .queryMaps(
@@ -1162,8 +1115,6 @@ public class DeskThenSteps {
             return null;
         }
     }
-
-    // ================================================================ 資料庫讀取
 
     private long tenantId() {
         return tenantFixtures.testTenantId();
@@ -1229,7 +1180,6 @@ public class DeskThenSteps {
         return latestEventOfType(taskId, type).map(e -> staffNameOf(e.get("actor_id"))).orElse(null);
     }
 
-    /** 等待起算是 created 與 returned_to_pool 兩種事件中最新一筆的時間；triaged 不算在內。 */
     private Instant latestWaitingEventAt(UUID taskId) {
         return dbProbe
                 .queryOne(
@@ -1258,7 +1208,6 @@ public class DeskThenSteps {
                 tenantId(), roomNo, now, now);
     }
 
-    /** 契約 DeskTask.guestName 的認定：單有連結訂房時取那筆，沒有時取這間房現在住著的訂房。 */
     private Optional<Map<String, Object>> guestReservationOf(UUID taskId, Map<String, Object> row) {
         Object reservationId = row.get("reservation_id");
         if (reservationId != null) {
@@ -1296,7 +1245,6 @@ public class DeskThenSteps {
         return objectMapper.readTree(String.valueOf(rows.get(0).get("value")));
     }
 
-    /** 房務與工務的在職同仁，當場回答的單不能算進他們任何一位的今日完成。 */
     private List<Map<String, Object>> fieldStaff() {
         return dbProbe.queryMaps(
                 "SELECT id, name FROM staff_accounts WHERE tenant_id = ? AND active = true AND dept IN (?, ?) ORDER BY name",
@@ -1315,7 +1263,6 @@ public class DeskThenSteps {
         return staffId == null ? null : String.valueOf(staffRow(staffId).get("name"));
     }
 
-    /** 本場景裡任一位可以用櫃檯介面的人（櫃檯、主管、值班主管），用來再讀看板或詳情。 */
     private String deskReader() {
         for (Map<String, Object> staff : dbProbe.queryMaps(
                 """
@@ -1343,7 +1290,6 @@ public class DeskThenSteps {
         return UUID.fromString(world.staffId(name));
     }
 
-    /** 任務用房號指；修繕單用工務單號（{@code W-} 開頭）指。 */
     private UUID taskIdOf(String key) {
         if (key.startsWith("W-")) {
             return UUID.fromString(world.repairTicketTaskId(key));
@@ -1351,7 +1297,6 @@ public class DeskThenSteps {
         return UUID.fromString(world.taskId(key));
     }
 
-    /** 拿 When 送出前記下的快照，並確認記的就是這張單；記的是別張單時比對沒有意義。 */
     private LastOperationGuard.Snapshot snapshotOf(UUID taskId) {
         LastOperationGuard.Snapshot snapshot = lastOperationGuard.current();
         if (!taskId.equals(snapshot.taskId())) {
@@ -1361,7 +1306,6 @@ public class DeskThenSteps {
         return snapshot;
     }
 
-    /** 被拒絕的操作不能動到這張單，也不能多寫任何事件。 */
     private void assertUnchangedSinceWhen(UUID taskId) {
         LastOperationGuard.Snapshot before = snapshotOf(taskId);
         Map<String, Object> after = taskRow(taskId);
@@ -1381,10 +1325,6 @@ public class DeskThenSteps {
         checkInstant(where + "的時間", instantOf(before.get("created_at")), instantOf(after.get("created_at")));
     }
 
-    /**
-     * 契約規定給人看的歷程略過兩種事件：被復原的派單與緊接其後的那筆復原（成對略過），以及逐項勾選清潔項目。
-     * 這裡照同一條規則從 {@code task_events} 挑出應該出現在歷程上的事件，用來和回應的 timeline 逐筆對。
-     */
     private static List<Map<String, Object>> visibleTimelineEvents(List<Map<String, Object>> events) {
         Set<Integer> hidden = new HashSet<>();
         for (int i = 0; i < events.size(); i++) {
@@ -1416,10 +1356,6 @@ public class DeskThenSteps {
         }
     }
 
-    /**
-     * 依最近一筆到手事件換算到手方式：系統做的指派是班前排房，人做的指派是主管指派；
-     * 認領必須是負責人自己認的才算自己認領，否則回傳一個不會相符的說明，讓比對失敗時看得出原因。
-     */
     private static String acceptedViaOf(Map<String, Object> event, Map<String, Object> taskRow) {
         String type = String.valueOf(event.get("type"));
         return switch (type) {
@@ -1459,8 +1395,6 @@ public class DeskThenSteps {
             throw new AssertionError("回應不符合契約 " + type.getSimpleName() + "：" + node, e);
         }
     }
-
-    // ================================================================ 小工具
 
     private static void requireOk(String operation, ScenarioWorld.ApiResponse response) {
         if (response == null || response.status() != 200 || response.json() == null) {

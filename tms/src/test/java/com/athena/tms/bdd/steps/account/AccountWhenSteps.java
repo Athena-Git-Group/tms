@@ -26,7 +26,6 @@ public class AccountWhenSteps {
         apiClient.post("/staff-accounts/login", BddApiClient.Auth.none(), body);
     }
 
-    // 不帶 client，只看飯店代碼的效果；代碼原樣送出，不修剪也不轉小寫。
     @當("{string} 帶飯店代碼 {string} 用員工編號 {string} 密碼 {string} 登入")
     public void loginAtHotel(String staffName, String hotelCode, String loginId, String password) {
         Map<String, Object> body = Map.of("loginId", loginId, "password", password, "hotelCode", hotelCode);
@@ -39,8 +38,6 @@ public class AccountWhenSteps {
         apiClient.post("/staff-accounts/login", BddApiClient.Auth.none(), body);
     }
 
-    // 憑證取自「已用臨時密碼從櫃檯畫面登入」那一步：它把登入換得的憑證記成這位員工的憑證。
-    // 強制改密碼時身分已由這把憑證證明，所以請求只帶新密碼，不帶目前的密碼。
     @當("{string} 把新密碼設為 {string}")
     public void changeOwnPassword(String staffName, String newPassword) {
         Map<String, Object> body = Map.of("newPassword", newPassword);
@@ -52,7 +49,6 @@ public class AccountWhenSteps {
         apiClient.get("/public/hotels/" + hotelCode, BddApiClient.Auth.none());
     }
 
-    // 拿飯店主檔的內部編號當成識別代碼來查，用來確認後端不接受這種查法。
     @當("沒有登入的人用 {string} 這家飯店的內部編號查飯店名稱")
     public void readPublicHotelByInternalId(String hotelCode) {
         Object tenantId = dbProbe

@@ -65,12 +65,6 @@ public class OutboxWriter {
         return saved;
     }
 
-    /**
-     * 以 idempotency_key 去重寫入一筆 outbox，同鍵已存在就不寫。
-     *
-     * <p>所有寫入 outbox 的程式都要走這個類別，因為 relay 靠這裡發出的 {@link OutboxEnqueued} 才會在交易提交後立刻送出；
-     * 繞過這裡直接 INSERT 的訊息只能等 relay 的定時輪詢。
-     */
     public boolean enqueueIfAbsent(long tenantId, String kind, String aggregateKey, String payloadJson, String idempotencyKey, OffsetDateTime createdAt) {
         int inserted = this.jdbcTemplate.update("INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)\nVALUES (?, ?, ?, ?::jsonb, ?, 'pending', 0, ?)\nON CONFLICT (tenant_id, kind, idempotency_key) DO NOTHING\n", tenantId, aggregateKey, kind, payloadJson, idempotencyKey, createdAt);
         if (inserted > 0) {

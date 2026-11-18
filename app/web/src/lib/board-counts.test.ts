@@ -5,7 +5,6 @@ import { columnHeads, tileCounts } from './board-counts';
 
 const now = new Date('2026-10-26T06:30:00Z');
 
-/** 在 `now` 之前 `minutesAgo` 分鐘的時刻。 */
 function ago(minutesAgo: number): string {
   return new Date(now.getTime() - minutesAgo * 60_000).toISOString();
 }

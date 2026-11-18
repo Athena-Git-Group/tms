@@ -1245,7 +1245,6 @@ class _TaskScreenState extends State<TaskScreen> {
     return <String>['已接', '進行中', '完成', waived ? '免查房' : '查房'];
   }
 
-  /// 還在待認領的單沒有人接，回 null：步驟條每一步都未到，不把「已接」標成目前步驟。
   static String? _currentStep(TaskDetail task) {
     final steps = _stepsOf(task);
     switch (task.state) {

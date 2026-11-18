@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FIRST_RETRY_MS, LATER_RETRY_MS, SILENCE_LIMIT_MS, type LiveLink, type LiveState } from './live-connection';
 import { openStaffStream, takeStreamEvents, type StreamEvent } from './stream-client';
 
-/** 送出給定文字後就結束的串流回應。 */
 function streamResponse(text: string): Response {
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -38,7 +37,6 @@ describe('openStaffStream', () => {
       onEvent: (event) => events.push(event),
       onState: (state) => {
         states.push(state);
-        // 只記連線走到哪一步的變化；同一步裡收到第一則訊號也會報一次狀態。
         if (connections.at(-1) !== state.link) connections.push(state.link);
       },
     });

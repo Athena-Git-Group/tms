@@ -504,9 +504,7 @@ void main() {
         ),
       );
 
-      // 標題列那一段與資訊卡的「報修人」兩處都要寫系統排程。
       expect(find.textContaining('系統排程'), findsWidgets);
-      // 資料側掛著的那位員工不能出現，也不能退成沒有值的破折號。
       expect(find.textContaining('阿美'), findsNothing);
       expect(find.text('—'), findsNothing);
     });

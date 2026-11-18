@@ -100,7 +100,6 @@ describe('logOut', () => {
     expect(sessionStorage.getItem(BOARD_VIEW_STATE.key)).not.toBeNull();
     expect(sessionStorage.getItem(SESSION_STATE.key)).not.toBeNull();
     expect(useDeskPanelsStore.getState().detailTaskId).toBe('task-1');
-    // 之後新增的跟著分頁的鍵，這裡還沒透過畫面寫進去，先直接放一份，才驗得出登出有沒有漏清。
     for (const { key } of TAB_STORED_STATES) {
       if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, '{}');
     }

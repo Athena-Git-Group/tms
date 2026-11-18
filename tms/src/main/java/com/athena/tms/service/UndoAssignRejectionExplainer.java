@@ -11,15 +11,6 @@ import java.util.function.Predicate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * 派出後復原沒有收回時，用這裡說明原因，組出 409 的例外。
- *
- * <p>回的是例外而不是直接丟出，呼叫的一方寫 {@code throw explainer.explain(...)}，讀程式的人一眼看得出這裡就結束了。
- *
- * <p>原因由下面的判斷表由上而下比對，第一列符合的就是答案。順序是先看單現在的樣子、再看時間：
- * 有負責人、住客收回這兩種是單已經變了樣子，排在前面；單還是剛派出的樣子（仍待認領、最新一筆事件就是那筆派單）
- * 卻沒收回，才是超過時間；都不是就歸為其他。
- */
 @Component
 public class UndoAssignRejectionExplainer {
     private static final List<Rejection> REJECTIONS = List.of(
@@ -64,7 +55,6 @@ public class UndoAssignRejectionExplainer {
         return new StateConflictException(rejection.code(), rejection.message(), rejection.context().apply(facts));
     }
 
-    /** context 的鍵照傳進來的順序排，回給畫面的 JSON 也是這個順序。 */
     private static Map<String, Object> context(Object... keysAndValues) {
         Map<String, Object> context = new LinkedHashMap<>();
         for (int i = 0; i < keysAndValues.length; i += 2) {
@@ -77,10 +67,6 @@ public class UndoAssignRejectionExplainer {
             Predicate<UndoFacts> when, String code, String message, Function<UndoFacts, Map<String, Object>> context) {
     }
 
-    /**
-     * 這張單現在的樣子。要另外查資料庫的兩件事（負責人姓名、最新一筆事件）等判斷表真的問到才查，
-     * 前面的列已經符合時就不會多查。
-     */
     private final class UndoFacts {
         private final long tenantId;
         private final UUID taskId;
@@ -100,7 +86,6 @@ public class UndoAssignRejectionExplainer {
             return "cancelled".equals(this.state()) && "guest_withdrew".equals(this.row.get("cancel_reason"));
         }
 
-        /** 仍待認領，而且派單之後沒有再發生任何事：最新一筆事件就是那筆派單。 */
         boolean stillJustAssigned() {
             if (!"pool".equals(this.state())) {
                 return false;

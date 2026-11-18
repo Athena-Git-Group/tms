@@ -87,16 +87,10 @@ public class TaskEventsSseConsumer {
         if (lagMillis > this.degradedThreshold.toMillis()) {
             this.registry.enterDegraded(StreamDegradation.Reason.CONSUMER_LAG);
         } else {
-            // 及時收到並處理了一則事件，表示事件來源接得上、處理也跟得上，不論原本為什麼降級都可以回到正常。
             this.registry.leaveDegraded();
         }
     }
 
-    /**
-     * 串流的事件消費者停了、啟動失敗或卡住不再向事件來源拉事件，後端就收不到任何單的變化，
-     * 這時要宣告降級，否則客戶端會一直以為沒有變化而不重抓。
-     * 只看這個串流自己的消費者，推播等其他消費者的狀況與這裡無關。
-     */
     @EventListener(value={ConsumerStoppedEvent.class, ConsumerFailedToStartEvent.class, NonResponsiveConsumerEvent.class})
     void onEventSourceLost(KafkaEvent event) {
         if (this.isStreamListener(event)) {
@@ -104,7 +98,6 @@ public class TaskEventsSseConsumer {
         }
     }
 
-    /** 消費者重新啟動，只解除因為連不上事件來源而起的降級；處理事件落後要等事件真的追上才解除。 */
     @EventListener(value={ConsumerStartedEvent.class})
     void onEventSourceBack(ConsumerStartedEvent event) {
         if (this.isStreamListener(event)) {
@@ -181,7 +174,6 @@ public class TaskEventsSseConsumer {
 
     private TaskChange loadRouting(long tenantId, UUID taskId, int seq, String type, String occurredAt) {
         return this.tenantScopedExecutor.callAsTenant(tenantId, () -> {
-            // 復原派單的事件內容記著被收回的部門，一起帶出來，讓那個部門的連線也收得到。
             List rows = this.jdbcTemplate.query("""
                     SELECT t.dept, t.assignee_id, t.reservation_id,
                            CASE WHEN e.type = 'triage_undone' THEN e.payload ->> 'dept' END AS recalled_from_dept

@@ -136,7 +136,6 @@ public final class Terms {
         return lookup(REMINDER_STAGE, chinese, "未接提醒階段");
     }
 
-    /** 住客原文的語言用語只會出現日文與英文兩種，後端收的與回的都是語言代碼。 */
     private static final Map<String, String> GUEST_TEXT_LANG = Map.ofEntries(
             Map.entry("日文", "ja"),
             Map.entry("英文", "en"));

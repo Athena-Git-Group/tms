@@ -5,12 +5,6 @@ import { LanguageMenu } from '../../features/account';
 import { HOTEL_CODE_MAX_LENGTH, isWellFormedHotelCode, normalizeHotelCode } from '../../lib/hotel-code';
 import { PATHS, hotelPath } from '../../lib/paths';
 
-/**
- * 網址沒有飯店識別代碼時（例如 `/`、`/login`、`/board`）顯示的「輸入飯店代碼」頁。
- * 飯店是彼此隔離的單位，登入一定要知道是哪一家，所以這裡先問代碼，再帶去那一家的登入頁。
- *
- * 這一頁不列出任何飯店，也不向後端查代碼存不存在，因為列出來或查得出來，別人就能從這一頁知道有哪些飯店。
- */
 export function MissingHotelPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();

@@ -27,18 +27,6 @@ import { boardColumnWidth, boardContentWidth } from '../../lib/board-layout';
 import { BoardDragDispatch, DragHint, DropZone, useCardDrag, useDraggingTask } from './board-drag';
 import { MoreStatesButton } from './board-more-states';
 
-/**
- * 總覽看板（路徑 `/board`），畫在外框的內容區：數量卡、控制列與看板本體。
- *
- * 目前有：四張數量卡（「等最久」顯示分鐘數與顏色，點了打開那張單的詳情）、控制列（泳道分段鈕、篩選膠囊）、
- * 8 個欄（欄頭的色點、張數與警示，欄內排序、空欄文字）與卡片（房號、VIP、等待膠囊、標題、副標、SOP、部門列），
- * 泳道切到部門或樓層時看板分列，點卡片打開詳情面板；「待派單」的卡片拖到「待認領」欄的拖放區放開就派單（`board-drag.tsx`）。
- * 欄平均分掉可用寬度、每欄至少 200px（`lib/board-layout.ts`），放不下時看板橫向捲動，右緣有「還有 N 個狀態」（`board-more-states.tsx`）。
- * 資料還沒讀到時不畫空欄文字，因為櫃檯看到「沒有要派的單」會以為真的沒有單；第一次讀取畫骨架，讀不到畫讀取失敗。
- *
- * 篩選、房號搜尋與泳道只改畫面，不重新向後端讀；數量卡與頁副標永遠算全館，欄頭與泳道副標只算搜尋後留下的單。
- * 數量卡、欄頭警示與卡片膠囊的分鐘數都用同一個校正後的現在（`useCorrectedNow`），不各自取裝置時間。
- */
 export function BoardPage() {
   const { data, isError, errorUpdatedAt, refetch } = useQuery(deskBoardQuery);
   const cardFilter = useBoardViewStore((state) => state.cardFilter);
@@ -57,7 +45,6 @@ export function BoardPage() {
     body = <LoadFailed onRetry={() => void refetch()} />;
   } else {
     const columns = layout.heads.length;
-    // 看板本體左右貼齊內容區（抵掉頁面的左右邊距），邊距改放在捲動的內容裡，理由見 `lib/board-layout.ts`。
     body = (
       <div className="relative -mx-gutter flex min-h-0 flex-auto flex-col">
         <div ref={scrollerRef} className="min-h-0 flex-auto overflow-auto [scrollbar-width:thin]">
@@ -122,7 +109,6 @@ export function BoardPage() {
   );
 }
 
-/** 載入中的一欄：由欄頭命名、標成載入中，裡面兩張灰色骨架卡，沒有空欄文字。 */
 function SkeletonCell({ labelledBy, columns }: { labelledBy: string; columns: number }) {
   return (
     <section
@@ -136,7 +122,6 @@ function SkeletonCell({ labelledBy, columns }: { labelledBy: string; columns: nu
   );
 }
 
-/** 工具列上的「搜尋房號」，前面一個放大鏡。只在總覽看板出現，所以由外框在這一頁時放進工具列。 */
 export function RoomSearch() {
   const { t } = useTranslation();
   const roomSearch = useBoardViewStore((state) => state.roomSearch);
@@ -166,10 +151,6 @@ export function RoomSearch() {
   );
 }
 
-/**
- * 控制列的篩選膠囊：數量卡篩選與房號搜尋併成一顆，例如「只看：待認領 · 房號 305」；兩樣都沒有時不顯示。
- * 點了一次把兩樣都清掉。
- */
 function FilterPill({ content }: { content: FilterPillContent | null }) {
   const { t } = useTranslation();
   const updateView = useBoardViewStore((state) => state.update);
@@ -196,13 +177,8 @@ function FilterPill({ content }: { content: FilterPillContent | null }) {
   );
 }
 
-/** 樓層泳道標題的色點，各層同一個灰。 */
 const FLOOR_LANE_DOT = '#8E8E93';
 
-/**
- * 一列泳道：上面是黏在看板左緣的泳道標題（方形色點、名稱、「{N} 張未結案」），下面是這一列的各欄。
- * 副標算這一列不在「已結案」欄的單，不管數量卡篩選留下哪幾欄。
- */
 function LaneRow({ row, now }: { row: LaneRowLayout; now: Date | undefined }) {
   const { t } = useTranslation();
   const headingId = useId();
@@ -234,10 +210,6 @@ function LaneRow({ row, now }: { row: LaneRowLayout; now: Date | undefined }) {
   );
 }
 
-/**
- * 看板資料裡的營業日（`YYYY-MM-DD`）換成用介面語言寫的月日與星期幾。日期照後端給的，不用這台裝置的時區換算。
- * 月日的先後也跟著語言走：繁中、英、日是「10/26」，越南文是「26/10」。
- */
 function businessDay(businessDate: string, language: string): { date: string; weekday: string } {
   const [year = 0, month = 1, day = 1] = businessDate.split('-').map(Number);
   const instant = new Date(Date.UTC(year, month - 1, day));
@@ -248,10 +220,6 @@ function businessDay(businessDate: string, language: string): { date: string; we
   return { date, weekday };
 }
 
-/**
- * 工具列頁標題下的頁副標：今天的日期、全館未結案張數（「已結案」欄的不算）。
- * 看板資料還沒讀到（還在讀或讀不到）時只寫日期，張數等讀到才出現，不先寫成 0。
- */
 export function BoardSubtitle() {
   const { t, i18n } = useTranslation();
   const { data } = useQuery(deskBoardQuery);
@@ -270,10 +238,6 @@ export function BoardSubtitle() {
   );
 }
 
-/**
- * 還沒有後端給的營業日時，今天是哪一天：收到過後端時間就用校正後的現在、照伺服器的時區算；
- * 一次都還沒收到時只能用這台裝置的時間與時區，這是第一次打開看板、資料還在路上的情形。
- */
 function todayBeforeBoardData(offsetMs: number | null, serverUtcOffsetMinutes: number): string {
   const deviceNow = new Date();
   if (offsetMs === null) {
@@ -282,7 +246,6 @@ function todayBeforeBoardData(offsetMs: number | null, serverUtcOffsetMinutes: n
   return dateAtUtcOffset(correctedNow(offsetMs, deviceNow), serverUtcOffsetMinutes);
 }
 
-/** 數量卡左邊的線條圖示，照雛形 `ui/desk.js` 的同名圖示。 */
 const TILE_ICONS = {
   tray: (
     <>
@@ -301,7 +264,6 @@ const TILE_ICONS = {
 
 type TileIcon = keyof typeof TILE_ICONS;
 
-/** 每張數量卡圖示的底色與線條顏色：待派單黃、待認領品牌淺底、處理中淡綠、等最久淡紅。 */
 const TILE_ICON_COLORS: Record<CardFilter | 'longest', string> = {
   triage: 'bg-yellow-bg text-yellow-fg',
   pool: 'bg-brand-container text-brand',
@@ -309,10 +271,6 @@ const TILE_ICON_COLORS: Record<CardFilter | 'longest', string> = {
   longest: 'bg-err-bg text-err-fg',
 };
 
-/**
- * 一張數量卡的內容：左邊色底圖示，右邊上面是數字、下面是說明。
- * 數字那一處帶 `data-tone`（一般、橘色、紅色）；`number` 是 `undefined` 時數字位置是灰色骨架、不帶顏色。
- */
 function TileBody({
   icon,
   iconColors,
@@ -355,11 +313,6 @@ function TileBody({
 const TILE_CLASS =
   'flex min-h-count-tile items-center gap-3 rounded-tile border-2 border-transparent bg-surface px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
 
-/**
- * 四張數量卡：前三張會篩選看板，再點一次同一張就取消篩選；第四張是等最久的單。
- * `counts` 是全館的數字，看板資料還沒讀到時是 `undefined`：還在讀時數字位置是骨架，讀不到時數字寫「—」，
- * 兩種情形都不寫 0，也不寫待認領的部門分項。
- */
 function CountTiles({
   counts,
   load,
@@ -418,10 +371,6 @@ function CountTiles({
   );
 }
 
-/**
- * 「等最久」數量卡：待派單與待認領裡等最久的那張單已經等了幾分鐘，10 分起橘色、20 分起紅色。
- * 點了打開那張單的詳情面板，不篩選看板；沒有在等的單時數字是「—」，按鈕停用、點了沒有反應。
- */
 function LongestTile({ counts, load }: { counts: TileCounts | undefined; load: LoadState }) {
   const { t } = useTranslation();
   const openDetail = useDeskPanelsStore((state) => state.openDetail);
@@ -464,7 +413,6 @@ const LANES: { lane: Lane; key: 'none' | 'dept' | 'floor' }[] = [
   { lane: 'floor', key: 'floor' },
 ];
 
-/** 泳道分段鈕：不分、部門、樓層。 */
 function LaneSwitch() {
   const { t } = useTranslation();
   const lane = useBoardViewStore((state) => state.lane);
@@ -490,7 +438,6 @@ function LaneSwitch() {
   );
 }
 
-/** 欄頭色點的顏色，照雛形依序是橘、品牌色、灰、綠、深綠、紅、灰、淺灰。 */
 const COLUMN_DOTS: Record<BoardColumn, string> = {
   triage: '#FF9500',
   pool: '#0C7680',
@@ -502,10 +449,6 @@ const COLUMN_DOTS: Record<BoardColumn, string> = {
   closed: '#AEAEB2',
 };
 
-/**
- * 一欄的欄頭：色點、欄名、張數與警示。欄頭排成一列黏在看板上緣，分泳道時也只有這一列，
- * 張數與警示算搜尋後留下的全部單，不分泳道。第一次載入時（`loading`）只有色點與欄名，張數位置空白，不先寫 0。
- */
 function ColumnHeading({
   id,
   head,
@@ -551,19 +494,11 @@ function ColumnHeading({
   );
 }
 
-/** 泳道在拖放區編號裡的寫法，讓每一格的拖放區編號在整個看板唯一。 */
 function laneKey(lane: LaneKind | null): string {
   if (lane === null) return 'all';
   return lane.kind === 'dept' ? lane.dept : `floor-${lane.floor}`;
 }
 
-/**
- * 看板上的一格：一欄（分泳道時是一列泳道裡的一欄）的卡片，沒有卡片時是那一欄的空欄文字。
- * 不分泳道時由上面的欄頭命名（`labelledBy`）；分泳道時欄頭只有一列，改用「{欄名} · {泳道}」命名（`label`）。
- * 拖曳中，該出現拖放區的格子把拖放區放在最上面；既沒有拖放區、也不是被拖的卡片原本所在的格子變淡。
- *
- * @param lane 這一格所在的泳道；不分泳道時是 `null`
- */
 function Cell({
   head,
   columns,
@@ -573,7 +508,6 @@ function Cell({
   label,
 }: {
   head: ColumnHead;
-  /** 看板現在有幾欄，決定每一欄的寬度範圍。 */
   columns: number;
   lane: LaneKind | null;
   now: Date | undefined;
@@ -607,29 +541,23 @@ function Cell({
   );
 }
 
-/**
- * 拖得動的卡片（「待派單」欄）：陰影比較深、游標是抓取的手；被拖時原位這張變半透明留著當佔位。
- */
 function DraggableTaskCard({ task, now }: { task: DeskTask; now: Date | undefined }) {
   const drag = useCardDrag(task);
   return <TaskCard task={task} now={now} drag={drag} />;
 }
 
 /**
- * 拖得動的卡片的樣子，照雛形 `ui/desk.css` 的 `.card.draggable`。
  * 卡片上不能擋掉手指的捲動，否則手指落在卡片上就捲不動看板，所以只擋縮放、長按選字與 iOS 的長按選單。
  */
 const DRAGGABLE_CARD_CLASS =
   'cursor-grab shadow-[0_2px_6px_rgba(0,0,0,0.10)] [touch-action:pan-x_pan-y] select-none [-webkit-touch-callout:none]';
 
-/** 卡片部門列的顏色：色點、部門字、頭像底色與字色，照雛形 `ui/desk.js` 的 `DEPT`。 */
 const DEPT_COLORS: Record<Dept, { dot: string; fg: string; avatarBg: string; avatarFg: string }> = {
   housekeeping: { dot: '#0C7680', fg: '#0C7680', avatarBg: '#C8E8ED', avatarFg: '#0C7680' },
   engineering: { dot: '#FF8E2B', fg: '#944B00', avatarBg: '#FFDCC5', avatarFg: '#703700' },
   frontdesk: { dot: '#AEAEB2', fg: '#3C3C43', avatarBg: '#E5E5EA', avatarFg: '#3C3C43' },
 };
 
-/** 卡片右下的來源圖示，照雛形的 QR 碼、櫃檯人像、日曆、扳手。 */
 const SOURCE_ICONS: Record<TaskSource, ReactNode> = {
   guest: (
     <>
@@ -655,7 +583,6 @@ const SOURCE_ICONS: Record<TaskSource, ReactNode> = {
   staff: <path d="M14.5 6.5a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3l8.5-8.5" />,
 };
 
-/** 等待膠囊四種顏色的底色與字色，照 `ui/ui-plan.md` 的膠囊色表。 */
 const PILL_COLORS: Record<WaitPillTone, string> = {
   gray: 'bg-bg text-text-2',
   orange: 'bg-warm-bg text-warm-fg',
@@ -663,7 +590,6 @@ const PILL_COLORS: Record<WaitPillTone, string> = {
   green: 'bg-ok-bg text-ok-fg',
 };
 
-/** 卡片右上的等待膠囊：前面一個時鐘圖示，後面是文字。顏色記在 `data-tone`，卡片上只有這一處帶它。 */
 function WaitPillBadge({ text, tone }: { text: string; tone: WaitPillTone }) {
   return (
     <span
@@ -678,12 +604,6 @@ function WaitPillBadge({ text, tone }: { text: string; tone: WaitPillTone }) {
   );
 }
 
-/**
- * 一張卡片，由上到下：房號、「VIP」標與靠右的等待膠囊、標題、副標、SOP 進度、部門列（部門、類型、來源圖示、負責人頭像）。
- * 點了打開詳情面板；詳情面板開著這張單時標成展開。來源圖示旁不放字，名稱給螢幕報讀軟體。
- * 給螢幕報讀軟體的名稱是「{房號} {標題}，{等待文字}」；畫面規劃的名稱在標題後還有狀態，要等狀態標籤做好再補。
- * `now` 是校正後的現在，還沒有時不畫膠囊；膠囊上的完成與結束時刻照後端伺服器的時區顯示。
- */
 function TaskCard({
   task,
   now,
@@ -717,7 +637,6 @@ function TaskCard({
         {task.vip && (
           <span className="rounded-md bg-warm-bg px-1.5 py-px text-[11px] font-extrabold text-warm-fg">{t('board.card.vip')}</span>
         )}
-        {/* 用撐開的空白把膠囊推到右邊，擠到第二行時從左邊開始，照雛形 `ui/desk.js` 的卡片頂列。 */}
         {pill && <span aria-hidden="true" className="min-w-0 flex-auto" />}
         {pill && <WaitPillBadge text={pillText} tone={pill.tone} />}
       </span>

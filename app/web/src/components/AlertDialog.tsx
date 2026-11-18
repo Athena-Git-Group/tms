@@ -1,11 +1,6 @@
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
-/**
- * 只有一顆「好」的提示對話框，蓋在整個畫面上、置中。
- * 打開時焦點落在「好」上，按 Enter 就關；按 Esc 也關。
- * 螢幕報讀軟體讀到的是「提示對話框，標題，內文」，所以標題與內文分別掛在 `aria-labelledby` 與 `aria-describedby`。
- */
 export function AlertDialog({
   title,
   body,

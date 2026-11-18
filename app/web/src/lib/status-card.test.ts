@@ -5,10 +5,6 @@ import { zhTW } from '../i18n/locales/zh-TW';
 import { displayString } from './display-text';
 import { statusCard, statusTag, type StatusCardTone, type StatusTagTone } from './status-card';
 
-/**
- * 期待值是 `狀態標籤與狀態訊息卡.feature` 的繁體中文字面，色調照 `ui/ui-plan.md` 畫面 8 的色表；
- * 用真的繁體中文資源檔把結果轉成字再比，鍵或代入值有誤都會被抓到。
- */
 const zh = i18next.createInstance();
 void zh.init({
   lng: 'zh-TW',
@@ -18,11 +14,9 @@ void zh.init({
 });
 const t = zh.t as unknown as TFunction;
 
-/** feature 的背景：現在是台北時間 14:40。 */
 const NOW = new Date('2026-11-17T06:40:00Z');
 const TAIPEI = 480;
 
-/** 台北時間的「時:分」換成當天的 UTC 時刻，案例的時間才能照 feature 寫。 */
 function taipei(clock: string): string {
   const [hours = 0, minutes = 0] = clock.split(':').map(Number);
   return new Date(Date.UTC(2026, 10, 17, hours - 8, minutes)).toISOString();

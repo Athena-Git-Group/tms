@@ -82,7 +82,6 @@ public class InspectionService {
         if (ManagerKind.of(inspector).filter(kind -> !kind.inspects()).isPresent()) {
             throw new ForbiddenException("你沒有查房的權限");
         }
-        // 飯店允許主管查自己清的房時，只放寬清房者與查房者是同一人這一條，上面的權限檢查照舊。
         if (inspector.staffId() != null && inspector.staffId().equals(task.getAssigneeId())
                 && !this.selfInspectionSetting.allowed(tenantId)) {
             throw new ForbiddenException("查房者不得為原清房者");

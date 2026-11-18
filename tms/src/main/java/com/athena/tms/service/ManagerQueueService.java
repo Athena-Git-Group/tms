@@ -45,7 +45,6 @@ public class ManagerQueueService {
     }
 
     private List<InspectionQueueItem> inspectionQueue(long tenantId, UUID callerStaffId, LocalDate today) {
-        // 清單與查房判定讀同一個設定：飯店允許主管查自己清的房時，清單不再排除呼叫者本人清的房。
         UUID excludedCleanerId = selfInspectionSetting.allowed(tenantId) ? null : callerStaffId;
         return jdbcTemplate.queryForList(
                 """
@@ -90,8 +89,6 @@ public class ManagerQueueService {
                 tenantId, AutomationRuleService.PUBLIC_AREA_ROOM_NO).stream()
                 .map(row -> {
                     Base base = base(row, today);
-                    // 排程建立的定期保養單沒有真實報修人，不顯示資料側掛著的那位員工。
-                    // 追蹤單的 source 也是 system，但它有真實報修人，用 origin_ticket_task_id 排除。
                     boolean scheduled = "system".equals(row.get("source"))
                             && row.get("origin_ticket_task_id") == null;
                     return new VerifyQueueItem(

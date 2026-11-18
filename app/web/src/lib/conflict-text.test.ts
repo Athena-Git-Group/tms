@@ -2,7 +2,6 @@ import type { TFunction } from 'i18next';
 import { describe, expect, it } from 'vitest';
 import { conflictText } from './conflict-text';
 
-/** 假的翻譯函式：回傳「鍵」加上參數，方便斷言用的是哪一句、帶了什麼值。 */
 const t = ((key: string, options?: Record<string, string>) =>
   options ? `${key}|${Object.values(options).join('|')}` : key) as unknown as TFunction;
 

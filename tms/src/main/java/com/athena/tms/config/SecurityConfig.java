@@ -47,8 +47,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/auth/login").permitAll()
                         .requestMatchers("/guest/**").hasRole("guest")
-                        // 員工事件串流另外給值班主管連，櫃檯畫面要靠它即時更新；值班主管只用櫃檯畫面，
-                        // 所以只放行這一條，下面其他 /staff/** 的員工 App 端點照舊不給。
                         .requestMatchers(HttpMethod.GET, "/staff/stream")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "duty_manager")
                         .requestMatchers(HttpMethod.GET, "/staff/**")

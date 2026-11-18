@@ -3,13 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { DeskTaskDetail } from '../api/types';
 import { createdAgoText, detailContentRows } from './detail-content';
 
-/** 假的翻譯函式：回傳「鍵」加上參數，方便斷言用的是哪一句、帶了什麼值。 */
 const t = ((key: string, options?: Record<string, string | number>) =>
   options ? `${key}|${Object.values(options).join('|')}` : key) as unknown as TFunction;
 
 const createdAt = new Date('2026-10-26T06:00:00Z');
 
-/** 台北時間 +08:00，建立時刻 06:00Z 寫成 14:00。 */
 const TAIPEI = 480;
 
 function task(overrides: Partial<DeskTaskDetail> = {}): DeskTaskDetail {
@@ -41,7 +39,6 @@ function minutesAfter(minutes: number): Date {
   return new Date(createdAt.getTime() + minutes * 60_000);
 }
 
-/** 取某一列的值；列的順序是房號、住客、部門、負責人、來源、建立。 */
 function valueOf(row: number, overrides: Partial<DeskTaskDetail> = {}, now: Date | undefined = minutesAfter(5)) {
   return detailContentRows(task(overrides), now, TAIPEI, t)[row]?.value;
 }

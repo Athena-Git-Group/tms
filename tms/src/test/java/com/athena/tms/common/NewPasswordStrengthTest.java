@@ -7,11 +7,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-/**
- * 確認新密碼強度規則對各種密碼回報的沒過規則與順序。
- *
- * <p>規則代碼是畫面對照提示用的字串，所以這裡也直接比對字串本身，代碼一改測試就會失敗。
- */
 class NewPasswordStrengthTest {
 
     @Test
@@ -67,7 +62,6 @@ class NewPasswordStrengthTest {
 
     @Test
     void 非ASCII的字母與數字不算() {
-        // 帶重音的字母、中文、全形英文字母都不算英文字母；全形數字不算數字
         assertThat(NewPasswordStrength.failedRules("éàüçñ123")).containsExactly(LETTER_REQUIRED);
         assertThat(NewPasswordStrength.failedRules("飯店密碼一二三四56")).containsExactly(LETTER_REQUIRED);
         assertThat(NewPasswordStrength.failedRules("ＡＢＣＤ1234")).containsExactly(LETTER_REQUIRED);

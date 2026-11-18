@@ -106,7 +106,6 @@ describe('assignTaskFlow', () => {
   });
 });
 
-/** 讓派單流程跑到「請求已送出、登記為進行中」那一步。 */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('undoAssignFlow', () => {

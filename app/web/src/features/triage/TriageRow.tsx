@@ -5,7 +5,6 @@ import { cardTitle } from '../../lib/card-text';
 import { originalLineText, sourceText, waitedText } from '../../lib/triage-text';
 import { waitTone, waitingMinutes, type WaitPillTone } from '../../lib/wait-pill';
 
-/** 「已等 N 分」的字色：灰色照一般文字，10 分起橘、20 分起紅，和看板膠囊同一組分級。 */
 const WAIT_TEXT_COLORS: Record<WaitPillTone, string> = {
   gray: 'text-text-2',
   orange: 'text-amber',
@@ -13,26 +12,17 @@ const WAIT_TEXT_COLORS: Record<WaitPillTone, string> = {
   green: 'text-text-2',
 };
 
-/** 三顆動作同一個樣子：品牌色外框、透明底，沒有哪一顆特別突出，系統不替櫃檯選部門。 */
 const ACTION_BUTTON =
   'min-h-12 rounded-full border-[1.5px] border-solid border-brand bg-transparent px-[18px] text-base font-bold whitespace-nowrap text-brand';
 
 interface TriageRowProps {
   task: DeskTask;
-  /** 校正後的現在；還沒有時已等算 0 分。 */
   now: Date | undefined;
-  /** 房號方塊與這一列動作以外的地方被點時，開這張單的詳情。 */
   onOpenDetail: (taskId: string) => void;
-  /** 「派給房務」「派給工務」被點時，直接把這張單派給那個部門，不另外確認。 */
   onAssign: (task: DeskTask, dept: AssignDept) => void;
-  /** 「當場回答…」被點時，開這張單的當場回答面板。 */
   onAnswer: (taskId: string) => void;
 }
 
-/**
- * 待派單的一列：左邊房號方塊（點了開詳情）、中間住客原話與住客資訊、右邊三顆動作。
- * 點這一列動作以外的地方也是開詳情。
- */
 export function TriageRow({ task, now, onOpenDetail, onAssign, onAnswer }: TriageRowProps) {
   const { t } = useTranslation();
   const minutes = now ? (waitingMinutes(task, now) ?? 0) : 0;

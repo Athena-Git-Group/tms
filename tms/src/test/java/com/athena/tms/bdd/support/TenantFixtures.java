@@ -10,15 +10,6 @@ public class TenantFixtures {
 
     private static final String TEST_TENANT_NAME = "測試飯店";
 
-    /**
-     * 「測試飯店」的識別代碼，與 V24 回填既有「測試飯店」用的是同一個值。
-     *
-     * <p>代碼的命名規則：後端測試預設的那一家固定用這個值；另外再建的飯店由呼叫端自己給代碼
-     * （通常就是 feature 裡寫的那個字），這裡不替它編。代碼要符合資料庫的限制：
-     * 長度 3 到 32、只有小寫英文字母、數字與連字號、第一個字是英文字母、不以連字號結尾、
-     * 不連用兩個連字號，而且不能是保留字（例如 {@code test}、{@code admin}、{@code desk}）。
-     * 每家飯店的代碼都不能和別家相同。
-     */
     public static final String TEST_TENANT_CODE = "test-hotel";
 
     private final JdbcClient jdbcClient;
@@ -45,13 +36,6 @@ public class TenantFixtures {
         return cachedTenantId;
     }
 
-    /**
-     * 在「測試飯店」之外另建一家飯店，回傳它的 id。
-     *
-     * <p>測試用的資料庫在案例之間不會清掉飯店，所以同一個代碼第二次呼叫時直接回傳已經建好的那一家；
-     * 但名稱若和先前不同就視為測試資料寫錯而失敗，因為代碼寫入後不能改、也不能兩家共用。
-     * 代碼不合格式或是保留字時由資料庫拒絕。
-     */
     public synchronized long createTenant(String name, String code) {
         Optional<String> existingName = jdbcClient
                 .sql("SELECT name FROM tenants WHERE code = ?")

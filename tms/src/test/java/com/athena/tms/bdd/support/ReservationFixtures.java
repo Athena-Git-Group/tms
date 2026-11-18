@@ -40,7 +40,6 @@ public class ReservationFixtures {
         return upsertReservation(roomNo, attrs, checkinDate, checkinTime, checkinDate.plusDays(1), guestName);
     }
 
-    /** 住超過一晚的訂單：退房日由呼叫端指定，退房時間固定在當天 11:00。 */
     public UUID upsertReservation(
             String roomNo,
             List<String> attrs,

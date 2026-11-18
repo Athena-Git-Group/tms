@@ -275,13 +275,10 @@ void main() {
   });
 
   test('標籤色票的值逐字對上雛形 manager.css', () {
-    // .chip.redo（manager.css:71）
     expect(TmsColors.redoContainer, const Color(0xFFFFF1C2));
     expect(TmsColors.onRedoContainer, const Color(0xFF6B4E00));
-    // .chip.scheduled（manager.css:69）
     expect(TmsColors.scheduledContainer, const Color(0xFFEDE7FF));
     expect(TmsColors.onScheduledContainer, const Color(0xFF4B2FA6));
-    // .chip.closed（manager.css:73）＝ --brand-primary-dark（manager.css:2）
     expect(TmsColors.brandPrimaryDark, const Color(0xFF0A5C64));
   });
 }

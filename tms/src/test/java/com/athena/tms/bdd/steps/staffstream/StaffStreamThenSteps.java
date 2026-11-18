@@ -18,49 +18,31 @@ import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 本模組 {@code 員工事件串流/dsl.md} 的 Then 句型。
- * 多帶一個 {@link DbProbe}：訊號的 {@code seq} 要和 {@code task_events} 裡那一筆事件對得上。
- *
- * <p>所有等待都有上限，預設是模組規定的 10 秒；等不到就以斷言失敗收場，不會無限等。
- * 後端每 15 秒對所有連線送的真實心跳可能夾在任何位置，比對先後順序前一律先拿掉。
- */
 public class StaffStreamThenSteps {
 
-    /** 模組用語對照：訊號名稱對到 {@code task} 訊號的 {@code type}。 */
     private static final Map<String, String> SIGNAL_TYPE = Map.of(
             "認領", "claimed",
             "派單", "triaged",
             "復原派單", "triage_undone");
 
-    /** 模組用語對照：建議重抓的資料對到 {@code resync.refetch}。 */
     private static final Map<String, String> REFETCH = Map.of(
             "櫃檯看板", "/api/v1/desk/board",
             "部門待認領", "/api/v1/pool");
 
-    /** 模組用語對照：降級原因對到 {@code degraded.reason}。 */
     private static final Map<String, String> DEGRADED_REASON = Map.of(
             "處理事件落後", "kafka_consumer_lag",
             "連不上事件來源", "kafka_unavailable");
 
-    /** 模組用語對照：後端目前的狀態對到 {@code heartbeat.degraded}。 */
     private static final Map<String, Boolean> HEARTBEAT_DEGRADED = Map.of(
             "正常", false,
             "降級", true);
 
-    /** 契約裡 {@code task} 訊號允許出現的欄位；多出任何一欄就代表帶了單的內容。 */
     private static final Set<String> TASK_SIGNAL_FIELDS = Set.of("stream_pos", "task_id", "seq", "type", "occurred_at");
 
-    /** 收得到全館每一張單訊號的角色。 */
     private static final Set<String> HOTEL_WIDE_ROLES = Set.of("frontdesk", "manager", "duty_manager");
 
-    /**
-     * 確認「沒有多送一次」時，收到第一則之後再看多久。
-     * 重複送出的那一則和第一則出自同一次處理或同一輪重送，本機上一秒內一定到得了。
-     */
     private static final Duration DUPLICATE_SETTLE = Duration.ofSeconds(1);
 
-    /** 模組規定：確認收不到時，在全館範圍已經收到之後再多等的時間。 */
     private static final Duration ABSENCE_SETTLE = Duration.ofSeconds(2);
 
     private final ScenarioWorld world;
@@ -85,11 +67,6 @@ public class StaffStreamThenSteps {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * 保證員工收到的是那一筆事件本身，而且只收到一次、不夾帶單的內容。
-     * 先等連線上出現這張單、這種類型的訊號，再拿它的 {@code seq} 回頭對 {@code task_events}；
-     * 只看類型的話，同一張單較早的同類事件也會被誤當成這一次的訊號。
-     */
     @那麼("{string} 的串流收到 {string} 的 {string} 訊號")
     public void receivedTaskSignal(String staffName, String taskKey, String signal) {
         String type = lookup(SIGNAL_TYPE, signal, "訊號");
@@ -131,14 +108,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /**
-     * 保證這位員工的連線看不到這張單最近的那筆事件。
-     * 「沒收到」只有在確定後端已經把這筆事件送給該送的連線之後才有意義，否則只是還沒到。
-     *
-     * <p>確定送完的方法：這筆事件已從待送清單送進 Kafka，而且串流的事件消費者已經處理完它；
-     * 後端是在處理那一則的當下逐一寫給每條連線的，處理完就代表送完。
-     * 場景裡若另外開著全館範圍的連線，也等它真的收到這筆事件。之後再多等 2 秒才檢查。
-     */
     @那麼("{string} 的串流沒有收到 {string} 的任何訊號")
     public void receivedNothingForTask(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
@@ -199,7 +168,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /** 被拒絕的連線拿不到串流，所以「沒有收到任何訊號」就是紀錄是空的。 */
     @那麼("這次連線被拒絕")
     public void connectionRejected() {
         Connection connection = streamClient.lastAttempt();
@@ -215,7 +183,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /** 等到降級訊號出現後再多看一下，確認同一次進入降級沒有送第二則。 */
     @那麼("{string} 的串流收到降級訊號，原因是 {string}")
     public void receivedDegraded(String staffName, String reason) {
         String expected = lookup(DEGRADED_REASON, reason, "降級原因");
@@ -256,10 +223,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /**
-     * 真實的定時心跳也可能落在這次觸發的前後；它們反映的是同一個後端狀態，
-     * 所以只要求等到一則 {@code degraded} 對得上的心跳，不指定是哪一則。
-     */
     @那麼("{string} 的串流收到一則心跳，標示後端目前 {string}")
     public void receivedHeartbeat(String staffName, String state) {
         boolean expected = lookup(HEARTBEAT_DEGRADED, state, "後端狀態");
@@ -276,7 +239,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /** 等到連線上拿掉心跳之後至少有 {@code count} 則，回傳前 {@code count} 則；等不到就斷言失敗。 */
     private static List<Event> awaitNonHeartbeat(Connection connection, int count) {
         int[] seen = {0};
         connection.awaitEvent(

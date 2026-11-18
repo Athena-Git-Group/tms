@@ -214,7 +214,6 @@ public class BddSpringConfiguration {
                     tenantFixtures, roomFixtures, reservationFixtures, mutableClock);
         }
 
-        // destroyMethod：案例結束時 Spring 會呼叫它關掉這個案例開過的串流連線，不必另外寫 @After。
         @Bean(destroyMethod = "close")
         @ScenarioScope
         StaffStreamClient staffStreamClient(
@@ -225,7 +224,6 @@ public class BddSpringConfiguration {
             return new StaffStreamClient(environment, objectMapper, scenarioWorld, jobTrigger);
         }
 
-        // destroyMethod：案例結束時 Spring 會呼叫它把後端的降級狀態與事件消費者還原，下一個案例才不會受影響。
         @Bean(destroyMethod = "restore")
         @ScenarioScope
         StreamFaults streamFaults(

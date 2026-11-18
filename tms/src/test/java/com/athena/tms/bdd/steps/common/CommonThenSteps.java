@@ -171,7 +171,6 @@ public class CommonThenSteps {
             check("tasks.dept", expected.dept(), row.get("dept"));
         }
 
-        // 待派單、待認領的單沒有負責人，只用負責人再讀會整段跳過，所以改由同飯店的主管再讀一次
         Object assigneeId = row.get("assignee_id");
         String readerJwt = assigneeId != null
                 ? mintJwtFor(UUID.fromString(String.valueOf(assigneeId)))
@@ -179,10 +178,6 @@ public class CommonThenSteps {
         check("readTasks.state", expected.state(), textOrNull(readTasks(taskId, readerJwt), "state"));
     }
 
-    /**
-     * 只找部門主管：值班主管不能用員工 App 的端點，拿它讀單會被擋成 403。
-     * 案例裡沒有部門主管時另外建一位，避免沒有負責人的單因為找不到讀的人而略過再讀確認。
-     */
     private String supervisorJwt() {
         return dbProbe.queryOne(
                         "SELECT id FROM staff_accounts WHERE tenant_id = ? AND active = true"
@@ -202,7 +197,6 @@ public class CommonThenSteps {
             return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("免查"), null, null);
         }
         if ("待派單".equals(stateChinese)) {
-            // 待派單是還在櫃檯手上、等派單或當場回答的單，部門一定是櫃檯
             return new ExpectedTaskState(Terms.taskState(stateChinese), null, null, Terms.dept("櫃檯"));
         }
         try {

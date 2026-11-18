@@ -29,20 +29,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/**
- * 把 outbox 裡 pending 的訊息送上 Kafka，並保證寫入方的交易一提交就開始送，不必等下一次輪詢。
- *
- * <p>送出全部由一條專屬執行緒負責。寫入 outbox 的交易提交後，{@link #onEnqueued} 只往容量為一的 {@link #wakeSignal}
- * 放一個訊號就返回，請求執行緒不碰資料庫也不碰 Kafka。執行緒被叫醒後跑一輪 {@link #poll}，
- * 一輪會把當下所有 pending 的訊息送完，所以送出期間湧進來的多次提交只在佇列裡留下一個訊號，合併成下一輪。
- * 如果改成一次提交跑一輪，尖峰時一百筆提交就是一百輪重複的查詢。交易回滾不會呼叫 {@link #onEnqueued}，也就不會白跑一輪。
- *
- * <p>沒有訊號時，執行緒每隔 tms.outbox.relay.poll-interval 自己醒來跑一輪。這一輪負責撿回不經 {@link OutboxWriter} 寫入的列，
- * 以及退避時間到期、該重試的訊息；少了它，這兩種訊息會一直留在 pending。
- *
- * <p>{@link #poll} 也可以從外部直接呼叫，和這條執行緒同時跑也安全。每筆訊息送出前都要先搶租約：用一句只在該列仍是 pending 且沒有別人持有租約時才成立的 UPDATE，把下次可重試時間往後推，
- * 搶不到的一方會跳過整個 aggregate_key，同鍵順序不會亂。這和多個 instance 同時跑靠的是同一套機制。
- */
 @Component
 public class OutboxRelay implements SmartLifecycle {
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
@@ -136,7 +122,6 @@ public class OutboxRelay implements SmartLifecycle {
             try {
                 this.poll();
             }
-            // 接住所有 Throwable：送出與輪詢補漏都在這條執行緒上，讓 Error 結束它，之後就再也沒有訊息送出，isRunning() 卻仍回 true。
             catch (Throwable e) {
                 log.error("relay 這輪出錯，等下一輪再試: {}", (Object)e.getMessage(), (Object)e);
             }

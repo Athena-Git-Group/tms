@@ -21,13 +21,6 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 
-/**
- * 介面根 {@code backend/dsl.md} 裡屬於櫃檯的 5 句（待派單的住客需求、已派出、讀取看板、派單、復原）。
- * 這 5 句會被別的模組的 feature 共用，和本模組專屬的句型分開放，補句型時才不會和另外三個檔互相卡住。
- *
- * <p>句中的任務一律寫房號，對應到本場景 Given 建立的那張單。
- * 「這次操作被拒絕」要比對單與事件都沒有變，所以派單與復原的 When 在送出前先記下這張單的現況。
- */
 public class DeskCommonSteps {
 
     private static final String VIA_BUTTON = "button";
@@ -60,14 +53,6 @@ public class DeskCommonSteps {
         this.lastOperationGuard = lastOperationGuard;
     }
 
-    /**
-     * 每一列都由該房的住客實際送出一段文字，讓單走產品自己的建單路徑落進待派單，而不是直接寫資料庫假造。
-     *
-     * <p>單的建立時間與建立事件要由產品自己照時鐘寫入，所以有寫進來的時間時，送出那一刻的時鐘要停在那個時刻。
-     *
-     * <p>文字若被飯店的分類規則接走，單會直接進某個部門的待認領，
-     * 後面所有派單、復原的步驟都會在錯的前提上執行，所以送完先確認單真的落在待派單，不是就當場停下。
-     */
     @假設("待派單有以下住客打字的需求：")
     public void triageHasGuestTypedRequests(DataTable table) {
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
@@ -79,7 +64,6 @@ public class DeskCommonSteps {
             String translated = optionalCell(row, "翻譯");
 
             if (guestName != null) {
-                // 住客連線掛在送單當下入住中的那筆訂房上，訂房要先建好，單才算得到這位住客。
                 createStayingReservation(roomNo, guestName);
             }
 
@@ -139,16 +123,10 @@ public class DeskCommonSteps {
         try {
             return deskApi.createGuestRequest(roomNo, text, lang);
         } finally {
-            // 場景的「現在」由時間相關的句子決定，這一步建完單就讓時鐘回到送單前的時刻。
             clock.setInstant(now);
         }
     }
 
-    /**
-     * 這筆訂房要在今天任何時刻都算入住中，因為場景可能把時鐘撥到一天裡的任何時刻；
-     * 所以入住放在今天零點，退房是明天上午。
-     * 同房同日的訂房在測試資料裡是同一筆，之後別的步驟替同一間房補資料會更新它，不會多出第二筆撞住期。
-     */
     private void createStayingReservation(String roomNo, String guestName) {
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
         LocalDate today = ZonedDateTime.ofInstant(clock.instant(), clock.getZone()).toLocalDate();
@@ -173,7 +151,6 @@ public class DeskCommonSteps {
         }
     }
 
-    /** 測試環境不接翻譯服務，單上要有翻譯就只能由測試補進這張單的備註，櫃檯讀到的就是這一欄。 */
     private void writeTranslation(UUID taskId, String translated) {
         jdbcClient
                 .sql("""

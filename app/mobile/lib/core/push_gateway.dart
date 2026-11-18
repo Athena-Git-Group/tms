@@ -158,7 +158,6 @@ class PushGateway {
     }
   }
 
-  /// 主管的待認領有房務、工務兩池；推播帶部門時先把本機的部門選擇改成它，待認領一打開就停在那一池。
   Future<void> _rememberManagerPoolDept(String? dept) async {
     if (ApiClient.instance.session?.role != 'manager' ||
         !PoolDeptPreference.isPoolDept(dept)) {

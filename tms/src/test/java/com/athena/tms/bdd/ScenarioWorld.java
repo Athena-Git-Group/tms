@@ -35,22 +35,18 @@ public class ScenarioWorld {
         return required(staffJwts, name, "員工 JWT");
     }
 
-    // 帳號與登入：案例裡看得到的明文密碼、臨時密碼與飯店內部編號，給登入、改密碼與查飯店的步驟互相取用。
     private final Map<String, String> staffPasswords = new HashMap<>();
     private final Map<String, String> temporaryPasswords = new HashMap<>();
     private final Map<String, Long> tenantIdsByCode = new HashMap<>();
 
-    /** 記下這位員工目前的明文密碼；案例裡改過密碼就再記一次。 */
     public void rememberStaffPassword(String name, String password) {
         staffPasswords.put(name, password);
     }
 
-    /** 這位員工目前的明文密碼；案例沒有指定過時是空的，呼叫端自己決定用建立帳號時的預設密碼。 */
     public java.util.Optional<String> staffPassword(String name) {
         return java.util.Optional.ofNullable(staffPasswords.get(name));
     }
 
-    /** 記下這位員工在設定新密碼之前用的那組臨時密碼。 */
     public void rememberTemporaryPassword(String name, String password) {
         temporaryPasswords.put(name, password);
     }
@@ -59,7 +55,6 @@ public class ScenarioWorld {
         return required(temporaryPasswords, name, "臨時密碼");
     }
 
-    /** 記下用識別代碼建立的飯店的內部編號 {@code tenants.id}。 */
     public void rememberTenant(String code, long tenantId) {
         tenantIdsByCode.put(code, tenantId);
     }
@@ -111,7 +106,6 @@ public class ScenarioWorld {
         return lastResponse;
     }
 
-    // 有些 Then 要知道上一個請求打了哪條路徑、送了什麼（例如拿同一組員工編號再登入一次來比對回應），所以和回應一起記。
     private ApiRequest lastRequest;
 
     public void setLastRequest(ApiRequest request) {
@@ -125,7 +119,6 @@ public class ScenarioWorld {
         return lastRequest;
     }
 
-    /** 送出去的請求：路徑不含 {@code /api/v1} 前綴；{@code body} 是序列化前的物件，沒有內容時是 null。 */
     public record ApiRequest(String method, String path, Object body) {
     }
 

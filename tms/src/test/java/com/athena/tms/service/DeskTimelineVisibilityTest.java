@@ -6,7 +6,6 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** 鎖住櫃檯歷程目前的略過規則：哪些事件種類的組合會被略過、哪些照常列出。 */
 class DeskTimelineVisibilityTest {
 
     @Test

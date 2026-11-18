@@ -1,10 +1,5 @@
 import type { ReactNode } from 'react';
 
-/**
- * 內容區正中央的一塊說明：上面一個大圖示，下面一行粗體標題、一行說明，需要時再接一顆按鈕。
- * 讀取失敗與待派單頁的兩種空狀態都長這樣，只換圖示、顏色與字。
- * 標題不是頁標題，所以用粗體字而不是標題元素。
- */
 export function CenteredNotice({
   icon,
   iconClassName,
@@ -12,13 +7,10 @@ export function CenteredNotice({
   hint,
   children,
 }: {
-  /** 圖示的線條，畫在 24×24 的框裡。 */
   icon: ReactNode;
-  /** 圖示的顏色，預設是淡灰。 */
   iconClassName?: string;
   title: string;
   hint: string;
-  /** 說明下面的按鈕；沒有就不畫。 */
   children?: ReactNode;
 }) {
   return (

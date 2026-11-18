@@ -38,16 +38,9 @@ enum TicketView {
   }
 }
 
-/// 使用者是從哪個入口打開這張工務單的。
-///
-/// 主管驗收通過後要離開還是留下，取決於這個來源：從待驗收清單進來的人正在
-/// 一張一張處理，通過後應該回到清單繼續下一張；從推播、通知中心或首頁進來
-/// 的人只關心這一張，把他送回清單反而是把他丟到沒要求去的地方。
 enum TicketEntry {
-  /// 主管的待驗收清單。
   verifyQueue,
 
-  /// 推播、通知中心、首頁等其他入口。
   elsewhere,
 }
 
@@ -289,8 +282,6 @@ class _TicketScreenState extends State<TicketScreen> {
     }
     final outcome = _pendingVerifyOutcome;
     _pendingVerifyOutcome = null;
-    // 只有不通過才覆蓋驗收結果卡：那張卡的標題寫死「退回重修」，通過的 outcome
-    // 一旦走到這裡會變成「通過卻顯示退回」。通過路徑自己會清掉暫存值，這裡再擋一次。
     if (outcome != null && outcome.result == 'failed') {
       setState(() => _verifyOutcome = outcome);
     }

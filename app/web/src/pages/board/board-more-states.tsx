@@ -2,12 +2,10 @@ import { useLayoutEffect, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { columnsHiddenOnRight } from '../../lib/board-layout';
 
-/** 看板本體裡各欄的欄頭，由左到右。欄頭身上帶 `data-board-head`（`BoardPage` 的 `ColumnHeading`）。 */
 function headsIn(scroller: HTMLElement): HTMLElement[] {
   return [...scroller.querySelectorAll<HTMLElement>('[data-board-head]')];
 }
 
-/** 看板本體右邊現在看不到幾欄。看得到的範圍扣掉直向捲軸。 */
 function measureHidden(scroller: HTMLElement): number {
   const box = scroller.getBoundingClientRect();
   const visibleRight = box.left + scroller.clientLeft + scroller.clientWidth;
@@ -17,7 +15,6 @@ function measureHidden(scroller: HTMLElement): number {
   );
 }
 
-/** 看板往右捲一欄：一欄的寬度含欄距，量相鄰兩個欄頭左緣的距離。 */
 function scrollOneColumn(scroller: HTMLElement) {
   const [first, second] = headsIn(scroller);
   if (!first) return;
@@ -28,14 +25,6 @@ function scrollOneColumn(scroller: HTMLElement) {
   scroller.scrollBy({ left: step, behavior: 'smooth' });
 }
 
-/**
- * 看板右緣的「還有 {N} 個狀態」與底下的淡出，照雛形 `ui/desk.js` 的 `updateMore`：
- * N 是看板右邊看不到的欄數，按一下往右捲一欄；N 是 0（全部看得到或捲到最右邊）時整個不畫。
- * 看板捲動、看板本體或欄的寬度改變（視窗改尺寸、側欄或詳情面板開關、篩選）時重算。
- *
- * @param scrollerRef 看板本體，也就是可以捲動的那一塊
- * @param layoutKey 欄或泳道換了就換的值，換了就重新量
- */
 export function MoreStatesButton({
   scrollerRef,
   layoutKey,
@@ -64,13 +53,10 @@ export function MoreStatesButton({
   if (hidden === 0) return null;
   return (
     <>
-      {/* 右緣淡出：雛形是內容區邊距內側 56px、到 85% 全成底色（`ui/desk.css` 的 `.more-fade`）。
-          這裡的看板貼齊內容區，所以再加上一段邊距寬，淡出段落在同一個位置，邊距那段全是底色。 */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute top-0 right-0 bottom-2 w-[calc(--spacing(14)+var(--spacing-gutter))] bg-linear-to-r from-bg/0 to-bg to-66%"
       />
-      {/* 雛形的按鈕對齊看板區塊內距內側（`ui/desk.css:132`、`:194`），這裡同樣讓出一段邊距寬，右緣和「代開單」鈕、卡片對齊。 */}
       <button
         type="button"
         onClick={() => scrollerRef.current && scrollOneColumn(scrollerRef.current)}

@@ -22,17 +22,14 @@ import { useSessionStore } from '../stores/session';
 import { ConnectionAlertBar } from './ConnectionAlertBar';
 import { visibleUnopenedEntries } from './unopened-entries';
 
-/** 外框的兩頁：總覽看板與待派單頁。 */
 type ShellPage = 'board' | 'triage';
 
-/** 側欄導覽由上到下的頁。 */
 const SHELL_PAGES: readonly ShellPage[] = ['board', 'triage'];
 
 function shellPageOf(pathname: string): ShellPage {
   return pathname.endsWith(PATHS.triage) ? 'triage' : 'board';
 }
 
-/** 外框用到的線條圖示，照雛形 `ui/desk.js` 的同名圖示。 */
 const ICON_PATHS = {
   desk: (
     <>
@@ -85,7 +82,6 @@ function Icon({ name, className = 'size-[22px] stroke-[1.8]' }: { name: IconName
   );
 }
 
-/** 側欄上每一頁的圖示。 */
 const PAGE_ICONS: Record<ShellPage, IconName> = { board: 'board', triage: 'tray' };
 
 const ICON_BUTTON =
@@ -94,10 +90,6 @@ const ICON_BUTTON =
 const NAV_ITEM =
   'group flex min-h-touch items-center gap-3 rounded-control border-none bg-transparent px-3 text-left text-[17px] text-text no-underline';
 
-/**
- * 側欄「待派單」右側的紅色徽章：全館待派單的張數，和數量卡「待派單」是同一個數字。
- * 0 張或看板資料還沒到時整個不畫，不顯示 0。
- */
 function TriageBadge() {
   const { data: count } = useQuery({
     ...deskBoardQuery,
@@ -111,14 +103,6 @@ function TriageBadge() {
   );
 }
 
-/**
- * 登入後每一頁共用的外框。總覽看板與待派單頁都畫在 `<Outlet />` 的位置，
- * 所以在兩頁之間切換時外框不會重建，掛在外框上的東西也不會被關掉重開。
- *
- * 側欄收起時用 `hidden` 藏起來而不是拿掉，帳號卡等內容一直在頁面上，打開時不必重畫。
- * 還沒自己按過側欄開關時，總覽看板收起、待派單頁打開；按過之後照使用者的選擇。
- * 詳情面板開著時側欄一律收起。
- */
 export function DeskShell() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
@@ -128,16 +112,11 @@ export function DeskShell() {
   const updateView = useBoardViewStore((state) => state.update);
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const detailTaskId = useDeskPanelsStore((state) => state.detailTaskId);
-  // 詳情面板開著時側欄讓位收起，關掉面板後回到原本的開收；這不算使用者自己按了側欄開關，所以不改記下的選擇。
   const isSidebarOpen = !detailTaskId && sidebarOpen(page, sidebarOpenByUser);
   const answerTaskId = useDeskPanelsStore((state) => state.answerTaskId);
   const closeDetail = useDeskPanelsStore((state) => state.closeDetail);
   const hotelCode = useHotelCode();
 
-  // 換頁時關掉詳情面板、清掉數量卡篩選，房號搜尋與泳道留著。
-  // 點側欄與按瀏覽器的上一頁、下一頁都算換頁，所以看的是頁有沒有變，不是點了哪裡；
-  // 重新整理時外框是新掛上的，記下的頁就是現在這頁，篩選還在。
-  // 在畫面畫出來之前就清，換回總覽看板時不會先閃一下舊的篩選。
   const shownPage = useRef(page);
   useLayoutEffect(() => {
     if (shownPage.current === page) return;
@@ -146,17 +125,12 @@ export function DeskShell() {
     updateView({ cardFilter: null });
   }, [page, closeDetail, updateView]);
 
-  // 事件串流掛在外框：在兩頁之間切換時連線不必斷掉重連，兩頁看到的都是同一份跟著現場更新的看板。
   const live = useLiveUpdates();
-  // 兩頁共用同一份看板資料，掛在外框上抓，換頁時不必重抓。
-  // 定時再讀也只放在外框，因為頁面的查詢若也各掛一個計時器，同一份資料會被讀好幾次：
-  // 即時訊號不可信時照連線狀態給的間隔定時讀，回到可信就停；可信時只有讀取失敗才定時再試。
   const { data: hasBoard, isError: boardReadFailed } = useQuery({
     ...deskBoardQuery,
     select: () => true,
     refetchInterval: boardPollMs(live) ?? retryAfterFailure,
   });
-  // 已經有資料之後重讀失敗，畫面留著舊資料，同樣用提醒列告訴櫃檯資料可能延遲。
   const showConnectionAlert = showsConnectionAlert(live) || (hasBoard === true && boardReadFailed);
 
   return (
@@ -243,7 +217,6 @@ export function DeskShell() {
               aria-label={t('shell.openSidebar')}
               className={ICON_BUTTON}
               onClick={() => {
-                // 詳情面板開著時按「打開側欄」，面板讓位給側欄。
                 closeDetail();
                 updateView({ sidebarOpenByUser: true });
               }}

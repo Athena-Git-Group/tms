@@ -8,7 +8,6 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** 鎖住員工事件串流進出降級的規則：同一次降級只宣告一次、恢復只宣告一次、特定恢復跡象只解除對應原因的降級。 */
 class StreamDegradationTest {
 
     private final StreamDegradation degradation = new StreamDegradation();

@@ -5,10 +5,6 @@ import { zhTW } from '../i18n/locales/zh-TW';
 import { displayString } from './display-text';
 import { type TimelineDotTone, timelineMeta, timelineSentence } from './timeline-sentence';
 
-/**
- * 期待的句子與操作者是 `單筆詳情/歷程.feature` 的繁體中文字面；用真的繁體中文資源檔把結果轉成字再比，鍵或代入值有誤都會被抓到。
- * 點的顏色 feature 沒寫，照 `ui/ui-plan.md` 畫面 8 歷程句子表的「色點」欄；暫定句子的顏色照雛形 `ui/desk.js` 的 `eventsOf`。
- */
 const zh = i18next.createInstance();
 void zh.init({
   lng: 'zh-TW',
@@ -18,7 +14,6 @@ void zh.init({
 });
 const t = zh.t as unknown as TFunction;
 
-/** feature 的背景：現在是台北時間 10/26 14:40。 */
 const NOW = new Date('2026-10-26T06:40:00Z');
 const TAIPEI = 480;
 
@@ -59,7 +54,6 @@ const GUEST = { kind: 'guest', name: '陳怡安' } as const;
 const SYSTEM = { kind: 'system' } as const;
 const staff = (name: string, role: 'frontdesk' | 'manager' | 'housekeeping' = 'housekeeping') => ({ kind: 'staff', role, name }) as const;
 
-/** 句子、操作者與點的顏色轉成繁體中文；不顯示的事件回 `null`。 */
 function rowOf(
   event: DeskTimelineEntry,
   of: DeskTaskDetail = task(),
@@ -284,7 +278,6 @@ describe('timelineMeta', () => {
   });
 
   it('同一個時刻，伺服器時區不同，寫出的時刻與是不是今天跟著變', () => {
-    // 台北是 10/26 00:30，算今天；UTC 是 10/25 16:30，現在 06:40 已是 10/26，算昨天；夏威夷（-10:00）的現在與事件都在 10/25，算今天。
     expect(metaOf('2026-10-25T16:30:00Z', NOW, 480)).toBe('00:30 · 住客（陳怡安）');
     expect(metaOf('2026-10-25T16:30:00Z', NOW, 0)).toBe('10/25 16:30 · 住客（陳怡安）');
     expect(metaOf('2026-10-25T16:30:00Z', NOW, -600)).toBe('06:30 · 住客（陳怡安）');

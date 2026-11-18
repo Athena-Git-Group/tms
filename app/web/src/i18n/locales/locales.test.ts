@@ -4,7 +4,6 @@ import { ja } from './ja';
 import { vi as vietnamese } from './vi';
 import { zhTW } from './zh-TW';
 
-/** 型別只保證鍵一致；漏譯成空字串、插值名打錯要在執行期比對。 */
 const LOCALES = { 'zh-TW': zhTW, en, ja, vi: vietnamese } as const;
 
 function flatten(node: unknown, prefix = ''): Map<string, unknown> {

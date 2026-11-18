@@ -29,32 +29,15 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-/**
- * 櫃檯 Web 的看板、單筆詳情與派單。
- *
- * <p>兩台櫃檯可能同時處理同一張待派單，先送到的生效。後到的那一次會收到 409 {@code task_not_in_triage}，
- * 說明由 {@link TaskNotInTriageExplainer} 組。
- */
 @Service
 public class DeskBoardService {
     private static final Set<String> ASSIGNABLE_DEPTS = Set.of("housekeeping", "engineering");
     private static final Set<String> ASSIGN_VIAS = Set.of("button", "drag");
     private static final String DEFAULT_VIA = "button";
-    /** 開單人只對櫃檯代開與同仁報修有意義；住客與系統建的單不帶。 */
     private static final Set<String> CREATOR_NAMED_SOURCES = Set.of("desk", "staff");
     private static final Set<String> ACCEPT_EVENTS = Set.of("assigned", "claimed", "reassigned");
-    /** 畫面的復原按鈕只出現 5 秒，後端多留 5 秒給網路延遲與逾時後重送。 */
     private static final Duration UNDO_WINDOW = Duration.ofSeconds(10);
 
-    /**
-     * 組一張卡片要的每個欄位，一次查完。看板一次讀很多張單，姓名、住客與事件都在這一句裡接上，不逐張回頭查。
-     * 開頭兩個參數都是現在的時間，用來找房間現在住著的訂房；呼叫的一方再接自己的 WHERE 參數。
-     *
-     * <p>各段的口徑：住客先看單上連結的訂房，沒有才看房間現在住著的訂房（入住已到、退房未到、沒有被取代）；
-     * 等待起算是 created 與 returned_to_pool 兩種事件中最新一筆的時間，和待認領清單同一把尺；
-     * 到手方式看最近一筆 claimed、assigned 或 reassigned 事件；
-     * 清潔 SOP 只在打掃單已接、進行中或中斷時算，總數是飯店啟用中的清潔 SOP 項目，已勾選不含跳過的。
-     */
     private static final String TASK_SELECT = """
             SELECT t.*, r.room_no, r.floor,
                    rt.ticket_no,
@@ -137,10 +120,6 @@ public class DeskBoardService {
         this.clock = clock;
     }
 
-    /**
-     * 看板一次讀取：還沒結束的單（不限日期）加上今天結束的單，再加飯店的樓層與登入者本人今天的兩個張數。
-     * 「今天」是注入的時鐘在伺服器時區的日期。一共三句查詢：單、樓層、張數。
-     */
     public DeskBoard board() {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
@@ -164,10 +143,6 @@ public class DeskBoardService {
         return new DeskBoard(now, today, floors, tasks, this.myToday(tenantId, actor.staffId(), todayStart, tomorrowStart));
     }
 
-    /**
-     * 本人今天的已派單與當場回答張數，從事件現算。被復原的派單（下一筆緊接著是 triage_undone）不算，
-     * 所以同一張單派出、復原、再派出只算最後那一次。
-     */
     private DeskMyToday myToday(long tenantId, UUID staffId, OffsetDateTime from, OffsetDateTime until) {
         return this.jdbcTemplate.queryForObject(
                 """
@@ -193,12 +168,6 @@ public class DeskBoardService {
         return this.jdbcTemplate.queryForList(TASK_SELECT + whereAndOrder, all);
     }
 
-    /**
-     * 單筆詳情：卡片欄位，加上住客、開單人、回覆與回答的人、到手與取消的說明、工務單的完修結果，以及歷程。
-     *
-     * <p>查詢次數固定，不隨事件筆數增加：單一句、這張單的全部事件一句，工務單再多一句完修結果。
-     * 回答的人、開單人、經手的人與原負責人都從同一份事件裡取。
-     */
     public DeskTaskDetail detail(UUID taskId) {
         long tenantId = TenantContext.require();
         Map<String, Object> row = this.requireTaskRow(tenantId, taskId);
@@ -220,12 +189,6 @@ public class DeskBoardService {
                 timeline(events, task));
     }
 
-    /**
-     * 把待派單派給房務或工務。
-     *
-     * <p>單是不是還在待派單，由派單那一句更新自己判斷：條件寫在 UPDATE 的 WHERE 裡，單已經不在待派單時一列也不改，
-     * 也不寫事件。這樣兩台櫃檯同時送出時只有一台會成功，不會出現兩筆派單。
-     */
     public DeskTask assign(UUID taskId, String idempotencyKey, DeskAssignRequest request) {
         requireIdempotencyKey(idempotencyKey);
         long tenantId = TenantContext.require();
@@ -247,12 +210,6 @@ public class DeskBoardService {
         return this.deskTaskMapper.toDeskTask(this.requireTaskRow(tenantId, taskId));
     }
 
-    /**
-     * 派出後復原，把剛派出的單收回待派單。
-     *
-     * <p>收不收回由復原那一句更新自己判斷，和派單一樣，兩台櫃檯同時復原、或派出後馬上被認領時只會有一邊生效。
-     * 沒收回時才回頭說明原因，判斷順序見 {@link UndoAssignRejectionExplainer}。
-     */
     public DeskTask undoAssign(UUID taskId, String idempotencyKey) {
         requireIdempotencyKey(idempotencyKey);
         long tenantId = TenantContext.require();
@@ -267,12 +224,6 @@ public class DeskBoardService {
         return this.deskTaskMapper.toDeskTask(this.requireTaskRow(tenantId, taskId));
     }
 
-    /**
-     * 當場回答並結案：櫃檯直接回住客一句話，這張待派單就結束。
-     *
-     * <p>存下來與住客看到的都是去掉頭尾空白後的字，必須是 1 到 120 字。
-     * 單是不是還在待派單由回答那一句更新自己判斷，和派單一樣，兩台櫃檯同時處理時只有先到的生效。
-     */
     public DeskTask answer(UUID taskId, String idempotencyKey, DeskAnswerRequest request) {
         requireIdempotencyKey(idempotencyKey);
         long tenantId = TenantContext.require();
@@ -287,10 +238,6 @@ public class DeskBoardService {
         return this.deskTaskMapper.toDeskTask(this.requireTaskRow(tenantId, taskId));
     }
 
-    /**
-     * 櫃檯的寫入一定要帶防重複鍵。畫面在網路逾時後不知道上一次有沒有成功，只能拿同一把鍵重送；
-     * 沒帶鍵的請求重送時會被當成新的一次，同一張單就可能被處理兩次。
-     */
     private static void requireIdempotencyKey(String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IdempotencyKeyRequired();
@@ -304,10 +251,6 @@ public class DeskBoardService {
                 .orElseThrow(() -> new NotFoundException("查無任務: " + taskId));
     }
 
-    /**
-     * 這張單的全部事件，由舊到新。操作者與接手的人的姓名在這一句裡接上；
-     * 接手的人記在指派、認領、轉派事件內容的 {@code assignee_id}。
-     */
     private List<Map<String, Object>> eventRows(long tenantId, UUID taskId) {
         return this.jdbcTemplate.queryForList(
                 """
@@ -328,7 +271,6 @@ public class DeskBoardService {
                 tenantId, taskId);
     }
 
-    /** 最近一筆這種事件的操作者姓名；住客與系統沒有姓名，回 null。 */
     private static String latestActorName(List<Map<String, Object>> events, String type) {
         for (int i = events.size() - 1; i >= 0; i--) {
             if (type.equals(events.get(i).get("type"))) {
@@ -338,7 +280,6 @@ public class DeskBoardService {
         return null;
     }
 
-    /** 住客的認定同卡片的住客姓名；空房，或訂房上沒有住客姓名時為 null。日期取飯店時區（伺服器時區）。 */
     private DeskTaskDetail.Guest guestOf(Map<String, Object> row) {
         String name = (String) row.get("guest_name");
         if (name == null) {
@@ -352,10 +293,6 @@ public class DeskBoardService {
         return at == null ? null : at.atZoneSameInstant(this.clock.getZone()).toLocalDate();
     }
 
-    /**
-     * 到手的說明取卡片算到手方式的同一筆事件（最近一筆指派、認領或轉派）。
-     * 轉派事件只記新的負責人，原負責人是再往前一筆到手事件接手的人。
-     */
     private static DeskTaskDetail.Accepted acceptedOf(DeskTask task, List<Map<String, Object>> events) {
         if (task.acceptedVia() == null) {
             return null;
@@ -376,7 +313,6 @@ public class DeskBoardService {
         return new DeskTaskDetail.Accepted(task.acceptedVia(), task.acceptedAt(), byName, previousAssigneeName);
     }
 
-    /** 完修結果與驗收通過的主管都只記在工務單上。 */
     private DeskTaskDetail.Repair repairOf(long tenantId, UUID taskId) {
         return this.jdbcTemplate.queryForList(
                 """
@@ -391,7 +327,6 @@ public class DeskBoardService {
                 .orElse(null);
     }
 
-    /** 給櫃檯看的歷程；哪些事件略過不列由 {@link DeskTimelineVisibility} 決定。 */
     private static List<DeskTimelineEntry> timeline(List<Map<String, Object>> events, DeskTask task) {
         List<String> types = events.stream().map(event -> (String) event.get("type")).toList();
         List<DeskTimelineEntry> visible = new ArrayList<>();
@@ -401,7 +336,6 @@ public class DeskBoardService {
         return visible;
     }
 
-    /** 轉派事件之前最近一筆到手事件接手的人；不是轉派或找不到時為 null。 */
     private static String previousAssigneeName(List<Map<String, Object>> events, int index) {
         if (!"reassigned".equals(events.get(index).get("type"))) {
             return null;
@@ -424,7 +358,6 @@ public class DeskBoardService {
                 timelineDetail(type, event, task, previousAssigneeName));
     }
 
-    /** 每種事件只帶契約列給它的那幾項，其餘留 null 不輸出；畫面沒有句子的事件種類不帶內容。 */
     private static DeskTimelineEntry.Detail timelineDetail(
             String type, Map<String, Object> event, DeskTask task, String previousAssigneeName) {
         String reason = (String) event.get("reason");
@@ -458,12 +391,10 @@ public class DeskBoardService {
         };
     }
 
-    /** 建立快照的起點。工務單已沒有主管審核，舊單記的 pending_review 當成直接進待認領。 */
     private static String initialState(String state) {
         return "pending_review".equals(state) ? "pool" : state;
     }
 
-    /** 住客的姓名取這張單的住客；空房為 null。系統沒有姓名。 */
     private static DeskTimelineEntry.Actor actorOf(String role, String name, String guestName) {
         if ("guest".equals(role)) {
             return new DeskTimelineEntry.Actor(role, null, guestName);

@@ -27,10 +27,8 @@ public class AccountThenSteps {
     private static final String DESK_BOARD_PATH = "/desk/board";
     private static final String STAFF_TODAY_PATH = "/me/today";
 
-    /** 和「密碼錯誤」比對時故意送錯的密碼；只要不可能是任何案例真的設過的密碼就好。 */
     private static final String PROBE_WRONG_PASSWORD = "錯誤密碼-account-then";
 
-    /** 和「查不到」比對時用的代碼：格式合法、不是保留字，但不會有飯店用它。 */
     private static final String PROBE_UNKNOWN_HOTEL_CODE = "nohotel-zz9";
 
     private static final Map<String, String> PASSWORD_RULE = Map.of(
@@ -71,7 +69,6 @@ public class AccountThenSteps {
         check("LoginResponse.mustChangePassword", false, body.path("mustChangePassword").asBoolean(true));
         requireCredential(body, "登入成功");
 
-        // 登入只換發憑證，不建帳號、不改帳號：員工編號仍只對到這一個人，臨時密碼標記與啟用狀態都維持原樣。
         long sameLoginId = dbProbe.count(
                 "SELECT count(*) FROM staff_accounts WHERE tenant_id = ? AND login_id = ?",
                 staffRow.get("tenant_id"), staffRow.get("login_id"));
@@ -87,8 +84,6 @@ public class AccountThenSteps {
         check("登入失敗的提示 message", hint, textOrNull(json, "message"));
         requireNoCredential(json, "登入失敗");
 
-        // 員工編號對得到帳號時，這次錯誤要記進連續錯誤次數；對不到帳號時沒有地方可記，不檢查。
-        // 登入帶了飯店代碼就看那一家的帳號，沒帶就看「測試飯店」的。
         String loginId = lastLoginField("loginId");
         Optional<Long> tenantId = loginTargetTenantId();
         Optional<Map<String, Object>> account = tenantId.flatMap(id -> dbProbe.queryOne(
@@ -126,7 +121,6 @@ public class AccountThenSteps {
         }
         Instant lockedUntil = toInstant(lockedUntilValue);
 
-        // 鎖定到期時間是最後一次錯誤後的指定分鐘數。登入用的是真實時間，所以和「現在」比、容許兩分鐘誤差。
         Instant expected = Instant.now().plus(Duration.ofMinutes(minutes));
         if (Duration.between(expected, lockedUntil).abs().compareTo(Duration.ofMinutes(2)) > 0) {
             throw new AssertionError(
@@ -159,7 +153,6 @@ public class AccountThenSteps {
         check("LoginResponse.mustChangePassword", true, body.path("mustChangePassword").asBoolean(false));
         String token = requireCredential(body, "「" + staffName + "」臨時密碼登入");
 
-        // 改密之前這把憑證只能拿去改密碼，其他要身分的端點一律 403。櫃檯看板與員工端點各打一支，兩種介面都涵蓋到。
         for (String path : List.of(DESK_BOARD_PATH, STAFF_TODAY_PATH)) {
             ScenarioWorld.ApiResponse rejected = apiClient.get(path, BddApiClient.Auth.staff(token));
             if (rejected.status() != 403) {
@@ -202,7 +195,6 @@ public class AccountThenSteps {
             }
         }
 
-        // 拿同一組員工編號、同一個登入來源，故意送錯密碼再登入一次，兩份回應必須整份相同，才看不出密碼其實是對的。
         Map<String, Object> wrongPassword = new LinkedHashMap<>();
         wrongPassword.put("loginId", lastLoginField("loginId"));
         wrongPassword.put("password", PROBE_WRONG_PASSWORD);
@@ -229,7 +221,6 @@ public class AccountThenSteps {
                     "預期「" + staffName + "」沒有被鎖定，實際 staff_accounts.locked_until=" + row.get("locked_until"));
         }
 
-        // 被擋下的那次送的就是正確密碼；不帶登入來源再用它登入一次，要能照常登入。
         Map<String, Object> plainLogin = Map.of(
                 "loginId", String.valueOf(row.get("login_id")),
                 "password", lastLoginField("password"));
@@ -241,7 +232,6 @@ public class AccountThenSteps {
         }
     }
 
-    // 只讀資料庫、不再登入，所以可以接在其他 Then 後面，不會改到上一次登入的回應。
     @那麼("{string} 的連續錯誤次數是 {int} 次")
     public void failedCountIs(String staffName, int times) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
@@ -332,7 +322,6 @@ public class AccountThenSteps {
     public void passwordStillTemporary(String staffName) {
         UUID staffId = UUID.fromString(world.staffId(staffName));
         Map<String, Object> row = staffRow(staffId, staffName);
-        // 雜湊每次重算都不同，所以用「仍對得上臨時密碼」來確認這次請求沒有改到密碼。
         if (!passwordEncoder.matches(world.temporaryPassword(staffName), String.valueOf(row.get("password_hash")))) {
             throw new AssertionError("「" + staffName + "」staff_accounts.password_hash 預期仍是原本的臨時密碼，實際已被改掉");
         }
@@ -372,7 +361,6 @@ public class AccountThenSteps {
             throw new AssertionError("查不到飯店時回應不該帶飯店資料，實際 body=" + resp.body());
         }
 
-        // 不同原因要回一模一樣的內容，才看不出是哪一種：拿一個格式合法但沒有飯店用的代碼再查一次，兩份回應必須整份相同。
         ScenarioWorld.ApiResponse reference =
                 apiClient.get(PUBLIC_HOTEL_PATH_PREFIX + PROBE_UNKNOWN_HOTEL_CODE, BddApiClient.Auth.none());
         if (reference.status() != resp.status() || !Objects.equals(reference.json(), json)) {
@@ -391,7 +379,6 @@ public class AccountThenSteps {
                 .orElseThrow(() -> new AssertionError("staff_accounts 查無員工「" + staffName + "」id=" + staffId));
     }
 
-    /** 上一個請求必須是登入，回傳它送出的內容。Then 用它取得「這次登入的是哪個員工編號」。 */
     private Map<?, ?> lastLoginBody() {
         ScenarioWorld.ApiRequest request = world.lastRequest();
         if (!LOGIN_PATH.equals(request.path()) || !(request.body() instanceof Map<?, ?> body)) {
@@ -400,7 +387,6 @@ public class AccountThenSteps {
         return body;
     }
 
-    /** 上一次登入要登進哪一家：帶了飯店代碼就是那一家（對不到飯店時是空的），沒帶就是「測試飯店」。 */
     private Optional<Long> loginTargetTenantId() {
         Object hotelCode = lastLoginBody().get("hotelCode");
         if (hotelCode == null) {
@@ -427,7 +413,6 @@ public class AccountThenSteps {
         return request.path().substring(PUBLIC_HOTEL_PATH_PREFIX.length());
     }
 
-    /** 角色用語：主管、值班主管、老闆查角色對照；櫃檯、房務、工務的角色代碼和部門代碼相同。 */
     private static String roleCode(String term) {
         try {
             return Terms.role(term);
@@ -452,7 +437,6 @@ public class AccountThenSteps {
         return json;
     }
 
-    /** 登入回應的憑證是 token 加到期時間，兩樣都要有，後續請求才用得了。 */
     private static String requireCredential(JsonNode body, String what) {
         String token = requireToken(body, what);
         String expiresAt = textOrNull(body, "expiresAt");

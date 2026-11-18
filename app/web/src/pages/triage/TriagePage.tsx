@@ -13,10 +13,6 @@ import { deptLoadText, triageEmptyText, triageSubtitleText } from '../../lib/tri
 import { useDeskPanelsStore } from '../../stores/desk-panels';
 import { useCorrectedNow } from '../../stores/server-clock';
 
-/**
- * 待派單頁的頁副標，放在工具列的頁標題下面：有單寫「{N} 張等你派單 · 最久已等 {M} 分」，清單空了寫「目前沒有要派的單」。
- * 讀的是外框那一份看板資料；還沒讀到時不寫字，不先說沒有單。
- */
 export function TriageSubtitle() {
   const { t } = useTranslation();
   const { data } = useQuery(deskBoardQuery);
@@ -25,12 +21,6 @@ export function TriageSubtitle() {
   return <div className="min-h-[17px] truncate text-[13px] text-text-2">{triageSubtitleText(rows, now, t)}</div>;
 }
 
-/**
- * 待派單頁（路徑 `/triage`），畫在外框的內容區：頁首、需求清單與頁尾說明。
- * 清單就是看板資料裡的待派單，和總覽看板讀同一份快取，不另外向後端讀。
- * 系統不建議部門，每一列只有「派給房務」「派給工務」「當場回答…」三顆動作，由櫃檯自己判斷。
- * 清單空了只畫空狀態；第一次讀取畫骨架、讀不到畫讀取失敗，都不會顯示成沒有單。
- */
 export function TriagePage() {
   const { t } = useTranslation();
   const { data, isError, errorUpdatedAt, refetch } = useQuery(deskBoardQuery);
@@ -92,11 +82,6 @@ export function TriagePage() {
   );
 }
 
-/**
- * 待派單清單空了的時候畫在清單位置的說明，這時沒有頁首與頁尾。
- * 今天派過單或當場回答過是綠色勾的「都派完了」，兩個都沒有是灰色收件匣的「目前沒有要派的單」。
- * 派單或復原後看板會重讀，張數跟著後端更新。
- */
 function TriageEmpty({ myToday }: { myToday: DeskMyToday }) {
   const { t } = useTranslation();
   const { done, title, hint } = triageEmptyText(myToday, t);
