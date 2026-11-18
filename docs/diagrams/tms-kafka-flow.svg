@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 880" width="1400" height="880" font-family="'Xiaolai SC','LXGW WenKai TC','Klee One','Virgil','Comic Sans MS','PingFang TC',cursive,sans-serif">
+<defs><filter id="rough" filterUnits="userSpaceOnUse" x="0" y="0" width="1400" height="880"><feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter>
+<marker id="m1971c2" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#1971c2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="m2f9e44" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#2f9e44" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="m7048e8" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#7048e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="me8590c" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#e8590c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="m495057" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#495057" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="m0c8599" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#0c8599" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="me03131" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#e03131" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="madb5bd" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L10 5 L1 9" fill="none" stroke="#adb5bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1400" height="880" fill="#fffdf8"/>
+<text x="30" y="44" font-size="26" fill="#1e1e1e" text-anchor="start" font-weight="bold">一個動作，兩種通知：Kafka 在中間做什麼？</text>
+<text x="30" y="72" font-size="14" fill="#495057" text-anchor="start" font-weight="normal">以「櫃檯派單」為例。寫入只做一件事：在同一筆交易裡把資料和「要發的事件」一起存好；之後的發送都在交易外、非同步進行</text>
+<path d="M180 345 L228 345" fill="none" stroke="#1971c2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m1971c2)" filter="url(#rough)"/>
+<text x="204" y="335" font-size="13" fill="#1971c2" text-anchor="middle" font-weight="normal">① 派單</text>
+<path d="M540 345 L578 345" fill="none" stroke="#2f9e44" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m2f9e44)" filter="url(#rough)"/>
+<text x="552" y="335" font-size="13" fill="#2f9e44" text-anchor="middle" font-weight="normal">②</text>
+<path d="M750 320 L788 250" fill="none" stroke="#e8590c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#me8590c)" filter="url(#rough)"/>
+<text x="758" y="272" font-size="13" fill="#e8590c" text-anchor="start" font-weight="normal">③</text>
+<path d="M750 370 L788 450" fill="none" stroke="#e8590c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#me8590c)" filter="url(#rough)"/>
+<text x="758" y="425" font-size="13" fill="#e8590c" text-anchor="start" font-weight="normal">③</text>
+<path d="M990 240 L1058 240" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<path d="M990 215 L1020 215 L1020 160 L1285 160 L1285 188" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<path d="M990 455 L1020 455 L1020 600 L1058 600" fill="none" stroke="#e8590c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#me8590c)" filter="url(#rough)"/>
+<text x="1026" y="540" font-size="13" fill="#e8590c" text-anchor="start" font-weight="normal">④</text>
+<path d="M1130 290 L1130 338" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<text x="1140" y="320" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑤ SSE</text>
+<path d="M1285 290 L1285 338" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<text x="1295" y="320" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑤ SSE</text>
+<path d="M1100 640 L1100 698" fill="none" stroke="#495057" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m495057)" filter="url(#rough)"/>
+<text x="1110" y="675" font-size="13" fill="#495057" text-anchor="start" font-weight="normal">⑤</text>
+<path d="M1100 768 L1100 806" fill="none" stroke="#495057" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m495057)" filter="url(#rough)"/>
+<g filter="url(#rough)"><rect x="30" y="300" width="150" height="95" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="32" y="298.5" width="147" height="97" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
+<text x="105.0" y="327" font-size="17" fill="#1e1e1e" text-anchor="middle" font-weight="bold">櫃檯人員</text>
+<text x="105.0" y="350" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">按「派單」</text>
+<g filter="url(#rough)"><rect x="210" y="110" width="330" height="500" rx="14" fill="none" stroke="#7048e8" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="212" y="108.5" width="327" height="502" rx="15" fill="none" stroke="#7048e8" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
+<text x="226" y="136" font-size="15" fill="#7048e8" text-anchor="start" font-weight="bold">同一筆資料庫交易</text>
+<g filter="url(#rough)"><rect x="230" y="150" width="290" height="80" rx="14" fill="#f3f0ff" stroke="#7048e8" stroke-width="2.2"/><rect x="232" y="148.5" width="287" height="82" rx="15" fill="none" stroke="#7048e8" stroke-width="1" opacity=".5"/></g>
+<text x="375.0" y="177" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">工單更新＋事件紀錄</text>
+<text x="375.0" y="200" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">tasks 改狀態；task_events 記一筆</text>
+<text x="375.0" y="219" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">每張單自己的流水號 seq（如 5）</text>
+<g filter="url(#rough)"><rect x="230" y="245" width="290" height="80" rx="14" fill="#f3f0ff" stroke="#7048e8" stroke-width="2.2"/><rect x="232" y="243.5" width="287" height="82" rx="15" fill="none" stroke="#7048e8" stroke-width="1" opacity=".5"/></g>
+<text x="375.0" y="272" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">outbox：看板事件 ×1</text>
+<text x="375.0" y="295" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">種類 task_event</text>
+<text x="375.0" y="314" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">分組鍵 task:123</text>
+<g filter="url(#rough)"><rect x="230" y="340" width="290" height="95" rx="14" fill="#f3f0ff" stroke="#7048e8" stroke-width="2.2"/><rect x="232" y="338.5" width="287" height="97" rx="15" fill="none" stroke="#7048e8" stroke-width="1" opacity=".5"/></g>
+<text x="375.0" y="367" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">outbox：推播 ×N</text>
+<text x="375.0" y="390" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">收件人在這一刻就決定好</text>
+<text x="375.0" y="409" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">每位收件人一筆</text>
+<text x="375.0" y="428" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">（例：被派到的房務員）</text>
+<g filter="url(#rough)"><rect x="230" y="450" width="290" height="80" rx="14" fill="#f3f0ff" stroke="#7048e8" stroke-width="2.2"/><rect x="232" y="448.5" width="287" height="82" rx="15" fill="none" stroke="#7048e8" stroke-width="1" opacity=".5"/></g>
+<text x="375.0" y="477" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">notifications</text>
+<text x="375.0" y="500" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">App 裡的通知收件匣</text>
+<text x="375" y="560" font-size="13" fill="#7048e8" text-anchor="middle" font-weight="normal">交易失敗 → 全部沒寫，也不會發任何通知</text>
+<text x="375" y="580" font-size="13" fill="#7048e8" text-anchor="middle" font-weight="normal">交易成功 → 事件一定會被送出去</text>
+<g filter="url(#rough)"><rect x="580" y="290" width="170" height="110" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="582" y="288.5" width="167" height="112" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
+<text x="665.0" y="317" font-size="16" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Outbox 轉送器</text>
+<text x="665.0" y="340" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">交易提交後被叫醒</text>
+<text x="665.0" y="359" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">撈出待送的事件</text>
+<text x="665.0" y="378" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">每 2 秒巡一次補漏</text>
+<text x="665" y="425" font-size="12" fill="#2f9e44" text-anchor="middle" font-weight="normal">送不出去：1、2、4… 秒退避</text>
+<text x="665" y="442" font-size="12" fill="#2f9e44" text-anchor="middle" font-weight="normal">最多送 8 次 → 標 failed 待人工</text>
+<text x="665" y="459" font-size="12" fill="#2f9e44" text-anchor="middle" font-weight="normal">failed 會擋住同一張單後面的事件</text>
+<text x="665" y="476" font-size="12" fill="#2f9e44" text-anchor="middle" font-weight="normal">→ 同一張單永遠不會亂序</text>
+<g filter="url(#rough)"><rect x="790" y="110" width="200" height="500" rx="14" fill="none" stroke="#e8590c" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="792" y="108.5" width="197" height="502" rx="15" fill="none" stroke="#e8590c" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
+<text x="806" y="136" font-size="15" fill="#e8590c" text-anchor="start" font-weight="bold">Kafka</text>
+<g filter="url(#rough)"><rect x="805" y="180" width="170" height="130" rx="14" fill="#fff4e6" stroke="#e8590c" stroke-width="2.2"/><rect x="807" y="178.5" width="167" height="132" rx="15" fill="none" stroke="#e8590c" stroke-width="1" opacity=".5"/></g>
+<text x="890.0" y="207" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">tms.task-events</text>
+<text x="890.0" y="230" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">工單狀態變化</text>
+<text x="890.0" y="249" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">以 task:123 分區</text>
+<text x="890.0" y="268" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">→ 同一張單</text>
+<text x="890.0" y="287" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">照 seq 順序到</text>
+<g filter="url(#rough)"><rect x="805" y="395" width="170" height="120" rx="14" fill="#fff4e6" stroke="#e8590c" stroke-width="2.2"/><rect x="807" y="393.5" width="167" height="122" rx="15" fill="none" stroke="#e8590c" stroke-width="1" opacity=".5"/></g>
+<text x="890.0" y="422" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">tms.push</text>
+<text x="890.0" y="445" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">要推的通知</text>
+<text x="890.0" y="464" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">一則 = 一位收件人</text>
+<text x="890.0" y="483" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">失敗備援：</text>
+<text x="890.0" y="502" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">tms.push.DLT</text>
+<g filter="url(#rough)"><rect x="1040" y="110" width="340" height="350" rx="14" fill="none" stroke="#0c8599" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="1042" y="108.5" width="337" height="352" rx="15" fill="none" stroke="#0c8599" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
+<text x="1056" y="136" font-size="15" fill="#0c8599" text-anchor="start" font-weight="bold">看板事件消費者：每台後端一個獨立群組</text>
+<g filter="url(#rough)"><rect x="1060" y="190" width="140" height="100" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="1062" y="188.5" width="137" height="102" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
+<text x="1130.0" y="217" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">後端 A</text>
+<text x="1130.0" y="240" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">收到全部事件</text>
+<text x="1130.0" y="259" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">連著：櫃檯 1、2</text>
+<g filter="url(#rough)"><rect x="1215" y="190" width="140" height="100" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="1217" y="188.5" width="137" height="102" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
+<text x="1285.0" y="217" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">後端 B</text>
+<text x="1285.0" y="240" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">也收到全部事件</text>
+<text x="1285.0" y="259" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">連著：櫃檯 3</text>
+<g filter="url(#rough)"><rect x="1060" y="340" width="295" height="70" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="1062" y="338.5" width="292" height="72" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
+<text x="1207.5" y="367" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">櫃檯瀏覽器</text>
+<text x="1207.5" y="390" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">收到「哪張單變了」→ 重抓看板</text>
+<text x="1210" y="432" font-size="12" fill="#0c8599" text-anchor="middle" font-weight="normal">為什麼每台都要收全部？櫃檯的連線</text>
+<text x="1210" y="449" font-size="12" fill="#0c8599" text-anchor="middle" font-weight="normal">分散在不同台後端，誰都可能需要</text>
+<g filter="url(#rough)"><rect x="1040" y="490" width="340" height="370" rx="14" fill="none" stroke="#495057" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="1042" y="488.5" width="337" height="372" rx="15" fill="none" stroke="#495057" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
+<text x="1056" y="516" font-size="15" fill="#495057" text-anchor="start" font-weight="bold">推播消費者：所有後端共用一個群組</text>
+<g filter="url(#rough)"><rect x="1060" y="560" width="140" height="80" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="1062" y="558.5" width="137" height="82" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
+<text x="1130.0" y="587" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">後端 A</text>
+<text x="1130.0" y="610" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">這則由我送</text>
+<g filter="url(#rough)"><rect x="1215" y="560" width="140" height="80" rx="14" fill="#f8f9fa" stroke="#adb5bd" stroke-width="2.2"/><rect x="1217" y="558.5" width="137" height="82" rx="15" fill="none" stroke="#adb5bd" stroke-width="1" opacity=".5"/></g>
+<text x="1285.0" y="587" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">後端 B</text>
+<text x="1285.0" y="610" font-size="13" fill="#adb5bd" text-anchor="middle" font-weight="normal">這則不歸我</text>
+<g filter="url(#rough)"><rect x="1060" y="705" width="295" height="63" rx="14" fill="#f1f3f5" stroke="#495057" stroke-width="2.2"/><rect x="1062" y="703.5" width="292" height="65" rx="15" fill="none" stroke="#495057" stroke-width="1" opacity=".5"/></g>
+<text x="1207.5" y="732" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Firebase（Google 推播）</text>
+<text x="1207.5" y="755" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">→ iOS／Android</text>
+<g filter="url(#rough)"><rect x="1060" y="808" width="295" height="44" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="1062" y="806.5" width="292" height="46" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
+<text x="1207" y="836" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">收件人手機跳通知</text>
+<text x="1365" y="600" font-size="12" fill="#1e1e1e" text-anchor="start" font-weight="normal"></text>
+<text x="1250" y="658" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">為什麼共用群組？同一則</text>
+<text x="1250" y="674" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">只能送一次，大家搶著送</text>
+<text x="1250" y="690" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">手機會收到好幾則</text>
+<g filter="url(#rough)"><rect x="30" y="640" width="980" height="220" rx="14" fill="none" stroke="#868e96" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="32" y="638.5" width="977" height="222" rx="15" fill="none" stroke="#868e96" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
+<text x="46" y="666" font-size="15" fill="#868e96" text-anchor="start" font-weight="bold">白話：Kafka 在這裡扮演「廣播站＋郵局」</text>
+<text x="50" y="690" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">廣播站（tms.task-events）：只說「123 號單變了（第 5 版）」，所有後端都聽得到，各自轉告連在自己身上的櫃檯看板。</text>
+<text x="50" y="716" font-size="13" fill="#495057" text-anchor="start" font-weight="normal">郵局（tms.push）：每封信寫好收件人，一封只派一位郵差送，送到 Firebase 再到手機。</text>
+<text x="50" y="742" font-size="13" fill="#7048e8" text-anchor="start" font-weight="normal">為什麼不在派單當下直接送？① 派單不用等通知送完，按鈕馬上有反應；② 後端或 Kafka 暫時掛掉，</text>
+<text x="50" y="768" font-size="13" fill="#7048e8" text-anchor="start" font-weight="normal">   事件還在 outbox 裡，恢復後補送，不會掉；③ 多一種收件方（例如 PMS 對接）只要再訂閱一次，派單程式不用改。</text>
+<text x="50" y="794" font-size="13" fill="#e8590c" text-anchor="start" font-weight="normal">重複怎麼辦？Kafka 可能把同一則送兩次：看板端記住每張單送過的最大 seq，舊的丟掉；推播端先查送過沒有。</text>
+</svg>
