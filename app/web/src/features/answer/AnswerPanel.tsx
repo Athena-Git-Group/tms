@@ -34,7 +34,7 @@ export function AnswerPanel({ taskId }: { taskId: string }) {
   const replyBox = useRef<HTMLTextAreaElement>(null);
   const now = useCorrectedNow();
   const closeAnswer = useDeskPanelsStore((state) => state.closeAnswer);
-  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: () => readDeskTask(taskId) });
+  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: ({ signal }) => readDeskTask(taskId, signal) });
   const quickReplies = useQuery(quickRepliesQuery);
   const reply = useAnswerReply(taskId, task?.roomNo ?? '');
 

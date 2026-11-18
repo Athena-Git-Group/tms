@@ -34,8 +34,9 @@ export const BOARD_COLUMNS: readonly BoardColumn[] = [
 ];
 
 /**
- * 這張單落在哪一欄。完成的單當場回答過的已經結束，放「已結案」；其餘完成的單還在等查房或驗收，放「已完成」。
- * 查房通過、免查、驗收結案、取消都放「已結案」。
+ * 這張單落在哪一欄。後端記了結束時刻（`endedAt` 有值）的單一律放「已結案」，
+ * 包括查房通過、免查、驗收結案、取消、當場回答，以及完成當下就結束的備品與其他類單。
+ * 「已完成」只放完成了、還在等查房或驗收的單；只看 `state` 的話，完成的備品單會一直佔著「已完成」，頁副標也會把它算成未結案。
  */
 export function columnOf(task: DeskTask): BoardColumn {
   switch (task.state) {
@@ -47,7 +48,7 @@ export function columnOf(task: DeskTask): BoardColumn {
     case 'deferred':
       return task.state;
     case 'done':
-      return task.answered ? 'closed' : 'done';
+      return task.endedAt ? 'closed' : 'done';
     case 'inspected':
     case 'closed':
     case 'cancelled':
@@ -83,17 +84,27 @@ function msOf(moment: string | null | undefined): number {
 }
 
 /**
+ * 後端給看板時的順序：建立時間新的在上，同一刻建立的再比 id，大的在上。
+ * 拿它當每一欄最後的比較，時刻相同的單才不會因為即時更新把新卡片併進陣列的位置不同，跟重新整理後排得不一樣。
+ */
+function byServerOrder(a: DeskTask, b: DeskTask): number {
+  return msOf(b.createdAt) - msOf(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+}
+
+/**
  * 一欄裡的單由上到下的順序：待派單最新進來的在上；待認領等最久的在上；其他欄最後更新最新的在上。
- * 回傳新的陣列，不動傳進來的那一份。
+ * 時刻相同時照後端給看板的順序。回傳新的陣列，不動傳進來的那一份。
  */
 export function sortInColumn(column: BoardColumn, tasks: readonly DeskTask[]): DeskTask[] {
   const sorted = [...tasks];
   switch (column) {
     case 'triage':
-      return sorted.sort((a, b) => msOf(b.createdAt) - msOf(a.createdAt));
+      return sorted.sort(byServerOrder);
     case 'pool':
-      return sorted.sort((a, b) => msOf(a.waitingSince ?? a.createdAt) - msOf(b.waitingSince ?? b.createdAt));
+      return sorted.sort(
+        (a, b) => msOf(a.waitingSince ?? a.createdAt) - msOf(b.waitingSince ?? b.createdAt) || byServerOrder(a, b),
+      );
     default:
-      return sorted.sort((a, b) => msOf(b.updatedAt) - msOf(a.updatedAt));
+      return sorted.sort((a, b) => msOf(b.updatedAt) - msOf(a.updatedAt) || byServerOrder(a, b));
   }
 }

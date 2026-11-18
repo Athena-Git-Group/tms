@@ -18,9 +18,14 @@ export function assignRequest(dept: AssignDept, via: AssignVia): DeskAssignReque
   return { dept, via };
 }
 
-/** 看板資料裡把同一張單換成新的樣子；看板裡沒有這張單時原樣回傳。 */
+/**
+ * 看板資料裡把同一張單換成新的樣子；看板裡沒有這張單時原樣回傳。
+ * 看板上那張的步數（`seq`）比較大時也原樣回傳：派單、復原、當場回答的回應可能比即時訊號帶來的卡片晚到，
+ * 換上它會把畫面倒回舊的樣子，而之後不一定還有訊號來糾正。步數一樣時照換，按下去先畫的樣子才能蓋上去。
+ */
 export function withTaskReplaced(board: DeskBoard, task: DeskTask): DeskBoard {
-  if (!board.tasks.some((item) => item.id === task.id)) return board;
+  const current = board.tasks.find((item) => item.id === task.id);
+  if (!current || current.seq > task.seq) return board;
   return { ...board, tasks: board.tasks.map((item) => (item.id === task.id ? task : item)) };
 }
 
@@ -44,7 +49,7 @@ export function withConflictSettled(board: DeskBoard, taskId: string, context: C
     case 'assigned':
       return isAssignDept(context.dept) ? withTaskReplaced(board, assumedAssigned(task, context.dept)) : board;
     case 'answered':
-      return withTaskReplaced(board, { ...task, state: 'done', answered: true });
+      return withTaskReplaced(board, { ...task, state: 'done', answered: true, endedAt: task.endedAt ?? task.updatedAt });
     case 'guest_withdrew':
       return withTaskReplaced(board, { ...task, state: 'cancelled' });
     default:

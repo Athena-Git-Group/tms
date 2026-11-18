@@ -14,6 +14,7 @@ function task(id: string, state: TaskState, overrides: Partial<DeskTask> = {}): 
   return {
     id,
     displayNo: `T-${id}`,
+    seq: 1,
     state,
     answered: false,
     dept: 'housekeeping',
@@ -125,15 +126,17 @@ describe('columnHeads', () => {
     expect(headOf(tasks, 'doing').warning).toBeNull();
   });
 
-  it('已完成欄只算打掃單為「待查房」；當場回答過的單在已結案欄，不算', () => {
+  it('已完成欄只算打掃單為「待查房」；等驗收的工務單不算，已結束的單在已結案欄也不算', () => {
     const tasks = [
       task('c1', 'done', { type: 'cleaning' }),
       task('c2', 'done', { type: 'cleaning' }),
-      task('a1', 'done', { type: 'amenity' }),
-      task('ans', 'done', { type: 'cleaning', answered: true }),
+      task('r1', 'done', { type: 'repair' }),
+      task('a1', 'done', { type: 'amenity', endedAt: ago(3) }),
+      task('ans', 'done', { type: 'cleaning', answered: true, endedAt: ago(3) }),
     ];
-    expect(headOf(tasks, 'done').warning).toEqual({ kind: 'awaitingInspection', count: 2 });
-    expect(headOf([task('a1', 'done', { type: 'amenity' })], 'done').warning).toBeNull();
+    expect(headOf(tasks, 'done')).toMatchObject({ count: 3, warning: { kind: 'awaitingInspection', count: 2 } });
+    expect(headOf(tasks, 'closed')).toMatchObject({ count: 2, warning: null });
+    expect(headOf([task('r1', 'done', { type: 'repair' })], 'done').warning).toBeNull();
   });
 
   it('還沒有校正後的現在時不顯示「逾 20 分」', () => {

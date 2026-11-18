@@ -102,6 +102,8 @@ export interface DeskGuestText {
 /** 時間欄位都是時刻；「等 N 分」「接 N 分」由畫面用校正過的現在去換算。 */
 export interface DeskTask {
   id: string;
+  /** 這張卡片是這張單第幾步的樣子；同一張單拿到兩份卡片時，步數大的比較新。 */
+  seq: number;
   displayNo: string;
   state: TaskState;
   answered: boolean;

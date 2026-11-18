@@ -78,7 +78,7 @@ export function DetailPanel({ taskId }: { taskId: string }) {
   const closeDetail = useDeskPanelsStore((state) => state.closeDetail);
   const now = useCorrectedNow();
   const offsetMinutes = useServerClockStore((state) => state.serverUtcOffsetMinutes);
-  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: () => readDeskTask(taskId) });
+  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: ({ signal }) => readDeskTask(taskId, signal) });
   useRereadWithBoard(taskId);
   const contentId = useId();
   const timelineId = useId();
@@ -221,9 +221,10 @@ function DetailFooter({ task }: { task: DeskTaskDetail }) {
 }
 
 /**
- * 看板資料每讀到一次新的，就把開著的這張單的詳情也重讀一次。
- * 同仁在手機上認領、完成之後，看板一更新，面板上的狀態標籤與狀態訊息卡就跟著換，不必重新整理網頁；
- * 讀的時候舊內容留著，不閃骨架。看板什麼時候會更新，由看板自己的讀取決定。
+ * 整份看板每重讀成功一次，就把開著的這張單的詳情也重讀一次。整份重讀可能補上漏掉的訊號，這張單也許在其中；
+ * 讀的時候舊內容留著，不閃骨架。
+ * 畫面自己改快取（訊號帶來的卡片、按下派單先畫的樣子）不算，否則別張單每變一次這裡就重讀一次。
+ * 這張單自己的訊號另外由 `followBoard` 重讀詳情。
  */
 function useRereadWithBoard(taskId: string) {
   const queryClient = useQueryClient();
@@ -233,6 +234,7 @@ function useRereadWithBoard(taskId: string) {
         if (
           event.type === 'updated' &&
           event.action.type === 'success' &&
+          !event.action.manual &&
           event.query.queryKey[0] === deskBoardQuery.queryKey[0]
         ) {
           void queryClient.invalidateQueries({ queryKey: ['desk-task', taskId] });
