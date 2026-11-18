@@ -1,5 +1,5 @@
 /**
  * 單筆詳情面板的落點：面板內容、狀態標籤與狀態訊息卡、歷程、派單區與單據管理動作列。
- * 面板掛在外框（`shell/DeskShell.tsx`）上，總覽看板與待派單頁共用；這個資料夾目前還沒有內容。
+ * 面板掛在外框（`shell/DeskShell.tsx`）上，總覽看板與待派單頁共用。
  */
-export {};
+export { DetailPanel } from './DetailPanel';

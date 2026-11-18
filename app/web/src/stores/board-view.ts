@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { readJson, removeItem, writeJson } from '../lib/browser-storage';
+import { BOARD_VIEW_STATE } from '../lib/persistence';
 
 /**
  * 看板上「只存在畫面」的選擇：泳道、數量卡篩選、房號搜尋、側欄是開是收。
- * 和登入狀態一樣存在這個分頁的 `sessionStorage`，重新整理還在，登出時要清掉（呼叫 `reset`）。
+ * 和登入狀態一樣存在這個分頁的 `sessionStorage`，重新整理還在，登出時要清掉（呼叫 `reset`）。鍵定在 `lib/persistence.ts`。
  *
  * 這裡只有欄位與存取；什麼時候清篩選、側欄各頁預設開或收，由用到的畫面決定。
  */
@@ -28,9 +29,6 @@ export interface BoardView {
   sidebarOpenByUser: boolean | null;
 }
 
-/** `sessionStorage` 的鍵。值是 `BoardView` 的 JSON。 */
-export const BOARD_VIEW_STORAGE_KEY = 'tms.frontdesk.board-view';
-
 const INITIAL_VIEW: BoardView = {
   lane: 'none',
   cardFilter: null,
@@ -50,7 +48,7 @@ export const useBoardViewStore = create<BoardViewState>((set, get) => ({
   update: (changes) => {
     set(changes);
     const { lane, cardFilter, roomSearch, sidebarOpenByUser } = get();
-    writeJson('session', BOARD_VIEW_STORAGE_KEY, {
+    writeJson(BOARD_VIEW_STATE.kind, BOARD_VIEW_STATE.key, {
       lane,
       cardFilter,
       roomSearch,
@@ -58,7 +56,7 @@ export const useBoardViewStore = create<BoardViewState>((set, get) => ({
     } satisfies BoardView);
   },
   reset: () => {
-    removeItem('session', BOARD_VIEW_STORAGE_KEY);
+    removeItem(BOARD_VIEW_STATE.kind, BOARD_VIEW_STATE.key);
     set(INITIAL_VIEW);
   },
 }));
@@ -72,7 +70,7 @@ function oneOf<T>(allowed: readonly T[], value: unknown): value is T {
  * 每一欄各自檢查，是為了一欄壞掉時其他欄的選擇還留得住。
  */
 function readStoredView(): BoardView {
-  const stored = readJson('session', BOARD_VIEW_STORAGE_KEY);
+  const stored = readJson(BOARD_VIEW_STATE.kind, BOARD_VIEW_STATE.key);
   if (typeof stored !== 'object' || stored === null) return INITIAL_VIEW;
   const view = stored as Record<string, unknown>;
   return {

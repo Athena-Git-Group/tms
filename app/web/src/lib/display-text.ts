@@ -1,4 +1,4 @@
-import type { ParseKeys } from 'i18next';
+import type { ParseKeys, TFunction } from 'i18next';
 
 /**
  * 「一段要顯示的文字」在純計算裡的寫法：只記是哪一句、句子裡要代入什麼，不是翻好的字。
@@ -14,4 +14,18 @@ import type { ParseKeys } from 'i18next';
 export interface DisplayText {
   key: ParseKeys;
   values?: Record<string, string | number | DisplayText>;
+}
+
+/**
+ * 把一段 `DisplayText` 轉成目前語言的字。`values` 裡嵌著的 `DisplayText` 先轉成字再代入外面這一句。
+ * `t` 由畫面傳進來（`useTranslation` 拿到的那一個），這個檔本身不碰多語系的設定。
+ */
+export function displayString(text: DisplayText, t: TFunction): string {
+  const values: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(text.values ?? {})) {
+    values[name] = typeof value === 'object' ? displayString(value, t) : value;
+  }
+  // 鍵在 `DisplayText` 建立時已經檢查過；這裡的代入值是執行時才組出來的，套不上每一句各自的代入值型別。
+  const translate = t as unknown as (key: string, values: Record<string, string | number>) => string;
+  return translate(text.key, values);
 }

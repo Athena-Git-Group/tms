@@ -1,5 +1,6 @@
 /**
- * 帳號面板的落點：身分卡、語言頁、登出確認，以及登入頁也會用到的語言選單與介面語言的決定方式。
- * 面板掛在外框（`shell/DeskShell.tsx`）上；這個資料夾目前還沒有內容。
+ * 帳號面板的落點：身分卡、語言頁、登出確認，以及登入頁與改密碼畫面也會用到的語言選單。
+ * 面板掛在外框（`shell/DeskShell.tsx`）上。介面語言怎麼決定、記在哪裡，在 `i18n/interface-language.ts`。
  */
-export {};
+export { AccountPanel } from './AccountPanel';
+export { LanguageMenu } from './LanguageMenu';

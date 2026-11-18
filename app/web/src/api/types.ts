@@ -29,6 +29,8 @@ export interface LoginRequest {
   password: string;
   /** 櫃檯 Web 一律帶 `frontdesk_web`，後端才會擋下不能用櫃檯畫面的角色。 */
   client?: 'frontdesk_web';
+  /** 要登入哪一家飯店的識別代碼。櫃檯 Web 一律帶網址上的那一家，後端只在那家找帳號。 */
+  hotelCode?: string;
 }
 
 /** 登入與設定新密碼成功時後端回的是同一個形狀；畫面把它整份存在這個分頁當登入狀態。 */
