@@ -83,6 +83,26 @@ public class StaffFixtures {
         return insertStaff(name, "owner", null, stateCode);
     }
 
+    /**
+     * 在指定的飯店建一位在職的房務員工，員工編號與密碼直接用給的值。
+     * 只建帳號，不排班、不建負責樓層，用在只驗登入的案例；其他讀寫入口都假設員工在「測試飯店」，不能拿來操作這位員工。
+     */
+    public CreatedStaff createHousekeeperInTenant(long tenantId, String name, String loginId, String rawPassword) {
+        UUID id = UuidV7.generate();
+        OffsetDateTime now = OffsetDateTime.now();
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO staff_accounts
+                            (id, tenant_id, name, login_id, password_hash, role, dept, active, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 'housekeeping', 'housekeeping', true, 'active', ?, ?)
+                        """)
+                .params(id, tenantId, name, loginId, passwordEncoder.encode(rawPassword), now, now)
+                .update();
+        JwtService.IssuedToken issued = jwtService.issue(tenantId, id, "housekeeping", "housekeeping");
+        return new CreatedStaff(tenantId, id, loginId, rawPassword, issued.token());
+    }
+
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {
         long tenantId = tenantFixtures.testTenantId();
         String passwordHash = passwordEncoder.encode(rawPassword);

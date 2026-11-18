@@ -143,61 +143,12 @@ public class StaffDeskWhenSteps {
                 api.staffToken(1L, ctx.staffLogin("小美"))));
     }
 
-    @When("^櫃檯以 dept \"([a-z_]+)\" 判讀任務 \"([^\"]+)\"$")
-    public void deskAssignsDept(String dept, String taskSymbol) {
-        decideOn(taskSymbol, Map.of("action", "assign", "dept", dept));
-    }
-
-    @When("^櫃檯以 action \"([a-z_]+)\" 判讀任務 \"([^\"]+)\"$")
-    public void deskDecidesActionOnly(String action, String taskSymbol) {
-        decideOn(taskSymbol, Map.of("action", action));
-    }
-
-    @When("^櫃檯以 action \"answer\" 但不帶 note 判讀任務 \"([^\"]+)\"$")
-    public void deskAnswersWithoutNote(String taskSymbol) {
-        decideOn(taskSymbol, Map.of("action", "answer"));
-    }
-
-    @When("^櫃檯以 action \"assign\"、dept \"([a-z_]+)\" 判讀任務 \"([^\"]+)\"$")
-    public void deskAssignsToDept(String dept, String taskSymbol) {
-        decideOn(taskSymbol, Map.of("action", "assign", "dept", dept));
-    }
-
-    @When("^櫃檯以 action \"answer\"、note \"([^\"]+)\" 判讀任務 \"([^\"]+)\"$")
-    public void deskAnswersWithNote(String note, String taskSymbol) {
-        ctx.put("answerNote", note);
-        decideOn(taskSymbol, Map.of("action", "answer", "note", note));
-    }
-
-    @When("^櫃檯查詢任務清單$")
-    public void deskListsAllTasks() {
-        ScenarioContext.HttpResult tasks = api.get("/desk/tasks", api.staffToken(1L, ctx.staffLogin("櫃檯")));
-        Assertions.assertEquals(200, tasks.status(), "全單視圖該成功: " + tasks.body());
-        ctx.put("deskTasksBody", tasks.body());
-        ctx.lastResponse(tasks);
-    }
-
-    @When("^櫃檯判讀一個不存在的任務$")
-    public void deskDecidesUnknownTask() {
-        ctx.lastResponse(decide(UUID.randomUUID(), Map.of("action", "answer", "note", "x")));
-    }
-
-    private void decideOn(String taskSymbol, Map<String, Object> body) {
-        UUID taskId = ctx.entityId(taskSymbol);
-        ctx.taskId(taskId);
-        ctx.lastResponse(decide(taskId, body));
-    }
-
     private ScenarioContext.HttpResult claim(UUID taskId, String loginId) {
         return api.post("/api/v1/tasks/" + taskId + "/claim", api.staffToken(1L, loginId), newIdempotencyKey());
     }
 
     private ScenarioContext.HttpResult sop(UUID taskId, Map<String, Object> body, String token) {
         return api.postJson("/api/v1/tasks/" + taskId + "/sop-check", token, body, null);
-    }
-
-    private ScenarioContext.HttpResult decide(UUID taskId, Map<String, Object> body) {
-        return api.postJson("/desk/triage/" + taskId, api.staffToken(1L, ctx.staffLogin("櫃檯")), body, null);
     }
 
     private UUID staffIdOf(String loginId) {

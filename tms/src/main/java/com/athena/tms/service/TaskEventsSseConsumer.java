@@ -11,7 +11,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +21,11 @@ import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.event.ConsumerFailedToStartEvent;
+import org.springframework.kafka.event.ConsumerStartedEvent;
+import org.springframework.kafka.event.ConsumerStoppedEvent;
+import org.springframework.kafka.event.KafkaEvent;
+import org.springframework.kafka.event.NonResponsiveConsumerEvent;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -31,13 +35,13 @@ import tools.jackson.databind.ObjectMapper;
 public class TaskEventsSseConsumer {
     private static final Logger log = LoggerFactory.getLogger(TaskEventsSseConsumer.class);
     private static final int DEDUP_CAPACITY = 10000;
+    private static final String STREAM_LISTENER_ID = "sse-task-events";
     private final StreamConnectionRegistry registry;
     private final TenantScopedExecutor tenantScopedExecutor;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final Duration degradedThreshold;
     private final KafkaListenerEndpointRegistry kafkaListenerRegistry;
-    private final AtomicBoolean degraded = new AtomicBoolean(false);
     private final Map<UUID, Integer> deliveredSeqByTask = new LinkedHashMap<UUID, Integer>(256, 0.75f, true){
 
         @Override
@@ -78,14 +82,39 @@ public class TaskEventsSseConsumer {
         if (recordTimestamp <= -1L) {
             return;
         }
+        // 事件的時間戳是送出端的真實時間，所以落後要拿真實時間來比，不能用業務上可調整的時鐘。
         long lagMillis = System.currentTimeMillis() - recordTimestamp;
         if (lagMillis > this.degradedThreshold.toMillis()) {
-            if (this.degraded.compareAndSet(false, true)) {
-                this.registry.broadcastDegraded();
-            }
+            this.registry.enterDegraded(StreamDegradation.Reason.CONSUMER_LAG);
         } else {
-            this.degraded.set(false);
+            // 及時收到並處理了一則事件，表示事件來源接得上、處理也跟得上，不論原本為什麼降級都可以回到正常。
+            this.registry.leaveDegraded();
         }
+    }
+
+    /**
+     * 串流的事件消費者停了、啟動失敗或卡住不再向事件來源拉事件，後端就收不到任何單的變化，
+     * 這時要宣告降級，否則客戶端會一直以為沒有變化而不重抓。
+     * 只看這個串流自己的消費者，推播等其他消費者的狀況與這裡無關。
+     */
+    @EventListener(value={ConsumerStoppedEvent.class, ConsumerFailedToStartEvent.class, NonResponsiveConsumerEvent.class})
+    void onEventSourceLost(KafkaEvent event) {
+        if (this.isStreamListener(event)) {
+            this.registry.enterDegraded(StreamDegradation.Reason.KAFKA_UNAVAILABLE);
+        }
+    }
+
+    /** 消費者重新啟動，只解除因為連不上事件來源而起的降級；處理事件落後要等事件真的追上才解除。 */
+    @EventListener(value={ConsumerStartedEvent.class})
+    void onEventSourceBack(ConsumerStartedEvent event) {
+        if (this.isStreamListener(event)) {
+            this.registry.leaveDegradedIf(StreamDegradation.Reason.KAFKA_UNAVAILABLE);
+        }
+    }
+
+    private boolean isStreamListener(KafkaEvent event) {
+        MessageListenerContainer container = event.getContainer(MessageListenerContainer.class);
+        return container != null && STREAM_LISTENER_ID.equals(container.getListenerId());
     }
 
     private void dispatch(String envelopeJson) {
@@ -152,7 +181,14 @@ public class TaskEventsSseConsumer {
 
     private TaskChange loadRouting(long tenantId, UUID taskId, int seq, String type, String occurredAt) {
         return this.tenantScopedExecutor.callAsTenant(tenantId, () -> {
-            List rows = this.jdbcTemplate.query("SELECT dept, assignee_id, reservation_id\n  FROM tasks\n WHERE tenant_id = ? AND id = ?\n", (rs, rowNum) -> new TaskChange(tenantId, taskId, seq, type, occurredAt, rs.getString("dept"), rs.getObject("assignee_id", UUID.class), rs.getObject("reservation_id", UUID.class)), new Object[]{tenantId, taskId});
+            // 復原派單的事件內容記著被收回的部門，一起帶出來，讓那個部門的連線也收得到。
+            List rows = this.jdbcTemplate.query("""
+                    SELECT t.dept, t.assignee_id, t.reservation_id,
+                           CASE WHEN e.type = 'triage_undone' THEN e.payload ->> 'dept' END AS recalled_from_dept
+                      FROM tasks t
+                      LEFT JOIN task_events e ON e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.seq = ?
+                     WHERE t.tenant_id = ? AND t.id = ?
+                    """, (rs, rowNum) -> new TaskChange(tenantId, taskId, seq, type, occurredAt, rs.getString("dept"), rs.getObject("assignee_id", UUID.class), rs.getObject("reservation_id", UUID.class), rs.getString("recalled_from_dept")), new Object[]{seq, tenantId, taskId});
             return rows.isEmpty() ? null : (TaskChange)rows.getFirst();
         });
     }

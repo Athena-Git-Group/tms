@@ -39,12 +39,12 @@ public class AuthTestEndpointsConfiguration {
             return Map.of("probe", "staff-write");
         }
 
-        @GetMapping("/desk/probe")
+        @GetMapping("/api/v1/desk/probe")
         Map<String, String> deskRead() {
             return Map.of("probe", "desk-read");
         }
 
-        @PostMapping("/desk/probe")
+        @PostMapping("/api/v1/desk/probe")
         Map<String, String> deskWrite() {
             return Map.of("probe", "desk-write");
         }

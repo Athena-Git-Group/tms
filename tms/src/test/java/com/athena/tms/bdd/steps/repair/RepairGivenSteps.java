@@ -175,6 +175,10 @@ public class RepairGivenSteps {
             if (assigneeId != null) {
                 builder.assignee(assigneeId);
             }
+            if ("staff".equals(taskSource)) {
+                // 同仁報修時，正式流程的開單事件記在報修人名下，詳情的開單人才讀得到名字。
+                builder.createdBy(Actor.staff(staffRole(tenantId, reporterId), reporterId));
+            }
             if ("cancelled".equals(state)) {
                 builder.cancelReason(Terms.repairTicketWithdrawnReason());
             }
@@ -316,6 +320,14 @@ public class RepairGivenSteps {
                 .query(UUID.class)
                 .optional()
                 .orElseThrow(() -> new IllegalStateException("定期保養的工務單沒有報修人，租戶內也找不到任何在職員工可頂替"));
+    }
+
+    private String staffRole(long tenantId, UUID staffId) {
+        return jdbcClient
+                .sql("SELECT role FROM staff_accounts WHERE tenant_id = ? AND id = ?")
+                .params(tenantId, staffId)
+                .query(String.class)
+                .single();
     }
 
     private void appendEvent(

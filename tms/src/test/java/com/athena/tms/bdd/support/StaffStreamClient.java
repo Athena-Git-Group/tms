@@ -106,6 +106,11 @@ public class StaffStreamClient implements AutoCloseable {
         return lastAttempt;
     }
 
+    /** 本場景每位連過的員工最近一次開的連線，鍵是員工姓名，依第一次連線的先後。 */
+    public synchronized Map<String, Connection> latestConnections() {
+        return new LinkedHashMap<>(latestByStaff);
+    }
+
     /** 本場景開過的每一條連線，依開的先後。 */
     public synchronized List<Connection> connections() {
         return List.copyOf(opened);

@@ -58,9 +58,12 @@ public class CommonGivenSteps {
             String shiftEnd = blankToNull(row.get("班次結束"));
             String stateCode = Terms.staffState(row.getOrDefault("狀態", "在職"));
             String roleChinese = blankToNull(row.get("角色"));
-            boolean managerLikeDept = "主管".equals(deptChinese) || "值班經理".equals(deptChinese);
-            if (managerLikeDept && "員工".equals(roleChinese)) {
-                throw new IllegalArgumentException("部門寫「" + deptChinese + "」時角色一定是主管，不能寫員工：" + row);
+            // 主管、值班主管、老闆三種沒有部門，部門欄寫的就是角色本身
+            boolean managerLikeDept = "主管".equals(deptChinese)
+                    || "值班主管".equals(deptChinese)
+                    || "老闆".equals(deptChinese);
+            if ("主管".equals(deptChinese) && "員工".equals(roleChinese)) {
+                throw new IllegalArgumentException("部門寫「主管」時角色一定是主管，不能寫員工：" + row);
             }
             if (roleChinese != null && !"主管".equals(roleChinese) && !"員工".equals(roleChinese)) {
                 throw new IllegalArgumentException("角色只支援 主管／員工，收到「" + roleChinese + "」：" + row);

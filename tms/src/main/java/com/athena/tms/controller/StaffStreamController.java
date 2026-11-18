@@ -17,6 +17,6 @@ public class StaffStreamController {
     @GetMapping(path={"/staff/stream"}, produces={"text/event-stream"})
     public SseEmitter stream() {
         CurrentActor actor = CurrentActor.require();
-        return this.registry.connectStaff(actor.tenantId(), actor.staffId(), actor.dept());
+        return this.registry.connectStaff(actor.tenantId(), actor.staffId(), actor.role(), actor.dept());
     }
 }

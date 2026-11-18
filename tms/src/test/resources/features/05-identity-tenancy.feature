@@ -84,21 +84,21 @@
       那麼 回應為 200
 
       例子:
-        | 角色 | 方法 | 路徑         |
-        | 房務 | GET  | /staff/probe |
-        | 房務 | POST | /staff/probe |
-        | 工務 | GET  | /staff/probe |
-        | 工務 | POST | /staff/probe |
-        | 櫃檯 | GET  | /staff/probe |
-        | 櫃檯 | GET  | /desk/probe  |
-        | 櫃檯 | POST | /desk/probe  |
-        | 主管 | GET  | /staff/probe |
-        | 主管 | POST | /staff/probe |
-        | 主管 | GET  | /desk/probe  |
-        | 主管 | POST | /desk/probe  |
-        | 主管 | GET  | /admin/probe |
-        | 主管 | POST | /admin/probe |
-        | 老闆 | GET  | /owner/probe |
+        | 角色 | 方法 | 路徑               |
+        | 房務 | GET  | /staff/probe       |
+        | 房務 | POST | /staff/probe       |
+        | 工務 | GET  | /staff/probe       |
+        | 工務 | POST | /staff/probe       |
+        | 櫃檯 | GET  | /staff/probe       |
+        | 櫃檯 | GET  | /api/v1/desk/probe |
+        | 櫃檯 | POST | /api/v1/desk/probe |
+        | 主管 | GET  | /staff/probe       |
+        | 主管 | POST | /staff/probe       |
+        | 主管 | GET  | /api/v1/desk/probe |
+        | 主管 | POST | /api/v1/desk/probe |
+        | 主管 | GET  | /admin/probe       |
+        | 主管 | POST | /admin/probe       |
+        | 老闆 | GET  | /owner/probe       |
 
     @boundary
     場景大綱: 角色×前綴矩陣逐格驗證——擋下格
@@ -106,26 +106,26 @@
       那麼請求應該失敗，回應為 403
 
       例子:
-        | 角色 | 方法 | 路徑              |
-        | 房務 | GET  | /desk/probe       |
-        | 房務 | POST | /desk/probe       |
-        | 房務 | GET  | /admin/probe      |
-        | 房務 | POST | /admin/probe      |
-        | 房務 | GET  | /owner/probe      |
-        | 房務 | GET  | /guest/context    |
-        | 工務 | POST | /admin/probe      |
-        | 櫃檯 | POST | /staff/probe      |
-        | 櫃檯 | GET  | /admin/probe      |
-        | 櫃檯 | POST | /admin/probe      |
-        | 櫃檯 | GET  | /owner/probe      |
-        | 主管 | GET  | /owner/probe      |
-        | 主管 | GET  | /guest/context    |
-        | 老闆 | POST | /owner/probe      |
-        | 老闆 | GET  | /staff/probe      |
-        | 老闆 | POST | /staff/probe      |
-        | 老闆 | GET  | /desk/probe       |
-        | 老闆 | GET  | /admin/probe      |
-        | 主管 | GET  | /outside/anything |
+        | 角色 | 方法 | 路徑               |
+        | 房務 | GET  | /api/v1/desk/probe |
+        | 房務 | POST | /api/v1/desk/probe |
+        | 房務 | GET  | /admin/probe       |
+        | 房務 | POST | /admin/probe       |
+        | 房務 | GET  | /owner/probe       |
+        | 房務 | GET  | /guest/context     |
+        | 工務 | POST | /admin/probe       |
+        | 櫃檯 | POST | /staff/probe       |
+        | 櫃檯 | GET  | /admin/probe       |
+        | 櫃檯 | POST | /admin/probe       |
+        | 櫃檯 | GET  | /owner/probe       |
+        | 主管 | GET  | /owner/probe       |
+        | 主管 | GET  | /guest/context     |
+        | 老闆 | POST | /owner/probe       |
+        | 老闆 | GET  | /staff/probe       |
+        | 老闆 | POST | /staff/probe       |
+        | 老闆 | GET  | /api/v1/desk/probe |
+        | 老闆 | GET  | /admin/probe       |
+        | 主管 | GET  | /outside/anything  |
 
   Rule: 住客 session——驗過即綁房與訂單
 

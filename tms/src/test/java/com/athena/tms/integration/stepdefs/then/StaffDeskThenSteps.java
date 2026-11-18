@@ -124,57 +124,8 @@ public class StaffDeskThenSteps {
         assertFalse(containsTaskId(items, taskIdByTitle(excludedTitle)), "工務看不到房務的單");
     }
 
-    @Then("^該任務仍停在 \"triage\"$")
-    public void taskStillInTriage() {
-        assertEquals("triage", db.taskRow(ctx.taskId()).get("state"), "被拒的判讀不得改狀態");
-    }
-
-    @Then("^房務「小美」的待認領立刻看得到這單$")
-    public void housekeepingPoolSeesTaskImmediately() {
-        ScenarioContext.HttpResult pool = api.get("/api/v1/pool", api.staffToken(1L, ctx.staffLogin("小美")));
-        assertEquals(200, pool.status(), pool.body());
-        assertTrue(containsTaskId(poolItems(objectMapper.readTree(pool.body())), ctx.taskId()),
-                "判讀後房務池立刻看得到這單");
-    }
-
-    @Then("^回應的任務 \"([^\"]+)\" 的 doneAt 應有值$")
-    public void responseDoneAtPresent(String symbol) {
-        ScenarioContext.HttpResult last = ctx.lastResponse();
-        assertEquals(200, last.status(), "判讀該成功: " + last.body());
-        assertEquals(ctx.entityId(symbol).toString(), json(last).get("id").asText(), "回應的任務要是 " + symbol);
-        assertFalse(json(last).get("doneAt").isNull(), "doneAt 該有值");
-    }
-
-    @Then("^清單含標題「([^」]+)」且其狀態為 \"([a-z_]+)\"$")
-    public void deskListContainsTitleWithState(String title, String state) {
-        JsonNode all = objectMapper.readTree((String) ctx.get("deskTasksBody"));
-        UUID expectedId = taskIdByTitle(title);
-        JsonNode found = null;
-        for (JsonNode task : all) {
-            if (expectedId.toString().equals(task.get("id").asText())) {
-                found = task;
-                break;
-            }
-        }
-        assertNotNull(found, "清單含標題「" + title + "」: " + all);
-        assertEquals(state, found.get("state").asText(), "標題「" + title + "」的狀態");
-    }
-
-    @Then("^待判讀清單只含 triage 的任務$")
-    public void triageListOnlyContainsTriage() {
-        ScenarioContext.HttpResult triage = api.get("/desk/triage", api.staffToken(1L, ctx.staffLogin("櫃檯")));
-        assertEquals(200, triage.status(), triage.body());
-        JsonNode list = objectMapper.readTree(triage.body());
-        assertTrue(containsId(list, taskIdInState("triage")), "待判讀清單含 triage 任務");
-        assertFalse(containsId(list, taskIdInState("pool")), "待判讀清單不含已在池中的任務，只回 triage");
-    }
-
     private UUID taskIdByTitle(String title) {
         return db.admin().queryForObject("SELECT id FROM tasks WHERE tenant_id = 1 AND title = ? LIMIT 1", UUID.class, title);
-    }
-
-    private UUID taskIdInState(String state) {
-        return db.admin().queryForObject("SELECT id FROM tasks WHERE tenant_id = 1 AND state = ? LIMIT 1", UUID.class, state);
     }
 
     private JsonNode json(ScenarioContext.HttpResult result) {
@@ -190,15 +141,6 @@ public class StaffDeskThenSteps {
     private static boolean containsTaskId(JsonNode items, UUID id) {
         for (JsonNode item : items) {
             if (id.toString().equals(item.get("taskId").asText())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean containsId(JsonNode array, UUID id) {
-        for (JsonNode node : array) {
-            if (id.toString().equals(node.get("id").asText())) {
                 return true;
             }
         }

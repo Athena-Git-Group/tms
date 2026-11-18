@@ -58,6 +58,7 @@ public class DeskApi {
     public ScenarioWorld.ApiResponse getBoard(String staffName) {
         ScenarioWorld.ApiResponse response = apiClient.get("/desk/board", staff(staffName));
         deskContext.rememberBoardResponse(response);
+        deskContext.rememberBoardReader(staffName);
         return response;
     }
 
@@ -85,7 +86,10 @@ public class DeskApi {
     public ScenarioWorld.ApiResponse assign(
             String staffName, UUID taskId, String dept, String via, String idempotencyKey) {
         deskContext.rememberAssignIdempotencyKey(idempotencyKey);
-        return apiClient.post(assignPath(taskId), staff(staffName), assignBody(dept, via), idempotencyKey);
+        ScenarioWorld.ApiResponse response =
+                apiClient.post(assignPath(taskId), staff(staffName), assignBody(dept, via), idempotencyKey);
+        deskContext.rememberAssignResponse(response);
+        return response;
     }
 
     /** deskAssignTask，不帶 {@code Idempotency-Key} 標頭，用來驗後端會拒絕沒帶鍵的寫入。 */

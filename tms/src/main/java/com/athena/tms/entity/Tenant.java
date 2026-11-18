@@ -15,6 +15,7 @@ public class Tenant {
     @GeneratedValue(strategy=GenerationType.IDENTITY)
     private Long id;
     private String name;
+    private String code;
     private OffsetDateTime createdAt;
 
     @Generated
@@ -25,6 +26,10 @@ public class Tenant {
     @Generated
     public String getName() {
         return this.name;
+    }
+
+    public String getCode() {
+        return this.code;
     }
 
     @Generated

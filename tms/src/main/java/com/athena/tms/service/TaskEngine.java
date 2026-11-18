@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -74,6 +75,8 @@ public class TaskEngine {
         task.setAssigneeId(command.assigneeId());
         task.setTitle(command.title());
         task.setNote(command.note());
+        String taskNo = "repair".equals(command.type()) ? null : this.nextTaskNo(command.tenantId());
+        task.setTaskNo(taskNo);
         task.setEstMin(command.estMin());
         task.setPlanId(command.planId());
         task.setWorkDate(command.workDate());
@@ -82,23 +85,78 @@ public class TaskEngine {
         task.setCreatedAt(now);
         task.setUpdatedAt(now);
         task = (Task)this.taskRepository.saveAndFlush(task);
-        this.recordEvent(command.tenantId(), task.getId(), 1, "created", command.actor(), this.createdSnapshot(command));
+        this.recordEvent(command.tenantId(), task.getId(), 1, "created", command.actor(), this.createdSnapshot(command, taskNo));
         if (assigned) {
             this.recordEvent(command.tenantId(), task.getId(), 2, "assigned", command.actor(), TaskEngine.payload("assignee_id", command.assigneeId()));
         }
         return task;
     }
 
-    @Transactional
-    public int assignFromTriage(long tenantId, UUID taskId, String dept, Actor actor) {
-        int seq = this.guard("指派部門", "UPDATE tasks\n   SET state = 'pool', dept = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'triage'\nRETURNING event_seq\n", dept, tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "triaged", actor, TaskEngine.payload("dept", dept));
+    /**
+     * 向這家飯店的序號表取下一號，組成 T- 加至少 4 位數的單號。
+     * 取號與加一在同一句完成，和建單同一個交易，兩張單同時建立也不會拿到同一號；還沒有序號列的飯店第一次取到 1 號。
+     */
+    private String nextTaskNo(long tenantId) {
+        Integer lastNo = this.jdbcTemplate.queryForObject(
+                """
+                INSERT INTO task_counters (tenant_id, last_no) VALUES (?, 1)
+                ON CONFLICT (tenant_id) DO UPDATE SET last_no = task_counters.last_no + 1
+                RETURNING last_no
+                """,
+                Integer.class, tenantId);
+        return String.format("T-%04d", lastNo);
     }
 
     @Transactional
+    public int assignFromTriage(long tenantId, UUID taskId, String dept, Actor actor) {
+        return this.assignFromTriage(tenantId, taskId, dept, null, actor);
+    }
+
+    /** {@code via} 記下是按鈕還是拖曳派出的，只寫進事件內容；給 null 時事件不帶這個鍵。 */
+    @Transactional
+    public int assignFromTriage(long tenantId, UUID taskId, String dept, String via, Actor actor) {
+        int seq = this.guard("指派部門", "UPDATE tasks\n   SET state = 'pool', dept = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'triage'\nRETURNING event_seq\n", dept, tenantId, taskId);
+        return this.recordEvent(tenantId, taskId, seq, "triaged", actor, TaskEngine.payload("dept", dept, "via", via));
+    }
+
+    /**
+     * 派出後復原：把剛派出的單收回待派單，部門回到櫃檯，未接提醒階段與進池來源清空。
+     *
+     * <p>只收回「剛派出」的單：還在待認領、沒有負責人、最新一筆事件就是派單。最新一筆派單的 seq 要在同一句 UPDATE 裡查，
+     * 先查出來再帶進來的話，兩步之間別人認領或住客收回，就會改到不該改的單。
+     * {@code triagedAfter} 是派單時間的下限，派得比它早的不收回；時限由呼叫的一方決定。
+     * 條件不符時一列也不改，丟 {@link StateConflictException}，由呼叫的一方說明原因。
+     */
+    @Transactional
+    public int undoTriage(long tenantId, UUID taskId, OffsetDateTime triagedAfter, Actor actor) {
+        int seq = this.guard("復原派單", """
+                UPDATE tasks t
+                   SET state = 'triage', dept = 'frontdesk', reminder_stage = NULL, pool_source = NULL,
+                       event_seq = t.event_seq + 1, updated_at = now()
+                 WHERE t.tenant_id = ? AND t.id = ? AND t.state = 'pool' AND t.assignee_id IS NULL
+                   AND t.event_seq = (SELECT max(e.seq) FROM task_events e
+                                       WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.type = 'triaged')
+                   AND (SELECT e.created_at FROM task_events e
+                         WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.seq = t.event_seq) >= ?
+                RETURNING t.event_seq
+                """, tenantId, taskId, triagedAfter);
+        String formerDept = this.jdbcTemplate.queryForObject(
+                "SELECT payload ->> 'dept' FROM task_events WHERE tenant_id = ? AND task_id = ? AND seq = ?",
+                String.class, tenantId, taskId, seq - 1);
+        return this.recordEvent(tenantId, taskId, seq, "triage_undone", actor, TaskEngine.payload("dept", formerDept));
+    }
+
+    /**
+     * 櫃檯當場回答並結案：待派單直接變成完成，同時也是這張單的終點，所以完成與結束時間一起寫。
+     *
+     * <p>回覆寫進 {@code answer}，{@code note} 裡住客打的原文與翻譯不動。部門維持櫃檯、沒有負責人，
+     * 這張單就不會算進任何同仁或部門做掉的單。單已經不是待派單時一列也不改，丟 {@link StateConflictException}。
+     */
+    @Transactional
     public int answer(long tenantId, UUID taskId, String answer, Actor actor) {
-        int seq = this.guard("回覆", "UPDATE tasks\n   SET state = 'done', note = ?, done_at = now(), event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'triage'\nRETURNING event_seq\n", answer, tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "answered", actor, TaskEngine.payload("answer", answer));
+        return this.reachEnd(tenantId, taskId, "回覆", "UPDATE tasks\n   SET state = 'done', answer = ?, done_at = ?, ended_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'triage'\nRETURNING event_seq\n",
+                now -> new Object[]{answer, now, now, tenantId, taskId},
+                "answered", actor, now -> TaskEngine.payload("answer", answer));
     }
 
     @Transactional
@@ -141,16 +199,23 @@ public class TaskEngine {
         if (actor.id() == null) {
             throw new UnprocessableEntityException("完成任務必須是具名員工");
         }
-        OffsetDateTime now = OffsetDateTime.now(this.clock);
-        int seq = this.guard("完成", "UPDATE tasks\n   SET state = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'inspected'\n                    WHEN type = 'repair' AND ? THEN 'closed' ELSE 'done' END,\n       inspection = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'waived' ELSE inspection END,\n       " + CLOSE_SEGMENT_SET + ", done_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'doing' AND assignee_id = ?\nRETURNING event_seq\n", closeRepair, now, now, tenantId, taskId, actor.id());
+        // 完成就走到終點的有三種：免查房的打掃單、判斷不需處理直接結案的工務單、備品與其他類的單。
+        // 其餘打掃單與工務單的完成還在等查房或驗收，ended_at 留空。
+        // 免查結案不回寫 PMS 房況。沒有人查過這間房，回寫會讓 PMS 把續住房當成可售；只有查房通過才回寫。
+        return this.reachEnd(tenantId, taskId, "完成", "UPDATE tasks\n   SET state = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'inspected'\n                    WHEN type = 'repair' AND ? THEN 'closed' ELSE 'done' END,\n       inspection = CASE WHEN type = 'cleaning' AND inspection_waived THEN 'waived' ELSE inspection END,\n       ended_at = CASE WHEN (type = 'cleaning' AND inspection_waived) OR (type = 'repair' AND ?)\n                         OR type IN ('amenity', 'other') THEN ? END,\n       " + CLOSE_SEGMENT_SET + ", done_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'doing' AND assignee_id = ?\nRETURNING event_seq\n",
+                now -> new Object[]{closeRepair, closeRepair, now, now, now, tenantId, taskId, actor.id()},
+                "completed", actor, now -> this.completedPayload(tenantId, taskId, now, extraPayload));
+    }
+
+    /** 完成事件帶這次自動補成跳過的 SOP 項目，再併上呼叫的一方另外要記的欄位。 */
+    private Map<String, Object> completedPayload(long tenantId, UUID taskId, OffsetDateTime now, Map<String, Object> extraPayload) {
         List<String> skippedLabels = this.markUncheckedSopAsSkipped(tenantId, taskId, now);
         Map<String, Object> payload = skippedLabels == null ? null : TaskEngine.payload("skipped_items", skippedLabels);
         if (extraPayload != null && !extraPayload.isEmpty()) {
             payload = payload == null ? new LinkedHashMap<>() : payload;
             payload.putAll(extraPayload);
         }
-        // 免查結案不回寫 PMS 房況。沒有人查過這間房，回寫會讓 PMS 把續住房當成可售；只有查房通過才回寫。
-        return this.recordEvent(tenantId, taskId, seq, "completed", actor, payload);
+        return payload;
     }
 
     private List<String> markUncheckedSopAsSkipped(long tenantId, UUID taskId, OffsetDateTime now) {
@@ -167,8 +232,9 @@ public class TaskEngine {
 
     @Transactional
     public int passInspection(long tenantId, UUID taskId, Actor actor) {
-        int seq = this.guard("查房通過", "UPDATE tasks\n   SET state = 'inspected', inspection = 'passed', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'done'\nRETURNING event_seq\n", tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "inspection_passed", actor, null);
+        return this.reachEnd(tenantId, taskId, "查房通過", "UPDATE tasks\n   SET state = 'inspected', inspection = 'passed', ended_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'done'\nRETURNING event_seq\n",
+                now -> new Object[]{now, tenantId, taskId},
+                "inspection_passed", actor, now -> null);
     }
 
     @Transactional
@@ -203,7 +269,7 @@ public class TaskEngine {
                 UPDATE tasks
                    SET state = 'accepted', started_at = NULL, done_at = NULL,
                        worked_sec = 0, segment_started_at = NULL,
-                       inspection = 'failed', redo_count = redo_count + 1,
+                       inspection = 'failed', redo_count = redo_count + 1, ended_at = NULL,
                        event_seq = event_seq + 1, updated_at = now()
                  WHERE tenant_id = ? AND id = ? AND state = 'inspected'
                 RETURNING event_seq
@@ -281,8 +347,9 @@ public class TaskEngine {
 
     @Transactional
     public int cancelByGuest(long tenantId, UUID taskId) {
-        int seq = this.guard("收回", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = 'guest_withdrew', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('triage', 'pool')\nRETURNING event_seq\n", tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "cancelled", Actor.guest(), TaskEngine.payload("reason", "guest_withdrew"));
+        return this.reachEnd(tenantId, taskId, "收回", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = 'guest_withdrew', ended_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('triage', 'pool')\nRETURNING event_seq\n",
+                now -> new Object[]{now, tenantId, taskId},
+                "cancelled", Actor.guest(), now -> TaskEngine.payload("reason", "guest_withdrew"));
     }
 
     @Transactional
@@ -290,22 +357,25 @@ public class TaskEngine {
         if (reason == null || !TaskCancelReason.ALL.contains(reason)) {
             throw new UnprocessableEntityException("取消必附原因 enum（" + String.join((CharSequence)"/", TaskCancelReason.ALL) + "），收到: " + reason);
         }
-        int seq = this.guard("取消", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\n   AND state IN ('triage', 'pool', 'accepted', 'doing', 'deferred', 'interrupted')\nRETURNING event_seq\n", reason, tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "cancelled", actor, TaskEngine.payload("reason", reason));
+        return this.reachEnd(tenantId, taskId, "取消", "UPDATE tasks\n   SET state = 'cancelled', cancel_reason = ?, ended_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\n   AND state IN ('triage', 'pool', 'accepted', 'doing', 'deferred', 'interrupted')\nRETURNING event_seq\n",
+                now -> new Object[]{reason, now, tenantId, taskId},
+                "cancelled", actor, now -> TaskEngine.payload("reason", reason));
     }
 
     @Transactional
     public int withdrawFromPool(long tenantId, UUID taskId, Actor actor) {
-        int seq = this.guard(
+        return this.reachEnd(
+                tenantId,
+                taskId,
                 "撤回",
                 """
                 UPDATE tasks
-                   SET state = 'cancelled', cancel_reason = 'staff_withdrew', event_seq = event_seq + 1, updated_at = now()
+                   SET state = 'cancelled', cancel_reason = 'staff_withdrew', ended_at = ?, event_seq = event_seq + 1, updated_at = now()
                  WHERE tenant_id = ? AND id = ? AND state = 'pool'
                 RETURNING event_seq
                 """,
-                tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "cancelled", actor, TaskEngine.payload("reason", "staff_withdrew"));
+                now -> new Object[]{now, tenantId, taskId},
+                "cancelled", actor, now -> TaskEngine.payload("reason", "staff_withdrew"));
     }
 
     @Transactional
@@ -335,11 +405,13 @@ public class TaskEngine {
 
     @Transactional
     public int verifyRepairTicket(long tenantId, UUID taskId, Actor actor) {
-        int seq = this.guard(
+        return this.reachEnd(
+                tenantId,
+                taskId,
                 "驗收",
-                "UPDATE tasks\n   SET state = 'closed', event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND type = 'repair' AND state = 'done'\nRETURNING event_seq\n",
-                tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "repair_verified", actor, null);
+                "UPDATE tasks\n   SET state = 'closed', ended_at = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND type = 'repair' AND state = 'done'\nRETURNING event_seq\n",
+                now -> new Object[]{now, tenantId, taskId},
+                "repair_verified", actor, now -> null);
     }
 
     @Transactional
@@ -350,6 +422,20 @@ public class TaskEngine {
         int seq = this.guard("驗收不通過", sql, tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "repair_verification_failed", actor,
                 TaskEngine.payload("reason", reason, "destination", toPool ? "pool" : "assignee", "assigneeId", assigneeId));
+    }
+
+    /**
+     * 走到終點的轉移都經過這裡：同一句 UPDATE 寫 {@code ended_at}，再用同一個時間記事件，兩者才會相等。
+     * {@code sql} 裡 {@code ended_at} 的值用 {@code ?} 帶入，{@code params} 拿這個時間排出整句的參數；
+     * 事件內容在 UPDATE 成功之後才組，也拿得到同一個時間。單的狀態不對時和 {@link #guard} 一樣丟
+     * {@link StateConflictException}，不寫事件。
+     */
+    private int reachEnd(long tenantId, UUID taskId, String operation, String sql,
+                         Function<OffsetDateTime, Object[]> params,
+                         String eventType, Actor actor, Function<OffsetDateTime, Map<String, Object>> payload) {
+        OffsetDateTime now = OffsetDateTime.now(this.clock);
+        int seq = this.guard(operation, sql, params.apply(now));
+        return this.recordEvent(tenantId, taskId, seq, eventType, actor, payload.apply(now), now);
     }
 
     private int guard(String operation, String sql, Object ... params) {
@@ -366,6 +452,11 @@ public class TaskEngine {
     }
 
     private int recordEvent(long tenantId, UUID taskId, int seq, String type, Actor actor, Map<String, Object> payload) {
+        return this.recordEvent(tenantId, taskId, seq, type, actor, payload, OffsetDateTime.now(this.clock));
+    }
+
+    /** 走到終點的轉移用這個版本，把寫進 {@code ended_at} 的同一個時間記成事件時間，兩者才會相等。 */
+    private int recordEvent(long tenantId, UUID taskId, int seq, String type, Actor actor, Map<String, Object> payload, OffsetDateTime at) {
         TaskEvent event = new TaskEvent();
         event.setTenantId(tenantId);
         event.setTaskId(taskId);
@@ -374,14 +465,14 @@ public class TaskEngine {
         event.setActorRole(actor.role());
         event.setActorId(actor.id());
         event.setPayload(this.toJson(payload));
-        event.setCreatedAt(OffsetDateTime.now(this.clock));
+        event.setCreatedAt(at);
         event = (TaskEvent)this.taskEventRepository.save(event);
         this.outboxWriter.enqueueTaskEvent(event);
         return seq;
     }
 
-    private Map<String, Object> createdSnapshot(TaskCreateCommand command) {
-        return TaskEngine.payload("type", command.type(), "source", command.source(), "room_id", command.roomId(), "reservation_id", command.reservationId(), "dept", command.dept(), "state", command.initialState(), "title", command.title(), "note", command.note(), "est_min", command.estMin(), "plan_id", command.planId(), "work_date", command.workDate());
+    private Map<String, Object> createdSnapshot(TaskCreateCommand command, String taskNo) {
+        return TaskEngine.payload("task_no", taskNo, "type", command.type(), "source", command.source(), "room_id", command.roomId(), "reservation_id", command.reservationId(), "dept", command.dept(), "state", command.initialState(), "title", command.title(), "note", command.note(), "est_min", command.estMin(), "plan_id", command.planId(), "work_date", command.workDate());
     }
 
     private static Map<String, Object> payload(Object ... keyValues) {
