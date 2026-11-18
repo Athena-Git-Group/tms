@@ -24,10 +24,10 @@
 <path d="M990 215 L1020 215 L1020 160 L1285 160 L1285 188" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m0c8599)" filter="url(#rough)"/>
 <path d="M990 455 L1020 455 L1020 600 L1058 600" fill="none" stroke="#e8590c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#me8590c)" filter="url(#rough)"/>
 <text x="1026" y="540" font-size="13" fill="#e8590c" text-anchor="start" font-weight="normal">④</text>
-<path d="M1130 290 L1130 338" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
-<text x="1140" y="320" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑤ SSE</text>
-<path d="M1285 290 L1285 338" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
-<text x="1295" y="320" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑤ SSE</text>
+<path d="M1130 290 L1130 333" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<text x="1140" y="318" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑤ SSE 帶卡片</text>
+<path d="M1285 290 L1285 333" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<text x="1295" y="318" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑤ SSE 帶卡片</text>
 <path d="M1100 640 L1100 698" fill="none" stroke="#495057" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m495057)" filter="url(#rough)"/>
 <text x="1110" y="675" font-size="13" fill="#495057" text-anchor="start" font-weight="normal">⑤</text>
 <path d="M1100 768 L1100 806" fill="none" stroke="#495057" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m495057)" filter="url(#rough)"/>
@@ -77,21 +77,24 @@
 <text x="890.0" y="464" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">一則 = 一位收件人</text>
 <text x="890.0" y="483" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">失敗備援：</text>
 <text x="890.0" y="502" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">tms.push.DLT</text>
-<g filter="url(#rough)"><rect x="1040" y="110" width="340" height="350" rx="14" fill="none" stroke="#0c8599" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="1042" y="108.5" width="337" height="352" rx="15" fill="none" stroke="#0c8599" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
+<g filter="url(#rough)"><rect x="1040" y="110" width="340" height="365" rx="14" fill="none" stroke="#0c8599" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="1042" y="108.5" width="337" height="367" rx="15" fill="none" stroke="#0c8599" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
 <text x="1056" y="136" font-size="15" fill="#0c8599" text-anchor="start" font-weight="bold">看板事件消費者：每台後端一個獨立群組</text>
 <g filter="url(#rough)"><rect x="1060" y="190" width="140" height="100" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="1062" y="188.5" width="137" height="102" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
 <text x="1130.0" y="217" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">後端 A</text>
 <text x="1130.0" y="240" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">收到全部事件</text>
-<text x="1130.0" y="259" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">連著：櫃檯 1、2</text>
+<text x="1130.0" y="259" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">查出那張單的卡片</text>
+<text x="1130.0" y="278" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">連著：櫃檯 1、2</text>
 <g filter="url(#rough)"><rect x="1215" y="190" width="140" height="100" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="1217" y="188.5" width="137" height="102" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
 <text x="1285.0" y="217" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">後端 B</text>
 <text x="1285.0" y="240" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">也收到全部事件</text>
-<text x="1285.0" y="259" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">連著：櫃檯 3</text>
-<g filter="url(#rough)"><rect x="1060" y="340" width="295" height="70" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="1062" y="338.5" width="292" height="72" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
-<text x="1207.5" y="367" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">櫃檯瀏覽器</text>
-<text x="1207.5" y="390" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">收到「哪張單變了」→ 重抓看板</text>
-<text x="1210" y="432" font-size="12" fill="#0c8599" text-anchor="middle" font-weight="normal">為什麼每台都要收全部？櫃檯的連線</text>
-<text x="1210" y="449" font-size="12" fill="#0c8599" text-anchor="middle" font-weight="normal">分散在不同台後端，誰都可能需要</text>
+<text x="1285.0" y="259" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">也查出那張卡片</text>
+<text x="1285.0" y="278" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">連著：櫃檯 3</text>
+<g filter="url(#rough)"><rect x="1060" y="335" width="295" height="88" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="1062" y="333.5" width="292" height="90" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
+<text x="1207.5" y="360" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">櫃檯瀏覽器</text>
+<text x="1207.5" y="383" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">收到卡片（帶 seq）→ 直接換上那一張</text>
+<text x="1207.5" y="402" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">跳號、營業日不同、看不懂才整份重讀</text>
+<text x="1210" y="443" font-size="12" fill="#0c8599" text-anchor="middle" font-weight="normal">為什麼每台都要收全部？櫃檯的連線</text>
+<text x="1210" y="460" font-size="12" fill="#0c8599" text-anchor="middle" font-weight="normal">分散在不同台後端，誰都可能需要</text>
 <g filter="url(#rough)"><rect x="1040" y="490" width="340" height="370" rx="14" fill="none" stroke="#495057" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="1042" y="488.5" width="337" height="372" rx="15" fill="none" stroke="#495057" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
 <text x="1056" y="516" font-size="15" fill="#495057" text-anchor="start" font-weight="bold">推播消費者：所有後端共用一個群組</text>
 <g filter="url(#rough)"><rect x="1060" y="560" width="140" height="80" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="1062" y="558.5" width="137" height="82" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
@@ -111,7 +114,7 @@
 <text x="1250" y="690" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">手機會收到好幾則</text>
 <g filter="url(#rough)"><rect x="30" y="640" width="980" height="220" rx="14" fill="none" stroke="#868e96" stroke-width="1.8" stroke-dasharray="8 6"/><rect x="32" y="638.5" width="977" height="222" rx="15" fill="none" stroke="#868e96" stroke-width="1" opacity=".5" stroke-dasharray="8 6"/></g>
 <text x="46" y="666" font-size="15" fill="#868e96" text-anchor="start" font-weight="bold">白話：Kafka 在這裡扮演「廣播站＋郵局」</text>
-<text x="50" y="690" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">廣播站（tms.task-events）：只說「123 號單變了（第 5 版）」，所有後端都聽得到，各自轉告連在自己身上的櫃檯看板。</text>
+<text x="50" y="690" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">廣播站（tms.task-events）：只說「123 號單變了（第 5 版）」，所有後端都聽得到，各自查出那張卡片、連卡片送給連在自己身上的櫃檯看板。</text>
 <text x="50" y="716" font-size="13" fill="#495057" text-anchor="start" font-weight="normal">郵局（tms.push）：每封信寫好收件人，一封只派一位郵差送，送到 Firebase 再到手機。</text>
 <text x="50" y="742" font-size="13" fill="#7048e8" text-anchor="start" font-weight="normal">為什麼不在派單當下直接送？① 派單不用等通知送完，按鈕馬上有反應；② 後端或 Kafka 暫時掛掉，</text>
 <text x="50" y="768" font-size="13" fill="#7048e8" text-anchor="start" font-weight="normal">   事件還在 outbox 裡，恢復後補送，不會掉；③ 多一種收件方（例如 PMS 對接）只要再訂閱一次，派單程式不用改。</text>
