@@ -1,32 +1,38 @@
 # TMS — 飯店任務交辦系統（MVP）
 
 四五星飯店的任務交辦系統（Task Management System）。住客掃碼提需求、櫃檯判讀派單、
-房務／工務從部門待接池搶單回報、主管查房把關、老闆看唯讀總覽。
+房務／工務從部門待接池認領回報、主管查房把關、老闆看唯讀總覽。
 雲端多租戶 SaaS 託管，PMS 用 adapter 模式介接（自家 PMS 是第一個 adapter）。
 
 技術形態：**Spring Boot 模組化單體 + PostgreSQL（RLS 多租戶）+ Kafka（Transactional Outbox）**，
-不做微服務。
+不做微服務。程式碼分三塊：`tms/` 後端、`app/mobile/` 員工 App（Flutter）、`app/web/` 櫃檯 Web（React）；住客 Web 目前只有後端 API，前端尚未做。
 
-## 架構圖
+## 架構圖：三種使用者怎麼串在一起？
 
-### 系統部署架構
+![TMS：三種使用者怎麼串在一起](docs/diagrams/tms-scenarios.png)
 
-Web / PWA 客戶端走 HTTPS（REST + SSE、JWT Bearer）進到 TMS Spring Boot 單體；
-交易寫入 PostgreSQL（RLS 多租戶 + outbox 表），Outbox Relay 每 2 秒輪詢把事件轉送進
-Kafka（task-events 等 3 個 topics）；應用自己也是 SSE consumer（每實例獨立 group 做廣播），
-外部 consumer（PMS / 推播閘道）訂閱 `tms.push` 與 `tms.pms-status`。
+系統有三種使用者端，但**寫入只有一條路**：全部走 REST API，寫進同一個 PostgreSQL。
 
-![TMS 系統部署架構](docs/diagrams/tms-architecture.svg)
+| 使用者端 | 怎麼寫入 | 怎麼知道別人改了東西 |
+|---|---|---|
+| 房務／工務人員 App（Flutter） | REST API：認領、開工、完成 | 手機推播（Firebase） |
+| 櫃檯人員 Web（React，瀏覽器／iPad） | REST API：派單、代開單 | 看板開著時維持一條 SSE 長連線（`/staff/stream`），即時更新 |
+| 住客 Web（手機掃房內 QR Code，前端尚未做） | REST API：掃碼、提需求、取消、評分（後端已備） | 後端已備好 `/guest/stream`，等住客前端接上 |
 
-### 一個 Request 從進站到 SSE 推播
+把三者串起來的是「事件」：
 
-事件主線：REST 請求（帶冪等鍵）→ TaskEngine（狀態變更與事件同一筆交易落庫，取 event_seq）→
-Outbox Relay（每 2 秒輪詢、lease 60 秒；重試 8 次耗盡才標記 failed 交人工處理）→
-SSE Consumer（@KafkaListener，監測 lag）→ 廣播到住客／員工瀏覽器。
-連線層由 Registry 管 stream_pos 去重與 15 秒心跳。
-業務程式不直接發 Kafka，一律經 Transactional Outbox。
+1. **寫入時一併記下事件**：業務資料與一筆 outbox 事件在同一筆交易寫入，
+   所以不會發生「資料改了、事件卻沒發」。寫入可帶冪等鍵（`Idempotency-Key`，派單、查房等端點必帶），網路重送會回放上次結果、不會重做。
+2. **交易一提交就送進 Kafka**：Outbox 轉送器在交易提交後立刻發布；每 2 秒的輪詢只負責補漏，
+   送不出去會退避重試，最多送 8 次仍失敗才標記 failed 交人工處理。
+3. **Kafka 分頭送達**：
+   - `tms.task-events` → 看板事件消費者（每台後端各自訂閱）→ 推給連在本機的櫃檯看板（SSE）。
+   - `tms.push` → 推播消費者 → Firebase → 員工手機；暫時性失敗重試耗盡進 `tms.push.DLT`。
+   - PMS 對接串流 `/integration/pms/stream` 也由看板事件消費者從 `tms.task-events` 轉推；
+     另有 `tms.pms-status`（房態回寫事件）會寫出，但目前沒有消費者。
 
-![一個 Request 從進站到 SSE 推播](docs/diagrams/tms-kafka-sse.svg)
+所以住客一提需求（住客前端接上後），櫃檯看板會立刻跳出來、負責人的手機也會收到推播；
+員工在 App 按完成，櫃檯看板同樣即時更新。業務程式不直接發 Kafka，一律經 Transactional Outbox。
 
 ## 文件導覽
 
