@@ -49,6 +49,10 @@ staffAccountsLogin:
       完成改密前這組憑證呼叫其他需要身分的 API 一律被拒。
       員工 App 與櫃檯 Web 都用這一個端點登入；六種角色（含 duty_manager）都能登入。
       回應帶員工編號（loginId）與飯店名稱（hotelName），不必另外查。
+      飯店是彼此隔離的單位，帳號以飯店加員工編號識別，不同飯店可以有相同員工編號。
+      請求帶 hotelCode 時只在那家飯店找帳號，下面停用、鎖定、密碼、角色的規則都只作用在那家的帳號，別家相同員工編號的帳號不受影響；
+      代碼格式不對、對不到飯店或那家沒有這個員工編號，一律回 401 credentials_invalid，與密碼錯誤相同，不洩漏飯店是否存在。
+      櫃檯 Web 一律帶網址上的飯店代碼；員工 App 目前不帶，不帶時逐家找有這個員工編號的帳號、登入密碼對得上的那一家（規則見 LoginRequest.hotelCode）。
       櫃檯 Web 登入時請求帶 client=frontdesk_web，後端多做一步角色檢查，順序在停用、鎖定、密碼比對之後：
       角色是 frontdesk、manager、duty_manager 的照常登入。
       角色是 housekeeping、engineering、owner，而且密碼不是臨時密碼的，回 401 credentials_invalid，

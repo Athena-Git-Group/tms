@@ -131,13 +131,13 @@
     langMenu(); eyeToggle($('#eye'), pw);
     const clear = () => { err.hidden = true; card.hidden = true; };
     const notice = (title, body) => { card.hidden = false; $('#noticeTitle').textContent = title; $('#noticeBody').textContent = body; };
-    const sync = () => { btn.disabled = !(id.value.trim() && pw.value); };
-    id.addEventListener('input', () => { id.value = id.value.toUpperCase(); clear(); sync(); });
+    const sync = () => { btn.disabled = !(id.value && pw.value); };
+    id.addEventListener('input', () => { clear(); sync(); });
     pw.addEventListener('input', () => { clear(); sync(); });
     $('#forgot').addEventListener('click', () => showAlert(t('忘記密碼'), t('請主管在後台重設密碼。重設後你會拿到臨時密碼，第一次登入時要改成自己的密碼。'), ok()));
     $('#form').addEventListener('submit', (e) => {
       e.preventDefault(); if (btn.disabled) return; clear();
-      const no = id.value.trim(), a = ACCOUNTS[no], p = pw.value;
+      const no = id.value, a = ACCOUNTS[no], p = pw.value;
       const wrong = () => { err.hidden = false; err.textContent = t('員工編號或密碼不正確。'); pw.value = ''; sync(); };
       if (Q.get('fail') === 'net') { err.hidden = false; err.textContent = '現在連不上系統，請檢查網路連線後再試一次。'; return; }
       if (!a) return wrong();
