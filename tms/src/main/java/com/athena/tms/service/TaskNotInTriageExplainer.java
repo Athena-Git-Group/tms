@@ -8,12 +8,6 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * 櫃檯要處理一張待派單（派單、當場回答），送到時單已經不是待派單，就用這裡組出 409 {@code task_not_in_triage}。
- *
- * <p>回的是例外而不是直接丟出，呼叫的一方寫 {@code throw explainer.explain(...)}，讀程式的人一眼看得出這裡就結束了。
- * 例外的 context 說明這張單是怎麼離開待派單的，讓畫面說得出「剛剛被誰派走」這類提示，而不是只說失敗。
- */
 @Component
 public class TaskNotInTriageExplainer {
     private final JdbcTemplate jdbcTemplate;
@@ -24,10 +18,6 @@ public class TaskNotInTriageExplainer {
         this.taskRowLookup = taskRowLookup;
     }
 
-    /**
-     * 看的是最後一筆讓單離開待派單的事件：派單、當場回答或取消。
-     * 取消只有住客自己收回另外說明，其餘的取消與找不到這類事件的單都歸為其他。
-     */
     public StateConflictException explain(long tenantId, UUID taskId) {
         Map<String, Object> row = this.taskRowLookup.require(tenantId, taskId);
         Map<String, Object> exit = this.lastExitEvent(tenantId, taskId);
@@ -58,7 +48,6 @@ public class TaskNotInTriageExplainer {
         return "other";
     }
 
-    /** 找不到這類事件時回空的，讓結果歸為其他。 */
     private Map<String, Object> lastExitEvent(long tenantId, UUID taskId) {
         return this.jdbcTemplate.queryForList(
                 """

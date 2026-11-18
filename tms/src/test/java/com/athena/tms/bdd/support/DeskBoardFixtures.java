@@ -18,30 +18,13 @@ import java.util.regex.Pattern;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 櫃檯看板的測試資料：照「現況」建出一張單，並讓它的任務列與事件歷程和產品真的走過那條路時一樣。
- *
- * <p>看板與詳情讀的不只是 {@code tasks.state}：到手方式看最近一筆到手事件的種類與操作者，
- * 等待起算看建立與退回待認領事件的時間，看板範圍看 {@code ended_at}，單號看 {@code task_no}。
- * 所以每張單都盡量經由 {@link TaskEngine} 的狀態轉移建立，事件的種類、順序與內容才會和線上一致；
- * 產品還沒有入口的轉移（主管從待認領指派、當場回答寫進 {@code answer}）才照資料模型直接寫。
- * 只改 {@code tasks.state} 的捷徑會讓看板把單算對、歷程卻是空的，詳情與到手方式的檢查就失去意義。
- *
- * <p>所有事件都先以現在的時鐘寫入，最後再整批改成表格指定的時間：最後一筆事件落在指定時間，
- * 之前的每一筆往前各錯開一分鐘。任務列上由事件推得的時間欄位（建立、開始、完成、結束）一併改成對應事件的時間。
- *
- * <p>建單取號與寫入結束時間在產品裡尚未完成，這裡照資料模型自己補上；
- * 產品補上之後，單號沿用產品取到的那一號，結束時間仍以表格指定的時間為準。
- */
 public class DeskBoardFixtures {
 
-    /** 走到這些現況就算結束，要寫 {@code ended_at}。待查房與已完修還在等查房或驗收，不算。 */
     private static final Set<String> ENDED_SITUATIONS = Set.of(
             "已送達", "查房通過", "已當場回答", "已取消（主管取消）", "已取消（住客收回）");
 
     private static final Pattern TASK_NO = Pattern.compile("^T-(\\d{4,})$");
 
-    /** 已當場回答的單在表格裡沒有寫回覆內容，用這段固定的文字代表櫃檯回給住客的話。 */
     private static final String DEFAULT_ANSWER = "櫃檯已當場回覆";
 
     private final TaskEngine engine;
@@ -69,18 +52,6 @@ public class DeskBoardFixtures {
         this.clock = clock;
     }
 
-    /**
-     * 一張單的規格。欄位都已換成資料庫的值，只有現況與到手方式保留表格的用語，因為它們決定的是要走哪幾步轉移。
-     *
-     * @param type 任務類型（{@code cleaning}、{@code amenity}、{@code repair}、{@code other}）
-     * @param situation 現況用語，例如「待開始」「已取消（主管取消）」
-     * @param at 最後一筆事件的時間
-     * @param assigneeId 負責人；沒寫時，需要負責人的現況會找該部門第一位同仁頂上
-     * @param taskNo 指定的任務單號；null 時照取號規則取下一號
-     * @param acceptedVia 到手方式用語；null 視為自己認領
-     * @param managerId 指派、轉派或取消的主管；可為 null
-     * @param previousAssigneeId 被轉派前的負責人
-     */
     public record Spec(
             String roomNo,
             String content,
@@ -94,7 +65,6 @@ public class DeskBoardFixtures {
             UUID previousAssigneeId) {
     }
 
-    /** 建出一張單，回傳任務 id；修繕單另外回傳它的工務單號，見 {@link Created}。 */
     public Created create(Spec spec) {
         validate(spec);
         long tenantId = tenantFixtures.testTenantId();
@@ -118,12 +88,6 @@ public class DeskBoardFixtures {
     public record Created(UUID taskId, String repairTicketNo) {
     }
 
-    /**
-     * 讓一張待認領的單在指定時刻被同仁退回待認領：補一筆認領，緊接著一筆退回待認領，退回落在指定時刻。
-     *
-     * <p>等待起算看的是最新一筆退回待認領事件，所以兩筆事件的時間都要對；
-     * 認領排在退回的前一分鐘。同仁取該部門第一位現場人員，因為句型只關心退回的時間，不關心是誰。
-     */
     public void returnToPoolByColleague(UUID taskId, Instant at) {
         long tenantId = tenantFixtures.testTenantId();
         Map<String, Object> task = taskRow(tenantId, taskId);
@@ -211,10 +175,6 @@ public class DeskBoardFixtures {
         };
     }
 
-    /**
-     * 住客打字送出的單：來源是住客、掛在該房住客工作階段的訂單上，原文照產品的格式存成 JSON。
-     * 訂單與工作階段沿用 {@link DeskApi#guestSessionToken(String)} 那一份，之後同房住客收回或看進度時才認得這張單。
-     */
     private UUID createGuestTyped(long tenantId, UUID roomId, LocalDate workDate, Spec spec, String initialState) {
         String sessionToken = deskApi.guestSessionToken(spec.roomNo());
         UUID reservationId = jdbcClient
@@ -237,14 +197,12 @@ public class DeskBoardFixtures {
                 .getId();
     }
 
-    /** 待開始的單依到手方式走不同的路，最近一筆到手事件的種類與操作者才會對得上到手方式。 */
     private UUID accept(long tenantId, UUID roomId, LocalDate workDate, Spec spec) {
         String via = spec.acceptedVia() == null ? "自己認領" : spec.acceptedVia();
         UUID assigneeId = assigneeOrFirstOfDept(tenantId, spec);
         String dept = staffDept(tenantId, assigneeId);
         switch (via) {
             case "班前排房" -> {
-                // 班前排房發佈時就是建立在已接狀態，系統同時寫建立與指派兩筆事件。
                 return engine.create(new TaskCreateCommand(
                                 tenantId, spec.type(), "system", roomId, null, dept, "accepted", assigneeId,
                                 spec.content(), null, null, null, workDate, Actor.system()))
@@ -272,11 +230,6 @@ public class DeskBoardFixtures {
         }
     }
 
-    /**
-     * 主管從待認領直接指派給同仁。產品目前沒有這個入口，照資料模型寫：
-     * 一筆操作者是主管的 {@code assigned} 事件，內容與排房指派相同，只帶負責人。
-     * 前提條件寫在 UPDATE 的 WHERE 裡，單不在待認領就一列也不改，這時直接失敗，免得建出事件與任務列對不上的單。
-     */
     private void managerAssignsFromPool(long tenantId, UUID taskId, UUID assigneeId, UUID managerId) {
         int seq = jdbcClient
                 .sql(
@@ -292,7 +245,6 @@ public class DeskBoardFixtures {
                 Map.of("assignee_id", assigneeId.toString()));
     }
 
-    /** 認領、開始，再依現況完成、查房；進行中停在開始之後。 */
     private UUID work(long tenantId, UUID roomId, LocalDate workDate, Spec spec) {
         UUID assigneeId = assigneeOrFirstOfDept(tenantId, spec);
         String dept = staffDept(tenantId, assigneeId);
@@ -313,11 +265,6 @@ public class DeskBoardFixtures {
         return id;
     }
 
-    /**
-     * 當場回答：待派單直接結案成完成，回覆寫進 {@code answer}，住客原文 {@code note} 不動，部門維持未分部門。
-     * 這裡照資料模型直接寫，不經由產品的回答入口，前置資料才能指定任何時間與狀態。
-     * 操作者取飯店第一位櫃檯人員；表格沒有寫是誰回答的。
-     */
     private void answerOnTheSpot(long tenantId, UUID taskId) {
         UUID frontdeskId = jdbcClient
                 .sql(
@@ -345,10 +292,6 @@ public class DeskBoardFixtures {
         insertEvent(tenantId, taskId, seq, "answered", "frontdesk", frontdeskId, Map.of("answer", DEFAULT_ANSWER));
     }
 
-    /**
-     * 修繕單的單號只有工務單號，所以每張修繕單都要有一列工務單，否則看板與詳情找不到它的單號。
-     * 工務單號照產品的取號方式接續下一號；報修人用負責人，沒有負責人時用工務第一位同仁。
-     */
     private String insertRepairTicket(long tenantId, UUID taskId, UUID roomId, Spec spec) {
         int n = jdbcClient
                 .sql(
@@ -379,11 +322,6 @@ public class DeskBoardFixtures {
         return ticketNo;
     }
 
-    /**
-     * 非修繕單要有任務單號。表格有指定就用指定的號碼，並把序號推到至少這一號，之後取號才不會撞號；
-     * 沒指定時，產品已經取過號就沿用，還沒取過就照取號規則取下一號。
-     * 建立事件的快照也帶單號，因為重放時單號從那裡還原。
-     */
     private void assignTaskNo(long tenantId, UUID taskId, String requested) {
         String taskNo;
         if (requested != null) {
@@ -431,10 +369,6 @@ public class DeskBoardFixtures {
                 .update();
     }
 
-    /**
-     * 把整段事件歷程搬到指定時間：最後一筆落在 {@code at}，之前每一筆往前一分鐘。
-     * 任務列上建立、開始、完成與結束的時間改成對應事件的時間；進行中的單，這一段工作從開始事件起算。
-     */
     private void backdate(long tenantId, UUID taskId, Instant at, boolean ended) {
         List<Map<String, Object>> events = jdbcClient
                 .sql("SELECT id, type FROM task_events WHERE tenant_id = ? AND task_id = ? ORDER BY seq")
@@ -541,7 +475,6 @@ public class DeskBoardFixtures {
         return OffsetDateTime.ofInstant(at, clock.getZone());
     }
 
-    /** 任務引擎依目前租戶判斷資料歸屬，呼叫它之前要先設定租戶，呼叫完一定清掉，免得影響同一條執行緒的下一個案例。 */
     private static <T> T withTenant(long tenantId, Supplier<T> action) {
         TenantContext.set(tenantId);
         try {

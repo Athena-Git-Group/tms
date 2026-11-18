@@ -8,6 +8,7 @@ function task(id: string, overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id,
     displayNo: `T-${id}`,
+    seq: 1,
     state: 'triage',
     answered: false,
     dept: 'frontdesk',

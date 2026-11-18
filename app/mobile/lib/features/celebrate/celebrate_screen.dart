@@ -21,8 +21,8 @@ class CelebrateScreen extends StatelessWidget {
     this.onNextStep,
   });
 
-  /// 這張卡是覆蓋層而不是路由，離開要由推它上來的那一頁決定。Flutter 路由的
-  /// `ModalBarrier` 會用 `BlockSemantics` 擋掉底下那一頁的 accessibility 節點。
+  /// 這張卡是疊在頁面上的覆蓋層，不是路由，所以不會自己關閉，離開時由放上它的
+  /// 那一頁處理。
   final VoidCallback onBackHome;
 
   final bool celebrationEnabled;

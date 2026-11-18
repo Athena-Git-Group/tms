@@ -12,7 +12,6 @@ import { useCorrectedNow } from '../../stores/server-clock';
 import { ConflictDialog } from '../dispatch';
 import { useAnswerReply } from './use-answer-reply';
 
-/** 常用回覆的查詢設定：飯店設定，全館共用一份；開面板時讀一次，不需要即時同步。 */
 const quickRepliesQuery = {
   queryKey: ['desk-quick-replies'],
   queryFn: listDeskQuickReplies,
@@ -20,13 +19,6 @@ const quickRepliesQuery = {
   staleTime: Infinity,
 } as const;
 
-/**
- * 當場回答面板：置中、後面是半透明遮罩，標題是「當場回答 · {房號}」。按「取消」或點遮罩關閉，打到一半的字不保留。
- *
- * 由上到下：住客原話白卡、常用回覆（點了把全文帶進回覆框）、回覆框與字數、說明、底部的「回覆並結案」。
- * 帶入、字數、能不能送與送出後的處理都在 `useAnswerReply`，這裡只管畫。
- * 撞單與沒送出時在面板上面跳只有「好」的對話框，按「好」之後面板關不關由 `useAnswerReply` 決定。
- */
 export function AnswerPanel({ taskId }: { taskId: string }) {
   const { t } = useTranslation();
   const titleId = useId();
@@ -34,11 +26,10 @@ export function AnswerPanel({ taskId }: { taskId: string }) {
   const replyBox = useRef<HTMLTextAreaElement>(null);
   const now = useCorrectedNow();
   const closeAnswer = useDeskPanelsStore((state) => state.closeAnswer);
-  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: () => readDeskTask(taskId) });
+  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: ({ signal }) => readDeskTask(taskId, signal) });
   const quickReplies = useQuery(quickRepliesQuery);
   const reply = useAnswerReply(taskId, task?.roomNo ?? '');
 
-  // 打開就把焦點放進回覆框，櫃檯可以直接打字，按 Esc 也關得掉。
   useEffect(() => {
     replyBox.current?.focus();
   }, []);
@@ -47,7 +38,6 @@ export function AnswerPanel({ taskId }: { taskId: string }) {
   const { notice } = reply;
   const closeNotice = () => {
     reply.closeNotice();
-    // 沒送出時面板還在，焦點回到回覆框，可以直接再送；撞單時面板接著就關掉。
     replyBox.current?.focus();
   };
 
@@ -160,8 +150,6 @@ export function AnswerPanel({ taskId }: { taskId: string }) {
           </div>
         </div>
       </div>
-      {/* 對話框放在面板外面、排在它後面：蓋在面板上，按 Esc 只關對話框，不會連面板一起關。 */}
-      {/* 撞單用和派單共用的 `ConflictDialog`，最後一句換成「不需要再回覆。」。 */}
       {notice?.kind === 'answerConflict' && (
         <ConflictDialog notice={notice} action="answer" onClose={closeNotice} />
       )}

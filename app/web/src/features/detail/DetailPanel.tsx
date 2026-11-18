@@ -15,7 +15,6 @@ import { useCorrectedNow, useServerClockStore } from '../../stores/server-clock'
 import { useSessionStore } from '../../stores/session';
 import { useAssignTask } from '../dispatch';
 
-/** 狀態標籤六種顏色的樣式，色碼照 `ui/ui-plan.md` 畫面 8 的表。 */
 const TAG_STYLES: Record<StatusTagTone, string> = {
   yellow: 'bg-[#FFF1C2] text-[#6B4E00]',
   'brand-soft': 'bg-brand-container text-brand-on-container',
@@ -25,7 +24,6 @@ const TAG_STYLES: Record<StatusTagTone, string> = {
   red: 'bg-[#FFE4E1] text-[#B42318]',
 };
 
-/** 狀態訊息卡四種底色，照 `ui/ui-plan.md` 畫面 8。 */
 const CARD_STYLES: Record<StatusCardTone, string> = {
   green: 'bg-ok-bg',
   'brand-soft': 'bg-brand-container',
@@ -33,7 +31,6 @@ const CARD_STYLES: Record<StatusCardTone, string> = {
   white: 'bg-surface',
 };
 
-/** 狀態訊息卡圖示的顏色，跟著底色換，照雛形 `ui/desk.css` 的 `.info`。 */
 const CARD_ICON_STYLES: Record<StatusCardTone, string> = {
   green: 'text-ok-fg',
   'brand-soft': 'text-brand',
@@ -41,7 +38,6 @@ const CARD_ICON_STYLES: Record<StatusCardTone, string> = {
   white: 'text-text-4',
 };
 
-/** 歷程色點五種顏色，色碼照雛形 `ui/desk.js` 的歷程。 */
 const DOT_STYLES: Record<TimelineDotTone, string> = {
   brand: 'bg-brand',
   gray: 'bg-[#8E8E93]',
@@ -50,10 +46,8 @@ const DOT_STYLES: Record<TimelineDotTone, string> = {
   green: 'bg-[#34C759]',
 };
 
-/** 原文列認得的語言；其他語言只寫「原文：」。 */
 const KNOWN_LANGUAGES = ['ja', 'en', 'ko', 'vi', 'zh'] as const;
 
-/** 有翻譯內容時標題下的原文列：「{語言}原文：{住客打的字}」；沒有翻譯時沒有這一列。 */
 function originalLine(task: DeskTaskDetail, t: TFunction): string | null {
   const guestText = task.guestText;
   if (!task.guestTyped || !guestText?.translated) {
@@ -66,19 +60,12 @@ function originalLine(task: DeskTaskDetail, t: TFunction): string | null {
     : t('detail.originalPlain', { text: guestText.original });
 }
 
-/**
- * 單筆詳情面板：從畫面右側讓出 400px 顯示一張單。名稱是「{單號} 詳情」。
- *
- * 由上到下：關閉列與單號；白卡（房號與狀態標籤、標題、原文列、標題下那一行）；狀態訊息卡；
- * 打掃單已接與進行中時的「清潔 SOP」；「內容」六列；歷程；底部是派單區或「單據管理」動作列（見 `DetailFooter`）。
- * 回覆全文、住客原文是別人打的字，介面換語言時照原文顯示。
- */
 export function DetailPanel({ taskId }: { taskId: string }) {
   const { t } = useTranslation();
   const closeDetail = useDeskPanelsStore((state) => state.closeDetail);
   const now = useCorrectedNow();
   const offsetMinutes = useServerClockStore((state) => state.serverUtcOffsetMinutes);
-  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: () => readDeskTask(taskId) });
+  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: ({ signal }) => readDeskTask(taskId, signal) });
   useRereadWithBoard(taskId);
   const contentId = useId();
   const timelineId = useId();
@@ -157,7 +144,6 @@ export function DetailPanel({ taskId }: { taskId: string }) {
   );
 }
 
-/** 底部動作列的按鈕：等寬並排、品牌色描邊，`solid` 實心、`danger` 紅色描邊，照雛形 `ui/desk.css` 的 `.action-bar`。 */
 const BAR_BUTTON =
   'min-h-[54px] min-w-0 flex-[1_1_0] rounded-full border-[1.5px] border-solid px-2 text-[17px] font-semibold whitespace-nowrap';
 const BAR_OUTLINE = `${BAR_BUTTON} border-brand bg-transparent text-brand`;
@@ -173,12 +159,6 @@ const MANAGEMENT_STYLES: Record<ManagementAction, string> = {
   reassign: BAR_SOLID,
 };
 
-/**
- * 面板底部固定的動作列。
- * 待派單的單是「派單」區三格：「派給房務」「派給工務」直接派單，走和待派單頁同一支派單流程（浮條、復原、撞單都一樣），
- * 「當場回答…」打開當場回答面板。派出之後面板留著，看板一換成待認領這一區就收起來，不必等詳情重讀，免得被按第二次。
- * 其他狀態依登入者的角色畫「單據管理」動作列（`managementActions`），這一版點了沒有任何反應，也不送任何請求。
- */
 function DetailFooter({ task }: { task: DeskTaskDetail }) {
   const { t } = useTranslation();
   const role = useSessionStore((state) => state.session?.role);
@@ -191,7 +171,6 @@ function DetailFooter({ task }: { task: DeskTaskDetail }) {
   });
 
   if (hasDispatchArea(task) && (!card || hasDispatchArea(card))) {
-    // 看板上有這張單就拿看板那一份去派，派單流程是照看板的樣子先畫、失敗時還原的。
     const target = card ?? task;
     return (
       <div role="group" aria-label={t('detail.dispatchArea')} className={BAR}>
@@ -220,11 +199,6 @@ function DetailFooter({ task }: { task: DeskTaskDetail }) {
   );
 }
 
-/**
- * 看板資料每讀到一次新的，就把開著的這張單的詳情也重讀一次。
- * 同仁在手機上認領、完成之後，看板一更新，面板上的狀態標籤與狀態訊息卡就跟著換，不必重新整理網頁；
- * 讀的時候舊內容留著，不閃骨架。看板什麼時候會更新，由看板自己的讀取決定。
- */
 function useRereadWithBoard(taskId: string) {
   const queryClient = useQueryClient();
   useEffect(
@@ -233,6 +207,7 @@ function useRereadWithBoard(taskId: string) {
         if (
           event.type === 'updated' &&
           event.action.type === 'success' &&
+          !event.action.manual &&
           event.query.queryKey[0] === deskBoardQuery.queryKey[0]
         ) {
           void queryClient.invalidateQueries({ queryKey: ['desk-task', taskId] });
@@ -242,10 +217,6 @@ function useRereadWithBoard(taskId: string) {
   );
 }
 
-/**
- * 白卡：房號與狀態標籤一列，下面是標題、原文列（有翻譯內容才有）、灰字「{住客} · {類型} · {N} 分鐘前建立」。
- * 空房的單沒有住客那一段。詳情面板上不顯示住客人數，也不顯示急件。
- */
 function DetailHeader({ task, now }: { task: DeskTaskDetail; now: Date | undefined }) {
   const { t } = useTranslation();
   const tag = statusTag(task);
@@ -278,10 +249,6 @@ function DetailHeader({ task, now }: { task: DeskTaskDetail; now: Date | undefin
   );
 }
 
-/**
- * 歷程：由舊到新，每筆左邊一個色點與往下的連接線，右邊一句話，下面灰字「{時間} · {操作者}」。
- * 規格還沒定句子的事件不畫，所以畫出來的筆數可能比後端回的少。
- */
 function Timeline({ task, now, offsetMinutes }: { task: DeskTaskDetail; now: Date | undefined; offsetMinutes: number }) {
   const { t } = useTranslation();
   const rows = task.timeline.flatMap((entry) => {
@@ -310,9 +277,6 @@ function Timeline({ task, now, offsetMinutes }: { task: DeskTaskDetail; now: Dat
   );
 }
 
-/**
- * 狀態訊息卡：圓形資訊圖示、標題、說明。文字與底色由 `statusCard` 算，沒有訊息卡的狀況（待派單）不畫。
- */
 function StatusCardBlock({
   task,
   now,

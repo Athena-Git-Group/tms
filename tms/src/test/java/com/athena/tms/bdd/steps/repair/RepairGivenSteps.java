@@ -176,7 +176,6 @@ public class RepairGivenSteps {
                 builder.assignee(assigneeId);
             }
             if ("staff".equals(taskSource)) {
-                // 同仁報修時，正式流程的開單事件記在報修人名下，詳情的開單人才讀得到名字。
                 builder.createdBy(Actor.staff(staffRole(tenantId, reporterId), reporterId));
             }
             if ("cancelled".equals(state)) {

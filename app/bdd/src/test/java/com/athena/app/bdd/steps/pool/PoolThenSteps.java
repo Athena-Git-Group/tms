@@ -124,9 +124,20 @@ public class PoolThenSteps {
         assertAbsent(cardId + ".claim-button");
         if (!world.driver().findElements(
                 org.openqa.selenium.By.xpath("//*[contains(@label, '認領這單')]")).isEmpty()) {
-            throw new AssertionError("主管的待認領不該有任何可觸發認領的操作，畫面上卻有「認領這單」");
+            throw new AssertionError("這個池不該有任何可觸發認領的操作，畫面上卻有「認領這單」");
         }
+        assertStillUnclaimed(dept, task);
+    }
 
+    @那麼("{string} 的單卡有搶單鈕")
+    public void poolCardHasClaimButton(String task) {
+        String dept = PoolDept.currentDept(world);
+        String buttonId = PoolDept.cardPrefix(dept) + task + ".claim-button";
+        world.waitForTestId(buttonId, SCREEN_TIMEOUT);
+        assertStillUnclaimed(dept, task);
+    }
+
+    private void assertStillUnclaimed(String dept, String task) {
         List<Map<String, Object>> rows = PoolDept.ENGINEERING.equals(dept)
                 ? world.backend().queryRows("""
                         SELECT t.state, t.assignee_id FROM repair_tickets rt

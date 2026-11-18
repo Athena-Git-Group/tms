@@ -378,18 +378,81 @@ public class BackendChannel {
                 staff.role(), staff.dept());
     }
 
+    /**
+     * 清空業務資料，每個場景開頭呼叫。後端這時候可能還在讀寫這些資料表，例如看板查詢、班末掃描或即時訊號組卡片。
+     *
+     * <p>這裡要保證清空不會和後端互相卡死，也不會害後端的查詢被資料庫中止。
+     * TRUNCATE 要一張一張拿到每個資料表的獨占鎖，後端的查詢也是一張一張鎖它讀到的表，
+     * 兩邊拿鎖的先後不同時，可能各自握著對方要的那張表互相等待。資料庫等滿 deadlock_timeout（預設 1 秒）
+     * 會挑一邊中止（SQLState 40P01）：中止的是清空，整個場景還沒開始就失敗；中止的是後端，畫面那一次讀取就失敗。
+     *
+     * <p>做法是在同一個交易裡先用 LOCK TABLE 把所有要清的表鎖好，再 TRUNCATE。鎖表這一步限時 {@link #RESET_LOCK_WAIT}，
+     * 比 deadlock_timeout 短：真的和後端互相等待時，清空這一方先時間到、放掉手上所有的鎖、稍等再整批重來，
+     * 互相等待在資料庫判定之前就解開，後端的查詢不會被中止。鎖是排隊等的，不是拿不到就放棄，
+     * 後端之後才來的查詢會排在清空後面，所以後端再忙也輪得到清空。全部鎖到手之後 TRUNCATE 不必再等任何人。
+     */
     public void resetBusinessData() {
         List<Map<String, Object>> rows = queryRows("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
                   AND table_name NOT IN ('flyway_schema_history', 'tenants')
+                ORDER BY table_name
                 """);
         if (rows.isEmpty()) {
             return;
         }
-        List<String> tables = rows.stream().map(r -> (String) r.get("table_name")).toList();
-        execute("TRUNCATE TABLE " + String.join(", ", tables) + " RESTART IDENTITY CASCADE");
+        String tables = String.join(", ", rows.stream().map(r -> (String) r.get("table_name")).toList());
+        lockAllThenTruncate(
+                "LOCK TABLE " + tables + " IN ACCESS EXCLUSIVE MODE",
+                "TRUNCATE TABLE " + tables + " RESTART IDENTITY CASCADE");
         jwtByStaffId.clear();
+    }
+
+    /** 鎖表這一步最多等多久，必須比資料庫的 deadlock_timeout（預設 1 秒）短。 */
+    private static final Duration RESET_LOCK_WAIT = Duration.ofMillis(400);
+
+    private static final Duration RESET_PATIENCE = Duration.ofSeconds(30);
+
+    private static final long RESET_RETRY_PAUSE_MS = 20;
+
+    /** 鎖表時間到（57014）、拿不到鎖（55P03）或仍被判定互相等待（40P01）時整批重來，其他錯誤照常拋出。 */
+    private static final List<String> RESET_RETRYABLE_STATES = List.of("57014", "55P03", "40P01");
+
+    private void lockAllThenTruncate(String lockSql, String truncateSql) {
+        Connection db = connection();
+        long deadline = System.nanoTime() + RESET_PATIENCE.toNanos();
+        int attempts = 0;
+        try {
+            db.setAutoCommit(false);
+            while (true) {
+                attempts++;
+                try (java.sql.Statement statement = db.createStatement()) {
+                    statement.execute("SET LOCAL statement_timeout = " + RESET_LOCK_WAIT.toMillis());
+                    statement.execute(lockSql);
+                    statement.execute("SET LOCAL statement_timeout = 0");
+                    statement.execute(truncateSql);
+                    db.commit();
+                    return;
+                } catch (SQLException e) {
+                    db.rollback();
+                    if (!RESET_RETRYABLE_STATES.contains(e.getSQLState()) || System.nanoTime() > deadline) {
+                        throw new IllegalStateException("清空業務資料失敗（試了 " + attempts + " 次）：" + truncateSql, e);
+                    }
+                }
+                Thread.sleep(RESET_RETRY_PAUSE_MS);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("清空業務資料時交易控制失敗", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("清空業務資料時被中斷", e);
+        } finally {
+            try {
+                db.setAutoCommit(true);
+            } catch (SQLException e) {
+                connection = null;
+            }
+        }
     }
 
     private static final String TEST_CLOCK_RESTART_HINT =
@@ -1386,6 +1449,7 @@ public class BackendChannel {
     private static final int VACANT_ROOM_STAY_DAYS_AGO = 30;
 
     private static final String GUEST_SESSION_HEADER = "X-Guest-Session";
+    private static final String GUEST_SESSION_ISSUER_NAME = "測試資料櫃檯";
 
     /**
      * 直接在資料庫建一張已經處在指定狀況的單，連同走到這個狀況會留下的整串事件。
@@ -2286,24 +2350,25 @@ public class BackendChannel {
     /**
      * 把房號換成這間房住客的連線憑證，住客端點靠它認人。
      *
-     * <p>住客的連線一定要掛在一筆訂房上。這間房現在有人住時掛那筆訂房；沒有人住時掛一筆住期早已結束的訂房，
-     * 房間仍然是空房，場景之後再替同一間房建在住的訂房也不會因為住期重疊被資料庫拒絕。
+     * <p>住客的連線一定要掛在一筆訂房上。這間房現在有人住時，照正式流程由櫃檯開連線，到期時間由後端定成那筆訂房的退房時刻。
+     * 沒有人住時掛一筆住期早已結束的訂房，房間仍然是空房，場景之後再替同一間房建在住的訂房也不會因為住期重疊被資料庫拒絕。
+     * 後端不替已經退房的訂房開連線，所以這種連線直接寫進資料庫，到期時間放在一天後，場景進行中不會失效。
      * 住客只看得到自己那筆訂房名下的單，所以同一筆訂房沿用同一個連線，送出與收回才會是同一位住客。
      */
     private String guestSessionToken(String roomNo) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
         OffsetDateTime now = backendNow();
-        UUID reservationId = queryScalar("""
+        Optional<UUID> stayingReservation = queryScalar("""
                 SELECT id FROM reservations_cache
                  WHERE tenant_id = ? AND room_id = ? AND superseded_at IS NULL
                    AND checkin_at <= ? AND checkout_at > ?
                 """, tenantId, roomId, now, now)
-                .map(UUID.class::cast)
-                .orElseGet(() -> {
-                    OffsetDateTime longAgo = now.minusDays(VACANT_ROOM_STAY_DAYS_AGO);
-                    return createReservation(roomNo, null, false, longAgo, longAgo.plusDays(1));
-                });
+                .map(UUID.class::cast);
+        UUID reservationId = stayingReservation.orElseGet(() -> {
+            OffsetDateTime longAgo = now.minusDays(VACANT_ROOM_STAY_DAYS_AGO);
+            return createReservation(roomNo, null, false, longAgo, longAgo.plusDays(1));
+        });
         Optional<Object> existing = queryScalar("""
                 SELECT session_token FROM guest_sessions
                  WHERE tenant_id = ? AND room_id = ? AND reservation_id = ?
@@ -2313,18 +2378,43 @@ public class BackendChannel {
         if (existing.isPresent()) {
             return String.valueOf(existing.get());
         }
-        String sessionToken = "fx-guest-session-" + UUID.randomUUID();
+        if (stayingReservation.isEmpty()) {
+            return insertVacantRoomGuestSession(tenantId, roomId, reservationId, now);
+        }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("tenantId", tenantId);
-        body.put("sessionToken", sessionToken);
         body.put("roomId", roomId.toString());
         body.put("reservationId", reservationId.toString());
-        body.put("expiresAt", now.plusDays(1).toString());
-        HttpResponse<String> response = send(request("POST", "/guest-sessions/scan", null)
+        HttpResponse<String> response = send(request("POST", "/guest-sessions/scan", jwt(guestSessionIssuer()))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
         requireSuccess(response, "建立住客連線：POST /guest-sessions/scan（房號 " + roomNo + "）");
-        return sessionToken;
+        return parseJson(response.body()).path("sessionToken").asText();
+    }
+
+    /** 空房住客的連線，權杖格式照後端的「飯店編號.隨機字串」，後端才認得出是哪家飯店的連線。 */
+    private String insertVacantRoomGuestSession(long tenantId, UUID roomId, UUID reservationId, OffsetDateTime now) {
+        byte[] randomBytes = new byte[32];
+        new java.security.SecureRandom().nextBytes(randomBytes);
+        String token = tenantId + "." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+        execute("""
+                INSERT INTO guest_sessions (id, tenant_id, session_token, room_id, reservation_id, expires_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, UUID.randomUUID(), tenantId, token, roomId, reservationId, now.plusDays(1), now);
+        return token;
+    }
+
+    /**
+     * 住客連線只能由櫃檯、主管或值班主管開，所以準備住客連線要有一位櫃檯登入。
+     * 用一位專門給測試資料的櫃檯，不借用場景自己的帳號，免得場景要驗的登入次數或鎖定狀態被這裡的登入改掉。
+     */
+    private CreatedStaff guestSessionIssuer() {
+        return queryRows("SELECT id, login_id FROM staff_accounts WHERE tenant_id = ? AND name = ?",
+                        ensureTenant(), GUEST_SESSION_ISSUER_NAME)
+                .stream()
+                .findFirst()
+                .map(row -> new CreatedStaff((UUID) row.get("id"), GUEST_SESSION_ISSUER_NAME,
+                        (String) row.get("login_id"), DEFAULT_PASSWORD, "frontdesk", "frontdesk"))
+                .orElseGet(() -> insertStaff(GUEST_SESSION_ISSUER_NAME, "frontdesk", "frontdesk", "active"));
     }
 
     /**

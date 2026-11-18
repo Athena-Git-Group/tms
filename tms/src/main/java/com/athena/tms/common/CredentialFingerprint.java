@@ -5,7 +5,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-/** JWT 的內容任何持有者都讀得出來，所以簽進權杖的是密碼雜湊的指紋，不是雜湊本身。 */
+/**
+ * 產生簽進 JWT 的密碼指紋，密碼一改，舊權杖的指紋就對不上而失效。
+ * JWT 的內容任何持有者都讀得出來，所以簽進去的是密碼雜湊的指紋，不是雜湊本身。
+ */
 public final class CredentialFingerprint {
 
     private static final int HEX_LENGTH = 16;

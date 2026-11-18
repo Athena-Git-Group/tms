@@ -8,10 +8,6 @@ import { LOGIN_ID_MAX_LENGTH, PASSWORD_MAX_LENGTH } from '../../lib/login-form';
 import { useHotelCode } from '../../lib/use-hotel-code';
 import { useLoginForm } from './use-login-form';
 
-/**
- * 登入頁（路徑 `/{飯店識別代碼}/login`）。飯店名稱用網址上的代碼查，登入也只登入這一家。
- * 登入成功只更新登入狀態，換去哪一頁由路由那一層依登入狀態決定。
- */
 export function LoginPage() {
   const { t } = useTranslation();
   const hotelCode = useHotelCode();
@@ -19,7 +15,6 @@ export function LoginPage() {
   const [passwordShown, setPasswordShown] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
 
-  // 查不到、還沒回來或查詢失敗時都不畫飯店名稱那一行，登入照常可用，所以失敗不重試。
   const hotel = useQuery({
     queryKey: ['public-hotel', hotelCode],
     queryFn: () => readPublicHotel(hotelCode),

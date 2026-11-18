@@ -3,10 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { chooseLanguage } from '../../i18n/interface-language';
 import { DEFAULT_LANGUAGE, LANGUAGES, LANGUAGE_OWN_NAMES, isLanguage } from '../../i18n/languages';
 
-/**
- * 登入頁與改密碼畫面右上的語言選單：地球圖示加目前語言的名稱，點開列出四種語言，目前的語言前面打勾。
- * 選了立刻套用；點選單以外的地方或按 Esc 收起。選項用每種語言自己的寫法，看不懂目前語言的人也找得到自己的。
- */
 export function LanguageMenu() {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);

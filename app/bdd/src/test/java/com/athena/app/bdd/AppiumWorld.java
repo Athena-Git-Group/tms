@@ -117,6 +117,8 @@ public class AppiumWorld {
 
     @After(order = 0)
     public void after() {
+        backend.resetBackendClock();
+        postBackdoorJson("/clock", "{\"isoTime\":null}");
     }
 
     public synchronized void start() {
@@ -504,6 +506,11 @@ public class AppiumWorld {
                     "房號「" + roomNo + "」在後端有 " + rows.size() + " 筆任務，無法以房號唯一指認");
         }
         return rows.get(0);
+    }
+
+    /** 從首頁以外的入口（例如待認領的單卡）進了任務頁，記下目前是哪一房，給讀任務頁的斷言用。 */
+    public void enteredTaskDetail(String roomNo) {
+        currentTaskRoomNo = roomNo;
     }
 
     public boolean hasCurrentTaskRoomNo() {

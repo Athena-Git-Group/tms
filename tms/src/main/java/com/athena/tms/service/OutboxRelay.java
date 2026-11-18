@@ -3,6 +3,8 @@ package com.athena.tms.service;
 import com.athena.tms.common.OutboxKafkaHeaders;
 import com.athena.tms.config.KafkaTopicsProperties;
 import com.athena.tms.service.TenantScopedExecutor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -10,6 +12,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
@@ -17,14 +21,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.convert.DurationStyle;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
-public class OutboxRelay {
+public class OutboxRelay implements SmartLifecycle {
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
     private static final int MAX_BACKOFF_SHIFT = 10;
     private static final RowMapper<PendingMessage> PENDING_MAPPER = (rs, rowNum) -> new PendingMessage(rs.getLong("id"), rs.getLong("tenant_id"), rs.getString("aggregate_key"), rs.getString("kind"), rs.getString("payload"), rs.getString("idempotency_key"), rs.getInt("attempts"), rs.getObject("next_retry_at", OffsetDateTime.class));
@@ -40,8 +46,12 @@ public class OutboxRelay {
     private final Duration backoffBase;
     private final Duration sendTimeout;
     private final Duration claimLease;
+    private final Duration pollInterval;
+    private final Counter passes;
+    private final BlockingQueue<Boolean> wakeSignal = new ArrayBlockingQueue<>(1);
+    private volatile Thread runner;
 
-    public OutboxRelay(JdbcTemplate jdbcTemplate, KafkaTemplate<String, String> kafkaTemplate, KafkaTopicsProperties topics, TenantScopedExecutor tenantScopedExecutor, @Value(value="${tms.outbox.relay.max-attempts:8}") int maxAttempts, @Value(value="${tms.outbox.relay.backoff-base:1s}") String backoffBase, @Value(value="${tms.outbox.relay.send-timeout:10s}") String sendTimeout, @Value(value="${tms.outbox.relay.claim-lease:60s}") String claimLease, @Value(value="${spring.kafka.producer.properties.max.block.ms:5000}") long producerMaxBlockMs, @Value(value="${spring.kafka.producer.properties.delivery.timeout.ms:120000}") long producerDeliveryTimeoutMs) {
+    public OutboxRelay(JdbcTemplate jdbcTemplate, KafkaTemplate<String, String> kafkaTemplate, KafkaTopicsProperties topics, TenantScopedExecutor tenantScopedExecutor, MeterRegistry meterRegistry, @Value(value="${tms.outbox.relay.poll-interval:2s}") String pollInterval, @Value(value="${tms.outbox.relay.max-attempts:8}") int maxAttempts, @Value(value="${tms.outbox.relay.backoff-base:1s}") String backoffBase, @Value(value="${tms.outbox.relay.send-timeout:10s}") String sendTimeout, @Value(value="${tms.outbox.relay.claim-lease:60s}") String claimLease, @Value(value="${spring.kafka.producer.properties.max.block.ms:5000}") long producerMaxBlockMs, @Value(value="${spring.kafka.producer.properties.delivery.timeout.ms:120000}") long producerDeliveryTimeoutMs) {
         this.jdbcTemplate = jdbcTemplate;
         this.kafkaTemplate = kafkaTemplate;
         this.topics = topics;
@@ -50,6 +60,8 @@ public class OutboxRelay {
         this.backoffBase = DurationStyle.detectAndParse((String)backoffBase);
         this.sendTimeout = DurationStyle.detectAndParse((String)sendTimeout);
         this.claimLease = DurationStyle.detectAndParse((String)claimLease);
+        this.pollInterval = DurationStyle.detectAndParse(pollInterval);
+        this.passes = Counter.builder("tms.outbox.relay.passes").description("relay 跑完的輪數").register(meterRegistry);
         if (this.sendTimeout.toMillis() < producerDeliveryTimeoutMs) {
             throw new IllegalStateException("tms.outbox.relay.send-timeout（" + String.valueOf(this.sendTimeout) + "）必須大於等於 producer 的 delivery.timeout.ms（" + producerDeliveryTimeoutMs + "ms）。send-timeout 比它短，我們會在 producer 真正放棄之前就先認輸、把訊息排去重試，但 producer 可能之後還是把它送到了 Kafka，留下一筆我們自己不知道的重複送出。");
         }
@@ -59,7 +71,63 @@ public class OutboxRelay {
         }
     }
 
-    @Scheduled(fixedDelayString="${tms.outbox.relay.poll-interval:2s}")
+    @TransactionalEventListener(phase=TransactionPhase.AFTER_COMMIT, fallbackExecution=true)
+    public void onEnqueued(OutboxEnqueued event) {
+        this.wakeSignal.offer(Boolean.TRUE);
+    }
+
+    @Override
+    public void start() {
+        Thread thread = new Thread(this::runUntilStopped, "outbox-relay");
+        thread.setDaemon(true);
+        this.runner = thread;
+        thread.start();
+    }
+
+    @Override
+    public void stop() {
+        Thread thread = this.runner;
+        this.runner = null;
+        if (thread == null) {
+            return;
+        }
+        this.wakeSignal.offer(Boolean.TRUE);
+        try {
+            thread.join(this.sendTimeout.toMillis());
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (thread.isAlive()) {
+            thread.interrupt();
+        }
+    }
+
+    @Override
+    public boolean isRunning() {
+        return this.runner != null;
+    }
+
+    private void runUntilStopped() {
+        while (this.runner == Thread.currentThread()) {
+            try {
+                this.wakeSignal.poll(this.pollInterval.toMillis(), TimeUnit.MILLISECONDS);
+            }
+            catch (InterruptedException e) {
+                return;
+            }
+            if (this.runner != Thread.currentThread()) {
+                return;
+            }
+            try {
+                this.poll();
+            }
+            catch (Throwable e) {
+                log.error("relay 這輪出錯，等下一輪再試: {}", (Object)e.getMessage(), (Object)e);
+            }
+        }
+    }
+
     public void poll() {
         for (long tenantId : this.tenantScopedExecutor.tenantIds()) {
             try {
@@ -69,6 +137,7 @@ public class OutboxRelay {
                 log.error("租戶 {} 這輪 relay 出錯，跳過、下一輪再試: {}", new Object[]{tenantId, e.getMessage(), e});
             }
         }
+        this.passes.increment();
     }
 
     private void relayTenant(long tenantId) {

@@ -16,6 +16,8 @@ public class StaffFixtures {
 
     public static final String DEFAULT_SHIFT_END = "17:00";
 
+    private static final String FIXTURE_FRONTDESK_NAME = "測試資料櫃檯";
+
     private static final Set<String> SUPPORTED_DEPTS = Set.of("housekeeping", "engineering", "frontdesk");
 
     private final JdbcClient jdbcClient;
@@ -65,28 +67,18 @@ public class StaffFixtures {
         return created;
     }
 
-    /**
-     * 建立櫃檯人員：角色與部門都是 {@code frontdesk}。
-     * 今日班次與負責樓層都照其他現場人員沒指定時的預設建立。
-     */
     public CreatedStaff createFrontdeskStaff(String name, String stateCode) {
         return createFieldStaff(name, "frontdesk", null, null, stateCode);
     }
 
-    /** 建立值班主管：角色是 {@code duty_manager}，沒有部門。 */
     public CreatedStaff createDutyManager(String name, String stateCode) {
         return insertStaff(name, "duty_manager", null, stateCode);
     }
 
-    /** 建立老闆：角色是 {@code owner}，沒有部門。 */
     public CreatedStaff createOwner(String name, String stateCode) {
         return insertStaff(name, "owner", null, stateCode);
     }
 
-    /**
-     * 在指定的飯店建一位在職的房務員工，員工編號與密碼直接用給的值。
-     * 只建帳號，不排班、不建負責樓層，用在只驗登入的案例；其他讀寫入口都假設員工在「測試飯店」，不能拿來操作這位員工。
-     */
     public CreatedStaff createHousekeeperInTenant(long tenantId, String name, String loginId, String rawPassword) {
         UUID id = UuidV7.generate();
         OffsetDateTime now = OffsetDateTime.now();
@@ -101,6 +93,22 @@ public class StaffFixtures {
                 .update();
         JwtService.IssuedToken issued = jwtService.issue(tenantId, id, "housekeeping", "housekeeping");
         return new CreatedStaff(tenantId, id, loginId, rawPassword, issued.token());
+    }
+
+    /**
+     * 準備住客 session 的測試資料要用的櫃檯 JWT，因為住客 session 只能由櫃檯、主管或值班主管開。
+     * 每個案例只建一位不排班、沒有負責樓層的櫃檯，同一案例重複呼叫沿用同一位，
+     * 不借用案例自己的櫃檯，免得案例要驗證的那位員工多出操作紀錄。
+     */
+    public String fixtureFrontdeskJwt() {
+        long tenantId = tenantFixtures.testTenantId();
+        UUID id = jdbcClient
+                .sql("SELECT id FROM staff_accounts WHERE tenant_id = ? AND name = ?")
+                .params(tenantId, FIXTURE_FRONTDESK_NAME)
+                .query(UUID.class)
+                .optional()
+                .orElseGet(() -> insertStaff(FIXTURE_FRONTDESK_NAME, "frontdesk", "frontdesk", "active").id());
+        return jwtService.issue(tenantId, id, "frontdesk", "frontdesk").token();
     }
 
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {
@@ -141,7 +149,6 @@ public class StaffFixtures {
                 .update();
     }
 
-    /** 讀這個帳號目前累計的連續輸入錯誤密碼次數。 */
     public int failedLoginCount(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         return jdbcClient
@@ -151,7 +158,6 @@ public class StaffFixtures {
                 .single();
     }
 
-    /** 直接把連續輸入錯誤密碼的次數寫成指定的值，不經過登入。 */
     public void setFailedLoginCount(UUID staffId, int count) {
         long tenantId = tenantFixtures.testTenantId();
         jdbcClient
@@ -162,7 +168,6 @@ public class StaffFixtures {
                 .update();
     }
 
-    /** 讀這個帳號鎖定到什麼時候；沒有被鎖定時是空的。 */
     public Optional<OffsetDateTime> lockedUntil(UUID staffId) {
         long tenantId = tenantFixtures.testTenantId();
         return jdbcClient
@@ -172,7 +177,6 @@ public class StaffFixtures {
                 .single();
     }
 
-    /** 直接寫入鎖定到期時間；傳 {@code null} 代表解除鎖定。 */
     public void setLockedUntil(UUID staffId, OffsetDateTime lockedUntil) {
         long tenantId = tenantFixtures.testTenantId();
         jdbcClient

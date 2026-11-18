@@ -19,9 +19,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 櫃檯 Web 的看板與派單入口，六支操作都在 {@code /api/v1/desk} 底下。
- */
 @RestController
 @RequestMapping("/api/v1/desk")
 public class DeskBoardController {
@@ -48,8 +45,9 @@ public class DeskBoardController {
         return this.deskQuickReplyService.list();
     }
 
-    // 三支寫入的 Idempotency-Key 先宣告成非必帶：沒帶時契約要回 400 idempotency_key_required，
-    // 交給 Spring 擋會變成另一個錯誤碼，所以留給各支的規則自己判斷。
+    // 下面三個寫入端點的 Idempotency-Key 標頭宣告成非必帶，由各自的服務邏輯檢查。
+    // 缺少這個標頭時，API 規格要求回 400 idempotency_key_required。
+    // 若宣告成必帶，Spring 會先擋下並回另一種錯誤碼。
     @PostMapping("/tasks/{id}/assign")
     public DeskTask deskAssignTask(
             @PathVariable UUID id,

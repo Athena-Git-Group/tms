@@ -60,7 +60,6 @@ describe('checkNewPassword', () => {
   });
 
   test('中間有換行的密碼照樣找得到字母和數字', () => {
-    // 和後端用 find() 一樣，只要出現一個就算有，換行不會讓判斷失效。
     expect(checkNewPassword('\nabcdefg\n1', '\nabcdefg\n1')).toEqual({
       minLength: true,
       letter: true,
@@ -80,7 +79,6 @@ describe('checkNewPassword', () => {
   });
 
   test('長度照字元單位算，一個表情符號算兩碼', () => {
-    // 「A1」加三個表情符號：畫面上 5 個字，字元單位是 8。
     expect(checkNewPassword('A1😀😀😀', 'A1😀😀😀').minLength).toBe(true);
   });
 });

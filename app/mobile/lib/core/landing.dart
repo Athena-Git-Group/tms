@@ -15,13 +15,17 @@ Widget landingShellFor({required String role, String? dept}) {
 }
 
 enum ManagerKind {
-  housekeeping(['inspection', 'verify']),
+  housekeeping(['inspection', 'verify'], 'housekeeping'),
 
-  engineering(['verify']);
+  engineering(['verify'], 'engineering');
 
-  const ManagerKind(this.queues);
+  const ManagerKind(this.queues, this.poolDept);
 
   final List<String> queues;
+
+  final String poolDept;
+
+  bool canClaimFrom(String dept) => dept == poolDept;
 }
 
 ManagerKind? managerKindOf({required String role, String? dept}) {

@@ -48,18 +48,6 @@ public class StaffAccountController {
                 .toList();
     }
 
-    /**
-     * 登入前用飯店識別代碼查飯店名稱，不用登入就能呼叫，回應只有名稱一項。
-     *
-     * <p>代碼原樣拿去比對，不修剪也不轉小寫。對不到飯店時不分原因，一律回同一個 404：
-     * 不存在、大小寫不符、格式不對、拿內部流水號來查，回應都一模一樣。
-     * 要是不同原因回不同內容，呼叫的人就能拿流水號一個個試，從回應的差別推出有哪些飯店。
-     *
-     * <p>這支端點不用登入，誰都能拿任意字串來試。格式不合代碼規則的字串在資料庫裡不可能有對應的飯店，
-     * 不必為它們查資料庫；它們和其他查不到的情況回同一個 404，回應看不出是格式不對。
-     *
-     * <p>飯店主檔不在列層級權限的範圍內，應用的資料庫帳號本來就能讀，所以這裡沒有登入的飯店身分也查得到。
-     */
     @GetMapping("/public/hotels/{hotelCode}")
     public PublicHotel readPublicHotel(@PathVariable String hotelCode) {
         return Optional.of(hotelCode)

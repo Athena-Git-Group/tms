@@ -10,6 +10,7 @@ import '../../core/widgets/tms_alert.dart';
 import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_viewer.dart';
 import '../../core/widgets/tms_sheet.dart';
+import '../../core/widgets/tms_toast.dart';
 import 'repair_labels.dart';
 import 'ticket_complete_sheet.dart';
 import 'ticket_detail_engineering.dart';
@@ -18,6 +19,7 @@ import 'ticket_manager_action_bar.dart';
 import 'ticket_verify_fail_sheet.dart';
 import 'ticket_verify_result_card.dart';
 import '../manager/manager_conflict_alert.dart';
+import '../manager/manager_ids.dart';
 
 enum TicketView {
   housekeeping,
@@ -36,12 +38,25 @@ enum TicketView {
   }
 }
 
+enum TicketEntry {
+  verifyQueue,
+
+  elsewhere,
+}
+
 class TicketScreen extends StatefulWidget {
-  const TicketScreen({super.key, required this.view, this.taskId});
+  const TicketScreen({
+    super.key,
+    required this.view,
+    this.taskId,
+    this.entry = TicketEntry.elsewhere,
+  });
 
   final TicketView view;
 
   final String? taskId;
+
+  final TicketEntry entry;
 
   @override
   State<TicketScreen> createState() => _TicketScreenState();
@@ -61,10 +76,18 @@ class _TicketScreenState extends State<TicketScreen> {
 
   final Map<String, String> _verifyKeys = {};
 
+  TmsToastHandle? _toast;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _toast?.dismiss();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -191,9 +214,7 @@ class _TicketScreenState extends State<TicketScreen> {
         idempotencyKey: key,
       );
       _verifyKeys.clear();
-      if (outcome.result == 'failed') {
-        _pendingVerifyOutcome = outcome;
-      }
+      _pendingVerifyOutcome = outcome;
       return null;
     } on ApiException catch (e) {
       if (e.statusCode == 409) {
@@ -224,7 +245,24 @@ class _TicketScreenState extends State<TicketScreen> {
       _showError(error);
       return;
     }
-    Navigator.of(context).maybePop();
+    final outcome = _pendingVerifyOutcome;
+    _pendingVerifyOutcome = null;
+    final ticketNo = outcome?.ticketNo ?? _ticket?.ticketNo ?? '';
+    if (widget.entry == TicketEntry.verifyQueue) {
+      Navigator.of(context).pop(ticketNo);
+      return;
+    }
+    TodayRefresh.instance.request();
+    await _load();
+    if (!mounted) {
+      return;
+    }
+    _toast?.dismiss();
+    _toast = TmsToast.show(
+      context,
+      '$ticketNo 已結案',
+      id: ManagerIds.ticketPassedToast,
+    );
   }
 
   Future<void> _openFailSheet() async {
@@ -243,8 +281,8 @@ class _TicketScreenState extends State<TicketScreen> {
       return;
     }
     final outcome = _pendingVerifyOutcome;
-    if (outcome != null) {
-      _pendingVerifyOutcome = null;
+    _pendingVerifyOutcome = null;
+    if (outcome != null && outcome.result == 'failed') {
       setState(() => _verifyOutcome = outcome);
     }
     if (_verifyConflicted) {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { boardColumnWidth, boardContentWidth, columnsHiddenOnRight } from './board-layout';
 
-/** 沒捲動時第 i 欄（從 0 起）欄頭的右緣：左邊距 16px，每欄 200px、欄距 10px。 */
 const rightOf = (i: number) => 16 + i * 210 + 200;
 const eightRights = Array.from({ length: 8 }, (_, i) => rightOf(i));
 

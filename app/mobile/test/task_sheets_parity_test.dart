@@ -11,19 +11,12 @@ import 'package:tms_staff_app/features/task/ask_sheet.dart';
 import 'package:tms_staff_app/features/task/hold_sheet.dart';
 import 'package:tms_staff_app/features/task/repair_sheet.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  setUp(() {
-    // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 

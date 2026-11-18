@@ -8,6 +8,7 @@ import com.athena.web.bdd.pages.ShellFrame;
 import com.athena.web.bdd.pages.TriagePage;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.Network.SentRequest;
+import com.athena.web.bdd.support.StepPhaseListener;
 import com.athena.web.bdd.support.WebWorld;
 import com.athena.web.bdd.support.WhenStart;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,7 +19,9 @@ import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.BoundingBox;
 import io.cucumber.java.Before;
 import io.cucumber.java.zh_tw.那麼;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -45,6 +48,16 @@ public class RealtimeThenSteps {
 
     /** 全部推進完之後再多等這麼久，還在路上的請求才會被記到。 */
     private static final double SETTLE_AFTER_WATCH_MS = 1_000;
+
+    /** 「仍在」「沒有重新讀取」這類結果句，When 之後再看多久，確認畫面沒有慢一步變掉。 */
+    private static final double STILL_AFTER_MS = 2_000;
+
+    /** 會跟著看板上的卡片增減的數量卡。 */
+    private static final List<String> COUNTED_TILES = List.of("待派單", "待認領", "處理中");
+
+    private static final String CARD_GONE_FROM_BOARD = "{int} 秒內看板上沒有 {string} 的卡片";
+
+    private static final String NO_FULL_BOARD_REREAD = "這段期間畫面沒有重新讀取整份看板";
 
     /** 重連成功之後再看多久，確認提醒列沒有慢一步出現。 */
     private static final double NO_ALERT_AFTER_RECONNECT_MS = 2_000;
@@ -80,8 +93,18 @@ public class RealtimeThenSteps {
 
     private RuntimeException subtitleCaptureFailure;
 
-    public RealtimeThenSteps(WebWorld world, WhenStart whenStart, LiveUpdateTiming timing, RealtimeScenario scenario) {
+    /** 前置走完那一刻每張已登記的單在哪幾欄，以房號為鍵；那時沒有開著總覽看板時是空的。 */
+    private final Map<String, List<String>> columnsAtWhenStart = new HashMap<>();
+
+    /** 前置走完那一刻各數量卡的數字。 */
+    private final Map<String, String> tilesAtWhenStart = new HashMap<>();
+
+    private final LiveConnection live;
+
+    public RealtimeThenSteps(WebWorld world, WhenStart whenStart, LiveUpdateTiming timing, RealtimeScenario scenario,
+            LiveConnection live) {
         this.world = world;
+        this.live = live;
         this.scenario = scenario;
         this.shell = new ShellFrame(world);
         this.board = new BoardPage(world);
@@ -94,6 +117,39 @@ public class RealtimeThenSteps {
     @Before(order = 11)
     public void rememberSubtitleAtWhenStart() {
         whenStart.alsoCapture(this::captureSubtitle);
+    }
+
+    /**
+     * 「當」開始那一刻記下：後端的 {@code resync} 到了沒有，以及總覽看板上每張單在哪一欄、數量卡的數字，
+     * 給「這段期間畫面沒有重新讀取整份看板」「看板上沒有某張卡片」比對。
+     * 只有用到這兩句的場景才記：其他場景那一刻的看板可能還沒讀好或正顯示讀取失敗，畫面上沒有數量卡可讀。
+     */
+    @Before(order = 12)
+    public void rememberBoardAtWhenStart() {
+        if (StepPhaseListener.currentScenarioUses(CARD_GONE_FROM_BOARD)
+                || StepPhaseListener.currentScenarioUses(NO_FULL_BOARD_REREAD)) {
+            whenStart.alsoCapture(this::captureBoard);
+        }
+    }
+
+    private void captureBoard() {
+        if (!world.hasPage()) {
+            return;
+        }
+        Page page = world.page();
+        scenario.markResyncSeenAtWhenStart(live.resyncReceived(page));
+        if (!shell.onPage("總覽看板")) {
+            return;
+        }
+        for (var entry : world.tasks().all()) {
+            columnsAtWhenStart.put(entry.roomNo(), board.columnsHolding(entry.roomNo()));
+        }
+        for (String tile : COUNTED_TILES) {
+            String number = board.readTile(tile).number();
+            if (number != null && number.matches("\\d+")) {
+                tilesAtWhenStart.put(tile, number);
+            }
+        }
     }
 
     private void captureSubtitle() {
@@ -123,6 +179,81 @@ public class RealtimeThenSteps {
             return holding.isEmpty() ? "看板上任何一欄都找不到這張卡片" : "卡片在 " + holding;
         });
         requireUntouchedSinceOrigin();
+    }
+
+    /** 送來的卡片不比畫面上的新時畫面不理它，所以再看一陣子，卡片還在原來那一欄。 */
+    @那麼("{string} 的卡片仍在 {string} 欄")
+    public void cardStillInColumn(String roomNo, String column) {
+        if (!BoardPage.COLUMN_NAMES.contains(column.strip())) {
+            throw new IllegalArgumentException("看板的欄只有 " + BoardPage.COLUMN_NAMES + "，收到「" + column + "」");
+        }
+        world.page().waitForTimeout(STILL_AFTER_MS);
+        List<String> holding = board.columnsHolding(roomNo);
+        if (!holding.equals(List.of(column.strip()))) {
+            throw new AssertionError("「" + roomNo + "」的卡片應該仍在「" + column + "」欄，現在"
+                    + (holding.isEmpty() ? "看板上任何一欄都找不到它" : "在 " + holding));
+        }
+    }
+
+    /**
+     * 卡片要在秒數內從每一欄消失，原本算進它的數量卡也跟著少 1。
+     * 數量卡和「當」開始那一刻記下的數字比，所以只看那時這張卡片所在的欄算進的那幾張。
+     */
+    @那麼(CARD_GONE_FROM_BOARD)
+    public void cardGoneFromBoard(int seconds, String roomNo) {
+        List<String> before = columnsAtWhenStart.getOrDefault(roomNo, List.of());
+        withinSeconds(seconds, "「" + roomNo + "」的卡片沒有從看板上拿掉", () -> {
+            List<String> holding = board.columnsHolding(roomNo);
+            if (!holding.isEmpty()) {
+                return "卡片還在 " + holding;
+            }
+            for (String tile : COUNTED_TILES) {
+                String was = tilesAtWhenStart.get(tile);
+                if (was == null || BoardPage.columnsFilteredBy(tile).stream().noneMatch(before::contains)) {
+                    continue;
+                }
+                String expected = String.valueOf(Integer.parseInt(was) - 1);
+                String now = board.readTile(tile).number();
+                if (!expected.equals(now)) {
+                    return "「" + tile + "」數量卡是 " + now + "，應該從 " + was + " 少算成 " + expected;
+                }
+            }
+            return null;
+        });
+        requireUntouchedSinceOrigin();
+    }
+
+    /**
+     * 畫面只換了那一張卡片，沒有整份重讀：從前置走完到現在再多看一陣子，這個分頁沒有任何看板請求。
+     * 前置走完時後端的 {@code resync} 還沒到的話，它引起的那一次重讀不是這個案例的動作造成的，容許那一次。
+     */
+    @那麼(NO_FULL_BOARD_REREAD)
+    public void noFullBoardReread() {
+        Page tab = world.page();
+        tab.waitForTimeout(STILL_AFTER_MS);
+        int from = scenario.boardRequestsFrom().orElseGet(() -> whenStart.snapshot().requestCount());
+        boolean resyncAfterGiven = scenario.boardRequestsFrom().isEmpty()
+                && !scenario.resyncSeenAtWhenStart().orElse(false);
+        long reads = boardReadsSince(tab, from);
+        long allowed = resyncAfterGiven ? 1 : 0;
+        if (reads > allowed) {
+            throw new AssertionError("這段期間畫面讀了 " + reads + " 次整份看板"
+                    + (resyncAfterGiven ? "，扣掉後端剛連上時要求的那一次仍然多了" : ""));
+        }
+    }
+
+    @那麼("{int} 秒內畫面重新讀取了一次整份看板")
+    public void fullBoardReread(int seconds) {
+        Page tab = world.page();
+        int from = timing.origin().requestCount();
+        withinSeconds(seconds, "畫面沒有重新讀取整份看板",
+                () -> boardReadsSince(tab, from) > 0 ? null : "這個分頁沒有送出看板請求");
+    }
+
+    private long boardReadsSince(Page tab, int requestCount) {
+        return world.network().sentRequestsSince(requestCount).stream()
+                .filter(request -> request.page() == tab && request.is(Network.DESK_BOARD))
+                .count();
     }
 
     @那麼("{int} 秒內 {string} 的卡片有負責人頭像 {string}，等待膠囊是 {string}")
@@ -298,12 +429,12 @@ public class RealtimeThenSteps {
     }
 
     /**
-     * 連線正常時畫面只能靠即時訊號重讀看板；若還留著斷線期間的定時讀取，後端會被每個櫃檯分頁反覆讀取。
+     * 連線正常時畫面不定時重讀整份看板；若還留著斷線期間的定時讀取，後端會被每個櫃檯分頁反覆讀取。
      * 檢查方式是不送任何即時訊號，把這個分頁的瀏覽器時鐘分 3 次各推進該秒數，看這段期間有沒有新的看板讀取。
      * 只推瀏覽器的時鐘，因為定時讀取是畫面自己的計時器，和後端的時間無關。
      * 不經過 {@code Clocks}：它以後端時刻為準對齊，瀏覽器已經比後端快時不會觸發畫面的計時器。
      */
-    @那麼("畫面只在收到即時訊號時才重新讀取看板，沒有每 {int} 秒定時讀取")
+    @那麼("畫面沒有每 {int} 秒定時讀取整份看板")
     public void noPeriodicBoardReload(int seconds) {
         Page tab = world.page();
         int before = world.network().sentRequestCount();

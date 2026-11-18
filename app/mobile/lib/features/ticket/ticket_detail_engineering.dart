@@ -230,7 +230,7 @@ class TicketDetailEngineering extends StatelessWidget {
   String _heroMeta(RepairTicketDetail detail) {
     final createdAt = detail.createdAt;
     return [
-      '${detail.reporterNameText} 報修',
+      repairReporterMetaText(detail),
       repairCategoryText(detail.category),
       if (createdAt != null) '${repairMinutesSince(createdAt)} 分鐘前',
     ].join(' · ');
@@ -322,7 +322,7 @@ class TicketDetailEngineering extends StatelessWidget {
         if (detail.state == 'pool')
           TmsStatusCallout(
             kind: TmsCalloutKind.ticketInPool,
-            tone: TmsCalloutTone.info,
+            tone: TmsCalloutTone.neutral,
             title: repairStatusSummaryText(detail),
             body: '還沒有人認領這張單，其他工務同仁都接得到。',
             idPrefix: 'ticket.status-summary-card',
@@ -473,7 +473,7 @@ class TicketDetailEngineering extends StatelessWidget {
     final rows = <({String key, String value})>[
       (key: '地點', value: detail.whereText),
       (key: '類別', value: repairCategoryText(detail.category)),
-      (key: '報修人', value: detail.reporterNameText),
+      (key: '報修人', value: repairReporterText(detail)),
       (key: '負責人', value: detail.assigneeName ?? '等工務認領'),
     ];
     return ClipRRect(

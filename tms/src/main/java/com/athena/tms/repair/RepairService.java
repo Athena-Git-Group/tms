@@ -125,7 +125,8 @@ public class RepairService {
         List<Map<String, Object>> duplicates = jdbcTemplate.queryForList(
                 """
                 SELECT rt.task_id, rt.ticket_no, rt.category, rt.created_at, rt.reporter_id,
-                       t.state, rt.is_urgent, r.room_no, s.name AS reporter_name
+                       t.state, t.source, rt.origin_ticket_task_id, rt.is_urgent, r.room_no,
+                       s.name AS reporter_name
                   FROM repair_tickets rt
                   JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
                   JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
@@ -199,7 +200,8 @@ public class RepairService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT rt.task_id, rt.ticket_no, rt.category, rt.created_at, rt.is_urgent,
-                       t.state, r.room_no, s.name AS reporter_name
+                       t.state, t.source, rt.origin_ticket_task_id, r.room_no,
+                       s.name AS reporter_name
                   FROM repair_tickets rt
                   JOIN tasks t ON t.tenant_id = rt.tenant_id AND t.id = rt.task_id
                   JOIN rooms r ON r.tenant_id = rt.tenant_id AND r.id = rt.room_id
@@ -408,6 +410,7 @@ public class RepairService {
         Map<String, Object> row = rows.get(0);
         Map<String, Object> body = summaryFromRow(ticketTaskId, row);
         body.put("photoCount", ((Number) row.get("photo_count")).intValue());
+        body.put("photos", reportPhotos(tenantId, ticketTaskId));
         body.put("description", row.get("description"));
         body.put("resolutionNote", row.get("resolution_note"));
         body.put("completionPhotos", completionPhotos(tenantId, ticketTaskId));
@@ -433,8 +436,19 @@ public class RepairService {
         CurrentActor viewer = CurrentActor.get();
         body.put("viewerIsAssignee", viewer != null && row.get("assignee_id") != null
                 && viewer.staffId().toString().equalsIgnoreCase(String.valueOf(row.get("assignee_id"))));
-        body.put("origin", "system".equals(row.get("source")) ? "scheduled" : "reported");
+        body.put("origin", isScheduled(row) ? "scheduled" : "reported");
         return body;
+    }
+
+    private List<Map<String, Object>> reportPhotos(long tenantId, UUID ticketTaskId) {
+        return photoViews(jdbcTemplate.queryForList(
+                """
+                SELECT p.id, p.status, p.taken_at
+                  FROM repair_photos p
+                 WHERE p.tenant_id = ? AND p.ticket_task_id = ? AND p.purpose = 'report'
+                 ORDER BY p.taken_at, p.id
+                """,
+                tenantId, ticketTaskId));
     }
 
     private List<Map<String, Object>> completionPhotos(long tenantId, UUID ticketTaskId) {
@@ -449,6 +463,10 @@ public class RepairService {
                  ORDER BY p.taken_at, p.id
                 """,
                 tenantId, ticketTaskId);
+        return photoViews(rows);
+    }
+
+    private List<Map<String, Object>> photoViews(List<Map<String, Object>> rows) {
         List<Map<String, Object>> photos = new ArrayList<>(rows.size());
         for (Map<String, Object> photoRow : rows) {
             Map<String, Object> photo = new LinkedHashMap<>();
@@ -470,9 +488,13 @@ public class RepairService {
         body.put("category", row.get("category"));
         body.put("isUrgent", Boolean.TRUE.equals(row.get("is_urgent")));
         body.put("state", row.get("state"));
-        body.put("reporterName", row.get("reporter_name"));
+        body.put("reporterName", isScheduled(row) ? null : row.get("reporter_name"));
         body.put("createdAt", toOffsetDateTime(row.get("created_at")).toString());
         return body;
+    }
+
+    private static boolean isScheduled(Map<String, Object> row) {
+        return "system".equals(row.get("source")) && row.get("origin_ticket_task_id") == null;
     }
 
     private void bindUnclaimedPhotos(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
@@ -575,6 +597,7 @@ public class RepairService {
         body.put("reporterName", staffName(tenantId, actor.staffId()));
         body.put("createdAt", now.toString());
         body.put("photoCount", photoIds.size());
+        body.put("photos", reportPhotos(tenantId, ticketTaskId));
         body.put("sourceTaskId", sourceTaskId == null ? null : sourceTaskId.toString());
         body.put("urgentJudgement", urgentJudgement);
         body.put("urgentDowngradeReason", null);

@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** 鎖住串流連線目前收不收一筆單的變化、連上後建議重抓哪裡的規則。 */
 class StreamSubscriberTest {
 
     private static final long TENANT = 1L;
@@ -83,7 +82,6 @@ class StreamSubscriberTest {
     @Test
     @DisplayName("復原派單時，被收回部門是工務，工務收、房務不收")
     void triageUndoneGoesToRecalledDept() {
-        // 復原之後單回到櫃檯，事件上的部門已經不是工務。
         TaskChange undone = change(TENANT, "triage_undone", "frontdesk", null, null, "engineering");
 
         assertThat(StreamSubscriber.staff(TENANT, ME, "engineering", "engineering").wants(undone)).isTrue();

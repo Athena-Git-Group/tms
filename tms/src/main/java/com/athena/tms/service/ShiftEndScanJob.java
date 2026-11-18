@@ -4,7 +4,6 @@ import com.athena.tms.dto.ShiftTimes;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +21,7 @@ public class ShiftEndScanJob {
     private final JdbcTemplate jdbcTemplate;
     private final TenantScopedExecutor tenantScopedExecutor;
     private final PushOutboxWriter pushOutboxWriter;
+    private final TaskEngine taskEngine;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -29,11 +29,13 @@ public class ShiftEndScanJob {
             JdbcTemplate jdbcTemplate,
             TenantScopedExecutor tenantScopedExecutor,
             PushOutboxWriter pushOutboxWriter,
+            TaskEngine taskEngine,
             ObjectMapper objectMapper,
             Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.tenantScopedExecutor = tenantScopedExecutor;
         this.pushOutboxWriter = pushOutboxWriter;
+        this.taskEngine = taskEngine;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -70,34 +72,12 @@ public class ShiftEndScanJob {
     }
 
     private void requeueNotStarted(long tenantId, UUID staffId, String dept) {
-        OffsetDateTime now = OffsetDateTime.now(clock);
-        List<Map.Entry<UUID, Integer>> returned = jdbcTemplate.query(
-                """
-                UPDATE tasks
-                   SET state = 'pool', assignee_id = NULL, pool_source = 'shift_end_return',
-                       return_reason = '班末退池 · 交給下一班', deferred_by_self = false,
-                       hold_reason = NULL, event_seq = event_seq + 1, updated_at = now()
-                 WHERE tenant_id = ? AND assignee_id = ?
-                   AND (state = 'accepted' OR (state = 'deferred' AND deferred_by_self))
-                RETURNING id, event_seq
-                """,
-                (rs, i) -> Map.entry(rs.getObject(1, UUID.class), rs.getInt(2)),
-                tenantId, staffId);
-        for (Map.Entry<UUID, Integer> entry : returned) {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("reason", "shift_end_return");
-            jdbcTemplate.update(
-                    """
-                    INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
-                    VALUES (?, ?, ?, 'returned_to_pool', 'system', NULL, ?::jsonb, ?)
-                    """,
-                    tenantId, entry.getKey(), entry.getValue(), payload.toString(), now);
-        }
-        if (returned.isEmpty()) {
+        int returned = taskEngine.returnNotStartedAtShiftEnd(tenantId, staffId);
+        if (returned == 0) {
             return;
         }
         ObjectNode payload = PushOutboxWriter.payload(objectMapper, staffId, "shift_end_returned",
-                returned.size() + " 單還沒開始，已退回待認領交給下一班；進行中的單仍由您完成");
+                returned + " 單還沒開始，已退回待認領交給下一班；進行中的單仍由您完成");
         ObjectNode target = payload.putObject("target");
         target.put("kind", "pool");
         target.put("dept", dept);

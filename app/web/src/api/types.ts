@@ -1,9 +1,3 @@
-/**
- * 後端契約的型別，照 `specs/truth/contracts/` 寫，欄位名稱與值都和契約一致。
- * 契約裡「可為空」的欄位寫成 `| null`；契約沒有列在 required 的欄位寫成可省略（`?`）。
- * 契約改了就改這裡，畫面不自己另外定義一份，免得兩邊對不起來。
- */
-
 export type StaffRole =
   | 'frontdesk'
   | 'housekeeping'
@@ -12,28 +6,22 @@ export type StaffRole =
   | 'duty_manager'
   | 'owner';
 
-/** 待派單與當場回答的單還沒有分給房務或工務，部門是 `frontdesk`。 */
 export type Dept = 'housekeeping' | 'engineering' | 'frontdesk';
 
-/** 契約 `shared.yaml` 的 `Error`。 */
 export interface ApiErrorBody {
   code: string;
   message: string;
   details?: { field?: string; issue?: string }[];
-  /** 內容依 `code` 而定，例如 `task_not_in_triage` 帶 `resolution`、`roomNo`。 */
   context?: Record<string, unknown>;
 }
 
 export interface LoginRequest {
   loginId: string;
   password: string;
-  /** 櫃檯 Web 一律帶 `frontdesk_web`，後端才會擋下不能用櫃檯畫面的角色。 */
   client?: 'frontdesk_web';
-  /** 要登入哪一家飯店的識別代碼。櫃檯 Web 一律帶網址上的那一家，後端只在那家找帳號。 */
   hotelCode?: string;
 }
 
-/** 登入與設定新密碼成功時後端回的是同一個形狀；畫面把它整份存在這個分頁當登入狀態。 */
 export interface LoginResponse {
   token: string;
   expiresAt: string;
@@ -79,7 +67,6 @@ export type CancelReason = 'guest_withdrew' | 'manager_void' | 'plan_superseded'
 
 export type RepairResolutionType = 'fixed' | 'temporary' | 'cannot_fix' | 'no_action_needed';
 
-/** 總覽看板、待派單頁、徽章與數量卡都從這一份算，畫面上的數字才會彼此對得起來。 */
 export interface DeskBoard {
   serverTime: string;
   businessDate: string;
@@ -99,9 +86,10 @@ export interface DeskGuestText {
   translated?: string | null;
 }
 
-/** 時間欄位都是時刻；「等 N 分」「接 N 分」由畫面用校正過的現在去換算。 */
 export interface DeskTask {
   id: string;
+  /** 這張卡片是這張單第幾步的樣子；同一張單拿到兩份卡片時，步數大的比較新。 */
+  seq: number;
   displayNo: string;
   state: TaskState;
   answered: boolean;
@@ -163,14 +151,12 @@ export interface DeskTaskDetail extends DeskTask {
 export interface DeskTimelineEntry {
   seq: number;
   at: string;
-  /** 值同 `task_events.type`（例如 `created`、`triaged`、`answered`）；契約沒有列舉，所以是字串。 */
   type: string;
   actor: {
     kind: 'guest' | 'system' | 'staff';
     role?: Exclude<StaffRole, 'owner'> | null;
     name?: string | null;
   };
-  /** 後端依事件種類只帶其中幾項，畫面拿它們組歷程的句子。 */
   detail?: {
     dept?: Dept;
     initialState?: 'triage' | 'pool' | 'accepted';

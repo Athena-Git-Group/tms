@@ -7,19 +7,12 @@ import 'package:tms_staff_app/features/today/my_today_scope.dart';
 import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_screen.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 

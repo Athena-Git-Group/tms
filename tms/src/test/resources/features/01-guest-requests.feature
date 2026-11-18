@@ -222,3 +222,130 @@
       並且 同一 IP 已有 3 次掃碼失敗
       當 該 IP 再以不存在的 token 掃碼
       那麼請求應該失敗，回應為 429 且原因是 "rate_limited"
+
+  Rule: 櫃檯替住客開 session——飯店取自登入、權杖由伺服器產生，兩種帶法都先看權杖前綴的飯店
+
+    # 權杖格式是「飯店編號.隨機字串」；伺服器先從前綴取出飯店，只在那家飯店的資料裡查一次。
+    @happy
+    場景大綱: 櫃檯或主管替住客開 session，拿到的權杖用兩種帶法都能建單
+      假設 系統中存在以下員工:
+        | id    | tenant_id | name   | login_id | password_hash | role         | dept      |
+        | s-fd1 | 1         | 林櫃檯 | fd1      | hash-fd1      | frontdesk    | frontdesk |
+        | s-mgr | 1         | 王主管 | mgr1     | hash-mgr1     | manager      |           |
+        | s-dm1 | 1         | 陳值班 | dm1      | hash-dm1      | duty_manager |           |
+      當 "<員工>" 替房 "r-305" 開住客 session "s-new"
+      那麼 回應為 200
+      並且 回應的住客權杖以 "1." 開頭
+      當 住客以 <帶法> 帶 session "s-new" 送出選單項「加毛巾」
+      那麼 建立任務 type 為 amenity、dept 為 housekeeping、state 為 pool
+      並且 事件 "created" 的快照之種類為 amenity、來源為 "guest"、房號為 "305"、訂單為 "PMS-88321"、標題為 "加毛巾"
+
+      例子:
+        | 員工   | 帶法            |
+        | 林櫃檯 | X-Guest-Session |
+        | 林櫃檯 | Authorization   |
+        | 王主管 | X-Guest-Session |
+        | 陳值班 | Authorization   |
+
+    # 到期時間由後端決定，和住客自己掃房間 QR 開的 session 同一條規則：綁定訂單的退房時刻。
+    @happy
+    場景: 開出來的住客 session 在訂單退房時刻到期，請求帶的到期時間不採用
+      假設 系統中存在以下員工:
+        | id    | tenant_id | name   | login_id | password_hash | role      | dept      |
+        | s-fd1 | 1         | 林櫃檯 | fd1      | hash-fd1      | frontdesk | frontdesk |
+      當 "林櫃檯" 替房 "r-305" 開住客 session "s-new"，請求另外帶到期時間 "2026-12-31T00:00:00Z"
+      那麼 回應與資料庫裡住客 session "s-new" 的到期時間都是 "2026-10-20T12:00:00Z"
+
+    @error @boundary
+    場景: 訂單已經過了退房時刻就不開住客 session
+      假設 系統中存在以下訂單:
+        | id           | tenant_id | reservation_ref | room_id | checkin_at           | checkout_at          | source |
+        | res-305-prev | 1         | PMS-88001       | r-305   | 2026-10-15T15:00:00Z | 2026-10-17T12:00:00Z | pms    |
+      並且 系統中存在以下員工:
+        | id    | tenant_id | name   | login_id | password_hash | role      | dept      |
+        | s-fd1 | 1         | 林櫃檯 | fd1      | hash-fd1      | frontdesk | frontdesk |
+      當 "林櫃檯" 替房 "r-305"、訂單 "res-305-prev" 開住客 session "s-ended"
+      那麼請求應該失敗，回應為 409 且原因是 "reservation_ended"
+      並且 系統未簽發任何 guest session 也未建立任何任務
+
+    @error @boundary
+    場景: 沒登入不能開住客 session
+      當 未登入就替房 "r-305" 開住客 session
+      那麼請求應該失敗，回應為 401
+
+    @error @boundary
+    場景: 房務不能開住客 session
+      假設 系統中存在以下員工:
+        | id    | tenant_id | name | login_id | password_hash | role         | dept         |
+        | s-hk1 | 1         | 小美 | hk1      | hash-hk1      | housekeeping | housekeeping |
+      當 "小美" 替房 "r-305" 開住客 session "s-hk"
+      那麼請求應該失敗，回應為 403
+
+    # 別家飯店的房間與訂單一律當作查無資料，回應碼不能透露別家飯店有沒有這筆資料。
+    @error @boundary
+    場景大綱: 只能替自己飯店的房間與訂單開住客 session
+      假設 系統中存在以下房間:
+        | id       | tenant_id | room_no | floor | room_type       | hk_state | occupancy |
+        | r-t2-101 | 2         | 101     | 1     | standard_double | cleaned  | occupied  |
+      並且 系統中存在以下訂單:
+        | id         | tenant_id | reservation_ref | room_id  | checkin_at           | checkout_at          | source |
+        | res-t2-101 | 2         | PMS-20077       | r-t2-101 | 2026-10-18T15:00:00Z | 2026-10-20T12:00:00Z | pms    |
+      並且 系統中存在以下員工:
+        | id    | tenant_id | name   | login_id | password_hash | role      | dept      |
+        | s-fd1 | 1         | 林櫃檯 | fd1      | hash-fd1      | frontdesk | frontdesk |
+      當 "林櫃檯" 替房 "<房間>"、訂單 "<訂單>" 開住客 session "s-other"
+      那麼請求應該失敗，回應為 404
+      並且 系統未簽發任何 guest session 也未建立任何任務
+
+      例子:
+        | 房間     | 訂單       |
+        | r-t2-101 | res-t2-101 |
+        | r-305    | res-t2-101 |
+
+    @error @boundary
+    場景: 別家飯店的住客 session 動不到本店的需求
+      假設 系統中存在以下房間:
+        | id       | tenant_id | room_no | floor | room_type       | hk_state | occupancy |
+        | r-t2-101 | 2         | 101     | 1     | standard_double | cleaned  | occupied  |
+      並且 系統中存在以下訂單:
+        | id         | tenant_id | reservation_ref | room_id  | checkin_at           | checkout_at          | source |
+        | res-t2-101 | 2         | PMS-20077       | r-t2-101 | 2026-10-18T15:00:00Z | 2026-10-20T12:00:00Z | pms    |
+      並且 系統中存在以下員工:
+        | id     | tenant_id | name | login_id | password_hash | role      | dept      |
+        | s-t2-1 | 2         | 小芳 | fang1    | hash-fang1    | frontdesk | frontdesk |
+      並且 "小芳" 替房 "r-t2-101" 開住客 session "s-t2-101"
+      並且 系統中存在以下任務:
+        | id      | tenant_id | type    | source | room_id | reservation_id | dept         | state | title  |
+        | t-305-9 | 1         | amenity | guest  | r-305   | res-305        | housekeeping | pool  | 加毛巾 |
+      當 住客以 X-Guest-Session 帶 session "s-t2-101" 收回任務 "t-305-9"
+      那麼請求應該失敗，回應為 404
+      並且 任務 "t-305-9" 的資料應為:
+        | state |
+        | pool  |
+
+    @error @boundary
+    場景大綱: 沒有飯店前綴或前綴被竄改的權杖被拒
+      當 住客以 <帶法> 帶 <權杖> 送出選單項「加毛巾」
+      那麼請求應該失敗，回應為 401
+
+      例子:
+        | 帶法            | 權杖                                |
+        | X-Guest-Session | 沒有飯店前綴的權杖                  |
+        | Authorization   | 沒有飯店前綴的權杖                  |
+        | X-Guest-Session | session "sess-305" 前綴改成飯店 2 的權杖 |
+        | Authorization   | session "sess-305" 前綴改成飯店 2 的權杖 |
+
+    @error @boundary
+    場景大綱: 已過期或已撤銷的住客 session 被拒
+      假設 系統中存在以下住客session:
+        | id     | tenant_id | session_token | room_id | reservation_id | expires_at   | revoked_at   |
+        | gs-old | 1         | sess-old      | r-305   | res-305        | <expires_at> | <revoked_at> |
+      當 住客以 <帶法> 帶 session "sess-old" 送出選單項「加毛巾」
+      那麼請求應該失敗，回應為 401
+
+      例子:
+        | 帶法            | expires_at           | revoked_at           |
+        | X-Guest-Session | 2026-10-19T08:00:00Z |                      |
+        | Authorization   | 2026-10-19T08:00:00Z |                      |
+        | X-Guest-Session | 2026-10-20T12:00:00Z | 2026-10-19T08:00:00Z |
+        | Authorization   | 2026-10-20T12:00:00Z | 2026-10-19T08:00:00Z |

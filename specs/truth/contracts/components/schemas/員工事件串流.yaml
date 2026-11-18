@@ -27,7 +27,11 @@ StaffStreamResync:
       example: /api/v1/desk/board
 StaffStreamTask:
   type: object
-  description: 事件名稱 task。某一張單發生了一則事件。只說是哪一張單、哪一種事件，不帶單的內容。
+  description: >-
+    事件名稱 task。某一張單發生了一則事件。
+    frontdesk、manager、duty_manager 的連線另外帶 board、card_seq、business_date，board 為 upsert 時再帶 card：
+    這張單在櫃檯看板上現在的樣子，和 getDeskBoard 回的同一張單一模一樣（同一句查詢、同一個形狀），或「這張單已經不在看板上」。
+    housekeeping、engineering 的連線不帶這幾個欄位，只說是哪一張單、哪一種事件。
   required:
   - stream_pos
   - task_id
@@ -44,14 +48,44 @@ StaffStreamTask:
     seq:
       type: integer
       format: int32
-      description: 這張單的第幾步（task_events.seq）。
+      description: >-
+        這則事件是這張單的第幾步（task_events.seq）。同一張單的每一步都會送出訊號，所以櫃檯 Web 靠它發現漏掉的訊號：
+        比畫面記的步數多 2 以上就是中間漏了。
     type:
       type: string
-      description: 事件種類，值同 task_events.type，例如 created、triaged、triage_undone、answered、claimed、started、completed、cancelled。
+      description: 事件種類，值同 task_events.type，例如 created、triaged、triage_undone、answered、claimed、started、completed、cancelled、returned_to_pool、rated、pms_writeback。
     occurred_at:
       type: string
       format: date-time
       description: 事件發生的時間；來源沒有帶時不出現。
+    board:
+      type: string
+      enum:
+      - upsert
+      - remove
+      description: >-
+        這張單在櫃檯看板上現在該怎麼呈現，只有 frontdesk、manager、duty_manager 的連線帶。
+        upsert＝這張單在看板範圍內，卡片內容見 card，畫面上有就換掉、沒有就放上；
+        remove＝這張單現在不在看板範圍內（例如昨天以前就結束的單又多了一筆評分），畫面上有就拿掉。
+        看板範圍和 getDeskBoard 的 DeskBoard.tasks 同一條規則，由後端在送出訊號時判斷，畫面不自己判斷。
+        後端組卡片失敗時不帶 board，畫面就重抓整份看板。
+    card_seq:
+      type: integer
+      format: int32
+      description: >-
+        board 描述的是這張單第幾步的樣子（送出訊號當下讀到的 tasks.event_seq），有 board 就一定有。
+        後端是在收到事件之後才讀這張單，所以它可能比 seq 大（後面幾步已經寫進去了），不會比 seq 小。
+        board 為 upsert 時等於 card.seq。畫面用它和自己記的步數比，決定要換上還是不理。
+    business_date:
+      type: string
+      format: date
+      description: >-
+        後端判斷看板範圍時用的「今天」，和 DeskBoard.businessDate 同一個口徑。有 board 就一定有。
+        和畫面上看板的 businessDate 不同時，畫面重抓整份看板。
+    card:
+      description: board 為 upsert 時必有，是這張單在櫃檯看板上的整張卡片；board 為 remove 時不出現。
+      allOf:
+      - $ref: './櫃檯看板與派單.yaml#/DeskTask'
 StaffStreamHeartbeat:
   type: object
   description: 事件名稱 heartbeat。每 15 秒一則，讓客戶端知道連線還活著，並對齊目前是不是降級。

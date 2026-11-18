@@ -5,8 +5,14 @@ import com.athena.tms.common.codes.StaffRole;
 import java.util.Optional;
 
 public enum ManagerKind {
-    HOUSEKEEPING,
-    ENGINEERING;
+    HOUSEKEEPING(Dept.HOUSEKEEPING),
+    ENGINEERING(Dept.ENGINEERING);
+
+    private final String poolDept;
+
+    ManagerKind(String poolDept) {
+        this.poolDept = poolDept;
+    }
 
     public static Optional<ManagerKind> of(String role, String dept) {
         if (!StaffRole.MANAGER.equals(role)) {
@@ -17,6 +23,10 @@ public enum ManagerKind {
 
     public static Optional<ManagerKind> of(CurrentActor actor) {
         return of(actor.role(), actor.dept());
+    }
+
+    public String poolDept() {
+        return poolDept;
     }
 
     public boolean inspects() {

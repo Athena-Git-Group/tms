@@ -8,7 +8,9 @@ getDeskBoard:
       篩選、房號搜尋、泳道、各欄排序、數量卡與徽章都由畫面從這一份算，這樣畫面上每個數字一定對得起來。
       待派單頁就是其中 state 為 triage 的單。
       只有 frontdesk、manager、duty_manager 可以呼叫，其他角色回 403 forbidden。
-      事件串流正常時，畫面收到訊號才重抓；串流異常時每 5 秒抓一次。
+      事件串流正常時，平常靠訊號帶來的卡片逐張更新，只在剛連上、恢復、發現漏了訊號、營業日換了或訊號看不懂時重抓這一份；
+      營業日到了換日時刻，就算沒有任何訊號，畫面也自己重抓一次（換日時刻的算法見 DeskBoard.businessDate）。
+      串流異常時每 4 秒抓一次（提醒列上寫每 5 秒）。每張卡片帶 seq，畫面用它和訊號帶來的卡片比新舊。
     tags:
     - 櫃檯看板與派單 API
     responses:
@@ -22,7 +24,11 @@ getDeskBoard:
         $ref: '../../components/responses.yaml#/Unauthorized'
       '403':
         $ref: '../../components/responses.yaml#/Forbidden'
-    x-realtime-note: 員工事件串流（staffStream）每送來一則 task、resync 或 recovered，櫃檯 Web 就重抓這一份。
+    x-realtime-note: >-
+      員工事件串流（staffStream）送來的 task 帶著那張單的整張卡片（StaffStreamTask.card），櫃檯 Web 直接換掉那一張，不重抓這一份；
+      收到 resync、recovered，或依 staffStream 說明的規則發現漏了訊號、營業日換了、訊號看不懂時才重抓；
+      另外營業日到了換日時刻，畫面不等訊號自己重抓一次。
+      訊號帶的卡片與這一份裡的同一張單，由後端同一句查詢組成，看板範圍也是同一條規則。
 readDeskTask:
   get:
     operationId: readDeskTask

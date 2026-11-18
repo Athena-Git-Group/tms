@@ -72,6 +72,19 @@ public class TaskExecutionThenSteps {
         assertStepTrack(List.of("已接", "進行中", "送達"), step, row);
     }
 
+    @那麼("任務頁的步驟條還沒有目前步驟，標示 {string}")
+    public void stepTrackHasNoCurrentStep(String label) {
+        Map<String, Object> row = world.taskRowByRoomNo(world.currentTaskRoomNo());
+        if (!"pool".equals(String.valueOf(row.get("state"))) || row.get("assignee_id") != null) {
+            throw new AssertionError("後端這一筆應該還在待認領（pool）且沒有負責人，實際 state="
+                    + row.get("state") + "、assignee_id=" + row.get("assignee_id"));
+        }
+        String actual = world.waitForTestId("task.step-track", SCREEN_TIMEOUT).getAttribute("label");
+        if (!label.equals(actual)) {
+            throw new AssertionError("步驟條應標示「" + label + "」，實際「" + actual + "」");
+        }
+    }
+
     private void assertStepTrack(List<String> expectedSteps, String step, Map<String, Object> row) {
         if (!expectedSteps.contains(step)) {
             throw new IllegalArgumentException(

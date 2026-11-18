@@ -6,6 +6,7 @@ import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.ReservationFixtures;
 import com.athena.tms.bdd.support.RoomFixtures;
+import com.athena.tms.bdd.support.StaffFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import io.cucumber.java.zh_tw.假設;
 import io.cucumber.java.zh_tw.當;
@@ -27,6 +28,7 @@ public class PushGuestSteps {
     private final ReservationFixtures reservationFixtures;
     private final TenantFixtures tenantFixtures;
     private final MutableClock clock;
+    private final StaffFixtures staffFixtures;
 
     public PushGuestSteps(
             ScenarioWorld world,
@@ -35,7 +37,8 @@ public class PushGuestSteps {
             RoomFixtures roomFixtures,
             ReservationFixtures reservationFixtures,
             TenantFixtures tenantFixtures,
-            MutableClock clock) {
+            MutableClock clock,
+            StaffFixtures staffFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -43,6 +46,7 @@ public class PushGuestSteps {
         this.reservationFixtures = reservationFixtures;
         this.tenantFixtures = tenantFixtures;
         this.clock = clock;
+        this.staffFixtures = staffFixtures;
     }
 
     @假設("住客 {int} 分鐘內已在 {string} 送出 {int} 筆需求")
@@ -133,17 +137,17 @@ public class PushGuestSteps {
         LocalDate checkinDate = clock.instant().atZone(clock.getZone()).toLocalDate();
         UUID reservationId = reservationFixtures.upsertReservation(roomNo, List.of(), checkinDate, null);
         UUID roomId = roomFixtures.roomId(roomNo);
-        String sessionToken = "fx-guest-session-" + UUID.randomUUID();
-        OffsetDateTime expiresAt = OffsetDateTime.now(clock).plusDays(1);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("tenantId", tenantId);
-        body.put("sessionToken", sessionToken);
         body.put("roomId", roomId.toString());
         body.put("reservationId", reservationId.toString());
-        body.put("expiresAt", expiresAt.toString());
-        apiClient.post("/guest-sessions/scan", BddApiClient.Auth.none(), body);
-        return sessionToken;
+        ScenarioWorld.ApiResponse scan = apiClient.post(
+                "/guest-sessions/scan", BddApiClient.Auth.staff(staffFixtures.fixtureFrontdeskJwt()), body);
+        if (scan.status() != 200) {
+            throw new IllegalStateException(
+                    "建立「" + roomNo + "」的住客 session 失敗，狀態碼=" + scan.status() + "，body=" + scan.body());
+        }
+        return scan.json().get("sessionToken").asText();
     }
 
     private ScenarioWorld.ApiResponse createGuestRequest(String sessionToken, String itemId, int quantity) {

@@ -5,6 +5,8 @@ import com.athena.tms.entity.OutboxMessage;
 import com.athena.tms.entity.TaskEvent;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -15,10 +17,14 @@ import tools.jackson.databind.node.ObjectNode;
 public class OutboxWriter {
     private final OutboxMessageRepository outboxMessageRepository;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public OutboxWriter(OutboxMessageRepository outboxMessageRepository, ObjectMapper objectMapper) {
+    public OutboxWriter(OutboxMessageRepository outboxMessageRepository, ObjectMapper objectMapper, JdbcTemplate jdbcTemplate, ApplicationEventPublisher eventPublisher) {
         this.outboxMessageRepository = outboxMessageRepository;
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     public OutboxMessage enqueueTaskEvent(TaskEvent event) {
@@ -43,7 +49,18 @@ public class OutboxWriter {
         envelope.put("tenant_id", tenantId);
         envelope.put("task_id", taskId.toString());
         envelope.set("payload", this.readTree(payloadJson));
-        return this.enqueue(tenantId, "push", "task:" + String.valueOf(taskId), idempotencyKey, envelope.toString());
+        return this.enqueue(tenantId, "push", OutboxWriter.pushKey("task:" + String.valueOf(taskId)), idempotencyKey, envelope.toString());
+    }
+
+    /**
+     * 推播的排隊鍵：推播對象的鍵前面加 {@code push:}，例如 {@code push:task:<id>}。
+     *
+     * <p>relay 依排隊鍵一筆一筆按順序送，同一把鍵有一筆重試用完就整把鍵停送。推播若和單的事件共用 {@code task:<id>}，
+     * 某一則推播送不出去就會連帶擋住這張單之後的每一則事件，員工事件串流從此收不到這張單的訊號。
+     * 推播有自己的鍵，卡住時只擋住後面的推播。所有寫推播的程式都經過這裡。
+     */
+    static String pushKey(String subject) {
+        return "push:" + subject;
     }
 
     private OutboxMessage enqueue(long tenantId, String kind, String aggregateKey, String idempotencyKey, String payload) {
@@ -54,7 +71,17 @@ public class OutboxWriter {
         message.setIdempotencyKey(idempotencyKey);
         message.setPayload(payload);
         message.setCreatedAt(OffsetDateTime.now());
-        return (OutboxMessage)this.outboxMessageRepository.save(message);
+        OutboxMessage saved = (OutboxMessage)this.outboxMessageRepository.save(message);
+        this.eventPublisher.publishEvent(new OutboxEnqueued());
+        return saved;
+    }
+
+    public boolean enqueueIfAbsent(long tenantId, String kind, String aggregateKey, String payloadJson, String idempotencyKey, OffsetDateTime createdAt) {
+        int inserted = this.jdbcTemplate.update("INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)\nVALUES (?, ?, ?, ?::jsonb, ?, 'pending', 0, ?)\nON CONFLICT (tenant_id, kind, idempotency_key) DO NOTHING\n", tenantId, aggregateKey, kind, payloadJson, idempotencyKey, createdAt);
+        if (inserted > 0) {
+            this.eventPublisher.publishEvent(new OutboxEnqueued());
+        }
+        return inserted > 0;
     }
 
     private JsonNode readTree(String json) {

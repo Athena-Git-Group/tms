@@ -68,9 +68,6 @@ public class StaffAccountLoginService {
                 ? candidates.get(0)
                 : firstTenantWithMatchingPassword(candidates, request).orElse(null);
         if (tenantId == null) {
-            // 每一家的帳號都比對不上密碼時，這次輸入對每個帳號都算一次密碼錯誤，再回密碼錯誤。
-            // 只記在其中一個帳號的話，其他同編號的帳號可以被反覆猜密碼而不會鎖定。
-            // 已停用或鎖定中的帳號照單一帳號時的規則處理，不增加次數。
             for (long candidate : candidates) {
                 evaluateInTenant(candidate, request);
             }
@@ -83,9 +80,6 @@ public class StaffAccountLoginService {
         return outcome.response();
     }
 
-    // 帶了飯店代碼就只在那一家找帳號，別家相同員工編號的帳號完全不碰：不比對密碼、不記錯誤次數、不鎖定。
-    // 代碼格式不對、對不到飯店，都回和密碼錯誤相同的內容，看不出這家飯店存不存在。
-    // 格式不對的代碼資料庫裡不可能有，先擋掉、不查資料庫。飯店主檔不受列層級權限限制，所以查代碼不必先切換飯店身分。
     private StaffLoginResponse loginAtHotel(StaffLoginRequest request) {
         long tenantId = Optional.of(request.hotelCode())
                 .filter(HotelCode::isWellFormed)
@@ -99,8 +93,9 @@ public class StaffAccountLoginService {
         return outcome.response();
     }
 
-    // TransactionTemplate 遇到往外拋的 RuntimeException 會整筆 rollback，失敗次數與鎖定就寫不進去，
-    // 所以 evaluate() 回傳 Outcome，等交易 commit 之後才由呼叫端拋。
+    // 登入失敗也要把失敗次數與鎖定狀態寫進資料庫，所以 evaluate() 不拋例外，而是回傳 Outcome，
+    // 等交易 commit 之後才由呼叫端拋出。TransactionTemplate 遇到往外拋的 RuntimeException
+    // 會把整筆交易 rollback，失敗次數與鎖定就會跟著消失。
     private Outcome evaluateInTenant(long tenantId, StaffLoginRequest request) {
         return tenantScopedExecutor.callAsTenant(tenantId, () -> evaluate(tenantId, request));
     }
@@ -143,9 +138,6 @@ public class StaffAccountLoginService {
         return issueLoginResponse(tenantId, account);
     }
 
-    // 列出有這個員工編號的飯店，按飯店編號由小到大。登入請求沒帶飯店代碼（員工 App）時才走這裡，逐家查，
-    // 每一家都把飯店編號寫進查詢條件。只靠列層級安全限定範圍的話，資料庫帳號不受這層限制時
-    // 會查到別家的同編號帳號，憑證帶錯飯店，之後每個請求都被拒。
     private List<Long> tenantsHavingLoginId(String loginId) {
         return tenantScopedExecutor.tenantIds().stream()
                 .sorted()
@@ -155,10 +147,6 @@ public class StaffAccountLoginService {
                 .toList();
     }
 
-    // 不同飯店可以有相同的員工編號。這時登入密碼比對得上的那一家；
-    // 不只一家比對得上時，取飯店編號最小的一家，結果不會隨查詢順序改變。
-    // 從櫃檯畫面登入時，先挑能用櫃檯畫面的那一家，免得編號較小那一家的房務把另一家的櫃檯擋在門外；
-    // 都不能用時才取密碼對得上、編號最小的一家，由後面的角色檢查擋下。
     private Optional<Long> firstTenantWithMatchingPassword(List<Long> tenantIds, StaffLoginRequest request) {
         List<Long> matching = tenantIds.stream()
                 .filter(tenantId -> accountInTenant(tenantId, request)
@@ -178,8 +166,6 @@ public class StaffAccountLoginService {
                 tenantId, () -> staffAccountRepository.findByTenantIdAndLoginId(tenantId, request.loginId()));
     }
 
-    // 不帶 client 時不看角色。帶 frontdesk_web 時只放行櫃檯、主管、值班主管，
-    // 其他角色只有拿臨時密碼時放行，讓他先設定新密碼。
     private static boolean canUseRequestedClient(StaffLoginRequest request, StaffAccount account) {
         if (!FRONTDESK_WEB_CLIENT.equals(request.client())) {
             return true;
@@ -213,9 +199,6 @@ public class StaffAccountLoginService {
             return Outcome.failure(new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
         }
 
-        // 櫃檯畫面只給櫃檯、主管、值班主管用。其他角色密碼對了也回與密碼錯誤相同的內容，
-        // 而且不動連續錯誤次數：不帶 client 就登得進去，這一步只是把人擋在櫃檯畫面外，
-        // 不值得因此把同仁在員工 App 的帳號鎖住。臨時密碼照常放行，先去設定新密碼。
         if (!canUseRequestedClient(request, account)) {
             return Outcome.failure(new CredentialsInvalidException(CREDENTIALS_INVALID_MESSAGE));
         }
@@ -227,8 +210,6 @@ public class StaffAccountLoginService {
         return Outcome.success(issueLoginResponse(tenantId, account));
     }
 
-    // 登入成功與改密碼成功回同一種內容：新發的憑證、帳號資料、所屬飯店名稱、是否還要改密碼。
-    // 改密碼時已先把「要改密碼」清掉並存檔，所以這裡讀到的一定是否。
     private StaffLoginResponse issueLoginResponse(long tenantId, StaffAccount account) {
         JwtService.IssuedToken issued = jwtService.issue(
                 tenantId,

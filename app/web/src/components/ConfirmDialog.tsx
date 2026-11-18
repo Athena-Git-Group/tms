@@ -1,9 +1,5 @@
 import { useId } from 'react';
 
-/**
- * 要先問一次才做的事用的確認對話框：左邊「取消」、右邊做這件事的按鈕，蓋在整個畫面上、置中。
- * 打開時焦點落在右邊那一顆；按 Esc 等於取消。外觀和只有「好」的 `AlertDialog` 同一套。
- */
 export function ConfirmDialog({
   title,
   body,

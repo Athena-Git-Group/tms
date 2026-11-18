@@ -111,7 +111,6 @@ public class TaskFixtures {
             return this;
         }
 
-        /** 開單事件記在誰名下；沒指定時記成系統開的單。 */
         public Builder createdBy(Actor v) {
             this.creator = v;
             return this;
@@ -556,7 +555,7 @@ public class TaskFixtures {
                             """)
                     .params(
                             tenantId,
-                            "task:" + taskId,
+                            "push:task:" + taskId,
                             payload,
                             "fx-reminder:" + taskId + ":" + stage + ":" + recipient,
                             OffsetDateTime.ofInstant(clock.instant(), clock.getZone()))

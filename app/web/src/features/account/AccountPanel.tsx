@@ -5,14 +5,6 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { chooseLanguage } from '../../i18n/interface-language';
 import { DEFAULT_LANGUAGE, LANGUAGES, LANGUAGE_OWN_NAMES, isLanguage, type Language } from '../../i18n/languages';
 
-/**
- * 帳號面板：置中、後面是半透明遮罩，點遮罩或按 Esc 等於按「完成」。
- * 內容只有三塊：身分卡（只是讓人確認登入的是自己，不能點）、「語言」、「登出」。
- * 點「語言」在同一個面板裡換成語言頁，左上的「‹ 帳號」回來。
- *
- * 按「登出」先問一次。問的時候面板先收起來，只留確認對話框；
- * 按「取消」就回到看板，不再回到面板，畫面上不留任何對話框。
- */
 export function AccountPanel({
   session,
   onClose,
@@ -50,7 +42,6 @@ export function AccountPanel({
         if (event.key === 'Escape') onClose();
       }}
     >
-      {/* 面板換到語言頁時標題變成「語言」，但面板本身仍叫「帳號」，所以名稱不跟著標題走。 */}
       <div
         role="dialog"
         aria-modal="true"
@@ -137,10 +128,6 @@ export function AccountPanel({
   );
 }
 
-/**
- * 語言頁：四個單選列，第一行是該語言自己的寫法，第二行是用目前介面語言寫的名稱，選中的右側打勾。
- * 清單下方說明換語言只換介面文字，免得同仁以為住客或同事寫的內容也會跟著翻譯。
- */
 function LanguagePage({ current, onChoose }: { current: Language; onChoose: (language: Language) => void }) {
   const { t } = useTranslation();
   const sectionId = useId();

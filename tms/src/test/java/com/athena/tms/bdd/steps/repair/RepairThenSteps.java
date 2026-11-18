@@ -229,7 +229,8 @@ public class RepairThenSteps {
         }
     }
 
-    // 單號清單在 Gherkin 裡不加引號，{string} 配不到沒有引號的文字；用 ^...$ 讓 Cucumber 當成 Regular Expression 編譯。
+    // 清單在 Gherkin 裡不加引號，{string} 參數比對不到，所以整句寫成以 ^ 開頭、$ 結尾，
+    // 讓 Cucumber 改當正規表示式編譯。
     @那麼("^工務待認領順序為 (.+)$")
     public void poolOrderIs(String rawList) {
         List<String> expected = Arrays.asList(rawList.split("、"));

@@ -11,7 +11,6 @@ import {
   stripAnswer,
 } from './answer-text';
 
-/** 假的翻譯函式：回傳「鍵」加上參數，方便斷言用的是哪一句、帶了什麼值。 */
 const t = ((key: string, options?: Record<string, string | number>) =>
   options ? `${key}|${Object.values(options).join('|')}` : key) as unknown as TFunction;
 
@@ -21,6 +20,7 @@ function task(overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id: '1',
     displayNo: 'T-1',
+    seq: 1,
     state: 'triage',
     answered: false,
     dept: 'frontdesk',
@@ -79,6 +79,10 @@ describe('answerLength', () => {
     expect('😀'.length).toBe(2);
     expect(answerLength('好的😀')).toBe(3);
     expect(answerLength('𠮷野家')).toBe(3);
+  });
+
+  it('由多個碼位組成的表情符號照碼位數算，和後端 codePointCount 相同', () => {
+    expect(answerLength('👨‍👩‍👧')).toBe(5);
   });
 });
 

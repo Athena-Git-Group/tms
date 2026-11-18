@@ -2,22 +2,18 @@ package com.athena.web.bdd.steps.triage;
 
 import com.athena.bddsupport.BackendChannel;
 import com.athena.web.bdd.pages.ShellFrame;
-import com.athena.web.bdd.support.Network;
+import com.athena.web.bdd.pages.TriagePage;
 import com.athena.web.bdd.support.ScenarioTasks;
 import com.athena.web.bdd.support.WebWorld;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Response;
-import com.microsoft.playwright.TimeoutError;
+import com.microsoft.playwright.Locator;
 import io.cucumber.java.zh_tw.當;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Consumer;
 
 /** 「待派單」模組的 When 句型。 */
 public class TriageWhenSteps {
@@ -37,8 +33,8 @@ public class TriageWhenSteps {
 
     private static final String RULE_HIT_TEXT = "冷氣一直滴水";
 
-    /** 送出之後最久等這麼久讓畫面收到即時訊號並重抓到這兩張單。 */
-    private static final long REFETCH_TIMEOUT_MS = 15_000;
+    /** 送出之後最久等這麼久讓兩張卡片放上看板；即時更新的規格承諾別人動了單，畫面 5 秒內跟上。 */
+    private static final double CARDS_ARRIVE_TIMEOUT_MS = 5_000;
 
     private final WebWorld world;
 
@@ -62,7 +58,8 @@ public class TriageWhenSteps {
 
     /**
      * 以住客身分在後端送出兩張需求：一張從需求選單勾選，一張打字且命中分類規則，兩張都直接進部門的待認領。
-     * 送完等畫面收到即時訊號、重抓到含這兩張單的看板資料並畫完。
+     * 送完等頁首的房務、工務待接張數各多一張，代表畫面收到即時訊號、兩張卡片都放上看板了。
+     * 等的是畫面上的張數而不是看板讀取：訊號帶著卡片時畫面直接換上，不會重讀整份看板。
      *
      * <p>需求選單與分類規則是這個場景自己寫進飯店設定的；每個場景開始時業務資料會清空，不會留給別的場景。
      */
@@ -73,26 +70,28 @@ public class TriageWhenSteps {
         backend.setTenantConfig(tenantId, "request_menu", List.of(menuItem()));
         backend.setTenantConfig(tenantId, "classification_rules", List.of(classificationRule()));
 
-        Page page = world.page();
-        List<Response> boardReads = new ArrayList<>();
-        Consumer<Response> seen = response -> {
-            if (isBoardResponse(response)) {
-                boardReads.add(response);
-            }
-        };
-        page.onResponse(seen);
-        try {
-            UUID menuTask = backend.guestSubmitMenuItem(MENU_ITEM_ROOM, MENU_ITEM_KEY, 1);
-            UUID ruleTask = backend.guestSubmitRequest(RULE_HIT_ROOM, RULE_HIT_TEXT, null);
-            requireInPool(menuTask, "勾選的「" + MENU_ITEM_LABEL + "」");
-            requireInPool(ruleTask, "命中規則的「" + RULE_HIT_TEXT + "」");
-            world.tasks().add(new ScenarioTasks.Entry(MENU_ITEM_ROOM, MENU_ITEM_LABEL, menuTask, "待認領"));
-            world.tasks().add(new ScenarioTasks.Entry(RULE_HIT_ROOM, RULE_HIT_TEXT, ruleTask, "待認領"));
-            waitForBoardReadWith(page, boardReads, List.of(menuTask, ruleTask));
-        } finally {
-            page.offResponse(seen);
-        }
+        TriagePage triage = new TriagePage(world);
+        int housekeeping = triage.deptLoadCount("房務");
+        int engineering = triage.deptLoadCount("工務");
+        UUID menuTask = backend.guestSubmitMenuItem(MENU_ITEM_ROOM, MENU_ITEM_KEY, 1);
+        UUID ruleTask = backend.guestSubmitRequest(RULE_HIT_ROOM, RULE_HIT_TEXT, null);
+        requireInPool(menuTask, "勾選的「" + MENU_ITEM_LABEL + "」");
+        requireInPool(ruleTask, "命中規則的「" + RULE_HIT_TEXT + "」");
+        world.tasks().add(new ScenarioTasks.Entry(MENU_ITEM_ROOM, MENU_ITEM_LABEL, menuTask, "待認領"));
+        world.tasks().add(new ScenarioTasks.Entry(RULE_HIT_ROOM, RULE_HIT_TEXT, ruleTask, "待認領"));
+        awaitDeptLoad(triage, "房務", housekeeping + 1);
+        awaitDeptLoad(triage, "工務", engineering + 1);
         new ShellFrame(world).settleAfter(() -> { });
+    }
+
+    private static void awaitDeptLoad(TriagePage triage, String deptName, int count) {
+        try {
+            triage.deptLoad(deptName, count).waitFor(new Locator.WaitForOptions().setTimeout(CARDS_ARRIVE_TIMEOUT_MS));
+        } catch (com.microsoft.playwright.TimeoutError notYet) {
+            throw new AssertionError("送出兩張直接進待認領的需求後，頁首沒有在 " + (long) (CARDS_ARRIVE_TIMEOUT_MS / 1_000)
+                    + " 秒內變成「" + deptName + " " + count + " 單待接」，現在是 "
+                    + triage.textsMatching(triage.header(), TriagePage.DEPT_LOAD));
+        }
     }
 
     private static Map<String, Object> menuItem() {
@@ -120,45 +119,5 @@ public class TriageWhenSteps {
             throw new IllegalStateException(label + "沒有直接進部門待認領：state=" + row.get("state")
                     + "、dept=" + row.get("dept"));
         }
-    }
-
-    /**
-     * 一筆一筆看畫面讀到的看板資料，直到有一筆含這兩張單；兩張單各自觸發一次重抓，
-     * 第一次重抓可能只拿到其中一張，所以不能等到任一筆就停。
-     * 回應的內容在事件處理之外才讀，事件處理裡只記下回應。
-     */
-    private static void waitForBoardReadWith(Page page, List<Response> boardReads, List<UUID> taskIds) {
-        long deadline = System.currentTimeMillis() + REFETCH_TIMEOUT_MS;
-        int checked = 0;
-        while (true) {
-            for (; checked < boardReads.size(); checked++) {
-                Response read = boardReads.get(checked);
-                if (read.ok() && containsAll(read.text(), taskIds)) {
-                    return;
-                }
-            }
-            long left = deadline - System.currentTimeMillis();
-            if (left <= 0) {
-                throw new AssertionError("送出兩張直接進待認領的需求後，畫面沒有在 " + REFETCH_TIMEOUT_MS / 1_000
-                        + " 秒內重抓到含這兩張單的看板資料（期間讀到 " + boardReads.size() + " 次看板）");
-            }
-            int seenSoFar = checked;
-            try {
-                page.waitForCondition(() -> boardReads.size() > seenSoFar,
-                        new Page.WaitForConditionOptions().setTimeout(left));
-            } catch (TimeoutError noNewRead) {
-                // 時間到了還沒有新的讀取，回到迴圈開頭由上面的期限檢查報出好懂的訊息。
-            }
-        }
-    }
-
-    private static boolean containsAll(String body, List<UUID> taskIds) {
-        return taskIds.stream().allMatch(id -> body.contains(id.toString()));
-    }
-
-    private static boolean isBoardResponse(Response response) {
-        Network.Api board = Network.DESK_BOARD;
-        String path = response.url().split("[?#]")[0];
-        return board.method().equals(response.request().method()) && path.endsWith(board.path());
     }
 }

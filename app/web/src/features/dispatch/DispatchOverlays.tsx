@@ -6,10 +6,6 @@ import { useDispatchStore } from '../../stores/dispatch';
 import { ConflictDialog } from './ConflictDialog';
 import { useUndoAssign } from './use-dispatch';
 
-/**
- * 派單後畫面底部置中的深色浮條：打勾、「已派給{部門}（{房號}）」、右邊「復原」。
- * 掛在外框的內容區，換頁時還在。浮條是 `role="status"`，報讀軟體會唸出派給誰，不搶焦點。
- */
 export function AssignToastBar() {
   const { t } = useTranslation();
   const toast = useDispatchStore((state) => state.toast);
@@ -40,7 +36,6 @@ export function AssignToastBar() {
   );
 }
 
-/** 撞單以外的對話框的標題與內文；部門換成這個語言的名稱。 */
 function noticeText(
   notice: Exclude<DispatchNotice, { kind: 'assignConflict' }>,
   t: TFunction,
@@ -73,7 +68,6 @@ function noticeText(
   }
 }
 
-/** 派單、復原沒成功時的提示對話框，只有一顆「好」。撞單用和當場回答共用的 `ConflictDialog`。 */
 export function DispatchNoticeDialog() {
   const { t } = useTranslation();
   const notice = useDispatchStore((state) => state.notice);

@@ -445,7 +445,12 @@ class _ToneIconPainter extends CustomPainter {
             ..moveTo(7.4, 12.4)
             ..lineTo(10.5, 15.5)
             ..lineTo(16.6, 8.9),
-          stroke..color = TmsColors.brandPrimaryDark,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = _strokeWidth
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..color = TmsColors.brandPrimaryDark,
         );
       case TmsCalloutTone.neutral:
         canvas.drawLine(

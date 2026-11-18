@@ -63,9 +63,9 @@ class ManagerQueueRowData {
                 : TmsTagTone.neutralStrong,
           ),
         if (item.origin == 'scheduled')
-          const ManagerQueueTag('定期保養', TmsTagTone.info),
+          const ManagerQueueTag('定期保養', TmsTagTone.scheduled),
         if (item.wasVerificationFailed)
-          const ManagerQueueTag('重修後再驗', TmsTagTone.warn),
+          const ManagerQueueTag('重修後再驗', TmsTagTone.redo),
       ],
       waitingSince: item.waitingSince,
       waitingSinceIsToday: item.waitingSinceIsToday,

@@ -5,6 +5,7 @@ import '../../core/landing.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_content_unavailable.dart';
+import '../../core/widgets/tms_toast.dart';
 import '../ticket/ticket_screen.dart';
 import 'inspection_screen.dart';
 import 'manager_ids.dart';
@@ -97,16 +98,27 @@ class ManagerQueueScreen extends StatelessWidget {
         for (final item in queues.verify)
           (
             data: ManagerQueueRowData.verify(item),
-            page: () =>
-                TicketScreen(view: TicketView.manager, taskId: item.taskId),
+            page: () => TicketScreen(
+              view: TicketView.manager,
+              taskId: item.taskId,
+              entry: TicketEntry.verifyQueue,
+            ),
           ),
       ],
     };
   }
 
   Future<void> _open(BuildContext context, Widget page) async {
-    await Navigator.of(context)
-        .push(CupertinoPageRoute<void>(builder: (_) => page));
+    final closedTicketNo = await Navigator.of(
+      context,
+    ).push(CupertinoPageRoute<String>(builder: (_) => page));
+    if (context.mounted && closedTicketNo != null) {
+      TmsToast.show(
+        context,
+        '$closedTicketNo 已結案',
+        id: ManagerIds.ticketPassedToast,
+      );
+    }
     await store.refresh();
   }
 

@@ -44,7 +44,8 @@ class PushGateway {
       }
       await handlePushPayload(_asStringKeyedMap(result));
     } on MissingPluginException {
-      // 原生側沒有接上這個 channel 時（例如 widget test），Flutter 會丟 MissingPluginException。
+      // 沒有待開啟的推播，直接略過。原生側沒有註冊這個 channel 時會丟
+      // MissingPluginException，例如在 widget test 裡。
     }
   }
 
@@ -158,7 +159,6 @@ class PushGateway {
     }
   }
 
-  /// 主管的待認領有房務、工務兩池；推播帶部門時先把本機的部門選擇改成它，待認領一打開就停在那一池。
   Future<void> _rememberManagerPoolDept(String? dept) async {
     if (ApiClient.instance.session?.role != 'manager' ||
         !PoolDeptPreference.isPoolDept(dept)) {

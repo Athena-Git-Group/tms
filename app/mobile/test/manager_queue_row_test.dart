@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/widgets/tms_tag.dart';
 import 'package:tms_staff_app/features/manager/manager_queue_row.dart';
 
 void main() {
@@ -95,6 +96,33 @@ void main() {
       ),
     );
     expect(row.label, 'W-0116 312 門把鬆動 已修好 重修後再驗 阿強 完修');
+  });
+
+  test('待驗收列：重修後再驗、無法修復、定期保養三顆標籤各用各的色調', () {
+    final row = ManagerQueueRowData.verify(
+      const VerifyQueueItem(
+        taskId: 't6',
+        roomNo: '320',
+        isPublicArea: false,
+        title: '窗戶卡住',
+        waitingSince: '2026-11-10T11:25:00+08:00',
+        waitingSinceIsToday: true,
+        ticketNo: 'W-0118',
+        category: 'other',
+        origin: 'scheduled',
+        resolutionType: 'cannot_fix',
+        assigneeName: '阿強',
+        wasVerificationFailed: true,
+      ),
+    );
+    expect(
+      {for (final tag in row.tags) tag.label: tag.tone},
+      {
+        '無法修復': TmsTagTone.warn,
+        '定期保養': TmsTagTone.scheduled,
+        '重修後再驗': TmsTagTone.redo,
+      },
+    );
   });
 
   test('待驗收列：認不得的完修結果不把內部值搬上畫面', () {

@@ -40,6 +40,8 @@ abstract final class ManagerIds {
   static const String ticketFailSheetSubmitButton =
       'managerTicket.fail-sheet.submit-button';
 
+  static const String ticketPassedToast = 'managerTicket.passed-toast';
+
   static const String ticketResult = 'managerTicket.result';
   static const String ticketResultBackButton =
       'managerTicket.result.back-button';

@@ -2,6 +2,7 @@ package com.athena.tms.service;
 
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
 import com.athena.tms.dto.TaskChange;
+import com.athena.tms.dto.desk.DeskBoardChange;
 import com.athena.tms.service.IntegrationRoomStatusWhitelist;
 import com.athena.tms.service.StreamConnectionRegistry;
 import com.athena.tms.service.TenantScopedExecutor;
@@ -42,6 +43,7 @@ public class TaskEventsSseConsumer {
     private final ObjectMapper objectMapper;
     private final Duration degradedThreshold;
     private final KafkaListenerEndpointRegistry kafkaListenerRegistry;
+    private final DeskBoardService deskBoardService;
     private final Map<UUID, Integer> deliveredSeqByTask = new LinkedHashMap<UUID, Integer>(256, 0.75f, true){
 
         @Override
@@ -50,13 +52,14 @@ public class TaskEventsSseConsumer {
         }
     };
 
-    public TaskEventsSseConsumer(StreamConnectionRegistry registry, TenantScopedExecutor tenantScopedExecutor, JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, @Value(value="${tms.stream.degraded-threshold:10s}") String degradedThreshold, KafkaListenerEndpointRegistry kafkaListenerRegistry) {
+    public TaskEventsSseConsumer(StreamConnectionRegistry registry, TenantScopedExecutor tenantScopedExecutor, JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, @Value(value="${tms.stream.degraded-threshold:10s}") String degradedThreshold, KafkaListenerEndpointRegistry kafkaListenerRegistry, DeskBoardService deskBoardService) {
         this.registry = registry;
         this.tenantScopedExecutor = tenantScopedExecutor;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.degradedThreshold = DurationStyle.detectAndParse((String)degradedThreshold);
         this.kafkaListenerRegistry = kafkaListenerRegistry;
+        this.deskBoardService = deskBoardService;
     }
 
     @EventListener(value={ApplicationReadyEvent.class})
@@ -87,16 +90,10 @@ public class TaskEventsSseConsumer {
         if (lagMillis > this.degradedThreshold.toMillis()) {
             this.registry.enterDegraded(StreamDegradation.Reason.CONSUMER_LAG);
         } else {
-            // 及時收到並處理了一則事件，表示事件來源接得上、處理也跟得上，不論原本為什麼降級都可以回到正常。
             this.registry.leaveDegraded();
         }
     }
 
-    /**
-     * 串流的事件消費者停了、啟動失敗或卡住不再向事件來源拉事件，後端就收不到任何單的變化，
-     * 這時要宣告降級，否則客戶端會一直以為沒有變化而不重抓。
-     * 只看這個串流自己的消費者，推播等其他消費者的狀況與這裡無關。
-     */
     @EventListener(value={ConsumerStoppedEvent.class, ConsumerFailedToStartEvent.class, NonResponsiveConsumerEvent.class})
     void onEventSourceLost(KafkaEvent event) {
         if (this.isStreamListener(event)) {
@@ -104,7 +101,6 @@ public class TaskEventsSseConsumer {
         }
     }
 
-    /** 消費者重新啟動，只解除因為連不上事件來源而起的降級；處理事件落後要等事件真的追上才解除。 */
     @EventListener(value={ConsumerStartedEvent.class})
     void onEventSourceBack(ConsumerStartedEvent event) {
         if (this.isStreamListener(event)) {
@@ -138,8 +134,25 @@ public class TaskEventsSseConsumer {
             log.debug("任務 {} 查無投影列，略過此鈴", (Object)task);
             return;
         }
-        this.registry.broadcastTask(change);
+        this.registry.broadcastTask(change, this.loadBoardChange(tenantId.asLong(), task));
         this.pushIntegration(tenantId.asLong(), task, eventSeq, type.asText());
+    }
+
+    /**
+     * 每則事件只組一次卡片，所有櫃檯角色的連線共用：同一家飯店的櫃檯角色看到的卡片完全相同，沒有因人而異的欄位。
+     * 這家飯店沒有櫃檯角色連著就不組。組不出來時回 null，訊號照送、不帶卡片，畫面會改成重抓整份看板，不會卡住。
+     */
+    private DeskBoardChange loadBoardChange(long tenantId, UUID taskId) {
+        if (!this.registry.hasDeskBoardViewer(tenantId)) {
+            return null;
+        }
+        try {
+            return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.deskBoardService.boardChange(tenantId, taskId));
+        }
+        catch (Exception e) {
+            log.warn("組櫃檯看板卡片失敗，這則訊號不帶卡片（task={}）: {}", (Object)taskId, (Object)e.getMessage());
+            return null;
+        }
     }
 
     private void pushIntegration(long tenantId, UUID taskId, int seq, String type) {
@@ -181,7 +194,6 @@ public class TaskEventsSseConsumer {
 
     private TaskChange loadRouting(long tenantId, UUID taskId, int seq, String type, String occurredAt) {
         return this.tenantScopedExecutor.callAsTenant(tenantId, () -> {
-            // 復原派單的事件內容記著被收回的部門，一起帶出來，讓那個部門的連線也收得到。
             List rows = this.jdbcTemplate.query("""
                     SELECT t.dept, t.assignee_id, t.reservation_id,
                            CASE WHEN e.type = 'triage_undone' THEN e.payload ->> 'dept' END AS recalled_from_dept

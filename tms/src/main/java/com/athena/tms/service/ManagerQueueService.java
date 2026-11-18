@@ -45,7 +45,6 @@ public class ManagerQueueService {
     }
 
     private List<InspectionQueueItem> inspectionQueue(long tenantId, UUID callerStaffId, LocalDate today) {
-        // 清單與查房判定讀同一個設定：飯店允許主管查自己清的房時，清單不再排除呼叫者本人清的房。
         UUID excludedCleanerId = selfInspectionSetting.allowed(tenantId) ? null : callerStaffId;
         return jdbcTemplate.queryForList(
                 """
@@ -75,6 +74,7 @@ public class ManagerQueueService {
                 """
                 SELECT t.id, t.title, t.source, t.done_at AS waiting_since, r.room_no,
                        rt.ticket_no, rt.category, rt.description, rt.resolution_type,
+                       rt.origin_ticket_task_id,
                        rt.last_verify_failed_at IS NOT NULL AS was_verification_failed,
                        rep.name AS reporter_name, asg.name AS assignee_name
                   FROM tasks t
@@ -89,15 +89,17 @@ public class ManagerQueueService {
                 tenantId, AutomationRuleService.PUBLIC_AREA_ROOM_NO).stream()
                 .map(row -> {
                     Base base = base(row, today);
+                    boolean scheduled = "system".equals(row.get("source"))
+                            && row.get("origin_ticket_task_id") == null;
                     return new VerifyQueueItem(
                             base.taskId(), base.roomNo(), base.publicArea(), base.title(),
                             base.waitingSince(), base.today(),
                             (String) row.get("ticket_no"),
                             (String) row.get("category"),
                             (String) row.get("description"),
-                            (String) row.get("reporter_name"),
+                            scheduled ? null : (String) row.get("reporter_name"),
                             (String) row.get("assignee_name"),
-                            "system".equals(row.get("source")) ? "scheduled" : "reported",
+                            scheduled ? "scheduled" : "reported",
                             (String) row.get("resolution_type"),
                             (Boolean) row.get("was_verification_failed"));
                 })

@@ -62,6 +62,12 @@ tasksClaim:
   post:
     operationId: tasksClaim
     summary: claim
+    description: >-
+      把部門待認領裡的單認領到自己名下，pool→accepted。現場員工認領自己部門的池。
+      主管也能認領，讓人手不夠時主管自己下場做：房務主管（role=manager 且 dept 不是 engineering，含沒有部門的主管）
+      認領房務池的單，工務主管（role=manager 且 dept=engineering）認領工務池的單；
+      主管認領另一個部門的單回 403 forbidden，單與事件都不變。
+      同一張單兩人同時認領時只有先到的成立，後到的回 409 state_conflict，message 帶先搶到的人，例如「這單已被小美認領」。
     tags:
     - 任務 API
     parameters:
@@ -85,6 +91,8 @@ tasksClaim:
               $ref: '../../components/schemas/任務.yaml#/tasks'
       '400':
         $ref: '../../components/responses.yaml#/BadRequest'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
       '404':
         $ref: '../../components/responses.yaml#/NotFound'
       '409':

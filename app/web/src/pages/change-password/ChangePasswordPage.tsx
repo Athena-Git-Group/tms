@@ -4,10 +4,6 @@ import { LanguageMenu } from '../../features/account';
 import { NEW_PASSWORD_MAX_LENGTH, NEW_PASSWORD_RULES } from '../../lib/new-password-rules';
 import { useChangePasswordForm } from './use-change-password-form';
 
-/**
- * 改密碼畫面（路徑 `/{飯店識別代碼}/change-password`）。拿臨時密碼登入的人先在這裡設定自己的密碼，
- * 才進得了其他櫃檯畫面。版面沿用登入頁的置中版型；不需要再輸入一次臨時密碼，所以只有兩欄。
- */
 export function ChangePasswordPage() {
   const { t } = useTranslation();
   const form = useChangePasswordForm();
@@ -57,7 +53,6 @@ export function ChangePasswordPage() {
               </p>
             )}
 
-            {/* 規則只是即時告訴同仁哪一條還沒符合，不能點；螢幕報讀軟體讀到的是「規則文字，已勾選／未勾選」。 */}
             <div className="flex flex-col gap-1 px-4 pt-0.5">
               {NEW_PASSWORD_RULES.map((rule) => {
                 const passed = form.rules[rule];
@@ -102,7 +97,6 @@ export function ChangePasswordPage() {
   );
 }
 
-/** 白卡裡的一列：左側欄名、中間輸入欄、右側顯示／隱藏鈕，和登入頁的密碼列同一個樣子。 */
 function PasswordRow({
   id,
   label,

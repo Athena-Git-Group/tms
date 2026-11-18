@@ -202,7 +202,7 @@ class ManagerShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return _MainShell(
       homeTab: ManagerHomeScreen(kind: kind),
-      poolTab: const ManagerPoolScreen(),
+      poolTab: ManagerPoolScreen(kind: kind),
     );
   }
 }

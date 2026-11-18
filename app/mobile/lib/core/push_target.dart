@@ -2,7 +2,8 @@ import 'dart:convert';
 
 typedef RoomNoLookup = Future<String?> Function(String taskId);
 
-/// FCM data message 的值只能是字串，所以 `target` 是 JSON 字串。
+/// 推播的 `target` 可能是 JSON 字串，也可能是已經解析好的 map，這裡兩種都接受。
+/// FCM data message 的值只能是字串，所以從 FCM 來的是 JSON 字串。
 /// iOS 原生側轉過來的 userInfo 則可能已經是 map。
 Map<String, dynamic>? parsePushTarget(Object? raw) {
   if (raw is Map) {

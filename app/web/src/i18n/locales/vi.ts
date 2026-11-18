@@ -1,9 +1,5 @@
 import type { Translation } from './zh-TW';
 
-/**
- * 越南文的介面文字，鍵和繁體中文那一份一一對應；萬一缺了某個鍵，畫面會先顯示繁體中文。
- * 登入頁、改密碼畫面與帳號面板的句子取自設計雛形的字典，其餘是暫定譯文，等母語人士審稿。
- */
 export const vi: Translation = {
   app: { name: 'TMS Lễ tân' },
   missingHotel: {

@@ -58,7 +58,6 @@ public class CommonGivenSteps {
             String shiftEnd = blankToNull(row.get("班次結束"));
             String stateCode = Terms.staffState(row.getOrDefault("狀態", "在職"));
             String roleChinese = blankToNull(row.get("角色"));
-            // 主管、值班主管、老闆三種沒有部門，部門欄寫的就是角色本身
             boolean managerLikeDept = "主管".equals(deptChinese)
                     || "值班主管".equals(deptChinese)
                     || "老闆".equals(deptChinese);

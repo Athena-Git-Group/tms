@@ -1,20 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_STATE } from '../lib/persistence';
-
-/** 單元測試沒有瀏覽器的儲存空間，用放在記憶體的簡易版代替；要在載入 store 之前裝好，store 建立時就會去讀。 */
-function memoryStorage(): Storage {
-  const items = new Map<string, string>();
-  return {
-    get length() {
-      return items.size;
-    },
-    clear: () => items.clear(),
-    getItem: (key) => items.get(key) ?? null,
-    key: (index) => [...items.keys()][index] ?? null,
-    removeItem: (key) => void items.delete(key),
-    setItem: (key, value) => void items.set(key, value),
-  };
-}
+import { memoryStorage } from '../test-support/memory-storage';
 
 const loginResponse = {
   token: 'token',

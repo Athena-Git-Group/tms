@@ -149,6 +149,12 @@ TmsStatusAppearance repairStatusAppearance({
         background: TmsColors.successContainer,
         foreground: TmsColors.onSuccessContainer,
       );
+    case 'closed':
+      return TmsStatusAppearance(
+        text: _repairChipText(state),
+        background: TmsColors.brandPrimaryDark,
+        foreground: TmsColors.brandOnPrimary,
+      );
     default:
       return TmsStatusAppearance(
         text: _repairChipText(state),
@@ -211,6 +217,12 @@ enum RepairSummaryAudience {
 
   statusLine,
 }
+
+String repairReporterText(RepairTicketDetail ticket) =>
+    ticket.origin == 'scheduled' ? '系統排程' : ticket.reporterNameText;
+
+String repairReporterMetaText(RepairTicketDetail ticket) =>
+    ticket.origin == 'scheduled' ? '系統排程' : '${ticket.reporterNameText} 報修';
 
 String repairStatusSummaryText(
   RepairTicketDetail ticket, {

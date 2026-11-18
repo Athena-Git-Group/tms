@@ -322,6 +322,43 @@ void main() {
   });
 
   group('導覽列計時（Main.dc.html:5036）', () {
+    testWidgets('勾清單底下的項目後，畫面停在原處不跳回頂端', (tester) async {
+      await pumpTask(
+        tester,
+        task: _task(state: 'doing'),
+        sopItems: <SopItem>[
+          for (var i = 0; i < 20; i++)
+            SopItem(
+              id: 's$i',
+              appliesTo: 'cleaning',
+              itemKey: 'k$i',
+              label: '項目 $i',
+            ),
+        ],
+      );
+      final scrollable = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.text('項目 19'),
+        300,
+        scrollable: scrollable.first,
+      );
+      final offsetBefore =
+          tester.state<ScrollableState>(scrollable.first).position.pixels;
+      expect(offsetBefore, greaterThan(0));
+
+      await tester.tap(find.text('項目 19'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester.state<ScrollableState>(scrollable.first).position.pixels,
+        offsetBefore,
+      );
+    });
+
     testWidgets('捲過標題區之後，導覽列上的計時跟著標題區同一支計時器逐秒跳', (tester) async {
       addTearDown(TestHooks.instance.reset);
       final startedAt = DateTime(2026, 11, 9, 9);

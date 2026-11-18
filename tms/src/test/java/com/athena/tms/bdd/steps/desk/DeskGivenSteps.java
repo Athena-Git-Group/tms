@@ -37,12 +37,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * 本模組 {@code 櫃檯看板與派單/dsl.md} 的 Given 句型。
- *
- * <p>呼叫端點的「已…」句型都要確認那一步真的成功，並查一次資料庫確認單走到了句型說的狀態；
- * 前置步驟默默失敗時，後面的斷言會在不相干的地方紅掉，很難看出是哪一步沒做到。
- */
 public class DeskGivenSteps {
 
     private static final Set<String> SITUATIONS = Set.of(
@@ -53,7 +47,6 @@ public class DeskGivenSteps {
 
     private static final Pattern MONTH_DAY = Pattern.compile("^(\\d{1,2})/(\\d{1,2})$");
 
-    /** 句型的預設：飯店啟用的清潔 SOP 共 8 項。 */
     private static final int DEFAULT_CLEANING_SOP_ITEMS = 8;
 
     private final ScenarioWorld world;
@@ -100,7 +93,6 @@ public class DeskGivenSteps {
     @假設("看板範圍內外有以下的單：")
     public void boardHasTasks(DataTable table) {
         List<Map<String, String>> rows = new ArrayList<>(table.asMaps(String.class, String.class));
-        // 一位同仁同時只能有一張進行中的單，其他列走完成流程時也要開始一次，所以進行中的單排最後建。
         rows.sort(Comparator.comparingInt(r -> "進行中".equals(r.get("現況")) ? 1 : 0));
         for (Map<String, String> row : rows) {
             String roomNo = requireCell(row, "房號");
@@ -132,13 +124,6 @@ public class DeskGivenSteps {
         boardFixtures.returnToPoolByColleague(resolveTaskId(taskKey), todayAt(hhmm));
     }
 
-    /**
-     * 讓表格裡的每間房在後端時鐘的現在都算入住中，之後以住客身分送出的單才掛得到這筆訂單上。
-     *
-     * <p>表格可以寫一段不含預設日期的住期，例如入住日 10/25。住期外的訂單不算入住中，
-     * 所以必要時時鐘會被移進住期，時刻保持不變。
-     * 之後若有步驟用「現在時間是」撥時鐘，日期會回到預設的那一天，住客就又不在住期內。
-     */
     @假設("以下房間現在有住客：")
     public void roomsCurrentlyOccupied(DataTable table) {
         LocalDate today = today();
@@ -164,12 +149,6 @@ public class DeskGivenSteps {
         }
     }
 
-    /**
-     * 看板的樓層取自房間主檔，所以主檔的樓層集合要剛好等於清單：每個樓層至少一間客房，清單以外的樓層不留房間。
-     *
-     * <p>建立員工時會替排班建佔位房間，它們被排班資料引用而刪不掉。
-     * 佔位房間不是客房，改掛到清單裡最低的樓層，樓層集合才不會多出它們所在的樓層。
-     */
     @假設("^飯店的客房樓層為 (\\d+(?:、\\d+)*)$")
     public void hotelFloorsAre(String floorList) {
         long tenantId = tenantFixtures.testTenantId();
@@ -206,7 +185,6 @@ public class DeskGivenSteps {
         }
     }
 
-    /** 讓含這個關鍵字的住客文字分給該部門；飯店原有的規則照樣有效，不含關鍵字的文字不受影響。 */
     @假設("飯店的分類規則把含 {string} 的文字分給 {string}")
     public void classificationRule(String keyword, String deptChinese) {
         String dept = Terms.dept(deptChinese);
@@ -278,10 +256,6 @@ public class DeskGivenSteps {
         requireEquals("started", latestEventType(taskId), taskKey + " 開始後最新一筆事件");
     }
 
-    /**
-     * 先讓同仁認領，再由一位主管登記他今天整天請假，觸發產品既有的請假退回待認領。
-     * 登記請假要主管身分，句型沒有指名是哪位主管，所以另建一位只做這件事的主管。
-     */
     @假設("{string} 被 {string} 認領後因請假退回待認領")
     public void claimedThenReturnedForLeave(String taskKey, String staffName) {
         UUID taskId = resolveTaskId(taskKey);
@@ -308,16 +282,11 @@ public class DeskGivenSteps {
         }
     }
 
-    /** 只撥時鐘，不執行任何排程；派出後到復原之間的時間差靠的就是這一步。 */
     @假設("派出後過了 {int} 秒")
     public void secondsAfterDispatch(int seconds) {
         clock.setInstant(clock.instant().plusSeconds(seconds));
     }
 
-    /**
-     * 照 SOP 的排列順序勾前幾項。詳情顯示的進度是「勾了幾項／全部幾項」，總數要是句型說的那個數，
-     * 所以飯店還沒有清潔 SOP 時，先照句型預設建 8 項。
-     */
     @假設("{string} 已在 {string} 勾選 {int} 項清潔項目")
     public void staffCheckedSopItems(String staffName, String taskKey, int count) {
         UUID taskId = resolveTaskId(taskKey);
@@ -428,7 +397,6 @@ public class DeskGivenSteps {
                 .single() > 0;
     }
 
-    /** 把時鐘移到這筆訂單住期內第一個和現在同一時刻的時間點。 */
     private void moveClockIntoStay(Stay stay) {
         Instant[] stayRange = jdbcClient
                 .sql("SELECT checkin_at, checkout_at FROM reservations_cache WHERE id = ?")

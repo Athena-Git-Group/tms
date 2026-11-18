@@ -86,7 +86,6 @@ public class ManagerQueueThenSteps {
         }
     }
 
-    /** 飯店沒有關掉「允許主管查自己清的房」時（沒有設定視為允許），待查房清單與格數都包含呼叫者本人清的房。 */
     private boolean selfInspectionAllowed() {
         return dbProbe.count(
                 "SELECT count(*) FROM tenant_config WHERE tenant_id = ? AND key = 'self_inspection_allowed'"

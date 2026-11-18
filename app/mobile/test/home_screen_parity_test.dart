@@ -7,18 +7,12 @@ import 'package:tms_staff_app/core/widgets/tms_category_square.dart';
 import 'package:tms_staff_app/features/home/home_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 

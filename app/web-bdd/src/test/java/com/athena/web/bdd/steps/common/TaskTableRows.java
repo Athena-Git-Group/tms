@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
  *   <li>預設的住客昨天 15:00 入住、明天 11:00 退房；只寫了入住日或退房日時，時刻也用這兩個。</li>
  * </ul>
  */
-final class TaskTableRows {
+public final class TaskTableRows {
 
     private static final Set<String> COLUMNS = Set.of(
             "房號", "狀況", "標題", "類型", "部門", "負責人", "住客", "VIP", "入住日", "退房日", "來源",
@@ -99,11 +99,11 @@ final class TaskTableRows {
     /** 手上已經有一張進行中的同仁，替沒寫負責人的進行中單挑人時要跳過。 */
     private final Set<String> busyDoing = new HashSet<>();
 
-    TaskTableRows(WebWorld world) {
+    public TaskTableRows(WebWorld world) {
         this.world = world;
     }
 
-    void createAll(List<Map<String, String>> rows) {
+    public void createAll(List<Map<String, String>> rows) {
         for (Map<String, String> row : rows) {
             for (String column : row.keySet()) {
                 if (!COLUMNS.contains(column)) {

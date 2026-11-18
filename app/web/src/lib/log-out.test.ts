@@ -1,40 +1,9 @@
 import { QueryClient } from '@tanstack/react-query';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { memoryStorage } from '../test-support/memory-storage';
 
-/**
- * 單元測試跑在沒有瀏覽器的環境，沒有 `window.sessionStorage` 與 `window.localStorage`。
- * 這裡用放在記憶體的簡易版代替，而且要在載入各個 store 之前裝好，因為 store 建立時就會去讀儲存空間。
- */
-class MemoryStorage implements Storage {
-  private readonly items = new Map<string, string>();
-
-  get length() {
-    return this.items.size;
-  }
-
-  clear() {
-    this.items.clear();
-  }
-
-  getItem(key: string) {
-    return this.items.get(key) ?? null;
-  }
-
-  key(index: number) {
-    return [...this.items.keys()][index] ?? null;
-  }
-
-  removeItem(key: string) {
-    this.items.delete(key);
-  }
-
-  setItem(key: string, value: string) {
-    this.items.set(key, value);
-  }
-}
-
-const sessionStorage = new MemoryStorage();
-const localStorage = new MemoryStorage();
+const sessionStorage = memoryStorage();
+const localStorage = memoryStorage();
 
 beforeAll(() => {
   vi.stubGlobal('window', { sessionStorage, localStorage });
@@ -78,6 +47,7 @@ describe('logOut', () => {
     useBoardDragStore.getState().startDrag({
       id: 'task-1',
       displayNo: 'T-1',
+      seq: 1,
       state: 'triage',
       answered: false,
       dept: 'frontdesk',
@@ -100,7 +70,6 @@ describe('logOut', () => {
     expect(sessionStorage.getItem(BOARD_VIEW_STATE.key)).not.toBeNull();
     expect(sessionStorage.getItem(SESSION_STATE.key)).not.toBeNull();
     expect(useDeskPanelsStore.getState().detailTaskId).toBe('task-1');
-    // 之後新增的跟著分頁的鍵，這裡還沒透過畫面寫進去，先直接放一份，才驗得出登出有沒有漏清。
     for (const { key } of TAB_STORED_STATES) {
       if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, '{}');
     }

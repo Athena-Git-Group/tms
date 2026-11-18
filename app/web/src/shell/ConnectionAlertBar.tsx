@@ -1,9 +1,5 @@
 import { useTranslation } from 'react-i18next';
 
-/**
- * 工具列下方、內容區上緣的「即時連線異常」提醒列，照雛形 `ui/desk.css` 的 `.conn-bar`。
- * 只負責告知，上面沒有任何按鈕；出現與消失由外框決定。
- */
 export function ConnectionAlertBar() {
   const { t } = useTranslation();
   return (

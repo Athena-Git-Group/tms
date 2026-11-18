@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../../core/landing.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_segmented_control.dart';
@@ -10,7 +11,9 @@ import 'manager_ids.dart';
 import 'pool_dept_preference.dart';
 
 class ManagerPoolScreen extends StatefulWidget {
-  const ManagerPoolScreen({super.key});
+  const ManagerPoolScreen({super.key, required this.kind});
+
+  final ManagerKind kind;
 
   @override
   State<ManagerPoolScreen> createState() => _ManagerPoolScreenState();
@@ -82,7 +85,7 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
       body = EngineeringPoolList(
         key: const ValueKey<String>(PoolDeptPreference.engineering),
         dept: EngineeringPoolList.deptKey,
-        canClaim: false,
+        canClaim: widget.kind.canClaimFrom(EngineeringPoolList.deptKey),
         highlightTaskId: _highlightTaskId,
         aboveCategories: _deptSwitch(dept),
       );
@@ -90,7 +93,7 @@ class _ManagerPoolScreenState extends State<ManagerPoolScreen> {
       body = HousekeepingPoolList(
         key: const ValueKey<String>(PoolDeptPreference.housekeeping),
         dept: HousekeepingPoolList.deptKey,
-        canClaim: false,
+        canClaim: widget.kind.canClaimFrom(HousekeepingPoolList.deptKey),
         highlightRoomNo: _highlightRoomNo,
         aboveCategories: _deptSwitch(dept),
       );

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/landing.dart';
 import 'package:tms_staff_app/core/push_gateway.dart';
 import 'package:tms_staff_app/core/widgets/tms_category_tile.dart';
 import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
@@ -12,30 +13,30 @@ import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
   late _RecordingApiClient api;
 
+  turnOffAnimationsForEachTest();
+
   setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
     api = _RecordingApiClient();
     ApiClient.instance = api;
   });
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
     PoolDeptPreference.changes.value = null;
     MainShellTabRequest.poolHighlightRoomNo.value = null;
     MainShellTabRequest.poolHighlightTaskId.value = null;
   });
 
-  Future<void> pumpManagerPool(WidgetTester tester) async {
-    await tester.pumpWidget(const CupertinoApp(home: ManagerPoolScreen()));
+  Future<void> pumpManagerPool(
+    WidgetTester tester, {
+    ManagerKind kind = ManagerKind.housekeeping,
+  }) async {
+    await tester.pumpWidget(CupertinoApp(home: ManagerPoolScreen(kind: kind)));
     await tester.pumpAndSettle();
   }
 
@@ -87,7 +88,7 @@ void main() {
     await tester.pumpWidget(
       CupertinoApp(
         navigatorKey: navigatorKey,
-        home: const ManagerPoolScreen(),
+        home: const ManagerPoolScreen(kind: ManagerKind.housekeeping),
       ),
     );
     await tester.pumpAndSettle();
@@ -128,17 +129,53 @@ void main() {
     expect(prefs.getString(PoolDeptPreference.key), 'housekeeping');
   });
 
-  testWidgets('主管的單卡沒有認領鈕，員工的有', (tester) async {
+  testWidgets('房務主管在房務池有認領鈕，切到工務池沒有', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpManagerPool(tester);
+    expect(find.text('317'), findsOneWidget);
+    expect(find.byType(PoolClaimButton), findsOneWidget);
+
+    await tester.tap(find.text('工務'));
+    await tester.pumpAndSettle();
+    expect(find.text('冷氣不冷'), findsOneWidget);
+    expect(find.byType(PoolClaimButton), findsNothing);
+  });
+
+  testWidgets('工務主管在房務池沒有認領鈕，切到工務池有', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpManagerPool(tester, kind: ManagerKind.engineering);
     expect(find.text('317'), findsOneWidget);
     expect(find.byType(PoolClaimButton), findsNothing);
 
     await tester.tap(find.text('工務'));
     await tester.pumpAndSettle();
     expect(find.text('冷氣不冷'), findsOneWidget);
-    expect(find.byType(PoolClaimButton), findsNothing);
+    expect(find.byType(PoolClaimButton), findsOneWidget);
+  });
 
+  testWidgets('房務主管按認領這單，後端收到認領並重抓待認領', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpManagerPool(tester);
+
+    await tester.tap(find.byType(PoolClaimButton));
+    await tester.pumpAndSettle();
+
+    expect(api.claimedTaskIds, ['task-1']);
+    expect(api.deptQueries, ['housekeeping', 'housekeeping']);
+  });
+
+  testWidgets('工務主管在工務池按認領這單，後端收到認領', (tester) async {
+    SharedPreferences.setMockInitialValues({'pool.dept': 'engineering'});
+    await pumpManagerPool(tester, kind: ManagerKind.engineering);
+
+    await tester.tap(find.byType(PoolClaimButton));
+    await tester.pumpAndSettle();
+
+    expect(api.claimedTaskIds, ['task-1']);
+  });
+
+  testWidgets('員工的待認領照常有認領鈕', (tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const CupertinoApp(home: PoolScreen()));
     await tester.pumpAndSettle();
     expect(find.byType(PoolClaimButton), findsOneWidget);
@@ -160,6 +197,13 @@ const _manager = LoginResult(
 
 class _RecordingApiClient extends ApiClient {
   final List<String?> deptQueries = [];
+
+  final List<String> claimedTaskIds = [];
+
+  @override
+  Future<void> claimTask(String taskId) async {
+    claimedTaskIds.add(taskId);
+  }
 
   LoginResult? _fakeSession;
 

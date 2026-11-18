@@ -28,8 +28,9 @@ class TestHooks {
   }
 }
 
-/// 帶時區位移的字串（例如 `2026-10-22T14:32+08:00`）經 `DateTime.parse` 會得到
-/// UTC 時間，所以要轉回裝置本地時間。
+/// 回傳裝置目前時間，測試注入時鐘時改用注入的值。注入的字串帶時區位移，
+/// 例如 `2026-10-22T14:32+08:00`，經 `DateTime.parse` 會得到 UTC 時間，
+/// 所以要轉回裝置本地時間，否則畫面顯示的時刻會差一個時區位移。
 DateTime deviceNow() {
   final injected = TestHooks.instance.injectedClockIso;
   return injected == null ? DateTime.now() : DateTime.parse(injected).toLocal();

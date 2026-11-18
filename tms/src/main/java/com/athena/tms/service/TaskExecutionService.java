@@ -3,6 +3,7 @@ package com.athena.tms.service;
 import com.athena.tms.common.codes.TaskState;
 import com.athena.tms.common.codes.TaskType;
 import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.ManagerKind;
 import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.ForbiddenException;
@@ -27,6 +28,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -107,11 +109,24 @@ public class TaskExecutionService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         try {
+            String claimDept = claimDept(tenantId, taskId, actor);
             return transition(tenantId, taskId, actor,
-                    (actorRef) -> taskEngine.claim(tenantId, taskId, actor.dept(), actorRef));
+                    (actorRef) -> taskEngine.claim(tenantId, taskId, claimDept, actorRef));
         } catch (StateConflictException conflict) {
             throw claimConflictWithClaimerName(tenantId, taskId, conflict);
         }
+    }
+
+    private String claimDept(long tenantId, UUID taskId, CurrentActor actor) {
+        Optional<ManagerKind> managerKind = ManagerKind.of(actor);
+        if (managerKind.isEmpty()) {
+            return actor.dept();
+        }
+        String poolDept = managerKind.get().poolDept();
+        if (!poolDept.equals(taskRowLookup.require(tenantId, taskId).get("dept"))) {
+            throw new ForbiddenException("主管只能認領自己部門的待認領單");
+        }
+        return poolDept;
     }
 
     private StateConflictException claimConflictWithClaimerName(

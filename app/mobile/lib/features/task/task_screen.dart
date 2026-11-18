@@ -48,8 +48,9 @@ class _TaskScreenState extends State<TaskScreen> {
 
   bool _repairSheetOpen = false;
 
-  /// Flutter 的 `ModalBarrier` 把自己包在 `BlockSemantics` 裡，用路由推上來的
-  /// 覆蓋層會擋掉底下那一頁的 accessibility 節點。這張卡因此疊在這一頁上。
+  /// 完成慶祝卡直接疊在這一頁上，不用路由推出來。Flutter 路由的 `ModalBarrier`
+  /// 會用 `BlockSemantics` 擋掉底下那一頁的 accessibility 節點，改用路由的話，
+  /// 這一頁的元件就讀不到了。
   _CelebrateContent? _celebrate;
 
   String? _openRepairSheetTaskId;
@@ -224,7 +225,8 @@ class _TaskScreenState extends State<TaskScreen> {
                     padding: EdgeInsets.all(16),
                     child: Text('載入失敗，請稍後再試'),
                   );
-                } else if (snapshot.connectionState != ConnectionState.done) {
+                } else if (snapshot.connectionState != ConnectionState.done &&
+                    !snapshot.hasData) {
                   content = const Center(child: CupertinoActivityIndicator());
                 } else {
                   content = _buildTask(snapshot.data, topInset: navTopInset);
@@ -502,8 +504,9 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 指派不能寫成 `setState(() => _taskFuture = ...)`。箭頭函式會把那個
-  /// `Future` 當成回傳值，Flutter 在 debug 版會拒絕回傳 `Future` 的回呼。
+  /// `setState` 裡的賦值要寫成區塊，不能寫成 `setState(() => _taskFuture = ...)`。
+  /// 箭頭函式會把賦值結果的 `Future` 當成回傳值，Flutter 在 debug 版會拒絕
+  /// 回傳 `Future` 的 setState 回呼。
   void _showTask(TaskDetail task) {
     setState(() {
       _loadedTask = task;
@@ -1187,13 +1190,13 @@ class _TaskScreenState extends State<TaskScreen> {
   Widget _buildStepTrack(TaskDetail task, {required bool onDark}) {
     final steps = _stepsOf(task);
     final current = _currentStep(task);
-    final currentIndex = steps.indexOf(current);
+    final currentIndex = current == null ? -1 : steps.indexOf(current);
     final allDone = task.state == 'inspected';
     return Padding(
       padding: const EdgeInsets.only(top: TmsSpacing.md2),
       child: TmsSemantics(
         id: 'task.step-track',
-        label: current,
+        label: current ?? '待認領',
         explicitChildNodes: true,
         child: TmsStepTrack(
           onDark: onDark,
@@ -1244,9 +1247,11 @@ class _TaskScreenState extends State<TaskScreen> {
     return <String>['已接', '進行中', '完成', waived ? '免查房' : '查房'];
   }
 
-  static String _currentStep(TaskDetail task) {
+  static String? _currentStep(TaskDetail task) {
     final steps = _stepsOf(task);
     switch (task.state) {
+      case 'pool':
+        return null;
       case 'doing':
       case 'interrupted':
         return '進行中';

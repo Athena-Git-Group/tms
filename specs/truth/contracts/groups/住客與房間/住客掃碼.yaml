@@ -1,7 +1,21 @@
 guestSessionsScan:
   post:
     operationId: guestSessionsScan
-    summary: scan
+    summary: 櫃檯替住客開一個住客 session
+    description: >-
+      櫃檯或主管替某間房的住客開一個住客 session，住客拿回應裡的 sessionToken 就能提需求、看進度。
+      只有 frontdesk、manager、duty_manager 可以呼叫；沒登入回 401 unauthorized，其他角色回 403 forbidden。
+      飯店一律取自呼叫者登入的那家飯店，請求內容不帶飯店。
+      roomId 必須是這家飯店的房間；有帶 reservationId 時，這筆訂單也必須屬於這家飯店而且是這間房的，
+      任一條不符都回 404 not_found，不透露別家飯店有沒有這筆資料。
+      沒帶 reservationId 時用這間房目前入住中的訂單；這間房目前沒有住客時回 409 room_vacant。
+      session 什麼時候到期由後端決定，呼叫端不能指定：到期時間就是綁定那筆訂單的退房時刻（reservations_cache.checkout_at，
+      PMS 給的退房日期與時刻，不是退房日的午夜），和住客自己掃房間 QR 開的 session 用同一條規則，兩個入口開出來的 session 一樣時候失效。
+      綁定的訂單已經過了退房時刻（checkout_at 不晚於現在）時回 409 reservation_ended，不開一個一出生就過期的 session。
+      回應的 expiresAt 就是這個到期時間。
+      sessionToken 由伺服器產生，格式是「飯店編號.隨機字串」（例如 1.Qm9hdC1zaGVk…），
+      隨機字串是 32 個位元組的安全亂數，呼叫端不能自己指定。
+      這個前綴讓伺服器在查 session 之前就知道該在哪家飯店的資料裡找。
     tags:
     - 住客掃碼 API
     requestBody:
@@ -12,15 +26,21 @@ guestSessionsScan:
             $ref: '../../components/schemas/住客掃碼.yaml#/guest_sessionsRequest'
     responses:
       '200':
-        description: 成功
+        description: 成功，回剛開好的住客 session，sessionToken 就是住客之後要帶的權杖，expiresAt 是後端定的到期時間（綁定訂單的退房時刻）。
         content:
           application/json:
             schema:
               $ref: '../../components/schemas/住客掃碼.yaml#/guest_sessions'
-      '400':
-        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
       '409':
         $ref: '../../components/responses.yaml#/Conflict'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
 listGuestRequestsAndcreateGuestRequest:
   get:
     operationId: listGuestRequests

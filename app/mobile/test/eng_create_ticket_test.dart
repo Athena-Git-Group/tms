@@ -10,18 +10,12 @@ import 'package:tms_staff_app/features/shell/main_shell.dart';
 import 'package:tms_staff_app/features/ticket/repair_ticket_form_sheet.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 
@@ -29,7 +23,7 @@ void main() {
     WidgetTester tester, {
     int tabIndex = MainShellTab.homeIndex,
   }) async {
-    _useIPhoneSurface(tester);
+    usePhoneSurface(tester);
     final api = _FakeApiClient();
     ApiClient.instance = api;
     await tester.pumpWidget(
@@ -97,7 +91,7 @@ void main() {
 
   group('開工單面板（Main.dc.html:2197）', () {
     Future<_FakeApiClient> pumpSheet(WidgetTester tester) async {
-      _useIPhoneSurface(tester);
+      usePhoneSurface(tester);
       final api = _FakeApiClient();
       ApiClient.instance = api;
       await tester.pumpWidget(
@@ -213,13 +207,6 @@ void main() {
 }
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
-
-/// Flutter 測試視窗預設是 800x600，貼在下緣的按鈕會落在視窗外面而點不到。
-void _useIPhoneSurface(WidgetTester tester) {
-  tester.view.physicalSize = const Size(402, 874);
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-}
 
 Future<void> _addPhoto(WidgetTester tester) async {
   await tester.tap(find.text('加入照片'));

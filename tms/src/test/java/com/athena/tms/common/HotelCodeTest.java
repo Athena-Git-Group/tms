@@ -14,13 +14,6 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-/**
- * 確認程式裡的飯店識別代碼規則和資料庫 tenants 表上的 CHECK 是同一條。
- *
- * <p>規則的來源是 migration {@code V24__tenant_code.sql}，這裡從 classpath 讀那支 SQL，
- * 取出長度上下限、正規式與保留字清單，逐項和 {@link HotelCode} 比對，測試本身不另抄一份規則。
- * 之後若用新的 migration 改了這兩條 CHECK，要把讀取的檔名改成新的那一支。
- */
 class HotelCodeTest {
 
     private static final String MIGRATION = "db/migration/V24__tenant_code.sql";
@@ -115,7 +108,6 @@ class HotelCodeTest {
                 && !sqlReserved.contains(code);
     }
 
-    /** 取出某條 CHECK 從名稱到下一個分號之間的內容，讓比對不會讀到別條限制或註解裡的字。 */
     private static String constraintBody(String sql, String constraintName) {
         int start = sql.indexOf("ADD CONSTRAINT " + constraintName);
         assertThat(start).as("V24 裡找得到 %s", constraintName).isGreaterThanOrEqualTo(0);

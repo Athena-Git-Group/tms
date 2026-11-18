@@ -6,6 +6,7 @@ function task(state: TaskState, overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id: '1',
     displayNo: 'T-1',
+    seq: 1,
     state,
     answered: false,
     dept: 'housekeeping',

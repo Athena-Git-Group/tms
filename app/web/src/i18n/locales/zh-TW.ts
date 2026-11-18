@@ -1,8 +1,3 @@
-/**
- * 繁體中文的介面文字，也是「有哪些鍵」的唯一依據：其他三種語言的檔只能有這裡有的鍵。
- * 鍵照畫面分組（例如 `login.title`、`board.columns.triage`），各畫面的文字由做那個畫面的人加進來，
- * 字面照驗收規格，不放 `triage`、`pool` 這類內部值。
- */
 export const zhTW = {
   app: {
     name: 'TMS 櫃檯',
@@ -379,7 +374,6 @@ export const zhTW = {
     waited: '已等 {{minutes}} 分',
     waitedUnderOne: '已等 不到 1 分',
     originalLine: '{{language}}原文：{{text}}',
-    /** 原文列開頭的住客語言名稱。 */
     guestLanguages: {
       'zh-TW': '中文',
       en: '英文',
@@ -427,7 +421,6 @@ export const zhTW = {
     languageSection: 'App 語言',
     languageNote: '只會改變 App 介面的文字。住客、主管與同事輸入的內容（例如交辦、報修說明）維持原文。',
   },
-  /** 語言頁每個選項的第二行：用目前介面語言寫的語言名稱。 */
   languages: {
     'zh-TW': '中文（繁體）',
     en: '英文',
@@ -438,5 +431,4 @@ export const zhTW = {
 
 type Shape<T> = { [K in keyof T]?: T[K] extends string ? string : Shape<T[K]> };
 
-/** 其他語言的檔用這個型別，鍵打錯或多出繁體中文沒有的鍵時編譯就會擋下來。 */
 export type Translation = Shape<typeof zhTW>;

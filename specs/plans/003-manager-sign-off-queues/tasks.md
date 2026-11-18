@@ -987,7 +987,7 @@
 - `specs/truth/features/ios-app/主管工作台/主管清單.feature`
 
 - [X] T151 [CODE-REMOVE] 移除 App 主管審核的模型、方法、待審核格與清單、核准退回的 id 與畫面分支、主管未核准文案
-- [ ] T152 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
+- [X] T152 [REGRESSION] 跑 Test Scope，確認新版 truth 成立
 
 ## Phase 4V: ui quality gate
 
@@ -1003,7 +1003,7 @@
 - 重點比對：房務主管兩格與工務主管一格寬磚的大小與顏色；待驗收列的單號與完修結果標籤、重修後再驗標籤；工務主管名下的工務單卡與工務首頁一致；工務單詳情各狀態的狀態列、摘要卡、步驟條第四步與動作列（不通過描邊、通過實心）；不通過面板的標題、佔位字與禁用態；結果卡兩種去處說明；退回重修提示卡；完修回報第四個結果與照片豁免；工務待認領的驗收退回標籤；已被處理與離線對話框。
 - 用語以 truth 為準，畫面上不得出現 `closed`、`no_action_needed` 這類內部值或錯誤碼，也不得殘留等主管審核、主管未核准、待審核。
 
-- [ ] T153 subagent review (ui quality gate)
+- [X] T153 subagent review (ui quality gate)
 
 ## Phase 4W: REGRESSION - 003 涉及的全部 feature
 
@@ -1017,4 +1017,4 @@
 - App：`帳號與登入/登入與登出守衛.feature`、`主管工作台/主管首頁.feature`、`主管工作台/主管清單.feature`、`主管工作台/查房.feature`、`工務單/主管視角.feature`、`工務單/工務視角.feature`、`工務單/工務單房務端生命週期.feature`、`推播/點開推播的去處.feature`、`待認領/待認領列表.feature`、`系統層/離線模式與連線異常.feature`，逐支以 `FEATURE=<路徑>` 跑；另跑 `app/mobile` 的 `flutter test`。
 
 - [ ] T154 [REGRESSION] 跑後端 Test Scope 與後端全套件，確認全綠
-- [ ] T155 [REGRESSION] 跑 App Test Scope 與 `flutter test`，確認全綠
+- [X] T155 [REGRESSION] 跑 App Test Scope 與 `flutter test`，確認全綠

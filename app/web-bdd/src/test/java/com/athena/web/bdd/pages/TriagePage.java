@@ -5,6 +5,7 @@ import com.athena.web.bdd.support.WebWorld;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** 待派單頁（路徑 {@code /triage}）：待派單的清單與每一列的動作。 */
@@ -102,7 +103,7 @@ public class TriagePage extends PageObject {
      */
 
     /** 頁首寫房務、工務各有幾張單待接的那兩段字。 */
-    public static final Pattern DEPT_LOAD = Pattern.compile("(房務|工務) \\d+ 單待接");
+    public static final Pattern DEPT_LOAD = Pattern.compile("(房務|工務) (\\d+) 單待接");
 
     /** 頁尾說明開頭的幾個字，照待派單頁的畫面文字。 */
     public static final String FOOTER_LEAD = "只有住客打字";
@@ -121,6 +122,22 @@ public class TriagePage extends PageObject {
                 .filter(new Locator.FilterOptions().setHasText(Pattern.compile("房務 \\d+ 單待接")))
                 .filter(new Locator.FilterOptions().setHasText(Pattern.compile("工務 \\d+ 單待接")))
                 .last();
+    }
+
+    /** 頁首上剛好寫著「{部門} {張數} 單待接」的那一段字。 */
+    public Locator deptLoad(String deptName, int count) {
+        return exactText(header(), deptName + " " + count + " 單待接");
+    }
+
+    /** 頁首上這個部門現在寫著幾張待接。 */
+    public int deptLoadCount(String deptName) {
+        for (String text : textsMatching(header(), DEPT_LOAD)) {
+            Matcher load = DEPT_LOAD.matcher(text);
+            if (load.matches() && load.group(1).equals(deptName)) {
+                return Integer.parseInt(load.group(2));
+            }
+        }
+        throw new IllegalStateException("待派單頁頁首沒有「" + deptName + " N 單待接」");
     }
 
     /** 頁尾說明：以「只有住客打字」開頭的那一段字。 */

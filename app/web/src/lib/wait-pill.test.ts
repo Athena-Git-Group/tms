@@ -6,6 +6,7 @@ function task(state: TaskState, overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id: 'a',
     displayNo: 'T-0001',
+    seq: 1,
     state,
     answered: false,
     dept: 'housekeeping',
@@ -69,7 +70,6 @@ describe('waitTone', () => {
 describe('waitPill', () => {
   const now = new Date('2026-10-26T06:10:00Z');
   const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60_000).toISOString();
-  /** 台北的伺服器，`+08:00`。 */
   const TAIPEI = 480;
 
   describe('待派單：不到 1 分「剛剛」，之後「等 N 分」，等再久都不寫逾時', () => {
@@ -162,6 +162,12 @@ describe('waitPill', () => {
         TAIPEI,
       ),
     ).toEqual({ text: { key: 'board.pill.at', values: { time: '14:25' } }, tone: 'gray' });
+  });
+
+  it('完成當下就結束的備品單在已結案欄，寫結束時刻、灰色', () => {
+    expect(
+      waitPill(task('done', { type: 'amenity', doneAt: '2026-10-26T06:30:00Z', endedAt: '2026-10-26T06:30:00Z' }), now, TAIPEI),
+    ).toEqual({ text: { key: 'board.pill.at', values: { time: '14:30' } }, tone: 'gray' });
   });
 
   describe('起算時刻後端沒給時，退回最後更新的時刻', () => {

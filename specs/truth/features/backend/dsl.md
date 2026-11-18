@@ -71,7 +71,7 @@
 
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | StepDef 實作語意 |
 | --- | --- | --- | --- | --- |
-| `"{員工}" 認領 "{任務}"` | `員工`：字串。<br>`任務`：字串；房號或工務單號。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫 `tasksClaim`（`POST /tasks/{id}/claim`）。`權威狀態落地`：成功時 pool 轉為 accepted，assignee 為該員工，寫入 `claimed` 事件；失敗時（已被他人認領）任務與事件不變。`回寫`：回應。 |
+| `"{員工}" 認領 "{任務}"` | `員工`：字串；現場員工或主管。<br>`任務`：字串；房號或工務單號。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫 `tasksClaim`（`POST /tasks/{id}/claim`）。`權威狀態落地`：成功時 pool 轉為 accepted，assignee 為該員工，寫入 `claimed` 事件。主管只能認領自己那個部門的池：房務主管（含沒有部門的主管）認領房務的單，工務主管認領工務的單；認領另一個部門的單回 403 `forbidden`。已被他人認領回 409 `state_conflict`，提示帶先搶到的人。失敗時任務與事件都不變。`回寫`：回應。 |
 | `時間來到 "{時刻}"` | `時刻`：字串 `HH:mm`；今日的時刻。 | 不支援 | 無 | `怎麼做`：把測試 `Clock` 推進到今日該時刻，並讓引擎完成到該時刻為止的週期掃描（排程建單、待認領未接提醒）。`權威狀態落地`：期間命中的排程工單、未接提醒事件與 push outbox 都已寫入；每個待認領單的每個提醒階段只發一次。`回寫`：無。 |
 | `"{員工}" 開始 "{任務}"` | `員工`：字串。<br>`任務`：字串；房號。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫 `tasksStart`（`POST /tasks/{id}/start`），適用 accepted 與本人延後的 deferred。`權威狀態落地`：成功時 `tasks.state`=doing、`segment_started_at`=目前 `Clock`、依租戶設定寫入 `inspection_waived`，寫入 `started` 事件，並在 `handover_reads` 記一筆；失敗時任務與事件都不變。`回寫`：回應狀態碼與內容。 |
 | `"{員工}" 恢復 "{任務}"` | `員工`：字串。<br>`任務`：字串；房號。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫 `tasksResume`（`POST /tasks/{id}/resume`）。`權威狀態落地`：成功時 interrupted 轉為 doing，`worked_sec` 保留，`segment_started_at`=目前 `Clock`，並寫入 `resumed` 事件。`回寫`：回應。 |
