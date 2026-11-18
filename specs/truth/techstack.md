@@ -2,11 +2,12 @@
 
 ## 系統有哪些端
 
-系統有三個端：
+系統有四個端：
 
 - 後端 API：`tms/`
 - 員工 App（房務、工務員工的手機 App）：`app/mobile/`
 - 櫃檯 Web（櫃檯人員、主管、值班主管的網頁）：`app/web/`
+- 住客掃碼頁（住客掃房間 QR Code 後用的手機網頁，不登入、不安裝）：與櫃檯 Web 同一個程式 `app/web/`，自己的路由 `/g/{代碼}` 與手機版面，程式集中在 `app/web/src/guest/`
 
 ## 技術堆疊總覽
 
@@ -31,6 +32,15 @@
 | 櫃檯 Web 連後端 | 開發時由 Vite 開發伺服器代理到本機後端；正式環境與後端同源部署（同一個網址底下）；API 位址建置時可設定，預設相對路徑 | 同源部署時後端不需要跨網域設定（CORS，後端宣告允許哪些網站來呼叫它）；同源部署是假設，第一次部署前要確認；若不成立，需要後端加跨網域設定 |
 | 櫃檯 Web 即時更新 | 以 `fetch` 讀取後端的員工事件串流 `GET /staff/stream`（可帶 `Authorization` 標頭）；異常時每 4 秒輪詢 | 櫃檯 Web 是員工事件串流的客戶端：櫃檯角色收到的訊號帶著那張單在看板上的整張卡片，畫面直接換上那一張；剛連上、恢復、漏了訊號、營業日換了時才重抓整份看板；串流斷線、約兩個心跳週期沒有資料、或後端宣告降級時，顯示提醒列（上面寫每 5 秒自動更新）並改成每 4 秒重抓，恢復後停止輪詢 |
 | 櫃檯 Web 驗收規格 | Gherkin feature files（`# language: zh-TW`），在 `specs/truth/features/frontdesk-web/` | 櫃檯 Web 的畫面行為測項；runner 見「測試與驗證」 |
+| 住客掃碼頁框架與建置 | 與櫃檯 Web 同一個 `React` ＋ `TypeScript` ＋ `Vite` 專案（`app/web/`），同一次建置、同一個部署來源 | 住客掃碼後的首頁、備品補充、設備報修、送出成功、我的需求、需求進度、資訊頁；直接呼叫 `tms` 後端的住客介面 `/guest/*`，不另起後端 |
+| 住客掃碼頁換頁與載入 | `React Router` 的路由 `lazy` 延遲載入：整棵 `/g/:qrToken/*` 等住客走到才下載 | QR Code 的網址是 `/g/{代碼}`，每一個子頁都帶著代碼（重新整理、從歷史記錄再開都不用再掃）；櫃檯的程式（含拖曳套件）不進住客的手機 |
+| 住客掃碼頁外框與版面 | 自己的外框（不走櫃檯的 `DeskShell`）：手機直向為基準、單欄、內容最寬 480 點置中、可點的東西至少 44 點見方、送出鈕釘在頁底；高度用 `dvh` 與安全區域變數；`Tailwind CSS` 另立一組住客的設計變數命名空間 | 櫃檯最小寬 1180、整頁不捲；住客最寬 480、整頁可捲，兩套前提相反，各自一個外框 |
+| 住客掃碼頁後端資料 | `TanStack Query`（與櫃檯共用同一個 query client） | 首頁資料與需求清單的讀取、收到即時訊號後重讀、連線異常時每 4 秒重讀 |
+| 住客 session | 用網址裡的代碼向 `POST /guest/scan` 換來的 session 存 `sessionStorage`，鍵帶代碼；請求以 `X-Guest-Session` 標頭帶出；任何一次呼叫被回 401 就用網址裡的代碼重換一次（只重換一次），換到就重發、換不到就顯示無法使用頁 | 重新整理不用再掃；關掉分頁就清掉，下次從網址的代碼重換；與櫃檯的登入狀態用不同的鍵、不同的 store、不同的標頭，同一支手機上兩邊互不影響 |
+| 住客掃碼頁連後端 | 自己的薄薄一層 API（前綴 `/guest`、住客標頭、401 重換），與櫃檯共用 `ApiError`、`NetworkError`、`newIdempotencyKey`；開發時 Vite 代理 `/guest`（串流用與 `/staff/stream` 相同的斷線切斷設定）；正式環境同源部署 | 每個寫入都帶 `Idempotency-Key`；備品多項依清單順序一張一張送，被限流就停、已建立的保留 |
+| 住客掃碼頁即時更新 | 以 `fetch` 讀取後端的住客事件串流 `GET /guest/stream`（帶 `X-Guest-Session`），解析器與連線狀態機與櫃檯共用；收到 `task` 重讀需求清單、收到 `resync` 另重讀首頁資料；斷線、35 秒沒資料、收到 `degraded` 事件時改成每 4 秒重讀，串流重新連上並收到 `init` 才停止 | 住客的訊號不帶內容，一律重讀；畫面上不顯示連線異常的提示列；後端給住客的串流沒有任何恢復訊號（`recovered` 與心跳的 `degraded` 旗標都只給員工連線），所以 `degraded` 之後會一直重讀到連線被切斷重連為止，最長 30 分鐘（後端的連線逾時） |
+| 住客掃碼頁多語系 | 同一個 `i18next` 實例，四份語系檔各加 `guest` 子樹；第一次打開依手機瀏覽器語言（`zh*` 一律繁體中文、`ja`、`vi` 各自對應、其餘英文）；選過的語言存 `localStorage`、一支手機一筆，鍵與櫃檯的語言鍵不同 | 繁體中文、英文、日文、越南文；不加韓文；後端給的字（服務項目、需求標題、櫃檯回覆、資訊頁）原樣顯示 |
+| 住客掃碼頁驗收規格 | Gherkin feature files（`# language: zh-TW`），在 `specs/truth/features/guest-web/`，自己的 `dsl.md` | 住客掃碼頁的畫面行為測項；runner 見「測試與驗證」 |
 
 ### 後端
 
@@ -66,7 +76,10 @@
 | 櫃檯 Web BDD techstack | `Cucumber-JVM` ＋ `Playwright for Java`，獨立 Maven 模組 `app/web-bdd/` | 櫃檯 Web E2E：跑 `specs/truth/features/frontdesk-web/` 的 Gherkin，開真的瀏覽器操作畫面、連真的後端與資料庫；Java step definitions 放在自己的 glue 套件（Cucumber 用來找每句 Gherkin 對應哪段 Java 程式的 Java 套件；不在手機 App 測試線的 `com.athena.app.bdd` 底下），不會啟動 Appium |
 | 櫃檯 Web 驗收的視窗與輸入 | Playwright 的兩組瀏覽器設定：1280×720 以滑鼠操作；1180×820、WebKit 引擎（Safari 所用的瀏覽器引擎，用來近似 iPad 上的 Safari，但不等於真機）、開啟觸控 | 驗收至少涵蓋電腦最小尺寸與 iPad 橫向；觸控拖曳能否由自動化驅動由建立專案時的半日 spike 確認，真機 iPad 的觸控手感另需人工驗一次 |
 | BDD 共用的後端資料準備 | `BackendChannel`，獨立 Maven 模組 `app/bdd-support/`（放在 `src/main/java`，不含任何 Cucumber 步驟或 `@Before`） | 手機 App 與櫃檯 Web 兩條測試線共用：直接寫資料庫建飯店、員工、各狀態的單、訂房，撥後端時鐘，以某位員工的身分呼叫正式 API；`app/bdd/` 與 `app/web-bdd/` 各自引用它 |
-| 櫃檯 Web 單元測試 | `Vitest` | 只測沒有畫面的純計算，例如看板分欄與未結案張數、等待 10 分與 20 分的門檻、瀏覽器語言比對；驗收仍以 E2E 為主線 |
+| 住客掃碼頁 BDD techstack | 與櫃檯 Web 同一個 `app/web-bdd/` 模組（`Cucumber-JVM` ＋ `Playwright for Java`），同一個 glue 套件，住客的步驟與頁面物件各自一個子套件；跑 `specs/truth/features/guest-web/` 的 Gherkin 做 E2E；`run-feature.sh` 的 feature 路徑可用 `guest-web/…` 指定根 | 住客情境的前提與觸發多是飯店那邊的動作（同仁認領、櫃檯回答、主管換 QR、撥時鐘），`BackendChannel` 都有或一個 helper 就補得上；不另起模組或 Node 測試線。runner 不用加：腳本一律以 `-Dcucumber.features` 指定，Cucumber 的 JUnit 引擎在這個屬性有值時忽略 runner 寫死的目錄 |
+| 住客掃碼頁驗收的視窗與輸入 | Playwright 的第三組瀏覽器設定 `phone`：WebKit、393 × 852、開啟觸控、語言預設繁體中文；規格句型寫「手機直向 393 × 852 觸控」 | 住客的規格只在 `phone` 跑；WebKit 近似 iPhone 上的 Safari，不等於真機，安全區域與工具列收放要在真機看一次 |
+| BDD 後端資料準備補的 helper | `BackendChannel` 加取房間 QR 代碼與換 QR 的 helper（以主管身分呼叫 `GET /admin/rooms/{roomNo}/qr`、`POST /admin/rooms/{roomNo}/qr/rotate`，這兩個端點不在 `/api/v1` 下），以及住客評分的 helper | 住客驗收要用真的代碼開 `/g/{代碼}`；換 QR 走正式 API 才會連坐撤銷 session，直接寫表測不到真的行為 |
+| Web 單元測試 | `Vitest` | 只測沒有畫面的純計算；櫃檯例如看板分欄與未結案張數、等待 10 分與 20 分的門檻、瀏覽器語言比對；住客例如狀態值對顯示階段的對照表、狀態訊息框的優先序、10 分鐘額度估算、報修文字組合、問候時段、住客的瀏覽器語言比對、401 重換一次的狀態機；驗收仍以 E2E 為主線 |
 
 ## 本次開發不引入的技術
 
@@ -92,3 +105,8 @@
 - 後端的跨網域設定（CORS）：櫃檯 Web 與後端同源部署（同源部署是假設，第一次部署前要確認；若不成立，需要後端加跨網域設定）
 - 櫃檯 Web 一定要有 Service Worker 才能運作的功能
 - 把櫃檯 Web 包成 iPad App 的外殼（PWA、WKWebView、`Capacitor`）：路線未定，目前只交付 Web
+- 住客掃碼頁另起前端專案、另起驗收測試模組或 Node 測試線：與櫃檯 Web 同一個程式、同一條測試線，用延遲載入與第三組瀏覽器設定分開
+- 住客 session 放 `localStorage`、放 `Authorization: Bearer` 標頭、或放在網址上：壽命由後端管，存分頁即可；標頭與櫃檯分開
+- 住客掃碼頁用瀏覽器內建的 `EventSource` 讀串流：不能帶住客標頭，與櫃檯同樣用 `fetch`
+- 住客掃碼頁的韓文介面、要安裝或加到主畫面才能用的功能（PWA、原生 App）、照片拍攝與上傳：本版不做
+- 住客頁的網址放在後端的 `/guest/**` 底下：那是 API 的路徑，網頁路由用 `/g/`
