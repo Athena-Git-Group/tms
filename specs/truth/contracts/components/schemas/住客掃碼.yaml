@@ -9,7 +9,7 @@ guest_sessions:
       format: int64
     sessionToken:
       type: string
-      description: 住客瀏覽器憑證；全域 UNIQUE
+      description: 住客的權杖，格式是「飯店編號.隨機字串」，由伺服器產生，全域唯一。
     roomId:
       type: string
       format: uuid
@@ -20,7 +20,9 @@ guest_sessions:
     expiresAt:
       type: string
       format: date-time
-      description: =退房時間
+      description: >-
+        session 到期時間，由後端決定：等於綁定訂單的退房時刻（reservations_cache.checkout_at）。
+        住客掃房間 QR 與櫃檯替住客開 session 兩個入口用同一條規則。
     revokedAt:
       type: string
       format: date-time
@@ -42,37 +44,20 @@ guest_sessions:
   - createdAt
 guest_sessionsRequest:
   type: object
+  description: >-
+    飯店取自呼叫者登入的那家飯店，權杖由伺服器產生，到期時間由後端依綁定訂單的退房時刻決定，三者都不在請求裡；
+    請求裡多帶了 expiresAt 也不採用。
   properties:
-    tenantId:
-      type: integer
-      format: int64
-    sessionToken:
-      type: string
-      description: 住客瀏覽器憑證；全域 UNIQUE
     roomId:
       type: string
       format: uuid
+      description: 要開 session 的房間，必須屬於呼叫者的飯店。
     reservationId:
       type: string
       format: uuid
-      description: 綁簽發當下訂單——換住客舊 session 自然失效
-    expiresAt:
-      type: string
-      format: date-time
-      description: =退房時間
-    revokedAt:
-      type: string
-      format: date-time
-      description: QR 輪替/提前退房/訂單取消時整批標上
-    lastSeenAt:
-      type: string
-      format: date-time
+      description: 選填。要綁的訂單，必須屬於呼叫者的飯店而且是這間房的；不帶就用這間房目前入住中的訂單。
   required:
-  - tenantId
-  - sessionToken
   - roomId
-  - reservationId
-  - expiresAt
 CreateGuestRequestRequest:
   type: object
   description: itemId 與 text 必須剛好擇一，兩者都有或都沒有時回 422。

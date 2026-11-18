@@ -46,7 +46,10 @@ GuestSession:
   name: X-Guest-Session
   in: header
   required: true
-  description: guestSessionsScan 回傳的 sessionToken。驗證條件為 expires_at > now() 而且 revoked_at 為空，缺一就回 401（基線 E-17）。
+  description: >-
+    住客 session 的權杖，跟 Authorization: Bearer 帶同一個值效果相同。
+    格式是「飯店編號.隨機字串」；伺服器先從前綴取出飯店，只在那家飯店的資料裡查一次。
+    沒有合法前綴、前綴的飯店查不到這個權杖、已過期（expires_at 不晚於現在）或已撤銷（revoked_at 有值），一律回 401。
   schema:
     type: string
 GuestRequestId:
