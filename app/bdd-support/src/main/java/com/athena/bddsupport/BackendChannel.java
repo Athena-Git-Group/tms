@@ -1601,6 +1601,10 @@ public class BackendChannel {
             String note = repair ? null : taskNote();
             LocalDate workDate = cleaning ? times[TIME_CREATED].toLocalDate() : null;
             boolean planAssigned = "accepted".equals(initialState);
+            if (spec.urgent && !repair) {
+                // 急件只存在工務單上；其他類型的單寫進去也不會出現在任何畫面，案例以為建了急件卻沒有，所以直接擋下。
+                throw new IllegalArgumentException("只有修繕單可以是急件，" + spec.roomNo + " 的類型是 " + spec.type);
+            }
 
             columns.put("id", taskId);
             columns.put("tenant_id", tenantId);
@@ -1615,7 +1619,7 @@ public class BackendChannel {
             columns.put("note", note);
             columns.put("est_min", spec.estMin);
             columns.put("work_date", workDate);
-            columns.put("urgent", repair && spec.urgent);
+            columns.put("urgent", spec.urgent);
             columns.put("created_at", times[TIME_CREATED]);
             if ("pool".equals(initialState)) {
                 // 待認領清單靠這一欄顯示單是從哪裡進來的；後端只在這三種單直接進待認領時填它。
@@ -2241,12 +2245,42 @@ public class BackendChannel {
         return UUID.fromString(parseJson(response.body()).path("id").asText());
     }
 
+    /**
+     * 以住客的身分從需求選單勾選一個品項送出，回這張單的 id。
+     *
+     * <p>勾選的品項不經過分類規則，直接進選單上該品項所屬部門的待認領。{@code itemKey} 要是飯店需求選單
+     * （{@code tenant_config} 的 {@code request_menu}）上有的品項，不在選單上的品項後端會當成打字的需求處理。
+     */
+    public UUID guestSubmitMenuItem(String roomNo, String itemKey, int quantity) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("itemId", itemKey);
+        body.put("quantity", quantity);
+        HttpResponse<String> response = send(request("POST", "/guest-requests", null)
+                .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        requireSuccess(response, "住客勾選需求：POST /guest-requests（房號 " + roomNo + "）");
+        return UUID.fromString(parseJson(response.body()).path("id").asText());
+    }
+
     /** 以住客的身分收回自己送出的需求。只有還在待派單或待認領的單收得回來，其餘後端會拒絕。 */
     public void guestWithdrawRequest(String roomNo, UUID taskId) {
         HttpResponse<String> response = send(request("POST", "/guest-requests/" + taskId + "/cancel", null)
                 .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
                 .POST(HttpRequest.BodyPublishers.noBody()));
         requireSuccess(response, "住客收回需求：POST /guest-requests/" + taskId + "/cancel（房號 " + roomNo + "）");
+    }
+
+    /**
+     * 以這間房住客的身分讀自己這次住宿的需求，回後端給的整份清單，也就是住客進度頁看到的內容。
+     * 只讀不寫；櫃檯當場回答過的單，回應裡的 {@code answer} 是回覆全文。
+     */
+    public JsonNode guestRequests(String roomNo) {
+        HttpResponse<String> response = send(request("GET", "/guest-requests", null)
+                .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
+                .GET());
+        requireSuccess(response, "住客讀自己的需求：GET /guest-requests（房號 " + roomNo + "）");
+        return parseJson(response.body());
     }
 
     /**
@@ -2375,6 +2409,34 @@ public class BackendChannel {
                     + response.statusCode() + "，body=" + response.body());
         }
         return response.body();
+    }
+
+    /**
+     * 以員工編號與密碼向後端登入一次，不管成功與否都回 HTTP 狀態碼。
+     *
+     * <p>準備「連續輸錯密碼被鎖定」這類狀態時用：失敗的登入要真的經過後端，連續錯誤次數與鎖定時間才是後端自己算的。
+     */
+    public int attemptLogin(String loginId, String password) {
+        Map<String, Object> body = Map.of("loginId", loginId, "password", password);
+        return send(request("POST", "/staff-accounts/login", null)
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json"))
+                .statusCode();
+    }
+
+    /**
+     * 拿臨時密碼登入，再把密碼改成新密碼，回改密碼後後端給的登入回應。
+     *
+     * <p>臨時密碼登入時後端要求先設定新密碼，這時改密碼不必帶目前密碼，身分由剛拿到的憑證證明。
+     */
+    public JsonNode changeTemporaryPassword(String loginId, String temporaryPassword, String newPassword) {
+        String token = login(loginId, temporaryPassword);
+        HttpResponse<String> response = send(request("POST", "/staff-accounts/change-password", token)
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        toJson(Map.of("newPassword", newPassword)), StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json"));
+        requireSuccess(response, "改密碼：POST /staff-accounts/change-password（" + loginId + "）");
+        return parseJson(response.body());
     }
 
     public void postTaskAction(UUID taskId, String action, CreatedStaff actor) {

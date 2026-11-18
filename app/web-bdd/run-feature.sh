@@ -155,8 +155,9 @@ stop_tree() {
     sleep 0.2
     waited=$(( waited + 1 ))
   done
+  # 只對還在的送強制結束：已經結束的編號可能已被系統配給別的行程。
   for pid in $pids; do
-    kill -KILL "$pid" 2>/dev/null || true
+    if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid" 2>/dev/null || true; fi
   done
   wait "$root" 2>/dev/null || true
   log "已關閉${name}（PID ${root}）"

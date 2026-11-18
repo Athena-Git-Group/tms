@@ -61,6 +61,17 @@ public final class BrowserProfiles {
         return profile.newContext(browser(profile));
     }
 
+    /**
+     * 同上，但在這一組的設定之外再改幾項，例如瀏覽器的語言、或帶進另一個瀏覽器留下的儲存空間。
+     * 視窗大小與觸控仍以這一組為準，呼叫端不要改這兩項。
+     */
+    public static synchronized BrowserContext newContext(
+            WebProfile profile, java.util.function.Consumer<Browser.NewContextOptions> customize) {
+        Browser.NewContextOptions options = profile.contextOptions();
+        customize.accept(options);
+        return browser(profile).newContext(options);
+    }
+
     private static Browser browser(WebProfile profile) {
         Browser browser = BROWSERS.get(profile);
         if (browser == null || !browser.isConnected()) {

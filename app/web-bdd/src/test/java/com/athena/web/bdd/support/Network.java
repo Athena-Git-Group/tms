@@ -242,6 +242,51 @@ public final class Network {
         cutLiveStream(currentPage.get());
     }
 
+    /**
+     * 代替後端在這個分頁已經連上的事件串流裡送一則訊號，給「後端宣告降級」這類測試沒辦法叫真的後端做的情況用。
+     * 畫面還沒連上串流時這一則沒有地方送，所以回傳送進了幾條連線，讓步驟可以當場失敗而不是讓斷言去猜。
+     *
+     * @param event 訊號名稱，例如 {@code degraded}、{@code heartbeat}、{@code task}
+     * @param dataJson 訊號內容，一行 JSON，形狀照契約對應的 {@code StaffStream*}
+     */
+    public int sendLiveSignal(Page page, String event, String dataJson) {
+        // 照後端送的格式寫：畫面若只認後端那種寫法，測試送的也要認得出來。
+        String text = "event:" + event + "\ndata:" + dataJson + "\n\n";
+        Object sentTo = page.evaluate("text => window.__webBddSendLiveSignal ? window.__webBddSendLiveSignal(text) : 0",
+                text);
+        return ((Number) sentTo).intValue();
+    }
+
+    /**
+     * 讓這個分頁的事件串流連線維持著，但後端送來的訊號（含心跳）一則都不交給畫面，先扣在測試這一頭。
+     * 用在「連線還在、卻太久沒有訊號」這種切斷連線模擬不出來的情況；之後重連的串流也一樣扣住，
+     * 直到呼叫 {@link #releaseLiveSignals(Page)}。
+     */
+    public void holdLiveSignals(Page page) {
+        page.evaluate("() => { if (window.__webBddHoldLiveSignals) window.__webBddHoldLiveSignals(true); }");
+    }
+
+    /** 不再扣住訊號，扣著的那些照原來的順序交給畫面。 */
+    public void releaseLiveSignals(Page page) {
+        page.evaluate("() => { if (window.__webBddHoldLiveSignals) window.__webBddHoldLiveSignals(false); }");
+    }
+
+    /** 這個分頁現在有幾條連著的事件串流，給要等畫面重新連上之後才往下做的步驟用。 */
+    public int liveStreamCount(Page page) {
+        Object count = page.evaluate("() => window.__webBddLiveStreamCount ? window.__webBddLiveStreamCount() : 0");
+        return ((Number) count).intValue();
+    }
+
+    /**
+     * 連著的事件串流裡，後端已經交給畫面幾塊資料（取最多的那一條）。
+     * 剛重連時用它等後端的 {@code init}、{@code resync} 先到，測試再送訊號，畫面收到的先後才和真的後端一樣。
+     */
+    public int liveChunksDelivered(Page page) {
+        Object count = page.evaluate(
+                "() => window.__webBddLiveChunksDelivered ? window.__webBddLiveChunksDelivered() : 0");
+        return ((Number) count).intValue();
+    }
+
     /** 這個場景到目前為止所有分頁送出過的請求，依送出的先後。回傳的是當下的副本。 */
     public List<SentRequest> sentRequests() {
         return List.copyOf(sent);
@@ -262,6 +307,7 @@ public final class Network {
      * <p>瀏覽器的請求攔截與離線模擬都只影響之後才發出的請求，切不斷已經在收資料的串流。
      * 所以事件串流的回應改由這段程式轉手：資料照原樣一塊一塊交給畫面，測試要切斷時讓畫面那一頭讀到連線錯誤，
      * 同時把真正的連線關掉。其他端點的 {@code fetch} 原樣通過。
+     * 同一段程式也讓測試能代替後端送一則訊號進去，或把後端送來的訊號先扣住不交給畫面。
      *
      * <p>畫面拿到的串流回應是重新包過的，狀態碼與標頭相同，但 {@code url} 與 {@code redirected} 是空的。
      */
@@ -272,6 +318,20 @@ public final class Network {
               window.__webBddCutLiveStreams = () => {
                 for (const cut of Array.from(live)) cut();
               };
+              const taps = new Set();
+              const encoder = new TextEncoder();
+              let held = false;
+              window.__webBddSendLiveSignal = (text) => {
+                for (const tap of Array.from(taps)) tap.send(text);
+                return taps.size;
+              };
+              window.__webBddHoldLiveSignals = (on) => {
+                held = on;
+                if (!on) for (const tap of Array.from(taps)) tap.flush();
+              };
+              window.__webBddLiveStreamCount = () => taps.size;
+              window.__webBddLiveChunksDelivered = () =>
+                Array.from(taps).reduce((most, tap) => Math.max(most, tap.delivered), 0);
               window.fetch = async function (input, init) {
                 const response = await realFetch.call(this, input, init);
                 let path = '';
@@ -284,8 +344,10 @@ public final class Network {
                 if (path !== '%s' || !response.body) return response;
                 const reader = response.body.getReader();
                 let cut = null;
+                let tap = null;
                 let finished = false;
-                const finish = () => { finished = true; live.delete(cut); };
+                const pending = [];
+                const finish = () => { finished = true; live.delete(cut); taps.delete(tap); };
                 const body = new ReadableStream({
                   start(controller) {
                     cut = () => {
@@ -295,12 +357,24 @@ public final class Network {
                       reader.cancel().catch(() => {});
                     };
                     live.add(cut);
+                    tap = {
+                      delivered: 0,
+                      send: (text) => { if (!finished) controller.enqueue(encoder.encode(text)); },
+                      flush: () => { if (!finished) for (const value of pending.splice(0)) controller.enqueue(value); },
+                    };
+                    taps.add(tap);
                   },
                   async pull(controller) {
                     try {
-                      const { done, value } = await reader.read();
-                      if (finished) return;
-                      if (done) { finish(); controller.close(); } else { controller.enqueue(value); }
+                      for (;;) {
+                        const { done, value } = await reader.read();
+                        if (finished) return;
+                        if (done) { finish(); controller.close(); return; }
+                        if (held) { pending.push(value); continue; }
+                        controller.enqueue(value);
+                        tap.delivered++;
+                        return;
+                      }
                     } catch (e) {
                       if (finished) return;
                       finish();

@@ -3,6 +3,7 @@ package com.athena.web.bdd.support;
 import com.athena.bddsupport.BackendChannel;
 import com.athena.bddsupport.BackendChannel.CreatedStaff;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Route;
 import java.util.List;
@@ -23,7 +24,7 @@ import java.util.function.Supplier;
  */
 public final class SessionInjector {
 
-    /** 登入狀態：{@code sessionStorage}，值是登入回應的 JSON 原樣。 */
+    /** 登入狀態：{@code sessionStorage}，值是登入回應的 JSON，另加一欄登入時的飯店識別代碼 {@code hotelCode}。 */
     public static final String SESSION_KEY = "tms.frontdesk.session";
 
     /** 看板的選擇（泳道、篩選、房號搜尋、側欄）：{@code sessionStorage}。 */
@@ -39,9 +40,13 @@ public final class SessionInjector {
 
     private final Supplier<Page> currentPage;
 
-    SessionInjector(BackendChannel backend, Supplier<Page> currentPage) {
+    private final Supplier<String> hotelCode;
+
+    /** @param hotelCode 預設帳號所屬飯店的識別代碼；畫面只認登入狀態裡記的飯店和網址上的相同時才算已登入 */
+    SessionInjector(BackendChannel backend, Supplier<Page> currentPage, Supplier<String> hotelCode) {
         this.backend = backend;
         this.currentPage = currentPage;
+        this.hotelCode = hotelCode;
     }
 
     /** 某位員工自己選的語言：{@code localStorage} 的鍵，值是語言代碼。 */
@@ -60,9 +65,17 @@ public final class SessionInjector {
         return loginAs(currentPage.get(), staff);
     }
 
-    /** 把一份登入回應原樣放進分頁。要放改過內容的登入回應時用這個。 */
+    /**
+     * 把一份登入回應放進分頁。要放改過內容的登入回應時用這個。
+     * 畫面登入時會在登入回應旁記下網址上的飯店識別代碼，這裡照做：回應裡沒有 {@code hotelCode} 時補上預設飯店的代碼，
+     * 已經有的（例如要模擬別家飯店的登入狀態）原樣保留。
+     */
     public void inject(Page page, JsonNode loginResponse) {
-        putSessionItem(page, SESSION_KEY, loginResponse.toString());
+        JsonNode stored = loginResponse;
+        if (loginResponse instanceof ObjectNode object && !object.has("hotelCode")) {
+            stored = object.deepCopy().put("hotelCode", hotelCode.get());
+        }
+        putSessionItem(page, SESSION_KEY, stored.toString());
     }
 
     /** 拿掉分頁的登入狀態，其他儲存的東西不動。 */

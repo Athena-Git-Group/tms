@@ -30,7 +30,17 @@ public final class WebApp {
         return System.getProperty(BASE_URL_PROPERTY, "http://localhost:5173").replaceAll("/+$", "");
     }
 
-    /** 把 {@code /board} 這樣的路徑接成完整網址。 */
+    /**
+     * 把某一頁接在飯店識別代碼底下，例如 {@code /athena/board}。
+     * 櫃檯 Web 的網址最前面是飯店識別代碼，上面四個常數是代碼之後的那一段，
+     * 所以判斷「停在哪一頁」時比對網址的結尾即可。
+     */
+    public static String underHotel(String hotelCode, String path) {
+        return "/" + java.net.URLEncoder.encode(hotelCode, java.nio.charset.StandardCharsets.UTF_8)
+                + (path.startsWith("/") ? path : "/" + path);
+    }
+
+    /** 把 {@code /athena/board} 這樣的路徑接成完整網址。 */
     public static String url(String path) {
         return baseUrl() + (path.startsWith("/") ? path : "/" + path);
     }

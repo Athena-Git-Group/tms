@@ -50,7 +50,9 @@ public class WebWorld {
 
     private final Network network = new Network(this::page);
 
-    private final SessionInjector session = new SessionInjector(BACKEND, this::page);
+    private final SessionInjector session = new SessionInjector(BACKEND, this::page, () -> defaults().tenantCode());
+
+    private final ScenarioTasks tasks = new ScenarioTasks();
 
     private final List<BrowserContext> contexts = new ArrayList<>();
 
@@ -59,6 +61,9 @@ public class WebWorld {
     private FrontdeskDefaults defaults;
 
     private Page page;
+
+    /** 瀏覽器時鐘被步驟停住、等著引發的那一步放開的分頁；沒有時是 {@code null}。 */
+    private Page pausedClockPage;
 
     @Before(order = 0)
     public void prepareScenario() {
@@ -75,10 +80,39 @@ public class WebWorld {
             }
         } finally {
             try {
+                resumePausedClock();
+            } catch (RuntimeException alreadyGone) {
+                // 分頁已經壞掉放不開也沒關係，下一行就把它整個關掉。
+            }
+            try {
                 closeContexts();
             } finally {
                 clocks.reset();
             }
+        }
+    }
+
+    /**
+     * 記下這個分頁的瀏覽器時鐘剛被停住，要由之後引發畫面動作的那一步（按「重試」、等時間過去）放開。
+     *
+     * <p>時鐘停著時，畫面框架排在 {@code setTimeout(0)} 的更新也不會跑：資料讀回來了，畫面卻不換。
+     * 所以停住只能用來擋住「兩步之間自己先發生」的計時，動作觸發之後一定要放開。
+     */
+    public void clockPausedUntilTriggered(Page paused) {
+        pausedClockPage = paused;
+    }
+
+    /** 目前有沒有被停住、還沒放開的瀏覽器時鐘。 */
+    public boolean clockPaused() {
+        return pausedClockPage != null && !pausedClockPage.isClosed();
+    }
+
+    /** 放開被停住的瀏覽器時鐘，讓它從停住的時刻照真實速度往前走；沒有停住時不做事。 */
+    public void resumePausedClock() {
+        Page paused = pausedClockPage;
+        pausedClockPage = null;
+        if (paused != null && !paused.isClosed()) {
+            paused.clock().resume();
         }
     }
 
@@ -112,6 +146,11 @@ public class WebWorld {
         return session;
     }
 
+    /** 這個場景準備了哪些單：房號（同房兩張時加標題）對到哪一個 task id。 */
+    public ScenarioTasks tasks() {
+        return tasks;
+    }
+
     /** 這個場景現在用的瀏覽器設定。 */
     public WebProfile profile() {
         return profile;
@@ -130,9 +169,14 @@ public class WebWorld {
         return page != null && !page.isClosed();
     }
 
-    /** 在目前的分頁開櫃檯 Web 的某一條路徑，例如 {@link WebApp#BOARD}。 */
+    /** 在目前的分頁開預設飯店底下的某一頁，例如 {@link WebApp#BOARD} 開的是 {@code /athena/board}。 */
     public void open(String path) {
-        page().navigate(WebApp.url(path));
+        openPath(WebApp.underHotel(defaults().tenantCode(), path));
+    }
+
+    /** 在目前的分頁開這條完整的路徑，不再加上飯店識別代碼；給要指定別家飯店代碼的地方用。 */
+    public void openPath(String fullPath) {
+        page().navigate(WebApp.url(fullPath));
     }
 
     /** 在目前分頁所在的 context 再開一個分頁，並把它當成目前的分頁。 */
@@ -143,12 +187,19 @@ public class WebWorld {
 
     /** 以現在的瀏覽器設定另開一個 context 與它的第一個分頁，並把它當成目前的分頁。 */
     public Page openContext() {
-        BrowserContext context = BrowserProfiles.newContext(profile);
+        return openContext(options -> { });
+    }
+
+    /**
+     * 同上，但這個 context 另外改幾項設定，例如瀏覽器的語言（{@code setLocale}），
+     * 或帶進上一個瀏覽器留下的 {@code localStorage}（{@code setStorageState}）。
+     */
+    public Page openContext(java.util.function.Consumer<com.microsoft.playwright.Browser.NewContextOptions> customize) {
+        BrowserContext context = BrowserProfiles.newContext(profile, customize);
         contexts.add(context);
         clocks.install(context);
         network.watch(context);
-        page = context.newPage();
-        return page;
+        page = context.newPage();        return page;
     }
 
     /** 把步驟與 page object 操作的對象換成這個場景開過的另一個分頁。 */
@@ -170,6 +221,14 @@ public class WebWorld {
         }
         closeContexts();
         profile = next;
+    }
+
+    /**
+     * 給「關掉瀏覽器再打開」這類案例用：關掉這個場景開過的所有分頁，儲存空間跟著不見。
+     * 之後第一次用到分頁時以現在的瀏覽器設定重開。
+     */
+    public void closeBrowser() {
+        closeContexts();
     }
 
     private void closeContexts() {
