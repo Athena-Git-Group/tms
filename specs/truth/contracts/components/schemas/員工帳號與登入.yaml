@@ -108,6 +108,21 @@ LoginRequest:
         從哪一個畫面登入，選填。員工 App 不帶，登入規則與不帶時完全相同、不看角色。
         櫃檯 Web 一律帶 frontdesk_web：這時後端在密碼比對正確之後再看角色，只有 frontdesk、manager、duty_manager 能用櫃檯畫面
         （規則見 staffAccountsLogin）。
+    hotelCode:
+      type: string
+      minLength: 3
+      maxLength: 32
+      pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+      example: athena
+      description: >-
+        要登入哪一家飯店的識別代碼（tenants.code），選填；格式與比對方式和 readPublicHotel 的路徑參數 hotelCode 相同
+        （一字不差、分大小寫，保留字不會是任何飯店的代碼）。
+        帶了就只在這家飯店找這個員工編號的帳號，停用、鎖定、密碼、角色的檢查照常，別家飯店相同員工編號的帳號完全不碰
+        （不比對密碼、不記連續錯誤次數、不鎖定）。
+        代碼格式不對、對不到飯店、這家飯店沒有這個員工編號，一律回與密碼錯誤相同的 401 credentials_invalid，
+        看不出飯店是否存在；格式不對時也不回 400。
+        櫃檯 Web 一律帶網址上的飯店代碼。員工 App 目前不帶，不帶時維持原本的做法：逐家找有這個員工編號的帳號，
+        登入密碼對得上的那一家。
 ChangePasswordRequest:
   type: object
   description: >-

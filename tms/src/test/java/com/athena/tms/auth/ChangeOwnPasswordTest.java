@@ -7,9 +7,11 @@ import com.athena.tms.common.error.ApiException;
 import com.athena.tms.config.AuthProperties;
 import com.athena.tms.dao.GuestSessionRepository;
 import com.athena.tms.dao.StaffAccountRepository;
+import com.athena.tms.dao.TenantRepository;
 import com.athena.tms.dto.StaffChangePasswordRequest;
 import com.athena.tms.dto.StaffLoginResponse;
 import com.athena.tms.entity.StaffAccount;
+import com.athena.tms.entity.Tenant;
 import com.athena.tms.filter.BearerTokenAuthFilter;
 import com.athena.tms.service.JwtService;
 import com.athena.tms.service.StaffAccountLoginService;
@@ -54,8 +56,17 @@ class ChangeOwnPasswordTest {
         staffAccountRepository = Mockito.mock(StaffAccountRepository.class);
         passwordEncoder = new BCryptPasswordEncoder();
         jwtService = new JwtService(new AuthProperties("x".repeat(48), Duration.ofHours(12)));
+        Tenant tenant = new Tenant();
+        tenant.setId(TENANT_ID);
+        tenant.setName("測試飯店");
+        TenantRepository tenantRepository = Mockito.mock(TenantRepository.class);
+        Mockito.when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.of(tenant));
         loginService = new StaffAccountLoginService(
-                staffAccountRepository, Mockito.mock(TenantScopedExecutor.class), passwordEncoder, jwtService);
+                staffAccountRepository,
+                tenantRepository,
+                Mockito.mock(TenantScopedExecutor.class),
+                passwordEncoder,
+                jwtService);
         filter = new BearerTokenAuthFilter(
                 jwtService,
                 staffAccountRepository,
@@ -123,12 +134,18 @@ class ChangeOwnPasswordTest {
     }
 
     @Test
-    @DisplayName("密碼強度門檻 truth 還沒定義：短密碼照收，不在後端自己擋長度")
-    void shortNewPasswordAccepted() {
+    @DisplayName("新密碼太短且沒有數字 → 422 new_password_too_weak，列出沒過的規則，密碼不變")
+    void weakNewPasswordRejected() {
         StaffAccount account = stubAccount(true);
-        StaffLoginResponse response =
-                loginService.changePassword(TENANT_ID, account.getId(), new StaffChangePasswordRequest(null, "ab"));
-        Assertions.assertNotNull(response.token());
+        ApiException thrown = Assertions.assertThrows(
+                ApiException.class,
+                () -> loginService.changePassword(TENANT_ID, account.getId(), new StaffChangePasswordRequest(null, "ab")));
+        Assertions.assertEquals(422, thrown.getStatus());
+        Assertions.assertEquals("new_password_too_weak", thrown.getCode());
+        Assertions.assertEquals(
+                java.util.List.of("min_length", "digit_required"), thrown.getContext().get("failedRules"));
+        Assertions.assertTrue(account.isMustChangePassword(), "被拒時仍要先設定新密碼");
+        Assertions.assertTrue(passwordEncoder.matches(CURRENT_PASSWORD, account.getPasswordHash()), "被拒時密碼不變");
     }
 
     @Test

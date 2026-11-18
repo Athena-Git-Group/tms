@@ -17,7 +17,8 @@ public final class Terms {
             Map.entry("已送達", "done"),
             Map.entry("查房通過", "inspected"),
             Map.entry("完成 · 免查房", "inspected"),
-            Map.entry("已取消", "cancelled"));
+            Map.entry("已取消", "cancelled"),
+            Map.entry("待派單", "triage"));
 
     private static final Map<String, String> REPAIR_TICKET_STATE = Map.ofEntries(
             Map.entry("已接單", "accepted"),
@@ -33,7 +34,8 @@ public final class Terms {
 
     private static final Map<String, String> ROLE = Map.ofEntries(
             Map.entry("主管", "manager"),
-            Map.entry("值班經理", "duty_manager"));
+            Map.entry("值班主管", "duty_manager"),
+            Map.entry("老闆", "owner"));
 
     private static final Map<String, String> STAFF_STATE = Map.ofEntries(
             Map.entry("在職", "active"),
@@ -132,6 +134,15 @@ public final class Terms {
 
     public static String reminderStage(String chinese) {
         return lookup(REMINDER_STAGE, chinese, "未接提醒階段");
+    }
+
+    /** 住客原文的語言用語只會出現日文與英文兩種，後端收的與回的都是語言代碼。 */
+    private static final Map<String, String> GUEST_TEXT_LANG = Map.ofEntries(
+            Map.entry("日文", "ja"),
+            Map.entry("英文", "en"));
+
+    public static String lang(String chinese) {
+        return lookup(GUEST_TEXT_LANG, chinese, "原文語言");
     }
 
     private static String lookup(Map<String, String> table, String chinese, String tableName) {

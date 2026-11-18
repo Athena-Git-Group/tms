@@ -7,6 +7,7 @@ import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.OutboxAwait;
 import com.athena.tms.bdd.support.PushPayloadView;
+import com.athena.tms.bdd.support.StaffFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import com.athena.tms.service.JwtService;
@@ -33,6 +34,7 @@ public class CommonThenSteps {
     private final JwtService jwtService;
     private final TenantFixtures tenantFixtures;
     private final ObjectMapper objectMapper;
+    private final StaffFixtures staffFixtures;
 
     public CommonThenSteps(
             ScenarioWorld world,
@@ -43,7 +45,8 @@ public class CommonThenSteps {
             MutableClock clock,
             JwtService jwtService,
             TenantFixtures tenantFixtures,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            StaffFixtures staffFixtures) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -53,6 +56,7 @@ public class CommonThenSteps {
         this.jwtService = jwtService;
         this.tenantFixtures = tenantFixtures;
         this.objectMapper = objectMapper;
+        this.staffFixtures = staffFixtures;
     }
 
     @那麼("這次操作被拒絕")
@@ -110,7 +114,15 @@ public class CommonThenSteps {
             Map.entry("account_disabled", 403),
             Map.entry("forbidden", 403),
             Map.entry("forbidden_dept_pool", 403),
-            Map.entry("account_locked", 429));
+            Map.entry("account_locked", 429),
+            Map.entry("idempotency_key_required", 400),
+            Map.entry("answer_invalid", 422),
+            Map.entry("task_not_in_triage", 409),
+            Map.entry("undo_claimed", 409),
+            Map.entry("undo_guest_withdrew", 409),
+            Map.entry("undo_expired", 409),
+            Map.entry("undo_unavailable", 409),
+            Map.entry("new_password_too_weak", 422));
 
     private static final Map<String, String> HK_STATE = Map.of(
             "還沒打掃好", "dirty",
@@ -155,25 +167,49 @@ public class CommonThenSteps {
         if (expected.cancelReason() != null) {
             check("tasks.cancel_reason", expected.cancelReason(), row.get("cancel_reason"));
         }
+        if (expected.dept() != null) {
+            check("tasks.dept", expected.dept(), row.get("dept"));
+        }
 
-        withAssigneeReadTasks(
-                taskId, row, json -> check("readTasks.state", expected.state(), textOrNull(json, "state")));
+        // 待派單、待認領的單沒有負責人，只用負責人再讀會整段跳過，所以改由同飯店的主管再讀一次
+        Object assigneeId = row.get("assignee_id");
+        String readerJwt = assigneeId != null
+                ? mintJwtFor(UUID.fromString(String.valueOf(assigneeId)))
+                : supervisorJwt();
+        check("readTasks.state", expected.state(), textOrNull(readTasks(taskId, readerJwt), "state"));
     }
 
-    private record ExpectedTaskState(String state, String inspection, String cancelReason) {}
+    /**
+     * 只找部門主管：值班主管不能用員工 App 的端點，拿它讀單會被擋成 403。
+     * 案例裡沒有部門主管時另外建一位，避免沒有負責人的單因為找不到讀的人而略過再讀確認。
+     */
+    private String supervisorJwt() {
+        return dbProbe.queryOne(
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND active = true"
+                                + " AND role = 'manager' LIMIT 1",
+                        tenantFixtures.testTenantId())
+                .map(staff -> mintJwtFor(UUID.fromString(String.valueOf(staff.get("id")))))
+                .orElseGet(() -> staffFixtures.createManagerLikeStaff("再讀確認用主管", "manager", "active").jwt());
+    }
+
+    private record ExpectedTaskState(String state, String inspection, String cancelReason, String dept) {}
 
     private static ExpectedTaskState resolveExpectedState(String stateChinese) {
         if ("查房通過".equals(stateChinese)) {
-            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("通過"), null);
+            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("通過"), null, null);
         }
         if ("完成 · 免查房".equals(stateChinese)) {
-            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("免查"), null);
+            return new ExpectedTaskState(Terms.taskState(stateChinese), Terms.inspection("免查"), null, null);
+        }
+        if ("待派單".equals(stateChinese)) {
+            // 待派單是還在櫃檯手上、等派單或當場回答的單，部門一定是櫃檯
+            return new ExpectedTaskState(Terms.taskState(stateChinese), null, null, Terms.dept("櫃檯"));
         }
         try {
-            return new ExpectedTaskState(Terms.taskState(stateChinese), null, null);
+            return new ExpectedTaskState(Terms.taskState(stateChinese), null, null, null);
         } catch (IllegalArgumentException notPlainTaskState) {
             String cancelReason = "已撤回".equals(stateChinese) ? Terms.repairTicketWithdrawnReason() : null;
-            return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason);
+            return new ExpectedTaskState(Terms.repairTicketState(stateChinese), null, cancelReason, null);
         }
     }
 

@@ -10,6 +10,8 @@ public record StaffLoginResponse(
         OffsetDateTime expiresAt,
         UUID staffId,
         String name,
+        String loginId,
+        String hotelName,
         String dept,
         String role,
         boolean mustChangePassword) {}

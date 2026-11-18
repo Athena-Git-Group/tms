@@ -105,6 +105,7 @@ public class BddApiClient {
             return new ScenarioWorld.ApiResponse(status, raw, json);
         });
 
+        world.setLastRequest(new ScenarioWorld.ApiRequest(method.name(), path, body));
         world.setLastResponse(result);
         return result;
     }

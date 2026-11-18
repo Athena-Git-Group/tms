@@ -3,6 +3,7 @@ package com.athena.web.bdd;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import com.athena.web.bdd.support.WebApp;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
@@ -19,8 +20,7 @@ import org.junit.jupiter.api.Test;
  */
 class SmokeTest {
 
-    /** 開發伺服器的位址，用 {@code -Dweb.baseUrl=…} 換。 */
-    private static final String BASE_URL = System.getProperty("web.baseUrl", "http://localhost:5173");
+    private static final String BASE_URL = WebApp.baseUrl();
 
     /** 用不存在的帳號登入：後端有收到就會回 401；代理沒通或後端沒開會是 502 或 404。 */
     private static final String LOGIN_WITH_UNKNOWN_ACCOUNT = """

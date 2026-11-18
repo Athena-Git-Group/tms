@@ -42,6 +42,63 @@ public class BackendChannel {
 
     private static final String TEST_TENANT_NAME = "測試飯店";
 
+    /**
+     * 員工 App 測試線那家「測試飯店」的識別代碼。每家飯店都必須有一個不重複的代碼，沒給就建不出飯店。
+     * 後端自己的測試也替「測試飯店」用這個值，兩邊共用同一個資料庫時才會認成同一家。
+     */
+    private static final String TEST_TENANT_CODE = "test-hotel";
+
+    /** 櫃檯 Web 驗收的預設飯店。代碼會出現在櫃檯畫面的網址裡。 */
+    public static final String FRONTDESK_TENANT_NAME = "雅典娜酒店";
+
+    public static final String FRONTDESK_TENANT_CODE = "athena";
+
+    /** 櫃檯 Web 預設帳號共用的密碼。 */
+    public static final String FRONTDESK_PASSWORD = "Tms12345";
+
+    /** 預設飯店的客房在 2 至 5 樓，每層 01 到 16 號；房號第一碼就是樓層。 */
+    private static final int FRONTDESK_FIRST_FLOOR = 2;
+
+    private static final int FRONTDESK_LAST_FLOOR = 5;
+
+    private static final int FRONTDESK_ROOMS_PER_FLOOR = 16;
+
+    private record DefaultStaff(String name, String loginId, String role, String dept) {}
+
+    /**
+     * 櫃檯 Web 的 12 個預設帳號。員工編號刻意不與同一個資料庫裡其他飯店的帳號重複：
+     * 後端登入不帶飯店，是逐家找第一個有這個員工編號的飯店，重複時會登進別家。
+     */
+    private static final List<DefaultStaff> FRONTDESK_STAFF = List.of(
+            new DefaultStaff("林佩君", "F0101", "frontdesk", "frontdesk"),
+            new DefaultStaff("何志偉", "F0102", "frontdesk", "frontdesk"),
+            new DefaultStaff("阮氏香", "F0103", "frontdesk", "frontdesk"),
+            new DefaultStaff("許雅婷", "F0199", "frontdesk", "frontdesk"),
+            new DefaultStaff("張主管", "M0001", "manager", null),
+            new DefaultStaff("吳家豪", "D0001", "duty_manager", null),
+            new DefaultStaff("小美", "H0201", "housekeeping", "housekeeping"),
+            new DefaultStaff("小林", "H0202", "housekeeping", "housekeeping"),
+            new DefaultStaff("小陳", "H0203", "housekeeping", "housekeeping"),
+            new DefaultStaff("阿美", "H0204", "housekeeping", "housekeeping"),
+            new DefaultStaff("阿強", "E0301", "engineering", "engineering"),
+            new DefaultStaff("陳老闆", "O0001", "owner", null));
+
+    /** 預設飯店的住客資訊頁，順序就是櫃檯看到的常用回覆順序。 */
+    private static final List<Map<String, String>> FRONTDESK_INFO_PAGES = List.of(
+            infoPage("breakfast", "早餐時間", "早餐 07:00–10:00，在 2 樓自助餐廳，憑房卡入場。"),
+            infoPage("wifi", "Wi-Fi", "Wi-Fi 名稱 Athena-Guest，密碼是房號加姓氏拼音。"),
+            infoPage("checkout", "退房時間", "退房時間是中午 12:00。"),
+            infoPage("gym", "健身房", "健身房在 B1，06:00–22:00 開放。"),
+            infoPage("taxi", "叫車", "需要叫車請告訴櫃檯時間與目的地，我們幫您安排。"));
+
+    private static Map<String, String> infoPage(String key, String title, String body) {
+        Map<String, String> page = new LinkedHashMap<>();
+        page.put("key", key);
+        page.put("title", title);
+        page.put("body", body);
+        return page;
+    }
+
     private static final Map<String, String> TASK_STATE = Map.ofEntries(
             Map.entry("待認領", "pool"),
             Map.entry("待開始", "accepted"),
@@ -59,9 +116,12 @@ public class BackendChannel {
             Map.entry("工務", "engineering"),
             Map.entry("櫃檯", "frontdesk"));
 
+    /** 「值班經理」是員工 App 測試線的說法，「值班主管」是櫃檯 Web 的說法，兩個都是同一種角色。 */
     private static final Map<String, String> ROLE = Map.ofEntries(
             Map.entry("主管", "manager"),
-            Map.entry("值班經理", "duty_manager"));
+            Map.entry("值班經理", "duty_manager"),
+            Map.entry("值班主管", "duty_manager"),
+            Map.entry("老闆", "owner"));
 
     private static final Map<String, String> TASK_TYPE = Map.ofEntries(
             Map.entry("打掃", "cleaning"),
@@ -123,6 +183,7 @@ public class BackendChannel {
 
     private Connection connection;
     private Long cachedTenantId;
+    private String frontdeskPasswordHash;
     private final Map<UUID, String> jwtByStaffId = new ConcurrentHashMap<>();
 
     public BackendChannel() {
@@ -216,11 +277,105 @@ public class BackendChannel {
             cachedTenantId = ((Number) existing.get()).longValue();
             return cachedTenantId;
         }
-        Object id = queryScalar("INSERT INTO tenants (name, created_at) VALUES (?, ?) RETURNING id",
-                TEST_TENANT_NAME, OffsetDateTime.now())
-                .orElseThrow(() -> new IllegalStateException("INSERT tenants 沒有回傳 id"));
-        cachedTenantId = ((Number) id).longValue();
+        cachedTenantId = insertTenant(TEST_TENANT_NAME, TEST_TENANT_CODE);
         return cachedTenantId;
+    }
+
+    private long insertTenant(String name, String code) {
+        Object id = queryScalar("INSERT INTO tenants (name, code, created_at) VALUES (?, ?, ?) RETURNING id",
+                name, code, OffsetDateTime.now())
+                .orElseThrow(() -> new IllegalStateException("INSERT tenants 沒有回傳 id"));
+        return ((Number) id).longValue();
+    }
+
+    /**
+     * 櫃檯 Web 驗收的預設資料：飯店、客房、帳號與住客資訊頁。
+     *
+     * @param tenantId 預設飯店的內部編號
+     * @param tenantCode 預設飯店的識別代碼，櫃檯畫面的網址用它
+     * @param staffByName 以姓名找預設帳號；順序與規格的帳號表相同
+     */
+    public record FrontdeskDefaults(long tenantId, String tenantCode, Map<String, CreatedStaff> staffByName) {
+
+        public CreatedStaff staff(String name) {
+            CreatedStaff staff = staffByName.get(name);
+            if (staff == null) {
+                throw new IllegalArgumentException(
+                        "「" + name + "」不是櫃檯 Web 的預設帳號（有：" + staffByName.keySet() + "）");
+            }
+            return staff;
+        }
+    }
+
+    /**
+     * 把櫃檯 Web 驗收的預設資料準備好，並把這個物件之後的資料準備都改成對「雅典娜酒店」做。
+     *
+     * <p>每個場景開始前都可以呼叫：飯店與客房沒有才建；帳號與住客資訊頁每次都寫回預設值，
+     * 所以上一個場景改過密碼、被鎖定或被停用的帳號，到這裡都會恢復成可以登入的樣子。
+     *
+     * <p>員工 App 測試線不呼叫這個方法，它的資料準備仍然對「測試飯店」做。
+     */
+    public synchronized FrontdeskDefaults ensureFrontdeskDefaults() {
+        long tenantId = ensureFrontdeskTenant();
+        cachedTenantId = tenantId;
+
+        OffsetDateTime now = OffsetDateTime.now();
+        for (int floor = FRONTDESK_FIRST_FLOOR; floor <= FRONTDESK_LAST_FLOOR; floor++) {
+            for (int seq = 1; seq <= FRONTDESK_ROOMS_PER_FLOOR; seq++) {
+                execute("""
+                        INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at)
+                        VALUES (?, ?, ?, ?, 'standard_double', 'cleaned', 'vacant', ?)
+                        ON CONFLICT (tenant_id, room_no) DO NOTHING
+                        """, UUID.randomUUID(), tenantId, String.format("%d%02d", floor, seq), floor, now);
+            }
+        }
+
+        Map<String, CreatedStaff> staffByName = new LinkedHashMap<>();
+        for (DefaultStaff staff : FRONTDESK_STAFF) {
+            staffByName.put(staff.name(), upsertFrontdeskStaff(tenantId, staff, now));
+        }
+
+        setTenantConfig(tenantId, "guest_info_pages", FRONTDESK_INFO_PAGES);
+
+        return new FrontdeskDefaults(tenantId, FRONTDESK_TENANT_CODE,
+                java.util.Collections.unmodifiableMap(staffByName));
+    }
+
+    private long ensureFrontdeskTenant() {
+        List<Map<String, Object>> rows = queryRows(
+                "SELECT id, name FROM tenants WHERE code = ?", FRONTDESK_TENANT_CODE);
+        if (rows.isEmpty()) {
+            return insertTenant(FRONTDESK_TENANT_NAME, FRONTDESK_TENANT_CODE);
+        }
+        Map<String, Object> row = rows.get(0);
+        if (!FRONTDESK_TENANT_NAME.equals(row.get("name"))) {
+            throw new IllegalStateException("飯店代碼 " + FRONTDESK_TENANT_CODE + " 已經給了「" + row.get("name")
+                    + "」，不能當成櫃檯 Web 的預設飯店「" + FRONTDESK_TENANT_NAME + "」");
+        }
+        return ((Number) row.get("id")).longValue();
+    }
+
+    private CreatedStaff upsertFrontdeskStaff(long tenantId, DefaultStaff staff, OffsetDateTime now) {
+        // 算密碼雜湊很慢，12 個帳號共用同一個密碼，所以整個物件只算一次。
+        if (frontdeskPasswordHash == null) {
+            frontdeskPasswordHash = passwordEncoder.encode(FRONTDESK_PASSWORD);
+        }
+        Object id = queryScalar("""
+                INSERT INTO staff_accounts
+                    (id, tenant_id, name, login_id, password_hash, role, dept, active, status,
+                     must_change_password, failed_login_count, locked_until, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, true, 'active', false, 0, NULL, ?, ?)
+                ON CONFLICT (tenant_id, login_id) DO UPDATE
+                    SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash,
+                        role = EXCLUDED.role, dept = EXCLUDED.dept, active = true, status = 'active',
+                        must_change_password = false, failed_login_count = 0, locked_until = NULL,
+                        updated_at = EXCLUDED.updated_at
+                RETURNING id
+                """, UUID.randomUUID(), tenantId, staff.name(), staff.loginId(), frontdeskPasswordHash,
+                staff.role(), staff.dept(), now, now)
+                .orElseThrow(() -> new IllegalStateException("寫入預設帳號 " + staff.loginId() + " 沒有回傳 id"));
+        return new CreatedStaff((UUID) id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
+                staff.role(), staff.dept());
     }
 
     public void resetBusinessData() {
@@ -318,7 +473,7 @@ public class BackendChannel {
      *
      * <p>後端時鐘沒被撥定、或後端根本沒開放撥時鐘端點時，後端用的就是系統時間，這裡回測試機的現在。
      */
-    private OffsetDateTime backendNow() {
+    public OffsetDateTime backendNow() {
         HttpResponse<String> response = send(request("GET", "/test/clock", null).GET());
         int status = response.statusCode();
         if (status == 404 || status == 401 || status == 403) {
@@ -1212,11 +1367,1039 @@ public class BackendChannel {
         return assignee;
     }
 
+    private static final int TIME_CREATED = 0;
+    private static final int TIME_TRIAGED = 1;
+    private static final int TIME_ACCEPTED = 2;
+    private static final int TIME_STARTED = 3;
+    private static final int TIME_DONE = 4;
+    private static final int TIME_FINAL = 5;
+
+    private static final List<String> SITUATION_TIME_NAMES =
+            List.of("建立", "派出", "到手", "開工", "完成", "進入這個狀況");
+
+    private static final java.util.regex.Pattern TASK_NO_FORMAT = java.util.regex.Pattern.compile("T-(\\d{4,})");
+
+    private static final java.util.regex.Pattern REPAIR_TICKET_NO_FORMAT =
+            java.util.regex.Pattern.compile("W-(\\d{4,})");
+
+    /** 空房的住客連線掛的那筆訂房，住期放在這麼多天以前，才不會和場景裡「現在有住客」的訂房住期重疊。 */
+    private static final int VACANT_ROOM_STAY_DAYS_AGO = 30;
+
+    private static final String GUEST_SESSION_HEADER = "X-Guest-Session";
+
+    /**
+     * 直接在資料庫建一張已經處在指定狀況的單，連同走到這個狀況會留下的整串事件。
+     *
+     * <h2>要保證什麼</h2>
+     *
+     * 建出來的單要和後端自己一步一步走到這個狀況時寫出來的資料分不出來：
+     * 任務列的狀態、負責人與各個時間欄位、事件的種類、順序、操作者與內容都一致，
+     * 而且事件序號從 1 連號、任務列記的序號等於最後一筆。
+     * 這樣櫃檯看板讀到的卡片、詳情與歷程才是真的，之後再用後端的動作接著推進這張單也不會被拒絕。
+     *
+     * <h2>為什麼不呼叫後端來建</h2>
+     *
+     * 驗收要的是「25 分鐘前送出的待派單」「昨天結案的單」這種單。後端的每個動作都以它的現在記時間，
+     * 要排出過去的時刻只能直接寫資料庫。另外有幾種狀況（主管指派、主管延後、請假造成的中斷、排房被取代）
+     * 後端還沒有對應的動作可以呼叫。所以這裡一律直接寫，每一種狀況只有一條寫法。
+     *
+     * <h2>怎麼做到</h2>
+     *
+     * 每一筆事件的操作者與內容照後端任務引擎的寫法；資料模型有規定、後端還沒寫出來的部分照資料模型：
+     * 非工務單向取號表領單號、已結束的單寫結束時間、當場回答的單寫回覆。
+     * 整張單在同一個資料庫交易裡寫完，中途發現內容不合就什麼都不留。
+     *
+     * <h2>刻意沒有做的事</h2>
+     *
+     * 不寫事件的對外通知。後端每寫一筆事件都會排一則通知給即時更新與推播，這裡不排，
+     * 所以開著的櫃檯畫面不會因為測試在準備資料而收到一串訊號；畫面要看到這些單，靠的是下一次讀看板。
+     * 也不做完修的附帶動作：完修照片、暫時處理的追蹤單、無法修復時把房間轉成停用。
+     *
+     * <p>時刻一律由呼叫端給，而且應該從 {@link #backendNow()} 推算；沒有給的以後端的現在為準。
+     * 用測試機的時間推算的話，後端時鐘被撥定時，「等了幾分鐘」會算錯。
+     */
+    public synchronized UUID createTaskInSituation(TaskSituation situation, TaskSituationSpec spec) {
+        long tenantId = ensureTenant();
+        OffsetDateTime[] times = resolveSituationTimes(situation, spec, this::backendNow);
+        return inTransaction(() -> new SituationTaskWriter(tenantId, situation, spec, times).write());
+    }
+
+    /**
+     * 把規格裡有給的時刻補成完整的六個，順序是建立、派出、到手、開工、完成、進入這個狀況。
+     *
+     * <p>{@code spec.at} 是這個狀況的計時起點，它對應六個裡的哪一個依狀況而定。
+     * 在它之前沒有給的時刻沿用後一個，在它之後的時刻這張單還沒走到，所以不收；
+     * 唯一的例外是待認領：等待從建立起算，櫃檯派出發生在那之後。
+     */
+    private static OffsetDateTime[] resolveSituationTimes(
+            TaskSituation situation, TaskSituationSpec spec,
+            java.util.function.Supplier<OffsetDateTime> backendNow) {
+        OffsetDateTime[] times = {
+            spec.createdAt, spec.triagedAt, spec.acceptedAt, spec.startedAt, spec.doneAt, null
+        };
+        boolean returnedToPool = isReturnedToPool(situation, spec);
+        int anchor = returnedToPool ? TIME_FINAL : situationTimeAnchor(situation);
+        if (times[anchor] != null && spec.at != null && !times[anchor].isEqual(spec.at)) {
+            throw new IllegalArgumentException("「" + situation.term() + "」的計時起點就是"
+                    + SITUATION_TIME_NAMES.get(anchor) + "的時刻，兩邊給了不同的值：" + spec.at + " 與 " + times[anchor]);
+        }
+        if (times[anchor] == null) {
+            times[anchor] = spec.at != null ? spec.at : backendNow.get();
+        }
+        for (int i = anchor + 1; i < times.length; i++) {
+            boolean triagedWhileWaiting = situation == TaskSituation.POOL && i == TIME_TRIAGED;
+            if (times[i] != null && !triagedWhileWaiting) {
+                throw new IllegalArgumentException("「" + situation.term() + "」的單還沒走到"
+                        + SITUATION_TIME_NAMES.get(i) + "，不能給這個時刻");
+            }
+            if (times[i] == null) {
+                times[i] = times[i - 1];
+            }
+        }
+        for (int i = anchor - 1; i >= 0; i--) {
+            if (times[i] == null) {
+                times[i] = times[i + 1];
+            }
+        }
+        for (int i = 0; i < times.length; i++) {
+            // 資料庫的時間只記到微秒，先截掉，讀回來才會與這裡算的相等。
+            times[i] = times[i].truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+            if (i > 0 && times[i].isBefore(times[i - 1])) {
+                throw new IllegalArgumentException("「" + situation.term() + "」的時刻前後顛倒："
+                        + SITUATION_TIME_NAMES.get(i) + "（" + times[i] + "）早於"
+                        + SITUATION_TIME_NAMES.get(i - 1) + "（" + times[i - 1] + "）");
+            }
+        }
+        return times;
+    }
+
+    private static final List<String> RETURN_POOL_SOURCES =
+            List.of("manager_requeue", "leave_return", "shift_end_return");
+
+    /**
+     * 這張待認領的單是不是被退回來的。
+     *
+     * <p>後端算等待時間，取的是建立與退回待認領兩種事件裡最新的那一筆。
+     * 所以開始等待的時刻晚於建立，就只可能是被退回過；呼叫端明講了誰退回、退回前誰拿著、
+     * 或指定了退回的來源，也算。
+     */
+    private static boolean isReturnedToPool(TaskSituation situation, TaskSituationSpec spec) {
+        if (situation != TaskSituation.POOL) {
+            return false;
+        }
+        boolean waitingStartedAfterCreation =
+                spec.createdAt != null && spec.at != null && spec.at.isAfter(spec.createdAt);
+        boolean returnSourceGiven = spec.poolSource != null && RETURN_POOL_SOURCES.contains(spec.poolSource);
+        return waitingStartedAfterCreation || spec.returnedBy != null || spec.previousAssignee != null
+                || returnSourceGiven;
+    }
+
+    private static int situationTimeAnchor(TaskSituation situation) {
+        return switch (situation) {
+            case TRIAGE, POOL -> TIME_CREATED;
+            case ACCEPTED_BY_PLAN, ACCEPTED_BY_CLAIM, ACCEPTED_BY_MANAGER, ACCEPTED_BY_REASSIGN -> TIME_ACCEPTED;
+            case DOING -> TIME_STARTED;
+            case DONE_AWAITING_INSPECTION, DONE_AWAITING_VERIFICATION, DONE, INSPECTION_WAIVED,
+                    CLOSED_NO_ACTION_NEEDED -> TIME_DONE;
+            case INTERRUPTED_BY_LEAVE, INTERRUPTED_BY_SELF, DEFERRED_BY_MANAGER, DEFERRED_BY_SELF,
+                    INSPECTION_PASSED, CLOSED_VERIFIED, CANCELLED_BY_GUEST, CANCELLED_BY_MANAGER,
+                    CANCELLED_PLAN_SUPERSEDED, CANCELLED_BY_REPORTER, ANSWERED -> TIME_FINAL;
+        };
+    }
+
+    private record PendingEvent(
+            String type, String actorRole, UUID actorId, Map<String, Object> payload, OffsetDateTime at) {}
+
+    /**
+     * 一張單從建立走到指定狀況的寫入過程。
+     *
+     * <p>先在記憶體裡把任務列的欄位與事件一筆一筆排好，全部排完才寫進資料庫：
+     * 任務列只寫一次，寫進去就是最後的樣子，事件序號照排入的順序從 1 編起。
+     * 每個小方法對應後端任務引擎的一個動作，改的欄位與事件內容照那個動作。
+     */
+    private final class SituationTaskWriter {
+
+        private final long tenantId;
+        private final TaskSituation situation;
+        private final TaskSituationSpec spec;
+        private final OffsetDateTime[] times;
+        private final boolean repair;
+        private final boolean cleaning;
+        private final UUID taskId = UUID.randomUUID();
+        private final Map<String, Object> columns = new LinkedHashMap<>();
+        private final List<PendingEvent> events = new ArrayList<>();
+        private final List<Object[]> sopChecks = new ArrayList<>();
+        private final Map<String, Object> repairTicket = new LinkedHashMap<>();
+
+        SituationTaskWriter(
+                long tenantId, TaskSituation situation, TaskSituationSpec spec, OffsetDateTime[] times) {
+            this.tenantId = tenantId;
+            this.situation = situation;
+            this.spec = spec;
+            this.times = times;
+            this.repair = "repair".equals(spec.type);
+            this.cleaning = "cleaning".equals(spec.type);
+        }
+
+        UUID write() {
+            validate();
+            TaskSituationSpec.AcceptedVia acceptedVia = acceptedVia();
+            boolean startsInTriage = staysInTriage() || spec.triagedBy != null;
+            boolean planAssigned = acceptedVia == TaskSituationSpec.AcceptedVia.PLAN_ASSIGNED;
+            String initialState = startsInTriage ? "triage" : planAssigned ? "accepted" : "pool";
+            String initialDept = startsInTriage ? "frontdesk" : spec.dept;
+
+            create(initialState, initialDept);
+            if (spec.triagedBy != null) {
+                triage();
+            }
+            if (acceptedVia != null) {
+                accept(acceptedVia);
+            }
+            switch (situation) {
+                case TRIAGE -> { }
+                case POOL -> {
+                    if (isReturnedToPool(situation, spec)) {
+                        returnToPool();
+                    }
+                }
+                case ACCEPTED_BY_PLAN, ACCEPTED_BY_CLAIM, ACCEPTED_BY_MANAGER, ACCEPTED_BY_REASSIGN ->
+                        checkSopItems(times[TIME_ACCEPTED]);
+                case DOING -> start();
+                case DONE_AWAITING_INSPECTION, DONE_AWAITING_VERIFICATION, DONE, INSPECTION_WAIVED,
+                        CLOSED_NO_ACTION_NEEDED -> {
+                    start();
+                    complete();
+                }
+                case INSPECTION_PASSED -> {
+                    start();
+                    complete();
+                    passInspection();
+                }
+                case CLOSED_VERIFIED -> {
+                    start();
+                    complete();
+                    verifyRepair();
+                }
+                case INTERRUPTED_BY_LEAVE, INTERRUPTED_BY_SELF -> {
+                    start();
+                    interrupt();
+                }
+                case DEFERRED_BY_MANAGER, DEFERRED_BY_SELF -> defer();
+                case CANCELLED_BY_GUEST, CANCELLED_BY_MANAGER, CANCELLED_PLAN_SUPERSEDED,
+                        CANCELLED_BY_REPORTER -> cancel();
+                case ANSWERED -> answer();
+            }
+            insert();
+            return taskId;
+        }
+
+        private void create(String initialState, String initialDept) {
+            UUID roomId = ensureRoom(spec.roomNo, floorFromRoomNo(spec.roomNo));
+            String taskNo = repair ? null : takeDisplayNo("task_counters", "T-", TASK_NO_FORMAT, spec.displayNo);
+            String title = spec.title != null ? spec.title : titleFromGuestText();
+            String note = repair ? null : taskNote();
+            LocalDate workDate = cleaning ? times[TIME_CREATED].toLocalDate() : null;
+            boolean planAssigned = "accepted".equals(initialState);
+            if (spec.urgent && !repair) {
+                // 急件只存在工務單上；其他類型的單寫進去也不會出現在任何畫面，案例以為建了急件卻沒有，所以直接擋下。
+                throw new IllegalArgumentException("只有修繕單可以是急件，" + spec.roomNo + " 的類型是 " + spec.type);
+            }
+
+            columns.put("id", taskId);
+            columns.put("tenant_id", tenantId);
+            columns.put("task_no", taskNo);
+            columns.put("type", spec.type);
+            columns.put("source", spec.source);
+            columns.put("room_id", roomId);
+            columns.put("reservation_id", spec.reservationId);
+            columns.put("dept", initialDept);
+            columns.put("state", initialState);
+            columns.put("title", title);
+            columns.put("note", note);
+            columns.put("est_min", spec.estMin);
+            columns.put("work_date", workDate);
+            columns.put("urgent", spec.urgent);
+            columns.put("created_at", times[TIME_CREATED]);
+            if ("pool".equals(initialState)) {
+                // 待認領清單靠這一欄顯示單是從哪裡進來的；後端只在這三種單直接進待認領時填它。
+                boolean explicitEntry = spec.poolSource != null && !RETURN_POOL_SOURCES.contains(spec.poolSource);
+                if (explicitEntry) {
+                    columns.put("pool_source", spec.poolSource);
+                } else if ("guest".equals(spec.source)) {
+                    columns.put("pool_source", "guest_scan");
+                } else if ("system".equals(spec.source)) {
+                    columns.put("pool_source", "system");
+                } else if (repair && "desk".equals(spec.source)) {
+                    columns.put("pool_source", "desk_forward");
+                }
+            }
+
+            Map<String, Object> snapshot = new LinkedHashMap<>();
+            putIfPresent(snapshot, "type", spec.type);
+            putIfPresent(snapshot, "source", spec.source);
+            putIfPresent(snapshot, "room_id", roomId.toString());
+            putIfPresent(snapshot, "reservation_id", spec.reservationId == null ? null : spec.reservationId.toString());
+            putIfPresent(snapshot, "dept", initialDept);
+            putIfPresent(snapshot, "state", initialState);
+            putIfPresent(snapshot, "title", title);
+            putIfPresent(snapshot, "note", note);
+            putIfPresent(snapshot, "est_min", spec.estMin);
+            putIfPresent(snapshot, "work_date", workDate == null ? null : workDate.toString());
+            putIfPresent(snapshot, "task_no", taskNo);
+
+            boolean byStaff = "desk".equals(spec.source) || "staff".equals(spec.source);
+            String creatorRole = byStaff ? actorRole(spec.createdBy) : spec.source;
+            UUID creatorId = byStaff ? spec.createdBy.id() : null;
+            event("created", creatorRole, creatorId, snapshot, times[TIME_CREATED]);
+
+            if (repair) {
+                prepareRepairTicket(roomId);
+            }
+            if (planAssigned) {
+                // 看板靠「指派的操作者是系統」認出班前排房，所以這筆指派的操作者要和建立事件是同一個。
+                columns.put("assignee_id", spec.assignee.id());
+                event("assigned", creatorRole, creatorId,
+                        Map.of("assignee_id", spec.assignee.id().toString()), times[TIME_ACCEPTED]);
+            }
+        }
+
+        private void prepareRepairTicket(UUID roomId) {
+            CreatedStaff reporter = spec.createdBy != null ? spec.createdBy : spec.assignee;
+            repairTicket.put("task_id", taskId);
+            repairTicket.put("tenant_id", tenantId);
+            repairTicket.put("ticket_no",
+                    takeDisplayNo("repair_ticket_counters", "W-", REPAIR_TICKET_NO_FORMAT, spec.displayNo));
+            repairTicket.put("room_id", roomId);
+            repairTicket.put("category", spec.repairCategory != null ? spec.repairCategory : "other");
+            repairTicket.put("description", spec.note);
+            repairTicket.put("reporter_id", reporter.id());
+            repairTicket.put("is_urgent", spec.urgent);
+            repairTicket.put("created_at", times[TIME_CREATED]);
+        }
+
+        private void triage() {
+            columns.put("state", "pool");
+            columns.put("dept", spec.dept);
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("dept", spec.dept);
+            payload.put("via", spec.triageVia != null ? spec.triageVia : "button");
+            event("triaged", actorRole(spec.triagedBy), spec.triagedBy.id(), payload, times[TIME_TRIAGED]);
+        }
+
+        private void accept(TaskSituationSpec.AcceptedVia via) {
+            Map<String, Object> toAssignee = Map.of("assignee_id", spec.assignee.id().toString());
+            switch (via) {
+                case PLAN_ASSIGNED -> { }
+                case SELF_CLAIMED -> event("claimed", actorRole(spec.assignee), spec.assignee.id(),
+                        toAssignee, times[TIME_ACCEPTED]);
+                case MANAGER_ASSIGNED -> event("assigned", actorRole(spec.assignedBy), spec.assignedBy.id(),
+                        toAssignee, times[TIME_ACCEPTED]);
+                case REASSIGNED -> {
+                    // 後端只允許轉派已經在某人手上的單，所以歷程要先有前一位負責人的認領，轉派才接得上。
+                    event("claimed", actorRole(spec.previousAssignee), spec.previousAssignee.id(),
+                            Map.of("assignee_id", spec.previousAssignee.id().toString()), times[TIME_TRIAGED]);
+                    event("reassigned", actorRole(spec.assignedBy), spec.assignedBy.id(),
+                            toAssignee, times[TIME_ACCEPTED]);
+                }
+            }
+            columns.put("state", "accepted");
+            columns.put("assignee_id", spec.assignee.id());
+        }
+
+        /**
+         * 把一張有人認領過的單退回待認領，等待時間就會從退回那一刻重算。
+         *
+         * <p>後端有三條不必先開工或查房就能退回的路，各自寫的欄位與事件內容不同，這裡照來源分開寫：
+         * 主管附交代退回會標成優先通知並留下交代；登記請假時退回也標成優先通知；
+         * 班末由系統退回則沒有操作者，另外留一句退回原因。
+         */
+        private void returnToPool() {
+            CreatedStaff holder = spec.previousAssignee != null ? spec.previousAssignee : anyStaffOfDept();
+            event("claimed", actorRole(holder), holder.id(),
+                    Map.of("assignee_id", holder.id().toString()), times[TIME_ACCEPTED]);
+
+            String poolSource = returnPoolSource();
+            columns.put("state", "pool");
+            columns.put("assignee_id", null);
+            columns.put("pool_source", poolSource);
+            switch (poolSource) {
+                case "manager_requeue" -> {
+                    columns.put("priority_notify", true);
+                    columns.put("requeue_note", spec.handoverNote);
+                    event("returned_to_pool", actorRole(spec.returnedBy), spec.returnedBy.id(),
+                            Map.of("note", spec.handoverNote), times[TIME_FINAL]);
+                }
+                case "leave_return" -> {
+                    columns.put("priority_notify", true);
+                    event("returned_to_pool", actorRole(spec.returnedBy), spec.returnedBy.id(),
+                            Map.of("reason", "leave_return"), times[TIME_FINAL]);
+                }
+                default -> {
+                    columns.put("return_reason", "班末退池 · 交給下一班");
+                    event("returned_to_pool", "system", null,
+                            Map.of("reason", "shift_end_return"), times[TIME_FINAL]);
+                }
+            }
+        }
+
+        private String returnPoolSource() {
+            if (spec.poolSource != null) {
+                return spec.poolSource;
+            }
+            return spec.returnedBy != null ? "manager_requeue" : "shift_end_return";
+        }
+
+        /** 退回之前一定有人拿過這張單。呼叫端沒說是誰時，挑這個部門員工編號最前面的在職同仁，每次挑到的都是同一位。 */
+        private CreatedStaff anyStaffOfDept() {
+            List<Map<String, Object>> rows = queryRows("SELECT id, name, login_id, role, dept FROM staff_accounts"
+                    + " WHERE tenant_id = ? AND dept = ? AND active ORDER BY login_id LIMIT 1", tenantId, spec.dept);
+            require(!rows.isEmpty(), "被退回的單要有退回之前的負責人，但 " + spec.dept + " 沒有任何在職的同仁可以當");
+            Map<String, Object> row = rows.get(0);
+            return new CreatedStaff((UUID) row.get("id"), (String) row.get("name"), (String) row.get("login_id"),
+                    null, (String) row.get("role"), (String) row.get("dept"));
+        }
+
+        private void start() {
+            columns.put("state", "doing");
+            columns.put("started_at", times[TIME_STARTED]);
+            columns.put("segment_started_at", times[TIME_STARTED]);
+            columns.put("inspection_waived", situation == TaskSituation.INSPECTION_WAIVED);
+            event("started", actorRole(spec.assignee), spec.assignee.id(), null, times[TIME_STARTED]);
+            checkSopItems(times[TIME_STARTED]);
+        }
+
+        /** 已做時間只算真的在做的那幾段，所以離開進行中時要把這一段結算進累計秒數，完成與中斷都一樣。 */
+        private void closeWorkSegment(OffsetDateTime at) {
+            columns.put("worked_sec", (int) Duration.between(times[TIME_STARTED], at).getSeconds());
+            columns.put("segment_started_at", null);
+        }
+
+        private void complete() {
+            OffsetDateTime doneAt = times[TIME_DONE];
+            closeWorkSegment(doneAt);
+            columns.put("done_at", doneAt);
+            Map<String, Object> payload = null;
+            if (cleaning) {
+                payload = new LinkedHashMap<>();
+                payload.put("skipped_items", skipUncheckedSopItems(doneAt));
+            }
+            if (repair) {
+                String resolution = resolutionType();
+                payload = new LinkedHashMap<>();
+                payload.put("resolutionType", resolution);
+                repairTicket.put("resolution_type", resolution);
+            }
+            switch (situation) {
+                case INSPECTION_WAIVED -> {
+                    columns.put("state", "inspected");
+                    columns.put("inspection", "waived");
+                    columns.put("ended_at", doneAt);
+                }
+                case CLOSED_NO_ACTION_NEEDED -> {
+                    columns.put("state", "closed");
+                    columns.put("ended_at", doneAt);
+                }
+                case DONE -> {
+                    columns.put("state", "done");
+                    columns.put("ended_at", doneAt);
+                }
+                default -> columns.put("state", "done");
+            }
+            event("completed", actorRole(spec.assignee), spec.assignee.id(), payload, doneAt);
+        }
+
+        private String resolutionType() {
+            if (situation == TaskSituation.CLOSED_NO_ACTION_NEEDED) {
+                return "no_action_needed";
+            }
+            return spec.resolutionType != null ? spec.resolutionType : "fixed";
+        }
+
+        private void passInspection() {
+            columns.put("state", "inspected");
+            columns.put("inspection", "passed");
+            columns.put("ended_at", times[TIME_FINAL]);
+            event("inspection_passed", actorRole(spec.actedBy), spec.actedBy.id(), null, times[TIME_FINAL]);
+        }
+
+        private void verifyRepair() {
+            columns.put("state", "closed");
+            columns.put("ended_at", times[TIME_FINAL]);
+            repairTicket.put("verified_by", spec.actedBy.id());
+            repairTicket.put("verified_at", times[TIME_FINAL]);
+            event("repair_verified", actorRole(spec.actedBy), spec.actedBy.id(), null, times[TIME_FINAL]);
+        }
+
+        private void interrupt() {
+            boolean bySelf = situation == TaskSituation.INTERRUPTED_BY_SELF;
+            closeWorkSegment(times[TIME_FINAL]);
+            columns.put("state", "interrupted");
+            columns.put("hold_reason", spec.reason);
+            columns.put("requeue_note", spec.handoverNote);
+            Map<String, Object> payload = new LinkedHashMap<>();
+            putIfPresent(payload, "reason", spec.reason);
+            payload.put("by_self", bySelf);
+            if (bySelf) {
+                event("interrupted", actorRole(spec.assignee), spec.assignee.id(), payload, times[TIME_FINAL]);
+            } else if (spec.actedBy != null) {
+                event("interrupted", actorRole(spec.actedBy), spec.actedBy.id(), payload, times[TIME_FINAL]);
+            } else {
+                event("interrupted", "system", null, payload, times[TIME_FINAL]);
+            }
+        }
+
+        private void defer() {
+            boolean bySelf = situation == TaskSituation.DEFERRED_BY_SELF;
+            CreatedStaff actor = bySelf ? spec.assignee : spec.actedBy;
+            columns.put("state", "deferred");
+            columns.put("deferred_by_self", bySelf);
+            // 主管延後的事件後端不帶任何內容，是不是本人延後要看任務列的 deferred_by_self；只有本人延後才帶原因與標記。
+            Map<String, Object> payload = null;
+            if (bySelf) {
+                columns.put("hold_reason", spec.reason);
+                payload = new LinkedHashMap<>();
+                putIfPresent(payload, "reason", spec.reason);
+                payload.put("by_self", true);
+            }
+            event("deferred", actorRole(actor), actor.id(), payload, times[TIME_FINAL]);
+        }
+
+        private void cancel() {
+            String reason = switch (situation) {
+                case CANCELLED_BY_GUEST -> "guest_withdrew";
+                case CANCELLED_BY_MANAGER -> "manager_void";
+                case CANCELLED_PLAN_SUPERSEDED -> "plan_superseded";
+                default -> "staff_withdrew";
+            };
+            columns.put("state", "cancelled");
+            columns.put("cancel_reason", reason);
+            columns.put("ended_at", times[TIME_FINAL]);
+            Map<String, Object> payload = Map.of("reason", reason);
+            switch (situation) {
+                case CANCELLED_BY_GUEST -> event("cancelled", "guest", null, payload, times[TIME_FINAL]);
+                case CANCELLED_PLAN_SUPERSEDED -> event("cancelled", "system", null, payload, times[TIME_FINAL]);
+                case CANCELLED_BY_MANAGER -> event("cancelled", actorRole(spec.actedBy), spec.actedBy.id(),
+                        payload, times[TIME_FINAL]);
+                default -> event("cancelled", actorRole(spec.createdBy), spec.createdBy.id(),
+                        payload, times[TIME_FINAL]);
+            }
+        }
+
+        private void answer() {
+            String answer = spec.answer.strip();
+            columns.put("state", "done");
+            columns.put("answer", answer);
+            columns.put("done_at", times[TIME_FINAL]);
+            columns.put("ended_at", times[TIME_FINAL]);
+            event("answered", actorRole(spec.actedBy), spec.actedBy.id(),
+                    Map.of("answer", answer), times[TIME_FINAL]);
+        }
+
+        private void checkSopItems(OffsetDateTime at) {
+            if (spec.sopCheckedCount == null || spec.sopCheckedCount == 0) {
+                return;
+            }
+            List<Map<String, Object>> items = activeCleaningSopItems();
+            require(items.size() >= spec.sopCheckedCount, "要勾 " + spec.sopCheckedCount
+                    + " 項清潔 SOP，但飯店啟用中的清潔 SOP 只有 " + items.size() + " 項");
+            for (Map<String, Object> item : items.subList(0, spec.sopCheckedCount)) {
+                sopChecks.add(new Object[] {item.get("item_key"), item.get("label"), true, false,
+                        spec.assignee.id(), at});
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("item_key", item.get("item_key"));
+                payload.put("label", item.get("label"));
+                payload.put("checked", true);
+                payload.put("skipped", false);
+                event("sop_checked", actorRole(spec.assignee), spec.assignee.id(), payload, at);
+            }
+        }
+
+        /**
+         * 打掃單完成後，每一項清潔 SOP 都要有紀錄，主管查房時才看得出哪幾項沒做。
+         * 所以還沒勾的項目在完成時一律記成跳過，名稱另外交給完成事件帶著，和後端完成時的做法相同。
+         */
+        private List<String> skipUncheckedSopItems(OffsetDateTime at) {
+            List<String> skipped = new ArrayList<>();
+            List<Map<String, Object>> items = activeCleaningSopItems();
+            for (Map<String, Object> item : items.subList(sopChecks.size(), items.size())) {
+                sopChecks.add(new Object[] {item.get("item_key"), item.get("label"), false, true, null, at});
+                skipped.add(String.valueOf(item.get("label")));
+            }
+            return skipped;
+        }
+
+        private List<Map<String, Object>> activeCleaningSopItems() {
+            return queryRows("SELECT item_key, label FROM sop_items WHERE tenant_id = ?"
+                    + " AND applies_to = 'cleaning' AND active = true ORDER BY sort_order, item_key", tenantId);
+        }
+
+        private void event(
+                String type, String actorRole, UUID actorId, Map<String, Object> payload, OffsetDateTime at) {
+            events.add(new PendingEvent(type, actorRole, actorId, payload, at));
+        }
+
+        private void insert() {
+            columns.put("event_seq", events.size());
+            columns.put("updated_at", events.get(events.size() - 1).at());
+            insertRow("tasks", columns);
+            for (int i = 0; i < events.size(); i++) {
+                PendingEvent event = events.get(i);
+                // 後端對沒有內容的事件存的是空值，不是空的 JSON 物件；讀歷程的程式用「有沒有值」判斷。
+                String payload = event.payload() == null || event.payload().isEmpty()
+                        ? null : toJson(event.payload());
+                execute("""
+                        INSERT INTO task_events
+                            (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
+                        """, tenantId, taskId, i + 1, event.type(), event.actorRole(), event.actorId(),
+                        payload, event.at());
+            }
+            if (repair) {
+                insertRow("repair_tickets", repairTicket);
+            }
+            for (Object[] check : sopChecks) {
+                execute("""
+                        INSERT INTO task_sop_checks
+                            (id, tenant_id, task_id, item_key, label, checked, skipped, checked_by, checked_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, UUID.randomUUID(), tenantId, taskId, check[0], check[1], check[2], check[3],
+                        check[4], check[5]);
+            }
+        }
+
+        private void insertRow(String table, Map<String, Object> row) {
+            String names = String.join(", ", row.keySet());
+            String marks = String.join(", ", java.util.Collections.nCopies(row.size(), "?"));
+            execute("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", row.values().toArray());
+        }
+
+        /**
+         * 領一個給人看的單號，保證之後後端自己建單時不會領到同一號。
+         *
+         * <p>沒有指定時向取號表領下一號，寫法與後端相同。有指定時照寫，並把取號表推到至少這一號：
+         * 取號表落在後面的話，後端之後會領到同一號，被資料庫的不重複限制擋下。
+         */
+        private String takeDisplayNo(
+                String counterTable, String prefix, java.util.regex.Pattern format, String requested) {
+            if (requested == null) {
+                Object lastNo = queryScalar("INSERT INTO " + counterTable + " (tenant_id, last_no) VALUES (?, 1)"
+                        + " ON CONFLICT (tenant_id) DO UPDATE SET last_no = " + counterTable + ".last_no + 1"
+                        + " RETURNING last_no", tenantId)
+                        .orElseThrow(() -> new IllegalStateException(counterTable + " 取號沒有回傳 last_no"));
+                return prefix + String.format("%04d", ((Number) lastNo).intValue());
+            }
+            java.util.regex.Matcher matcher = format.matcher(requested);
+            require(matcher.matches(), "單號「" + requested + "」的格式不對，這張單要的是 " + prefix + " 加至少 4 位數");
+            execute("INSERT INTO " + counterTable + " (tenant_id, last_no) VALUES (?, ?)"
+                    + " ON CONFLICT (tenant_id) DO UPDATE SET last_no = GREATEST(" + counterTable
+                    + ".last_no, EXCLUDED.last_no)", tenantId, Integer.parseInt(matcher.group(1)));
+            return requested;
+        }
+
+        private String titleFromGuestText() {
+            return spec.guestText.length() <= 120 ? spec.guestText : spec.guestText.substring(0, 120) + "…";
+        }
+
+        private String taskNote() {
+            if (spec.guestText == null) {
+                return spec.note;
+            }
+            Map<String, Object> fields = new LinkedHashMap<>();
+            fields.put("text", spec.guestText);
+            putIfPresent(fields, "lang", spec.guestLang);
+            putIfPresent(fields, "llm_translated", spec.translatedText);
+            return toJson(fields);
+        }
+
+        /** 這張單從頭到尾都沒有離開櫃檯：待派單、已回答，以及還在待派單時就被取消的單。 */
+        private boolean staysInTriage() {
+            if (situation == TaskSituation.TRIAGE || situation == TaskSituation.ANSWERED) {
+                return true;
+            }
+            boolean cancellableInTriage = situation == TaskSituation.CANCELLED_BY_GUEST
+                    || situation == TaskSituation.CANCELLED_BY_MANAGER;
+            return cancellableInTriage && "frontdesk".equals(spec.dept);
+        }
+
+        private TaskSituationSpec.AcceptedVia acceptedVia() {
+            TaskSituationSpec.AcceptedVia fixed = switch (situation) {
+                case ACCEPTED_BY_PLAN -> TaskSituationSpec.AcceptedVia.PLAN_ASSIGNED;
+                case ACCEPTED_BY_CLAIM -> TaskSituationSpec.AcceptedVia.SELF_CLAIMED;
+                case ACCEPTED_BY_MANAGER -> TaskSituationSpec.AcceptedVia.MANAGER_ASSIGNED;
+                case ACCEPTED_BY_REASSIGN -> TaskSituationSpec.AcceptedVia.REASSIGNED;
+                default -> null;
+            };
+            if (fixed != null) {
+                require(spec.acceptedVia == null || spec.acceptedVia == fixed,
+                        "這個狀況的到手方式固定是 " + fixed + "，不能另外指定 " + spec.acceptedVia);
+                return fixed;
+            }
+            if (spec.assignee == null) {
+                return null;
+            }
+            return spec.acceptedVia != null ? spec.acceptedVia : TaskSituationSpec.AcceptedVia.SELF_CLAIMED;
+        }
+
+        private void validate() {
+            require(spec.roomNo != null && !spec.roomNo.isBlank(), "房號必填");
+            require(TASK_TYPE.containsValue(spec.type), "類型要是 " + TASK_TYPE.values() + " 之一，收到 " + spec.type);
+            require(List.of("guest", "desk", "system", "staff").contains(spec.source),
+                    "來源要是 guest、desk、system、staff 之一，收到 " + spec.source);
+            require(spec.title != null || spec.guestText != null, "標題與住客原話至少要給一個");
+            require(spec.note == null || spec.guestText == null, "備註與住客原話只能給一個");
+            require(!"guest".equals(spec.source) || spec.reservationId != null,
+                    "住客來源的單一定要連結訂房；空房也要先建一筆住期已經結束的訂房");
+            boolean byStaff = "desk".equals(spec.source) || "staff".equals(spec.source);
+            require(!byStaff || spec.createdBy != null, "櫃檯代開與同仁開的單要給開單的人");
+            require(!repair || spec.createdBy != null || spec.assignee != null,
+                    "工務單一定要有報修人；系統建的保養單沒有報修人時，至少要有負責人");
+            require(spec.triageVia == null || List.of("button", "drag").contains(spec.triageVia),
+                    "派單方式要是 button 或 drag，收到 " + spec.triageVia);
+            validateType();
+            validateDept();
+            validatePeople();
+            if (situation == TaskSituation.ANSWERED) {
+                require(spec.answer != null && !spec.answer.isBlank() && spec.answer.strip().length() <= 120,
+                        "已回答的單要給 1 到 120 字的回覆");
+            }
+            boolean hasSopProgress = spec.sopCheckedCount != null && spec.sopCheckedCount > 0;
+            require(!hasSopProgress || (cleaning && spec.assignee != null),
+                    "清潔 SOP 只有打掃單的負責人能勾，這張單不是打掃單或沒有負責人");
+        }
+
+        private void validateType() {
+            switch (situation) {
+                case DONE_AWAITING_INSPECTION, INSPECTION_PASSED, INSPECTION_WAIVED ->
+                        require(cleaning, "只有打掃單會查房");
+                case DONE_AWAITING_VERIFICATION, CLOSED_VERIFIED -> {
+                    require(repair, "只有工務單會完修與驗收");
+                    require(!"no_action_needed".equals(spec.resolutionType),
+                            "判斷不需處理的工務單完成當下就結案，不會停在這個狀況");
+                }
+                case CLOSED_NO_ACTION_NEEDED -> {
+                    require(repair, "只有工務單會結案");
+                    require(spec.resolutionType == null || "no_action_needed".equals(spec.resolutionType),
+                            "這個狀況的完修結果固定是 no_action_needed");
+                }
+                case CANCELLED_BY_REPORTER -> {
+                    require(repair, "同仁撤回只發生在工務單");
+                    require(spec.createdBy != null, "同仁撤回的單要給報修人，撤回的就是他");
+                }
+                case DONE -> require(!cleaning && !repair, "打掃單與工務單完成後還要查房或驗收，不會是已完成");
+                case TRIAGE, ANSWERED -> require(!repair, "工務單不經過待派單");
+                default -> { }
+            }
+        }
+
+        private void validateDept() {
+            if (staysInTriage()) {
+                require(spec.dept == null || "frontdesk".equals(spec.dept),
+                        "還在櫃檯手上的單固定歸 frontdesk，不能指定 " + spec.dept);
+                require(spec.triagedBy == null, "還在櫃檯手上的單沒有被派出過，不能給派單的人");
+                return;
+            }
+            require("housekeeping".equals(spec.dept) || "engineering".equals(spec.dept),
+                    "已經離開櫃檯的單要給部門 housekeeping 或 engineering，收到 " + spec.dept);
+        }
+
+        private void validatePeople() {
+            switch (situation) {
+                case TRIAGE, POOL, ANSWERED, CANCELLED_BY_GUEST, CANCELLED_BY_REPORTER ->
+                        require(spec.assignee == null, "這個狀況的單沒有負責人");
+                case DEFERRED_BY_MANAGER, CANCELLED_BY_MANAGER, CANCELLED_PLAN_SUPERSEDED ->
+                        require(spec.assignee == null || !staysInTriage(), "還在櫃檯手上的單沒有負責人");
+                default -> require(spec.assignee != null, "這個狀況的單要給負責人");
+            }
+            switch (situation) {
+                case DEFERRED_BY_MANAGER, CANCELLED_BY_MANAGER, INSPECTION_PASSED, CLOSED_VERIFIED ->
+                        require(spec.actedBy != null, "這個狀況要給做這個動作的主管");
+                case ANSWERED -> require(spec.actedBy != null, "已回答的單要給回答的人");
+                default -> { }
+            }
+            TaskSituationSpec.AcceptedVia via = acceptedVia();
+            if (via == TaskSituationSpec.AcceptedVia.PLAN_ASSIGNED) {
+                require(spec.triagedBy == null, "班前排房的單建立時就有負責人，不會經過待派單");
+            }
+            if (via == TaskSituationSpec.AcceptedVia.MANAGER_ASSIGNED
+                    || via == TaskSituationSpec.AcceptedVia.REASSIGNED) {
+                require(spec.assignedBy != null, "主管指派與轉派要給指派的主管");
+            }
+            if (via == TaskSituationSpec.AcceptedVia.REASSIGNED) {
+                require(spec.previousAssignee != null, "被轉派的單要給轉派之前的負責人");
+            }
+            validateReturnToPool();
+        }
+
+        private void validateReturnToPool() {
+            if (!isReturnedToPool(situation, spec)) {
+                require(spec.returnedBy == null, "只有待認領的單會是被退回來的");
+                require(spec.poolSource == null || !RETURN_POOL_SOURCES.contains(spec.poolSource),
+                        "退回的來源只能用在待認領的單");
+                require(!"inspection_return".equals(spec.poolSource)
+                                && !"verification_return".equals(spec.poolSource),
+                        "查房退回與驗收不通過退回的單要先走完查房或驗收，這個入口不建");
+                return;
+            }
+            String poolSource = returnPoolSource();
+            require(RETURN_POOL_SOURCES.contains(poolSource),
+                    "被退回的單來源要是 " + RETURN_POOL_SOURCES + " 之一，收到 " + poolSource);
+            switch (poolSource) {
+                case "manager_requeue" -> require(spec.returnedBy != null && spec.handoverNote != null
+                                && !spec.handoverNote.isBlank(),
+                        "主管退回要給退回的人與交代，後端不收沒有交代的退回");
+                case "leave_return" -> require(spec.returnedBy != null, "請假退回要給登記請假的人");
+                default -> require(spec.returnedBy == null, "班末退回是系統做的，不能給退回的人");
+            }
+        }
+
+        private void require(boolean condition, String message) {
+            if (!condition) {
+                throw new IllegalArgumentException(
+                        "「" + situation.term() + "」（房號 " + spec.roomNo + "）：" + message);
+            }
+        }
+    }
+
+    private static void putIfPresent(Map<String, Object> map, String key, Object value) {
+        if (value != null) {
+            map.put(key, value);
+        }
+    }
+
+    /** 任務事件記的是操作者當下的角色。資料庫不收老闆這個角色，所以在寫入之前先講清楚是誰不行。 */
+    private static String actorRole(CreatedStaff staff) {
+        if ("owner".equals(staff.role())) {
+            throw new IllegalArgumentException("「" + staff.name() + "」是老闆，任務事件的操作者不能是老闆");
+        }
+        return staff.role();
+    }
+
+    /**
+     * 讓一整組寫入要嘛全部成功、要嘛全部不留。
+     * 一張單分成任務列、事件、工務單好幾次寫入，中途失敗若留下半張單，看板會讀到沒有歷程的單。
+     */
+    private <T> T inTransaction(java.util.function.Supplier<T> work) {
+        Connection transaction = connection();
+        try {
+            transaction.setAutoCommit(false);
+            try {
+                T result = work.get();
+                transaction.commit();
+                return result;
+            } catch (RuntimeException e) {
+                transaction.rollback();
+                throw e;
+            } finally {
+                transaction.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("後端資料庫交易失敗", e);
+        }
+    }
+
+    /**
+     * 替一間房建一筆訂房，回訂房的 id；同一間房同一個入住日再呼叫一次是改寫那一筆。
+     *
+     * <p>看板上「這張單的住客是誰、是不是 VIP」都是從訂房讀的，所以有住客的單要先有訂房。
+     * {@code guestName} 給 null 代表訂房檔沒有住客姓名，畫面會當成空房。
+     * 同一間房的兩筆訂房住期不能重疊，重疊時資料庫會拒絕。
+     */
+    public UUID createReservation(
+            String roomNo, String guestName, boolean vip, OffsetDateTime checkinAt, OffsetDateTime checkoutAt) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        Object id = queryScalar("""
+                INSERT INTO reservations_cache
+                    (id, tenant_id, reservation_ref, room_id, guest_name, lang, attrs,
+                     checkin_at, checkout_at, source, synced_at, superseded_at)
+                VALUES (?, ?, ?, ?, ?, NULL, ?::jsonb, ?, ?, 'excel', ?, NULL)
+                ON CONFLICT (tenant_id, reservation_ref) DO UPDATE SET
+                    room_id = EXCLUDED.room_id, guest_name = EXCLUDED.guest_name, attrs = EXCLUDED.attrs,
+                    checkin_at = EXCLUDED.checkin_at, checkout_at = EXCLUDED.checkout_at,
+                    synced_at = EXCLUDED.synced_at, superseded_at = NULL
+                RETURNING id
+                """, UUID.randomUUID(), tenantId, "fixture:" + roomNo + ":" + checkinAt.toLocalDate(), roomId,
+                guestName, vip ? "{\"vip\": true}" : "{}", checkinAt, checkoutAt, checkinAt)
+                .orElseThrow(() -> new IllegalStateException("寫入訂房沒有回傳 id"));
+        return (UUID) id;
+    }
+
+    /**
+     * 以住客的身分送出一段打字的需求，回這張單的 id。
+     *
+     * <p>走後端的住客端點，所以這張單會經過分類規則：沒有命中規則的進待派單，命中的直接進部門的待認領。
+     * 開著的櫃檯畫面也會收到即時訊號。要排出過去的時刻或指定狀況的單，改用 {@link #createTaskInSituation}。
+     */
+    public UUID guestSubmitRequest(String roomNo, String text, String lang) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("text", text);
+        if (lang != null) {
+            body.put("lang", lang);
+        }
+        HttpResponse<String> response = send(request("POST", "/guest-requests", null)
+                .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        requireSuccess(response, "住客送出需求：POST /guest-requests（房號 " + roomNo + "）");
+        return UUID.fromString(parseJson(response.body()).path("id").asText());
+    }
+
+    /**
+     * 以住客的身分從需求選單勾選一個品項送出，回這張單的 id。
+     *
+     * <p>勾選的品項不經過分類規則，直接進選單上該品項所屬部門的待認領。{@code itemKey} 要是飯店需求選單
+     * （{@code tenant_config} 的 {@code request_menu}）上有的品項，不在選單上的品項後端會當成打字的需求處理。
+     */
+    public UUID guestSubmitMenuItem(String roomNo, String itemKey, int quantity) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("itemId", itemKey);
+        body.put("quantity", quantity);
+        HttpResponse<String> response = send(request("POST", "/guest-requests", null)
+                .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        requireSuccess(response, "住客勾選需求：POST /guest-requests（房號 " + roomNo + "）");
+        return UUID.fromString(parseJson(response.body()).path("id").asText());
+    }
+
+    /** 以住客的身分收回自己送出的需求。只有還在待派單或待認領的單收得回來，其餘後端會拒絕。 */
+    public void guestWithdrawRequest(String roomNo, UUID taskId) {
+        HttpResponse<String> response = send(request("POST", "/guest-requests/" + taskId + "/cancel", null)
+                .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
+                .POST(HttpRequest.BodyPublishers.noBody()));
+        requireSuccess(response, "住客收回需求：POST /guest-requests/" + taskId + "/cancel（房號 " + roomNo + "）");
+    }
+
+    /**
+     * 以這間房住客的身分讀自己這次住宿的需求，回後端給的整份清單，也就是住客進度頁看到的內容。
+     * 只讀不寫；櫃檯當場回答過的單，回應裡的 {@code answer} 是回覆全文。
+     */
+    public JsonNode guestRequests(String roomNo) {
+        HttpResponse<String> response = send(request("GET", "/guest-requests", null)
+                .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
+                .GET());
+        requireSuccess(response, "住客讀自己的需求：GET /guest-requests（房號 " + roomNo + "）");
+        return parseJson(response.body());
+    }
+
+    /**
+     * 把房號換成這間房住客的連線憑證，住客端點靠它認人。
+     *
+     * <p>住客的連線一定要掛在一筆訂房上。這間房現在有人住時掛那筆訂房；沒有人住時掛一筆住期早已結束的訂房，
+     * 房間仍然是空房，場景之後再替同一間房建在住的訂房也不會因為住期重疊被資料庫拒絕。
+     * 住客只看得到自己那筆訂房名下的單，所以同一筆訂房沿用同一個連線，送出與收回才會是同一位住客。
+     */
+    private String guestSessionToken(String roomNo) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        OffsetDateTime now = backendNow();
+        UUID reservationId = queryScalar("""
+                SELECT id FROM reservations_cache
+                 WHERE tenant_id = ? AND room_id = ? AND superseded_at IS NULL
+                   AND checkin_at <= ? AND checkout_at > ?
+                """, tenantId, roomId, now, now)
+                .map(UUID.class::cast)
+                .orElseGet(() -> {
+                    OffsetDateTime longAgo = now.minusDays(VACANT_ROOM_STAY_DAYS_AGO);
+                    return createReservation(roomNo, null, false, longAgo, longAgo.plusDays(1));
+                });
+        Optional<Object> existing = queryScalar("""
+                SELECT session_token FROM guest_sessions
+                 WHERE tenant_id = ? AND room_id = ? AND reservation_id = ?
+                   AND revoked_at IS NULL AND expires_at > ?
+                 ORDER BY created_at DESC LIMIT 1
+                """, tenantId, roomId, reservationId, now);
+        if (existing.isPresent()) {
+            return String.valueOf(existing.get());
+        }
+        String sessionToken = "fx-guest-session-" + UUID.randomUUID();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("tenantId", tenantId);
+        body.put("sessionToken", sessionToken);
+        body.put("roomId", roomId.toString());
+        body.put("reservationId", reservationId.toString());
+        body.put("expiresAt", now.plusDays(1).toString());
+        HttpResponse<String> response = send(request("POST", "/guest-sessions/scan", null)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        requireSuccess(response, "建立住客連線：POST /guest-sessions/scan（房號 " + roomNo + "）");
+        return sessionToken;
+    }
+
+    /**
+     * 以櫃檯畫面使用者的身分把待派單派給部門，回後端給的那張單。
+     * {@code via} 是 {@code button} 或 {@code drag}，給 null 時請求不帶這一欄，後端視為按鈕。
+     */
+    public JsonNode deskAssign(UUID taskId, CreatedStaff actor, String deptCode, String via) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("dept", deptCode);
+        if (via != null) {
+            body.put("via", via);
+        }
+        return postDeskAction("/desk/tasks/" + taskId + "/assign", actor, body);
+    }
+
+    /** 以櫃檯畫面使用者的身分把剛派出的單收回待派單。派出之後這張單只要再發生任何事，後端就會拒絕。 */
+    public JsonNode deskUndoAssign(UUID taskId, CreatedStaff actor) {
+        return postDeskAction("/desk/tasks/" + taskId + "/assign/undo", actor, null);
+    }
+
+    /** 以櫃檯畫面使用者的身分當場回答一張待派單，回答之後這張單就結束，沒有復原。 */
+    public JsonNode deskAnswer(UUID taskId, CreatedStaff actor, String answer) {
+        return postDeskAction("/desk/tasks/" + taskId + "/answer", actor, Map.of("answer", answer));
+    }
+
+    /**
+     * 櫃檯的三個寫入動作共用的送出方式。
+     * 每次帶一把新的防重複鍵，因為畫面每按一次也是一把新的鍵；後端沒有照做就當場停下，
+     * 這三個入口是拿來準備資料的，資料沒備好時後面的斷言只會錯得更難懂。
+     */
+    private JsonNode postDeskAction(String path, CreatedStaff actor, Map<String, Object> body) {
+        HttpRequest.Builder builder = request("POST", path, jwt(actor))
+                .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString());
+        if (body == null) {
+            builder.POST(HttpRequest.BodyPublishers.noBody());
+        } else {
+            builder.POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8))
+                    .header("Content-Type", "application/json");
+        }
+        HttpResponse<String> response = send(builder);
+        requireSuccess(response, "櫃檯動作：POST " + path + "（" + actor.name() + "）");
+        return parseJson(response.body());
+    }
+
+    private static void requireSuccess(HttpResponse<String> response, String what) {
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("測試資料準備失敗，" + what + " -> HTTP "
+                    + response.statusCode() + "，body=" + response.body());
+        }
+    }
+
     public String jwt(CreatedStaff staff) {
         return jwtByStaffId.computeIfAbsent(staff.id(), ignored -> login(staff.loginId(), staff.password()));
     }
 
     public String login(String loginId, String password) {
+        String responseBody = postLogin(loginId, password);
+        JsonNode token = parseJson(responseBody).path("token");
+        if (token.isMissingNode() || token.isNull()) {
+            throw new IllegalStateException("登入回應沒有 token 欄位：" + responseBody);
+        }
+        return token.asText();
+    }
+
+    /**
+     * 以這位員工的員工編號與密碼向後端登入，回後端給的整份登入回應。
+     *
+     * <p>櫃檯 Web 的測試把這份回應原樣放進瀏覽器分頁的儲存空間，畫面就會當成已經登入、不必走登入頁；
+     * 畫面要讀回應裡的姓名、角色與是否要先改密碼，所以只給通行憑證不夠。
+     */
+    public JsonNode loginResponse(CreatedStaff staff) {
+        return parseJson(postLogin(staff.loginId(), staff.password()));
+    }
+
+    private String postLogin(String loginId, String password) {
         Map<String, Object> body = Map.of("loginId", loginId, "password", password);
         HttpResponse<String> response = send(request("POST", "/staff-accounts/login", null)
                 .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8))
@@ -1225,11 +2408,35 @@ public class BackendChannel {
             throw new IllegalStateException("登入失敗：POST /staff-accounts/login -> HTTP "
                     + response.statusCode() + "，body=" + response.body());
         }
-        JsonNode token = parseJson(response.body()).path("token");
-        if (token.isMissingNode() || token.isNull()) {
-            throw new IllegalStateException("登入回應沒有 token 欄位：" + response.body());
-        }
-        return token.asText();
+        return response.body();
+    }
+
+    /**
+     * 以員工編號與密碼向後端登入一次，不管成功與否都回 HTTP 狀態碼。
+     *
+     * <p>準備「連續輸錯密碼被鎖定」這類狀態時用：失敗的登入要真的經過後端，連續錯誤次數與鎖定時間才是後端自己算的。
+     */
+    public int attemptLogin(String loginId, String password) {
+        Map<String, Object> body = Map.of("loginId", loginId, "password", password);
+        return send(request("POST", "/staff-accounts/login", null)
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json"))
+                .statusCode();
+    }
+
+    /**
+     * 拿臨時密碼登入，再把密碼改成新密碼，回改密碼後後端給的登入回應。
+     *
+     * <p>臨時密碼登入時後端要求先設定新密碼，這時改密碼不必帶目前密碼，身分由剛拿到的憑證證明。
+     */
+    public JsonNode changeTemporaryPassword(String loginId, String temporaryPassword, String newPassword) {
+        String token = login(loginId, temporaryPassword);
+        HttpResponse<String> response = send(request("POST", "/staff-accounts/change-password", token)
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        toJson(Map.of("newPassword", newPassword)), StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json"));
+        requireSuccess(response, "改密碼：POST /staff-accounts/change-password（" + loginId + "）");
+        return parseJson(response.body());
     }
 
     public void postTaskAction(UUID taskId, String action, CreatedStaff actor) {

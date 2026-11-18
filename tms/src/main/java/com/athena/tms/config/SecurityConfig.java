@@ -1,5 +1,6 @@
 package com.athena.tms.config;
 
+import com.athena.tms.common.codes.RolePermissions;
 import com.athena.tms.common.error.ApiErrorResponses;
 import com.athena.tms.config.AuthProperties;
 import com.athena.tms.dao.GuestSessionRepository;
@@ -46,22 +47,29 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/auth/login").permitAll()
                         .requestMatchers("/guest/**").hasRole("guest")
+                        // 員工事件串流另外給值班主管連，櫃檯畫面要靠它即時更新；值班主管只用櫃檯畫面，
+                        // 所以只放行這一條，下面其他 /staff/** 的員工 App 端點照舊不給。
+                        .requestMatchers(HttpMethod.GET, "/staff/stream")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "duty_manager")
                         .requestMatchers(HttpMethod.GET, "/staff/**")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
                         .requestMatchers("/staff/**").hasAnyRole("housekeeping", "engineering", "manager")
-                        .requestMatchers("/desk/**").hasAnyRole("frontdesk", "manager")
                         .requestMatchers("/admin/**").hasRole("manager")
                         .requestMatchers(HttpMethod.GET, "/owner/**").hasRole("owner")
                         .requestMatchers("/integration/**").hasRole("INTEGRATION")
                         .requestMatchers("/api/v1/tenant-configs/**").hasRole("manager")
                         .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/public/hotels/*").permitAll()
                         .requestMatchers("/api/v1/test/clock").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/change-password")
-                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner", "duty_manager")
                         .requestMatchers("/api/v1/me/push-token")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner")
                         .requestMatchers("/api/v1/guest-requests/**").hasRole("guest")
+                        // 櫃檯畫面的端點（看板、詳情、派單、復原、當場回答、常用回覆）只給櫃檯、主管、值班主管，
+                        // 要排在下面 GET /api/v1/** 前面，否則房務與工務會被那條放行讀到看板。
+                        .requestMatchers("/api/v1/desk/**").hasAnyRole(RolePermissions.frontdeskWebRoles())
                         .requestMatchers(HttpMethod.POST, "/api/v1/desk-notes").hasAnyRole("frontdesk", "manager")
                         .requestMatchers(HttpMethod.POST, "/api/v1/repair-photos", "/api/v1/repair-tickets")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")

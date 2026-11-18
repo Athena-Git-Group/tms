@@ -29,4 +29,79 @@
   --color-danger: #FF3B30;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+
+  /* 載入中骨架的閃動，照雛形 `ui/desk.css` 的 shimmer。用法：animate-shimmer。 */
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+  }
+
+  /* 派單浮條從底部升起，照雛形 `ui/desk.css` 的 riseIn。用法：animate-rise-in。 */
+  --animate-rise-in: riseIn .26s ease-out;
+
+  @keyframes riseIn {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+}
+
+/*
+ * 版面尺寸：照 `ui/ui-plan.md`「版面尺寸與伸縮規則」與雛形 `ui/desk.css`。
+ * 畫面上的尺寸只在這裡寫數字，元件用對應的 Tailwind 名稱（寫在每一列後面）；
+ * 要用同一個數字算位置的程式（`lib/board-layout.ts`）也是讀這裡的變數，不另外抄一份。
+ * 用 static 讓這些變數一律輸出，程式裡用 `var(...)` 讀的那幾個才一定存在。
+ */
+@theme static {
+  /* 外框最小的尺寸，比這個小時瀏覽器自己出捲軸。min-w-shell、min-h-shell。 */
+  --min-width-shell: 1180px;
+  --min-height-shell: 720px;
+
+  /* 側欄寬（雛形 `--sidebar-w`）。w-sidebar。 */
+  --width-sidebar: 300px;
+
+  /* 工具列、提醒列、數量卡、看板控制列的高度。min-h-toolbar、min-h-alert-bar、min-h-count-tile、min-h-board-controls。 */
+  --min-height-toolbar: 64px;
+  --min-height-alert-bar: 44px;
+  --min-height-count-tile: 72px;
+  --min-height-board-controls: 48px;
+
+  /* 內容區左右的邊距；看板第一欄與最後一欄離內容區邊界也是這個距離。px-gutter、mx-gutter、left-gutter。 */
+  --spacing-gutter: 16px;
+
+  /* 可點的東西最小的高度（NFR-006）。min-h-touch、h-touch、size-touch。 */
+  --spacing-touch: 44px;
+
+  /* 看板的欄：最窄寬度、數量卡篩選後最寬寬度、欄與列之間的距離。min-w-board-column、max-w-board-column-filtered、gap-board。 */
+  --min-width-board-column: 200px;
+  --max-width-board-column-filtered: 260px;
+  --gap-board: 10px;
+
+  /* 工具列的房號搜尋框寬。w-room-search。 */
+  --width-room-search: 220px;
+
+  /* 詳情面板寬，貼齊右側：視窗寬的 28%，最窄 400px、最寬 480px（照雛形 desk.css 的 --detail-w）。w-detail-panel。 */
+  --width-detail-panel: clamp(400px, 28vw, 480px);
+
+  /* 當場回答面板：寬 640px（視窗太窄時左右各留 40px），最高是視窗高度減 72px。w-answer-panel、max-h-answer-panel。 */
+  --width-answer-panel: min(640px, calc(100% - 80px));
+  --max-height-answer-panel: calc(100% - 72px);
+
+  /* 帳號面板：寬 540px、高 620px，最高是視窗高度減 48px。w-account-panel、h-account-panel、max-h-account-panel。 */
+  --width-account-panel: 540px;
+  --height-account-panel: 620px;
+  --max-height-account-panel: calc(100% - 48px);
+
+  /* 確認與提示對話框寬。w-dialog。 */
+  --width-dialog: 300px;
+
+  /* 登入、改密碼、找不到飯店三個畫面的表單：最寬寬度與欄位名稱的寬。max-w-auth-form、w-form-label。 */
+  --max-width-auth-form: 420px;
+  --width-form-label: 116px;
+
+  /* 圓角：卡片與面板 14px、數量卡與待派單列 18px、側欄功能列與搜尋框 10px。rounded-card、rounded-tile、rounded-control。 */
+  --radius-card: 14px;
+  --radius-tile: 18px;
+  --radius-control: 10px;
 }

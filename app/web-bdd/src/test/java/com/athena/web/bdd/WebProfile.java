@@ -70,10 +70,16 @@ public enum WebProfile {
         return browserType(playwright).launch();
     }
 
+    /**
+     * 瀏覽器的語言固定是繁體中文，和台灣櫃檯的裝置一樣。
+     * 櫃檯 Web 在這台裝置還沒有人選過語言時跟瀏覽器的語言，不固定的話會跟著跑測試那台電腦的系統語言，
+     * 沒交代語言的場景就可能變成英文介面。要測別的瀏覽器語言的場景自己另開一個改了語言的瀏覽器。
+     */
     public Browser.NewContextOptions contextOptions() {
         return new Browser.NewContextOptions()
                 .setViewportSize(width, height)
-                .setHasTouch(touch);
+                .setHasTouch(touch)
+                .setLocale("zh-TW");
     }
 
     public BrowserContext newContext(Browser browser) {

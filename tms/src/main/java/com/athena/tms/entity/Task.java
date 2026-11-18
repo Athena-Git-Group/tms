@@ -1,5 +1,6 @@
 package com.athena.tms.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -24,6 +25,12 @@ public class Task {
     private UUID assigneeId;
     private String title;
     private String note;
+    /** 給人看的任務單號（例 T-1053），建單時取號寫入、之後不改；工務單不領，為 null。 */
+    @Column(updatable = false)
+    private String taskNo;
+    /** 櫃檯當場回答的回覆，只由 {@code TaskEngine.answer} 以 SQL 寫入，這裡只讀，存這個物件時不會蓋掉它。 */
+    @Column(insertable = false, updatable = false)
+    private String answer;
     private Integer estMin;
     private OffsetDateTime startedAt;
     private OffsetDateTime doneAt;
@@ -115,6 +122,18 @@ public class Task {
     @Generated
     public int getRedoCount() {
         return this.redoCount;
+    }
+
+    public String getTaskNo() {
+        return this.taskNo;
+    }
+
+    public void setTaskNo(String taskNo) {
+        this.taskNo = taskNo;
+    }
+
+    public String getAnswer() {
+        return this.answer;
     }
 
     @Generated

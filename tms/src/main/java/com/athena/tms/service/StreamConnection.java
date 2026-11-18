@@ -8,34 +8,26 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 final class StreamConnection {
-    private final Audience audience;
-    private final long tenantId;
-    private final UUID reservationId;
-    private final UUID staffId;
-    private final String dept;
+    private final StreamSubscriber subscriber;
     private final SseEmitter emitter;
     private long streamPos = 0L;
     private volatile boolean closed = false;
 
-    private StreamConnection(Audience audience, long tenantId, UUID reservationId, UUID staffId, String dept, SseEmitter emitter) {
-        this.audience = audience;
-        this.tenantId = tenantId;
-        this.reservationId = reservationId;
-        this.staffId = staffId;
-        this.dept = dept;
+    private StreamConnection(StreamSubscriber subscriber, SseEmitter emitter) {
+        this.subscriber = subscriber;
         this.emitter = emitter;
     }
 
     static StreamConnection guest(long tenantId, UUID reservationId, SseEmitter emitter) {
-        return new StreamConnection(Audience.GUEST, tenantId, reservationId, null, null, emitter);
+        return new StreamConnection(StreamSubscriber.guest(tenantId, reservationId), emitter);
     }
 
-    static StreamConnection staff(long tenantId, UUID staffId, String dept, SseEmitter emitter) {
-        return new StreamConnection(Audience.STAFF, tenantId, null, staffId, dept, emitter);
+    static StreamConnection staff(long tenantId, UUID staffId, String role, String dept, SseEmitter emitter) {
+        return new StreamConnection(StreamSubscriber.staff(tenantId, staffId, role, dept), emitter);
     }
 
     static StreamConnection integration(long tenantId, SseEmitter emitter) {
-        return new StreamConnection(Audience.INTEGRATION, tenantId, null, null, null, emitter);
+        return new StreamConnection(StreamSubscriber.integration(tenantId), emitter);
     }
 
     SseEmitter emitter() {
@@ -43,29 +35,15 @@ final class StreamConnection {
     }
 
     boolean wants(TaskChange change) {
-        if (change.tenantId() != this.tenantId) {
-            return false;
-        }
-        return switch (this.audience.ordinal()) {
-            default -> throw new MatchException(null, null);
-            case 0 -> {
-                if (this.reservationId != null && this.reservationId.equals(change.reservationId())) {
-                    yield true;
-                }
-                yield false;
-            }
-            case 1 -> {
-                if (this.dept != null && this.dept.equals(change.dept()) || this.staffId != null && this.staffId.equals(change.assigneeId())) {
-                    yield true;
-                }
-                yield false;
-            }
-            case 2 -> false;
-        };
+        return this.subscriber.wants(change);
+    }
+
+    boolean isStaff() {
+        return this.subscriber.audience() == StreamSubscriber.Audience.STAFF;
     }
 
     boolean wantsIntegration(long tenantId) {
-        return this.audience == Audience.INTEGRATION && this.tenantId == tenantId;
+        return this.subscriber.audience() == StreamSubscriber.Audience.INTEGRATION && this.subscriber.tenantId() == tenantId;
     }
 
     synchronized boolean sendInit(ObjectMapper mapper) {
@@ -77,7 +55,7 @@ final class StreamConnection {
     synchronized boolean sendResync(ObjectMapper mapper) {
         ObjectNode data = mapper.createObjectNode();
         data.put("reason", "connected");
-        data.put("refetch", this.audience == Audience.GUEST ? "/guest/home" : "/api/v1/pool");
+        data.put("refetch", this.subscriber.refetchPath());
         return this.write("resync", data.toString());
     }
 
@@ -103,24 +81,35 @@ final class StreamConnection {
         return this.write("room_status", event.eventId(), mapper.writeValueAsString((Object)event));
     }
 
-    synchronized boolean sendHeartbeat(ObjectMapper mapper) {
+    // 員工的心跳另外帶後端目前是不是降級，漏接 degraded 或 recovered 的客戶端靠它對齊；住客與對接系統的心跳維持原樣。
+    synchronized boolean sendHeartbeat(ObjectMapper mapper, boolean degraded) {
         if (this.closed) {
             return false;
         }
         ObjectNode data = mapper.createObjectNode();
-        if (this.audience != Audience.INTEGRATION) {
+        if (this.subscriber.audience() != StreamSubscriber.Audience.INTEGRATION) {
             data.put("stream_pos", this.streamPos);
+        }
+        if (this.isStaff()) {
+            data.put("degraded", degraded);
         }
         return this.write("heartbeat", data.toString());
     }
 
-    synchronized boolean sendDegraded(ObjectMapper mapper) {
+    synchronized boolean sendDegraded(String reason, ObjectMapper mapper) {
         if (this.closed) {
             return false;
         }
         ObjectNode data = mapper.createObjectNode();
-        data.put("reason", "kafka_consumer_lag");
+        data.put("reason", reason);
         return this.write("degraded", data.toString());
+    }
+
+    synchronized boolean sendRecovered(ObjectMapper mapper) {
+        if (this.closed) {
+            return false;
+        }
+        return this.write("recovered", mapper.createObjectNode().toString());
     }
 
     private boolean write(String event, String json) {
@@ -149,12 +138,5 @@ final class StreamConnection {
         }
         catch (Exception exception) {
         }
-    }
-
-    static enum Audience {
-        GUEST,
-        STAFF,
-        INTEGRATION;
-
     }
 }

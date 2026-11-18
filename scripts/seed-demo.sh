@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 用法： ./scripts/seed-demo.sh
 #   只需要 docker compose 的 postgres 起著，後端不必起。
+#   資料庫要先套到最新的遷移（後端啟動一次就會套）：這支腳本會寫飯店代碼、任務單號與結束時間這幾個欄位。
 #   連線帳號要用管理帳號 tms：業務表有 row level security，tms_app 沒設 app.tenant_id 時讀寫不到任何一列。
 
 set -euo pipefail
@@ -23,21 +24,11 @@ PGPASSWORD="$DB_PASSWORD" psql \
   --quiet --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
 
--- 004 的 V24 起 tenants 多了必填的飯店代碼 code；這個資料庫可能被 004 的後端遷移過，也可能還沒有，兩種都要能種。
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tenants' AND column_name = 'code') THEN
-    EXECUTE $q$
-      INSERT INTO tenants (id, name, code, created_at) OVERRIDING SYSTEM VALUE
-      VALUES (1, '示範飯店', 'demo-hotel', now())
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
-    $q$;
-  ELSE
-    INSERT INTO tenants (id, name, created_at) OVERRIDING SYSTEM VALUE
-    VALUES (1, '示範飯店', now())
-    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
-  END IF;
-END $$;
+-- 飯店代碼是櫃檯畫面網址上用來認飯店的那一段，發出去之後不能改。
+-- 所以飯店已經存在時只更新名稱，代碼維持資料庫裡原本的值。
+INSERT INTO tenants (id, name, code, created_at) OVERRIDING SYSTEM VALUE
+VALUES (1, '示範飯店', 'demo-hotel', now())
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 DO $$ BEGIN PERFORM setval(pg_get_serial_sequence('tenants', 'id'), GREATEST(1, (SELECT max(id) FROM tenants)), true); END $$;
 
 DELETE FROM task_sop_checks            WHERE tenant_id = 1;
@@ -77,7 +68,8 @@ INSERT INTO staff_accounts (id, tenant_id, name, login_id, password_hash, role, 
   ('00000000-0000-7000-8000-00000000a004', 1, '林櫃檯', 'fd1', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'frontdesk',    'frontdesk',    true, 'active', now(), now()),
   ('00000000-0000-7000-8000-00000000a005', 1, '阿芳',   'hk2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'housekeeping', 'housekeeping', true, 'active', now(), now()),
   ('00000000-0000-7000-8000-00000000a006', 1, '阿義',   'mt2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'engineering',  'engineering',  true, 'active', now(), now()),
-  ('00000000-0000-7000-8000-00000000a007', 1, '陳主管', 'mg2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'manager',      'engineering',  true, 'active', now(), now());
+  ('00000000-0000-7000-8000-00000000a007', 1, '陳主管', 'mg2', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'manager',      'engineering',  true, 'active', now(), now()),
+  ('00000000-0000-7000-8000-00000000a008', 1, '吳家豪', 'dm1', '$2y$10$bQc3edVM.yCnLts.1Z1WyuSNWlF9T9..kLS2GRgBIpvsFYYlh.pjW', 'duty_manager', NULL,           true, 'active', now(), now());
 
 INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at) VALUES
   ('00000000-0000-7000-8000-000000000202', 1, '202', 2, 'standard_double', 'dirty',     'vacant',   now()),
@@ -107,7 +99,7 @@ INSERT INTO tenant_config (tenant_id, key, value, updated_at, updated_by) VALUES
   (1, 'low_rating_threshold',      '2',  now(), NULL),
   (1, 'retention_days',            '365', now(), NULL),
   (1, 'shift_times',               '{"morning": {"start": "08:00", "end": "16:00"}, "afternoon": {"start": "16:00", "end": "23:00"}}', now(), NULL),
-  (1, 'guest_info_pages',          '[{"key": "wifi", "title": "Wi-Fi 使用說明", "body": "SSID: TMS-Hotel，密碼見房卡套"}, {"key": "breakfast", "title": "早餐時間與地點", "body": "07:00–10:00 於 2 樓餐廳"}]', now(), NULL),
+  (1, 'guest_info_pages',          '[{"key": "wifi", "title": "Wi-Fi 使用說明", "body": "SSID: TMS-Hotel，密碼見房卡套"}, {"key": "breakfast", "title": "早餐時間與地點", "body": "07:00–10:00 於 2 樓餐廳"}, {"key": "checkout", "title": "退房時間與行李寄放", "body": "退房時間為中午 12:00 前，退房後可在櫃檯寄放行李到晚上 8 點"}]', now(), NULL),
   (1, 'request_menu',              '[{"key": "towel", "label": "加毛巾", "dept": "housekeeping", "type": "amenity"}, {"key": "water", "label": "礦泉水", "dept": "housekeeping", "type": "amenity"}, {"key": "cleaning", "label": "清潔服務", "dept": "housekeeping", "type": "cleaning"}]', now(), NULL);
 
 INSERT INTO sop_items (id, tenant_id, applies_to, item_key, label, sort_order, active, created_at) VALUES
@@ -137,7 +129,13 @@ INSERT INTO plan_rooms (id, tenant_id, plan_id, room_id, staff_id, est_min, rout
 
 INSERT INTO reservations_cache (id, tenant_id, reservation_ref, room_id, guest_name, lang, attrs, checkin_at, checkout_at, source, synced_at, superseded_at) VALUES
   ('00000000-0000-7000-8000-00000000b001', 1, 'PMS-88321', '00000000-0000-7000-8000-000000000305', NULL, NULL, '{"vip": true}', date_trunc('day', now()) + interval '15 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL),
-  ('00000000-0000-7000-8000-00000000b002', 1, 'PMS-88347', '00000000-0000-7000-8000-000000000302', NULL, NULL, '{}',             date_trunc('day', now()) + interval '16 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL);
+  ('00000000-0000-7000-8000-00000000b002', 1, 'PMS-88347', '00000000-0000-7000-8000-000000000302', NULL, NULL, '{}',             date_trunc('day', now()) + interval '16 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL),
+  -- 在住的住客（昨天 15:00 入住、明天 11:00 退房）：下面的待派單是他們掃房內 QR 碼送出的，看板與待派單頁會顯示住客名。
+  ('00000000-0000-7000-8000-00000000b003', 1, 'PMS-88290', '00000000-0000-7000-8000-000000000508', '林雅婷',       'zh-TW', '{"vip": true}', date_trunc('day', now()) - interval '9 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL),
+  ('00000000-0000-7000-8000-00000000b004', 1, 'PMS-88295', '00000000-0000-7000-8000-000000000306', 'Emily Carter', 'en',    '{}',             date_trunc('day', now()) - interval '9 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL),
+  ('00000000-0000-7000-8000-00000000b005', 1, 'PMS-88301', '00000000-0000-7000-8000-000000000405', '佐藤健',       'ja',    '{}',             date_trunc('day', now()) - interval '9 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL),
+  ('00000000-0000-7000-8000-00000000b006', 1, 'PMS-88304', '00000000-0000-7000-8000-000000000407', '陳怡安',       'zh-TW', '{}',             date_trunc('day', now()) - interval '9 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL),
+  ('00000000-0000-7000-8000-00000000b007', 1, 'PMS-88310', '00000000-0000-7000-8000-000000000205', '黃志明',       'zh-TW', '{}',             date_trunc('day', now()) - interval '9 hours', date_trunc('day', now()) + interval '35 hours', 'pms', now(), NULL);
 
 INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq, assignee_id, title, note, est_min,
                    started_at, done_at, work_date, created_at, updated_at, worked_sec, segment_started_at,
@@ -145,7 +143,7 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
                    pool_source, return_reason, requeue_note, rule_hit, reminder_stage) VALUES
   ('00000000-0000-7000-8000-00000000d001', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000302', 'housekeeping', 'doing', 1,
    '00000000-0000-7000-8000-00000000a001', '302 退房打掃', '房客有帶寵物，地毯多吸一次', 30,
-   now() - interval '25 minutes', NULL, current_date, now() - interval '3 hours', now(), 0, now() - interval '18 minutes',
+   now() - interval '25 minutes', NULL, current_date, now() - interval '3 hours', now(), 300, now() - interval '18 minutes',
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d002', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000303', 'housekeeping', 'accepted', 1,
    '00000000-0000-7000-8000-00000000a001', '303 退房打掃', NULL, 30,
@@ -157,7 +155,7 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    NULL, false, '住客掛「請勿打擾」，下午再來', true, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d004', 1, 'amenity', 'guest', '00000000-0000-7000-8000-000000000308', 'housekeeping', 'interrupted', 1,
    '00000000-0000-7000-8000-00000000a001', '308 補備品', NULL, 15,
-   now() - interval '70 minutes', NULL, NULL, now() - interval '2 hours', now(), 900, NULL,
+   now() - interval '30 minutes', NULL, NULL, now() - interval '2 hours', now(), 900, NULL,
    NULL, false, '備品車缺枕頭套，等補貨', false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d005', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000301', 'housekeeping', 'done', 1,
    '00000000-0000-7000-8000-00000000a001', '301 退房打掃', NULL, 30,
@@ -165,11 +163,11 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d006', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000401', 'housekeeping', 'inspected', 1,
    '00000000-0000-7000-8000-00000000a001', '401 退房打掃', NULL, 30,
-   now() - interval '5 hours', now() - interval '4 hours', current_date, now() - interval '6 hours', now(), 1680, NULL,
+   now() - interval '268 minutes', now() - interval '4 hours', current_date, now() - interval '6 hours', now(), 1680, NULL,
    'waived', true, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d007', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000402', 'housekeeping', 'inspected', 1,
    '00000000-0000-7000-8000-00000000a001', '402 退房打掃', NULL, 30,
-   now() - interval '4 hours', now() - interval '3 hours', current_date, now() - interval '6 hours', now(), 2100, NULL,
+   now() - interval '220 minutes', now() - interval '185 minutes', current_date, now() - interval '6 hours', now(), 4500, NULL,
    'passed', false, NULL, false, 1, false, false, NULL, NULL, NULL, NULL, NULL),
 
   ('00000000-0000-7000-8000-00000000d010', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000502', 'housekeeping', 'pool', 1,
@@ -224,38 +222,24 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    NULL, false, NULL, false, 0, true, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d031', 1, 'repair', 'staff', '00000000-0000-7000-8000-000000000502', 'engineering', 'doing', 1,
    '00000000-0000-7000-8000-00000000a002', '502 馬桶沖水不停', NULL, 30,
-   now() - interval '30 minutes', NULL, NULL, now() - interval '2 hours', now(), 0, now() - interval '25 minutes',
+   now() - interval '30 minutes', NULL, NULL, now() - interval '2 hours', now(), 0, now() - interval '30 minutes',
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d032', 1, 'repair', 'staff', '00000000-0000-7000-8000-000000000301', 'engineering', 'done', 1,
    '00000000-0000-7000-8000-00000000a002', '301 門鎖電池更換', NULL, 20,
-   now() - interval '4 hours', now() - interval '100 minutes', NULL, now() - interval '5 hours', now(), 2400, NULL,
+   now() - interval '140 minutes', now() - interval '100 minutes', NULL, now() - interval '5 hours', now(), 2400, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d033', 1, 'repair', 'desk', '00000000-0000-7000-8000-000000000405', 'engineering', 'closed', 1,
    '00000000-0000-7000-8000-00000000a002', '405 電視遙控器失靈', NULL, 15,
-   now() - interval '70 minutes', now() - interval '40 minutes', NULL, now() - interval '3 hours', now(), 1200, NULL,
+   now() - interval '60 minutes', now() - interval '40 minutes', NULL, now() - interval '3 hours', now(), 1200, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d034', 1, 'repair', 'staff', '00000000-0000-7000-8000-000000000305', 'engineering', 'closed', 2,
    '00000000-0000-7000-8000-00000000a002', '305 浴室燈不亮', NULL, 15,
    now() - interval '2 hours', now() - interval '110 minutes', NULL, now() - interval '150 minutes', now(), 600, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
 
-  -- 住客打字的需求沒有命中分類規則，停在待派單，等櫃檯判斷派給哪個部門或當場回答。
-  ('00000000-0000-7000-8000-00000000d050', 1, 'other', 'guest', '00000000-0000-7000-8000-000000000305', 'frontdesk', 'triage', 1,
-   NULL, '可以幫我們訂明天早上七點的機場接送嗎？', '{"text": "可以幫我們訂明天早上七點的機場接送嗎？", "lang": "zh-TW"}', NULL,
-   NULL, NULL, NULL, now() - interval '6 minutes', now(), 0, NULL,
-   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
-  ('00000000-0000-7000-8000-00000000d051', 1, 'other', 'guest', '00000000-0000-7000-8000-000000000402', 'frontdesk', 'triage', 1,
-   NULL, 'Could we get a late checkout at 2pm?', '{"text": "Could we get a late checkout at 2pm?", "lang": "en"}', NULL,
-   NULL, NULL, NULL, now() - interval '14 minutes', now(), 0, NULL,
-   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
-  ('00000000-0000-7000-8000-00000000d052', 1, 'other', 'guest', '00000000-0000-7000-8000-000000000308', 'frontdesk', 'triage', 1,
-   NULL, '隔壁房間一直有聲音，睡不著', '{"text": "隔壁房間一直有聲音，睡不著", "lang": "zh-TW"}', NULL,
-   NULL, NULL, NULL, now() - interval '22 minutes', now(), 0, NULL,
-   NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
-
   ('00000000-0000-7000-8000-00000000d040', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000403', 'housekeeping', 'doing', 1,
    '00000000-0000-7000-8000-00000000a003', '403 退房打掃', NULL, 30,
-   now() - interval '15 minutes', NULL, current_date, now() - interval '2 hours', now(), 0, now() - interval '10 minutes',
+   now() - interval '15 minutes', NULL, current_date, now() - interval '2 hours', now(), 0, now() - interval '15 minutes',
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL),
   ('00000000-0000-7000-8000-00000000d041', 1, 'cleaning', 'system', '00000000-0000-7000-8000-000000000404', 'housekeeping', 'accepted', 1,
    '00000000-0000-7000-8000-00000000a003', '404 退房打掃', NULL, 30,
@@ -267,49 +251,30 @@ INSERT INTO tasks (id, tenant_id, type, source, room_id, dept, state, event_seq,
    now() - interval '1 day 3 hours', now() - interval '1 day 150 minutes', current_date - 1, now() - interval '1 day 4 hours', now() - interval '1 day', 1800, NULL,
    NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL);
 
-INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
-SELECT 1, id, 1, 'created', 'system', NULL,
-       jsonb_build_object('type', type, 'source', source, 'room_id', room_id::text, 'dept', dept,
-                          'state', CASE WHEN state = 'triage' THEN 'triage' ELSE 'pool' END, 'title', title, 'est_min', est_min,
-                          'work_date', work_date),
-       created_at
-FROM tasks WHERE tenant_id = 1;
-
-INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at) VALUES
-  (1, '00000000-0000-7000-8000-00000000d034', 2, 'completed', 'engineering', '00000000-0000-7000-8000-00000000a002',
-   '{"resolutionType": "no_action_needed"}'::jsonb, now() - interval '110 minutes');
-
--- 004 的 V25 起非工務單有單號 task_no（T-0001 起跳），取號計數在 task_counters；資料庫還沒有這兩樣就跳過。
-DO $$
-BEGIN
-  IF to_regclass('task_counters') IS NOT NULL THEN
-    EXECUTE $q$
-      UPDATE tasks t
-         SET task_no = 'T-' || lpad(n.no::text, 4, '0')
-        FROM (SELECT id, row_number() OVER (ORDER BY created_at, id) AS no
-                FROM tasks WHERE tenant_id = 1 AND type <> 'repair') n
-       WHERE t.tenant_id = 1 AND t.id = n.id
-    $q$;
-    EXECUTE $q$
-      INSERT INTO task_counters (tenant_id, last_no)
-      SELECT 1, count(*) FROM tasks WHERE tenant_id = 1 AND type <> 'repair'
-      ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no
-    $q$;
-  END IF;
-END $$;
-
--- 004 的 V25 起 tasks 多了 ended_at（走到終點的時間），櫃檯看板只列還沒結束或今天才結束的單。
--- 示範資料沒有結案事件可以推算，已結案的單用完成時間代替；留空的話會永遠掛在已結案欄。
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'ended_at') THEN
-    EXECUTE $q$
-      UPDATE tasks
-         SET ended_at = COALESCE(done_at, updated_at)
-       WHERE tenant_id = 1 AND state IN ('inspected', 'closed', 'cancelled')
-    $q$;
-  END IF;
-END $$;
+-- 待派單：住客掃碼打字送出、分類規則判斷不出部門的需求，照後端 GuestRequestService 建單的寫法：
+-- 種類 other、部門 frontdesk、狀態 triage、綁住客的訂房；標題是住客原文，
+-- note 是 JSON：text 原文、lang 住客端語言，有翻譯的再帶 llm_translated。
+-- 涵蓋該派房務、該派工務、可當場回答三種，等待時間從剛剛到超過 20 分（看板變紅）。
+INSERT INTO tasks (id, tenant_id, type, source, room_id, reservation_id, dept, state, event_seq, assignee_id, title, note, est_min,
+                   started_at, done_at, work_date, created_at, updated_at, worked_sec, segment_started_at,
+                   inspection, inspection_waived, hold_reason, deferred_by_self, redo_count, urgent, priority_notify,
+                   pool_source, return_reason, requeue_note, rule_hit, reminder_stage)
+SELECT ('00000000-0000-7000-8000-00000000' || v.task)::uuid, 1, 'other', 'guest',
+       ('00000000-0000-7000-8000-000000000' || v.room)::uuid, ('00000000-0000-7000-8000-00000000' || v.resv)::uuid,
+       'frontdesk', 'triage', 1, NULL, v.text,
+       jsonb_strip_nulls(jsonb_build_object('text', v.text, 'lang', v.lang, 'llm_translated', v.translated))::text, NULL,
+       NULL, NULL, NULL, now() - make_interval(mins => v.ago), now() - make_interval(mins => v.ago), 0, NULL,
+       NULL, false, NULL, false, 0, false, false, NULL, NULL, NULL, NULL, NULL
+  FROM (VALUES
+    -- 單的尾碼、房號、訂房尾碼、住客原文、語言、翻譯、幾分鐘前送出
+    ('d050', '508', 'b003', '垃圾桶滿了，可以順便幫我們整理一下床鋪嗎？', 'zh-TW', NULL, 0),
+    ('d051', '407', 'b006', '請問早餐幾點開始？在幾樓吃？', 'zh-TW', NULL, 3),
+    ('d052', '306', 'b004', 'There''s water dripping from the ceiling near the bathroom door.', 'en', '浴室門口附近的天花板在滴水。', 6),
+    ('d053', '405', 'b005', 'Wi-Fiのパスワードを教えてください。', 'ja', 'Wi-Fi 的密碼是多少？', 12),
+    ('d054', '405', 'b005', 'バスタオルをあと2枚お願いします。', 'ja', '麻煩再給我兩條浴巾。', 18),
+    ('d055', '205', 'b007', '冷氣開了很久還是不冷，遙控器按了也沒反應', 'zh-TW', NULL, 25),
+    ('d056', '407', 'b006', '想多一顆枕頭，另外檯燈不亮', 'zh-TW', NULL, 45)
+  ) AS v(task, room, resv, text, lang, translated, ago);
 
 INSERT INTO repair_tickets (task_id, tenant_id, ticket_no, room_id, category, description, reporter_id, source_task_id, resolution_note, created_at, is_urgent) VALUES
   ('00000000-0000-7000-8000-00000000d020', 1, 'W-0101', '00000000-0000-7000-8000-000000000306', 'air_conditioning',    '房客反映冷氣只出風不冷，設到 18 度也一樣',   '00000000-0000-7000-8000-00000000a001', NULL, NULL, now() - interval '8 minutes',  true),
@@ -335,6 +300,138 @@ UPDATE repair_tickets
 UPDATE repair_tickets
    SET verified_by = '00000000-0000-7000-8000-00000000a003', verified_at = now() - interval '30 minutes'
  WHERE tenant_id = 1 AND ticket_no = 'W-0109';
+
+-- 事件歷程照後端寫事件的方式補齊（TaskEngine）：櫃檯看板的「接 N 分」「做 N 分」「停 N 分」、
+-- 到手方式與詳情的歷程都從這裡讀。tasks.started_at 是第一次開始的時刻，worked_sec 是累計做了幾秒，
+-- 兩者要對得上下面的開始、中斷、恢復、完成事件。
+-- 建立：排房發佈的打掃單建立時就有負責人（起點 accepted，接著一筆系統的 assigned）；
+-- 其餘從待認領起點，操作者是開單的人：住客掃碼是住客、報修是報修的人、櫃檯開的是櫃檯、系統建的是系統。
+INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+SELECT 1, t.id, 1, 'created',
+       CASE WHEN t.source = 'system' THEN 'system'
+            WHEN t.source = 'guest' THEN 'guest'
+            ELSE COALESCE(reporter.role, 'frontdesk') END,
+       CASE WHEN t.source IN ('system', 'guest') THEN NULL
+            ELSE COALESCE(reporter.id, '00000000-0000-7000-8000-00000000a004') END,
+       jsonb_strip_nulls(jsonb_build_object('type', t.type, 'source', t.source, 'room_id', t.room_id::text,
+                          'reservation_id', t.reservation_id::text, 'dept', t.dept,
+                          'state', CASE WHEN t.type = 'cleaning' AND t.source = 'system' AND t.assignee_id IS NOT NULL
+                                        THEN 'accepted'
+                                        WHEN t.state = 'triage' THEN 'triage'
+                                        ELSE 'pool' END,
+                          'title', t.title, 'note', t.note, 'est_min', t.est_min, 'work_date', t.work_date)),
+       t.created_at
+  FROM tasks t
+  LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
+  LEFT JOIN staff_accounts reporter ON reporter.tenant_id = t.tenant_id AND reporter.id = rt.reporter_id
+ WHERE t.tenant_id = 1;
+
+INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+SELECT 1, t.id, 2, 'assigned', 'system', NULL, jsonb_build_object('assignee_id', t.assignee_id::text), t.created_at
+  FROM tasks t
+ WHERE t.tenant_id = 1 AND t.type = 'cleaning' AND t.source = 'system' AND t.assignee_id IS NOT NULL;
+
+-- 其餘事件：單的尾碼、seq、種類、操作者角色、操作者尾碼、內容、幾分鐘前。
+INSERT INTO task_events (tenant_id, task_id, seq, type, actor_role, actor_id, payload, created_at)
+SELECT 1, ('00000000-0000-7000-8000-00000000' || v.task)::uuid, v.seq, v.type, v.role,
+       ('00000000-0000-7000-8000-00000000' || v.actor)::uuid, v.payload::jsonb, now() - make_interval(mins => v.ago)
+  FROM (VALUES
+    -- 302 打掃：25 分鐘前開始，做 5 分鐘中斷，18 分鐘前恢復；SOP 勾了四項
+    ('d001', 3, 'started',      'housekeeping', 'a001', NULL, 25),
+    ('d001', 4, 'interrupted',  'housekeeping', 'a001', '{"reason": "住客回房拿東西，先離開", "by_self": true}', 20),
+    ('d001', 5, 'resumed',      'housekeeping', 'a001', NULL, 18),
+    ('d001', 6, 'sop_checked',  'housekeeping', 'a001', '{"item_key": "bed_sheets", "label": "更換床單被套", "checked": true, "skipped": false}', 15),
+    ('d001', 7, 'sop_checked',  'housekeeping', 'a001', '{"item_key": "towels", "label": "補齊毛巾浴巾", "checked": true, "skipped": false}', 12),
+    ('d001', 8, 'sop_checked',  'housekeeping', 'a001', '{"item_key": "amenities", "label": "補齊備品", "checked": true, "skipped": false}', 8),
+    ('d001', 9, 'sop_checked',  'housekeeping', 'a001', '{"item_key": "bathroom", "label": "浴室清潔", "checked": false, "skipped": true}', 5),
+    -- 305 續住打掃：本人延後
+    ('d003', 3, 'deferred',     'housekeeping', 'a001', '{"reason": "住客掛「請勿打擾」，下午再來", "by_self": true}', 40),
+    -- 308 補備品：30 分鐘前開始，做了 15 分鐘後中斷
+    ('d004', 2, 'claimed',      'housekeeping', 'a001', '{"assignee_id": "00000000-0000-7000-8000-00000000a001"}', 35),
+    ('d004', 3, 'started',      'housekeeping', 'a001', NULL, 30),
+    ('d004', 4, 'interrupted',  'housekeeping', 'a001', '{"reason": "備品車缺枕頭套，等補貨", "by_self": true}', 15),
+    -- 301 打掃：做完等查房
+    ('d005', 3, 'started',      'housekeeping', 'a001', NULL, 180),
+    ('d005', 4, 'completed',    'housekeeping', 'a001', NULL, 150),
+    -- 401 打掃：免查房，完成即結案
+    ('d006', 3, 'started',      'housekeeping', 'a001', NULL, 268),
+    ('d006', 4, 'completed',    'housekeeping', 'a001', NULL, 240),
+    -- 402 打掃：查房退回一次，重做後通過
+    ('d007', 3, 'started',      'housekeeping', 'a001', NULL, 300),
+    ('d007', 4, 'completed',    'housekeeping', 'a001', NULL, 260),
+    ('d007', 5, 'inspection_failed', 'manager', 'a003', '{"note": "床尾有毛髮，請重做"}', 240),
+    ('d007', 6, 'started',      'housekeeping', 'a001', NULL, 220),
+    ('d007', 7, 'completed',    'housekeeping', 'a001', NULL, 185),
+    ('d007', 8, 'inspection_passed', 'manager', 'a003', NULL, 180),
+    -- 305 冷氣滴水：阿強認領
+    ('d030', 2, 'claimed',      'engineering',  'a002', '{"assignee_id": "00000000-0000-7000-8000-00000000a002"}', 40),
+    -- 502 馬桶：阿義認領，陳主管轉給阿強，阿強開始
+    ('d031', 2, 'claimed',      'engineering',  'a006', '{"assignee_id": "00000000-0000-7000-8000-00000000a006"}', 115),
+    ('d031', 3, 'reassigned',   'manager',      'a007', '{"assignee_id": "00000000-0000-7000-8000-00000000a002"}', 100),
+    ('d031', 4, 'started',      'engineering',  'a002', NULL, 30),
+    -- 301 門鎖電池：完修等驗收
+    ('d032', 2, 'claimed',      'engineering',  'a002', '{"assignee_id": "00000000-0000-7000-8000-00000000a002"}', 150),
+    ('d032', 3, 'started',      'engineering',  'a002', NULL, 140),
+    ('d032', 4, 'completed',    'engineering',  'a002', '{"resolutionType": "fixed"}', 100),
+    -- 405 遙控器：完修後王主管驗收結案
+    ('d033', 2, 'claimed',      'engineering',  'a002', '{"assignee_id": "00000000-0000-7000-8000-00000000a002"}', 70),
+    ('d033', 3, 'started',      'engineering',  'a002', NULL, 60),
+    ('d033', 4, 'completed',    'engineering',  'a002', '{"resolutionType": "fixed"}', 40),
+    ('d033', 5, 'repair_verified', 'manager',   'a003', NULL, 30),
+    -- 305 浴室燈：判斷不需處理，完成即結案
+    ('d034', 2, 'claimed',      'engineering',  'a002', '{"assignee_id": "00000000-0000-7000-8000-00000000a002"}', 125),
+    ('d034', 3, 'started',      'engineering',  'a002', NULL, 120),
+    ('d034', 4, 'completed',    'engineering',  'a002', '{"resolutionType": "no_action_needed"}', 110),
+    -- 403 打掃：王主管自己清
+    ('d040', 3, 'started',      'manager',      'a003', NULL, 15),
+    -- 205 打掃：昨天做完
+    ('d042', 3, 'started',      'housekeeping', 'a005', NULL, 1620),
+    ('d042', 4, 'completed',    'housekeeping', 'a005', NULL, 1590)
+  ) AS v(task, seq, type, role, actor, payload, ago);
+
+-- 單上的事件序號要等於最後一筆事件的 seq，之後從畫面操作才會接著編。
+UPDATE tasks t
+   SET event_seq = (SELECT max(e.seq) FROM task_events e WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id)
+ WHERE t.tenant_id = 1;
+
+-- 工務單以外的單都要有給人看的單號（T- 加 4 位數）：依建立時間由舊到新，從 T-0001 編起。
+-- 工務單不領這種單號，它的單號是上面的 W-。
+WITH numbered AS (
+  SELECT id, row_number() OVER (ORDER BY created_at, id) AS no
+    FROM tasks
+   WHERE tenant_id = 1 AND type <> 'repair'
+)
+UPDATE tasks t
+   SET task_no = 'T-' || lpad(n.no::text, 4, '0')
+  FROM numbered n
+ WHERE t.tenant_id = 1 AND t.id = n.id;
+
+-- 後端建單時把單號一起記進建立事件，這裡補上，詳情歷程看到的建立內容才和真的建出來的單一樣。
+UPDATE task_events e
+   SET payload = jsonb_build_object('task_no', t.task_no) || e.payload
+  FROM tasks t
+ WHERE e.tenant_id = 1 AND e.type = 'created' AND t.tenant_id = e.tenant_id AND t.id = e.task_id
+   AND t.task_no IS NOT NULL;
+
+-- 取號表記到上面編出的最後一號，之後從畫面新開的單才會接著編、不會撞號。
+INSERT INTO task_counters (tenant_id, last_no)
+SELECT 1, count(*) FROM tasks WHERE tenant_id = 1 AND type <> 'repair'
+ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no;
+
+-- 已經結束的單要有結束時間：櫃檯看板只列「還沒結束的單」與「今天結束的單」，
+-- 沒寫的話這些單會被當成還沒結束，一直留在看板上。
+-- 打掃單與工務單的「完成」還在等查房或驗收，不算結束。
+-- 工務單結案取主管驗收的時間、查房通過取查房的時間；其餘（含免查房、判斷不需處理而直接結案的）取完成的時間。
+UPDATE tasks t
+   SET ended_at = COALESCE(
+         (SELECT r.verified_at FROM repair_tickets r WHERE r.tenant_id = t.tenant_id AND r.task_id = t.id),
+         (SELECT max(e.created_at) FROM task_events e
+           WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.type = 'inspection_passed'),
+         t.done_at,
+         t.updated_at)
+ WHERE t.tenant_id = 1
+   AND (t.state IN ('inspected', 'cancelled', 'closed')
+        OR (t.state = 'done' AND t.type IN ('amenity', 'other')));
 
 INSERT INTO repair_photos (id, tenant_id, ticket_task_id, purpose, status, storage_ref, taken_at, uploaded_by, created_at, uploaded_at) VALUES
   ('00000000-0000-7000-8000-00000000e601', 1, '00000000-0000-7000-8000-00000000d032', 'completion', 'uploaded',
@@ -407,12 +504,20 @@ PGPASSWORD="$DB_PASSWORD" psql \
   --host "$DB_HOST" --port "$DB_PORT" --username "$DB_USER" --dbname "$DB_NAME" \
   --quiet --no-psqlrc --set ON_ERROR_STOP=1 --tuples-only <<'SQL'
 \echo '[seed-demo] 種好了。清點：'
+SELECT '  飯店 ' || name || '（代碼 ' || code || '）' FROM tenants WHERE id = 1;
 SELECT '  員工 ' || count(*) || ' 位' FROM staff_accounts WHERE tenant_id = 1;
 SELECT '  房間 ' || count(*) || ' 間' FROM rooms WHERE tenant_id = 1;
-SELECT '  任務 ' || count(*) || ' 張（房務待認領 '
+SELECT '  任務 ' || count(*) || ' 張（待派單 '
+       || count(*) FILTER (WHERE state = 'triage') || '、房務待認領 '
        || count(*) FILTER (WHERE state = 'pool' AND dept = 'housekeeping') || '、工務待認領 '
        || count(*) FILTER (WHERE state = 'pool' AND dept = 'engineering') || '）'
   FROM tasks WHERE tenant_id = 1;
+SELECT '  有 T- 單號的 ' || count(task_no) || ' 張（取號表記到 '
+       || (SELECT last_no FROM task_counters WHERE tenant_id = 1) || ' 號）、已結束 '
+       || count(ended_at) || ' 張'
+  FROM tasks WHERE tenant_id = 1;
+SELECT '  住客資訊頁 ' || jsonb_array_length(value) || ' 頁（櫃檯當場回答的常用回覆）'
+  FROM tenant_config WHERE tenant_id = 1 AND key = 'guest_info_pages';
 SELECT '  工務單 ' || count(*) || ' 張' FROM repair_tickets WHERE tenant_id = 1;
 SELECT '  主管首頁：王主管 待查房 '
        || (SELECT count(*) FROM tasks WHERE tenant_id = 1 AND type = 'cleaning' AND state = 'done'
@@ -435,5 +540,8 @@ cat <<'EOF'
   mt1  阿強    工務員工
   mg1  王主管  房務主管
   mg2  陳主管  工務主管
+  fd1  林櫃檯  櫃檯
+  dm1  吳家豪  值班主管
+[seed-demo] 櫃檯 Web 只有櫃檯、主管、值班主管進得去（fd1、mg1、mg2、dm1）；飯店代碼見上面清點的第一行。
 [seed-demo] 跑過 app/bdd 的 BDD 之後這份資料會被清掉，想再玩就再跑一次這支腳本。
 EOF

@@ -74,6 +74,7 @@ public class TaskFixtures {
         private String dueAtHHmm;
         private Boolean deferredBySelf;
         private String reminderStage;
+        private Actor creator;
 
         public Builder roomNo(String v) {
             this.roomNo = v;
@@ -107,6 +108,12 @@ public class TaskFixtures {
 
         public Builder assignee(UUID v) {
             this.assigneeId = v;
+            return this;
+        }
+
+        /** 開單事件記在誰名下；沒指定時記成系統開的單。 */
+        public Builder createdBy(Actor v) {
+            this.creator = v;
             return this;
         }
 
@@ -305,25 +312,26 @@ public class TaskFixtures {
 
         private Task createAtState(long tenantId, UUID roomId, LocalDate workDate) {
             Actor systemActor = Actor.system();
+            Actor createActor = creator != null ? creator : systemActor;
             switch (state) {
                 case "triage":
-                    return poolOrTriageCreate(tenantId, roomId, workDate, "triage", systemActor);
+                    return poolOrTriageCreate(tenantId, roomId, workDate, "triage", createActor);
                 case "pool":
-                    return poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    return poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                 case "accepted": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     engine.claim(tenantId, task.getId(), dept, requireAssignee());
                     return task;
                 }
                 case "doing": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
                     return task;
                 }
                 case "done": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
@@ -331,7 +339,7 @@ public class TaskFixtures {
                     return task;
                 }
                 case "closed": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
@@ -343,7 +351,7 @@ public class TaskFixtures {
                     return task;
                 }
                 case "inspected": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
@@ -361,13 +369,13 @@ public class TaskFixtures {
                     return task;
                 }
                 case "deferred": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = assigneeId != null ? Actor.staff(dept, assigneeId) : systemActor;
                     engine.defer(tenantId, task.getId(), actor);
                     return task;
                 }
                 case "interrupted": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = requireAssignee();
                     engine.claim(tenantId, task.getId(), dept, actor);
                     engine.start(tenantId, task.getId(), actor);
@@ -375,7 +383,7 @@ public class TaskFixtures {
                     return task;
                 }
                 case "cancelled": {
-                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", systemActor);
+                    Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = assigneeId != null ? Actor.staff(dept, assigneeId) : Actor.staff("manager", null);
                     engine.cancel(tenantId, task.getId(), cancelReason, actor);
                     return task;

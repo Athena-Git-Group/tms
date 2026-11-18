@@ -2,6 +2,8 @@ package com.athena.tms.bdd;
 
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.DeskApi;
+import com.athena.tms.bdd.support.DeskContext;
 import com.athena.tms.bdd.support.HandoverFixtures;
 import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
@@ -17,6 +19,11 @@ import com.athena.tms.bdd.support.PmsProbe;
 import com.athena.tms.bdd.support.ReservationFixtures;
 import com.athena.tms.bdd.support.RoomFixtures;
 import com.athena.tms.bdd.support.StaffFixtures;
+import com.athena.tms.bdd.support.StaffStreamClient;
+import com.athena.tms.bdd.support.StreamFaults;
+import com.athena.tms.config.KafkaTopicsProperties;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.core.KafkaTemplate;
 import com.athena.tms.bdd.support.TaskFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.service.JwtService;
@@ -183,6 +190,53 @@ public class BddSpringConfiguration {
         @ScenarioScope
         VerifyFixtures verifyFixtures(BddApiClient bddApiClient) {
             return new VerifyFixtures(bddApiClient);
+        }
+
+        @Bean
+        @ScenarioScope
+        DeskContext deskContext() {
+            return new DeskContext();
+        }
+
+        @Bean
+        @ScenarioScope
+        DeskApi deskApi(
+                BddApiClient bddApiClient,
+                ScenarioWorld scenarioWorld,
+                DeskContext deskContext,
+                DbProbe dbProbe,
+                TenantFixtures tenantFixtures,
+                RoomFixtures roomFixtures,
+                ReservationFixtures reservationFixtures,
+                MutableClock mutableClock) {
+            return new DeskApi(
+                    bddApiClient, scenarioWorld, deskContext, dbProbe,
+                    tenantFixtures, roomFixtures, reservationFixtures, mutableClock);
+        }
+
+        // destroyMethod：案例結束時 Spring 會呼叫它關掉這個案例開過的串流連線，不必另外寫 @After。
+        @Bean(destroyMethod = "close")
+        @ScenarioScope
+        StaffStreamClient staffStreamClient(
+                Environment environment,
+                ObjectMapper objectMapper,
+                ScenarioWorld scenarioWorld,
+                JobTrigger jobTrigger) {
+            return new StaffStreamClient(environment, objectMapper, scenarioWorld, jobTrigger);
+        }
+
+        // destroyMethod：案例結束時 Spring 會呼叫它把後端的降級狀態與事件消費者還原，下一個案例才不會受影響。
+        @Bean(destroyMethod = "restore")
+        @ScenarioScope
+        StreamFaults streamFaults(
+                KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry,
+                KafkaTemplate<String, String> kafkaTemplate,
+                KafkaTopicsProperties kafkaTopicsProperties,
+                KafkaGroupAwait kafkaGroupAwait,
+                TenantFixtures tenantFixtures) {
+            return new StreamFaults(
+                    kafkaListenerEndpointRegistry, kafkaTemplate, kafkaTopicsProperties,
+                    kafkaGroupAwait, tenantFixtures);
         }
 
         @Bean

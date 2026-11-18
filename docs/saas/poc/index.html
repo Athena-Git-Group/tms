@@ -1,0 +1,1685 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SaaS 營運後台 POC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/*
+ * SaaS 營運後台 POC
+ *
+ * 設計 token 沿用 docs/13-poc/shared/styles.css（同一套顏色與字體角色），
+ * 但這份是單檔、自給自足，不引用 13-poc 的檔案，避免兩個 POC 互相綁死。
+ * 顏色只在 token 層定義；元件一律吃 var(--color-*)。
+ */
+:root {
+  --color-surface: #F7F9FA;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-sunken: #EDF1F4;
+  --color-ink: #1B2A33;
+  --color-ink-muted: #56687A;
+  --color-ink-faint: #8A96A0;
+  --color-line: #C6D0D8;
+  --color-line-strong: #AAB6BF;
+  --color-accent: #15705A;
+  --color-accent-strong: #0F5445;
+  --color-accent-soft: #DFF2EC;
+  --color-accent-ink: #FFFFFF;
+  --color-success: #15705A;  --color-success-soft: #DFF2EC;
+  --color-warning: #8A6210;  --color-warning-soft: #F7EDD3;
+  --color-error: #B33D2B;    --color-error-soft: #FBE9E5;
+  --color-info: #33608A;     --color-info-soft: #E4EDF5;
+  --color-neutral-soft: #E0E6EA;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+  --shadow-card: 0 1px 2px rgba(27,42,51,.06), 0 6px 16px rgba(27,42,51,.06);
+  --shadow-raised: 0 4px 10px rgba(27,42,51,.10), 0 16px 32px rgba(27,42,51,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-surface: #0F171C; --color-surface-raised: #17222A; --color-surface-sunken: #0B1216;
+    --color-ink: #E8EEF0; --color-ink-muted: #9FB0BA; --color-ink-faint: #71838D;
+    --color-line: #2B3940; --color-line-strong: #3C4C55;
+    --color-accent: #2FBE9B; --color-accent-strong: #52D6B5; --color-accent-soft: #163029; --color-accent-ink: #06221B;
+    --color-success: #3FCBA0; --color-success-soft: #113028;
+    --color-warning: #D9A94B; --color-warning-soft: #332710;
+    --color-error: #E07A62;   --color-error-soft: #391C16;
+    --color-info: #6FA3D1;    --color-info-soft: #1C2B38;
+    --color-neutral-soft: #202B33;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+    --shadow-raised: 0 6px 16px rgba(0,0,0,.4), 0 20px 40px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  --color-surface: #0F171C; --color-surface-raised: #17222A; --color-surface-sunken: #0B1216;
+  --color-ink: #E8EEF0; --color-ink-muted: #9FB0BA; --color-ink-faint: #71838D;
+  --color-line: #2B3940; --color-line-strong: #3C4C55;
+  --color-accent: #2FBE9B; --color-accent-strong: #52D6B5; --color-accent-soft: #163029; --color-accent-ink: #06221B;
+  --color-success: #3FCBA0; --color-success-soft: #113028;
+  --color-warning: #D9A94B; --color-warning-soft: #332710;
+  --color-error: #E07A62;   --color-error-soft: #391C16;
+  --color-info: #6FA3D1;    --color-info-soft: #1C2B38;
+  --color-neutral-soft: #202B33;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+  --shadow-raised: 0 6px 16px rgba(0,0,0,.4), 0 20px 40px rgba(0,0,0,.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--color-surface); color: var(--color-ink); font-family: var(--font-body); font-size: 14.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, h4 { margin: 0 0 .4em; font-weight: 700; text-wrap: balance; }
+p { margin: 0 0 .8em; }
+a { color: var(--color-accent); }
+code, .mono { font-family: var(--font-mono); font-size: .92em; }
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ── 版面 ─────────────────────────────── */
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 10px 20px; background: var(--color-surface-raised); border-bottom: 1px solid var(--color-line); }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand-mark { font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+.brand-sub { font-size: 12.5px; color: var(--color-ink-muted); padding: 2px 9px; border: 1px solid var(--color-line); border-radius: 999px; }
+.top-ctl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-ink-muted); }
+.top-ctl select, .top-ctl input { padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); font-weight: 600; }
+.shell { display: grid; grid-template-columns: 216px 1fr; min-height: calc(100vh - 57px); }
+.sidenav { border-right: 1px solid var(--color-line); background: var(--color-surface-raised); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+.sidenav a { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-sm); color: var(--color-ink-muted); text-decoration: none; font-weight: 500; }
+.sidenav a:hover { background: var(--color-surface-sunken); color: var(--color-ink); }
+.sidenav a.is-active { background: var(--color-accent-soft); color: var(--color-accent-strong); font-weight: 700; }
+.sidenav .nav-count { margin-left: auto; font-size: 11.5px; font-weight: 700; padding: 0 7px; border-radius: 999px; background: var(--color-error-soft); color: var(--color-error); }
+.sidenav .nav-sep { height: 1px; background: var(--color-line); margin: 10px 6px; }
+.sidenav .nav-label { font-size: 11.5px; color: var(--color-ink-faint); padding: 2px 12px; letter-spacing: .04em; }
+main { padding: 22px 26px 60px; min-width: 0; max-width: 1240px; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; margin-bottom: 16px; }
+.page-head h1 { font-size: 22px; margin: 0; }
+.page-head .sub { color: var(--color-ink-muted); font-size: 13.5px; margin: 2px 0 0; }
+.page-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .sidenav { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--color-line); padding: 8px 12px; }
+  .sidenav a { white-space: nowrap; }
+  .sidenav .nav-sep, .sidenav .nav-label { display: none; }
+  main { padding: 16px 16px 60px; }
+  .topbar { padding: 10px 16px; }
+}
+
+/* ── 元件 ─────────────────────────────── */
+.panel { background: var(--color-surface-raised); border: 1px solid var(--color-line); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 16px 18px; margin-bottom: 16px; min-width: 0; overflow-x: auto; }
+.panel h2 { font-size: 15.5px; margin-bottom: 2px; }
+.panel .panel-sub { font-size: 12.5px; color: var(--color-ink-muted); margin: 0 0 12px; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin-bottom: 10px; }
+.panel-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
+.grid-2 > .panel { margin-bottom: 0; }
+
+.btn { appearance: none; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 7px 13px; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+.btn-primary:hover:not(:disabled) { background: var(--color-accent-strong); border-color: var(--color-accent-strong); }
+.btn-secondary { background: var(--color-surface-raised); border-color: var(--color-line-strong); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-danger { background: var(--color-surface-raised); border-color: var(--color-error); color: var(--color-error); }
+.btn-sm { padding: 4px 9px; font-size: 12.5px; }
+.btn-link { background: none; border: none; color: var(--color-accent); padding: 0; font-weight: 600; cursor: pointer; }
+.btn.locked { opacity: .5; }
+.btn.locked::after { content: ' 🔒'; font-size: 11px; }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; background: var(--color-neutral-soft); color: var(--color-ink-muted); }
+.pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--color-success-soft); color: var(--color-success); }
+.pill.warn { background: var(--color-warning-soft); color: var(--color-warning); }
+.pill.err { background: var(--color-error-soft); color: var(--color-error); }
+.pill.info { background: var(--color-info-soft); color: var(--color-info); }
+.pill.plain::before { display: none; }
+
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tbl th { text-align: left; font-size: 12px; font-weight: 600; color: var(--color-ink-muted); padding: 7px 10px; border-bottom: 1px solid var(--color-line-strong); white-space: nowrap; }
+.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr.indent td:first-child { padding-left: 30px; }
+.tbl tr.group-row td { background: var(--color-surface-sunken); font-weight: 700; }
+.tbl .muted, .muted { color: var(--color-ink-muted); }
+.faint { color: var(--color-ink-faint); font-size: 12.5px; }
+.table-wrap { overflow-x: auto; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--color-surface-raised); border: 1px solid var(--color-line); border-radius: var(--radius-md); padding: 12px 14px; box-shadow: var(--shadow-card); }
+.kpi .k-label { font-size: 12.5px; color: var(--color-ink-muted); }
+.kpi .k-value { font-family: var(--font-display); font-size: 28px; font-weight: 600; line-height: 1.2; }
+.kpi.warn .k-value { color: var(--color-warning); }
+.kpi.err .k-value { color: var(--color-error); }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-line); margin-bottom: 16px; overflow-x: auto; }
+.tabs a { padding: 8px 14px; text-decoration: none; color: var(--color-ink-muted); font-weight: 600; border-bottom: 2px solid transparent; white-space: nowrap; }
+.tabs a.is-active { color: var(--color-accent-strong); border-bottom-color: var(--color-accent); }
+
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field.full { grid-column: 1 / -1; }
+.field > span { font-size: 12.5px; font-weight: 600; color: var(--color-ink-muted); }
+.field input, .field select, .field textarea, .inline-select { padding: 7px 9px; border-radius: var(--radius-sm); border: 1px solid var(--color-line-strong); background: var(--color-surface-raised); min-width: 0; }
+.field textarea { min-height: 64px; resize: vertical; }
+.field .hint { font-size: 12px; color: var(--color-ink-faint); }
+.checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.check { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); cursor: pointer; font-size: 13.5px; }
+.check input { accent-color: var(--color-accent); width: 15px; height: 15px; }
+
+.note { border-left: 3px solid var(--color-info); background: var(--color-info-soft); padding: 9px 12px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 13px; margin: 0 0 12px; }
+.note.warn { border-color: var(--color-warning); background: var(--color-warning-soft); }
+.note.err { border-color: var(--color-error); background: var(--color-error-soft); }
+.note b { font-weight: 700; }
+
+.progress { height: 7px; border-radius: 999px; background: var(--color-surface-sunken); overflow: hidden; min-width: 80px; }
+.progress > i { display: block; height: 100%; background: var(--color-accent); }
+
+.timeline { position: relative; height: 34px; margin: 20px 4px 28px; }
+.timeline .seg { position: absolute; top: 12px; height: 10px; }
+.timeline .seg.active { background: var(--color-success); border-radius: 999px 0 0 999px; }
+.timeline .seg.expiring { background: var(--color-warning); }
+.timeline .seg.grace { background: var(--color-error); opacity: .55; border-radius: 0 999px 999px 0; }
+.timeline .tick { position: absolute; top: 26px; transform: translateX(-50%); font-size: 11px; color: var(--color-ink-muted); white-space: nowrap; }
+.timeline .tick.top { top: -8px; }
+.timeline .today { position: absolute; top: 4px; width: 2px; height: 26px; background: var(--color-ink); }
+.timeline .today span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+pre.json { font-family: var(--font-mono); font-size: 12.5px; background: var(--color-surface-sunken); border: 1px solid var(--color-line); border-radius: var(--radius-sm); padding: 10px 12px; overflow: auto; max-height: 420px; margin: 0; white-space: pre; }
+.diff { font-family: var(--font-mono); font-size: 12px; display: grid; grid-template-columns: max-content 1fr 1fr; gap: 2px 10px; margin-top: 6px; }
+.diff .d-key { color: var(--color-ink-muted); }
+.diff .d-old { color: var(--color-error); text-decoration: line-through; word-break: break-all; }
+.diff .d-new { color: var(--color-success); word-break: break-all; }
+
+.brand-preview { border: 1px solid var(--color-line); border-radius: var(--radius-md); overflow: hidden; max-width: 320px; }
+.brand-preview .bp-head { padding: 14px; display: flex; align-items: center; gap: 10px; color: #FFFFFF; }
+.brand-preview .bp-head img { max-height: 36px; max-width: 120px; background: rgba(255,255,255,.9); border-radius: 4px; padding: 2px; }
+.brand-preview .bp-body { padding: 12px 14px; font-size: 13px; color: var(--color-ink-muted); }
+.brand-preview .bp-btn { display: inline-block; margin-top: 8px; padding: 6px 12px; border-radius: 6px; color: #FFFFFF; font-weight: 700; font-size: 12.5px; }
+
+.empty { text-align: center; color: var(--color-ink-faint); padding: 24px; font-size: 13.5px; }
+.sim-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.sim-switch input { accent-color: var(--color-error); width: 16px; height: 16px; }
+
+/* ── 服務狀態 ─────────────────────────── */
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--color-line-strong); flex-shrink: 0; }
+.dot.ok { background: var(--color-success); }
+.dot.warn { background: var(--color-warning); }
+.dot.err { background: var(--color-error); }
+.platform-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.platform-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-surface); }
+.platform-item .dot { margin-top: 6px; }
+.platform-item b { display: block; font-size: 13.5px; }
+.platform-item span { font-size: 12px; color: var(--color-ink-muted); }
+.signal-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12.5px; }
+.src-tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.src-tag.own { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.src-tag.tms { background: var(--color-warning-soft); color: var(--color-warning); }
+.signal-row { display: grid; grid-template-columns: 14px 150px 1fr auto; gap: 10px; align-items: start; padding: 10px 0; border-top: 1px dashed var(--color-line); }
+.signal-row:first-child { border-top: none; }
+.signal-row .dot { margin-top: 6px; }
+.signal-row .s-why { font-size: 12px; color: var(--color-ink-faint); }
+@media (max-width: 640px) { .signal-row { grid-template-columns: 14px 1fr; } .signal-row > :nth-child(n+3) { grid-column: 2; } }
+
+/* ── Modal ／ Toast ───────────────────── */
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,28,.45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; overflow-y: auto; }
+.modal { background: var(--color-surface-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-raised); width: 100%; max-width: 560px; border: 1px solid var(--color-line); }
+.modal.wide { max-width: 780px; }
+.modal header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--color-line); }
+.modal header h3 { margin: 0; font-size: 16px; }
+.modal .modal-body { padding: 16px 18px; }
+.modal footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--color-line); }
+.icon-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--color-ink-muted); line-height: 1; }
+.toast-host { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--color-surface-raised); border: 1px solid var(--color-line); border-left: 4px solid var(--color-info); border-radius: var(--radius-sm); box-shadow: var(--shadow-raised); padding: 10px 14px; font-size: 13.5px; }
+.toast.success { border-left-color: var(--color-success); }
+.toast.error { border-left-color: var(--color-error); }
+.toast.warning { border-left-color: var(--color-warning); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">Ops Console</span><span class="brand-sub">SaaS 營運後台 · POC</span></div>
+  <label class="top-ctl">模擬 SSO 身分 <select id="user-select"></select></label>
+  <label class="top-ctl">模擬今天 <input type="date" id="today-input"></label>
+  <button class="btn btn-secondary btn-sm" id="reset-btn">重置示範資料</button>
+</header>
+<div class="shell">
+  <nav class="sidenav" id="sidenav"></nav>
+  <main id="main"></main>
+</div>
+<div id="modal-host"></div>
+<div class="toast-host" id="toast-host"></div>
+
+<script>
+/**
+ * SaaS 營運後台 POC —— 單檔、無框架、狀態存 localStorage。
+ *
+ * 依據 docs/saas/SaaS營運後台-需求共識.md 的 MVP 六個模組，並把審閱時提出的修正直接做進來：
+ * - 對產品端（TMS）的寫入一律先進「同步佇列」（outbox），同一租戶串行、失敗可重試，
+ *   不在後台 commit 後直接呼叫 API（docs/11 §4 第一題的雙寫問題）。
+ * - 產品端 API 叫 Platform API（/platform/v1/...），不跟 TMS 主管用的 /admin/* 撞名。
+ * - 「從範本複製」複製的是 TMS 的 tenant_config key，並明列哪些不複製。
+ * - License API 回傳後台算好的最終狀態（有效／即將到期／寬限期／已關閉），產品端不自己算。
+ *
+ * 不做：真 SSO、真 API、檔案儲存、匯出 Excel（以 CSV 代替）。
+ */
+(function () {
+  'use strict';
+
+  var KEY = 'saas_ops_poc_v1';
+  var DAY = 86400000;
+
+  // ── 常數 ─────────────────────────────────────────────
+  var ROLES = {
+    admin:   { label: '管理員', group: 'OPS-Admin' },
+    sales:   { label: '業務',   group: 'OPS-Sales' },
+    impl:    { label: '實施',   group: 'OPS-Implementation' },
+    support: { label: '客服',   group: 'OPS-Support' },
+    manager: { label: '主管',   group: 'OPS-Manager' }
+  };
+  var PERMS = {
+    admin:   ['*'],
+    sales:   ['contract.write'],
+    impl:    ['tenant.write', 'brand.write', 'checklist.write', 'config.copy', 'account.create', 'account.disable', 'approval.request'],
+    support: ['account.reset'],
+    manager: ['grace.extend', 'approval.decide']
+  };
+  var PERM_LABELS = {
+    'contract.write': '新增／修改合約', 'tenant.write': '修改租戶', 'brand.write': '修改品牌資產',
+    'checklist.write': '更新上線清單', 'config.copy': '從範本複製設定', 'account.create': '建立飯店帳號',
+    'account.disable': '停用飯店帳號', 'account.reset': '重設飯店密碼', 'grace.extend': '延展寬限期',
+    'approval.request': '申請敏感操作', 'approval.decide': '核准敏感操作'
+  };
+  var LIFECYCLE = { preparing: '籌備中', trial: '試營運', live: '正式營運', suspended: '已停用' };
+  var LIC = {
+    none:     { label: '無合約', cls: '' },
+    pending:  { label: '未生效', cls: 'info' },
+    active:   { label: '有效', cls: 'ok' },
+    expiring: { label: '即將到期', cls: 'warn' },
+    grace:    { label: '寬限期', cls: 'err' },
+    expired:  { label: '已關閉', cls: 'err' }
+  };
+  var GRACE_DAYS = 14;
+
+  // TMS 可販售模組。impact 是「關閉時對進行中資料的影響」——要跟 TMS 團隊確認
+  var MODULES = [
+    { id: 'guest_request', label: '住客掃碼需求', impact: '已簽發的住客 session 一併撤銷，住客掃碼顯示「請洽櫃檯」' },
+    { id: 'triage',        label: '櫃檯判讀',     impact: '停在 triage 的自由文字需求無人可判讀' },
+    { id: 'cleaning_plan', label: '班前排房',     impact: '隔日起不再自動排房，主管需手動派工' },
+    { id: 'inspection',    label: '查房',         impact: '打掃任務停在 done，PMS 房況不會回寫為 Inspected——房間賣不出去' },
+    { id: 'knowledge',     label: '問一下（LLM）', impact: '員工端「問一下」按鈕隱藏' },
+    { id: 'lost_found',    label: '遺失物',       impact: '既有遺失物紀錄唯讀' },
+    { id: 'notices',       label: '通知板',       impact: '既有通知唯讀，不能發新通知' }
+  ];
+  var PLANS = {
+    basic:    { label: '基礎', modules: ['guest_request', 'triage', 'lost_found', 'notices'] },
+    standard: { label: '標準', modules: ['guest_request', 'triage', 'lost_found', 'notices', 'cleaning_plan', 'inspection'] },
+    premium:  { label: '進階', modules: MODULES.map(function (m) { return m.id; }) }
+  };
+  // TMS tenant_config 的 key（docs/12 §6 ＋ 13-poc 設定頁）；copy: true｜'review'（複製後飯店必改）
+  var CONFIG_KEYS = [
+    { key: 'standard_cleaning_minutes', label: '標準清掃工時', copy: true },
+    { key: 'shift_capacity',            label: '班次容量',     copy: true },
+    { key: 'sop_items',                 label: 'SOP 檢核項目', copy: true },
+    { key: 'inspection_items',          label: '查房項目',     copy: true },
+    { key: 'request_menu',              label: '住客需求選單', copy: true },
+    { key: 'sla_minutes',               label: 'SLA 時限',     copy: true },
+    { key: 'assign_strategy',           label: '自動分配策略', copy: true },
+    { key: 'owner_alert_threshold',     label: '老闆通知門檻', copy: true },
+    { key: 'guest_info_pages',          label: '住客資訊頁',   copy: 'review' }
+  ];
+  var NOT_COPIED = ['基本資料（名稱、地址、統編、聯絡人）', '品牌資產', '房間主檔', '飯店帳號', 'PMS 連線設定'];
+  var STEPS = [
+    { key: 'basic',    label: '建立租戶與基本資料（含時區）', auto: true },
+    { key: 'license',  label: '簽約並開通授權', auto: true },
+    { key: 'rooms',    label: '建立房間主檔（房號、樓層、房型）', hint: 'TMS 目前沒有房間主檔 API，待補' },
+    { key: 'pms',      label: 'PMS adapter 連線測試', hint: '對應 docs/11 Q8' },
+    { key: 'config',   label: '租戶設定（可從範本複製）', auto: true },
+    { key: 'accounts', label: '建立飯店管理員帳號', auto: true },
+    { key: 'qr',       label: '產生 QR、列印貼紙並張貼' },
+    { key: 'app',      label: '員工安裝 App、開通推播', hint: '對應 docs/11 Q6' },
+    { key: 'trial',    label: '試營運' },
+    { key: 'golive',   label: '正式上線' }
+  ];
+  var STEP_STATUS = { todo: { label: '未開始', cls: '' }, doing: { label: '進行中', cls: 'info' }, blocked: { label: '卡住', cls: 'err' }, done: { label: '完成', cls: 'ok' } };
+  var HOTEL_ROLES = { manager: '主管（manager）', owner: '老闆（owner）' };
+
+  // ── 種子資料 ─────────────────────────────────────────
+  function sampleConfig() {
+    return {
+      standard_cleaning_minutes: { stay: 25, checkout: 40, suite: 60 },
+      shift_capacity: { morning: 420, evening: 300 },
+      sop_items: ['換床單', '清潔浴室', '補備品', '吸塵', '倒垃圾', '檢查 minibar'],
+      inspection_items: ['床鋪', '浴室', '備品', '地面', 'QR 貼紙在位'],
+      request_menu: ['毛巾', '牙刷組', '加床', '嬰兒床', '冷氣報修', '熱水報修'],
+      sla_minutes: { amenity: 15, repair: 30 },
+      assign_strategy: 'floor_cluster',
+      owner_alert_threshold: 2,
+      guest_info_pages: ['早餐 06:30–10:00（2F 餐廳）', 'Wi-Fi：HANPIN-GUEST', '健身房 24 小時開放']
+    };
+  }
+  function doneChecklist(date) {
+    return STEPS.map(function (s) { return { key: s.key, status: 'done', owner: 'u_impl', doneAt: date + 'T17:00:00' }; });
+  }
+  function newChecklist() {
+    return STEPS.map(function (s) { return { key: s.key, status: 'todo', owner: s.key === 'license' ? 'u_sales' : 'u_impl', doneAt: null }; });
+  }
+  // 第二階段才有的資料：由 TMS 健康狀態 API 提供，POC 先放模擬值
+  function seedHealth() {
+    return {
+      h1: { pmsMode: 'event',   pmsSyncAgoMin: 1,   writebackFailed: 0, lagSec: 2, pushMissingPct: 5,  todayTasks: 186, activeStaff: 42, guestScans: 131, scanFailures: 3 },
+      h2: { pmsMode: 'event',   pmsSyncAgoMin: 2,   writebackFailed: 0, lagSec: 3, pushMissingPct: 12, todayTasks: 97,  activeStaff: 28, guestScans: 64,  scanFailures: 1 },
+      h3: { pmsMode: 'polling', pmsSyncAgoMin: 6,   writebackFailed: 0, lagSec: 4, pushMissingPct: 8,  todayTasks: 41,  activeStaff: 11, guestScans: 22,  scanFailures: 0 },
+      h4: { pmsMode: 'polling', pmsSyncAgoMin: 4,   writebackFailed: 0, lagSec: 2, pushMissingPct: 45, todayTasks: 7,   activeStaff: 6,  guestScans: 3,   scanFailures: 0 },
+      h5: { pmsMode: 'excel',   pmsSyncAgoMin: 190, writebackFailed: 3, lagSec: 2, pushMissingPct: 10, todayTasks: 58,  activeStaff: 19, guestScans: 30,  scanFailures: 0 }
+    };
+  }
+  function seed() {
+    var cfgA = sampleConfig();
+    var cfgB = sampleConfig();
+    cfgB.guest_info_pages = ['早餐 07:00–10:30（1F 大廳）', 'Wi-Fi：SL-ONSEN', '大浴場 15:00–24:00'];
+    cfgB.sop_items = cfgB.sop_items.concat(['湯屋排水檢查']);
+    var c4 = newChecklist();
+    ['basic', 'license', 'rooms', 'pms', 'config', 'accounts'].forEach(function (k) { var s = c4.find(function (x) { return x.key === k; }); s.status = 'done'; s.doneAt = '2026-10-1' + (STEPS.findIndex(function (x) { return x.key === k; }) % 9) + 'T15:00:00'; });
+    c4.find(function (x) { return x.key === 'qr'; }).status = 'doing';
+    c4.find(function (x) { return x.key === 'app'; }).status = 'blocked';
+    var c6 = newChecklist();
+    c6[0].status = 'done'; c6[0].doneAt = '2026-10-20T11:00:00';
+    c6[1].status = 'done'; c6[1].doneAt = '2026-10-21T16:20:00';
+    return {
+      v: 1, seq: 100, nextTenantId: 1006,
+      today: '2026-10-22',
+      currentUser: 'u_admin',
+      sim: { apiDown: false, licenseDown: false, productSilent: false, kafkaLag: false },
+      health: seedHealth(),
+      heartbeat: { lastAt: null, calls: [] },
+      users: [
+        { id: 'u_admin', name: '王志明', role: 'admin' },
+        { id: 'u_sales', name: '李佩珊', role: 'sales' },
+        { id: 'u_impl', name: '張家豪', role: 'impl' },
+        { id: 'u_support', name: '吳怡君', role: 'support' },
+        { id: 'u_manager', name: '周建宏', role: 'manager' }
+      ],
+      groups: [{ id: 'g1', name: '瀚品酒店集團', taxId: '24681357' }],
+      hotels: [
+        { id: 'h1', groupId: 'g1', tenantId: 1001, name: '瀚品酒店 台北館', address: '台北市中山區南京東路二段 88 號', taxId: '24681357', contact: { name: '陳淑芬', phone: '02-2511-0001', email: 'ops.tpe@hanpin.example' }, timezone: 'Asia/Taipei', locale: 'zh-TW', currency: 'TWD', lifecycle: 'live', rooms: 320, brand: { logo: null, color: '#7A2E3A' }, config: cfgA, checklist: doneChecklist('2026-02-10') },
+        { id: 'h2', groupId: 'g1', tenantId: 1002, name: '瀚品酒店 台中館', address: '台中市西屯區台灣大道三段 168 號', taxId: '24681357', contact: { name: '林冠宇', phone: '04-2251-0002', email: 'ops.txg@hanpin.example' }, timezone: 'Asia/Taipei', locale: 'zh-TW', currency: 'TWD', lifecycle: 'live', rooms: 210, brand: { logo: null, color: '#7A2E3A' }, config: sampleConfig(), checklist: doneChecklist('2026-03-02') },
+        { id: 'h3', groupId: null, tenantId: 1003, name: '山嵐溫泉會館', address: '新北市烏來區溫泉街 12 號', taxId: '53197531', contact: { name: '黃雅婷', phone: '02-2661-0003', email: 'gm@shanlan.example' }, timezone: 'Asia/Taipei', locale: 'zh-TW', currency: 'TWD', lifecycle: 'live', rooms: 86, brand: { logo: null, color: '#2F5D50' }, config: cfgB, checklist: doneChecklist('2025-11-05') },
+        { id: 'h4', groupId: null, tenantId: 1004, name: '港灣商旅', address: '高雄市鹽埕區七賢三路 20 號', taxId: '86420864', contact: { name: '蔡明哲', phone: '07-521-0004', email: 'fo@harbour.example' }, timezone: 'Asia/Taipei', locale: 'zh-TW', currency: 'TWD', lifecycle: 'trial', rooms: 140, brand: { logo: null, color: '#1E4E79' }, config: sampleConfig(), checklist: c4 },
+        { id: 'h5', groupId: null, tenantId: 1005, name: '北岸度假村', address: '新北市萬里區海岸路 5 號', taxId: '97531975', contact: { name: '許志偉', phone: '02-2492-0005', email: 'admin@northshore.example' }, timezone: 'Asia/Taipei', locale: 'zh-TW', currency: 'TWD', lifecycle: 'live', rooms: 180, brand: { logo: null, color: '#0E6E8C' }, config: sampleConfig(), checklist: doneChecklist('2025-10-20') },
+        { id: 'h6', groupId: null, tenantId: null, name: '青禾文旅', address: '台南市中西區民權路二段 66 號', taxId: '13572468', contact: { name: '鄭宜蓁', phone: '06-222-0006', email: 'hello@qinghe.example' }, timezone: 'Asia/Taipei', locale: 'zh-TW', currency: 'TWD', lifecycle: 'preparing', rooms: 60, brand: { logo: null, color: '#5B7A3A' }, config: {}, checklist: c6 }
+      ],
+      contracts: [
+        { id: 'c1', no: 'C-2025-031', scopeType: 'group', scopeId: 'g1', hotelIds: ['h1', 'h2'], plan: 'standard', modules: PLANS.standard.modules.slice(), limits: { rooms: 530 }, amount: 1144800, start: '2025-11-16', end: '2026-11-15', graceExtDays: 0, note: '集團合約，兩館合併計價' },
+        { id: 'c2', no: 'C-2025-044', scopeType: 'hotel', scopeId: 'h3', hotelIds: ['h3'], plan: 'basic', modules: PLANS.basic.modules.slice(), limits: { rooms: 90 }, amount: 129600, start: '2025-10-30', end: '2026-10-29', graceExtDays: 0, note: '' },
+        { id: 'c3', no: 'C-2026-012', scopeType: 'hotel', scopeId: 'h4', hotelIds: ['h4'], plan: 'premium', modules: PLANS.premium.modules.slice(), limits: { rooms: 150 }, amount: 432000, start: '2026-10-01', end: '2027-09-30', graceExtDays: 0, note: '試營運期間照常計費' },
+        { id: 'c4', no: 'C-2025-040', scopeType: 'hotel', scopeId: 'h5', hotelIds: ['h5'], plan: 'standard', modules: PLANS.standard.modules.slice(), limits: { rooms: 180 }, amount: 388800, start: '2025-10-16', end: '2026-10-15', graceExtDays: 0, note: '續約議價中' },
+        { id: 'c5', no: 'C-2026-019', scopeType: 'hotel', scopeId: 'h6', hotelIds: ['h6'], plan: 'standard', modules: PLANS.standard.modules.slice(), limits: { rooms: 60 }, amount: 129600, start: '2026-11-01', end: '2027-10-31', graceExtDays: 0, note: '' }
+      ],
+      accounts: [
+        { id: 'a1', hotelId: 'h1', loginId: 'tpe.manager', name: '陳淑芬', role: 'manager', active: true, mustChange: false },
+        { id: 'a2', hotelId: 'h1', loginId: 'tpe.owner', name: '何國棟', role: 'owner', active: true, mustChange: false },
+        { id: 'a3', hotelId: 'h2', loginId: 'txg.manager', name: '林冠宇', role: 'manager', active: true, mustChange: false },
+        { id: 'a4', hotelId: 'h3', loginId: 'shanlan.gm', name: '黃雅婷', role: 'manager', active: true, mustChange: false },
+        { id: 'a5', hotelId: 'h4', loginId: 'harbour.fo', name: '蔡明哲', role: 'manager', active: true, mustChange: true },
+        { id: 'a6', hotelId: 'h5', loginId: 'ns.admin', name: '許志偉', role: 'manager', active: true, mustChange: false }
+      ],
+      approvals: [],
+      outbox: [
+        { id: 'ob_1', key: 'tenant:h4', hotelId: 'h4', method: 'PUT', path: '/platform/v1/tenants/{tenantId}/config/sop_items', body: { value: '[6 項]' }, idem: 'idem-7f3a91c2', status: 'sent', attempts: 1, error: null, createdAt: '2026-10-16T14:02:11', sentAt: '2026-10-16T14:02:12', actor: 'u_impl' }
+      ],
+      audit: [
+        { id: 'au_1', ts: '2026-10-16T14:02:11', actor: 'u_impl', tenant: 'h4', action: '從範本複製設定', target: '來源：瀚品酒店 台北館', before: null, after: { keys: 9 } },
+        { id: 'au_2', ts: '2026-10-20T11:00:03', actor: 'u_impl', tenant: 'h6', action: '新增飯店', target: '青禾文旅', before: null, after: { name: '青禾文旅', timezone: 'Asia/Taipei' } },
+        { id: 'au_3', ts: '2026-10-21T16:20:44', actor: 'u_sales', tenant: 'h6', action: '新增合約', target: 'C-2026-019', before: null, after: { plan: 'standard', start: '2026-11-01', end: '2027-10-31', amount: 129600 } }
+      ],
+      productCache: null
+    };
+  }
+
+  // ── 狀態 ─────────────────────────────────────────────
+  var S = load();
+  function load() {
+    try { var raw = localStorage.getItem(KEY); if (raw) { var s = JSON.parse(raw); if (s && s.v === 1) return migrate(s); } } catch (e) {}
+    return seed();
+  }
+  // 舊版存檔沒有服務狀態相關欄位，補上即可，不用叫使用者重置
+  function migrate(s) {
+    if (!s.health) s.health = seedHealth();
+    if (!s.heartbeat) s.heartbeat = { lastAt: null, calls: [] };
+    if (s.sim.productSilent == null) s.sim.productSilent = false;
+    if (s.sim.kafkaLag == null) s.sim.kafkaLag = false;
+    return s;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  function nid(p) { S.seq += 1; return p + '_' + S.seq; }
+
+  // ── 工具 ─────────────────────────────────────────────
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(s, r) { return (r || document).querySelector(s); }
+  function d(s) { return Date.parse(s + 'T00:00:00Z'); }
+  function diffDays(a, b) { return Math.round((d(a) - d(b)) / DAY); }
+  function addDays(s, n) { return new Date(d(s) + n * DAY).toISOString().slice(0, 10); }
+  function nowTs() { var t = new Date(); var p = function (n) { return String(n).padStart(2, '0'); }; return S.today + 'T' + p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds()); }
+  function fmtTs(ts) { return ts ? ts.replace('T', ' ').slice(0, 16) : '—'; }
+  function money(n) { return 'NT$ ' + Number(n || 0).toLocaleString('en-US'); }
+  function rand(n) { var s = ''; var a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'; for (var i = 0; i < n; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
+  function me() { return S.users.find(function (u) { return u.id === S.currentUser; }); }
+  function userName(id) { var u = S.users.find(function (x) { return x.id === id; }); return u ? u.name : id; }
+  function hotel(id) { return S.hotels.find(function (h) { return h.id === id; }); }
+  function group(id) { return S.groups.find(function (g) { return g.id === id; }); }
+  function can(p) { var ps = PERMS[me().role]; return ps.indexOf('*') >= 0 || ps.indexOf(p) >= 0; }
+  function guard(p) {
+    if (can(p)) return true;
+    toast('403：' + ROLES[me().role].label + '沒有「' + PERM_LABELS[p] + '」權限', 'error');
+    return false;
+  }
+  // 沒權限的按鈕不藏起來，只標鎖頭——POC 要讓人看得到「這個角色不能做什麼」
+  function btn(label, action, perm, cls, data) {
+    var locked = perm && !can(perm);
+    var attrs = Object.keys(data || {}).map(function (k) { return ' data-' + k + '="' + esc(data[k]) + '"'; }).join('');
+    return '<button class="btn ' + (cls || 'btn-secondary') + (locked ? ' locked' : '') + '" data-action="' + action + '"' + attrs + (perm ? ' data-perm="' + perm + '"' : '') + ' title="' + (locked ? '需要權限：' + esc(PERM_LABELS[perm]) : '') + '">' + esc(label) + '</button>';
+  }
+  function pill(text, cls) { return '<span class="pill ' + (cls || '') + '">' + esc(text) + '</span>'; }
+
+  function toast(msg, variant) {
+    var host = $('#toast-host');
+    var t = document.createElement('div');
+    t.className = 'toast ' + (variant || 'info');
+    t.textContent = msg;
+    host.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3800);
+  }
+
+  // 密碼一律遮蔽，logo 只記大小——稽核紀錄不存敏感值，也不塞大檔
+  function maskForAudit(o) {
+    if (o == null || typeof o !== 'object') return o;
+    var out = Array.isArray(o) ? [] : {};
+    Object.keys(o).forEach(function (k) {
+      var v = o[k];
+      if (/password/i.test(k)) out[k] = '••••••';
+      else if (k === 'logo' && typeof v === 'string') out[k] = '[image ' + Math.round(v.length * 0.75 / 1024) + ' KB]';
+      else if (v && typeof v === 'object') out[k] = maskForAudit(v);
+      else out[k] = v;
+    });
+    return out;
+  }
+  function audit(action, hotelId, target, before, after) {
+    S.audit.push(Object.freeze({ id: nid('au'), ts: nowTs(), actor: S.currentUser, tenant: hotelId, action: action, target: target, before: maskForAudit(before), after: maskForAudit(after) }));
+  }
+
+  // ── 同步佇列（outbox）─────────────────────────────────
+  // 後台先在自己的 DB 落帳＋入佇列（同一次 save），再由 pump 逐筆送出。
+  // 同一租戶（key）串行：前一筆沒送成功，後面的不送——建租戶拿到 tenant_id 之前，
+  // 後續寫設定的路徑根本組不出來，這就是串行的必要性。
+  function enqueue(hotelId, method, path, body) {
+    S.outbox.push({ id: nid('ob'), key: 'tenant:' + hotelId, hotelId: hotelId, method: method, path: path, body: maskForAudit(body), idem: 'idem-' + rand(8).toLowerCase(), status: 'pending', attempts: 0, error: null, createdAt: nowTs(), sentAt: null, actor: S.currentUser });
+  }
+  function blockedBy(job) {
+    return S.outbox.find(function (j) { return j.key === job.key && j !== job && j.status !== 'sent' && S.outbox.indexOf(j) < S.outbox.indexOf(job); });
+  }
+  // 每一輪送出「每個租戶隊伍的第一筆」——不同租戶互不等待
+  function pump() {
+    var heads = S.outbox.filter(function (j) { return j.status === 'pending' && !blockedBy(j); });
+    if (!heads.length) return;
+    heads.forEach(send);
+    save();
+    refreshAfterSync();
+  }
+  function send(job) {
+    job.attempts += 1;
+    if (S.sim.apiDown) {
+      job.status = 'failed';
+      job.error = '503 Service Unavailable（模擬產品端故障）';
+    } else {
+      var h = hotel(job.hotelId);
+      if (job.path === '/platform/v1/tenants' && h && !h.tenantId) {
+        h.tenantId = S.nextTenantId++;
+        job.response = { tenantId: h.tenantId };
+      }
+      job.status = 'sent';
+      job.error = null;
+      job.sentAt = nowTs();
+    }
+  }
+  function failedCount() { return S.outbox.filter(function (j) { return j.status === 'failed'; }).length; }
+  function resolvedPath(job) {
+    var h = hotel(job.hotelId);
+    return job.path.replace('{tenantId}', h && h.tenantId ? h.tenantId : '{tenantId}');
+  }
+
+  // ── 授權計算 ─────────────────────────────────────────
+  function contractState(c, today) {
+    today = today || S.today;
+    if (diffDays(c.start, today) > 0) return 'pending';
+    var left = diffDays(c.end, today);
+    if (left > 30) return 'active';
+    if (left >= 0) return 'expiring';
+    if (-left <= GRACE_DAYS + (c.graceExtDays || 0)) return 'grace';
+    return 'expired';
+  }
+  function graceEnd(c) { return addDays(c.end, GRACE_DAYS + (c.graceExtDays || 0)); }
+  function contractFor(h) {
+    var cs = S.contracts.filter(function (c) { return c.hotelIds.indexOf(h.id) >= 0; });
+    // 多份合約時：優先挑今天生效中的，否則挑最晚到期的
+    cs.sort(function (a, b) {
+      var sa = contractState(a) === 'pending' ? 1 : 0, sb = contractState(b) === 'pending' ? 1 : 0;
+      return sa - sb || d(b.end) - d(a.end);
+    });
+    return cs[0] || null;
+  }
+  function licenseFor(h) {
+    var c = contractFor(h);
+    if (!c) return { state: 'none', contract: null, modules: {} };
+    var st = contractState(c);
+    var on = st === 'active' || st === 'expiring' || st === 'grace';
+    var mods = {};
+    MODULES.forEach(function (m) { mods[m.id] = on && c.modules.indexOf(m.id) >= 0; });
+    return { state: st, contract: c, modules: mods };
+  }
+  function scopeLabel(c) {
+    if (c.scopeType === 'group') { var g = group(c.scopeId); return (g ? g.name : '?') + '（集團）'; }
+    var h = hotel(c.scopeId); return h ? h.name : '?';
+  }
+  function licensePayload() {
+    return {
+      generatedAt: nowTs(),
+      etag: 'W/"' + rand(10) + '"',
+      tenants: S.hotels.filter(function (h) { return h.tenantId; }).map(function (h) {
+        var L = licenseFor(h);
+        return {
+          tenantId: h.tenantId,
+          state: L.state,
+          modules: L.modules,
+          validUntil: L.contract ? L.contract.end : null,
+          graceUntil: L.contract ? graceEnd(L.contract) : null,
+          limits: L.contract ? L.contract.limits : null,
+          timezone: h.timezone
+        };
+      })
+    };
+  }
+
+  // ── 服務狀態 ─────────────────────────────────────────
+  // POC 把時間壓縮：15 秒沒收到 License 呼叫，代表正式環境的 30 分鐘
+  var HEARTBEAT_STALE_MS = 15000;
+  var LEVEL_RANK = { none: 0, ok: 1, warn: 2, err: 3 };
+
+  // License API 是「一次拉全部租戶」，所以心跳是以產品為單位，不是以租戶為單位
+  function heartbeatAgeMs() { return S.heartbeat.lastAt ? Date.now() - S.heartbeat.lastAt : null; }
+  function heartbeatLevel() {
+    var age = heartbeatAgeMs();
+    if (age == null) return 'warn';
+    return age > HEARTBEAT_STALE_MS ? 'err' : 'ok';
+  }
+  function productPull() {
+    if (S.sim.licenseDown) {
+      // 後台的 License API 掛了：產品端拉不到，後台也收不到這次呼叫
+      if (S.productCache) S.productCache.stale = true;
+      return false;
+    }
+    var payload = licensePayload();
+    var sig = JSON.stringify(payload.tenants);
+    var notModified = S.productCache && S.productCache.sig === sig;
+    S.productCache = { fetchedAt: nowTs(), payload: payload, stale: false, sig: sig };
+    S.heartbeat.lastAt = Date.now();
+    S.heartbeat.calls.unshift({ at: Date.now(), status: notModified ? '304 Not Modified' : '200 OK' });
+    S.heartbeat.calls = S.heartbeat.calls.slice(0, 8);
+    return true;
+  }
+
+  function platformComponents() {
+    var hb = heartbeatLevel();
+    var age = heartbeatAgeMs();
+    return [
+      { name: 'TMS 應用', level: 'ok', text: '錯誤率 0.02%' },
+      { name: '背景 worker', level: 'ok', text: 'relay 正常' },
+      { name: 'Postgres', level: 'ok', text: '連線 38／200' },
+      { name: 'Kafka（代管）', level: S.sim.kafkaLag ? 'warn' : 'ok', text: S.sim.kafkaLag ? '消費延遲 4 分鐘' : '消費延遲 < 5 秒' },
+      { name: 'TMS License 心跳', level: hb, text: age == null ? '還沒收到呼叫' : '最後一次 ' + Math.round(age / 1000) + ' 秒前', own: true }
+    ];
+  }
+
+  // source：own＝後台自己就有的資料（MVP 可做）｜tms＝需要 TMS 提供（第二階段，POC 為模擬值）
+  function tenantSignals(h) {
+    var out = [];
+    var failed = S.outbox.filter(function (j) { return j.hotelId === h.id && j.status === 'failed'; }).length;
+    var waiting = S.outbox.filter(function (j) { return j.hotelId === h.id && j.status === 'pending'; }).length;
+    out.push({ key: 'sync', label: '後台 → TMS 同步', source: 'own',
+      level: failed ? 'err' : waiting ? 'warn' : 'ok',
+      text: failed ? failed + ' 筆失敗' + (waiting ? '，後面還有 ' + waiting + ' 筆在等' : '') : waiting ? waiting + ' 筆送出中' : '正常',
+      why: '後台寫入產品端的請求。失敗時這家飯店後續的設定變更都會卡住' });
+    var hb = heartbeatLevel();
+    out.push({ key: 'license', label: '授權快取', source: 'own',
+      level: hb === 'err' ? 'warn' : hb,
+      text: hb === 'err' ? 'TMS 沒來拉授權，飯店可能還在用舊的授權狀態' : hb === 'ok' ? '產品端有定期來拉' : '還沒收到呼叫',
+      why: '由 License API 的呼叫紀錄推得；心跳是全產品共用，不是這家飯店獨有' });
+
+    var H = S.health[h.id];
+    if (!H) {
+      out.push({ key: 'tms', label: 'TMS 健康資料', source: 'tms', level: 'none', text: '剛開通，尚無資料', why: '' });
+      return out;
+    }
+    var pms;
+    if (H.pmsMode === 'excel') pms = { level: 'warn', text: 'PMS 已斷線 ' + H.pmsSyncAgoMin + ' 分鐘，正用 Excel 匯入頂替' };
+    else if (H.pmsSyncAgoMin > 30) pms = { level: 'err', text: '同步中斷 ' + H.pmsSyncAgoMin + ' 分鐘' };
+    else if (H.pmsSyncAgoMin > 10) pms = { level: 'warn', text: H.pmsSyncAgoMin + ' 分鐘前同步' };
+    else pms = { level: 'ok', text: H.pmsSyncAgoMin + ' 分鐘前同步（' + (H.pmsMode === 'event' ? '事件訂閱' : '輪詢') + '）' };
+    out.push({ key: 'pms', label: 'PMS 同步', source: 'tms', level: pms.level, text: pms.text,
+      why: '斷線時當天新入住的房查不到訂單，住客一掃碼就是「請洽櫃檯」' });
+    out.push({ key: 'writeback', label: '房況回寫', source: 'tms',
+      level: H.writebackFailed ? 'err' : 'ok',
+      text: H.writebackFailed ? H.writebackFailed + ' 筆回寫失敗，等人工處理' : '正常',
+      why: 'outbox 裡 status＝failed 的 pms_status。查房通過卻沒回寫，房間就賣不出去' });
+    out.push({ key: 'realtime', label: '即時推送', source: 'tms',
+      level: S.sim.kafkaLag ? 'warn' : H.lagSec > 60 ? 'warn' : 'ok',
+      text: S.sim.kafkaLag ? '平台 Kafka 延遲，看板已切成輪詢（所有租戶都受影響）' : '延遲 ' + H.lagSec + ' 秒',
+      why: '延遲超過門檻時 TMS 會推 degraded，看板改成每 5 秒輪詢' });
+    out.push({ key: 'push', label: '推播', source: 'tms',
+      level: H.pushMissingPct >= 30 ? 'warn' : 'ok',
+      text: H.pushMissingPct + '% 員工沒開推播',
+      why: 'staff_devices.push_token 為空的比例。比例高代表員工收不到派單通知' });
+    var live = h.lifecycle === 'live';
+    out.push({ key: 'usage', label: '使用活躍度', source: 'tms',
+      level: live && H.todayTasks < 10 ? 'warn' : 'ok',
+      text: '今日 ' + H.todayTasks + ' 張單・' + H.activeStaff + ' 位員工・' + H.guestScans + ' 次掃碼',
+      why: '正式營運卻幾乎沒在用，業務要注意續約風險' });
+    out.push({ key: 'scan', label: '掃碼安全', source: 'tms',
+      level: H.scanFailures >= 50 ? 'err' : 'ok',
+      text: H.scanFailures >= 50 ? '掃碼失敗 ' + H.scanFailures + ' 次，可能有人在猜 QR token' : '失敗 ' + H.scanFailures + ' 次',
+      why: '/guest/scan 的失敗次數。暴增代表不是手滑，是有人在試' });
+    return out;
+  }
+  function worst(signals) {
+    return signals.reduce(function (acc, s) { return LEVEL_RANK[s.level] > LEVEL_RANK[acc] ? s.level : acc; }, 'none');
+  }
+  function monitoredHotels() { return S.hotels.filter(function (h) { return h.tenantId && h.lifecycle !== 'suspended'; }); }
+  function errTenantCount() { return monitoredHotels().filter(function (h) { return worst(tenantSignals(h)) === 'err'; }).length; }
+  function dot(level) { return '<span class="dot ' + (level === 'none' ? '' : level) + '"></span>'; }
+  var LEVEL_LABEL = { none: '無資料', ok: '正常', warn: '注意', err: '異常' };
+  var LEVEL_PILL = { none: '', ok: 'ok', warn: 'warn', err: 'err' };
+
+  // ── Checklist helpers ───────────────────────────────
+  function stepOf(h, key) { return h.checklist.find(function (s) { return s.key === key; }); }
+  function markStep(h, key) {
+    var s = stepOf(h, key);
+    if (s && s.status !== 'done') { s.status = 'done'; s.doneAt = nowTs(); }
+  }
+  function progress(h) {
+    var done = h.checklist.filter(function (s) { return s.status === 'done'; }).length;
+    return { done: done, total: h.checklist.length, pct: Math.round(done * 100 / h.checklist.length) };
+  }
+
+  // ── Modal ────────────────────────────────────────────
+  function openModal(opt) {
+    var host = $('#modal-host');
+    host.innerHTML = '<div class="modal-backdrop"><form class="modal' + (opt.wide ? ' wide' : '') + '" novalidate>' +
+      '<header><h3>' + esc(opt.title) + '</h3><button type="button" class="icon-btn" data-close aria-label="關閉">×</button></header>' +
+      '<div class="modal-body">' + opt.body + '</div>' +
+      '<footer><button type="button" class="btn btn-secondary" data-close>' + (opt.onSubmit ? '取消' : '關閉') + '</button>' +
+      (opt.onSubmit ? '<button type="submit" class="btn ' + (opt.danger ? 'btn-danger' : 'btn-primary') + '">' + esc(opt.submitLabel || '儲存') + '</button>' : '') +
+      '</footer></form></div>';
+    var form = $('form', host);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!opt.onSubmit) return;
+      var r = opt.onSubmit(form);
+      if (r !== false) { closeModal(); save(); render(); }
+    });
+    host.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeModal); });
+    $('.modal-backdrop', host).addEventListener('mousedown', function (e) { if (e.target.classList.contains('modal-backdrop')) closeModal(); });
+    if (opt.afterOpen) opt.afterOpen(form);
+    var first = form.querySelector('input:not([type=hidden]), select, textarea');
+    if (first) first.focus();
+  }
+  function closeModal() { $('#modal-host').innerHTML = ''; }
+  function val(form, name) { var e = form.elements[name]; return e ? String(e.value).trim() : ''; }
+
+  // ── Router ───────────────────────────────────────────
+  function route() {
+    var parts = (location.hash || '#/dashboard').slice(2).split('/');
+    return { page: parts[0] || 'dashboard', id: parts[1], tab: parts[2] };
+  }
+
+  function renderNav() {
+    var r = route();
+    var expiring = S.contracts.filter(function (c) { var st = contractState(c); return st === 'expiring' || st === 'grace'; }).length;
+    var approvals = S.approvals.filter(function (a) { return a.status === 'pending'; }).length;
+    var items = [
+      ['dashboard', '總覽', approvals],
+      ['tenants', '租戶管理', 0],
+      ['contracts', '合約與授權', expiring],
+      ['onboarding', '上線管理', 0],
+      ['status', '服務狀態', errTenantCount()],
+      ['audit', '稽核紀錄', 0],
+      ['sep'],
+      ['label', '整合（給產品團隊看）'],
+      ['sync', '同步佇列', failedCount()],
+      ['license-api', 'License API', 0],
+      ['sep'],
+      ['permissions', '角色權限', 0]
+    ];
+    $('#sidenav').innerHTML = items.map(function (it) {
+      if (it[0] === 'sep') return '<div class="nav-sep"></div>';
+      if (it[0] === 'label') return '<div class="nav-label">' + it[1] + '</div>';
+      var active = r.page === it[0] || (it[0] === 'tenants' && r.page === 'tenant');
+      return '<a href="#/' + it[0] + '" class="' + (active ? 'is-active' : '') + '">' + it[1] + (it[2] ? '<span class="nav-count">' + it[2] + '</span>' : '') + '</a>';
+    }).join('');
+  }
+
+  function renderTop() {
+    $('#user-select').innerHTML = S.users.map(function (u) {
+      return '<option value="' + u.id + '"' + (u.id === S.currentUser ? ' selected' : '') + '>' + esc(u.name) + '・' + ROLES[u.role].label + '（AD：' + ROLES[u.role].group + '）</option>';
+    }).join('');
+    $('#today-input').value = S.today;
+  }
+
+  function render() {
+    renderTop();
+    renderNav();
+    var r = route();
+    var view = VIEWS[r.page] || VIEWS.dashboard;
+    $('#main').innerHTML = view(r);
+  }
+
+  // 同步佇列推進時只在「不會打斷輸入」的情況下重繪
+  function refreshAfterSync() {
+    renderNav();
+    var r = route();
+    var busy = $('#modal-host').innerHTML || (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && $('#main').contains(document.activeElement));
+    if (!busy && ['sync', 'tenant', 'dashboard', 'tenants', 'license-api', 'status'].indexOf(r.page) >= 0) {
+      $('#main').innerHTML = (VIEWS[r.page])(r);
+    }
+  }
+
+  // ── Views ────────────────────────────────────────────
+  var VIEWS = {};
+
+  VIEWS.dashboard = function () {
+    var hotels = S.hotels;
+    var expiring = [], grace = [], expired = [];
+    S.contracts.forEach(function (c) {
+      var st = contractState(c);
+      if (st === 'expiring') expiring.push(c);
+      if (st === 'grace') grace.push(c);
+      if (st === 'expired') expired.push(c);
+    });
+    var onboarding = hotels.filter(function (h) { return h.lifecycle === 'preparing' || h.lifecycle === 'trial'; });
+    var pendingAp = S.approvals.filter(function (a) { return a.status === 'pending'; });
+
+    var html = '<div class="page-head"><div><h1>總覽</h1><p class="sub">' + esc(me().name) + '，今天是 ' + S.today + '（可在右上角調整「模擬今天」，看到期提醒、寬限期與關閉怎麼變化）</p></div></div>';
+    html += '<div class="kpis">' +
+      kpi('飯店數', hotels.length, '') +
+      kpi('上線中', onboarding.length, '') +
+      kpi('即將到期', expiring.length, expiring.length ? 'warn' : '') +
+      kpi('寬限期中', grace.length, grace.length ? 'err' : '') +
+      kpi('同步失敗', failedCount(), failedCount() ? 'err' : '') +
+      kpi('租戶異常', errTenantCount(), errTenantCount() ? 'err' : '') +
+      '</div>';
+
+    html += '<div class="grid-2">';
+    // 到期提醒
+    html += '<section class="panel"><div class="panel-head"><h2>到期提醒（給業務）</h2></div><p class="panel-sub">到期前 30 天、7 天提醒；到期後 ' + GRACE_DAYS + ' 天寬限期照常使用，之後關閉模組</p>';
+    var rows = expiring.concat(grace).concat(expired);
+    if (!rows.length) html += '<div class="empty">目前沒有需要處理的合約</div>';
+    else {
+      html += '<div class="table-wrap"><table class="tbl"><thead><tr><th>合約</th><th>對象</th><th>狀態</th><th>說明</th></tr></thead><tbody>';
+      rows.forEach(function (c) {
+        var st = contractState(c);
+        var left = diffDays(c.end, S.today);
+        var msg;
+        if (st === 'expiring') msg = (left <= 7 ? '【7 天提醒】' : '【30 天提醒】') + '還有 ' + left + ' 天到期';
+        else if (st === 'grace') {
+          var gl = diffDays(graceEnd(c), S.today);
+          msg = '寬限期剩 ' + gl + ' 天（' + graceEnd(c) + ' 關閉）' + (gl <= 3 ? '；已通知飯店聯絡人' : '；關閉前 3 天會通知飯店聯絡人');
+        } else msg = '已於 ' + addDays(graceEnd(c), 1) + ' 關閉模組';
+        html += '<tr><td><a href="#/contracts/' + c.id + '">' + esc(c.no) + '</a></td><td>' + esc(scopeLabel(c)) + '</td><td>' + pill(LIC[st].label, LIC[st].cls) + '</td><td class="muted">' + esc(msg) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    html += '</section>';
+
+    // 待核准
+    html += '<section class="panel"><div class="panel-head"><h2>待核准的敏感操作</h2></div><p class="panel-sub">停用租戶要主管核准；核准後才會送到產品端</p>';
+    if (!pendingAp.length) html += '<div class="empty">沒有待核准項目</div>';
+    else {
+      html += '<table class="tbl"><thead><tr><th>項目</th><th>申請人</th><th>原因</th><th></th></tr></thead><tbody>';
+      pendingAp.forEach(function (a) {
+        var h = hotel(a.hotelId);
+        html += '<tr><td>停用租戶：<b>' + esc(h.name) + '</b></td><td>' + esc(userName(a.requestedBy)) + '<div class="faint">' + fmtTs(a.requestedAt) + '</div></td><td class="muted">' + esc(a.reason) + '</td><td style="white-space:nowrap">' +
+          btn('核准', 'approve', 'approval.decide', 'btn-primary btn-sm', { id: a.id }) + ' ' + btn('駁回', 'reject', 'approval.decide', 'btn-secondary btn-sm', { id: a.id }) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+    html += '</section>';
+
+    // 上線進度
+    html += '<section class="panel"><div class="panel-head"><h2>上線中的飯店</h2><div class="actions"><a class="btn btn-secondary btn-sm" href="#/onboarding">看全部</a></div></div>';
+    if (!onboarding.length) html += '<div class="empty">沒有上線中的飯店</div>';
+    onboarding.forEach(function (h) {
+      var p = progress(h);
+      var blocked = h.checklist.filter(function (s) { return s.status === 'blocked'; });
+      html += '<div style="padding:8px 0;border-top:1px dashed var(--color-line)"><div style="display:flex;gap:8px;align-items:center"><a href="#/tenant/' + h.id + '/checklist"><b>' + esc(h.name) + '</b></a>' + pill(LIFECYCLE[h.lifecycle], 'info') + '<span class="faint" style="margin-left:auto">' + p.done + '／' + p.total + '</span></div><div class="progress" style="margin-top:6px"><i style="width:' + p.pct + '%"></i></div>' +
+        (blocked.length ? '<div class="faint" style="color:var(--color-error);margin-top:4px">卡住：' + blocked.map(function (s) { return esc(STEPS.find(function (x) { return x.key === s.key; }).label); }).join('、') + '</div>' : '') + '</div>';
+    });
+    html += '</section>';
+
+    // 最近操作
+    html += '<section class="panel"><div class="panel-head"><h2>最近操作</h2><div class="actions"><a class="btn btn-secondary btn-sm" href="#/audit">稽核紀錄</a></div></div>';
+    html += auditTable(S.audit.slice(-6).reverse(), true);
+    html += '</section></div>';
+
+    html += '<section class="panel" style="margin-top:16px"><h2>這個 POC 怎麼看</h2><ul class="muted" style="margin:6px 0 0;padding-left:18px;font-size:13.5px">' +
+      '<li><b>切換身分</b>：右上角模擬 SSO 登入的人，角色由 AD 群組決定。沒權限的按鈕會標 🔒，按下去回 403。</li>' +
+      '<li><b>調整日期</b>：把「模擬今天」改成 2026-10-30：山嵐溫泉會館剛到期、進入寬限期；北岸度假村寬限期結束、模組被關閉。改成 2026-10-26 則可以看到 7 天提醒。</li>' +
+      '<li><b>模擬產品端故障</b>：在「同步佇列」勾選故障，再去改租戶資料，可以看到同一租戶後面的寫入被擋住，等重試成功才會往下送。</li>' +
+      '<li><b>服務狀態</b>：北岸度假村目前有房況回寫失敗。在「服務狀態」頁可以勾選「TMS 停止拉授權」看心跳中斷，或對任一租戶觸發 PMS 中斷等事件。</li>' +
+      '<li><b>新飯店上線</b>：在租戶管理新增飯店，到上線清單用「從範本複製」，再建立管理員帳號。</li>' +
+      '<li>狀態存在瀏覽器 localStorage，按「重置示範資料」可以重來。</li></ul></section>';
+    return html;
+  };
+  function kpi(label, v, cls) { return '<div class="kpi ' + cls + '"><div class="k-label">' + label + '</div><div class="k-value">' + v + '</div></div>'; }
+
+  VIEWS.tenants = function () {
+    var html = '<div class="page-head"><div><h1>租戶管理</h1><p class="sub">兩層結構：集團 → 飯店。一家飯店對應 TMS 的一個 tenant_id</p></div><div class="actions">' +
+      btn('新增集團', 'new-group', 'tenant.write') + btn('新增飯店', 'new-hotel', 'tenant.write', 'btn-primary') + '</div></div>';
+    html += '<section class="panel"><div class="table-wrap"><table class="tbl"><thead><tr><th>名稱</th><th>TMS tenant_id</th><th>生命週期</th><th>授權</th><th>房間（實際／合約上限）</th><th>上線進度</th></tr></thead><tbody>';
+    function row(h, indent) {
+      var L = licenseFor(h);
+      var p = progress(h);
+      var limit = L.contract && L.contract.limits.rooms;
+      var over = limit && L.contract.scopeType === 'hotel' && h.rooms > limit;
+      return '<tr class="' + (indent ? 'indent' : '') + '"><td><a href="#/tenant/' + h.id + '/basic"><b>' + esc(h.name) + '</b></a></td>' +
+        '<td>' + (h.tenantId ? '<code>' + h.tenantId + '</code>' : pill('待同步', 'warn')) + '</td>' +
+        '<td>' + pill(LIFECYCLE[h.lifecycle], h.lifecycle === 'live' ? 'ok' : h.lifecycle === 'suspended' ? 'err' : 'info') + '</td>' +
+        '<td>' + pill(LIC[L.state].label, LIC[L.state].cls) + '</td>' +
+        '<td class="num">' + h.rooms + ' <span class="muted">／ ' + (limit ? limit + (L.contract.scopeType === 'group' ? '（集團）' : '') : '—') + '</span>' + (over ? ' ' + pill('超過上限', 'warn') : '') + '</td>' +
+        '<td><div style="display:flex;align-items:center;gap:8px"><div class="progress" style="flex:1"><i style="width:' + p.pct + '%"></i></div><span class="faint">' + p.done + '/' + p.total + '</span></div></td></tr>';
+    }
+    S.groups.forEach(function (g) {
+      var hs = S.hotels.filter(function (h) { return h.groupId === g.id; });
+      html += '<tr class="group-row"><td colspan="6">' + esc(g.name) + ' <span class="faint">集團・' + hs.length + ' 家飯店</span></td></tr>';
+      hs.forEach(function (h) { html += row(h, true); });
+    });
+    var solo = S.hotels.filter(function (h) { return !h.groupId; });
+    if (solo.length) {
+      html += '<tr class="group-row"><td colspan="6">單店 <span class="faint">' + solo.length + ' 家</span></td></tr>';
+      solo.forEach(function (h) { html += row(h, true); });
+    }
+    html += '</tbody></table></div><p class="faint" style="margin:10px 0 0">房間數只記錄、不強制檢查；「超過上限」只是提醒業務對帳。實際房間數之後可由產品端回報。</p></section>';
+    return html;
+  };
+
+  var TABS = [['basic', '基本資料'], ['brand', '品牌資產'], ['license', '授權'], ['checklist', '上線清單'], ['accounts', '飯店帳號'], ['health', '服務狀態'], ['sync', '同步紀錄'], ['audit', '稽核']];
+  VIEWS.tenant = function (r) {
+    var h = hotel(r.id);
+    if (!h) return '<div class="empty">找不到這家飯店</div>';
+    var tab = r.tab || 'basic';
+    var g = h.groupId ? group(h.groupId) : null;
+    var html = '<div class="page-head"><div><p class="sub"><a href="#/tenants">租戶管理</a> / ' + (g ? esc(g.name) + ' / ' : '') + '</p><h1>' + esc(h.name) + '</h1><p class="sub">TMS tenant_id：' + (h.tenantId ? '<code>' + h.tenantId + '</code>' : '待同步（建立租戶的請求還在同步佇列）') + '　' + pill(LIFECYCLE[h.lifecycle], h.lifecycle === 'live' ? 'ok' : h.lifecycle === 'suspended' ? 'err' : 'info') + '</p></div></div>';
+    html += '<nav class="tabs">' + TABS.map(function (t) { return '<a href="#/tenant/' + h.id + '/' + t[0] + '" class="' + (t[0] === tab ? 'is-active' : '') + '">' + t[1] + '</a>'; }).join('') + '</nav>';
+    html += (TENANT_TABS[tab] || TENANT_TABS.basic)(h);
+    return html;
+  };
+
+  var TENANT_TABS = {};
+  TENANT_TABS.basic = function (h) {
+    var dis = can('tenant.write') ? '' : ' disabled';
+    var html = '<form class="panel" id="basic-form" data-hotel="' + h.id + '"><div class="panel-head"><h2>基本資料</h2></div>' +
+      '<p class="panel-sub">時區會同步給 TMS——班次時間、班末掃描、班前排房、到期日都用飯店時區計算</p><div class="form-grid">' +
+      fld('name', '飯店名稱', h.name, dis) +
+      selFld('groupId', '所屬集團', [['', '（單店）']].concat(S.groups.map(function (g) { return [g.id, g.name]; })), h.groupId || '', dis) +
+      fld('address', '地址', h.address, dis, 'full') +
+      fld('taxId', '統一編號', h.taxId, dis) +
+      fld('rooms', '房間數', h.rooms, dis, '', 'number') +
+      fld('contactName', '聯絡人', h.contact.name, dis) +
+      fld('contactPhone', '電話', h.contact.phone, dis) +
+      fld('contactEmail', 'Email', h.contact.email, dis) +
+      selFld('timezone', '時區', [['Asia/Taipei', 'Asia/Taipei'], ['Asia/Tokyo', 'Asia/Tokyo'], ['Asia/Hong_Kong', 'Asia/Hong_Kong'], ['Asia/Bangkok', 'Asia/Bangkok']], h.timezone, dis) +
+      selFld('locale', '預設語系', [['zh-TW', '繁體中文'], ['en-US', 'English'], ['ja-JP', '日本語']], h.locale, dis) +
+      selFld('currency', '幣別', [['TWD', 'TWD'], ['JPY', 'JPY'], ['HKD', 'HKD'], ['THB', 'THB']], h.currency, dis) +
+      selFld('lifecycle', '生命週期', [['preparing', '籌備中'], ['trial', '試營運'], ['live', '正式營運']].concat(h.lifecycle === 'suspended' ? [['suspended', '已停用']] : []), h.lifecycle, dis) +
+      '</div><div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">' + btn('儲存並同步到 TMS', 'save-basic', 'tenant.write', 'btn-primary', { hotel: h.id }) +
+      '<span style="flex:1"></span>' + (h.lifecycle !== 'suspended' ? btn('申請停用租戶', 'request-suspend', 'approval.request', 'btn-danger', { hotel: h.id }) : '') + '</div></form>';
+    return html;
+  };
+  function fld(name, label, v, dis, cls, type) {
+    return '<label class="field ' + (cls || '') + '"><span>' + label + '</span><input name="' + name + '" type="' + (type || 'text') + '" value="' + esc(v) + '"' + (dis || '') + '></label>';
+  }
+  function selFld(name, label, opts, v, dis, cls) {
+    return '<label class="field ' + (cls || '') + '"><span>' + label + '</span><select name="' + name + '"' + (dis || '') + '>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(v) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>';
+  }
+
+  TENANT_TABS.brand = function (h) {
+    var dis = can('brand.write') ? '' : ' disabled';
+    var html = '<div class="grid-2"><form class="panel" id="brand-form"><h2>品牌資產</h2><p class="panel-sub">LOGO 與主色會顯示在 TMS 住客掃碼頁</p>' +
+      '<div class="note warn"><b>待確認：</b>TMS 架構目前沒有檔案儲存（object storage / CDN），也沒有品牌相關的 tenant_config key。POC 先把圖片存在瀏覽器裡。</div>' +
+      '<div class="form-grid"><label class="field"><span>LOGO（PNG／JPG／SVG，300 KB 以內）</span><input type="file" id="logo-input" accept="image/png,image/jpeg,image/svg+xml"' + dis + '></label>' +
+      '<label class="field"><span>主色系</span><input type="color" id="color-input" value="' + esc(h.brand.color) + '"' + dis + ' style="height:38px;padding:2px"></label></div>' +
+      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">' + btn('儲存並同步到 TMS', 'save-brand', 'brand.write', 'btn-primary', { hotel: h.id }) + (h.brand.logo ? btn('移除 LOGO', 'remove-logo', 'brand.write', 'btn-secondary', { hotel: h.id }) : '') + '</div></form>';
+    html += '<section class="panel"><h2>住客頁預覽</h2><p class="panel-sub">示意：住客掃碼後看到的頁首</p><div id="brand-preview">' + brandPreview(h.name, h.brand.logo, h.brand.color) + '</div></section></div>';
+    return html;
+  };
+  function brandPreview(name, logo, color) {
+    return '<div class="brand-preview"><div class="bp-head" style="background:' + esc(color) + '">' + (logo ? '<img src="' + esc(logo) + '" alt="">' : '') + '<b>' + esc(name) + '</b></div>' +
+      '<div class="bp-body">歡迎入住 305 房<br>早餐 06:30–10:00・Wi-Fi 在資訊頁<br><span class="bp-btn" style="background:' + esc(color) + '">我需要毛巾</span></div></div>';
+  }
+
+  TENANT_TABS.license = function (h) {
+    var L = licenseFor(h);
+    if (!L.contract) return '<section class="panel"><div class="empty">這家飯店還沒有合約。' + btn('新增合約', 'new-contract', 'contract.write', 'btn-primary', { hotel: h.id }) + '</div></section>';
+    var c = L.contract;
+    var html = '<section class="panel"><div class="panel-head"><h2>' + esc(c.no) + '・' + PLANS[c.plan].label + '方案</h2>' + pill(LIC[L.state].label, LIC[L.state].cls) +
+      '<div class="actions"><a class="btn btn-secondary btn-sm" href="#/contracts/' + c.id + '">開啟合約</a>' + btn('延展寬限期', 'extend-grace', 'grace.extend', 'btn-secondary btn-sm', { id: c.id }) + '</div></div>' +
+      '<p class="panel-sub">' + (c.scopeType === 'group' ? '這是集團合約（' + esc(scopeLabel(c)) + '），涵蓋 ' + c.hotelIds.length + ' 家飯店；延展寬限期會套用到同一份合約的所有飯店。' : '單店合約') + '</p>';
+    html += timeline(c);
+    if (L.state === 'grace') html += '<div class="note err"><b>寬限期中：</b>功能照常，' + graceEnd(c) + ' 之後關閉所有模組。關閉前 3 天會通知飯店聯絡人（' + esc(h.contact.name) + '，' + esc(h.contact.email) + '）。</div>';
+    if (L.state === 'expired') html += '<div class="note err"><b>已關閉：</b>License API 回傳的所有模組都是 false。產品端快取過期後就會生效。</div>';
+    html += '<table class="tbl"><thead><tr><th>模組</th><th>合約內含</th><th>目前生效</th><th>關閉時的影響（待和 TMS 團隊確認）</th></tr></thead><tbody>';
+    MODULES.forEach(function (m) {
+      var inC = c.modules.indexOf(m.id) >= 0;
+      html += '<tr><td><b>' + esc(m.label) + '</b><div class="faint"><code>' + m.id + '</code></div></td><td>' + (inC ? '✓' : '<span class="muted">—</span>') + '</td><td>' + (L.modules[m.id] ? pill('開', 'ok') : pill('關', '')) + '</td><td class="muted">' + esc(m.impact) + '</td></tr>';
+    });
+    html += '</tbody></table></section>';
+    return html;
+  };
+  function timeline(c) {
+    var start = c.start, end = c.end, gEnd = graceEnd(c);
+    var lo = d(start), hi = d(gEnd) + 20 * DAY;
+    var pos = function (s) { return Math.max(0, Math.min(100, (d(s) - lo) * 100 / (hi - lo))); };
+    var w30 = addDays(end, -30);
+    var html = '<div class="timeline">' +
+      '<div class="seg active" style="left:0;width:' + pos(w30) + '%"></div>' +
+      '<div class="seg expiring" style="left:' + pos(w30) + '%;width:' + (pos(end) - pos(w30)) + '%"></div>' +
+      '<div class="seg grace" style="left:' + pos(end) + '%;width:' + (pos(gEnd) - pos(end)) + '%"></div>' +
+      '<span class="tick" style="left:0;transform:none">' + start + ' 起</span>' +
+      '<span class="tick top" style="left:' + pos(w30) + '%">30 天提醒</span>' +
+      '<span class="tick" style="left:' + pos(end) + '%">' + end + ' 到期</span>' +
+      '<span class="tick top" style="left:' + pos(gEnd) + '%">寬限期止 ' + gEnd.slice(5) + (c.graceExtDays ? '（+' + c.graceExtDays + '）' : '') + '</span>';
+    if (d(S.today) >= lo && d(S.today) <= hi) html += '<div class="today" style="left:' + pos(S.today) + '%"><span></span></div>';
+    return html + '</div>';
+  }
+
+  TENANT_TABS.checklist = function (h) {
+    var p = progress(h);
+    var dis = can('checklist.write') ? '' : ' disabled';
+    var html = '<section class="panel"><div class="panel-head"><h2>上線清單</h2><span class="faint">' + p.done + '／' + p.total + ' 完成</span><div class="actions">' + btn('從範本複製設定', 'copy-template', 'config.copy', 'btn-primary', { hotel: h.id }) + '</div></div>' +
+      '<div class="progress" style="margin-bottom:12px"><i style="width:' + p.pct + '%"></i></div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>步驟</th><th>狀態</th><th>負責人</th><th>完成時間</th></tr></thead><tbody>';
+    h.checklist.forEach(function (s, i) {
+      var def = STEPS.find(function (x) { return x.key === s.key; });
+      html += '<tr><td class="num">' + (i + 1) + '</td><td><b>' + esc(def.label) + '</b>' + (def.auto ? ' <span class="pill plain info" title="完成對應操作時自動打勾">自動</span>' : '') + (def.hint ? '<div class="faint">' + esc(def.hint) + '</div>' : '') + '</td>' +
+        '<td><select class="inline-select" data-change="step-status" data-hotel="' + h.id + '" data-step="' + s.key + '"' + dis + '>' + Object.keys(STEP_STATUS).map(function (k) { return '<option value="' + k + '"' + (k === s.status ? ' selected' : '') + '>' + STEP_STATUS[k].label + '</option>'; }).join('') + '</select></td>' +
+        '<td><select class="inline-select" data-change="step-owner" data-hotel="' + h.id + '" data-step="' + s.key + '"' + dis + '>' + S.users.map(function (u) { return '<option value="' + u.id + '"' + (u.id === s.owner ? ' selected' : '') + '>' + esc(u.name) + '（' + ROLES[u.role].label + '）</option>'; }).join('') + '</select></td>' +
+        '<td class="muted">' + fmtTs(s.doneAt) + '</td></tr>';
+    });
+    html += '</tbody></table></div></section>';
+    var keys = Object.keys(h.config || {});
+    html += '<section class="panel"><h2>目前的 TMS 租戶設定</h2><p class="panel-sub">上線後由飯店主管在 TMS 自行維護（PUT /admin/settings）；後台只負責初始設定，不會覆寫飯店改過的值</p>';
+    if (!keys.length) html += '<div class="empty">還沒有設定。用「從範本複製設定」一次帶入。</div>';
+    else html += '<table class="tbl"><tbody>' + CONFIG_KEYS.filter(function (k) { return h.config[k.key] != null; }).map(function (k) { return '<tr><td><b>' + k.label + '</b><div class="faint"><code>' + k.key + '</code></div></td><td class="muted">' + esc(summarize(h.config[k.key])) + '</td></tr>'; }).join('') + '</tbody></table>';
+    html += '</section>';
+    return html;
+  };
+  function summarize(v) {
+    if (Array.isArray(v)) return v.length + ' 項：' + v.slice(0, 4).join('、') + (v.length > 4 ? '…' : '');
+    if (v && typeof v === 'object') return Object.keys(v).map(function (k) { return k + '=' + v[k]; }).join('，');
+    return String(v);
+  }
+
+  TENANT_TABS.accounts = function (h) {
+    var list = S.accounts.filter(function (a) { return a.hotelId === h.id; });
+    var html = '<section class="panel"><div class="panel-head"><h2>飯店帳號（代管）</h2><div class="actions">' + btn('建立管理員帳號', 'new-account', 'account.create', 'btn-primary', { hotel: h.id }) + '</div></div>' +
+      '<p class="panel-sub">只代管飯店端的管理帳號（TMS 角色 manager／owner）。不做代客登入。</p>' +
+      '<div class="note warn"><b>待確認：</b>TMS 目前沒有員工帳號管理 API（docs/11 附錄 A 第 15 條只有 /auth/login）。幾十位房務員的帳號由誰建立，需要先決定。</div>';
+    if (!list.length) html += '<div class="empty">還沒有帳號</div>';
+    else {
+      html += '<div class="table-wrap"><table class="tbl"><thead><tr><th>登入帳號</th><th>姓名</th><th>TMS 角色</th><th>狀態</th><th></th></tr></thead><tbody>';
+      list.forEach(function (a) {
+        html += '<tr><td><code>' + esc(a.loginId) + '</code></td><td>' + esc(a.name) + '</td><td>' + esc(HOTEL_ROLES[a.role]) + '</td><td>' + (a.active ? pill('啟用', 'ok') : pill('已停用', '')) + (a.mustChange && a.active ? ' ' + pill('首次登入須改密碼', 'warn') : '') + '</td>' +
+          '<td style="white-space:nowrap">' + (a.active ? btn('重設密碼', 'reset-pw', 'account.reset', 'btn-secondary btn-sm', { id: a.id }) + ' ' + btn('停用', 'disable-account', 'account.disable', 'btn-danger btn-sm', { id: a.id }) : '') + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    return html + '</section>';
+  };
+
+  TENANT_TABS.sync = function (h) {
+    return '<section class="panel"><h2>同步紀錄</h2><p class="panel-sub">這家飯店對 TMS 的所有寫入，依序送出</p>' + outboxTable(S.outbox.filter(function (j) { return j.hotelId === h.id; }).slice().reverse()) + '</section>';
+  };
+  TENANT_TABS.audit = function (h) {
+    return '<section class="panel"><h2>稽核紀錄</h2>' + auditTable(S.audit.filter(function (a) { return a.tenant === h.id; }).slice().reverse()) + '</section>';
+  };
+
+  VIEWS.contracts = function (r) {
+    if (r.id) return contractDetail(S.contracts.find(function (c) { return c.id === r.id; }));
+    var html = '<div class="page-head"><div><h1>合約與授權</h1><p class="sub">只記錄合約與授權，不開帳單、不收款、不開發票</p></div><div class="actions">' +
+      btn('匯出給財務（CSV）', 'export-csv', null) + btn('新增合約', 'new-contract', 'contract.write', 'btn-primary') + '</div></div>';
+    html += '<section class="panel"><div class="table-wrap"><table class="tbl"><thead><tr><th>合約編號</th><th>對象</th><th>方案</th><th>金額</th><th>期間</th><th>狀態</th><th>房間上限</th></tr></thead><tbody>';
+    S.contracts.slice().sort(function (a, b) { return d(a.end) - d(b.end); }).forEach(function (c) {
+      var st = contractState(c);
+      html += '<tr><td><a href="#/contracts/' + c.id + '"><b>' + esc(c.no) + '</b></a></td><td>' + esc(scopeLabel(c)) + (c.scopeType === 'group' ? '<div class="faint">' + c.hotelIds.map(function (id) { return esc(hotel(id).name); }).join('、') + '</div>' : '') + '</td><td>' + PLANS[c.plan].label + '</td><td class="num">' + money(c.amount) + '</td><td class="muted">' + c.start + ' ～ ' + c.end + '</td><td>' + pill(LIC[st].label, LIC[st].cls) + '</td><td class="num">' + (c.limits.rooms || '—') + '</td></tr>';
+    });
+    return html + '</tbody></table></div></section>';
+  };
+  function contractDetail(c) {
+    if (!c) return '<div class="empty">找不到合約</div>';
+    var st = contractState(c);
+    var html = '<div class="page-head"><div><p class="sub"><a href="#/contracts">合約與授權</a></p><h1>' + esc(c.no) + '</h1><p class="sub">' + esc(scopeLabel(c)) + '・' + PLANS[c.plan].label + '方案・' + money(c.amount) + '　' + pill(LIC[st].label, LIC[st].cls) + '</p></div><div class="actions">' +
+      btn('延展寬限期', 'extend-grace', 'grace.extend', 'btn-secondary', { id: c.id }) + btn('修改合約', 'edit-contract', 'contract.write', 'btn-primary', { id: c.id }) + '</div></div>';
+    html += '<section class="panel"><h2>期間</h2>' + timeline(c) + (c.graceExtDays ? '<p class="faint">寬限期已由主管延展 ' + c.graceExtDays + ' 天</p>' : '') + (c.note ? '<p class="muted">備註：' + esc(c.note) + '</p>' : '') + '</section>';
+    html += '<div class="grid-2"><section class="panel"><h2>模組</h2><div class="checks">' + MODULES.map(function (m) { return '<span class="check" style="cursor:default">' + (c.modules.indexOf(m.id) >= 0 ? '✓' : '<span class="muted">—</span>') + ' ' + esc(m.label) + '</span>'; }).join('') + '</div></section>';
+    html += '<section class="panel"><h2>涵蓋飯店</h2><table class="tbl"><tbody>' + c.hotelIds.map(function (id) { var h = hotel(id); return '<tr><td><a href="#/tenant/' + id + '/license">' + esc(h.name) + '</a></td><td class="num">' + h.rooms + ' 間</td><td>' + (h.tenantId ? '<code>' + h.tenantId + '</code>' : '') + '</td></tr>'; }).join('') + '</tbody></table><p class="faint" style="margin:8px 0 0">房間上限 ' + (c.limits.rooms || '—') + '（只記錄，不強制）</p></section></div>';
+    html += '<section class="panel"><h2>這份合約的稽核紀錄</h2>' + auditTable(S.audit.filter(function (a) { return a.target === c.no; }).slice().reverse()) + '</section>';
+    return html;
+  }
+
+  VIEWS.onboarding = function () {
+    var html = '<div class="page-head"><div><h1>上線管理</h1><p class="sub">每家飯店一份上線清單，可以看到每個步驟的狀態、負責人和完成時間</p></div></div>';
+    var hs = S.hotels.slice().sort(function (a, b) { return progress(a).pct - progress(b).pct; });
+    html += '<section class="panel"><div class="table-wrap"><table class="tbl"><thead><tr><th>飯店</th><th>生命週期</th><th>進度</th><th>目前步驟</th><th>卡住</th></tr></thead><tbody>';
+    hs.forEach(function (h) {
+      var p = progress(h);
+      var next = h.checklist.find(function (s) { return s.status !== 'done'; });
+      var blocked = h.checklist.filter(function (s) { return s.status === 'blocked'; }).length;
+      html += '<tr><td><a href="#/tenant/' + h.id + '/checklist"><b>' + esc(h.name) + '</b></a></td><td>' + pill(LIFECYCLE[h.lifecycle], h.lifecycle === 'live' ? 'ok' : 'info') + '</td><td style="min-width:160px"><div style="display:flex;align-items:center;gap:8px"><div class="progress" style="flex:1"><i style="width:' + p.pct + '%"></i></div><span class="faint">' + p.done + '/' + p.total + '</span></div></td>' +
+        '<td>' + (next ? esc(STEPS.find(function (x) { return x.key === next.key; }).label) + '<div class="faint">' + esc(userName(next.owner)) + '</div>' : '<span class="muted">全部完成</span>') + '</td><td>' + (blocked ? pill(blocked + ' 項', 'err') : '') + '</td></tr>';
+    });
+    return html + '</tbody></table></div></section>';
+  };
+
+  VIEWS.audit = function () {
+    var f = auditFilter;
+    var html = '<div class="page-head"><div><h1>稽核紀錄</h1><p class="sub">所有寫入操作都會記錄；紀錄只能新增，不能修改或刪除。密碼一律遮蔽</p></div></div>';
+    html += '<section class="panel"><div class="form-grid" style="margin-bottom:12px">' +
+      '<label class="field"><span>租戶</span><select data-change="audit-filter" data-key="tenant"><option value="">全部</option>' + S.hotels.map(function (h) { return '<option value="' + h.id + '"' + (f.tenant === h.id ? ' selected' : '') + '>' + esc(h.name) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="field"><span>操作者</span><select data-change="audit-filter" data-key="actor"><option value="">全部</option>' + S.users.map(function (u) { return '<option value="' + u.id + '"' + (f.actor === u.id ? ' selected' : '') + '>' + esc(u.name) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="field"><span>起</span><input type="date" data-change="audit-filter" data-key="from" value="' + esc(f.from) + '"></label>' +
+      '<label class="field"><span>迄</span><input type="date" data-change="audit-filter" data-key="to" value="' + esc(f.to) + '"></label></div>';
+    var list = S.audit.filter(function (a) {
+      return (!f.tenant || a.tenant === f.tenant) && (!f.actor || a.actor === f.actor) && (!f.from || a.ts.slice(0, 10) >= f.from) && (!f.to || a.ts.slice(0, 10) <= f.to);
+    }).slice().reverse();
+    html += '<p class="faint">共 ' + list.length + ' 筆</p>' + auditTable(list) + '</section>';
+    return html;
+  };
+  var auditFilter = { tenant: '', actor: '', from: '', to: '' };
+  function auditTable(list, compact) {
+    if (!list.length) return '<div class="empty">沒有紀錄</div>';
+    var html = '<div class="table-wrap"><table class="tbl"><thead><tr><th>時間</th><th>操作者</th>' + (compact ? '' : '<th>租戶</th>') + '<th>操作</th>' + (compact ? '' : '<th>改前 → 改後</th>') + '</tr></thead><tbody>';
+    list.forEach(function (a) {
+      var u = S.users.find(function (x) { return x.id === a.actor; });
+      var h = a.tenant ? hotel(a.tenant) : null;
+      html += '<tr><td class="muted" style="white-space:nowrap">' + fmtTs(a.ts) + '</td><td>' + esc(u ? u.name : a.actor) + (u ? '<div class="faint">' + ROLES[u.role].label + '</div>' : '') + '</td>' + (compact ? '' : '<td>' + (h ? esc(h.name) : '—') + '</td>') +
+        '<td><b>' + esc(a.action) + '</b>' + (a.target ? '<div class="faint">' + esc(a.target) + '</div>' : '') + (compact && h ? '<div class="faint">' + esc(h.name) + '</div>' : '') + '</td>' + (compact ? '' : '<td>' + diffHtml(a.before, a.after) + '</td>') + '</tr>';
+    });
+    return html + '</tbody></table></div>';
+  }
+  function diffHtml(before, after) {
+    if (before == null && after == null) return '<span class="muted">—</span>';
+    var b = before || {}, a = after || {};
+    var keys = Object.keys(Object.assign({}, b, a)).filter(function (k) { return JSON.stringify(b[k]) !== JSON.stringify(a[k]); });
+    if (!keys.length) return '<span class="muted">無變更</span>';
+    return '<div class="diff">' + keys.map(function (k) {
+      var show = function (v) { return v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v); };
+      return '<span class="d-key">' + esc(k) + '</span><span class="d-old">' + esc(show(b[k])) + '</span><span class="d-new">' + esc(show(a[k])) + '</span>';
+    }).join('') + '</div>';
+  }
+
+  VIEWS.sync = function () {
+    var html = '<div class="page-head"><div><h1>同步佇列</h1><p class="sub">後台寫入自己的 DB 時，同一筆交易把「要送給產品端的請求」放進佇列，再逐筆送出。不在 commit 之後直接呼叫 API</p></div></div>';
+    html += '<section class="panel"><div class="panel-head"><h2>模擬開關</h2></div><label class="sim-switch"><input type="checkbox" data-change="sim-api"' + (S.sim.apiDown ? ' checked' : '') + '> 模擬產品端 Platform API 故障（回 503）</label>' +
+      '<p class="faint" style="margin:8px 0 0">規則：同一個租戶的請求依序送出；前一筆失敗時，後面的請求停在「等待前一筆」，等重試成功後才繼續。不同租戶互不影響。每筆請求都帶 Idempotency-Key，重送不會重複執行。</p></section>';
+    html += '<section class="panel"><div class="panel-head"><h2>全部請求</h2><div class="actions">' + (failedCount() ? '<button class="btn btn-primary btn-sm" data-action="retry-all">重試全部失敗</button>' : '') + '</div></div>' + outboxTable(S.outbox.slice().reverse()) + '</section>';
+    return html;
+  };
+  function outboxTable(list) {
+    if (!list.length) return '<div class="empty">沒有請求</div>';
+    var html = '<div class="table-wrap"><table class="tbl"><thead><tr><th>時間</th><th>租戶</th><th>請求</th><th>狀態</th><th>次數</th><th></th></tr></thead><tbody>';
+    list.forEach(function (j) {
+      var h = hotel(j.hotelId);
+      var st;
+      if (j.status === 'sent') st = pill('已送達', 'ok');
+      else if (j.status === 'failed') st = pill('失敗', 'err') + '<div class="faint">' + esc(j.error) + '</div>';
+      else if (blockedBy(j)) st = pill('等待前一筆', 'warn');
+      else st = pill('待送出', 'info');
+      html += '<tr><td class="muted" style="white-space:nowrap">' + fmtTs(j.createdAt) + '</td><td>' + (h ? esc(h.name) : '') + '</td>' +
+        '<td><code>' + esc(j.method) + ' ' + esc(resolvedPath(j)) + '</code><div class="faint">Idempotency-Key: <code>' + esc(j.idem) + '</code>・X-Actor: ' + esc(userName(j.actor)) + '</div>' + (j.response ? '<div class="faint">回應：<code>' + esc(JSON.stringify(j.response)) + '</code></div>' : '') + '</td>' +
+        '<td>' + st + '</td><td class="num">' + j.attempts + '</td><td>' + (j.status === 'failed' ? '<button class="btn btn-secondary btn-sm" data-action="retry" data-id="' + j.id + '">重試</button>' : '') + '</td></tr>';
+    });
+    return html + '</tbody></table></div>';
+  }
+
+  VIEWS['license-api'] = function () {
+    var live = licensePayload();
+    var html = '<div class="page-head"><div><h1>License API</h1><p class="sub">產品端呼叫這支 API 讀授權狀態。TMS 是一個程式服務所有租戶，所以一次拿全部租戶，用 ETag 判斷有沒有變</p></div></div>';
+    html += '<div class="grid-2"><section class="panel"><h2><code>GET /license/v1/tenants</code></h2><p class="panel-sub">後台算好最終狀態再回傳，產品端不自己算寬限期</p><pre class="json">' + esc(JSON.stringify(live, null, 2)) + '</pre></section>';
+    html += '<section class="panel"><h2>產品端快取模擬</h2><p class="panel-sub">TMS 每 5 到 10 分鐘拉一次；API 掛掉時沿用最後一次的結果，不中斷服務</p>' +
+      '<label class="sim-switch"><input type="checkbox" data-change="sim-license"' + (S.sim.licenseDown ? ' checked' : '') + '> 模擬 License API 停擺</label>' +
+      '<div style="margin:12px 0"><button class="btn btn-primary" data-action="product-fetch">產品端拉取一次</button></div>';
+    var pc = S.productCache;
+    if (!pc) html += '<div class="note warn"><b>冷啟動且沒有快取：</b>如果這時剛好 API 也停擺，產品端該怎麼辦？建議把最後一次結果存進產品端 DB，並約定冷啟動時預設照常放行。</div>';
+    else {
+      var drift = [];
+      pc.payload.tenants.forEach(function (t) {
+        var now = live.tenants.find(function (x) { return x.tenantId === t.tenantId; });
+        if (now && (now.state !== t.state || JSON.stringify(now.modules) !== JSON.stringify(t.modules))) drift.push(t.tenantId + '：快取「' + LIC[t.state].label + '」，後台已是「' + LIC[now.state].label + '」');
+      });
+      html += '<p class="muted">產品端目前用的是 <b>' + fmtTs(pc.fetchedAt) + '</b> 拉到的結果' + (pc.stale ? '（API 停擺，沿用舊結果）' : '') + '。</p>';
+      if (drift.length) html += '<div class="note warn"><b>快取和後台不一致</b>（下次拉取成功後才會生效）：<br>' + drift.map(esc).join('<br>') + '</div>';
+      html += '<table class="tbl"><thead><tr><th>tenant_id</th><th>狀態</th><th>開啟模組</th></tr></thead><tbody>' + pc.payload.tenants.map(function (t) {
+        var on = Object.keys(t.modules).filter(function (k) { return t.modules[k]; });
+        return '<tr><td><code>' + t.tenantId + '</code></td><td>' + pill(LIC[t.state].label, LIC[t.state].cls) + '</td><td class="faint">' + (on.length ? on.join(', ') : '（全部關閉）') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    }
+    return html + '</section></div>';
+  };
+
+  var STATUS_COLS = [['sync', '同步'], ['pms', 'PMS'], ['writeback', '回寫'], ['realtime', '即時'], ['push', '推播'], ['usage', '活躍'], ['scan', '掃碼']];
+  VIEWS.status = function () {
+    var html = '<div class="page-head"><div><h1>服務狀態</h1><p class="sub">給客服、實施、業務看「這家飯店現在順不順」。基礎設施的監控與告警在監控工具，這裡只放摘要和連結</p></div>' +
+      '<div class="actions"><button class="btn btn-secondary" data-action="open-monitor">在監控工具開啟</button></div></div>';
+
+    html += '<section class="panel"><div class="panel-head"><h2>平台狀態</h2><span class="faint">來源：監控工具（示意），只有「License 心跳」是後台自己的資料</span></div><div class="platform-bar">' +
+      platformComponents().map(function (c) { return '<div class="platform-item">' + dot(c.level) + '<div><b>' + esc(c.name) + (c.own ? ' <span class="src-tag own">後台自有</span>' : '') + '</b><span>' + esc(c.text) + '</span></div></div>'; }).join('') + '</div>';
+    if (heartbeatLevel() === 'err') html += '<div class="note err" style="margin:12px 0 0"><b>TMS 超過 30 分鐘沒來拉授權</b>（POC 以 15 秒示意）。可能是 TMS 整個掛了，或 License client 壞了。這期間任何授權變更都不會生效。</div>';
+    html += '</section>';
+
+    var hs = monitoredHotels();
+    var rows = hs.map(function (h) { var sg = tenantSignals(h); return { h: h, sg: sg, lv: worst(sg) }; });
+    rows.sort(function (a, b) { return LEVEL_RANK[b.lv] - LEVEL_RANK[a.lv]; });
+    html += '<section class="panel"><div class="panel-head"><h2>各租戶健康度</h2><span class="faint">' +
+      '<span class="src-tag own">後台自有</span> MVP 就能做　<span class="src-tag tms">需 TMS 提供</span> 第二階段，目前為模擬值</span></div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>飯店</th><th>整體</th>' +
+      STATUS_COLS.map(function (c) { var own = c[0] === 'sync'; return '<th title="' + (own ? '後台自有' : '需 TMS 提供') + '">' + c[1] + ' <span class="src-tag ' + (own ? 'own' : 'tms') + '">' + (own ? '自有' : 'TMS') + '</span></th>'; }).join('') +
+      '<th>需要注意</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var by = {}; r.sg.forEach(function (s) { by[s.key] = s; });
+      var issues = r.sg.filter(function (s) { return s.level === 'warn' || s.level === 'err'; });
+      html += '<tr><td style="min-width:140px"><a href="#/tenant/' + r.h.id + '/health"><b>' + esc(r.h.name) + '</b></a><div class="faint">tenant_id <code>' + r.h.tenantId + '</code></div></td>' +
+        '<td>' + pill(LEVEL_LABEL[r.lv], LEVEL_PILL[r.lv]) + '</td>' +
+        STATUS_COLS.map(function (c) { var s = by[c[0]]; return '<td title="' + esc(s ? s.label + '：' + s.text : '無資料') + '">' + dot(s ? s.level : 'none') + '</td>'; }).join('') +
+        '<td class="muted" style="min-width:220px">' + (issues.length ? issues.map(function (s) { return esc(s.label + '：' + s.text); }).join('<br>') : '—') + '</td></tr>';
+    });
+    var skipped = S.hotels.filter(function (h) { return hs.indexOf(h) < 0; });
+    html += '</tbody></table></div>' + (skipped.length ? '<p class="faint" style="margin:10px 0 0">不在監控範圍：' + skipped.map(function (h) { return esc(h.name) + '（' + (h.lifecycle === 'suspended' ? '已停用' : '尚未開通') + '）'; }).join('、') + '</p>' : '') + '</section>';
+
+    html += '<div class="grid-2"><section class="panel"><h2>License API 呼叫紀錄</h2><p class="panel-sub">產品端每次來拉授權就是一次心跳。TMS 一次拉全部租戶，所以心跳以產品為單位</p>';
+    if (!S.heartbeat.calls.length) html += '<div class="empty">還沒有呼叫</div>';
+    else html += '<table class="tbl"><thead><tr><th>時間</th><th>產品</th><th>回應</th></tr></thead><tbody>' + S.heartbeat.calls.map(function (c) {
+      var t = new Date(c.at); var p = function (n) { return String(n).padStart(2, '0'); };
+      return '<tr><td class="mono">' + p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds()) + '</td><td>TMS</td><td><code>' + esc(c.status) + '</code></td></tr>';
+    }).join('') + '</tbody></table>';
+    html += '</section>';
+
+    html += '<section class="panel"><h2>模擬情境</h2><p class="panel-sub">示範用，正式版沒有這一區</p>' +
+      '<label class="sim-switch" style="margin-bottom:8px"><input type="checkbox" data-change="sim-silent"' + (S.sim.productSilent ? ' checked' : '') + '> TMS 停止拉授權（心跳中斷）</label>' +
+      '<label class="sim-switch" style="margin-bottom:14px"><input type="checkbox" data-change="sim-kafka"' + (S.sim.kafkaLag ? ' checked' : '') + '> 平台 Kafka 消費延遲（所有租戶一起受影響）</label>' +
+      '<div class="form-grid">' +
+      selFld('simHotel', '租戶', hs.map(function (h) { return [h.id, h.name]; }), hs[0] ? hs[0].id : '') +
+      selFld('simEvent', '事件', [['pms_down', 'PMS 同步中斷'], ['writeback', '房況回寫失敗 +2'], ['scan_attack', '掃碼失敗暴增'], ['low_usage', '使用量驟降']], 'pms_down') +
+      '</div><div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-primary" data-action="sim-event">觸發</button><button class="btn btn-secondary" data-action="sim-restore">還原預設情境</button></div></section></div>';
+    return html;
+  };
+
+  TENANT_TABS.health = function (h) {
+    if (!h.tenantId) return '<section class="panel"><div class="empty">尚未開通，TMS 還沒有這家飯店的資料</div></section>';
+    var sg = tenantSignals(h);
+    var lv = worst(sg);
+    var L = licenseFor(h);
+    var contact = stepOf(h, 'golive') && stepOf(h, 'golive').owner;
+    var html = '<section class="panel"><div class="panel-head"><h2>服務狀態</h2>' + pill(LEVEL_LABEL[lv], LEVEL_PILL[lv]) +
+      '<div class="actions"><button class="btn btn-secondary btn-sm" data-action="open-monitor" data-tenant="' + h.tenantId + '">在監控工具開啟（tenant_id=' + h.tenantId + '）</button></div></div>' +
+      '<p class="panel-sub">負責實施：' + esc(userName(contact)) + '・飯店聯絡人：' + esc(h.contact.name) + ' ' + esc(h.contact.phone) + '・授權：' + LIC[L.state].label + '</p>';
+    html += '<div>' + sg.map(function (s) {
+      return '<div class="signal-row">' + dot(s.level) + '<b>' + esc(s.label) + '</b><div>' + esc(s.text) + (s.why ? '<div class="s-why">' + esc(s.why) + '</div>' : '') + '</div><span class="src-tag ' + s.source + '">' + (s.source === 'own' ? '後台自有' : '需 TMS 提供') + '</span></div>';
+    }).join('') + '</div></section>';
+    html += '<div class="note"><b>告警分工：</b>基礎設施告警走監控工具通知值班的人；租戶層級的業務告警（例如 PMS 同步停了 30 分鐘）之後可以從後台通知負責的實施或客服。MVP 先只顯示。</div>';
+    return html;
+  };
+
+  VIEWS.permissions = function () {
+    var perms = Object.keys(PERM_LABELS);
+    var html = '<div class="page-head"><div><h1>角色權限</h1><p class="sub">五種固定角色，對應 AD 群組。目前登入：' + esc(me().name) + '（' + ROLES[me().role].label + '）</p></div></div>';
+    html += '<section class="panel"><div class="table-wrap"><table class="tbl"><thead><tr><th>權限</th>' + Object.keys(ROLES).map(function (r) { return '<th>' + ROLES[r].label + '<div class="faint"><code>' + ROLES[r].group + '</code></div></th>'; }).join('') + '</tr></thead><tbody>';
+    perms.forEach(function (p) {
+      html += '<tr><td>' + PERM_LABELS[p] + '</td>' + Object.keys(ROLES).map(function (r) { var ps = PERMS[r]; return '<td>' + (ps.indexOf('*') >= 0 || ps.indexOf(p) >= 0 ? '✓' : '<span class="faint">—</span>') + '</td>'; }).join('') + '</tr>';
+    });
+    html += '<tr><td>查看全部資料</td>' + Object.keys(ROLES).map(function () { return '<td>✓</td>'; }).join('') + '</tr>';
+    return html + '</tbody></table></div><p class="faint" style="margin:10px 0 0">名詞：這裡的「主管」是公司內部主管；TMS 的 manager 是飯店主管，兩者不同。</p></section>';
+  };
+
+  // ── Actions ──────────────────────────────────────────
+  var ACTIONS = {};
+
+  ACTIONS['new-group'] = function () {
+    if (!guard('tenant.write')) return;
+    openModal({ title: '新增集團', body: '<div class="form-grid">' + fld('name', '集團名稱', '') + fld('taxId', '統一編號', '') + '</div>', onSubmit: function (f) {
+      var name = val(f, 'name');
+      if (!name) { toast('請填集團名稱', 'error'); return false; }
+      var g = { id: nid('g'), name: name, taxId: val(f, 'taxId') };
+      S.groups.push(g);
+      audit('新增集團', null, name, null, g);
+      toast('已新增集團「' + name + '」', 'success');
+    } });
+  };
+
+  ACTIONS['new-hotel'] = function () {
+    if (!guard('tenant.write')) return;
+    openModal({ title: '新增飯店', submitLabel: '建立並同步到 TMS', body: '<div class="form-grid">' +
+      fld('name', '飯店名稱', '') +
+      selFld('groupId', '所屬集團', [['', '（單店）']].concat(S.groups.map(function (g) { return [g.id, g.name]; })), '') +
+      fld('address', '地址', '', '', 'full') + fld('taxId', '統一編號', '') + fld('rooms', '房間數', '100', '', '', 'number') +
+      fld('contactName', '聯絡人', '') + fld('contactEmail', 'Email', '') +
+      selFld('timezone', '時區', [['Asia/Taipei', 'Asia/Taipei'], ['Asia/Tokyo', 'Asia/Tokyo'], ['Asia/Hong_Kong', 'Asia/Hong_Kong'], ['Asia/Bangkok', 'Asia/Bangkok']], 'Asia/Taipei') +
+      '</div><p class="faint" style="margin:12px 0 0">建立後會送出 <code>POST /platform/v1/tenants</code>，TMS 回傳 tenant_id 之後，後續的設定寫入才會往下送。</p>', onSubmit: function (f) {
+      var name = val(f, 'name');
+      if (!name) { toast('請填飯店名稱', 'error'); return false; }
+      var h = { id: nid('h'), groupId: val(f, 'groupId') || null, tenantId: null, name: name, address: val(f, 'address'), taxId: val(f, 'taxId'), contact: { name: val(f, 'contactName'), phone: '', email: val(f, 'contactEmail') }, timezone: val(f, 'timezone'), locale: 'zh-TW', currency: 'TWD', lifecycle: 'preparing', rooms: Number(val(f, 'rooms')) || 0, brand: { logo: null, color: '#15705A' }, config: {}, checklist: newChecklist() };
+      S.hotels.push(h);
+      markStep(h, 'basic');
+      audit('新增飯店', h.id, name, null, { name: name, timezone: h.timezone, rooms: h.rooms });
+      enqueue(h.id, 'POST', '/platform/v1/tenants', { name: name, timezone: h.timezone, locale: h.locale });
+      toast('已建立「' + name + '」，等待 TMS 回傳 tenant_id', 'success');
+      setTimeout(function () { location.hash = '#/tenant/' + h.id + '/checklist'; }, 0);
+    } });
+  };
+
+  ACTIONS['save-basic'] = function (el) {
+    if (!guard('tenant.write')) return;
+    var h = hotel(el.dataset.hotel);
+    var f = $('#basic-form');
+    var before = { name: h.name, groupId: h.groupId, address: h.address, taxId: h.taxId, rooms: h.rooms, contact: h.contact, timezone: h.timezone, locale: h.locale, currency: h.currency, lifecycle: h.lifecycle };
+    var after = { name: val(f, 'name'), groupId: val(f, 'groupId') || null, address: val(f, 'address'), taxId: val(f, 'taxId'), rooms: Number(val(f, 'rooms')) || 0, contact: { name: val(f, 'contactName'), phone: val(f, 'contactPhone'), email: val(f, 'contactEmail') }, timezone: val(f, 'timezone'), locale: val(f, 'locale'), currency: val(f, 'currency'), lifecycle: val(f, 'lifecycle') };
+    if (JSON.stringify(before) === JSON.stringify(after)) { toast('沒有變更', 'info'); return; }
+    Object.assign(h, after);
+    audit('修改基本資料', h.id, h.name, before, after);
+    // 只把 TMS 用得到的欄位送過去；統編、幣別、聯絡人留在後台
+    var tmsBefore = { name: before.name, timezone: before.timezone, locale: before.locale };
+    var tmsAfter = { name: after.name, timezone: after.timezone, locale: after.locale };
+    if (JSON.stringify(tmsBefore) !== JSON.stringify(tmsAfter)) enqueue(h.id, 'PUT', '/platform/v1/tenants/{tenantId}', tmsAfter);
+    if (after.lifecycle === 'live' && before.lifecycle !== 'live') markStep(h, 'golive');
+    if (after.lifecycle === 'trial' && before.lifecycle === 'preparing') { var st = stepOf(h, 'trial'); if (st.status === 'todo') st.status = 'doing'; }
+    save(); render();
+    toast(JSON.stringify(tmsBefore) !== JSON.stringify(tmsAfter) ? '已儲存，名稱／時區／語系已排入同步' : '已儲存（這次修改的欄位只存在後台，不用同步）', 'success');
+  };
+
+  ACTIONS['request-suspend'] = function (el) {
+    if (!guard('approval.request')) return;
+    var h = hotel(el.dataset.hotel);
+    openModal({ title: '申請停用「' + h.name + '」', danger: true, submitLabel: '送出申請', body: '<div class="note err">停用後，飯店所有人都不能登入 TMS，住客掃碼也會顯示「請洽櫃檯」。這是敏感操作，要主管核准後才會送出。</div><label class="field"><span>原因</span><textarea name="reason" required></textarea></label>', onSubmit: function (f) {
+      var reason = val(f, 'reason');
+      if (!reason) { toast('請填原因', 'error'); return false; }
+      var a = { id: nid('ap'), type: 'suspend_tenant', hotelId: h.id, reason: reason, requestedBy: S.currentUser, requestedAt: nowTs(), status: 'pending' };
+      S.approvals.push(a);
+      audit('申請停用租戶', h.id, h.name, null, { reason: reason });
+      toast('已送出，等待主管核准', 'success');
+    } });
+  };
+  ACTIONS.approve = function (el) {
+    if (!guard('approval.decide')) return;
+    var a = S.approvals.find(function (x) { return x.id === el.dataset.id; });
+    if (a.requestedBy === S.currentUser) { toast('不能核准自己提出的申請', 'error'); return; }
+    var h = hotel(a.hotelId);
+    a.status = 'approved'; a.decidedBy = S.currentUser;
+    var before = h.lifecycle;
+    h.lifecycle = 'suspended';
+    audit('核准停用租戶', h.id, h.name, { lifecycle: before }, { lifecycle: 'suspended' });
+    enqueue(h.id, 'POST', '/platform/v1/tenants/{tenantId}/suspend', { reason: a.reason });
+    save(); render();
+    toast('已核准，停用請求已排入同步', 'success');
+  };
+  ACTIONS.reject = function (el) {
+    if (!guard('approval.decide')) return;
+    var a = S.approvals.find(function (x) { return x.id === el.dataset.id; });
+    a.status = 'rejected'; a.decidedBy = S.currentUser;
+    audit('駁回停用租戶', a.hotelId, hotel(a.hotelId).name, null, { reason: a.reason });
+    save(); render();
+    toast('已駁回', 'info');
+  };
+
+  ACTIONS['save-brand'] = function (el) {
+    if (!guard('brand.write')) return;
+    var h = hotel(el.dataset.hotel);
+    var before = Object.assign({}, h.brand);
+    var color = $('#color-input').value;
+    var file = $('#logo-input').files[0];
+    var finish = function (logo) {
+      var after = { logo: logo === undefined ? h.brand.logo : logo, color: color };
+      if (JSON.stringify(before) === JSON.stringify(after)) { toast('沒有變更', 'info'); return; }
+      h.brand = after;
+      audit('修改品牌資產', h.id, h.name, before, after);
+      enqueue(h.id, 'PUT', '/platform/v1/tenants/{tenantId}/config/brand_assets', after);
+      save(); render();
+      toast('品牌資產已儲存並排入同步', 'success');
+    };
+    if (!file) return finish(undefined);
+    if (file.size > 300 * 1024) { toast('檔案超過 300 KB', 'error'); return; }
+    var rd = new FileReader();
+    rd.onload = function () { finish(rd.result); };
+    rd.readAsDataURL(file);
+  };
+  ACTIONS['remove-logo'] = function (el) {
+    if (!guard('brand.write')) return;
+    var h = hotel(el.dataset.hotel);
+    var before = Object.assign({}, h.brand);
+    h.brand.logo = null;
+    audit('移除 LOGO', h.id, h.name, before, h.brand);
+    enqueue(h.id, 'PUT', '/platform/v1/tenants/{tenantId}/config/brand_assets', h.brand);
+    save(); render();
+  };
+
+  function contractForm(c, presetHotel) {
+    c = c || { scopeType: 'hotel', scopeId: presetHotel || S.hotels[0].id, hotelIds: [], plan: 'standard', modules: PLANS.standard.modules.slice(), limits: { rooms: '' }, amount: '', start: S.today, end: addDays(addDays(S.today, 365), -1), note: '' };
+    var scopeOpts = S.groups.map(function (g) { return ['group:' + g.id, '集團：' + g.name]; }).concat(S.hotels.map(function (h) { return ['hotel:' + h.id, '飯店：' + h.name]; }));
+    var cur = c.scopeType + ':' + c.scopeId;
+    return '<div class="form-grid">' +
+      selFld('scope', '合約對象', scopeOpts, cur, '', 'full') +
+      '<div class="field full" id="group-hotels"></div>' +
+      selFld('plan', '方案', Object.keys(PLANS).map(function (k) { return [k, PLANS[k].label]; }), c.plan) +
+      fld('amount', '合約金額（TWD）', c.amount, '', '', 'number') +
+      fld('start', '起日', c.start, '', '', 'date') + fld('end', '迄日', c.end, '', '', 'date') +
+      fld('rooms', '房間數上限（只記錄）', c.limits.rooms, '', '', 'number') +
+      '<div class="field full"><span>模組開關</span><div class="checks">' + MODULES.map(function (m) { return '<label class="check"><input type="checkbox" name="modules" value="' + m.id + '"' + (c.modules.indexOf(m.id) >= 0 ? ' checked' : '') + '> ' + esc(m.label) + '</label>'; }).join('') + '</div><span class="hint">換方案會帶入該方案的預設模組，可以再個別調整</span></div>' +
+      '<label class="field full"><span>備註</span><textarea name="note">' + esc(c.note) + '</textarea></label></div>';
+  }
+  function wireContractForm(f, c) {
+    var renderGroupHotels = function () {
+      var s = f.elements.scope.value.split(':');
+      var box = $('#group-hotels', f);
+      if (s[0] !== 'group') { box.innerHTML = ''; return; }
+      var hs = S.hotels.filter(function (h) { return h.groupId === s[1]; });
+      var chosen = c && c.scopeType === 'group' ? c.hotelIds : hs.map(function (h) { return h.id; });
+      box.innerHTML = '<span>涵蓋哪些飯店</span><div class="checks">' + hs.map(function (h) { return '<label class="check"><input type="checkbox" name="hotelIds" value="' + h.id + '"' + (chosen.indexOf(h.id) >= 0 ? ' checked' : '') + '> ' + esc(h.name) + '</label>'; }).join('') + '</div>';
+    };
+    f.elements.scope.addEventListener('change', renderGroupHotels);
+    f.elements.plan.addEventListener('change', function () {
+      var mods = PLANS[f.elements.plan.value].modules;
+      f.querySelectorAll('input[name=modules]').forEach(function (i) { i.checked = mods.indexOf(i.value) >= 0; });
+    });
+    renderGroupHotels();
+  }
+  function readContractForm(f) {
+    var s = f.elements.scope.value.split(':');
+    var hotelIds = s[0] === 'group' ? Array.prototype.map.call(f.querySelectorAll('input[name=hotelIds]:checked'), function (i) { return i.value; }) : [s[1]];
+    return {
+      scopeType: s[0], scopeId: s[1], hotelIds: hotelIds,
+      plan: f.elements.plan.value,
+      modules: Array.prototype.map.call(f.querySelectorAll('input[name=modules]:checked'), function (i) { return i.value; }),
+      limits: { rooms: Number(val(f, 'rooms')) || null },
+      amount: Number(val(f, 'amount')) || 0,
+      start: val(f, 'start'), end: val(f, 'end'), note: val(f, 'note')
+    };
+  }
+  ACTIONS['new-contract'] = function (el) {
+    if (!guard('contract.write')) return;
+    var preset = el.dataset.hotel;
+    openModal({ title: '新增合約', wide: true, body: contractForm(null, preset), afterOpen: function (f) { wireContractForm(f, null); }, onSubmit: function (f) {
+      var data = readContractForm(f);
+      if (!data.hotelIds.length) { toast('至少要涵蓋一家飯店', 'error'); return false; }
+      if (!data.start || !data.end || data.end < data.start) { toast('起訖日不正確', 'error'); return false; }
+      var c = Object.assign({ id: nid('c'), no: 'C-' + S.today.slice(0, 4) + '-' + String(S.seq).padStart(3, '0'), graceExtDays: 0 }, data);
+      S.contracts.push(c);
+      audit('新增合約', data.hotelIds.length === 1 ? data.hotelIds[0] : null, c.no, null, data);
+      data.hotelIds.forEach(function (id) { markStep(hotel(id), 'license'); });
+      toast('已新增合約 ' + c.no + '，License API 立即反映', 'success');
+    } });
+  };
+  ACTIONS['edit-contract'] = function (el) {
+    if (!guard('contract.write')) return;
+    var c = S.contracts.find(function (x) { return x.id === el.dataset.id; });
+    openModal({ title: '修改合約 ' + c.no, wide: true, body: contractForm(c), afterOpen: function (f) { wireContractForm(f, c); }, onSubmit: function (f) {
+      var data = readContractForm(f);
+      if (!data.hotelIds.length) { toast('至少要涵蓋一家飯店', 'error'); return false; }
+      var removed = c.modules.filter(function (m) { return data.modules.indexOf(m) < 0; });
+      var apply = function () {
+        var before = { plan: c.plan, modules: c.modules, limits: c.limits, amount: c.amount, start: c.start, end: c.end, hotelIds: c.hotelIds, note: c.note };
+        Object.assign(c, data);
+        audit('修改合約', c.hotelIds.length === 1 ? c.hotelIds[0] : null, c.no, before, { plan: c.plan, modules: c.modules, limits: c.limits, amount: c.amount, start: c.start, end: c.end, hotelIds: c.hotelIds, note: c.note });
+        save(); render();
+        toast('已更新合約 ' + c.no, 'success');
+      };
+      if (removed.length) {
+        // 關模組影響飯店營運，再確認一次並列出影響
+        setTimeout(function () {
+          openModal({ title: '確認關閉模組', danger: true, submitLabel: '確認關閉', body: '<div class="note err">下列模組將對 ' + c.hotelIds.map(function (id) { return esc(hotel(id).name); }).join('、') + ' 關閉，產品端快取過期後生效：</div><ul style="padding-left:18px;margin:0">' + removed.map(function (id) { var m = MODULES.find(function (x) { return x.id === id; }); return '<li><b>' + esc(m.label) + '</b>：<span class="muted">' + esc(m.impact) + '</span></li>'; }).join('') + '</ul>', onSubmit: function () { apply(); } });
+        }, 0);
+        return;
+      }
+      apply();
+    } });
+  };
+  ACTIONS['extend-grace'] = function (el) {
+    if (!guard('grace.extend')) return;
+    var c = S.contracts.find(function (x) { return x.id === el.dataset.id; });
+    openModal({ title: '延展寬限期：' + c.no, submitLabel: '延展', body: '<p class="muted">目前寬限期到 <b>' + graceEnd(c) + '</b>' + (c.graceExtDays ? '（已延展 ' + c.graceExtDays + ' 天）' : '') + '。</p><div class="form-grid">' + fld('days', '延展天數', 14, '', '', 'number') + '</div><label class="field" style="margin-top:12px"><span>原因（必填，會寫入稽核）</span><textarea name="reason"></textarea></label>', onSubmit: function (f) {
+      var days = Number(val(f, 'days'));
+      var reason = val(f, 'reason');
+      if (!days || days < 1) { toast('天數要大於 0', 'error'); return false; }
+      if (!reason) { toast('請填原因', 'error'); return false; }
+      var before = { graceExtDays: c.graceExtDays, graceUntil: graceEnd(c) };
+      c.graceExtDays = (c.graceExtDays || 0) + days;
+      audit('延展寬限期', c.hotelIds.length === 1 ? c.hotelIds[0] : null, c.no, before, { graceExtDays: c.graceExtDays, graceUntil: graceEnd(c), reason: reason });
+      toast('寬限期延到 ' + graceEnd(c), 'success');
+    } });
+  };
+  ACTIONS['export-csv'] = function () {
+    var rows = [['合約編號', '對象', '涵蓋飯店', '方案', '金額', '起日', '迄日', '寬限期止', '狀態', '房間上限']];
+    S.contracts.forEach(function (c) {
+      rows.push([c.no, scopeLabel(c), c.hotelIds.map(function (id) { return hotel(id).name; }).join(' / '), PLANS[c.plan].label, c.amount, c.start, c.end, graceEnd(c), LIC[contractState(c)].label, c.limits.rooms || '']);
+    });
+    var csv = '﻿' + rows.map(function (r) { return r.map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'contracts-' + S.today + '.csv';
+    a.click();
+    audit('匯出合約給財務', null, rows.length - 1 + ' 筆', null, null);
+    save(); renderNav();
+  };
+
+  ACTIONS['copy-template'] = function (el) {
+    if (!guard('config.copy')) return;
+    var h = hotel(el.dataset.hotel);
+    var sources = S.hotels.filter(function (x) { return x.id !== h.id && x.lifecycle === 'live' && Object.keys(x.config || {}).length; });
+    var body = selFld('source', '範本館（選一家已上線的飯店）', sources.map(function (s) { return [s.id, s.name]; }), sources[0] && sources[0].id) +
+      '<div id="tpl-preview" style="margin-top:12px"></div>' +
+      '<div class="note" style="margin-top:12px"><b>不會複製：</b>' + NOT_COPIED.join('、') + '</div>' +
+      (Object.keys(h.config).length ? '<div class="note warn"><b>注意：</b>這家飯店已經有設定，勾選的項目會被覆寫。</div>' : '');
+    openModal({ title: '從範本複製設定到「' + h.name + '」', wide: true, submitLabel: '複製並同步到 TMS', body: body, afterOpen: function (f) {
+      var draw = function () {
+        var src = hotel(f.elements.source.value);
+        $('#tpl-preview', f).innerHTML = '<table class="tbl"><thead><tr><th></th><th>設定項目</th><th>範本內容</th></tr></thead><tbody>' + CONFIG_KEYS.map(function (k) {
+          var v = src.config[k.key];
+          return '<tr><td><input type="checkbox" name="keys" value="' + k.key + '"' + (v != null ? ' checked' : ' disabled') + '></td><td><b>' + k.label + '</b><div class="faint"><code>' + k.key + '</code></div>' + (k.copy === 'review' ? '<div>' + pill('複製後飯店必須修改', 'warn') + '</div>' : '') + '</td><td class="muted">' + esc(v != null ? summarize(v) : '（範本沒有）') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      };
+      f.elements.source.addEventListener('change', draw);
+      draw();
+    }, onSubmit: function (f) {
+      var src = hotel(f.elements.source.value);
+      var keys = Array.prototype.map.call(f.querySelectorAll('input[name=keys]:checked'), function (i) { return i.value; });
+      if (!keys.length) { toast('至少勾一項', 'error'); return false; }
+      var before = {};
+      keys.forEach(function (k) {
+        before[k] = h.config[k];
+        h.config[k] = JSON.parse(JSON.stringify(src.config[k]));
+        enqueue(h.id, 'PUT', '/platform/v1/tenants/{tenantId}/config/' + k, { value: summarize(h.config[k]) });
+      });
+      markStep(h, 'config');
+      audit('從範本複製設定', h.id, '來源：' + src.name, null, { keys: keys });
+      toast('已複製 ' + keys.length + ' 項設定，排入同步佇列', 'success');
+    } });
+  };
+
+  ACTIONS['new-account'] = function (el) {
+    if (!guard('account.create')) return;
+    var h = hotel(el.dataset.hotel);
+    openModal({ title: '建立「' + h.name + '」的管理員帳號', submitLabel: '建立', body: '<div class="form-grid">' + fld('loginId', '登入帳號', '') + fld('name', '姓名', h.contact.name) + selFld('role', 'TMS 角色', Object.keys(HOTEL_ROLES).map(function (k) { return [k, HOTEL_ROLES[k]]; }), 'manager') + fld('email', '寄送臨時密碼到', h.contact.email) + '</div><p class="faint" style="margin:10px 0 0">系統產生臨時密碼，首次登入要強制修改。</p>', onSubmit: function (f) {
+      var loginId = val(f, 'loginId');
+      if (!/^[a-z0-9._-]{3,}$/i.test(loginId)) { toast('登入帳號至少 3 個字元，只能用英數和 . _ -', 'error'); return false; }
+      if (S.accounts.some(function (a) { return a.hotelId === h.id && a.loginId === loginId; })) { toast('這家飯店已經有同名帳號', 'error'); return false; }
+      var a = { id: nid('a'), hotelId: h.id, loginId: loginId, name: val(f, 'name'), role: val(f, 'role'), active: true, mustChange: true };
+      S.accounts.push(a);
+      var pw = rand(10);
+      audit('建立飯店帳號', h.id, loginId, null, { loginId: loginId, role: a.role, password: pw });
+      enqueue(h.id, 'POST', '/platform/v1/tenants/{tenantId}/staff-accounts', { loginId: loginId, name: a.name, role: a.role, password: pw, mustChangePassword: true });
+      markStep(h, 'accounts');
+      setTimeout(function () { showTempPassword(loginId, pw, val(f, 'email')); }, 0);
+    } });
+  };
+  function showTempPassword(loginId, pw, email) {
+    openModal({ title: '臨時密碼', body: '<p>帳號 <code>' + esc(loginId) + '</code> 的臨時密碼：</p><pre class="json" style="font-size:18px;text-align:center">' + esc(pw) + '</pre><p class="faint" style="margin-top:10px">只顯示這一次，稽核紀錄裡會遮蔽。' + (email ? '已寄到 ' + esc(email) + '（模擬）。' : '') + '</p>' });
+  }
+  ACTIONS['reset-pw'] = function (el) {
+    if (!guard('account.reset')) return;
+    var a = S.accounts.find(function (x) { return x.id === el.dataset.id; });
+    openModal({ title: '重設密碼：' + a.loginId, submitLabel: '重設', danger: true, body: '<p>會產生新的臨時密碼，對方下次登入時必須修改。</p>', onSubmit: function () {
+      var pw = rand(10);
+      a.mustChange = true;
+      audit('重設飯店帳號密碼', a.hotelId, a.loginId, { password: 'old' }, { password: pw, mustChangePassword: true });
+      enqueue(a.hotelId, 'POST', '/platform/v1/tenants/{tenantId}/staff-accounts/' + a.loginId + '/password-reset', { password: pw, mustChangePassword: true });
+      setTimeout(function () { showTempPassword(a.loginId, pw, ''); }, 0);
+    } });
+  };
+  ACTIONS['disable-account'] = function (el) {
+    if (!guard('account.disable')) return;
+    var a = S.accounts.find(function (x) { return x.id === el.dataset.id; });
+    openModal({ title: '停用帳號：' + a.loginId, submitLabel: '停用', danger: true, body: '<p>停用後不能登入，該帳號登記的推播裝置（staff_devices）也一併撤銷。歷史紀錄保留。</p>', onSubmit: function () {
+      a.active = false;
+      audit('停用飯店帳號', a.hotelId, a.loginId, { active: true }, { active: false });
+      enqueue(a.hotelId, 'POST', '/platform/v1/tenants/{tenantId}/staff-accounts/' + a.loginId + '/disable', { revokeDevices: true });
+      toast('已停用 ' + a.loginId, 'success');
+    } });
+  };
+
+  ACTIONS.retry = function (el) {
+    var j = S.outbox.find(function (x) { return x.id === el.dataset.id; });
+    j.status = 'pending';
+    save(); render();
+  };
+  ACTIONS['retry-all'] = function () {
+    S.outbox.forEach(function (j) { if (j.status === 'failed') j.status = 'pending'; });
+    save(); render();
+  };
+  ACTIONS['product-fetch'] = function () {
+    if (!productPull()) {
+      if (S.productCache) toast('License API 沒回應，產品端沿用上一次結果，服務不中斷', 'warning');
+      else toast('License API 沒回應，而且產品端沒有快取——這就是要先約定的冷啟動情境', 'error');
+    } else {
+      toast('產品端已更新授權快取', 'success');
+    }
+    save(); render();
+  };
+  ACTIONS['open-monitor'] = function (el) {
+    toast('（示意）會開啟監控工具' + (el.dataset.tenant ? '，並以 tenant_id=' + el.dataset.tenant + ' 篩選' : ''), 'info');
+  };
+  ACTIONS['sim-event'] = function () {
+    var id = $('#main [name=simHotel]').value;
+    var ev = $('#main [name=simEvent]').value;
+    var H = S.health[id];
+    if (!H) H = S.health[id] = { pmsMode: 'event', pmsSyncAgoMin: 1, writebackFailed: 0, lagSec: 2, pushMissingPct: 0, todayTasks: 0, activeStaff: 0, guestScans: 0, scanFailures: 0 };
+    if (ev === 'pms_down') { H.pmsMode = H.pmsMode === 'excel' ? 'polling' : H.pmsMode; H.pmsSyncAgoMin = 45; }
+    if (ev === 'writeback') H.writebackFailed += 2;
+    if (ev === 'scan_attack') H.scanFailures = 240;
+    if (ev === 'low_usage') { H.todayTasks = 3; H.guestScans = 0; }
+    save(); render();
+    toast('已對「' + hotel(id).name + '」觸發事件', 'warning');
+  };
+  ACTIONS['sim-restore'] = function () {
+    S.health = seedHealth();
+    // 心跳和同步也受其他頁的模擬開關影響，一併關掉才算「還原」
+    S.sim = { apiDown: false, licenseDown: false, productSilent: false, kafkaLag: false };
+    save(); render();
+    toast('已還原預設情境', 'info');
+  };
+
+  // ── 事件委派 ─────────────────────────────────────────
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]');
+    if (!el || !ACTIONS[el.dataset.action]) return;
+    e.preventDefault();
+    ACTIONS[el.dataset.action](el);
+  });
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    var kind = el.dataset && el.dataset.change;
+    if (!kind) {
+      if (el.id === 'user-select') { S.currentUser = el.value; save(); render(); toast('已切換為 ' + me().name + '（' + ROLES[me().role].label + '）', 'info'); }
+      else if (el.id === 'today-input' && el.value) { S.today = el.value; save(); render(); }
+      else if (el.id === 'color-input' || el.id === 'logo-input') updateBrandPreview();
+      return;
+    }
+    if (kind === 'step-status' || kind === 'step-owner') {
+      if (!guard('checklist.write')) { render(); return; }
+      var h = hotel(el.dataset.hotel);
+      var s = stepOf(h, el.dataset.step);
+      var label = STEPS.find(function (x) { return x.key === s.key; }).label;
+      if (kind === 'step-status') {
+        var before = s.status;
+        s.status = el.value;
+        s.doneAt = el.value === 'done' ? nowTs() : null;
+        audit('更新上線清單', h.id, label, { status: before }, { status: s.status });
+      } else {
+        var bo = s.owner;
+        s.owner = el.value;
+        audit('更新上線清單負責人', h.id, label, { owner: userName(bo) }, { owner: userName(s.owner) });
+      }
+      save(); render();
+    } else if (kind === 'audit-filter') {
+      auditFilter[el.dataset.key] = el.value;
+      render();
+    } else if (kind === 'sim-api') {
+      S.sim.apiDown = el.checked; save(); render();
+      toast(el.checked ? '產品端 API 模擬故障中' : '產品端 API 已恢復，失敗的請求要按「重試」', el.checked ? 'warning' : 'info');
+    } else if (kind === 'sim-license') {
+      S.sim.licenseDown = el.checked; save(); render();
+    } else if (kind === 'sim-silent') {
+      S.sim.productSilent = el.checked; save(); render();
+      if (el.checked) toast('TMS 停止拉授權，約 15 秒後心跳轉紅', 'warning');
+    } else if (kind === 'sim-kafka') {
+      S.sim.kafkaLag = el.checked; save(); render();
+    }
+  });
+  function updateBrandPreview() {
+    var r = route();
+    var h = hotel(r.id);
+    if (!h) return;
+    var color = $('#color-input').value;
+    var file = $('#logo-input').files[0];
+    if (!file) { $('#brand-preview').innerHTML = brandPreview(h.name, h.brand.logo, color); return; }
+    var rd = new FileReader();
+    rd.onload = function () { $('#brand-preview').innerHTML = brandPreview(h.name, rd.result, color); };
+    rd.readAsDataURL(file);
+  }
+
+  $('#reset-btn').addEventListener('click', function () {
+    if (!confirm('重置所有示範資料？')) return;
+    S = seed(); save(); auditFilter = { tenant: '', actor: '', from: '', to: '' };
+    location.hash = '#/dashboard'; render();
+    toast('已重置', 'info');
+  });
+  window.addEventListener('hashchange', render);
+  window.addEventListener('storage', function (e) { if (e.key === KEY) { S = load(); render(); } });
+  setInterval(pump, 900);
+  // 模擬產品端每 5 秒來拉一次授權（正式環境是 5 到 10 分鐘）；同時讓心跳秒數跟著跳
+  // 只重繪「看狀態」的頁面——表單頁每 5 秒重繪會吃掉使用者還沒存的輸入
+  function tick() {
+    if (!S.sim.productSilent && productPull()) save();
+    renderNav();
+    var r = route();
+    var live = r.page === 'status' || r.page === 'license-api' || (r.page === 'tenant' && r.tab === 'health');
+    if (live && !$('#modal-host').innerHTML && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))) {
+      $('#main').innerHTML = VIEWS[r.page](r);
+    }
+  }
+  setInterval(tick, 5000);
+  tick();
+  render();
+})();
+</script>
+</body>
+</html>
