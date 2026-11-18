@@ -9,8 +9,8 @@ import 'push_gateway.dart';
 import 'push_token_service.dart';
 
 /// firebase_messaging 17 把 `getToken`、`onTokenRefresh`、`deleteToken` 標成過時，
-/// 但取代它們的 `register()` 回的是 Firebase Installation ID，不是 FCM 註冊 token。
-/// 後端 `PUT /me/push-token` 收的是註冊 token，所以下面三處各壓掉一條過時警告。
+/// 但取代它們的 `register()` 回的是 Firebase Installation ID，不是 FCM 註冊權杖。
+/// 後端 `PUT /me/push-token` 收的是註冊權杖，所以下面三處各壓掉一條過時警告。
 class FirebasePushMessaging implements PushMessaging {
   @override
   Future<void> initialize() async {

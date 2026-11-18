@@ -3,7 +3,10 @@ import type { DeskTask } from '../api/types';
 import { minutesSince } from './wait-pill';
 
 /**
- * 不能用字串的 `length` 或輸入框的 `maxLength`，它們數的是 UTF-16 單位，一個表情符號會算成兩個。
+ * 回答最多 120 個字，長度一律用 Unicode 碼位數計算，和後端 `DeskAnswerText` 用的 `codePointCount` 一致，
+ * 前端放行的回答後端才不會因為長度拒收。字串的 `length` 與輸入框的 `maxLength` 數的是 UTF-16 單位，
+ * 一個表情符號會算成兩個。碼位數也不完全等於使用者看到的字數，由多個碼位組成的表情符號會算成好幾個字，
+ * 但兩端數法一致比較重要，所以不在單邊改用其他數法。
  */
 export const ANSWER_MAX_LENGTH = 120;
 
@@ -17,9 +20,9 @@ export function clampAnswer(text: string): string {
 }
 
 /**
- * 後端 `String.strip()` 會去掉的空白，也就是 Java `Character.isWhitespace` 認的字：
- * 各種空格與換行，但不含不換行空格（U+00A0、U+2007、U+202F）。
- * JS 的 `trim()` 範圍不同（會去掉不換行空格與 U+FEFF、不去掉 U+001C–U+001F），所以不用它。
+ * 去除前後空白的規則要和後端 `String.strip()` 一致，也就是 Java `Character.isWhitespace` 認定的字元：
+ * 各種空格與換行，但不含不換行空格 U+00A0、U+2007、U+202F。JS 的 `trim()` 會去掉不換行空格與 U+FEFF，
+ * 卻不去掉 U+001C 到 U+001F，範圍不同，所以不用它。
  */
 const BACKEND_SPACE = String.raw`(?:(?![   ])[\p{Zs}\p{Zl}\p{Zp}\t\n\u000B\f\r\u001C-\u001F])`;
 const LEADING_OR_TRAILING_SPACES = new RegExp(`^${BACKEND_SPACE}+|${BACKEND_SPACE}+$`, 'gu');

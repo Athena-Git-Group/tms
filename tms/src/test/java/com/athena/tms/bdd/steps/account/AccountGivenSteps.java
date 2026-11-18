@@ -48,7 +48,7 @@ public class AccountGivenSteps {
         staffFixtures.markMustChangePassword(UUID.fromString(world.staffId(staffName)));
     }
 
-    // Cucumber Expression 裡裸 / 是 alternation 語法，照字面比對斜線必須寫成 \/
+    // Cucumber Expression 裡單獨的 / 表示二選一，要比對字面上的斜線必須寫成 \/。
     @假設("{string} 的員工編號密碼為 {string} \\/ {string}")
     public void staffHasCredentials(String staffName, String loginId, String password) {
         UUID staffId = UUID.fromString(world.staffId(staffName));

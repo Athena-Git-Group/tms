@@ -13,22 +13,19 @@ import 'package:tms_staff_app/features/pool/pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
   late _RecordingApiClient api;
 
+  turnOffAnimationsForEachTest();
+
   setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
     api = _RecordingApiClient();
     ApiClient.instance = api;
   });
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
     PoolDeptPreference.changes.value = null;
     MainShellTabRequest.poolHighlightRoomNo.value = null;

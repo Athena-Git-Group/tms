@@ -48,8 +48,9 @@ class _TaskScreenState extends State<TaskScreen> {
 
   bool _repairSheetOpen = false;
 
-  /// Flutter 的 `ModalBarrier` 把自己包在 `BlockSemantics` 裡，用路由推上來的
-  /// 覆蓋層會擋掉底下那一頁的 accessibility 節點。這張卡因此疊在這一頁上。
+  /// 完成慶祝卡直接疊在這一頁上，不用路由推出來。Flutter 路由的 `ModalBarrier`
+  /// 會用 `BlockSemantics` 擋掉底下那一頁的 accessibility 節點，改用路由的話，
+  /// 這一頁的元件就讀不到了。
   _CelebrateContent? _celebrate;
 
   String? _openRepairSheetTaskId;
@@ -503,8 +504,9 @@ class _TaskScreenState extends State<TaskScreen> {
     }
   }
 
-  /// 指派不能寫成 `setState(() => _taskFuture = ...)`。箭頭函式會把那個
-  /// `Future` 當成回傳值，Flutter 在 debug 版會拒絕回傳 `Future` 的回呼。
+  /// `setState` 裡的賦值要寫成區塊，不能寫成 `setState(() => _taskFuture = ...)`。
+  /// 箭頭函式會把賦值結果的 `Future` 當成回傳值，Flutter 在 debug 版會拒絕
+  /// 回傳 `Future` 的 setState 回呼。
   void _showTask(TaskDetail task) {
     setState(() {
       _loadedTask = task;

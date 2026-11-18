@@ -5,23 +5,17 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 
   testWidgets('在待認領接了一張工務單之後，首頁「我的任務」出現那一張', (tester) async {
-    _useIPhoneSurface(tester);
+    usePhoneSurface(tester);
     final client = _FakeApiClient(
       today: _today(openCount: 0, tickets: const []),
       pool: _poolWith(_poolItem()),
@@ -50,7 +44,7 @@ void main() {
   testWidgets('在詳情頁把一張待開始的單開工並完修之後，首頁那一列從待開始變已完修', (
     tester,
   ) async {
-    _useIPhoneSurface(tester);
+    usePhoneSurface(tester);
     final client = _FakeApiClient(
       today: _today(openCount: 1, tickets: [_ticket(state: 'accepted')]),
       pool: _poolWith(),
@@ -88,12 +82,6 @@ void main() {
     expect(find.text('待開始'), findsNothing);
     expect(find.text('下一張（急件優先）'), findsNothing);
   });
-}
-
-void _useIPhoneSurface(WidgetTester tester) {
-  tester.view.physicalSize = const Size(402, 874);
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
 }
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);

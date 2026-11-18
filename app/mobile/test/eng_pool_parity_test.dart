@@ -9,18 +9,12 @@ import 'package:tms_staff_app/features/engineering/eng_pool_screen.dart';
 import 'package:tms_staff_app/features/pool/pool_widgets.dart';
 import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 

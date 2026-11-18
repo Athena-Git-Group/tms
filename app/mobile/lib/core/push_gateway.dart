@@ -44,7 +44,8 @@ class PushGateway {
       }
       await handlePushPayload(_asStringKeyedMap(result));
     } on MissingPluginException {
-      // 原生側沒有接上這個 channel 時（例如 widget test），Flutter 會丟 MissingPluginException。
+      // 沒有待開啟的推播，直接略過。原生側沒有註冊這個 channel 時會丟
+      // MissingPluginException，例如在 widget test 裡。
     }
   }
 

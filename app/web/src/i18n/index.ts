@@ -17,7 +17,7 @@ void i18n.use(initReactI18next).init({
   lng: initialLanguage(),
   fallbackLng: DEFAULT_LANGUAGE,
   supportedLngs: LANGUAGES,
-  // React 輸出文字時已經會處理特殊字元，再處理一次會把「&」之類的字變成亂碼。
+  // React 輸出文字時已經會轉義特殊字元，i18next 再轉一次會讓「&」顯示成「&amp;」。
   interpolation: { escapeValue: false },
 });
 

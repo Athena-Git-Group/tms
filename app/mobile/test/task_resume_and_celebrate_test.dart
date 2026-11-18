@@ -6,19 +6,12 @@ import 'package:tms_staff_app/core/connection_status.dart';
 import 'package:tms_staff_app/features/celebrate/celebrate_screen.dart';
 import 'package:tms_staff_app/features/task/task_screen.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
     ConnectionStatus.instance.reset();
   });

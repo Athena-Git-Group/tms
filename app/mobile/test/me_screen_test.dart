@@ -9,11 +9,9 @@ import 'package:tms_staff_app/features/task/task_screen.dart';
 import 'package:tms_staff_app/features/ticket/ticket_screen.dart';
 import 'package:tms_staff_app/features/today/my_today_scope.dart';
 
-void main() {
-  /// Flutter 測試預設的畫面是 800 × 600，而 `ListView` 不會建出捲到畫面外的
-  /// 列，所以改用手機的邏輯尺寸。
-  const deviceSize = Size(402, 874);
+import 'support/test_environment.dart';
 
+void main() {
   tearDown(() async {
     ApiClient.instance = ApiClient();
     ConnectionStatus.instance.reset();
@@ -69,7 +67,7 @@ void main() {
     LoginResult? session,
     MyToday? today,
   }) async {
-    await tester.binding.setSurfaceSize(deviceSize);
+    await tester.binding.setSurfaceSize(phoneLogicalSize);
     ApiClient.instance = _FakeApiClient(session, today: today);
     await tester.pumpWidget(
       const CupertinoApp(home: MyTodayScope(child: MeScreen())),

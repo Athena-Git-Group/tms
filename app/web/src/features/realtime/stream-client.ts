@@ -8,18 +8,15 @@ import {
   type LiveState,
 } from './live-connection';
 
-/**
- * 不用瀏覽器內建的 `EventSource`，因為它帶不了 `Authorization` 標頭。
- */
-
 export interface StreamEvent {
   event: string;
   data: string;
 }
 
 /**
- * 從累積的文字裡切出已經收完整的訊號。每則訊號以空行結束，每行是「欄位:值」，冒號後面的一個空白可有可無
- * （後端送的沒有空白）。以冒號開頭的行是註解，略過。最後一段還沒收到空行的留在 `rest`，等下一塊資料接上。
+ * 從累積的文字裡切出已經收完整的訊號，還沒收完整的部分留在 `rest`，等下一塊資料接上再切。
+ * 每則訊號以空行結束，每行是「欄位:值」。冒號後面可以有一個空白，也可以沒有，後端送的沒有。
+ * 以冒號開頭的行是註解，直接略過。
  */
 export function takeStreamEvents(buffer: string): { events: StreamEvent[]; rest: string } {
   // 結尾單獨的 \r 先不換：它可能是被切在兩塊資料之間的 \r\n，換成 \n 會和下一塊開頭的 \n 湊成假的空行。
@@ -62,6 +59,9 @@ export interface StaffStreamHandlers {
   onState?: (state: LiveState) => void;
 }
 
+/**
+ * 串流改用 fetch 讀取並自行解析，不用瀏覽器內建的 `EventSource`，因為它無法帶 `Authorization` 標頭。
+ */
 export function openStaffStream(handlers: StaffStreamHandlers): () => void {
   let stopped = false;
   let controller: AbortController | null = null;

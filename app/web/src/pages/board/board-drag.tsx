@@ -8,18 +8,27 @@ import { isAssignDept, type AssignDept } from '../../lib/dispatch';
 import { dropDeptOf } from '../../lib/drag-dispatch';
 import { useBoardDragStore } from '../../stores/board-drag';
 
-/**
- * 不用瀏覽器內建的拖放，它在觸控螢幕上不會動。
- * 只掛指標的感應器、不掛鍵盤的：拖曳派單沒有鍵盤版，掛了鍵盤感應器，在卡片上按 Enter 會變成起拖而不是打開詳情。
- */
+const TOUCH_HOLD_TO_DRAG_MS = 250;
+const TOUCH_MOVE_DURING_HOLD_CANCELS_DRAG_PX = 5;
+const POINTER_MOVE_TO_START_DRAG_PX = 6;
 
+/**
+ * 拖曳派單用拖放套件的指標感應器，不用瀏覽器內建的拖放，因為內建拖放在觸控螢幕上不會觸發。
+ * 只掛指標感應器，不掛鍵盤感應器。拖曳派單沒有鍵盤操作版本，掛了鍵盤感應器的話，
+ * 在卡片上按 Enter 會開始拖曳，而不是打開詳情。
+ */
 const SENSORS = [
   PointerSensor.configure({
     activationConstraints(event) {
       if (event.pointerType === 'touch') {
-        return [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })];
+        return [
+          new PointerActivationConstraints.Delay({
+            value: TOUCH_HOLD_TO_DRAG_MS,
+            tolerance: TOUCH_MOVE_DURING_HOLD_CANCELS_DRAG_PX,
+          }),
+        ];
       }
-      return [new PointerActivationConstraints.Distance({ value: 6 })];
+      return [new PointerActivationConstraints.Distance({ value: POINTER_MOVE_TO_START_DRAG_PX })];
     },
   }),
 ];
@@ -36,9 +45,6 @@ interface ZoneDropData {
   dept: AssignDept;
 }
 
-/**
- * 看板在拖曳中離開畫面（換頁、登出）時套件不會通知放開，所以這裡卸下時自己清掉。
- */
 export function BoardDragDispatch({
   children,
   renderCard,
@@ -49,6 +55,7 @@ export function BoardDragDispatch({
   const assignTask = useAssignTask();
   const dragging = useDraggingTask();
   const { startDrag, endDrag } = useBoardDragStore.getState();
+  // 看板在拖曳中離開畫面（換頁、登出）時套件不會通知放開，所以這裡卸下時自己清掉。
   useEffect(() => () => useBoardDragStore.getState().reset(), []);
   return (
     <DragDropProvider
@@ -92,8 +99,8 @@ function releasePointOf(event: Event | undefined): Point | undefined {
 }
 
 /**
- * 套件記的指標位置是不是就是放開那一點。套件把指標移動延到下一個畫面更新才處理，
- * 放開卻馬上處理，所以同一個畫面內「移動後放開」時，套件的位置與落點都還停在上一次移動。
+ * 判斷拖放套件記錄的指標位置是不是就是放開那一點，誤差不到 1 像素就算同一點。
+ * 兩者不同時，代表套件的落點還停在上一次移動，原因見 `dropDeptOf` 的說明。
  */
 function samePoint(release: Point, position: Point): boolean {
   return Math.abs(release.x - position.x) < 1 && Math.abs(release.y - position.y) < 1;

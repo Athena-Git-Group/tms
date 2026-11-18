@@ -93,8 +93,9 @@ public class StaffAccountLoginService {
         return outcome.response();
     }
 
-    // TransactionTemplate 遇到往外拋的 RuntimeException 會整筆 rollback，失敗次數與鎖定就寫不進去，
-    // 所以 evaluate() 回傳 Outcome，等交易 commit 之後才由呼叫端拋。
+    // 登入失敗也要把失敗次數與鎖定狀態寫進資料庫，所以 evaluate() 不拋例外，而是回傳 Outcome，
+    // 等交易 commit 之後才由呼叫端拋出。TransactionTemplate 遇到往外拋的 RuntimeException
+    // 會把整筆交易 rollback，失敗次數與鎖定就會跟著消失。
     private Outcome evaluateInTenant(long tenantId, StaffLoginRequest request) {
         return tenantScopedExecutor.callAsTenant(tenantId, () -> evaluate(tenantId, request));
     }

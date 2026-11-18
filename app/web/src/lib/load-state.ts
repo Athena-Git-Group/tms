@@ -1,7 +1,8 @@
 export type LoadState = 'loading' | 'failed' | 'ready';
 
 /**
- * 重讀時查詢會暫時清掉失敗狀態，所以另外看「最近一次失敗的時間」（沒失敗過是 0）。
+ * 判斷畫面該顯示載入中、失敗或資料。重讀時查詢會暫時清掉 `isError`，
+ * 所以另外用 `errorUpdatedAt` 判斷最近是否失敗過，沒失敗過時它是 0。
  */
 export function loadStateOf({
   data,

@@ -4,20 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/features/celebrate/celebrate_screen.dart';
 
-void main() {
-  // 畫面上有無限循環的動畫時，`pumpAndSettle` 會等到逾時。
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+import 'support/test_environment.dart';
 
-  tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
-  });
+void main() {
+  turnOffAnimationsForEachTest();
 
   String labelOf(WidgetTester tester, String id) =>
       tester.getSemantics(find.bySemanticsIdentifier(id)).label;

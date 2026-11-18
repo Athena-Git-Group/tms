@@ -306,8 +306,8 @@ class LoginTextField extends StatelessWidget {
   }
 }
 
-/// [TextCapitalization.characters] 只是請鍵盤把 shift 打開。
-/// 貼上的文字與不理會這個提示的第三方鍵盤不會被轉成大寫。
+/// 把輸入的文字一律轉成大寫。[TextCapitalization.characters] 只是請鍵盤打開
+/// shift，貼上的文字與不理會這個提示的第三方鍵盤都不會被轉成大寫。
 class UpperCaseTextInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(

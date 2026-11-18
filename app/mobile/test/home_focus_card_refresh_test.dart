@@ -5,21 +5,12 @@ import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/today_refresh.dart';
 import 'package:tms_staff_app/features/shell/main_shell.dart';
 
+import 'support/test_environment.dart';
+
 void main() {
-  // 這組測試用 `pumpAndSettle` 等畫面靜止。進行中卡那顆圓點是無限循環的呼吸
-  // 動畫，動態開著就永遠排得出下一幀，`pumpAndSettle` 會等到逾時而不是靜止。
-  setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
-      disableAnimations: true,
-    );
-  });
+  turnOffAnimationsForEachTest();
 
   tearDown(() {
-    TestWidgetsFlutterBinding.ensureInitialized()
-        .platformDispatcher
-        .clearAccessibilityFeaturesTestValue();
     ApiClient.instance = ApiClient();
   });
 

@@ -79,6 +79,10 @@ describe('answerLength', () => {
     expect(answerLength('好的😀')).toBe(3);
     expect(answerLength('𠮷野家')).toBe(3);
   });
+
+  it('由多個碼位組成的表情符號照碼位數算，和後端 codePointCount 相同', () => {
+    expect(answerLength('👨‍👩‍👧')).toBe(5);
+  });
 });
 
 describe('clampAnswer', () => {

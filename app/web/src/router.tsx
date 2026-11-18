@@ -29,7 +29,8 @@ function ToBoard() {
 const base = `/:${HOTEL_CODE_PARAM}`;
 
 /**
- * 固定的路徑比帶參數的路徑優先比對，所以 `/login` 不會被當成代碼是 `login` 的飯店。
+ * 沒帶飯店代碼的網址一律顯示缺少飯店的頁面。React Router 會先比對固定路徑，再比對帶參數的路徑，
+ * 所以 `/login` 會落在這裡，不會被當成代碼是 `login` 的飯店。
  */
 const withoutHotelCode: RouteObject[] = [
   { path: '/', element: <MissingHotelPage /> },

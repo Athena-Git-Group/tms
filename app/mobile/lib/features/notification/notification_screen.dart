@@ -269,7 +269,9 @@ class _NotificationRow extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      // 分組只有一列時，Flutter 會把沒有自己 semantics 節點的列內容併進上層節點。
+      // 每一列都包成獨立的 semantics 節點，讓輔助工具與 Appium 能單獨定位到這一列。
+      // 分組只有一列時，沒有自己節點的列內容會被 Flutter 併進上層的分組節點，
+      // 就定位不到了。
       child: Semantics(
         container: true,
         child: Container(
