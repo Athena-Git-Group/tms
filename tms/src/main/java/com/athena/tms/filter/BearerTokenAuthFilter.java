@@ -58,7 +58,10 @@ extends OncePerRequestFilter {
                 }
                 request.setAttribute("tms.tenant_id", (Object)TenantContext.require());
             } else if (guestSessionHeader != null && !guestSessionHeader.isBlank()) {
-                if (!this.authenticateGuestBySessionHeader(guestSessionHeader.trim(), response)) {
+                String token = guestSessionHeader.trim();
+                Long guestTenantId = GuestSessionTokens.parseTenantId(token);
+                boolean authenticated = guestTenantId != null ? this.authenticateGuest(token, guestTenantId, response) : this.unauthorized(response, "session 無效、過期或已撤銷");
+                if (!authenticated) {
                     return;
                 }
                 request.setAttribute("tms.tenant_id", (Object)TenantContext.require());
@@ -100,17 +103,6 @@ extends OncePerRequestFilter {
         }
         CurrentActor.set(CurrentActor.staff(claims.tenantId(), account.getId(), account.getRole(), account.getDept()));
         this.establishAuthentication("staff:" + String.valueOf(account.getId()), account.getRole());
-        return true;
-    }
-
-    private boolean authenticateGuestBySessionHeader(String token, HttpServletResponse response) throws IOException {
-        GuestSession session = this.guestSessionRepository.findBySessionToken(token).orElse(null);
-        if (session == null || session.getRevokedAt() != null || session.getExpiresAt() == null || !session.getExpiresAt().isAfter(OffsetDateTime.now(this.clock))) {
-            return this.unauthorized(response, "session 無效、過期或已撤銷");
-        }
-        TenantContext.set(session.getTenantId());
-        CurrentActor.set(CurrentActor.guest(session.getTenantId(), session.getId(), session.getRoomId(), session.getReservationId()));
-        this.establishAuthentication("guest:" + String.valueOf(session.getId()), "guest");
         return true;
     }
 

@@ -65,7 +65,7 @@ export function DetailPanel({ taskId }: { taskId: string }) {
   const closeDetail = useDeskPanelsStore((state) => state.closeDetail);
   const now = useCorrectedNow();
   const offsetMinutes = useServerClockStore((state) => state.serverUtcOffsetMinutes);
-  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: () => readDeskTask(taskId) });
+  const { data: task } = useQuery({ queryKey: ['desk-task', taskId], queryFn: ({ signal }) => readDeskTask(taskId, signal) });
   useRereadWithBoard(taskId);
   const contentId = useId();
   const timelineId = useId();
@@ -207,6 +207,7 @@ function useRereadWithBoard(taskId: string) {
         if (
           event.type === 'updated' &&
           event.action.type === 'success' &&
+          !event.action.manual &&
           event.query.queryKey[0] === deskBoardQuery.queryKey[0]
         ) {
           void queryClient.invalidateQueries({ queryKey: ['desk-task', taskId] });

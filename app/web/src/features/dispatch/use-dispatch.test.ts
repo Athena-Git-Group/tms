@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError } from '../../api/client';
-import { deskBoardQuery } from '../../api/desk';
+import { deskBoardQuery, receiveCardPush } from '../../api/desk';
 import type { DeskBoard, DeskTask } from '../../api/types';
 import { useDispatchStore } from '../../stores/dispatch';
 import { assignTaskFlow, undoAssignFlow, UNDO_WAIT_MS } from './use-dispatch';
@@ -19,6 +19,7 @@ function task(id: string, overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id,
     displayNo: `T-${id}`,
+    seq: 1,
     state: 'triage',
     answered: false,
     dept: 'frontdesk',
@@ -103,6 +104,44 @@ describe('assignTaskFlow', () => {
     );
     await assignTaskFlow(queryClient, task('a'), 'housekeeping', 'button');
     expect(tasksNow().map((item) => [item.state, item.dept])).toEqual([['pool', 'engineering']]);
+  });
+});
+
+describe('派單與即時訊號帶來的卡片', () => {
+  it('派單的回應比訊號帶來的較新卡片晚到時，不把畫面倒回去', async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(deskBoardQuery.queryKey, {
+      businessDate: '2026-10-26',
+      tasks: [task('a', { seq: 1 })],
+    } as unknown as DeskBoard);
+    let respond: (assigned: DeskTask) => void = () => {};
+    assignDeskTask.mockImplementation(() => new Promise<DeskTask>((resolve) => (respond = resolve)));
+    const flow = assignTaskFlow(queryClient, task('a', { seq: 1 }), 'housekeeping', 'button');
+    await vi.waitFor(() => expect(assignDeskTask).toHaveBeenCalled());
+
+    const claimed = task('a', { seq: 3, state: 'accepted', dept: 'housekeeping', assigneeName: '小美' });
+    receiveCardPush(queryClient, { taskId: 'a', seq: 3, cardSeq: 3, businessDate: '2026-10-26', card: claimed });
+    respond(task('a', { seq: 2, state: 'pool', dept: 'housekeeping' }));
+    await flow;
+
+    const tasks = (queryClient.getQueryData(deskBoardQuery.queryKey) as DeskBoard).tasks;
+    expect(tasks[0]).toMatchObject({ seq: 3, state: 'accepted' });
+  });
+
+  it('按下派單之後，同一步的重複訊號不會把先畫的樣子換回待派單', async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(deskBoardQuery.queryKey, {
+      businessDate: '2026-10-26',
+      tasks: [task('a', { seq: 1 })],
+    } as unknown as DeskBoard);
+    assignDeskTask.mockImplementation(() => new Promise<DeskTask>(() => {}));
+    void assignTaskFlow(queryClient, task('a', { seq: 1 }), 'housekeeping', 'button');
+    await vi.waitFor(() => expect(assignDeskTask).toHaveBeenCalled());
+
+    receiveCardPush(queryClient, { taskId: 'a', seq: 1, cardSeq: 1, businessDate: '2026-10-26', card: task('a', { seq: 1 }) });
+
+    const tasks = (queryClient.getQueryData(deskBoardQuery.queryKey) as DeskBoard).tasks;
+    expect(tasks[0]).toMatchObject({ state: 'pool', dept: 'housekeeping' });
   });
 });
 

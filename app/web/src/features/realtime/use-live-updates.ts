@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useSessionStore } from '../../stores/session';
 import { INITIAL_LIVE_STATE, type LiveState } from './live-connection';
-import { refetchForSignal } from './refetch-on-signal';
+import { followBoard } from './follow-board';
 import { openStaffStream } from './stream-client';
 
 export function useLiveUpdates(): LiveState {
@@ -12,11 +12,16 @@ export function useLiveUpdates(): LiveState {
 
   useEffect(() => {
     if (!token) return undefined;
-    return openStaffStream({
-      onEvent: (event) => refetchForSignal(event.event, queryClient),
+    const follower = followBoard(queryClient);
+    const close = openStaffStream({
+      onEvent: follower.onStreamEvent,
       onState: (state) =>
         setLive((previous) => (previous.token === token && previous.state === state ? previous : { token, state })),
     });
+    return () => {
+      close();
+      follower.stop();
+    };
   }, [token, queryClient]);
 
   return live.token === token ? live.state : INITIAL_LIVE_STATE;

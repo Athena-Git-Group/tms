@@ -53,6 +53,21 @@ public class RealtimeScenario {
         return Optional.ofNullable(boardRequestsFrom);
     }
 
+    private Boolean resyncSeenAtWhenStart;
+
+    /**
+     * 記下前置走完那一刻，後端連上時送的 {@code resync} 是不是已經交給畫面。
+     * 還沒到的話，它引起的那一次整份重讀會落在前置之後，「這段期間畫面沒有重新讀取整份看板」要把那一次排除。
+     */
+    void markResyncSeenAtWhenStart(boolean seen) {
+        resyncSeenAtWhenStart = seen;
+    }
+
+    /** 前置走完那一刻 {@code resync} 是不是已經到了；那時沒有開著分頁時是空的。 */
+    Optional<Boolean> resyncSeenAtWhenStart() {
+        return Optional.ofNullable(resyncSeenAtWhenStart);
+    }
+
     void recordBoardRequest(Instant at) {
         boardRequestTimes.add(at);
     }

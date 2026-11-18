@@ -47,6 +47,7 @@ describe('logOut', () => {
     useBoardDragStore.getState().startDrag({
       id: 'task-1',
       displayNo: 'T-1',
+      seq: 1,
       state: 'triage',
       answered: false,
       dept: 'frontdesk',

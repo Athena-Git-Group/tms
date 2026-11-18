@@ -1,6 +1,7 @@
 package com.athena.tms.bdd.support;
 
 import com.athena.tms.common.UuidV7;
+import com.athena.tms.dto.GuestSessionTokens;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -85,6 +86,26 @@ public class ReservationFixtures {
                         syncedAt)
                 .query(UUID.class)
                 .single();
+    }
+
+    /**
+     * 直接寫一個掛在指定訂房上的住客 session，回它的權杖。
+     * 後端只替還沒退房的訂房開 session，掛在已經退房的訂房上的 session 只能這樣寫進資料庫。
+     * 權杖照後端的「飯店編號.隨機字串」格式，後端才認得出是哪家飯店的 session。
+     */
+    public String insertGuestSession(UUID roomId, UUID reservationId, OffsetDateTime expiresAt) {
+        long tenantId = tenantFixtures.testTenantId();
+        String token = GuestSessionTokens.issue(tenantId);
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO guest_sessions
+                            (id, tenant_id, session_token, room_id, reservation_id, expires_at, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """)
+                .params(UuidV7.generate(), tenantId, token, roomId, reservationId, expiresAt, OffsetDateTime.now(clock))
+                .update();
+        return token;
     }
 
     private String toAttrsJson(List<String> attrs) {

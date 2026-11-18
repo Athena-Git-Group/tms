@@ -11,7 +11,8 @@ export function assignRequest(dept: AssignDept, via: AssignVia): DeskAssignReque
 }
 
 export function withTaskReplaced(board: DeskBoard, task: DeskTask): DeskBoard {
-  if (!board.tasks.some((item) => item.id === task.id)) return board;
+  const current = board.tasks.find((item) => item.id === task.id);
+  if (!current || current.seq > task.seq) return board;
   return { ...board, tasks: board.tasks.map((item) => (item.id === task.id ? task : item)) };
 }
 
@@ -26,7 +27,7 @@ export function withConflictSettled(board: DeskBoard, taskId: string, context: C
     case 'assigned':
       return isAssignDept(context.dept) ? withTaskReplaced(board, assumedAssigned(task, context.dept)) : board;
     case 'answered':
-      return withTaskReplaced(board, { ...task, state: 'done', answered: true });
+      return withTaskReplaced(board, { ...task, state: 'done', answered: true, endedAt: task.endedAt ?? task.updatedAt });
     case 'guest_withdrew':
       return withTaskReplaced(board, { ...task, state: 'cancelled' });
     default:

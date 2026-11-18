@@ -17,6 +17,7 @@ function task(overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id: '1',
     displayNo: 'T-1',
+    seq: 1,
     state: 'triage',
     answered: false,
     dept: 'housekeeping',

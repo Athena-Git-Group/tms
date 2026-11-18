@@ -13,6 +13,7 @@ import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.desk.DeskAnswerRequest;
 import com.athena.tms.dto.desk.DeskAssignRequest;
 import com.athena.tms.dto.desk.DeskBoard;
+import com.athena.tms.dto.desk.DeskBoardChange;
 import com.athena.tms.dto.desk.DeskMyToday;
 import com.athena.tms.dto.desk.DeskTask;
 import com.athena.tms.dto.desk.DeskTaskDetail;
@@ -37,6 +38,12 @@ public class DeskBoardService {
     private static final Set<String> CREATOR_NAMED_SOURCES = Set.of("desk", "staff");
     private static final Set<String> ACCEPT_EVENTS = Set.of("assigned", "claimed", "reassigned");
     private static final Duration UNDO_WINDOW = Duration.ofSeconds(10);
+
+    /**
+     * 看板範圍：還沒結束的單（不限日期），加上今天結束的單。接在 {@link #TASK_SELECT} 的 WHERE 後面，
+     * 兩個參數依序是今天與明天的 00:00。{@code TASK_SELECT} 以 inner join 接房間，沒有房間的單也因此不在看板上。
+     */
+    private static final String ON_BOARD = " AND (t.ended_at IS NULL OR (t.ended_at >= ? AND t.ended_at < ?))";
 
     private static final String TASK_SELECT = """
             SELECT t.*, r.room_no, r.floor,
@@ -123,24 +130,52 @@ public class DeskBoardService {
     public DeskBoard board() {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
-        OffsetDateTime now = OffsetDateTime.now(this.clock);
-        LocalDate today = now.atZoneSameInstant(this.clock.getZone()).toLocalDate();
-        OffsetDateTime todayStart = today.atStartOfDay(this.clock.getZone()).toOffsetDateTime();
-        OffsetDateTime tomorrowStart = today.plusDays(1).atStartOfDay(this.clock.getZone()).toOffsetDateTime();
+        BusinessDay day = BusinessDay.at(this.clock);
         List<DeskTask> tasks = this.taskRows(
-                        now,
-                        """
-                         WHERE t.tenant_id = ?
-                           AND (t.ended_at IS NULL OR (t.ended_at >= ? AND t.ended_at < ?))
-                         ORDER BY t.created_at DESC, t.id DESC
-                        """,
-                        tenantId, todayStart, tomorrowStart)
+                        day.now(),
+                        " WHERE t.tenant_id = ?" + ON_BOARD + " ORDER BY t.created_at DESC, t.id DESC",
+                        tenantId, day.start(), day.end())
                 .stream()
                 .map(this.deskTaskMapper::toDeskTask)
                 .toList();
         List<Integer> floors = this.jdbcTemplate.queryForList(
                 "SELECT DISTINCT floor FROM rooms WHERE tenant_id = ? ORDER BY floor", Integer.class, tenantId);
-        return new DeskBoard(now, today, floors, tasks, this.myToday(tenantId, actor.staffId(), todayStart, tomorrowStart));
+        return new DeskBoard(day.now(), day.date(), floors, tasks, this.myToday(tenantId, actor.staffId(), day.start(), day.end()));
+    }
+
+    /**
+     * 這張單現在在櫃檯看板上的樣子，給員工事件串流帶給櫃檯角色的連線。
+     *
+     * <p>畫面拿它直接換掉看板上的那一張，所以卡片與看板範圍都要和 {@link #board()} 完全一致：
+     * 同一句查詢、同一段範圍條件、同一個「今天」。讀不到就是不在看板上，這時另外讀這張單目前的步數，
+     * 畫面才能判斷這則「拿掉」比自己手上的卡片新還是舊。單不存在時丟例外，由呼叫的一方決定不帶看板內容。
+     */
+    public DeskBoardChange boardChange(long tenantId, UUID taskId) {
+        BusinessDay day = BusinessDay.at(this.clock);
+        List<Map<String, Object>> rows = this.taskRows(
+                day.now(), " WHERE t.tenant_id = ? AND t.id = ?" + ON_BOARD, tenantId, taskId, day.start(), day.end());
+        if (!rows.isEmpty()) {
+            return new DeskBoardChange.Upsert(this.deskTaskMapper.toDeskTask(rows.getFirst()), day.date());
+        }
+        Integer seq = this.jdbcTemplate.queryForObject(
+                "SELECT event_seq FROM tasks WHERE tenant_id = ? AND id = ?", Integer.class, tenantId, taskId);
+        return new DeskBoardChange.Remove(seq, day.date());
+    }
+
+    /**
+     * 看板上的「今天」：注入的時鐘換成伺服器時區的日曆日期，半夜 00:00 換日。
+     * {@code start} 與 {@code end} 是今天與明天的 00:00，今天結束的單落在這兩者之間。
+     */
+    private record BusinessDay(OffsetDateTime now, LocalDate date, OffsetDateTime start, OffsetDateTime end) {
+        static BusinessDay at(Clock clock) {
+            OffsetDateTime now = OffsetDateTime.now(clock);
+            LocalDate today = now.atZoneSameInstant(clock.getZone()).toLocalDate();
+            return new BusinessDay(
+                    now,
+                    today,
+                    today.atStartOfDay(clock.getZone()).toOffsetDateTime(),
+                    today.plusDays(1).atStartOfDay(clock.getZone()).toOffsetDateTime());
+        }
     }
 
     private DeskMyToday myToday(long tenantId, UUID staffId, OffsetDateTime from, OffsetDateTime until) {

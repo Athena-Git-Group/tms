@@ -6,7 +6,9 @@ staffStream:
     operationId: staffStream
     summary: 員工事件串流
     description: >-
-      伺服器推送（Server-Sent Events）的長連線，告訴客戶端「哪一張單剛剛有變化」。訊號不帶單的內容，客戶端收到後自己重抓畫面上的資料。
+      伺服器推送（Server-Sent Events）的長連線，告訴客戶端「哪一張單剛剛有變化」。
+      frontdesk、manager、duty_manager 的連線，訊號同時帶著這張單在櫃檯看板上現在的樣子（整張卡片，或「這張單已經不在看板上」），
+      櫃檯 Web 直接換掉那一張卡片，不必重抓整份看板；housekeeping、engineering 的連線只收到訊號，收到後自己重抓畫面上的資料。
       以 Authorization: Bearer 帶登入憑證；瀏覽器內建的 EventSource 不能帶這個標頭，櫃檯 Web 用 fetch 讀回應串流。
       housekeeping、engineering、frontdesk、manager、duty_manager 可以連線。
 
@@ -15,6 +17,11 @@ staffStream:
       frontdesk、manager、duty_manager 收全館（同一家飯店）每一張單的每一則事件，不看部門；
       housekeeping、engineering 只收「單現在的部門等於自己的部門」或「單指派給自己」的事件。
       另外，櫃檯派出後復原（triage_undone）的訊號也送給被收回的那個部門的連線，因為復原之後這張單已經不屬於該部門。
+
+
+      單的每一則事件（task_events 的每一筆，不論是誰、哪個排程寫的，包括班末掃描把單退回待認領）都會送出一則 task 訊號，
+      同一張單的 seq 一步一步往上加、不跳號。所以 frontdesk、manager、duty_manager 的連線看到同一張單的 seq 跳號，就表示中間有訊號漏掉了。
+      單的事件和推播在後端的待送匣裡各排各的隊：某一則推播重試用完送不出去，只會擋住同一個推播隊伍後面的推播，不會擋住這張單的事件訊號。
 
 
       連上之後依序收到：一則 init、一則 resync；後端當下若處於降級，緊接著再收到一則 degraded。之後有事件就收到 task，
@@ -26,9 +33,21 @@ staffStream:
       回到正常時送一則 recovered。每一則 heartbeat 也帶目前是不是降級，中途才連上或漏接 recovered 的客戶端靠它對齊。
 
 
-      櫃檯 Web 的用法：收到 task、resync、recovered 就重抓。出現下列任一情形就顯示「即時連線異常」並改成每 5 秒重抓一次：
+      櫃檯 Web 的用法：畫面記著看板上每一張卡片是第幾步（DeskTask.seq），收到 task 時依下面的規則處理，正常情況下不重抓整份看板。
+      一、卡片比畫面上新（card_seq 大於畫面記的步數，或畫面上沒有這張單）：board 是 upsert 就換上（沒有就放上）這張卡片；
+      board 是 remove 就拿掉這張卡片（畫面上沒有就不理），並記住它是在第幾步拿掉的。
+      二、卡片不比畫面上新（card_seq 小於或等於畫面記的步數）：整則不理。訊號可能重複或晚到，這條規則讓它們無害。
+      三、訊號的 seq 比畫面記的步數多 2 以上（中間漏了訊號）：照第一條換上卡片，同時重抓整份看板，因為別張單的訊號也可能漏了。
+      四、下列情形一律重抓整份看板：收到 resync、收到 recovered、訊號沒有 board 或內容看不懂、訊號的 business_date 和畫面上看板的
+      businessDate 不同（營業日換了，看板範圍跟著變）。
+      五、營業日換日時，就算全館都沒有訊號，畫面也自己重抓一次整份看板，昨天結束的卡片跟著從看板上拿掉。換日時刻的算法見 getDeskBoard 的 businessDate。
+      整份看板重抓回來時，某張卡片的步數比畫面在重抓期間從訊號記下的步數舊，就保留訊號那一份（包含已經拿掉的），不讓舊資料蓋掉新的。
+      看板範圍（哪些單在看板上）只由後端決定，畫面不自己判斷一張單該不該留在看板上。
+      詳情面板開著時，收到那張單的 task 仍重抓單筆詳情。
+      出現下列任一情形就顯示「即時連線異常」並改成每 4 秒重抓一次整份看板：
       連線中斷、超過 35 秒沒有收到任何訊號、收到 degraded、收到 degraded 為 true 的 heartbeat。
-      回到即時的條件是連線在線，而且收到 recovered 或 degraded 為 false 的 heartbeat；這時停止每 5 秒重抓，提醒自己消失。
+      提醒列上寫「每 5 秒自動更新」，意思是資料最多落後 5 秒；每次重抓本身要花一點時間，所以實際每 4 秒抓一次，讓這段時間也算在 5 秒之內。
+      回到即時的條件是連線在線，而且收到 recovered 或 degraded 為 false 的 heartbeat；這時停止每 4 秒重抓，提醒自己消失。
       斷線後客戶端自己重連，重連成功會再收到 init 與 resync。
     tags:
     - 員工事件串流 API

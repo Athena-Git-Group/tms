@@ -19,7 +19,13 @@ DeskBoard:
     businessDate:
       type: string
       format: date
-      description: 後端認定的「今天」（飯店當地日期，目前等於伺服器時區的日期）。看板範圍、今日張數與頁副標的日期都以它為準。
+      description: >-
+        後端認定的「今天」（飯店當地日期，目前等於伺服器時區的日期）。看板範圍、今日張數與頁副標的日期都以它為準。
+        換日規則：後端拿自己的時鐘，換成伺服器時區的日曆日期，就是 businessDate；所以在伺服器時區的半夜 00:00 換到隔天，
+        飯店沒有另外設定的換日時刻。serverTime 的時差（例如 +08:00）就是伺服器時區的時差。
+        畫面據此自己算出下一次換日時刻：businessDate 的隔天 00:00，時差照 serverTime；用校正後的現在（見 serverTime）去等，
+        到了就重抓整份看板，不必等訊號。讀回來的 businessDate 還是舊的（例如兩邊時鐘差了幾秒），一分鐘後再抓一次，直到換過去為止。
+        每次讀到新的一份看板，就照它的 businessDate 與 serverTime 重新算下一次換日時刻。
     floors:
       type: array
       items:
@@ -73,11 +79,20 @@ DeskTask:
   - guestTyped
   - createdAt
   - updatedAt
+  - seq
   properties:
     id:
       type: string
       format: uuid
       description: 任務 id。開詳情、派單、復原、當場回答都用它。
+    seq:
+      type: integer
+      format: int32
+      minimum: 0
+      description: >-
+        這張卡片是這張單第幾步的樣子（讀取當下的 tasks.event_seq），每多一筆事件就加 1。
+        櫃檯 Web 用它判斷員工事件串流送來的卡片比畫面上新還是舊：新的換上，一樣或舊的不理。
+        看板讀取、單筆詳情、派單、復原、當場回答的回應都帶它，畫面拿到任何一份都可以用同一條規則更新那張卡片。
     displayNo:
       type: string
       description: 給人看的單號，一張單只有一個。type 為 repair 的單是工務單號（repair_tickets.ticket_no，例 W-0132），其餘類型是 tasks.task_no（例 T-1053）。
@@ -95,10 +110,13 @@ DeskTask:
       - deferred
       - interrupted
       - cancelled
-      description: 任務的狀態，就是資料上的十個值。看板的 8 個欄與 13 種狀態標籤由畫面依 state、type、answered、inspection 分組，不是新的狀態值。
+      description: >-
+        任務的狀態，就是資料上的十個值。看板的 8 個欄與 13 種狀態標籤由畫面依 state、type、answered、inspection、endedAt 分組，不是新的狀態值。
+        「已完成」欄只放完成了、還在等查房或等驗收的單（state 為 done 且 endedAt 為 null）；後端已經結束的單（endedAt 有值）一律放「已結案」欄，
+        包括查房通過、免查房、工務單結案、當場回答、取消，以及完成的備品與其他類的單（state 還是 done，但完成當下就結束）。
     answered:
       type: boolean
-      description: 這張單是不是櫃檯當場回答結案的（tasks.answer 有值）。true 時 state 一定是 done，畫面把它放進「已結案」欄、標成「已回答」。
+      description: 這張單是不是櫃檯當場回答結案的（tasks.answer 有值）。true 時 state 一定是 done、endedAt 一定有值，畫面把它放進「已結案」欄、標成「已回答」。
     dept:
       type: string
       enum:
@@ -194,7 +212,7 @@ DeskTask:
       type: string
       format: date-time
       nullable: true
-      description: 完成時間。「已完成」欄的膠囊用它。
+      description: 完成時間。「已完成」欄的膠囊與完成的備品、其他類單的狀態訊息用它。
     interruptedAt:
       type: string
       format: date-time
@@ -204,7 +222,9 @@ DeskTask:
       type: string
       format: date-time
       nullable: true
-      description: 這張單走到終點的時間（tasks.ended_at）；還沒結束為 null。「已結案」欄的膠囊與取消時間用它。
+      description: >-
+        這張單走到終點的時間（tasks.ended_at）；還沒結束為 null。畫面用它分「已完成」與「已結案」兩欄：有值就在「已結案」欄。
+        「已結案」欄的膠囊與取消時間也用它。
     updatedAt:
       type: string
       format: date-time

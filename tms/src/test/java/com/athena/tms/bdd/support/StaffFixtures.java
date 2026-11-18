@@ -16,6 +16,8 @@ public class StaffFixtures {
 
     public static final String DEFAULT_SHIFT_END = "17:00";
 
+    private static final String FIXTURE_FRONTDESK_NAME = "測試資料櫃檯";
+
     private static final Set<String> SUPPORTED_DEPTS = Set.of("housekeeping", "engineering", "frontdesk");
 
     private final JdbcClient jdbcClient;
@@ -91,6 +93,22 @@ public class StaffFixtures {
                 .update();
         JwtService.IssuedToken issued = jwtService.issue(tenantId, id, "housekeeping", "housekeeping");
         return new CreatedStaff(tenantId, id, loginId, rawPassword, issued.token());
+    }
+
+    /**
+     * 準備住客 session 的測試資料要用的櫃檯 JWT，因為住客 session 只能由櫃檯、主管或值班主管開。
+     * 每個案例只建一位不排班、沒有負責樓層的櫃檯，同一案例重複呼叫沿用同一位，
+     * 不借用案例自己的櫃檯，免得案例要驗證的那位員工多出操作紀錄。
+     */
+    public String fixtureFrontdeskJwt() {
+        long tenantId = tenantFixtures.testTenantId();
+        UUID id = jdbcClient
+                .sql("SELECT id FROM staff_accounts WHERE tenant_id = ? AND name = ?")
+                .params(tenantId, FIXTURE_FRONTDESK_NAME)
+                .query(UUID.class)
+                .optional()
+                .orElseGet(() -> insertStaff(FIXTURE_FRONTDESK_NAME, "frontdesk", "frontdesk", "active").id());
+        return jwtService.issue(tenantId, id, "frontdesk", "frontdesk").token();
     }
 
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {

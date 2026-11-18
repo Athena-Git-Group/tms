@@ -8,12 +8,17 @@ import {
   sortInColumn,
 } from './board-columns';
 
-function task(state: TaskState, answered = false, overrides: Partial<DeskTask> = {}): DeskTask {
+const ENDED_AT = '2026-10-19T05:00:00Z';
+
+/** 終點狀態的單後端一定記了結束時刻，`ended` 讓完成的單也能表達「完成當下就結束」。 */
+function task(state: TaskState, ended = false, overrides: Partial<DeskTask> = {}): DeskTask {
+  const terminal = state === 'inspected' || state === 'closed' || state === 'cancelled';
   return {
     id: 'a',
     displayNo: 'T-0001',
+    seq: 1,
     state,
-    answered,
+    answered: false,
     dept: 'housekeeping',
     type: 'amenity',
     source: 'guest',
@@ -24,6 +29,7 @@ function task(state: TaskState, answered = false, overrides: Partial<DeskTask> =
     guestTyped: false,
     createdAt: '2026-10-19T04:00:00Z',
     updatedAt: '2026-10-19T04:00:00Z',
+    endedAt: terminal || ended ? ENDED_AT : null,
     ...overrides,
   };
 }
@@ -44,8 +50,18 @@ describe('columnOf', () => {
     expect(columnOf(task(state))).toBe(column);
   });
 
+  it('完成了還在等查房或驗收的單（沒有結束時刻）落在已完成', () => {
+    expect(columnOf(task('done', false, { type: 'cleaning' }))).toBe('done');
+    expect(columnOf(task('done', false, { type: 'repair' }))).toBe('done');
+  });
+
+  it('完成當下就結束的備品與其他類單落在已結案', () => {
+    expect(columnOf(task('done', true, { type: 'amenity' }))).toBe('closed');
+    expect(columnOf(task('done', true, { type: 'other' }))).toBe('closed');
+  });
+
   it('當場回答過的完成單落在已結案', () => {
-    expect(columnOf(task('done', true))).toBe('closed');
+    expect(columnOf(task('done', true, { answered: true }))).toBe('closed');
   });
 });
 
@@ -59,6 +75,7 @@ describe('countOpenTasks', () => {
       task('done'),
       task('interrupted'),
       task('deferred'),
+      task('done', true, { answered: true }),
       task('done', true),
       task('inspected'),
       task('closed'),
@@ -68,7 +85,9 @@ describe('countOpenTasks', () => {
   });
 
   it('全部都結案時是 0', () => {
-    expect(countOpenTasks([task('closed'), task('cancelled'), task('inspected'), task('done', true)])).toBe(0);
+    expect(
+      countOpenTasks([task('closed'), task('cancelled'), task('inspected'), task('done', true, { answered: true }), task('done', true)]),
+    ).toBe(0);
   });
 
   it('沒有單時是 0', () => {
@@ -109,12 +128,23 @@ describe('sortInColumn', () => {
     }
   });
 
-  it('時刻相同時維持原本的順序', () => {
+  it('時刻相同時照後端給看板的順序，跟陣列原本怎麼排無關', () => {
     const same = (id: string) => task('triage', false, { id });
-    const tasks = [same('a'), same('b'), same('c')];
-    expect(ids(sortInColumn('triage', tasks))).toEqual(['a', 'b', 'c']);
-    expect(ids(sortInColumn('pool', tasks))).toEqual(['a', 'b', 'c']);
-    expect(ids(sortInColumn('doing', tasks))).toEqual(['a', 'b', 'c']);
+    const expected = ['c', 'b', 'a'];
+    for (const tasks of [[same('a'), same('b'), same('c')], [same('b'), same('c'), same('a')]]) {
+      expect(ids(sortInColumn('triage', tasks))).toEqual(expected);
+      expect(ids(sortInColumn('pool', tasks))).toEqual(expected);
+      expect(ids(sortInColumn('doing', tasks))).toEqual(expected);
+    }
+  });
+
+  it('待認領與其他欄的時刻相同時，建立時間新的在上', () => {
+    const tasks = [
+      task('pool', false, { id: 'z-old', waitingSince: '2026-10-19T01:00:00Z', updatedAt: '2026-10-19T04:00:00Z', createdAt: '2026-10-19T00:10:00Z' }),
+      task('pool', false, { id: 'a-new', waitingSince: '2026-10-19T01:00:00Z', updatedAt: '2026-10-19T04:00:00Z', createdAt: '2026-10-19T00:20:00Z' }),
+    ];
+    expect(ids(sortInColumn('pool', tasks))).toEqual(['a-new', 'z-old']);
+    expect(ids(sortInColumn('doing', tasks))).toEqual(['a-new', 'z-old']);
   });
 
   it('回傳新的陣列，不動傳進來的那一份', () => {

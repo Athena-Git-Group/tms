@@ -555,7 +555,7 @@ public class TaskFixtures {
                             """)
                     .params(
                             tenantId,
-                            "task:" + taskId,
+                            "push:task:" + taskId,
                             payload,
                             "fx-reminder:" + taskId + ":" + stage + ":" + recipient,
                             OffsetDateTime.ofInstant(clock.instant(), clock.getZone()))

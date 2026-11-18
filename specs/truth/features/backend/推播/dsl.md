@@ -10,7 +10,7 @@
 
 本模組也驗證通知中心（App 收件匣）：推播送達後要能被員工在通知中心列表查到、分組、標記已讀，不是只送達裝置就結束。
 
-本模組另外驗證推播真的送到手機這一段（`推播送達手機.feature`）：手機以 `registerPushToken`（`PUT /me/push-token`）登記推播地址、`revokePushToken`（`DELETE /me/push-token`）解除；推播消費者從 Kafka 讀到 outbox 的推播後，送到收件人每一台未解除的手機，並以 outbox 的冪等鍵在 `push_deliveries` 留一列送達紀錄（`sent`＝已送出、`skipped_no_token`＝沒有可用裝置、`failed`＝送出失敗），同一把鍵重送只送一次。測試環境以替身取代 Firebase Cloud Messaging，替身記下每一次送往手機的呼叫，並可被指定對某個地址回報「已失效」。
+本模組另外驗證推播真的送到手機這一段（`推播送達手機.feature`）：手機以 `registerPushToken`（`PUT /me/push-token`）登記推播地址、`revokePushToken`（`DELETE /me/push-token`）解除；推播消費者從 Kafka 讀到 outbox 的推播後，送到收件人每一台未解除的手機，並以 outbox 的冪等鍵在 `push_deliveries` 留一列送達紀錄（`sent`＝已送出、`skipped_no_token`＝沒有可用裝置、`failed`＝送出失敗），同一把鍵重送只送一次。推播在待送匣裡用自己的排隊鍵（以 `push:` 開頭），不和單的事件同一個隊伍：某一則推播重試用完送不出去，只擋住同一個隊伍後面的推播，不擋住那張單在員工事件串流上的訊號（這一點在 `../員工事件串流/` 驗）。測試環境以替身取代 Firebase Cloud Messaging，替身記下每一次送往手機的呼叫，並可被指定對某個地址回報「已失效」。
 
 **已知的 truth 領先現況**：現有 `outbox` 只是「relay 給推播消費者」的一次性佇列，沒有為每位收件人保留可查詢、可標記已讀的持久清單；`specs/truth/contracts/**` 目前沒有 `GET /notifications`、`POST /notifications/read-all` 這類端點。以下 When／Then 先確立通知中心應該成立的業務語意，回交 `/api-plan`、`/data-plan` 補對應端點與持久化模型（例如每個 outbox push 事件對應一筆可查詢、帶 `read_at` 的收件紀錄）。
 
@@ -27,7 +27,7 @@
 
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | StepDef 實作語意 |
 | --- | --- | --- | --- | --- |
-| `住客在 "{房號}" 掃碼要 "{品項}"` | `房號`：字串。<br>`品項`：字串；勾選單品項與數量，例如 `衣架 ×4`。 | 不支援 | 無 | `怎麼做`：先以 `guestSessionsScan`（`POST /guest-sessions/scan`）取得住客 session，再以該 session（header `X-Guest-Session`）呼叫 `createGuestRequest`（`POST /guest-requests`，帶勾選單 itemId 與 quantity），品項預先對應到房務。`權威狀態落地`：建立 dept `housekeeping`、狀態 `pool`、source `guest`、`pool_source`=guest_scan 的任務，並為房務員寫入 push outbox（`PushPayload.event`=pool_new_request）。`回寫`：任務 id。 |
+| `住客在 "{房號}" 掃碼要 "{品項}"` | `房號`：字串。<br>`品項`：字串；勾選單品項與數量，例如 `衣架 ×4`。 | 不支援 | 無 | `怎麼做`：先以櫃檯身分呼叫 `guestSessionsScan`（`POST /guest-sessions/scan`，帶該房的房間 id）取得伺服器產生的住客 session 權杖（格式「飯店編號.隨機字串」），再以該權杖（header `X-Guest-Session`）呼叫 `createGuestRequest`（`POST /guest-requests`，帶勾選單 itemId 與 quantity），品項預先對應到房務。`權威狀態落地`：建立 dept `housekeeping`、狀態 `pool`、source `guest`、`pool_source`=guest_scan 的任務，並為房務員寫入 push outbox（`PushPayload.event`=pool_new_request）。`回寫`：任務 id。 |
 | `"{員工}" 查看通知中心` | `員工`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分查詢通知列表。待 `/api-plan`：目前沒有 `GET /notifications`，本句型假設該端點依時間新到舊回傳每筆的標題、送達時間與已讀狀態。`回寫`：通知清單。 |
 | `"{員工}" 將 "{標題}" 的通知標為已讀` | `員工`：字串。<br>`標題`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分標記該筆通知已讀。待 `/api-plan`：目前沒有對應端點。`權威狀態落地`：該筆通知的 `read_at` 已寫入。 |
 | `"{員工}" 將所有通知標為已讀` | `員工`：字串。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫批次已讀端點。待 `/api-plan`：目前沒有 `POST /notifications/read-all`。`權威狀態落地`：該員工所有通知的 `read_at` 都已寫入。 |

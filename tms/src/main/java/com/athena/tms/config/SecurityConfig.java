@@ -56,7 +56,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/owner/**").hasRole("owner")
                         .requestMatchers("/integration/**").hasRole("INTEGRATION")
                         .requestMatchers("/api/v1/tenant-configs/**").hasRole("manager")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").hasAnyRole(RolePermissions.frontdeskWebRoles())
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/public/hotels/*").permitAll()
                         .requestMatchers("/api/v1/test/clock").permitAll()

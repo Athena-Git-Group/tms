@@ -6,6 +6,7 @@ function task(state: TaskState, overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id: 'a',
     displayNo: 'T-0001',
+    seq: 1,
     state,
     answered: false,
     dept: 'housekeeping',
@@ -161,6 +162,12 @@ describe('waitPill', () => {
         TAIPEI,
       ),
     ).toEqual({ text: { key: 'board.pill.at', values: { time: '14:25' } }, tone: 'gray' });
+  });
+
+  it('完成當下就結束的備品單在已結案欄，寫結束時刻、灰色', () => {
+    expect(
+      waitPill(task('done', { type: 'amenity', doneAt: '2026-10-26T06:30:00Z', endedAt: '2026-10-26T06:30:00Z' }), now, TAIPEI),
+    ).toEqual({ text: { key: 'board.pill.at', values: { time: '14:30' } }, tone: 'gray' });
   });
 
   describe('起算時刻後端沒給時，退回最後更新的時刻', () => {

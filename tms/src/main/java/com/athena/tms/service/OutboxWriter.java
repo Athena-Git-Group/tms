@@ -49,7 +49,18 @@ public class OutboxWriter {
         envelope.put("tenant_id", tenantId);
         envelope.put("task_id", taskId.toString());
         envelope.set("payload", this.readTree(payloadJson));
-        return this.enqueue(tenantId, "push", "task:" + String.valueOf(taskId), idempotencyKey, envelope.toString());
+        return this.enqueue(tenantId, "push", OutboxWriter.pushKey("task:" + String.valueOf(taskId)), idempotencyKey, envelope.toString());
+    }
+
+    /**
+     * 推播的排隊鍵：推播對象的鍵前面加 {@code push:}，例如 {@code push:task:<id>}。
+     *
+     * <p>relay 依排隊鍵一筆一筆按順序送，同一把鍵有一筆重試用完就整把鍵停送。推播若和單的事件共用 {@code task:<id>}，
+     * 某一則推播送不出去就會連帶擋住這張單之後的每一則事件，員工事件串流從此收不到這張單的訊號。
+     * 推播有自己的鍵，卡住時只擋住後面的推播。所有寫推播的程式都經過這裡。
+     */
+    static String pushKey(String subject) {
+        return "push:" + subject;
     }
 
     private OutboxMessage enqueue(long tenantId, String kind, String aggregateKey, String idempotencyKey, String payload) {

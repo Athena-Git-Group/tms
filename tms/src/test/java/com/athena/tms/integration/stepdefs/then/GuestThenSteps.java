@@ -11,6 +11,8 @@ import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.GuestFixtures;
 import io.cucumber.java.en.Then;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
@@ -60,6 +62,25 @@ public class GuestThenSteps {
         assertEquals(200, last.status(), "跨租戶掃碼該成功: " + last.body());
         String sessionToken = objectMapper.readTree(last.body()).get("sessionToken").asText();
         assertTrue(sessionToken.startsWith("2."), "租戶 2 的碼必須在 RLS 下也找得回來且前綴＝2: " + sessionToken);
+    }
+
+    @Then("^回應的住客權杖以 \"([^\"]+)\" 開頭$")
+    public void sessionTokenStartsWith(String prefix) {
+        String sessionToken = objectMapper.readTree(ctx.lastResponse().body()).get("sessionToken").asText();
+        assertTrue(sessionToken.startsWith(prefix), "住客權杖: " + sessionToken);
+    }
+
+    @Then("^回應與資料庫裡住客 session \"([^\"]+)\" 的到期時間都是 \"([^\"]+)\"$")
+    public void sessionExpiresAt(String sessionSymbol, String expected) {
+        ScenarioContext.HttpResult last = ctx.lastResponse();
+        assertEquals(200, last.status(), "開住客 session 該成功: " + last.body());
+        Instant wanted = Instant.parse(expected);
+        String responded = objectMapper.readTree(last.body()).get("expiresAt").asText();
+        assertEquals(wanted, OffsetDateTime.parse(responded).toInstant(), "回應的 expiresAt");
+        OffsetDateTime stored = db.admin().queryForObject(
+                "SELECT expires_at FROM guest_sessions WHERE session_token = ?", OffsetDateTime.class,
+                ctx.guestSession(sessionSymbol));
+        assertEquals(wanted, stored.toInstant(), "資料庫的 expires_at");
     }
 
     @Then("^回應內容來自租戶設定 guest_info_pages$")

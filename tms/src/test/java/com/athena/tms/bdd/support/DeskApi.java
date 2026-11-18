@@ -20,6 +20,7 @@ public class DeskApi {
     private final RoomFixtures roomFixtures;
     private final ReservationFixtures reservationFixtures;
     private final MutableClock clock;
+    private final StaffFixtures staffFixtures;
 
     public DeskApi(
             BddApiClient apiClient,
@@ -29,7 +30,8 @@ public class DeskApi {
             TenantFixtures tenantFixtures,
             RoomFixtures roomFixtures,
             ReservationFixtures reservationFixtures,
-            MutableClock clock) {
+            MutableClock clock,
+            StaffFixtures staffFixtures) {
         this.apiClient = apiClient;
         this.world = world;
         this.deskContext = deskContext;
@@ -38,6 +40,7 @@ public class DeskApi {
         this.roomFixtures = roomFixtures;
         this.reservationFixtures = reservationFixtures;
         this.clock = clock;
+        this.staffFixtures = staffFixtures;
     }
 
     public ScenarioWorld.ApiResponse getBoard(String staffName) {
@@ -119,7 +122,8 @@ public class DeskApi {
         long tenantId = tenantFixtures.testTenantId();
         UUID roomId = roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
         OffsetDateTime now = OffsetDateTime.now(clock);
-        UUID reservationId = currentReservationId(tenantId, roomId, now);
+        UUID stayingReservationId = currentReservationId(tenantId, roomId, now);
+        UUID reservationId = stayingReservationId;
         if (reservationId == null) {
             LocalDate longAgo = now.toLocalDate().minusDays(VACANT_ROOM_STAY_DAYS_AGO);
             reservationId = reservationFixtures.upsertReservation(roomNo, List.of(), longAgo, null);
@@ -141,19 +145,19 @@ public class DeskApi {
             return String.valueOf(existing.get("session_token"));
         }
 
-        String sessionToken = "fx-desk-guest-session-" + UUID.randomUUID();
+        if (stayingReservationId == null) {
+            return reservationFixtures.insertGuestSession(roomId, reservationId, now.plusDays(1));
+        }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("tenantId", tenantId);
-        body.put("sessionToken", sessionToken);
         body.put("roomId", roomId.toString());
         body.put("reservationId", reservationId.toString());
-        body.put("expiresAt", now.plusDays(1).toString());
-        ScenarioWorld.ApiResponse scan = apiClient.post("/guest-sessions/scan", BddApiClient.Auth.none(), body);
+        ScenarioWorld.ApiResponse scan = apiClient.post(
+                "/guest-sessions/scan", BddApiClient.Auth.staff(staffFixtures.fixtureFrontdeskJwt()), body);
         if (scan.status() < 200 || scan.status() > 299) {
             throw new IllegalStateException(
                     "建立「" + roomNo + "」的住客 session 失敗，狀態碼=" + scan.status() + "，body=" + scan.body());
         }
-        return sessionToken;
+        return scan.json().get("sessionToken").asText();
     }
 
     private UUID currentReservationId(long tenantId, UUID roomId, OffsetDateTime now) {

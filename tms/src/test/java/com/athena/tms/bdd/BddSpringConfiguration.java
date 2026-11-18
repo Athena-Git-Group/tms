@@ -208,10 +208,11 @@ public class BddSpringConfiguration {
                 TenantFixtures tenantFixtures,
                 RoomFixtures roomFixtures,
                 ReservationFixtures reservationFixtures,
-                MutableClock mutableClock) {
+                MutableClock mutableClock,
+                StaffFixtures staffFixtures) {
             return new DeskApi(
                     bddApiClient, scenarioWorld, deskContext, dbProbe,
-                    tenantFixtures, roomFixtures, reservationFixtures, mutableClock);
+                    tenantFixtures, roomFixtures, reservationFixtures, mutableClock, staffFixtures);
         }
 
         @Bean(destroyMethod = "close")

@@ -7,6 +7,7 @@ import io.cucumber.plugin.event.TestCaseStarted;
 import io.cucumber.plugin.event.TestStepStarted;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * 在每個場景的前置步驟全部走完、第一個「當」或「那麼」步驟開始之前，通知 {@link WhenStart} 記下那一刻的樣子。
@@ -41,6 +42,8 @@ public final class StepPhaseListener implements ConcurrentEventListener {
 
     private static final ThreadLocal<Boolean> IN_THEN = ThreadLocal.withInitial(() -> false);
 
+    private static final ThreadLocal<Set<String>> STEP_PATTERNS = ThreadLocal.withInitial(Set::of);
+
     /** 登記這條執行緒上目前這個場景要在離開前置時做的事。 */
     static void onLeavingGiven(Runnable action) {
         ON_LEAVING_GIVEN.set(action);
@@ -54,6 +57,14 @@ public final class StepPhaseListener implements ConcurrentEventListener {
         ON_THEN_PHASE.set(action);
     }
 
+    /**
+     * 這條執行緒上目前這個場景有沒有用到這個步驟定義，{@code pattern} 是步驟定義註記上的那一句。
+     * 有些「當」開始那一刻的紀錄只有特定結果句用得到，而且只在那些場景的畫面上才記得到，給它們決定要不要登記。
+     */
+    public static boolean currentScenarioUses(String pattern) {
+        return STEP_PATTERNS.get().contains(pattern);
+    }
+
     static void clear() {
         ON_LEAVING_GIVEN.remove();
         ON_THEN_PHASE.remove();
@@ -64,6 +75,10 @@ public final class StepPhaseListener implements ConcurrentEventListener {
         publisher.registerHandlerFor(TestCaseStarted.class, event -> {
             STILL_IN_GIVEN.set(true);
             IN_THEN.set(false);
+            STEP_PATTERNS.set(event.getTestCase().getTestSteps().stream()
+                    .filter(PickleStepTestStep.class::isInstance)
+                    .map(step -> ((PickleStepTestStep) step).getPattern())
+                    .collect(Collectors.toUnmodifiableSet()));
         });
         publisher.registerHandlerFor(TestStepStarted.class, this::onStepStarted);
     }

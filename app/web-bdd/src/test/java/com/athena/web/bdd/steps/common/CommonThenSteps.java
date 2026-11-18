@@ -787,7 +787,7 @@ public class CommonThenSteps {
         return false;
     }
 
-    /** 後端這張單照「單的狀況對照」該放在看板的哪一欄。 */
+    /** 後端這張單照「單的狀況對照」該放在看板的哪一欄：完成的單有結束時刻就已經結案，沒有的還在等查房或驗收。 */
     private static String columnOf(Map<String, Object> row) {
         String state = String.valueOf(row.get("state"));
         return switch (state) {
@@ -795,7 +795,7 @@ public class CommonThenSteps {
             case "pool" -> "待認領";
             case "accepted" -> "已接";
             case "doing" -> "進行中";
-            case "done" -> row.get("answer") != null ? "已結案" : "已完成";
+            case "done" -> row.get("ended_at") != null ? "已結案" : "已完成";
             case "interrupted" -> "中斷";
             case "deferred" -> "延後中";
             case "inspected", "closed", "cancelled" -> "已結案";

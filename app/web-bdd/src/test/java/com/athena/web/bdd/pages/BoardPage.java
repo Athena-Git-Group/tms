@@ -756,7 +756,8 @@ public class BoardPage extends PageObject {
 
     /**
      * 後端的一張 {@code DeskTask} 依介面根「單的狀況對照」該落在哪一欄，用來確認畫面上卡片所在的欄和後端一致。
-     * 完成的單當場回答過的在「已結案」，其餘在「已完成」；查房通過、免查、驗收結案、取消都在「已結案」。
+     * 後端記了結束時刻（{@code endedAt} 有值）的單一律在「已結案」，包括當場回答、完成當下就結束的備品與其他類單；
+     * 完成了還在等查房或驗收的單在「已完成」；查房通過、免查、驗收結案、取消都在「已結案」。
      */
     public static String columnOfTask(com.fasterxml.jackson.databind.JsonNode task) {
         String state = task.path("state").asText();
@@ -765,7 +766,7 @@ public class BoardPage extends PageObject {
             case "pool" -> "待認領";
             case "accepted" -> "已接";
             case "doing" -> "進行中";
-            case "done" -> task.path("answered").asBoolean() ? "已結案" : "已完成";
+            case "done" -> task.path("endedAt").isTextual() ? "已結案" : "已完成";
             case "interrupted" -> "中斷";
             case "deferred" -> "延後中";
             case "inspected", "closed", "cancelled" -> "已結案";
@@ -775,7 +776,6 @@ public class BoardPage extends PageObject {
 
     /**
      * 頁副標的「N 張未結案」依後端該是多少：後端看板（{@code getDeskBoard}）裡不落在「已結案」欄的單。
-     * 不能用 {@code ended_at} 有沒有值來算，因為備品完成後有寫結束時刻，卻仍在「已完成」欄、仍算未結案。
      */
     public static long openTaskCount(com.fasterxml.jackson.databind.JsonNode deskBoard) {
         long open = 0;

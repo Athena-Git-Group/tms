@@ -5,12 +5,15 @@ import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.GuestFixtures;
 import io.cucumber.java.en.When;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 public class GuestWhenSteps {
+
+    private static final String GUEST_SESSION_HEADER = "X-Guest-Session";
 
     private final ScenarioContext ctx;
     private final ApiClient api;
@@ -100,6 +103,89 @@ public class GuestWhenSteps {
     @When("^該 IP 再以不存在的 token 掃碼$")
     public void blockedIpScansUnknownToken() {
         ctx.lastResponse(guest.scan("NoSuchTokenAnywhere999", ctx.get("attackerIp")));
+    }
+
+    @When("^\"([^\"]+)\" 替房 \"([^\"]+)\" 開住客 session \"([^\"]+)\"$")
+    public void staffOpensSession(String staffName, String roomSymbol, String sessionSymbol) {
+        openSession(staffBearer(staffName), roomSymbol, null, sessionSymbol);
+    }
+
+    @When("^\"([^\"]+)\" 替房 \"([^\"]+)\"、訂單 \"([^\"]+)\" 開住客 session \"([^\"]+)\"$")
+    public void staffOpensSessionForReservation(String staffName, String roomSymbol, String reservationSymbol, String sessionSymbol) {
+        openSession(staffBearer(staffName), roomSymbol, reservationSymbol, sessionSymbol);
+    }
+
+    @When("^未登入就替房 \"([^\"]+)\" 開住客 session$")
+    public void anonymousOpensSession(String roomSymbol) {
+        openSession(null, roomSymbol, null, null);
+    }
+
+    @When("^\"([^\"]+)\" 替房 \"([^\"]+)\" 開住客 session \"([^\"]+)\"，請求另外帶到期時間 \"([^\"]+)\"$")
+    public void staffOpensSessionAskingForExpiry(String staffName, String roomSymbol, String sessionSymbol, String expiresAt) {
+        openSession(staffBearer(staffName), roomSymbol, null, sessionSymbol, expiresAt);
+    }
+
+    @When("^住客以 (X-Guest-Session|Authorization) 帶 session \"([^\"]+)\" 送出選單項「([^」]+)」$")
+    public void createMenuRequestWithSession(String carrier, String sessionSymbol, String label) {
+        createMenuRequestWithSessionToken(carrier, ctx.guestSession(sessionSymbol), label);
+    }
+
+    @When("^住客以 (X-Guest-Session|Authorization) 帶 沒有飯店前綴的權杖 送出選單項「([^」]+)」$")
+    public void createMenuRequestWithUnprefixedToken(String carrier, String label) {
+        createMenuRequestWithSessionToken(carrier, "fx-guest-session-without-hotel", label);
+    }
+
+    @When("^住客以 (X-Guest-Session|Authorization) 帶 session \"([^\"]+)\" 前綴改成飯店 (\\d+) 的權杖 送出選單項「([^」]+)」$")
+    public void createMenuRequestWithForgedPrefix(String carrier, String sessionSymbol, long forgedTenantId, String label) {
+        String real = ctx.guestSession(sessionSymbol);
+        String forged = forgedTenantId + real.substring(real.indexOf('.'));
+        createMenuRequestWithSessionToken(carrier, forged, label);
+    }
+
+    @When("^住客以 X-Guest-Session 帶 session \"([^\"]+)\" 收回任務 \"([^\"]+)\"$")
+    public void cancelWithSessionHeader(String sessionSymbol, String taskSymbol) {
+        UUID taskId = ctx.entityId(taskSymbol);
+        ctx.lastResponse(api.postJson("/api/v1/guest-requests/" + taskId + "/cancel", null, Map.of(),
+                Map.of(GUEST_SESSION_HEADER, ctx.guestSession(sessionSymbol))));
+    }
+
+    private String staffBearer(String staffName) {
+        String loginId = ctx.staffLogin(staffName);
+        long tenantId = db.admin().queryForObject(
+                "SELECT tenant_id FROM staff_accounts WHERE login_id = ? AND name = ?", Long.class, loginId, staffName);
+        return api.staffToken(tenantId, loginId);
+    }
+
+    private void openSession(String bearer, String roomSymbol, String reservationSymbol, String sessionSymbol) {
+        openSession(bearer, roomSymbol, reservationSymbol, sessionSymbol, null);
+    }
+
+    private void openSession(
+            String bearer, String roomSymbol, String reservationSymbol, String sessionSymbol, String requestedExpiresAt) {
+        ctx.put("sessionsBefore", db.countAll("guest_sessions"));
+        ctx.put("tasksBefore", db.countAll("tasks"));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("roomId", ctx.entityId(roomSymbol).toString());
+        if (reservationSymbol != null) {
+            body.put("reservationId", ctx.entityId(reservationSymbol).toString());
+        }
+        if (requestedExpiresAt != null) {
+            body.put("expiresAt", requestedExpiresAt);
+        }
+        ScenarioContext.HttpResult result = api.postJson("/api/v1/guest-sessions/scan", bearer, body, null);
+        ctx.lastResponse(result);
+        if (result.status() == 200 && sessionSymbol != null) {
+            ctx.registerGuestSession(sessionSymbol, objectMapper.readTree(result.body()).get("sessionToken").asText());
+        }
+    }
+
+    private void createMenuRequestWithSessionToken(String carrier, String token, String label) {
+        Map<String, Object> body = Map.of("itemId", GuestFixtures.menuKeyOf(label), "quantity", 1);
+        ScenarioContext.HttpResult created = "Authorization".equals(carrier)
+                ? api.postJson("/api/v1/guest-requests", token, body, null)
+                : api.postJson("/api/v1/guest-requests", null, body, Map.of(GUEST_SESSION_HEADER, token));
+        ctx.lastResponse(created);
+        rememberTaskIdIfCreated(created);
     }
 
     private void scanAndSnapshot(String token) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError, NetworkError } from '../api/client';
+import { columnOf } from './board-columns';
 import type { DeskBoard, DeskTask } from '../api/types';
 import {
   answerFailureNotice,
@@ -15,6 +16,7 @@ function task(id: string, overrides: Partial<DeskTask> = {}): DeskTask {
   return {
     id,
     displayNo: `T-${id}`,
+    seq: 1,
     state: 'triage',
     answered: false,
     dept: 'frontdesk',
@@ -49,6 +51,16 @@ describe('withTaskReplaced', () => {
   it('看板裡沒有這張單時原樣回傳', () => {
     const before = board([task('a')]);
     expect(withTaskReplaced(before, task('z'))).toBe(before);
+  });
+
+  it('看板上那張已經是較新的一步時不換，晚到的回應不會把畫面倒回去', () => {
+    const before = board([task('a', { seq: 5, state: 'accepted' })]);
+    expect(withTaskReplaced(before, task('a', { seq: 4, state: 'pool' }))).toBe(before);
+  });
+
+  it('步數一樣時照換，按下去先畫的樣子蓋得上去', () => {
+    const before = board([task('a', { seq: 4, state: 'triage' })]);
+    expect(withTaskReplaced(before, task('a', { seq: 4, state: 'pool' })).tasks[0]).toMatchObject({ state: 'pool' });
   });
 });
 
@@ -133,6 +145,7 @@ describe('withConflictSettled', () => {
   it('被當場回答：結案、記為當場回答', () => {
     const after = withConflictSettled(before, 'a', { resolution: 'answered' });
     expect(after.tasks[0]).toMatchObject({ id: 'a', state: 'done', answered: true });
+    expect(columnOf(after.tasks[0]!)).toBe('closed');
   });
 
   it('住客收回：取消', () => {

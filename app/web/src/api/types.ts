@@ -88,6 +88,8 @@ export interface DeskGuestText {
 
 export interface DeskTask {
   id: string;
+  /** 這張卡片是這張單第幾步的樣子；同一張單拿到兩份卡片時，步數大的比較新。 */
+  seq: number;
   displayNo: string;
   state: TaskState;
   answered: boolean;

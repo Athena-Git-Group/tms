@@ -26,6 +26,7 @@ function task(overrides: Partial<DeskTaskDetail>): DeskTaskDetail {
   return {
     id: 't-1',
     displayNo: 'T-1001',
+    seq: 1,
     state: 'pool',
     answered: false,
     dept: 'housekeeping',
