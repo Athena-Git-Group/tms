@@ -1,13 +1,28 @@
 package com.athena.web.bdd.steps.realtime;
 
+import com.athena.bddsupport.BackendChannel.CreatedStaff;
+import com.athena.bddsupport.TaskSituation;
+import com.athena.web.bdd.steps.common.TaskTableRows;
+import com.athena.web.bdd.support.Clocks;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.ScenarioTasks.Entry;
 import com.athena.web.bdd.support.WebWorld;
+import com.athena.web.bdd.support.WhenStart;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.microsoft.playwright.Page;
 import io.cucumber.java.zh_tw.當;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * 「即時更新」模組的 When 句型。
@@ -19,6 +34,18 @@ public class RealtimeWhenSteps {
 
     private static final Map<String, String> DEPT = Map.of("房務", "housekeeping", "工務", "engineering");
 
+    /** 代替後端送的卡片要有負責人、畫面上那張又沒有時，照部門給的同仁；和建單表格沒寫負責人時的第一順位相同。 */
+    private static final Map<String, String> DEFAULT_ASSIGNEE = Map.of("housekeeping", "小美", "engineering", "阿強");
+
+    /** 推進瀏覽器時鐘時每一步推這麼多；比畫面「太久沒有訊號」的 35 秒短得多，每步之後補一則心跳就不會誤觸提醒列。 */
+    private static final Duration CLOCK_STEP = Duration.ofSeconds(10);
+
+    /** 放行扣住的看板資料之後，等畫面收到它最久等這麼久。 */
+    private static final double RELEASE_TIMEOUT_MS = 10_000;
+
+    /** 測試代替後端時送的心跳，{@code degraded} 為 false，和後端平常的心跳一樣。 */
+    private static final String HEARTBEAT = "{\"stream_pos\":0,\"degraded\":false}";
+
     /** 送一則 task 訊號之後，等畫面送出看板請求最久等這麼久；畫面收到訊號就該馬上重讀。 */
     private static final double REFETCH_TIMEOUT_MS = 10_000;
 
@@ -28,10 +55,133 @@ public class RealtimeWhenSteps {
 
     private final RealtimeScenario scenario;
 
-    public RealtimeWhenSteps(WebWorld world, LiveConnection live, RealtimeScenario scenario) {
+    private final BoardResponses boardResponses;
+
+    private final LiveUpdateTiming timing;
+
+    public RealtimeWhenSteps(WebWorld world, LiveConnection live, RealtimeScenario scenario,
+            BoardResponses boardResponses, LiveUpdateTiming timing) {
         this.world = world;
         this.live = live;
         this.scenario = scenario;
+        this.boardResponses = boardResponses;
+        this.timing = timing;
+    }
+
+    /** 給部門代碼、回代替後端送的卡片上要掛的負責人。 */
+    static Function<String, CreatedStaff> assigneeOf(WebWorld world) {
+        return dept -> {
+            String name = DEFAULT_ASSIGNEE.get(dept);
+            if (name == null) {
+                throw new IllegalStateException("「" + dept + "」部門沒有預設的負責人，卡片的狀況要有人做時只能是房務或工務的單");
+            }
+            return world.staff(name);
+        };
+    }
+
+    /**
+     * 畫面上這張卡片改成這個狀況、這一步之後送出。
+     * 比畫面上那張新的，之後讀回來的看板也照這張；一樣或較舊的是重複或晚到的訊號，後端的單沒有變，看板照舊。
+     */
+    @當("後端送來 {string} 第 {int} 步的卡片，狀況是 {string}")
+    public void backendPushesCard(String roomNo, int step, String situationTerm) {
+        live.waitUntilResyncReceived();
+        UUID taskId = world.tasks().idOf(roomNo);
+        ObjectNode onScreen = boardResponses.cardOnScreen(taskId);
+        boolean newer = step > onScreen.path("seq").asInt();
+        ObjectNode card = CardSignals.situated(onScreen, TaskSituation.ofTerm(situationTerm.strip()), step,
+                world.clocks().now(), assigneeOf(world));
+        if (newer) {
+            boardResponses.rememberPushed(taskId, card);
+        }
+        timing.markSent();
+        live.sendSignal(world.page(), "task", CardSignals.withCard(taskId, step, boardResponses.businessDate(), card));
+    }
+
+    @當("後端送來 {string} 第 {int} 步，說它已經不在看板上")
+    public void backendPushesRemoval(String roomNo, int step) {
+        live.waitUntilResyncReceived();
+        UUID taskId = world.tasks().idOf(roomNo);
+        boardResponses.rememberPushed(taskId, null);
+        timing.markSent();
+        live.sendSignal(world.page(), "task", CardSignals.withCard(taskId, step, boardResponses.businessDate(), null));
+    }
+
+    /**
+     * 先在後端直接建好這張單（直接寫的單不會發訊號），再代替後端送它的卡片。
+     * 單要真的存在：側欄徽章的結果句會核對後端的待派單張數，之後的整份重讀也要讀得到它。
+     * 卡片取自後端的單筆詳情，只留看板卡片也有的欄位，步數照句型定成第 1 步。
+     */
+    @當("後端送來畫面上沒有的 {string} 卡片，狀況是 {string}")
+    public void backendPushesNewCard(String roomNo, String situationTerm) {
+        live.waitUntilResyncReceived();
+        JsonNode template = boardResponses.lastBoard().path("tasks").path(0);
+        if (!template.isObject()) {
+            throw new IllegalStateException("畫面上的看板沒有任何卡片，無從得知卡片有哪些欄位");
+        }
+        new TaskTableRows(world).createAll(List.of(Map.of("房號", roomNo, "類型", "其他",
+                "住客原話", "需要多一條毛巾", "狀況", situationTerm.strip())));
+        UUID taskId = world.tasks().idOf(roomNo);
+        JsonNode detail = world.backend().getJson("/desk/tasks/" + taskId, world.staff(WhenStart.BACKEND_READER));
+        ObjectNode card = JsonNodeFactory.instance.objectNode();
+        for (Iterator<String> fields = template.fieldNames(); fields.hasNext(); ) {
+            String field = fields.next();
+            card.set(field, detail.path(field).isMissingNode() ? null : detail.get(field).deepCopy());
+        }
+        card.put("seq", 1);
+        boardResponses.rememberPushed(taskId, card);
+        timing.markSent();
+        live.sendSignal(world.page(), "task", CardSignals.withCard(taskId, 1, boardResponses.businessDate(), card));
+    }
+
+    /** 訊號掛在畫面上第一張卡片的單，事件步數比那張卡片多 1，所以不會被當成漏了訊號。 */
+    @當("後端送來一則 {string}")
+    public void backendPushesSignalOfKind(String kind) {
+        live.waitUntilResyncReceived();
+        JsonNode first = boardResponses.lastBoard().path("tasks").path(0);
+        if (!first.isObject()) {
+            throw new IllegalStateException("畫面上的看板沒有任何卡片，訊號沒有單可以掛");
+        }
+        UUID taskId = UUID.fromString(first.path("id").asText());
+        int step = first.path("seq").asInt() + 1;
+        ObjectNode card = ((ObjectNode) first.deepCopy()).put("seq", step);
+        LocalDate businessDate = boardResponses.businessDate();
+        String data = switch (kind.strip()) {
+            case "沒有帶卡片的單變化訊號" -> CardSignals.withoutCard(taskId, step);
+            case "看不懂的單變化訊號" -> CardSignals.unreadable(taskId, step, businessDate, card);
+            case "營業日是隔天的單變化訊號" -> CardSignals.withCard(taskId, step, businessDate.plusDays(1), card);
+            default -> throw new IllegalArgumentException("不認得「" + kind + "」這種訊號，可以用的見即時更新的用語對照");
+        };
+        timing.markSent();
+        live.sendSignal(world.page(), "task", data);
+    }
+
+    /**
+     * 後端先撥到隔天那一刻，瀏覽器再分步推過去，每推一步代替後端補一則心跳。
+     * 一次推到底會讓畫面以為超過 35 秒沒有訊號而出現提醒列，改成定時重讀，案例要看的「自己在換日時重讀」就分不出來。
+     * 推的過程中畫面在換日時刻送出的重讀也算這一句造成的，所以起算的請求數是這一句開始時的，時間則從推到那一刻起算。
+     */
+    @當("時間走到隔天 {string}，這段期間現場沒有任何變化")
+    public void timePassesToNextDay(String time) {
+        live.waitUntilResyncReceived();
+        Page page = world.page();
+        LocalTime at = LocalTime.parse(time.strip(), DateTimeFormatter.ofPattern("H:mm"));
+        world.clocks().moveToInSteps(Clocks.at(world.clocks().today().plusDays(1), at), CLOCK_STEP,
+                () -> live.sendSignal(page, "heartbeat", HEARTBEAT));
+        scenario.markSignalSent(Instant.now());
+    }
+
+    /** 放行之後等畫面真的收到這份看板；畫面拿它和讀取期間收到的卡片合併，由結果句看合併的結果。 */
+    @當("扣住的看板資料讀回來了")
+    public void heldBoardReturns() {
+        Page page = world.page();
+        Network network = world.network();
+        LiveConnection.waitFor(page, boardResponses::holding, RELEASE_TIMEOUT_MS,
+                "畫面一直沒有送出要被扣住的那一次看板讀取");
+        int before = network.deskBoardsReceived(page);
+        boardResponses.releaseHeld();
+        LiveConnection.waitFor(page, () -> network.deskBoardsReceived(page) > before, RELEASE_TIMEOUT_MS,
+                "放行之後畫面沒有收到扣住的看板資料");
     }
 
     /**

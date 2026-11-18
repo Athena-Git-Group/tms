@@ -5,12 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Request;
+import com.microsoft.playwright.Response;
 import com.microsoft.playwright.Route;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -107,6 +110,10 @@ public final class Network {
 
     private final List<SentRequest> sent = new ArrayList<>();
 
+    private final Map<Page, Response> lastDeskBoard = new HashMap<>();
+
+    private final Map<Page, Integer> deskBoardsReceived = new HashMap<>();
+
     Network(Supplier<Page> currentPage) {
         this.currentPage = currentPage;
     }
@@ -155,6 +162,14 @@ public final class Network {
 
     public void hold(Api api) {
         hold(currentPage.get(), api);
+    }
+
+    /**
+     * 由呼叫端決定這支端點之後的每一個請求怎麼處理，例如先向後端取回應、改過內容再交給畫面，或取回之後先扣著。
+     * 呼叫端扣著的請求由它自己放行；這支端點之後換成別的設定時，這裡不會替它放行。
+     */
+    public void handle(Page page, Api api, Consumer<Route> handler) {
+        intercept(page, api, (route, held) -> handler.accept(route));
     }
 
     /** 這支端點目前被扣住、還沒放行的請求有幾個。 */
@@ -287,6 +302,53 @@ public final class Network {
         return ((Number) count).intValue();
     }
 
+    /**
+     * 一則交給了畫面的串流訊號。
+     *
+     * @param event 訊號名稱，例如 {@code task}
+     * @param data 訊號內容那一行
+     */
+    public record LiveEvent(String event, String data) {
+    }
+
+    /**
+     * 後端從連上到現在交給這個分頁的串流訊號，依先後；測試代替後端送的不算。
+     * 給要等「畫面收到某張單的訊號」的步驟用，例如後端真的動了某張單之後，等它的訊號送到畫面。
+     */
+    public List<LiveEvent> liveEventsFromBackend(Page page) {
+        Object text = page.evaluate("() => window.__webBddLiveReceived || ''");
+        List<LiveEvent> events = new ArrayList<>();
+        for (String block : String.valueOf(text).replace("\r\n", "\n").split("\n\n")) {
+            String event = "message";
+            StringBuilder data = new StringBuilder();
+            for (String line : block.split("\n")) {
+                if (line.startsWith("event:")) {
+                    event = line.substring("event:".length()).strip();
+                } else if (line.startsWith("data:")) {
+                    data.append(data.isEmpty() ? "" : "\n").append(line.substring("data:".length()).strip());
+                }
+            }
+            if (!data.isEmpty()) {
+                events.add(new LiveEvent(event, data.toString()));
+            }
+        }
+        return events;
+    }
+
+    /**
+     * 這個分頁最近一次讀到的看板資料（{@code getDeskBoard} 成功的回應內容），也就是畫面上那份看板的底；還沒讀到過時是空的。
+     * 回應被測試改寫過時，拿到的是改寫後、畫面真正收到的內容。
+     */
+    public Optional<String> lastDeskBoardBody(Page page) {
+        Response response = lastDeskBoard.get(page);
+        return response == null ? Optional.empty() : Optional.of(response.text());
+    }
+
+    /** 這個分頁到目前為止讀到過幾份成功的看板資料；先記下這個數字，之後比它大就是又讀了一份。 */
+    public int deskBoardsReceived(Page page) {
+        return deskBoardsReceived.getOrDefault(page, 0);
+    }
+
     /** 這個場景到目前為止所有分頁送出過的請求，依送出的先後。回傳的是當下的副本。 */
     public List<SentRequest> sentRequests() {
         return List.copyOf(sent);
@@ -309,17 +371,27 @@ public final class Network {
      * 同時把真正的連線關掉。其他端點的 {@code fetch} 原樣通過。
      * 同一段程式也讓測試能代替後端送一則訊號進去，或把後端送來的訊號先扣住不交給畫面。
      *
+     * <p>切斷時已經送出、但回應還沒回來的串流請求也算在切斷之內：它的回應回來時畫面直接讀到連線錯誤。
+     * 這種請求已經過了請求攔截，攔截扣不住它；放它連上的話，畫面會在「暫停跟上」之後照樣收到後端推來的卡片。
+     *
      * <p>畫面拿到的串流回應是重新包過的，狀態碼與標頭相同，但 {@code url} 與 {@code redirected} 是空的。
      */
     private static final String LIVE_STREAM_CUT_SCRIPT = """
             (() => {
               const realFetch = window.fetch;
               const live = new Set();
+              let cutCount = 0;
               window.__webBddCutLiveStreams = () => {
+                cutCount++;
                 for (const cut of Array.from(live)) cut();
               };
               const taps = new Set();
               const encoder = new TextEncoder();
+              const decoder = new TextDecoder();
+              window.__webBddLiveReceived = '';
+              const received = (value) => {
+                window.__webBddLiveReceived += decoder.decode(value, { stream: true });
+              };
               let held = false;
               window.__webBddSendLiveSignal = (text) => {
                 for (const tap of Array.from(taps)) tap.send(text);
@@ -333,6 +405,7 @@ public final class Network {
               window.__webBddLiveChunksDelivered = () =>
                 Array.from(taps).reduce((most, tap) => Math.max(most, tap.delivered), 0);
               window.fetch = async function (input, init) {
+                const cutsBefore = cutCount;
                 const response = await realFetch.call(this, input, init);
                 let path = '';
                 try {
@@ -342,6 +415,10 @@ public final class Network {
                   return response;
                 }
                 if (path !== '%s' || !response.body) return response;
+                if (cutCount !== cutsBefore) {
+                  response.body.cancel().catch(() => {});
+                  throw new TypeError('network error');
+                }
                 const reader = response.body.getReader();
                 let cut = null;
                 let tap = null;
@@ -360,7 +437,10 @@ public final class Network {
                     tap = {
                       delivered: 0,
                       send: (text) => { if (!finished) controller.enqueue(encoder.encode(text)); },
-                      flush: () => { if (!finished) for (const value of pending.splice(0)) controller.enqueue(value); },
+                      flush: () => {
+                        if (finished) return;
+                        for (const value of pending.splice(0)) { controller.enqueue(value); received(value); }
+                      },
                     };
                     taps.add(tap);
                   },
@@ -372,6 +452,7 @@ public final class Network {
                         if (done) { finish(); controller.close(); return; }
                         if (held) { pending.push(value); continue; }
                         controller.enqueue(value);
+                        received(value);
                         tap.delivered++;
                         return;
                       }
@@ -398,6 +479,7 @@ public final class Network {
     /** 新開的 context 接上請求紀錄，並讓它之後載入的每個頁面都能被切斷事件串流。 */
     void watch(BrowserContext context) {
         context.onRequest(this::record);
+        context.onResponse(this::recordDeskBoard);
         context.addInitScript(LIVE_STREAM_CUT_SCRIPT);
     }
 
@@ -413,6 +495,21 @@ public final class Network {
             // 不是由分頁送出的請求沒有所屬的分頁。
         }
         sent.add(new SentRequest(page, request.method(), path, request.isNavigationRequest()));
+    }
+
+    /** 只記下回應本身；內容要在事件處理之外才讀，事件處理裡讀會卡住。 */
+    private void recordDeskBoard(Response response) {
+        if (!response.ok() || !DESK_BOARD.matches(response.request().method(), response.url())) {
+            return;
+        }
+        Page page;
+        try {
+            page = response.frame().page();
+        } catch (RuntimeException noFrame) {
+            return;
+        }
+        lastDeskBoard.put(page, response);
+        deskBoardsReceived.merge(page, 1, Integer::sum);
     }
 
     private interface Behaviour {

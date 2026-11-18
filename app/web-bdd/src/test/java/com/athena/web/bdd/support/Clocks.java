@@ -78,6 +78,30 @@ public final class Clocks {
         now = target;
     }
 
+    /**
+     * 同 {@link #moveTo(OffsetDateTime)}，但瀏覽器的時鐘分很多步往後推，每推一步就執行一次 {@code afterEachStep}。
+     * 給一次推太多會誤觸畫面計時器的情況用，例如畫面太久沒收到訊號就出現提醒列：每一步之後呼叫端可以補送該有的訊號。
+     *
+     * <p>後端先一次撥到目標。畫面在途中到期的計時器若去讀後端，讀到的必須是目標那一刻的資料。
+     * 瀏覽器已經比目標快時，和 {@link #moveTo(OffsetDateTime)} 一樣直接撥回目標，不分步。
+     */
+    public void moveToInSteps(OffsetDateTime target, Duration step, Runnable afterEachStep) {
+        backend.setBackendClock(target);
+        long targetMillis = target.toInstant().toEpochMilli();
+        for (BrowserContext context : contexts) {
+            long behind = targetMillis - browserMillis(context);
+            if (behind < 0) {
+                context.clock().setSystemTime(targetMillis);
+            }
+            while (behind > 0) {
+                context.clock().fastForward(Math.min(behind, step.toMillis()));
+                afterEachStep.run();
+                behind = targetMillis - browserMillis(context);
+            }
+        }
+        now = target;
+    }
+
     /** 今天的某個時刻。 */
     public void moveTo(LocalTime time) {
         moveTo(at(today(), time));
