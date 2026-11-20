@@ -1,0 +1,162 @@
+/*
+ * 住客掃碼頁的設計變數，獨立於櫃檯的命名空間：兩邊有同名但不同值的設計，例如卡片圓角櫃檯 14px、住客 16px，
+ * 危險紅櫃檯 #FF3B30、住客 #D70015，共用一組名稱會互相蓋掉。
+ */
+@theme {
+  --color-guest-brand-primary: #0C7680;
+  --color-guest-brand-on-primary: #FFFFFF;
+  --color-guest-brand-container: #C8E8ED;
+  --color-guest-brand-on-container: #4C696D;
+  --color-guest-brand-on-container-strong: #2F5357;
+  --color-guest-brand-accent-container: #FFDCC5;
+  --color-guest-brand-on-accent-container: #703700;
+  --color-guest-brand-accent: #944B00;
+  --color-guest-status-success-container: #DDF3E4;
+  --color-guest-status-on-success-container: #1A6B34;
+  --color-guest-status-error-container: #FFE4E1;
+  --color-guest-status-on-error-container: #B42318;
+  --color-guest-status-neutral-container: #E5E5EA;
+  --color-guest-status-on-neutral-container: #3C3C43;
+  --color-guest-icon-success: #34C759;
+  --color-guest-icon-caution: #FF9500;
+  --color-guest-icon-error: #FF3B30;
+  --color-guest-bg: #F2F2F7;
+  --color-guest-surface: #FFFFFF;
+  --color-guest-surface-raised: #FFFFFF;
+  --color-guest-text: #000000;
+  --color-guest-text-secondary: #6C6C70;
+  --color-guest-text-placeholder: #737378;
+  --color-guest-fill: rgba(118, 118, 128, .12);
+  --color-guest-fill-button: rgba(120, 120, 128, .12);
+  --color-guest-separator: rgba(60, 60, 67, .29);
+  --color-guest-separator-opaque: #C6C6C8;
+  --color-guest-danger: #D70015;
+  --color-guest-rating-star: #C46A00;
+  --color-guest-bar-bg: rgba(249, 249, 249, .94);
+  --color-guest-scrim: rgba(0, 0, 0, .32);
+  --color-guest-toast-bg: rgba(30, 30, 30, .92);
+  --color-guest-on-toast: #FFFFFF;
+  --color-guest-illo-teal: #2A9AA5;
+  --color-guest-illo-peach: #D4702F;
+  --color-guest-illo-sky: #5B8FDC;
+  --color-guest-illo-sand: #A97F50;
+  --color-guest-on-illo: #FFFFFF;
+  --color-guest-sky-container: #DFEAFB;
+  --color-guest-on-sky-container: #1F4A8A;
+  --color-guest-sand-container: #F3E8DA;
+  --color-guest-on-sand-container: #5A3D1A;
+
+  --radius-guest-sm: 10px;
+  --radius-guest-md: 14px;
+  --radius-guest-card: 16px;
+  --radius-guest-lg: 20px;
+  --radius-guest-xl: 24px;
+  --radius-guest-pill: 9999px;
+
+  --shadow-guest-card: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 20px rgba(0, 0, 0, .05);
+  --shadow-guest-float: 0 1px 2px rgba(0, 0, 0, .04), 0 10px 28px rgba(0, 0, 0, .09);
+  --shadow-guest-popover: 0 8px 32px rgba(0, 0, 0, .18);
+  --shadow-guest-toast: 0 8px 24px rgba(0, 0, 0, .2);
+
+  --text-guest-greeting: 34px;
+  --text-guest-greeting--line-height: 41px;
+  --text-guest-greeting-compact: 28px;
+  --text-guest-greeting-compact--line-height: 34px;
+  --text-guest-center-title: 28px;
+  --text-guest-center-title--line-height: 34px;
+  --text-guest-request-title: 22px;
+  --text-guest-request-title--line-height: 28px;
+  --text-guest-hero-title: 21px;
+  --text-guest-hero-title--line-height: 25px;
+  --text-guest-section-title: 20px;
+  --text-guest-section-title--line-height: 25px;
+  --text-guest-card-title: 20px;
+  --text-guest-card-title--line-height: 26px;
+  --text-guest-headline: 17px;
+  --text-guest-headline--line-height: 22px;
+  --text-guest-body: 17px;
+  --text-guest-body--line-height: 24px;
+  --text-guest-callout: 15px;
+  --text-guest-callout--line-height: 21px;
+  --text-guest-footnote: 13px;
+  --text-guest-footnote--line-height: 18px;
+  --text-guest-caption: 12px;
+  --text-guest-caption--line-height: 16px;
+
+  --spacing-guest-touch: 44px;
+  --spacing-guest-bar-button: 54px;
+  --spacing-guest-title-bar: 56px;
+  --spacing-guest-gutter: 16px;
+  --container-guest-content: 480px;
+
+  --animate-guest-pop: guest-pop .18s ease-out;
+  --animate-guest-drop: guest-drop .2s ease-out;
+
+  @keyframes guest-pop {
+    from { transform: scale(.94); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  @keyframes guest-drop {
+    from { transform: translateY(-12px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  --font-guest: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Hiragino Sans", "Noto Sans TC", "Noto Sans JP", "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+/* 深色的值先備好，外框目前固定淺色、不設這個屬性；要開時依手機的深色設定在外框加上 data-theme 即可。 */
+[data-theme="dark"] {
+  --color-guest-brand-primary: #7FD4DE;
+  --color-guest-brand-on-primary: #00363C;
+  --color-guest-brand-container: #304E52;
+  --color-guest-brand-on-container: #9FBEC2;
+  --color-guest-brand-on-container-strong: #D3EEF2;
+  --color-guest-brand-accent-container: #703700;
+  --color-guest-brand-on-accent-container: #FFDCC5;
+  --color-guest-brand-accent: #FFB783;
+  --color-guest-status-success-container: #1F3B28;
+  --color-guest-status-on-success-container: #A7E3B6;
+  --color-guest-status-error-container: #5C1A14;
+  --color-guest-status-on-error-container: #FFB4AB;
+  --color-guest-status-neutral-container: #2C2C2E;
+  --color-guest-status-on-neutral-container: #EBEBF5;
+  --color-guest-icon-success: #30D158;
+  --color-guest-icon-caution: #FF9F0A;
+  --color-guest-icon-error: #FF453A;
+  --color-guest-bg: #000000;
+  --color-guest-surface: #1C1C1E;
+  --color-guest-surface-raised: #2C2C2E;
+  --color-guest-text: #FFFFFF;
+  --color-guest-text-secondary: #AEAEB2;
+  --color-guest-text-placeholder: #8E8E93;
+  --color-guest-fill: rgba(118, 118, 128, .24);
+  --color-guest-fill-button: rgba(120, 120, 128, .24);
+  --color-guest-separator: rgba(84, 84, 88, .6);
+  --color-guest-separator-opaque: #38383A;
+  --color-guest-danger: #FF7B73;
+  --color-guest-rating-star: #FFB340;
+  --color-guest-bar-bg: rgba(29, 29, 29, .94);
+  --color-guest-scrim: rgba(0, 0, 0, .48);
+  --color-guest-toast-bg: rgba(58, 58, 60, .96);
+  --color-guest-on-toast: #FFFFFF;
+  --color-guest-illo-teal: #2B8D97;
+  --color-guest-illo-peach: #C2652A;
+  --color-guest-illo-sky: #4F7FC9;
+  --color-guest-illo-sand: #977046;
+  --color-guest-sky-container: #1F3354;
+  --color-guest-on-sky-container: #CFE0FB;
+  --color-guest-sand-container: #3D3226;
+  --color-guest-on-sand-container: #F1E2CC;
+  --color-guest-on-illo: #FFFFFF;
+  --shadow-guest-card: 0 0 0 .5px rgba(255, 255, 255, .08);
+  --shadow-guest-float: 0 0 0 .5px rgba(255, 255, 255, .1), 0 10px 28px rgba(0, 0, 0, .5);
+  --shadow-guest-popover: 0 8px 32px rgba(0, 0, 0, .18);
+  --shadow-guest-toast: 0 8px 24px rgba(0, 0, 0, .2);
+}
+
+/* 左右邊距取 16 點與安全區域較大的那個；外框、頁底操作列與提示浮層共用。 */
+:root {
+  --guest-gutter-left: max(var(--spacing-guest-gutter), env(safe-area-inset-left));
+  --guest-gutter-right: max(var(--spacing-guest-gutter), env(safe-area-inset-right));
+}

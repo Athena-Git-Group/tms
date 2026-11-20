@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./guest/theme.css";
 
 @theme {
   --color-brand: #0C7680;
