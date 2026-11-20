@@ -56,6 +56,10 @@ public class WebWorld {
 
     private final List<BrowserContext> contexts = new ArrayList<>();
 
+    private final List<java.util.function.Consumer<BrowserContext>> contextSetups = new ArrayList<>();
+
+    private final List<Runnable> waitingChores = new ArrayList<>();
+
     private WebProfile profile = BrowserProfiles.defaultProfile();
 
     private FrontdeskDefaults defaults;
@@ -199,7 +203,30 @@ public class WebWorld {
         contexts.add(context);
         clocks.install(context);
         network.watch(context);
-        page = context.newPage();        return page;
+        contextSetups.forEach(setup -> setup.accept(context));
+        page = context.newPage();
+        return page;
+    }
+
+    /**
+     * 這個場景之後開的每一個 context 在開出第一個分頁之前都先做這件事，例如裝上整個場景都要的請求攔截。
+     * 要在場景還沒開任何分頁時登記，已經開著的 context 不會補做。
+     */
+    public void onEveryNewContext(java.util.function.Consumer<BrowserContext> setup) {
+        contextSetups.add(setup);
+    }
+
+    /**
+     * 步驟輪詢等畫面或後端跟上時，每一輪都先做這件事，例如放行扣滿時間的回應。
+     * 攔截的處理程式跑在測試這條執行緒上、不能自己睡著等，到時間的事只能在輪詢時做。
+     */
+    public void whileWaiting(Runnable chore) {
+        waitingChores.add(chore);
+    }
+
+    /** 做一輪 {@link #whileWaiting(Runnable)} 登記的事。 */
+    public void doWaitingChores() {
+        waitingChores.forEach(Runnable::run);
     }
 
     /** 把步驟與 page object 操作的對象換成這個場景開過的另一個分頁。 */

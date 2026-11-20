@@ -6,8 +6,8 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
 
 /**
- * 櫃檯 Web 驗收的兩組瀏覽器設定，用系統屬性 {@code web.profile} 選（{@code desktop}、{@code ipad}），
- * 沒給時是 {@code desktop}。
+ * 驗收的三組瀏覽器設定，用系統屬性 {@code web.profile} 選（{@code desktop}、{@code ipad}、{@code phone}），
+ * 沒給時是 {@code desktop}。櫃檯 Web 跑前兩組，住客掃碼頁只跑 {@code phone}。
  */
 public enum WebProfile {
 
@@ -15,7 +15,10 @@ public enum WebProfile {
     DESKTOP("desktop", 1280, 720, false),
 
     /** iPad 橫向 1180 × 820 觸控：WebKit（近似 iPad 上的 Safari，不等於真機）。 */
-    IPAD("ipad", 1180, 820, true);
+    IPAD("ipad", 1180, 820, true),
+
+    /** 手機直向 393 × 852 觸控：WebKit（近似 iPhone 上的 Safari，安全區域與工具列收放要在真機看）。 */
+    PHONE("phone", 393, 852, true);
 
     public static final String SYSTEM_PROPERTY = "web.profile";
 
@@ -43,7 +46,7 @@ public enum WebProfile {
             }
         }
         throw new IllegalArgumentException(
-                SYSTEM_PROPERTY + " 只接受 desktop 或 ipad，收到的是：" + id);
+                SYSTEM_PROPERTY + " 只接受 desktop、ipad 或 phone，收到的是：" + id);
     }
 
     public String id() {
@@ -63,7 +66,7 @@ public enum WebProfile {
     }
 
     public BrowserType browserType(Playwright playwright) {
-        return this == IPAD ? playwright.webkit() : playwright.chromium();
+        return this == DESKTOP ? playwright.chromium() : playwright.webkit();
     }
 
     public Browser launch(Playwright playwright) {
@@ -76,10 +79,14 @@ public enum WebProfile {
      * 沒交代語言的場景就可能變成英文介面。要測別的瀏覽器語言的場景自己另開一個改了語言的瀏覽器。
      */
     public Browser.NewContextOptions contextOptions() {
-        return new Browser.NewContextOptions()
+        Browser.NewContextOptions options = new Browser.NewContextOptions()
                 .setViewportSize(width, height)
                 .setHasTouch(touch)
                 .setLocale("zh-TW");
+        if (this == PHONE) {
+            options.setIsMobile(true).setDeviceScaleFactor(3);
+        }
+        return options;
     }
 
     public BrowserContext newContext(Browser browser) {

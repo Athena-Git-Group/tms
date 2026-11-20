@@ -7,6 +7,8 @@ import com.athena.web.bdd.pages.BoardPage;
 import com.athena.web.bdd.pages.DetailPanel;
 import com.athena.web.bdd.pages.ShellFrame;
 import com.athena.web.bdd.pages.TriagePage;
+import com.athena.web.bdd.steps.guest.realtime.RealtimeWhenSteps;
+import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.ScenarioTasks.Entry;
 import com.athena.web.bdd.support.WebWorld;
@@ -39,8 +41,14 @@ public class CommonWhenSteps {
 
     private final AccountPanel account;
 
-    public CommonWhenSteps(WebWorld world) {
+    private final GuestScenario guestScenario;
+
+    private final RealtimeWhenSteps guestRealtime;
+
+    public CommonWhenSteps(WebWorld world, GuestScenario guestScenario, RealtimeWhenSteps guestRealtime) {
         this.world = world;
+        this.guestScenario = guestScenario;
+        this.guestRealtime = guestRealtime;
         this.shell = new ShellFrame(world);
         this.board = new BoardPage(world);
         this.triage = new TriagePage(world);
@@ -161,9 +169,14 @@ public class CommonWhenSteps {
     /**
      * 以房務、工務同仁或主管的身分直接在後端做這個動作，等後端回應成功。
      * 櫃檯畫面靠即時訊號自己更新，這裡不碰畫面、不重新整理。
+     * 住客掃碼頁的規格有一字不差的句子，第三個參數是需求標題，在住客場景交給住客的即時更新步驟。
      */
     @當("{string} 在手機上{word} {string}")
     public void actOnPhone(String staffName, String action, String roomNo) {
+        if (guestScenario.active()) {
+            guestRealtime.staffActs(staffName, action, roomNo);
+            return;
+        }
         CreatedStaff staff = world.staff(staffName);
         UUID taskId = world.tasks().idOf(roomNo);
         switch (action) {

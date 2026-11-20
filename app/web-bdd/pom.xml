@@ -112,10 +112,12 @@
 					<excludeJUnit5Engines>
 						<engine>cucumber</engine>
 					</excludeJUnit5Engines>
-					<!-- SmokeTest 要開發伺服器與 8080 後端都開著才跑得過，平常的 mvn test（含 dry-run）不跑它；
-						指名 -Dtest=SmokeTest 時 surefire 不看這個排除，照跑 -->
+					<!-- SmokeTest 與量測用的 spike 要開發伺服器與 8080 後端都開著才跑得過，平常的 mvn test（含 dry-run）
+						不跑它們；指名 -Dtest=SmokeTest 時 surefire 不看這個排除，照跑 -->
 					<excludes>
 						<exclude>**/SmokeTest.java</exclude>
+						<exclude>**/GuestBackendSpikeTest.java</exclude>
+						<exclude>**/GuestScreenTourTest.java</exclude>
 					</excludes>
 					<!-- Playwright 預設會在第一次啟動時把三種瀏覽器全部下載一遍；本模組只用 Chromium 與 WebKit，
 						改成只靠下面那條安裝指令，跑測試時不自動下載 -->

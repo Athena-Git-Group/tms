@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 #
-# 跑櫃檯 Web 的驗收規格：一支指令把後端、開發伺服器與瀏覽器起好，跑完收掉自己起的東西。
+# 跑櫃檯 Web 或住客掃碼頁的驗收規格：一支指令把後端、開發伺服器與瀏覽器起好，跑完收掉自己起的東西。
 #
 # 用法：
-#   bash app/web-bdd/run-feature.sh [選項] [feature 路徑] [desktop|ipad]
+#   bash app/web-bdd/run-feature.sh [選項] [feature 路徑] [desktop|ipad|phone]
 #
-#   feature 路徑  相對於 specs/truth/features/frontdesk-web/，可以是一份 feature
-#                 （待派單/待派單清單.feature）、其中一個場景（待派單/待派單清單.feature:18，
-#                 冒號後面是場景那一行的行號）、或一個模組目錄（待派單）。
-#                 不給就跑整個 frontdesk-web/。
-#   desktop|ipad  瀏覽器設定。desktop 是電腦 1280 × 720 滑鼠（Chromium），不給時用它；
-#                 ipad 是 iPad 橫向 1180 × 820 觸控（WebKit）。
+#   feature 路徑  以 guest-web/ 或 frontdesk-web/ 開頭時，就是相對於 specs/truth/features/ 的路徑，
+#                 開頭那一段是根（只寫 guest-web/ 就是整個住客掃碼頁）；不帶根時相對於
+#                 specs/truth/features/frontdesk-web/。可以是一份 feature（待派單/待派單清單.feature）、
+#                 其中一個場景（待派單/待派單清單.feature:18，冒號後面是場景那一行的行號）、
+#                 或一個模組目錄（待派單）。不給就跑整個 frontdesk-web/。
+#   desktop|ipad|phone
+#                 瀏覽器設定。desktop 是電腦 1280 × 720 滑鼠（Chromium）；ipad 是 iPad 橫向
+#                 1180 × 820 觸控（WebKit）；phone 是手機直向 393 × 852 觸控（WebKit）。
+#                 不給時，根是 guest-web/ 用 phone，其餘用 desktop。
 #
 # 選項：
 #   --keep     跑完不關這一次起的後端與開發伺服器。之後每一次執行都會直接沿用它們，
@@ -52,7 +55,7 @@ set -euo pipefail
 WEB_BDD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$WEB_BDD_DIR/../.." && pwd -P)"
 WEB_DIR="$REPO_ROOT/app/web"
-FEATURES_ROOT="$REPO_ROOT/specs/truth/features/frontdesk-web"
+FEATURES_BASE="$REPO_ROOT/specs/truth/features"
 BACKEND_JAR="$REPO_ROOT/tms/target/tms-0.0.1-SNAPSHOT.jar"
 STATE_DIR="$WEB_BDD_DIR/target/run-feature"
 BACKEND_LOG="$STATE_DIR/backend.log"
@@ -208,7 +211,8 @@ for arg in "$@"; do
     --rebuild) FORCE_REBUILD=1 ;;
     -*) fail "不認得的選項「${arg}」。用法見 bash app/web-bdd/run-feature.sh --help" ;;
     *)
-      if [ -z "$FEATURE_ARG" ] && [ -z "$PROFILE" ] && [ "$arg" != "desktop" ] && [ "$arg" != "ipad" ]; then
+      if [ -z "$FEATURE_ARG" ] && [ -z "$PROFILE" ] && [ "$arg" != "desktop" ] && [ "$arg" != "ipad" ] \
+        && [ "$arg" != "phone" ]; then
         FEATURE_ARG="$arg"
       elif [ -z "$PROFILE" ]; then
         PROFILE="$arg"
@@ -218,10 +222,28 @@ for arg in "$@"; do
       ;;
   esac
 done
-PROFILE="${PROFILE:-desktop}"
+# feature 路徑開頭是哪個根就在哪個根底下找；不帶根的沿用原本的寫法，相對於 frontdesk-web/。
+case "$FEATURE_ARG" in
+  guest-web|guest-web/*) FEATURES_ROOT_NAME="guest-web" ;;
+  frontdesk-web|frontdesk-web/*) FEATURES_ROOT_NAME="frontdesk-web" ;;
+  *) FEATURES_ROOT_NAME="" ;;
+esac
+if [ -n "$FEATURES_ROOT_NAME" ]; then
+  FEATURE_ARG="${FEATURE_ARG#"$FEATURES_ROOT_NAME"}"
+  FEATURE_ARG="${FEATURE_ARG#/}"
+else
+  FEATURES_ROOT_NAME="frontdesk-web"
+fi
+FEATURES_ROOT="$FEATURES_BASE/$FEATURES_ROOT_NAME"
 
-if [ "$PROFILE" != "desktop" ] && [ "$PROFILE" != "ipad" ]; then
-  fail "瀏覽器設定只接受 desktop 或 ipad，收到的是「${PROFILE}」。"
+if [ "$FEATURES_ROOT_NAME" = "guest-web" ]; then
+  PROFILE="${PROFILE:-phone}"
+else
+  PROFILE="${PROFILE:-desktop}"
+fi
+
+if [ "$PROFILE" != "desktop" ] && [ "$PROFILE" != "ipad" ] && [ "$PROFILE" != "phone" ]; then
+  fail "瀏覽器設定只接受 desktop、ipad 或 phone，收到的是「${PROFILE}」。"
 fi
 
 case "$WEB_PORT" in
@@ -236,11 +258,11 @@ FEATURE_FILE_PART="$(printf '%s' "$FEATURE_ARG" | sed -E 's/(:[0-9]+)+$//')"
 if [ -n "$FEATURE_ARG" ]; then
   case "$FEATURE_FILE_PART" in
     /*|..|../*|*/..|*/../*)
-      fail "feature 路徑要寫成相對於 specs/truth/features/frontdesk-web/ 的路徑（例如 待派單/待派單清單.feature），收到的是「${FEATURE_ARG}」。"
+      fail "feature 路徑要寫成相對於 specs/truth/features/${FEATURES_ROOT_NAME}/ 的路徑，或以 guest-web/、frontdesk-web/ 開頭（例如 待派單/待派單清單.feature），收到的是「${FEATURE_ARG}」。"
       ;;
   esac
   if [ ! -e "$FEATURES_ROOT/$FEATURE_FILE_PART" ]; then
-    echo "[run-feature] 錯誤：找不到 feature「${FEATURE_FILE_PART}」（在 specs/truth/features/frontdesk-web/ 底下找）。可以用的有：" >&2
+    echo "[run-feature] 錯誤：找不到 feature「${FEATURE_FILE_PART}」（在 specs/truth/features/${FEATURES_ROOT_NAME}/ 底下找）。可以用的有：" >&2
     (cd "$FEATURES_ROOT" && find . -name '*.feature' | sed 's|^\./|  |' | sort) >&2
     exit 2
   fi
@@ -252,9 +274,9 @@ if [ -n "$FEATURE_ARG" ]; then
   elif [ "$FEATURE_FILE_PART" != "$FEATURE_ARG" ]; then
     fail "行號只能接在 .feature 檔後面，「${FEATURE_FILE_PART}」是目錄。"
   fi
-  CUCUMBER_FEATURES="../../specs/truth/features/frontdesk-web/${FEATURE_ARG}"
+  CUCUMBER_FEATURES="../../specs/truth/features/${FEATURES_ROOT_NAME}/${FEATURE_ARG}"
 else
-  CUCUMBER_FEATURES="../../specs/truth/features/frontdesk-web"
+  CUCUMBER_FEATURES="../../specs/truth/features/${FEATURES_ROOT_NAME}"
 fi
 
 # 只沿用從這個工作目錄起的後端：別的工作目錄的後端跑的可能是另一版程式，拿來測會得到錯的結果。
@@ -340,7 +362,7 @@ if [ "$STOP_ONLY" -eq 1 ]; then
   exit 0
 fi
 
-log "1/6 檢查工具（瀏覽器設定：${PROFILE}；要跑的規格：${FEATURE_ARG:-整個 frontdesk-web/}）"
+log "1/6 檢查工具（瀏覽器設定：${PROFILE}；要跑的規格：${FEATURES_ROOT_NAME}/${FEATURE_ARG}）"
 
 # 在 git worktree 裡，app-bdd-support 會被裝進和主工作目錄共用的 ~/.m2。兩邊的版本不同時，
 # 這裡裝進去的會蓋掉另一邊正在用的那一份。只提醒不擋下：只有一個工作目錄時照常裝進 ~/.m2 就對了。
@@ -373,10 +395,10 @@ for tool in mvn node npm curl lsof nc; do
   command -v "$tool" >/dev/null 2>&1 || fail "PATH 上找不到 ${tool}。"
 done
 
-if [ "$PROFILE" = "ipad" ]; then
-  browser_pattern="webkit-*"
-else
+if [ "$PROFILE" = "desktop" ]; then
   browser_pattern="chromium*"
+else
+  browser_pattern="webkit-*"
 fi
 # shellcheck disable=SC2086
 if ! ls -d "$BROWSERS_DIR"/$browser_pattern >/dev/null 2>&1; then
