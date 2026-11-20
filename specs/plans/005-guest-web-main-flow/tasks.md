@@ -48,7 +48,7 @@
 
 **Goal**: 本輪沒有新套件，但有三樣新的技術環境：住客區的掛載點（`/g/:qrToken/*` 的延遲載入路由與 Vite 對 `/guest` 的代理）、驗收測試線的第三組瀏覽器設定 `phone`、以及 `run-feature.sh` 對第二個 feature 根 `guest-web/` 的支援。先把這三樣備好，用一個小 spike 確認延遲載入在手機設定下來得及，最後用 smoke-test 確認測試線起得來。不寫任何 DSL 語意，不寫任何產品行為。
 
-- [ ] T001 `app/web/`：`/g/:qrToken/*` 的延遲載入掛載點與 Vite 代理 `/guest`
+- [X] T001 `app/web/`：`/g/:qrToken/*` 的延遲載入掛載點與 Vite 代理 `/guest`
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「住客掃碼頁換頁與載入」「住客掃碼頁連後端」兩列
     - `research.md` -> 決策 1（為什麼是 `/g/`）、決策 2（路由樹與延遲載入）、決策 4（代理）
@@ -58,7 +58,7 @@
   - 驗證：`npm run typecheck` 綠；`npm run build` 的輸出多一個獨立的住客 chunk、主 chunk 不變大；`npm run dev` 後開 `/g/abc` 看到占位字樣、開 `/athena/login` 仍是登入頁。
   - 不做：不寫換 session、不畫任何畫面、不動 `DeskShell`。
 
-- [ ] T002 `app/web-bdd/`：第三組瀏覽器設定 `phone`
+- [X] T002 `app/web-bdd/`：第三組瀏覽器設定 `phone`
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證` 的「住客掃碼頁驗收的視窗與輸入」
     - `specs/truth/features/guest-web/dsl.md` -> 「共通實作約定」的「瀏覽器設定」
@@ -68,7 +68,7 @@
   - 驗證：`mvn -q -f app/web-bdd/pom.xml test -Dtest=SmokeTest -Dweb.profile=phone` 用 WebKit 開出 393 寬的分頁。
   - 不做：不改 `desktop`、`ipad` 的任何值；不寫任何住客的步驟。
 
-- [ ] T003 `app/web-bdd/run-feature.sh`：feature 路徑可以指定根 `guest-web/`，瀏覽器設定接受 `phone`
+- [X] T003 `app/web-bdd/run-feature.sh`：feature 路徑可以指定根 `guest-web/`，瀏覽器設定接受 `phone`
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證` 的「住客掃碼頁 BDD techstack」（runner 不用加的理由）
     - `research.md` -> 決策 8 的「`run-feature.sh` 的改法」
@@ -78,14 +78,14 @@
   - 驗證（四條都要）：`… guest-web/` 與 `… guest-web/進入層/掃碼就進首頁.feature` 都走到「跑測試」那一步、帶 `-Dweb.profile=phone`；`… 待派單/待派單清單.feature` 與 `… frontdesk-web/待派單/待派單清單.feature ipad` 的行為與改前相同；`… guest-web/不存在.feature` 的錯誤訊息列出的是 `guest-web/` 底下的檔。
   - 不做：不改 runner 類別名、不加第二個 runner、不改 `app/bdd/` 的腳本。
 
-- [ ] T004 spike：`phone` 設定下延遲載入的住客路由來得及
+- [X] T004 spike：`phone` 設定下延遲載入的住客路由來得及
   - Read:
     - `research.md` -> 「建立住客區時要先做的 spike」第 1 項與「失敗時的退路」
   - 以 `phone` 設定用 Playwright（`app/web-bdd/` 裡一支不進 runner 的 JUnit，照 `SmokeTest.java` 的寫法與排除方式）開 T001 的 `/g/abc`，量從導航到占位字樣出現的秒數，門檻 5 秒。逾時就把住客路由改成不延遲載入（只影響下載量）。
   - 產出：量到的秒數與結論記在 `specs/plans/005-guest-web-main-flow/implement-notes.md`（沒有就建立）。
   - 不做：不需要任何後端資料；不寫 stepdef。
 
-- [ ] T005 smoke-test：住客這條測試線起得來
+- [X] T005 smoke-test：住客這條測試線起得來
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證`
   - 依序確認並停手：①`cd app/web && npm run typecheck && npx vitest run` 綠、`npm run build` 產出含獨立住客 chunk 的靜態檔；②`bash app/web-bdd/run-feature.sh --keep guest-web/進入層/無法使用頁.feature` 能起後端與開發伺服器、以 WebKit 393 × 852 載入 `/g/abc` 看到 T001 的占位字樣（步驟全部 undefined 是預期）；③後端與開發伺服器還在時，`curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"token":"abc"}' http://localhost:5199/guest/scan` 回 `409` 或 `422`（經 Vite 代理打到 8080）；④`bash app/web-bdd/run-feature.sh 待派單/待派單清單.feature desktop` 仍然綠。做完 `bash app/web-bdd/run-feature.sh --stop`。
@@ -95,7 +95,7 @@
 
 **Goal**: 只建立後續要用的型別、狀態對照表、純計算落點、住客 session 與 API 的薄層、共用的串流連線函式、語系子樹與語言記憶、路由樹與外框骨架與兩個資料 hook、驗收測試線的 World／page object／stepdef 落點與限流替身、`BackendChannel` 的住客 helper，最後用兩項 spike 確認住客串流與冪等鍵。不寫無法使用頁、首頁內容、送出、取消、評分、即時更新這些行為，不寫任何句型的語意。
 
-- [ ] T006 `app/web/src/guest/api/types.ts`：先把資料形狀定下來
+- [X] T006 `app/web/src/guest/api/types.ts`：先把資料形狀定下來
   - Read:
     - `truth-delta.md` -> `/api-plan` 的 `/guest/scan`、`/guest/home`、`GuestRequest`（八欄與 `closed`）、`/guest/stream` 四列摘要
     - `tms/src/main/java/com/athena/tms/dto/ScanResponse.java`、`GuestHomeView.java`、`GuestMenuItemView.java`、`GuestTaskView.java`（只讀形狀，不改）
@@ -104,7 +104,7 @@
   - 不做：不寫任何函式、不寫畫面。
   - 驗證：`npm run typecheck`。
 
-- [ ] T007 `app/web/src/guest/lib/stage.ts`：狀態對照表與它推出來的純函式，連 `Vitest`
+- [X] T007 `app/web/src/guest/lib/stage.ts`：狀態對照表與它推出來的純函式，連 `Vitest`
   - Read:
     - `spec.md` -> 使用者故事 3 的狀態對照表、各步副文表、狀態訊息表、首頁進度卡說明表；「狀態對照與額度公式」
     - `ui/ui-plan.md` -> 「狀態對照表怎麼落到三個畫面」整節（含十個狀態值的大表與「打勾／實心／空心」的定義）
@@ -114,7 +114,7 @@
   - 不做：不寫任何元件；不做額度、報修文字、問候、時間（T008）。
   - 驗證：`npx vitest run src/guest/lib/stage.test.ts` 綠。
 
-- [ ] T008 其餘純計算的落點與 `Vitest` 檔殼
+- [X] T008 其餘純計算的落點與 `Vitest` 檔殼
   - Read:
     - `research.md` -> 決策 9 的清單
     - `ui/ui-plan.md` -> 「前端實作切分建議」的純函式一段
@@ -122,7 +122,7 @@
   - 不做：不實作任何一個函式（各由第一個用到它的 Feature phase 實作並補測試，見 Scope Note 第 7 條）；`language.ts` 不在這裡（T012 直接做完）。
   - 驗證：`npm run typecheck` 與 `npx vitest run` 綠（todo 不算失敗）。
 
-- [ ] T009 住客 session store：`app/web/src/guest/session.ts`
+- [X] T009 住客 session store：`app/web/src/guest/session.ts`
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「住客 session」
     - `research.md` -> 決策 3
@@ -131,7 +131,7 @@
   - 不做：不呼叫後端、不處理 401、不讀櫃檯的 `useSessionStore`。
   - 驗證：`npm run typecheck`；`session.test.ts` 以 `src/test-support/memory-storage.ts` 確認鍵帶代碼、兩枚代碼互不覆蓋、儲存空間丟例外時仍讀得回記憶體裡的值。
 
-- [ ] T010 住客 API 薄層：`app/web/src/guest/api/client.ts`
+- [X] T010 住客 API 薄層：`app/web/src/guest/api/client.ts`
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「住客掃碼頁連後端」
     - `research.md` -> 決策 4
@@ -141,7 +141,7 @@
   - 不做：不重換 session、不重試、不寫 UI 的錯誤文字。
   - 驗證：`npm run typecheck`；`client.test.ts` 以假 `fetch` 確認路徑前綴、`X-Guest-Session`、冪等鍵有帶、沒有 `Authorization`。
 
-- [ ] T011 把串流連線函式抽成可帶網址與標頭，櫃檯與住客共用
+- [X] T011 把串流連線函式抽成可帶網址與標頭，櫃檯與住客共用
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「住客掃碼頁即時更新」
     - `research.md` -> 決策 5
@@ -150,7 +150,7 @@
   - 不做：不改 `SILENCE_LIMIT_MS`、`REREAD_INTERVAL_MS`；不寫住客收到訊號後做什麼。
   - 驗證：`npx vitest run src/features/realtime` 綠；`bash app/web-bdd/run-feature.sh 即時更新/現場變化即時跟上.feature desktop` 與 `… 即時更新/連線異常提醒列.feature desktop` 綠。
 
-- [ ] T012 語系檔的 `guest` 子樹、住客的語言比對與語言記憶
+- [X] T012 語系檔的 `guest` 子樹、住客的語言比對與語言記憶
   - Read:
     - `specs/truth/techstack.md` -> `前端` 的「住客掃碼頁多語系」
     - `research.md` -> 決策 6
@@ -159,7 +159,7 @@
   - 不做：不畫語言選單（Phase 4-28）；不改櫃檯的 `initialLanguage`、`followSession`、`browser-language.ts`。
   - 驗證：`npx vitest run src/i18n src/guest` 綠（四份鍵集合一致、八種語言比對）；`npm run typecheck`。
 
-- [ ] T013 住客區的路由樹、進入容器、外框、七個頁面容器與兩個資料 hook 的骨架
+- [X] T013 住客區的路由樹、進入容器、外框、七個頁面容器與兩個資料 hook 的骨架
   - Read:
     - `ui/ui-plan.md` -> 「前端實作切分建議」（頁面／容器切分、共用元件、設計變數的命名、返回到進來的地方）、「設計變數」兩張表、「版面尺寸與伸縮規則」、「深色模式」
     - `ui/guest.css`（設計變數的值）、`ui/guest.js`（只看各頁的區塊骨架，不搬示範資料）
@@ -169,7 +169,7 @@
   - 不做：畫面可以是空白；不寫首頁內容、清單、進度頁、送出、取消、評分的任何規則與文案；不寫即時更新。
   - 驗證：`npm run typecheck`；`npm run build` 住客 chunk 仍獨立；T016 會實際開 `/g/{真的代碼}` 走到首頁容器。
 
-- [ ] T014 `app/web-bdd/` 住客的 World 延伸、網址、限流替身、page object 與 stepdef 落點
+- [X] T014 `app/web-bdd/` 住客的 World 延伸、網址、限流替身、page object 與 stepdef 落點
   - Read:
     - `specs/truth/features/guest-web/dsl.md` -> 「共通實作約定」全部十條與「需求的狀況對照」
     - 本檔 Scope Note 第 11、14 條
@@ -185,7 +185,7 @@
   - 不做：不寫任何句型的語意（Phase 3）；不用版面座標找元素；不改櫃檯既有 page object 與 stepdef 的行為；不改 `WebWorld.prepareScenario`。
   - 驗證：`mvn -q -f app/web-bdd/pom.xml test-compile` 過；`bash app/web-bdd/run-feature.sh 即時更新/連線異常提醒列.feature desktop` 仍綠（`Network.java` 的改動沒弄壞櫃檯）。
 
-- [ ] T015 `app/bdd-support/` 的 `BackendChannel`：住客的預設資料、種需求與四個 helper
+- [X] T015 `app/bdd-support/` 的 `BackendChannel`：住客的預設資料、種需求與四個 helper
   - Read:
     - `specs/truth/techstack.md` -> `測試與驗證` 的「BDD 後端資料準備補的 helper」
     - `specs/truth/features/guest-web/dsl.md` -> 「共通實作約定」的飯店與房間、服務項目與資訊頁、分類規則；「需求的狀況對照」
@@ -202,7 +202,7 @@
   - 不做：不寫任何 Cucumber 步驟、不解析 Data Table（Phase 3）；不改員工 App 測試線既有方法的簽章與行為；不改後端。
   - 驗證：`mvn -q -f app/bdd-support/pom.xml install` 過；實跑留給 T016。
 
-- [ ] T016 spike：住客串流與冪等鍵回放，順便驗 T015 的 helper
+- [X] T016 spike：住客串流與冪等鍵回放，順便驗 T015 的 helper
   - Read:
     - `research.md` -> 「建立住客區時要先做的 spike」第 2、3 項與「失敗時的退路」
     - `truth-delta.md` -> `/api-plan` 的 `/guest/stream`、`IdempotencyKey` 兩列（程式現況與 `檔案:行號`）
@@ -267,391 +267,391 @@
 
 ### 介面根 `specs/truth/features/guest-web/dsl.md`
 
-- [ ] T017 [P] [BDD-RED] `Given: 現在時間是 "{時刻}"`
+- [X] T017 [P] [BDD-RED] `Given: 現在時間是 "{時刻}"`
 
-- [ ] T018 [P] [BDD-RED] `Given: "{房號}" 房的住客這次住宿有以下需求：`
+- [X] T018 [P] [BDD-RED] `Given: "{房號}" 房的住客這次住宿有以下需求：`
 
-- [ ] T019 [P] [BDD-RED] `Given: "{房號}" 房今天沒有人住`
+- [X] T019 [P] [BDD-RED] `Given: "{房號}" 房今天沒有人住`
 
-- [ ] T020 [P] [BDD-RED] `Given: "{房號}" 房的住客這次住宿還沒送過任何需求`
+- [X] T020 [P] [BDD-RED] `Given: "{房號}" 房的住客這次住宿還沒送過任何需求`
 
-- [ ] T021 [P] [BDD-RED] `Given: "{房號}" 房的住客已打開首頁`
+- [X] T021 [P] [BDD-RED] `Given: "{房號}" 房的住客已打開首頁`
 
-- [ ] T022 [P] [BDD-RED] `Given: "{房號}" 房的住客停在 "{頁}"`
+- [X] T022 [P] [BDD-RED] `Given: "{房號}" 房的住客停在 "{頁}"`
 
-- [ ] T023 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的進度頁`
+- [X] T023 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的進度頁`
 
-- [ ] T024 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的資訊頁`
+- [X] T024 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的資訊頁`
 
-- [ ] T025 [P] [BDD-RED] `Given: "{房號}" 房的住客在備品補充頁，已把以下項目調到：`
+- [X] T025 [P] [BDD-RED] `Given: "{房號}" 房的住客在備品補充頁，已把以下項目調到：`
 
-- [ ] T026 [P] [BDD-RED] `Given: "{房號}" 房的另一支手機也打開了首頁`
+- [X] T026 [P] [BDD-RED] `Given: "{房號}" 房的另一支手機也打開了首頁`
 
-- [ ] T027 [P] [BDD-RED] `Given: 這支手機的介面語言是 "{語言}"`
+- [X] T027 [P] [BDD-RED] `Given: 這支手機的介面語言是 "{語言}"`
 
-- [ ] T028 [P] [BDD-RED] `Given: 這支手機暫時連不上後端`
+- [X] T028 [P] [BDD-RED] `Given: 這支手機暫時連不上後端`
 
-- [ ] T029 [P] [BDD-RED] `Given: 櫃檯在 "{時刻}" 替 "{房號}" 房代開了一張單`
+- [X] T029 [P] [BDD-RED] `Given: 櫃檯在 "{時刻}" 替 "{房號}" 房代開了一張單`
 
-- [ ] T030 [P] [BDD-RED] `When: 住客打開 "{房號}" 房 QR Code 的網址`
+- [X] T030 [P] [BDD-RED] `When: 住客打開 "{房號}" 房 QR Code 的網址`
 
-- [ ] T031 [P] [BDD-RED] `When: 住客按 "{按鈕}"`
+- [X] T031 [P] [BDD-RED] `When: 住客按 "{按鈕}"`
 
-- [ ] T032 [P] [BDD-RED] `When: 住客打開 "{頁}"`
+- [X] T032 [P] [BDD-RED] `When: 住客打開 "{頁}"`
 
-- [ ] T033 [P] [BDD-RED] `When: 住客打開 "{標題}" 的進度頁`
+- [X] T033 [P] [BDD-RED] `When: 住客打開 "{標題}" 的進度頁`
 
-- [ ] T034 [P] [BDD-RED] `When: 住客重新整理網頁`
+- [X] T034 [P] [BDD-RED] `When: 住客重新整理網頁`
 
-- [ ] T035 [P] [BDD-RED] `Then: 畫面上看得到以下文字：`
+- [X] T035 [P] [BDD-RED] `Then: 畫面上看得到以下文字：`
 
-- [ ] T036 [P] [BDD-RED] `Then: 畫面上沒有以下文字：`
+- [X] T036 [P] [BDD-RED] `Then: 畫面上沒有以下文字：`
 
-- [ ] T037 [P] [BDD-RED] `Then: 畫面上看得到 "{文字}"`
+- [X] T037 [P] [BDD-RED] `Then: 畫面上看得到 "{文字}"`
 
-- [ ] T038 [P] [BDD-RED] `Then: 畫面上沒有 "{文字}"`
+- [X] T038 [P] [BDD-RED] `Then: 畫面上沒有 "{文字}"`
 
-- [ ] T039 [P] [BDD-RED] `Then: 按鈕 "{按鈕}" 可以按`
+- [X] T039 [P] [BDD-RED] `Then: 按鈕 "{按鈕}" 可以按`
 
-- [ ] T040 [P] [BDD-RED] `Then: 按鈕 "{按鈕}" 不能按`
+- [X] T040 [P] [BDD-RED] `Then: 按鈕 "{按鈕}" 不能按`
 
-- [ ] T041 [P] [BDD-RED] `Then: 畫面是 "{頁}"`
+- [X] T041 [P] [BDD-RED] `Then: 畫面是 "{頁}"`
 
-- [ ] T042 [P] [BDD-RED] `Then: 畫面是 "{標題}" 的進度頁`
+- [X] T042 [P] [BDD-RED] `Then: 畫面是 "{標題}" 的進度頁`
 
-- [ ] T043 [P] [BDD-RED] `Then: 頁面頂端的標題列是返回鈕、"{頁標題}" 與 "房號 {房號}"`
+- [X] T043 [P] [BDD-RED] `Then: 頁面頂端的標題列是返回鈕、"{頁標題}" 與 "房號 {房號}"`
 
-- [ ] T044 [P] [BDD-RED] `Then: "{標題}" 的狀態標籤是 "{標籤}"`
+- [X] T044 [P] [BDD-RED] `Then: "{標題}" 的狀態標籤是 "{標籤}"`
 
-- [ ] T045 [P] [BDD-RED] `Then: 清單 "{段落}" 由上到下是 "{標題清單}"`
+- [X] T045 [P] [BDD-RED] `Then: 清單 "{段落}" 由上到下是 "{標題清單}"`
 
-- [ ] T046 [P] [BDD-RED] `Then: 狀態訊息框是 "{標題}"，內文 "{內文}"`
+- [X] T046 [P] [BDD-RED] `Then: 狀態訊息框是 "{標題}"，內文 "{內文}"`
 
-- [ ] T047 [P] [BDD-RED] `Then: 四步進度走到 "{步}"`
+- [X] T047 [P] [BDD-RED] `Then: 四步進度走到 "{步}"`
 
-- [ ] T048 [P] [BDD-RED] `Then: 四步進度如下：`
+- [X] T048 [P] [BDD-RED] `Then: 四步進度如下：`
 
-- [ ] T049 [P] [BDD-RED] `Then: 進度頁底部是 "{底部}"`
+- [X] T049 [P] [BDD-RED] `Then: 進度頁底部是 "{底部}"`
 
-- [ ] T050 [P] [BDD-RED] `Then: 進度頁沒有評分卡`
+- [X] T050 [P] [BDD-RED] `Then: 進度頁沒有評分卡`
 
-- [ ] T051 [P] [BDD-RED] `Then: 首頁的進度卡是 "{標題}"`
+- [X] T051 [P] [BDD-RED] `Then: 首頁的進度卡是 "{標題}"`
 
-- [ ] T052 [P] [BDD-RED] `Then: 後端這次住宿多了以下需求：`
+- [X] T052 [P] [BDD-RED] `Then: 後端這次住宿多了以下需求：`
 
-- [ ] T053 [P] [BDD-RED] `Then: 後端這次住宿沒有多任何一張需求`
+- [X] T053 [P] [BDD-RED] `Then: 後端這次住宿沒有多任何一張需求`
 
-- [ ] T054 [P] [BDD-RED] `Then: 畫面出現提示框 "{標題}"，內文 "{內文}"`
+- [X] T054 [P] [BDD-RED] `Then: 畫面出現提示框 "{標題}"，內文 "{內文}"`
 
 ### `specs/truth/features/guest-web/進入層/dsl.md`
 
-- [ ] T055 [P] [BDD-RED] `Given: 主管在後台換掉了 "{房號}" 房的 QR Code`
+- [X] T055 [P] [BDD-RED] `Given: 主管在後台換掉了 "{房號}" 房的 QR Code`
 
-- [ ] T056 [P] [BDD-RED] `Given: 這支手機上的住客憑證已經不見`
+- [X] T056 [P] [BDD-RED] `Given: 這支手機上的住客憑證已經不見`
 
-- [ ] T057 [P] [BDD-RED] `Given: 這支手機上的住客憑證已經失效`
+- [X] T057 [P] [BDD-RED] `Given: 這支手機上的住客憑證已經失效`
 
-- [ ] T058 [P] [BDD-RED] `Given: "{房號}" 房這筆訂房已經過了退房時刻`
+- [X] T058 [P] [BDD-RED] `Given: "{房號}" 房這筆訂房已經過了退房時刻`
 
-- [ ] T059 [P] [BDD-RED] `Given: 這支手機短時間內多次掃碼失敗，後端暫時不受理它的掃碼`
+- [X] T059 [P] [BDD-RED] `Given: 這支手機短時間內多次掃碼失敗，後端暫時不受理它的掃碼`
 
-- [ ] T060 [P] [BDD-RED] `Given: 後端暫時出錯，任何掃碼都失敗`
+- [X] T060 [P] [BDD-RED] `Given: 後端暫時出錯，任何掃碼都失敗`
 
-- [ ] T061 [P] [BDD-RED] `Given: "{房號}" 房的住客的畫面停在重試狀態`
+- [X] T061 [P] [BDD-RED] `Given: "{房號}" 房的住客的畫面停在重試狀態`
 
-- [ ] T062 [P] [BDD-RED] `Given: 這支手機已恢復連線`
+- [X] T062 [P] [BDD-RED] `Given: 這支手機已恢復連線`
 
-- [ ] T063 [P] [BDD-RED] `Given: 後端已恢復`
+- [X] T063 [P] [BDD-RED] `Given: 後端已恢復`
 
-- [ ] T064 [P] [BDD-RED] `Given: "{房號}" 房的住客打開清單時因為後端出錯停在重試狀態`
+- [X] T064 [P] [BDD-RED] `Given: "{房號}" 房的住客打開清單時因為後端出錯停在重試狀態`
 
-- [ ] T065 [P] [BDD-RED] `Given: "{員工}" 已在這支手機上登入過櫃檯 Web，登入狀態還在`
+- [X] T065 [P] [BDD-RED] `Given: "{員工}" 已在這支手機上登入過櫃檯 Web，登入狀態還在`
 
-- [ ] T066 [P] [BDD-RED] `Given: "{員工}" 已在這支手機上打開過 "{房號}" 房的住客頁`
+- [X] T066 [P] [BDD-RED] `Given: "{員工}" 已在這支手機上打開過 "{房號}" 房的住客頁`
 
-- [ ] T067 [P] [BDD-RED] `When: 住客打開 "{房號}" 房舊代碼的網址`
+- [X] T067 [P] [BDD-RED] `When: 住客打開 "{房號}" 房舊代碼的網址`
 
-- [ ] T068 [P] [BDD-RED] `When: 住客打開一個不存在的代碼的網址`
+- [X] T068 [P] [BDD-RED] `When: 住客打開一個不存在的代碼的網址`
 
-- [ ] T069 [P] [BDD-RED] `When: 住客把網頁關掉，再從歷史記錄打開同一個網址`
+- [X] T069 [P] [BDD-RED] `When: 住客把網頁關掉，再從歷史記錄打開同一個網址`
 
-- [ ] T070 [P] [BDD-RED] `When: 住客在同一支手機上打開櫃檯 Web 的網址`
+- [X] T070 [P] [BDD-RED] `When: 住客在同一支手機上打開櫃檯 Web 的網址`
 
-- [ ] T071 [P] [BDD-RED] `Then: 從打開網址到看到首頁，住客沒有輸入或按過任何東西`
+- [X] T071 [P] [BDD-RED] `Then: 從打開網址到看到首頁，住客沒有輸入或按過任何東西`
 
-- [ ] T072 [P] [BDD-RED] `Then: 過程中沒有要住客再掃一次 QR Code，也沒有出現錯誤訊息`
+- [X] T072 [P] [BDD-RED] `Then: 過程中沒有要住客再掃一次 QR Code，也沒有出現錯誤訊息`
 
-- [ ] T073 [P] [BDD-RED] `Then: 無法使用頁的文字與空房那一頁完全相同`
+- [X] T073 [P] [BDD-RED] `Then: 無法使用頁的文字與空房那一頁完全相同`
 
-- [ ] T074 [P] [BDD-RED] `Then: 畫面上沒有任何可以點的東西`
+- [X] T074 [P] [BDD-RED] `Then: 畫面上沒有任何可以點的東西`
 
-- [ ] T075 [P] [BDD-RED] `Then: 住客頁向後端的請求沒有帶員工的登入憑證`
+- [X] T075 [P] [BDD-RED] `Then: 住客頁向後端的請求沒有帶員工的登入憑證`
 
-- [ ] T076 [P] [BDD-RED] `Then: 櫃檯 Web 仍是 "{員工}" 的登入狀態，畫面是總覽看板`
+- [X] T076 [P] [BDD-RED] `Then: 櫃檯 Web 仍是 "{員工}" 的登入狀態，畫面是總覽看板`
 
-- [ ] T077 [P] [BDD-RED] `Then: 櫃檯 Web 顯示登入頁`
+- [X] T077 [P] [BDD-RED] `Then: 櫃檯 Web 顯示登入頁`
 
 ### `specs/truth/features/guest-web/首頁/dsl.md`
 
-- [ ] T078 [P] [BDD-RED] `Given: "{房號}" 房的訂房住客是 "{姓名}"，今天入住、後天退房`
+- [X] T078 [P] [BDD-RED] `Given: "{房號}" 房的訂房住客是 "{姓名}"，今天入住、後天退房`
 
-- [ ] T079 [P] [BDD-RED] `When: 住客點房號膠囊`
+- [X] T079 [P] [BDD-RED] `When: 住客點房號膠囊`
 
-- [ ] T080 [P] [BDD-RED] `When: 住客點即將開放的入口 "{入口}"`
+- [X] T080 [P] [BDD-RED] `When: 住客點即將開放的入口 "{入口}"`
 
-- [ ] T081 [P] [BDD-RED] `Then: 首頁由上到下依序是以下區塊：`
+- [X] T081 [P] [BDD-RED] `Then: 首頁由上到下依序是以下區塊：`
 
-- [ ] T082 [P] [BDD-RED] `Then: 頂列右上是房號膠囊 "{房號}" 與語言膠囊 "{短寫法}"`
+- [X] T082 [P] [BDD-RED] `Then: 頂列右上是房號膠囊 "{房號}" 與語言膠囊 "{短寫法}"`
 
-- [ ] T083 [P] [BDD-RED] `Then: 頂列左上是空白的`
+- [X] T083 [P] [BDD-RED] `Then: 頂列左上是空白的`
 
-- [ ] T084 [P] [BDD-RED] `Then: 問候是 "{第一行}" 與 "{第二行}"`
+- [X] T084 [P] [BDD-RED] `Then: 問候是 "{第一行}" 與 "{第二行}"`
 
-- [ ] T085 [P] [BDD-RED] `Then: 畫面沒有任何變化`
+- [X] T085 [P] [BDD-RED] `Then: 畫面沒有任何變化`
 
-- [ ] T086 [P] [BDD-RED] `Then: 首頁的進度卡的進度條亮到 "{步}"，說明是 "{說明}"`
+- [X] T086 [P] [BDD-RED] `Then: 首頁的進度卡的進度條亮到 "{步}"，說明是 "{說明}"`
 
-- [ ] T087 [P] [BDD-RED] `Then: 首頁沒有進度卡`
+- [X] T087 [P] [BDD-RED] `Then: 首頁沒有進度卡`
 
-- [ ] T088 [P] [BDD-RED] `Then: 首頁上「即將開放」的標籤有 {數量} 個`
+- [X] T088 [P] [BDD-RED] `Then: 首頁上「即將開放」的標籤有 {數量} 個`
 
 ### `specs/truth/features/guest-web/備品補充/dsl.md`
 
-- [ ] T089 [P] [BDD-RED] `Given: 飯店沒有另外設定服務項目`
+- [X] T089 [P] [BDD-RED] `Given: 飯店沒有另外設定服務項目`
 
-- [ ] T090 [P] [BDD-RED] `Given: 飯店設定了以下服務項目：`
+- [X] T090 [P] [BDD-RED] `Given: 飯店設定了以下服務項目：`
 
-- [ ] T091 [P] [BDD-RED] `Given: "{房號}" 房的住客在備品補充頁，所有數量是 0`
+- [X] T091 [P] [BDD-RED] `Given: "{房號}" 房的住客在備品補充頁，所有數量是 0`
 
-- [ ] T092 [P] [BDD-RED] `Given: "{房號}" 房的住客剛在備品補充送出以下項目，停在送出成功頁：`
+- [X] T092 [P] [BDD-RED] `Given: "{房號}" 房的住客剛在備品補充送出以下項目，停在送出成功頁：`
 
-- [ ] T093 [P] [BDD-RED] `Given: "{房號}" 房的住客剛在備品補充送出以下項目，已回到首頁：`
+- [X] T093 [P] [BDD-RED] `Given: "{房號}" 房的住客剛在備品補充送出以下項目，已回到首頁：`
 
-- [ ] T094 [P] [BDD-RED] `Given: "{房號}" 房的住客在備品補充頁，剛被額度估算擋下，提示框顯示中`
+- [X] T094 [P] [BDD-RED] `Given: "{房號}" 房的住客在備品補充頁，剛被額度估算擋下，提示框顯示中`
 
-- [ ] T095 [P] [BDD-RED] `Given: 這支手機會在第一張需求建立之後斷線`
+- [X] T095 [P] [BDD-RED] `Given: 這支手機會在第一張需求建立之後斷線`
 
-- [ ] T096 [P] [BDD-RED] `Given: 後端這時回覆很慢`
+- [X] T096 [P] [BDD-RED] `Given: 後端這時回覆很慢`
 
-- [ ] T097 [P] [BDD-RED] `Given: "{房號}" 房的住客剛才送到一半斷線，"{已建立}" 已建立、"{沒建立}" 沒有建立，手機已恢復連線`
+- [X] T097 [P] [BDD-RED] `Given: "{房號}" 房的住客剛才送到一半斷線，"{已建立}" 已建立、"{沒建立}" 沒有建立，手機已恢復連線`
 
-- [ ] T098 [P] [BDD-RED] `When: 住客按 "{項目}" 的加號 {次數} 次`
+- [X] T098 [P] [BDD-RED] `When: 住客按 "{項目}" 的加號 {次數} 次`
 
-- [ ] T099 [P] [BDD-RED] `When: 住客按 "{項目}" 的減號 {次數} 次`
+- [X] T099 [P] [BDD-RED] `When: 住客按 "{項目}" 的減號 {次數} 次`
 
-- [ ] T100 [P] [BDD-RED] `When: 住客連按兩下 "{按鈕}"`
+- [X] T100 [P] [BDD-RED] `When: 住客連按兩下 "{按鈕}"`
 
-- [ ] T101 [P] [BDD-RED] `Then: 備品清單由上到下是 "{項目清單}"`
+- [X] T101 [P] [BDD-RED] `Then: 備品清單由上到下是 "{項目清單}"`
 
-- [ ] T102 [P] [BDD-RED] `Then: 每一列的提示都是 "最多 5"、數量都是 0`
+- [X] T102 [P] [BDD-RED] `Then: 每一列的提示都是 "最多 5"、數量都是 0`
 
-- [ ] T103 [P] [BDD-RED] `Then: "{項目}" 的數量是 {數量}`
+- [X] T103 [P] [BDD-RED] `Then: "{項目}" 的數量是 {數量}`
 
-- [ ] T104 [P] [BDD-RED] `Then: "{項目}" 的加號不能按`
+- [X] T104 [P] [BDD-RED] `Then: "{項目}" 的加號不能按`
 
-- [ ] T105 [P] [BDD-RED] `Then: "{項目}" 的減號不能按`
+- [X] T105 [P] [BDD-RED] `Then: "{項目}" 的減號不能按`
 
-- [ ] T106 [P] [BDD-RED] `Then: "{項目}" 的減號可以按`
+- [X] T106 [P] [BDD-RED] `Then: "{項目}" 的減號可以按`
 
-- [ ] T107 [P] [BDD-RED] `Then: 後端送出的順序是 "{標題清單}"`
+- [X] T107 [P] [BDD-RED] `Then: 後端送出的順序是 "{標題清單}"`
 
 ### `specs/truth/features/guest-web/設備報修/dsl.md`
 
-- [ ] T108 [P] [BDD-RED] `Given: 這家飯店的分類規則沒有對 "{關鍵字}" 的規則`
+- [X] T108 [P] [BDD-RED] `Given: 這家飯店的分類規則沒有對 "{關鍵字}" 的規則`
 
-- [ ] T109 [P] [BDD-RED] `Given: 這家飯店的分類規則把含 "{關鍵字}" 的文字分給工務`
+- [X] T109 [P] [BDD-RED] `Given: 這家飯店的分類規則把含 "{關鍵字}" 的文字分給工務`
 
-- [ ] T110 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁`
+- [X] T110 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁`
 
-- [ ] T111 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁，已選類別 "{類別}"`
+- [X] T111 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁，已選類別 "{類別}"`
 
-- [ ] T112 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁，已選類別 "{類別}"，補充說明已輸入 "{補充說明}"`
+- [X] T112 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁，已選類別 "{類別}"，補充說明已輸入 "{補充說明}"`
 
-- [ ] T113 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁，已選類別 "{類別}"，補充說明已有 200 個字`
+- [X] T113 [P] [BDD-RED] `Given: "{房號}" 房的住客在設備報修頁，已選類別 "{類別}"，補充說明已有 200 個字`
 
-- [ ] T114 [P] [BDD-RED] `Given: "{房號}" 房的住客剛送出報修 "{標題}"，停在送出成功頁`
+- [X] T114 [P] [BDD-RED] `Given: "{房號}" 房的住客剛送出報修 "{標題}"，停在送出成功頁`
 
-- [ ] T115 [P] [BDD-RED] `When: 住客點類別 "{類別}"`
+- [X] T115 [P] [BDD-RED] `When: 住客點類別 "{類別}"`
 
-- [ ] T116 [P] [BDD-RED] `When: 住客在補充說明輸入 "{文字}"`
+- [X] T116 [P] [BDD-RED] `When: 住客在補充說明輸入 "{文字}"`
 
-- [ ] T117 [P] [BDD-RED] `When: 住客在補充說明輸入 {字數} 個字`
+- [X] T117 [P] [BDD-RED] `When: 住客在補充說明輸入 {字數} 個字`
 
-- [ ] T118 [P] [BDD-RED] `Then: 只有 "{類別}" 一顆類別是選中的`
+- [X] T118 [P] [BDD-RED] `Then: 只有 "{類別}" 一顆類別是選中的`
 
-- [ ] T119 [P] [BDD-RED] `Then: 補充說明的提示字是 "{提示字}"`
+- [X] T119 [P] [BDD-RED] `Then: 補充說明的提示字是 "{提示字}"`
 
-- [ ] T120 [P] [BDD-RED] `Then: 字數是 "{字數}"`
+- [X] T120 [P] [BDD-RED] `Then: 字數是 "{字數}"`
 
-- [ ] T121 [P] [BDD-RED] `Then: 補充說明裡仍是原本的 200 個字`
+- [X] T121 [P] [BDD-RED] `Then: 補充說明裡仍是原本的 200 個字`
 
-- [ ] T122 [P] [BDD-RED] `Then: 後端這張需求是打字的、帶語言 "{語言}"，沒有帶服務項目`
+- [X] T122 [P] [BDD-RED] `Then: 後端這張需求是打字的、帶語言 "{語言}"，沒有帶服務項目`
 
 ### `specs/truth/features/guest-web/我的需求/dsl.md`
 
-- [ ] T123 [P] [BDD-RED] `Given: 另一支手機已在備品補充送出 "{項目}"`
+- [X] T123 [P] [BDD-RED] `Given: 另一支手機已在備品補充送出 "{項目}"`
 
-- [ ] T124 [P] [BDD-RED] `Given: "{房號}" 房的住客從 "{入口}" 進了 "{標題}" 的進度頁`
+- [X] T124 [P] [BDD-RED] `Given: "{房號}" 房的住客從 "{入口}" 進了 "{標題}" 的進度頁`
 
-- [ ] T125 [P] [BDD-RED] `Then: 清單各列如下：`
+- [X] T125 [P] [BDD-RED] `Then: 清單各列如下：`
 
-- [ ] T126 [P] [BDD-RED] `Then: 清單各列的標籤與段落如下：`
+- [X] T126 [P] [BDD-RED] `Then: 清單各列的標籤與段落如下：`
 
-- [ ] T127 [P] [BDD-RED] `Then: 每列左邊有依需求類型的圖示`
+- [X] T127 [P] [BDD-RED] `Then: 每列左邊有依需求類型的圖示`
 
-- [ ] T128 [P] [BDD-RED] `Then: 各狀態標籤的顏色如下：`
+- [X] T128 [P] [BDD-RED] `Then: 各狀態標籤的顏色如下：`
 
-- [ ] T129 [P] [BDD-RED] `Then: 進度頁的第一張卡是標籤 "{標籤}"、標題 "{標題}" 與 "{第二行}"`
+- [X] T129 [P] [BDD-RED] `Then: 進度頁的第一張卡是標籤 "{標籤}"、標題 "{標題}" 與 "{第二行}"`
 
-- [ ] T130 [P] [BDD-RED] `Then: 進度頁沒有狀態訊息框`
+- [X] T130 [P] [BDD-RED] `Then: 進度頁沒有狀態訊息框`
 
-- [ ] T131 [P] [BDD-RED] `Then: 進度頁上唯一的時間是 "{時間}"`
+- [X] T131 [P] [BDD-RED] `Then: 進度頁上唯一的時間是 "{時間}"`
 
 ### `specs/truth/features/guest-web/取消與評分/dsl.md`
 
-- [ ] T132 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的進度頁，取消確認框開著`
+- [X] T132 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的進度頁，取消確認框開著`
 
-- [ ] T133 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的進度頁，已點第 {星等} 顆星`
+- [X] T133 [P] [BDD-RED] `Given: "{房號}" 房的住客開著 "{標題}" 的進度頁，已點第 {星等} 顆星`
 
-- [ ] T134 [P] [BDD-RED] `Given: 住客的畫面還沒跟上，"{員工}" 已在手機上認領了 "{標題}"`
+- [X] T134 [P] [BDD-RED] `Given: 住客的畫面還沒跟上，"{員工}" 已在手機上認領了 "{標題}"`
 
-- [ ] T135 [P] [BDD-RED] `Given: 住客的畫面還沒跟上，另一支手機已替 "{標題}" 送出了 {星等} 顆星`
+- [X] T135 [P] [BDD-RED] `Given: 住客的畫面還沒跟上，另一支手機已替 "{標題}" 送出了 {星等} 顆星`
 
-- [ ] T136 [P] [BDD-RED] `Given: "{房號}" 房的住客剛取消了 "{標題}"，停在它的進度頁`
+- [X] T136 [P] [BDD-RED] `Given: "{房號}" 房的住客剛取消了 "{標題}"，停在它的進度頁`
 
-- [ ] T137 [P] [BDD-RED] `Given: "{房號}" 房的住客剛替 "{標題}" 送出了 {星等} 顆星，停在它的進度頁`
+- [X] T137 [P] [BDD-RED] `Given: "{房號}" 房的住客剛替 "{標題}" 送出了 {星等} 顆星，停在它的進度頁`
 
-- [ ] T138 [P] [BDD-RED] `When: 住客點第 {星等} 顆星`
+- [X] T138 [P] [BDD-RED] `When: 住客點第 {星等} 顆星`
 
-- [ ] T139 [P] [BDD-RED] `Then: 畫面出現確認框，標題 "{標題}"、內文 "{內文}"、按鈕 "{按鈕一}" 與 "{按鈕二}"`
+- [X] T139 [P] [BDD-RED] `Then: 畫面出現確認框，標題 "{標題}"、內文 "{內文}"、按鈕 "{按鈕一}" 與 "{按鈕二}"`
 
-- [ ] T140 [P] [BDD-RED] `Then: 畫面上沒有任何確認框`
+- [X] T140 [P] [BDD-RED] `Then: 畫面上沒有任何確認框`
 
-- [ ] T141 [P] [BDD-RED] `Then: 畫面頂端浮出提示 "{文字}"，幾秒後自己消失`
+- [X] T141 [P] [BDD-RED] `Then: 畫面頂端浮出提示 "{文字}"，幾秒後自己消失`
 
-- [ ] T142 [P] [BDD-RED] `Then: 後端 "{標題}" 的需求是 "{狀況}"`
+- [X] T142 [P] [BDD-RED] `Then: 後端 "{標題}" 的需求是 "{狀況}"`
 
-- [ ] T143 [P] [BDD-RED] `Then: 後端 "{標題}" 的星等是 {星等}`
+- [X] T143 [P] [BDD-RED] `Then: 後端 "{標題}" 的星等是 {星等}`
 
-- [ ] T144 [P] [BDD-RED] `Then: 五顆星都是空心的`
+- [X] T144 [P] [BDD-RED] `Then: 五顆星都是空心的`
 
-- [ ] T145 [P] [BDD-RED] `Then: 只有前 {星等} 顆星是實心的`
+- [X] T145 [P] [BDD-RED] `Then: 只有前 {星等} 顆星是實心的`
 
-- [ ] T146 [P] [BDD-RED] `Then: 評分卡上沒有留言欄`
+- [X] T146 [P] [BDD-RED] `Then: 評分卡上沒有留言欄`
 
-- [ ] T147 [P] [BDD-RED] `Then: 進度頁有評分卡`
+- [X] T147 [P] [BDD-RED] `Then: 進度頁有評分卡`
 
 ### `specs/truth/features/guest-web/即時更新/dsl.md`
 
-- [ ] T148 [P] [BDD-RED] `Given: 即時連線已經中斷`
+- [X] T148 [P] [BDD-RED] `Given: 即時連線已經中斷`
 
-- [ ] T149 [P] [BDD-RED] `Given: 超過 {秒數} 秒沒有收到後端的任何訊號`
+- [X] T149 [P] [BDD-RED] `Given: 超過 {秒數} 秒沒有收到後端的任何訊號`
 
-- [ ] T150 [P] [BDD-RED] `Given: 後端已宣告即時訊號可能延遲`
+- [X] T150 [P] [BDD-RED] `Given: 後端已宣告即時訊號可能延遲`
 
-- [ ] T151 [P] [BDD-RED] `Given: 即時連線中斷後已經恢復`
+- [X] T151 [P] [BDD-RED] `Given: 即時連線中斷後已經恢復`
 
-- [ ] T152 [P] [BDD-RED] `When: "{員工}" 在手機上{動作} "{標題}"`
+- [X] T152 [P] [BDD-RED] `When: "{員工}" 在手機上{動作} "{標題}"`
 
-- [ ] T153 [P] [BDD-RED] `When: 櫃檯當場回答 "{標題}"，回覆 "{回覆}"`
+- [X] T153 [P] [BDD-RED] `When: 櫃檯當場回答 "{標題}"，回覆 "{回覆}"`
 
-- [ ] T154 [P] [BDD-RED] `When: 櫃檯取消 "{標題}"`
+- [X] T154 [P] [BDD-RED] `When: 櫃檯取消 "{標題}"`
 
-- [ ] T155 [P] [BDD-RED] `When: 另一支手機在備品補充送出 "{項目}"`
+- [X] T155 [P] [BDD-RED] `When: 另一支手機在備品補充送出 "{項目}"`
 
-- [ ] T156 [P] [BDD-RED] `When: 另一支手機取消 "{標題}"`
+- [X] T156 [P] [BDD-RED] `When: 另一支手機取消 "{標題}"`
 
-- [ ] T157 [P] [BDD-RED] `When: 即時連線中斷`
+- [X] T157 [P] [BDD-RED] `When: 即時連線中斷`
 
-- [ ] T158 [P] [BDD-RED] `When: 後端要求重新同步`
+- [X] T158 [P] [BDD-RED] `When: 後端要求重新同步`
 
-- [ ] T159 [P] [BDD-RED] `Then: {秒數} 秒內 "{標題}" 的狀態標籤變成 "{標籤}"`
+- [X] T159 [P] [BDD-RED] `Then: {秒數} 秒內 "{標題}" 的狀態標籤變成 "{標籤}"`
 
-- [ ] T160 [P] [BDD-RED] `Then: {秒數} 秒內 "{步}" 那一步的副文變成 "{副文}"`
+- [X] T160 [P] [BDD-RED] `Then: {秒數} 秒內 "{步}" 那一步的副文變成 "{副文}"`
 
-- [ ] T161 [P] [BDD-RED] `Then: {秒數} 秒內進度頁底部變成 "{底部}"`
+- [X] T161 [P] [BDD-RED] `Then: {秒數} 秒內進度頁底部變成 "{底部}"`
 
-- [ ] T162 [P] [BDD-RED] `Then: {秒數} 秒內狀態訊息框變成 "{標題}"，內文 "{內文}"`
+- [X] T162 [P] [BDD-RED] `Then: {秒數} 秒內狀態訊息框變成 "{標題}"，內文 "{內文}"`
 
-- [ ] T163 [P] [BDD-RED] `Then: {秒數} 秒內進度頁出現評分卡`
+- [X] T163 [P] [BDD-RED] `Then: {秒數} 秒內進度頁出現評分卡`
 
-- [ ] T164 [P] [BDD-RED] `Then: {秒數} 秒內四步進度走到 "{步}"`
+- [X] T164 [P] [BDD-RED] `Then: {秒數} 秒內四步進度走到 "{步}"`
 
-- [ ] T165 [P] [BDD-RED] `Then: {秒數} 秒內清單 "{段落}" 由上到下是 "{標題清單}"`
+- [X] T165 [P] [BDD-RED] `Then: {秒數} 秒內清單 "{段落}" 由上到下是 "{標題清單}"`
 
-- [ ] T166 [P] [BDD-RED] `Then: {秒數} 秒內首頁的進度卡是 "{標題}"`
+- [X] T166 [P] [BDD-RED] `Then: {秒數} 秒內首頁的進度卡是 "{標題}"`
 
-- [ ] T167 [P] [BDD-RED] `Then: {秒數} 秒內首頁的進度卡的進度條亮到 "{步}"，說明是 "{說明}"`
+- [X] T167 [P] [BDD-RED] `Then: {秒數} 秒內首頁的進度卡的進度條亮到 "{步}"，說明是 "{說明}"`
 
-- [ ] T168 [P] [BDD-RED] `Then: {秒數} 秒內畫面上看得到 "{文字}"`
+- [X] T168 [P] [BDD-RED] `Then: {秒數} 秒內畫面上看得到 "{文字}"`
 
-- [ ] T169 [P] [BDD-RED] `Then: {秒數} 秒內畫面重新讀取了首頁資料與需求清單`
+- [X] T169 [P] [BDD-RED] `Then: {秒數} 秒內畫面重新讀取了首頁資料與需求清單`
 
-- [ ] T170 [P] [BDD-RED] `Then: 這段期間住客沒有按任何東西，也沒有重新整理網頁`
+- [X] T170 [P] [BDD-RED] `Then: 這段期間住客沒有按任何東西，也沒有重新整理網頁`
 
-- [ ] T171 [P] [BDD-RED] `Then: 畫面沒有每 4 秒定時重新讀取需求清單`
+- [X] T171 [P] [BDD-RED] `Then: 畫面沒有每 4 秒定時重新讀取需求清單`
 
-- [ ] T172 [P] [BDD-RED] `Then: 畫面上沒有任何提示列或錯誤訊息`
+- [X] T172 [P] [BDD-RED] `Then: 畫面上沒有任何提示列或錯誤訊息`
 
 ### `specs/truth/features/guest-web/住宿指南/dsl.md`
 
-- [ ] T173 [P] [BDD-RED] `Given: 飯店設定了以下資訊頁：`
+- [X] T173 [P] [BDD-RED] `Given: 飯店設定了以下資訊頁：`
 
-- [ ] T174 [P] [BDD-RED] `Given: 飯店沒有設定任何資訊頁`
+- [X] T174 [P] [BDD-RED] `Given: 飯店沒有設定任何資訊頁`
 
-- [ ] T175 [P] [BDD-RED] `Given: 飯店的 "{標題}" 資訊頁內文是兩行 "{第一行}" 與 "{第二行}"`
+- [X] T175 [P] [BDD-RED] `Given: 飯店的 "{標題}" 資訊頁內文是兩行 "{第一行}" 與 "{第二行}"`
 
-- [ ] T176 [P] [BDD-RED] `Then: 首頁的住宿指南由上到下是 "{標題清單}"`
+- [X] T176 [P] [BDD-RED] `Then: 首頁的住宿指南由上到下是 "{標題清單}"`
 
-- [ ] T177 [P] [BDD-RED] `Then: 住宿指南的列上沒有圖片、營業時間或地點`
+- [X] T177 [P] [BDD-RED] `Then: 住宿指南的列上沒有圖片、營業時間或地點`
 
-- [ ] T178 [P] [BDD-RED] `Then: 首頁 "服務" 下面直接是 "{文字}"`
+- [X] T178 [P] [BDD-RED] `Then: 首頁 "服務" 下面直接是 "{文字}"`
 
-- [ ] T179 [P] [BDD-RED] `Then: 畫面是 "{標題}" 的資訊頁`
+- [X] T179 [P] [BDD-RED] `Then: 畫面是 "{標題}" 的資訊頁`
 
-- [ ] T180 [P] [BDD-RED] `Then: 資訊頁的內文是 "{內文}"`
+- [X] T180 [P] [BDD-RED] `Then: 資訊頁的內文是 "{內文}"`
 
-- [ ] T181 [P] [BDD-RED] `Then: 資訊頁的內文是兩行 "{第一行}" 與 "{第二行}"`
+- [X] T181 [P] [BDD-RED] `Then: 資訊頁的內文是兩行 "{第一行}" 與 "{第二行}"`
 
-- [ ] T182 [P] [BDD-RED] `Then: 資訊頁的內文是空白的`
+- [X] T182 [P] [BDD-RED] `Then: 資訊頁的內文是空白的`
 
 ### `specs/truth/features/guest-web/共用外框/dsl.md`
 
-- [ ] T183 [P] [BDD-RED] `Given: 這支手機的瀏覽器語言是 "{語言}"，還沒有選過介面語言`
+- [X] T183 [P] [BDD-RED] `Given: 這支手機的瀏覽器語言是 "{語言}"，還沒有選過介面語言`
 
-- [ ] T184 [P] [BDD-RED] `Given: "{房號}" 房的住客已打開首頁，語言選單開著`
+- [X] T184 [P] [BDD-RED] `Given: "{房號}" 房的住客已打開首頁，語言選單開著`
 
-- [ ] T185 [P] [BDD-RED] `Given: "{房號}" 房的另一支手機也打開了首頁，它的介面語言是 "{語言}"`
+- [X] T185 [P] [BDD-RED] `Given: "{房號}" 房的另一支手機也打開了首頁，它的介面語言是 "{語言}"`
 
-- [ ] T186 [P] [BDD-RED] `When: 住客點語言膠囊`
+- [X] T186 [P] [BDD-RED] `When: 住客點語言膠囊`
 
-- [ ] T187 [P] [BDD-RED] `When: 住客把頁面捲到底`
+- [X] T187 [P] [BDD-RED] `When: 住客把頁面捲到底`
 
-- [ ] T188 [P] [BDD-RED] `Then: 介面語言是 "{語言}"`
+- [X] T188 [P] [BDD-RED] `Then: 介面語言是 "{語言}"`
 
-- [ ] T189 [P] [BDD-RED] `Then: 語言膠囊顯示 "{短寫法}"`
+- [X] T189 [P] [BDD-RED] `Then: 語言膠囊顯示 "{短寫法}"`
 
-- [ ] T190 [P] [BDD-RED] `Then: 語言選單列出 "{選項清單}"，打勾的是 "{選項}"`
+- [X] T190 [P] [BDD-RED] `Then: 語言選單列出 "{選項清單}"，打勾的是 "{選項}"`
 
-- [ ] T191 [P] [BDD-RED] `Then: 畫面上沒有語言選單`
+- [X] T191 [P] [BDD-RED] `Then: 畫面上沒有語言選單`
 
-- [ ] T192 [P] [BDD-RED] `Then: 這支手機記住的介面語言是 "{語言}"`
+- [X] T192 [P] [BDD-RED] `Then: 這支手機記住的介面語言是 "{語言}"`
 
-- [ ] T193 [P] [BDD-RED] `Then: 另一支手機的介面語言仍是 "{語言}"`
+- [X] T193 [P] [BDD-RED] `Then: 另一支手機的介面語言仍是 "{語言}"`
 
-- [ ] T194 [P] [BDD-RED] `Then: 畫面上沒有子頁的標題列`
+- [X] T194 [P] [BDD-RED] `Then: 畫面上沒有子頁的標題列`
 
-- [ ] T195 [P] [BDD-RED] `Then: 頁面沒有橫向捲動，內容是單欄置中`
+- [X] T195 [P] [BDD-RED] `Then: 頁面沒有橫向捲動，內容是單欄置中`
 
-- [ ] T196 [P] [BDD-RED] `Then: 每一個可以點的東西至少 44 點見方`
+- [X] T196 [P] [BDD-RED] `Then: 每一個可以點的東西至少 44 點見方`
 
-- [ ] T197 [P] [BDD-RED] `Then: "{標題}" 那一列的標題換行或以「…」截斷，沒有蓋到狀態標籤`
+- [X] T197 [P] [BDD-RED] `Then: "{標題}" 那一列的標題換行或以「…」截斷，沒有蓋到狀態標籤`
 
-- [ ] T198 [P] [BDD-RED] `Then: 進度頁的標題 "{標題}" 完整換行顯示`
+- [X] T198 [P] [BDD-RED] `Then: 進度頁的標題 "{標題}" 完整換行顯示`
 
-- [ ] T199 [P] [BDD-RED] `Then: 按鈕 "{按鈕}" 仍釘在頁底`
+- [X] T199 [P] [BDD-RED] `Then: 按鈕 "{按鈕}" 仍釘在頁底`
 
-- [ ] T200 subagent review (phase quality gate)
+- [X] T200 subagent review (phase quality gate)
 
 ## Phase 4：Feature phases
 
@@ -701,8 +701,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/進入層/無法使用頁.feature`
 
-- [ ] T201 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T202 [BDD-REFACTOR] 在綠燈下把「換 session 的結果 → 進入層畫面」收成一個 reducer（`loading`／`ready`／`unavailable`，重試與重換的狀態留位），不散成多個 boolean
+- [X] T201 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T202 [BDD-REFACTOR] 在綠燈下把「換 session 的結果 → 進入層畫面」收成一個 reducer（`loading`／`ready`／`unavailable`，重試與重換的狀態留位），不散成多個 boolean
 
 ## Phase 4-02: ADD Feature File - guest-web/首頁/首頁內容與問候.feature
 
@@ -725,8 +725,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/首頁/首頁內容與問候.feature`
 
-- [ ] T203 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T204 [BDD-REFACTOR] 在綠燈下把首頁的九個區塊拆成各自的小元件，`HomePage` 只剩順序
+- [X] T203 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T204 [BDD-REFACTOR] 在綠燈下把首頁的九個區塊拆成各自的小元件，`HomePage` 只剩順序
 
 ## Phase 4-03: ADD Feature File - guest-web/首頁/即將開放的入口.feature
 
@@ -749,8 +749,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/首頁/即將開放的入口.feature`
 
-- [ ] T205 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T206 [BDD-REFACTOR] 在綠燈下把四個入口收成一張資料表（文字鍵、插圖色）由同一個元件畫，之後開放時只改表
+- [X] T205 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T206 [BDD-REFACTOR] 在綠燈下把四個入口收成一張資料表（文字鍵、插圖色）由同一個元件畫，之後開放時只改表
 
 ## Phase 4-04: ADD Feature File - guest-web/進入層/與櫃檯Web互不影響.feature
 
@@ -774,8 +774,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/進入層/與櫃檯Web互不影響.feature`
 
-- [ ] T207 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T208 [BDD-REFACTOR] 在綠燈下加一條 `Vitest` 靜態檢查：`app/web/src/guest/` 底下沒有任何檔 import `stores/session`、`lib/route-access` 或 `authHeaders`，把這條邊界鎖住
+- [X] T207 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T208 [BDD-REFACTOR] 在綠燈下加一條 `Vitest` 靜態檢查：`app/web/src/guest/` 底下沒有任何檔 import `stores/session`、`lib/route-access` 或 `authHeaders`，把這條邊界鎖住
 
 ## Phase 4-05: ADD Feature File - guest-web/備品補充/項目清單與數量.feature
 
@@ -799,8 +799,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/備品補充/項目清單與數量.feature`
 
-- [ ] T209 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T210 [BDD-REFACTOR] 在綠燈下把數量狀態收成一個 `useReducer`（`increment`／`decrement`／`reset`，上限與下限在 reducer 裡），按鈕文字由選出的項目數推得
+- [X] T209 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T210 [BDD-REFACTOR] 在綠燈下把數量狀態收成一個 `useReducer`（`increment`／`decrement`／`reset`，上限與下限在 reducer 裡），按鈕文字由選出的項目數推得
 
 ## Phase 4-06: ADD Feature File - guest-web/設備報修/報修頁與送出條件.feature
 
@@ -824,8 +824,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/設備報修/報修頁與送出條件.feature`
 
-- [ ] T211 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T212 [BDD-REFACTOR] 在綠燈下把「能不能送」收成一個純函式 `canSubmitRepair(category, note)` 放進 `repair-text.ts` 並補測試，頁面只呼叫它
+- [X] T211 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T212 [BDD-REFACTOR] 在綠燈下把「能不能送」收成一個純函式 `canSubmitRepair(category, note)` 放進 `repair-text.ts` 並補測試，頁面只呼叫它
 
 ## Phase 4-07: ADD Feature File - guest-web/住宿指南/首頁的住宿指南清單.feature
 
@@ -848,8 +848,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/住宿指南/首頁的住宿指南清單.feature`
 
-- [ ] T213 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T214 [BDD-REFACTOR] 在綠燈下把「哪些資訊頁可以列」收成 `lib/info-pages.ts` 的純函式 `listableInfoPages(pages)` 並補 `Vitest`
+- [X] T213 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T214 [BDD-REFACTOR] 在綠燈下把「哪些資訊頁可以列」收成 `lib/info-pages.ts` 的純函式 `listableInfoPages(pages)` 並補 `Vitest`
 
 ## Phase 4-08: ADD Feature File - guest-web/住宿指南/資訊頁內容.feature
 
@@ -872,8 +872,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/住宿指南/資訊頁內容.feature`
 
-- [ ] T215 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T216 [BDD-REFACTOR] 在綠燈下把內文區收成只吃一個 `GuestInfoPage` 的元件，「鍵找不到回首頁」放在頁面容器一處
+- [X] T215 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T216 [BDD-REFACTOR] 在綠燈下把內文區收成只吃一個 `GuestInfoPage` 的元件，「鍵找不到回首頁」放在頁面容器一處
 
 ## Phase 4-09: ADD Feature File - guest-web/我的需求/狀態對照表.feature
 
@@ -898,8 +898,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/我的需求/狀態對照表.feature`
 
-- [ ] T217 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T218 [BDD-REFACTOR] 在綠燈下確認清單列與進度頁沒有任何一處直接比對 `state` 字串，全部經 `stage.ts`；有就收回去
+- [X] T217 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T218 [BDD-REFACTOR] 在綠燈下確認清單列與進度頁沒有任何一處直接比對 `state` 字串，全部經 `stage.ts`；有就收回去
 
 ## Phase 4-10: ADD Feature File - guest-web/我的需求/狀態訊息框.feature
 
@@ -922,8 +922,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/我的需求/狀態訊息框.feature`
 
-- [ ] T219 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T220 [BDD-REFACTOR] 在綠燈下讓 `MessageBox` 只吃 `messageBox(task)` 回的 `{ kind, titleKey, body }`，四種色調與圖示由 `kind` 查表
+- [X] T219 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T220 [BDD-REFACTOR] 在綠燈下讓 `MessageBox` 只吃 `messageBox(task)` 回的 `{ kind, titleKey, body }`，四種色調與圖示由 `kind` 查表
 
 ## Phase 4-11: ADD Feature File - guest-web/我的需求/進度頁內容與四步副文.feature
 
@@ -946,8 +946,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/我的需求/進度頁內容與四步副文.feature`
 
-- [ ] T221 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T222 [BDD-REFACTOR] 在綠燈下把進度頁拆成「第一張卡」「訊息框」「四步」「評分卡」「底部」五個只吃一張 `GuestTask` 的元件，`RequestPage` 只負責取資料與排列
+- [X] T221 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T222 [BDD-REFACTOR] 在綠燈下把進度頁拆成「第一張卡」「訊息框」「四步」「評分卡」「底部」五個只吃一張 `GuestTask` 的元件，`RequestPage` 只負責取資料與排列
 
 ## Phase 4-12: ADD Feature File - guest-web/首頁/我的需求區.feature
 
@@ -970,8 +970,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/首頁/我的需求區.feature`
 
-- [ ] T223 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T224 [BDD-REFACTOR] 在綠燈下讓「我的需求」區的三態（不出現、進度卡、沒有進行中那一列）由一個純函式 `homeRequestsSection(tasks)` 決定並補 `Vitest`
+- [X] T223 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T224 [BDD-REFACTOR] 在綠燈下讓「我的需求」區的三態（不出現、進度卡、沒有進行中那一列）由一個純函式 `homeRequestsSection(tasks)` 決定並補 `Vitest`
 
 ## Phase 4-13: ADD Feature File - guest-web/進入層/掃碼就進首頁.feature
 
@@ -995,8 +995,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/進入層/掃碼就進首頁.feature`
 
-- [ ] T225 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T226 [BDD-REFACTOR] 在綠燈下把 T004 量到的延遲載入秒數與這個 phase 在 `phone` 下的實跑秒數並列記進 `implement-notes.md`，刪掉 T004 那支不再需要的 spike 測試
+- [X] T225 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T226 [BDD-REFACTOR] 在綠燈下把 T004 量到的延遲載入秒數與這個 phase 在 `phone` 下的實跑秒數並列記進 `implement-notes.md`，刪掉 T004 那支不再需要的 spike 測試
 
 ## Phase 4-14: ADD Feature File - guest-web/進入層/憑證失效時靜靜重換.feature
 
@@ -1021,8 +1021,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/進入層/憑證失效時靜靜重換.feature`
 
-- [ ] T227 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T228 [BDD-REFACTOR] 在綠燈下確認所有住客的查詢與寫入都經同一個 `guestSend`，401 的處理只在一處
+- [X] T227 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T228 [BDD-REFACTOR] 在綠燈下確認所有住客的查詢與寫入都經同一個 `guestSend`，401 的處理只在一處
 
 ## Phase 4-15: ADD Feature File - guest-web/進入層/重試狀態.feature
 
@@ -1046,8 +1046,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/進入層/重試狀態.feature`
 
-- [ ] T229 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T230 [BDD-REFACTOR] 在綠燈下把「原本要去的那一頁」收成一個值（目前網址）而不是各頁各自記，確認 reducer 的五個狀態之間沒有不可達的轉移
+- [X] T229 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T230 [BDD-REFACTOR] 在綠燈下把「原本要去的那一頁」收成一個值（目前網址）而不是各頁各自記，確認 reducer 的五個狀態之間沒有不可達的轉移
 
 ## Phase 4-16: ADD Feature File - guest-web/備品補充/送出鈕與成功頁.feature
 
@@ -1072,8 +1072,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/備品補充/送出鈕與成功頁.feature`
 
-- [ ] T231 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T232 [BDD-REFACTOR] 在綠燈下把「依序送、每張一把鍵、中途停」寫成 `lib/submit.ts` 不碰畫面的 `submitSequentially(items, send)` 並補 `Vitest`（全部成功、第二張失敗保留第一張），另匯出 `goToSent(navigate, qrToken, ids)` 給設備報修沿用
+- [X] T231 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T232 [BDD-REFACTOR] 在綠燈下把「依序送、每張一把鍵、中途停」寫成 `lib/submit.ts` 不碰畫面的 `submitSequentially(items, send)` 並補 `Vitest`（全部成功、第二張失敗保留第一張），另匯出 `goToSent(navigate, qrToken, ids)` 給設備報修沿用
 
 ## Phase 4-17: ADD Feature File - guest-web/我的需求/清單兩段與空狀態.feature
 
@@ -1096,8 +1096,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/我的需求/清單兩段與空狀態.feature`
 
-- [ ] T233 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T234 [BDD-REFACTOR] 在綠燈下讓兩段的標題、列與空狀態由 `splitSections` 的結果查表畫出，`RequestsPage` 裡沒有依段落寫的 if 分支
+- [X] T233 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T234 [BDD-REFACTOR] 在綠燈下讓兩段的標題、列與空狀態由 `splitSections` 的結果查表畫出，`RequestsPage` 裡沒有依段落寫的 if 分支
 
 ## Phase 4-18: ADD Feature File - guest-web/備品補充/十分鐘額度估算.feature
 
@@ -1121,8 +1121,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/備品補充/十分鐘額度估算.feature`
 
-- [ ] T235 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T236 [BDD-REFACTOR] 在綠燈下把提示框的內文選擇（還能送 k 項／一項都不能送／已送出 m 項）收成 `lib/quota.ts` 的純函式 `quotaNotice(...)` 回語系鍵與參數，4-19 與 4-21 共用
+- [X] T235 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T236 [BDD-REFACTOR] 在綠燈下把提示框的內文選擇（還能送 k 項／一項都不能送／已送出 m 項）收成 `lib/quota.ts` 的純函式 `quotaNotice(...)` 回語系鍵與參數，4-19 與 4-21 共用
 
 ## Phase 4-19: ADD Feature File - guest-web/備品補充/後端在送到一半拒絕.feature
 
@@ -1146,8 +1146,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/備品補充/後端在送到一半拒絕.feature`
 
-- [ ] T237 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T238 [BDD-REFACTOR] 在綠燈下讓送出結果收成一個 discriminated union（`all-sent`／`stopped-by-limit {sent}`／`stopped-by-network {sent}`），畫面依它查表，不留 try/catch 裡的分支
+- [X] T237 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T238 [BDD-REFACTOR] 在綠燈下讓送出結果收成一個 discriminated union（`all-sent`／`stopped-by-limit {sent}`／`stopped-by-network {sent}`），畫面依它查表，不留 try/catch 裡的分支
 
 ## Phase 4-20: ADD Feature File - guest-web/設備報修/組成文字送出.feature
 
@@ -1170,8 +1170,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/設備報修/組成文字送出.feature`
 
-- [ ] T239 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T240 [BDD-REFACTOR] 在綠燈下確認設備報修沒有自己的導頁邏輯，送出成功只呼叫 `goToSent`
+- [X] T239 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T240 [BDD-REFACTOR] 在綠燈下確認設備報修沒有自己的導頁邏輯，送出成功只呼叫 `goToSent`
 
 ## Phase 4-21: ADD Feature File - guest-web/設備報修/報修的限流.feature
 
@@ -1194,8 +1194,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/設備報修/報修的限流.feature`
 
-- [ ] T241 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T242 [BDD-REFACTOR] 在綠燈下把備品補充與設備報修的「送出前估算 → 擋下提示」收成同一個 hook `useQuotaGuard(tasks)`，兩頁都改用它
+- [X] T241 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T242 [BDD-REFACTOR] 在綠燈下把備品補充與設備報修的「送出前估算 → 擋下提示」收成同一個 hook `useQuotaGuard(tasks)`，兩頁都改用它
 
 ## Phase 4-22: ADD Feature File - guest-web/我的需求/返回回到進來的地方.feature
 
@@ -1218,8 +1218,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/我的需求/返回回到進來的地方.feature`
 
-- [ ] T243 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T244 [BDD-REFACTOR] 在綠燈下把「進來的地方 → 返回的去處」收成 `lib/back-target.ts` 的純函式 `backTargetOf(from, qrToken)` 並補 `Vitest`（三種入口與沒有紀錄）
+- [X] T243 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T244 [BDD-REFACTOR] 在綠燈下把「進來的地方 → 返回的去處」收成 `lib/back-target.ts` 的純函式 `backTargetOf(from, qrToken)` 並補 `Vitest`（三種入口與沒有紀錄）
 
 ## Phase 4-23: ADD Feature File - guest-web/取消與評分/取消需求.feature
 
@@ -1242,8 +1242,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/取消與評分/取消需求.feature`
 
-- [ ] T245 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T246 [BDD-REFACTOR] 在綠燈下把提示浮層收成外框層級的 `useToast()`（同時一則、新的蓋掉舊的），評分直接沿用
+- [X] T245 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T246 [BDD-REFACTOR] 在綠燈下把提示浮層收成外框層級的 `useToast()`（同時一則、新的蓋掉舊的），評分直接沿用
 
 ## Phase 4-24: ADD Feature File - guest-web/取消與評分/評分.feature
 
@@ -1266,8 +1266,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/取消與評分/評分.feature`
 
-- [ ] T247 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T248 [BDD-REFACTOR] 在綠燈下把取消與評分兩個寫入的「送出中鎖住 → 成功重讀 → 409 重讀 → 連不上提示」收成同一個 `useGuestMutation` 包裝，差別只剩成功與被拒時要不要提示
+- [X] T247 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T248 [BDD-REFACTOR] 在綠燈下把取消與評分兩個寫入的「送出中鎖住 → 成功重讀 → 409 重讀 → 連不上提示」收成同一個 `useGuestMutation` 包裝，差別只剩成功與被拒時要不要提示
 
 ## Phase 4-25: ADD Feature File - guest-web/即時更新/同仁一動畫面跟上.feature
 
@@ -1291,8 +1291,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/即時更新/同仁一動畫面跟上.feature`
 
-- [ ] T249 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T250 [BDD-REFACTOR] 在綠燈下把「收到哪種事件要重讀什麼」收成一張表（`task` → 需求清單；`resync` → 首頁資料與需求清單）並補 `Vitest`，串流客戶端本身不知道查詢的鍵
+- [X] T249 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T250 [BDD-REFACTOR] 在綠燈下把「收到哪種事件要重讀什麼」收成一張表（`task` → 需求清單；`resync` → 首頁資料與需求清單）並補 `Vitest`，串流客戶端本身不知道查詢的鍵
 
 ## Phase 4-26: ADD Feature File - guest-web/即時更新/連線異常時定期重讀.feature
 
@@ -1316,8 +1316,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/即時更新/連線異常時定期重讀.feature`
 
-- [ ] T251 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T252 [BDD-REFACTOR] 在綠燈下確認住客的連線狀態完全由共用的 `transition` 狀態機推得（住客只多一條「沒有 `recovered`」的規則），補 `Vitest` 驗 `degraded` → 斷線 → 重連收到 `init` 這條路
+- [X] T251 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T252 [BDD-REFACTOR] 在綠燈下確認住客的連線狀態完全由共用的 `transition` 狀態機推得（住客只多一條「沒有 `recovered`」的規則），補 `Vitest` 驗 `degraded` → 斷線 → 重連收到 `init` 這條路
 
 ## Phase 4-27: ADD Feature File - guest-web/共用外框/子頁標題列.feature
 
@@ -1341,8 +1341,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/共用外框/子頁標題列.feature`
 
-- [ ] T253 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T254 [BDD-REFACTOR] 在綠燈下讓每個子頁只宣告「頁標題鍵」與「返回去處」，標題列的畫法只在 `TitleBar` 一處
+- [X] T253 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T254 [BDD-REFACTOR] 在綠燈下讓每個子頁只宣告「頁標題鍵」與「返回去處」，標題列的畫法只在 `TitleBar` 一處
 
 ## Phase 4-28: ADD Feature File - guest-web/共用外框/介面語言.feature
 
@@ -1367,8 +1367,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/共用外框/介面語言.feature`
 
-- [ ] T255 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T256 [BDD-REFACTOR] 在綠燈下加一條 `Vitest` 檢查 `guest` 子樹裡英、日、越三份沒有任何值與繁體中文那份相同（白名單只放「Wi‑Fi」這類本來就同字的鍵），把占位譯文擋在建置外
+- [X] T255 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T256 [BDD-REFACTOR] 在綠燈下加一條 `Vitest` 檢查 `guest` 子樹裡英、日、越三份沒有任何值與繁體中文那份相同（白名單只放「Wi‑Fi」這類本來就同字的鍵），把占位譯文擋在建置外
 
 ## Phase 4-29: ADD Feature File - guest-web/共用外框/手機版面.feature
 
@@ -1392,8 +1392,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/共用外框/手機版面.feature`
 
-- [ ] T257 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T258 [BDD-REFACTOR] 在綠燈下把尺寸相關的數字（44、54、480、16）收成設計變數，不留散落的固定寬度
+- [X] T257 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T258 [BDD-REFACTOR] 在綠燈下把尺寸相關的數字（44、54、480、16）收成設計變數，不留散落的固定寬度
 
 ## Phase 4-G: ui quality gate
 
@@ -1411,7 +1411,7 @@
 - 用語以 truth 為準；畫面上不得出現內部值、錯誤碼、飯店內部用語，也不得出現住客姓名、飯店名稱、日期、同仁姓名、各步時間、取消原因。
 - 另在真的 iPhone 與 Android 各開一次 `/g/{代碼}`，看安全區域、瀏覽器工具列收放與 `dvh`（Scope Note 第 13 條），結果記在 `implement-notes.md`；看不到真機時記下「未做」與原因，不擋本題。
 
-- [ ] T259 subagent review (ui quality gate)
+- [X] T259 subagent review (ui quality gate)
 
 ## Phase 5: 全套回歸
 
@@ -1426,6 +1426,6 @@
 - 前端：`cd app/web && npm run typecheck && npx vitest run && npm run build`（含語系鍵集合一致性、譯文占位檢查、住客 chunk 仍獨立）。
 - 櫃檯 Web：`specs/truth/features/frontdesk-web/` 全部 29 份，`desktop` 一輪（`bash app/web-bdd/run-feature.sh frontdesk-web/ desktop`）；`共用外框/支援的視窗與輸入方式.feature` 另跑 `ipad`。
 
-- [ ] T260 跑住客 29 份 feature 的 `phone` 一輪，確認全綠
-- [ ] T261 跑前端的 `typecheck`、`Vitest`、建置，確認全綠且住客 chunk 獨立
-- [ ] T262 跑櫃檯 Web 29 份 feature 的 `desktop` 一輪與 1 份 `ipad`，確認本輪的共用改動與住客的預設資料沒有弄壞櫃檯
+- [X] T260 跑住客 29 份 feature 的 `phone` 一輪，確認全綠
+- [X] T261 跑前端的 `typecheck`、`Vitest`、建置，確認全綠且住客 chunk 獨立
+- [X] T262 跑櫃檯 Web 29 份 feature 的 `desktop` 一輪與 1 份 `ipad`，確認本輪的共用改動與住客的預設資料沒有弄壞櫃檯
