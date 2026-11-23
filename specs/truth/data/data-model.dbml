@@ -171,12 +171,12 @@ Table reservations_cache {
 Table tasks {
   id             uuid        [pk]
   tenant_id      bigint      [not null, ref: > tenants.id]
-  task_no        text        [note: '租戶內遞增單號，格式 T- 加 4 位數（不足補零，超過 9999 照實際位數），例如 T-1040；建單時由 task_counters 取號，與建單同交易，寫入後不改。type=repair 為 NULL：工務單的單號只有 repair_tickets.ticket_no 一個。amenity、cleaning、other 必有值。給人看與口頭溝通用，系統之間引用一律用 id']
+  task_no        text        [note: '租戶內遞增單號，格式 T- 加 4 位數（不足補零，超過 9999 照實際位數），例如 T-1040；建單時由 task_counters 取號，與建單同交易，寫入後不改。工務單開單路徑直接建成 type=repair 的單為 NULL：它的單號只有 repair_tickets.ticket_no 一個；櫃檯從待派單派給工務的單保留派單前取的 T-，type=repair 之後對外只顯示 W-（見 tasks Note 的單號段）。amenity、cleaning、other 必有值：住客的需求一律不以 type=repair 建單，所以都有 T-；V29 退回待派單的舊單補取號給人看與口頭溝通用，系統之間引用一律用 id']
   type           text        [not null, note: 'CHECK: amenity|repair|cleaning|other']
   source         text        [not null, note: 'CHECK: guest|desk|system|staff（staff 為本 plan 新增：房務開立的工務單）']
   room_id        uuid        [not null]
   reservation_id uuid        [note: 'guest 來源必填；住客查詢一律以它過濾（不按房號）']
-  dept           text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）']
+  dept           text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）。不變式：dept=engineering 的任務一律 type=repair，且恰好有一列 repair_tickets（task_id 相同；V29 之前就已結束的歷史任務除外）；會讓任務成為工務部門的只有建單（dept 直接是 engineering）與從待派單派給工務兩個動作，兩者都在同一交易開立工務單。住客的需求不會以 engineering 或 type=repair 建單（命中的部門是工務、或命中的類型是修繕，一律進 triage、type=other）']
   state          text        [not null, note: 'CHECK 十值: triage|pool|accepted|doing|done|inspected|closed|deferred|interrupted|cancelled。closed（已結案）只有 type=repair 會出現：主管驗收通過，或完修結果為 no_action_needed 時完成當下直接進入；它與 cleaning 的 inspected 對稱，是工務單唯一的完成終點。type=repair 的 done 是「已完修、等主管驗收」，還沒結束']
   event_seq      int         [not null, default: 0, note: '事件取號器：守衛 UPDATE 同句 +1 RETURNING']
   assignee_id    uuid        [note: '池中為空']
@@ -273,9 +273,12 @@ Table tasks {
     日界線沿用後端注入的 Clock 時區（資料層目前沒有每租戶的時區設定，與 todayTasks 的「今天」同一把尺）。
   櫃檯處理待派單（state=triage、dept=frontdesk）的三種轉移（由任務引擎守衛，非法回 409；操作者一律記實際登入的那一位）：
     派單 triage→pool：dept 改成 housekeeping 或 engineering，task_events.type=triaged，payload 帶 dept 與 via（button｜drag，按鈕派或拖曳派）。
+      派給 engineering 時守衛 UPDATE 同一句把 type 改成 repair，payload 另帶 former_type 與 former_urgent（派單前的 type 與 urgent），並在同一交易開一列 repair_tickets（欄位規則見 repair_tickets Note 的「櫃檯轉單」），開單同時把 tasks.urgent 寫成急件判定。
+      tasks.task_no（T-）保留不動，但 type=repair 之後對外顯示的單號改為 repair_tickets.ticket_no（W-），復原後恢復顯示 T-。
       按鈕與拖曳是同一種狀態變化，只差 via；不另設事件值，否則重放、事件串流、統計每個讀 triaged 的地方都要多認一個值。
-    派出後復原 pool→triage：dept 回到 frontdesk，reminder_stage 與 pool_source 清成 NULL，其餘欄位不動（派單沒有改過別的欄位），
-      這張單就回到派單前的樣子。task_events.type=triage_undone，payload 帶 dept（被收回的部門）。state 的值仍是原本十個，沒有新增。
+    派出後復原 pool→triage：dept 回到 frontdesk，reminder_stage 與 pool_source 清成 NULL；被復原的派單是派給 engineering 時，
+      type 與 urgent 回到該筆 triaged 的 payload.former_type 與 former_urgent，並刪掉那次派單開出的 repair_tickets 列（守衛保證它還沒有照片、貢獻者或追蹤單指向它），撤掉的單號不再使用；
+      其餘欄位不動，這張單就回到派單前的樣子。task_events.type=triage_undone，payload 帶 dept（被收回的部門）。state 的值仍是原本十個，沒有新增。
       守衛條件＝state='pool' 且 assignee_id IS NULL 且 event_seq 等於這張單最新一筆 triaged 事件的 seq（派出之後這張單沒有再發生任何事件）。
       最新一筆 triaged 的 seq 由守衛 UPDATE 在同一句裡以子查詢取得（task_events 中同 tenant_id、task_id、type=triaged 的最大 seq，走唯一索引 (tenant_id, task_id, seq)），
       不能先查出來再帶進 UPDATE：兩步之間別人認領或住客收回，就會改到不該改的單。
@@ -283,11 +286,15 @@ Table tasks {
       只比對 state='pool' 不夠：請假退回、班末退回、驗收不通過回到待認領的單也是 pool，不能被拉回待派單。
       未接提醒排程只改 reminder_stage、不動 event_seq，所以派出後已經被提醒過的單仍可復原，復原時一併清掉提醒階段；
       之後重新派出時，未接提醒照既有規則重新掃描，起算點不因復原而不同。派出時已寫入的 outbox 與 notifications 不回收。守衛條件不含時間，5 秒的時限不在資料層。
-      重放：triaged 把 state 設為 pool、dept 設為 payload.dept；triage_undone 把 state 設回 triage、dept 設回 frontdesk、reminder_stage 與 pool_source 清空，
+      重放：triaged 把 state 設為 pool、dept 設為 payload.dept（engineering 時 type 設為 repair）；triage_undone 把 state 設回 triage、dept 設回 frontdesk、reminder_stage 與 pool_source 清空（被收回的 triaged 帶 former_type 時 type 設回它；triage_undone 自己的 payload 帶 type 或 task_no 時照設），
       結果與線上的任務列一致。事件只進不改，復原不刪除那筆 triaged。
+    V29 退回待派單：V29 把住客經分類規則直接進工務、仍在 pool 的舊單退回待派單時，每張補一筆 triage_undone（actor_role=system、actor_id 為空，
+      payload 帶 dept=engineering、type=other、task_no 與 reason=guest_not_direct_backfill），event_seq 同句推進，並寫一筆對應的 outbox（kind=task_event，
+      aggregate_key、idempotency_key 與 envelope 的寫法同應用程式寫的事件），重放、Kafka 與事件串流因此都看得到這次轉移。這是 triage_undone 唯一不接在 triaged 之後的情況；
+      櫃檯歷程不為它組句子，今天的派單張數只數沒被收回的 triaged，不受影響。
     當場回答 triage→done：同句寫 answer、done_at、ended_at，note 不動；task_events.type=answered，payload 帶 answer。dept 維持 frontdesk，
       所以這張單不會出現在房務或工務的完成數裡。當場回答之後沒有復原。
-  單號：type=repair 的單號是 repair_tickets.ticket_no（W-），其餘類型是 tasks.task_no（T-）；一張單只有一個單號，兩個來源不重疊。
+  單號：type=repair 的單號是 repair_tickets.ticket_no（W-），其餘類型是 tasks.task_no（T-）；對外一張單只顯示一個單號。櫃檯從待派單派給工務的單兩個欄位都有值（T- 是派單前取的），對外依 type 只顯示 W-。
     不讓工務單也領 T- 單號：同一張工務單會有兩個號碼，手機 App、推播與主管待辦一律用 W- 稱呼它。也不借用 repair_ticket_counters：W- 的序號只屬於工務單。
     不拿 id 的片段當單號：UUID 不是流水號，電話裡唸不出來。task_no 隨 created 事件的建立快照一起記下，重放時原號還原，不重新取號。
   結束時間與櫃檯看板的範圍（衍生，不另存旗標）：看板列出 ended_at IS NULL 的單（不限日期）加上 ended_at 落在今天的單，走索引 (tenant_id, ended_at)。
@@ -306,10 +313,10 @@ Table task_events {
   tenant_id  bigint      [not null, ref: > tenants.id]
   task_id    uuid        [not null]
   seq        int         [not null, note: '這個任務的第幾步；取自 tasks.event_seq 的 RETURNING']
-  type       text        [not null, note: '25 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled|resumed|inspection_waived|repair_photos_appended|urgent_downgraded|repair_verified|repair_verification_failed|triage_undone。triage_undone＝櫃檯在派出後復原（pool→triage），只接在 triaged 之後；urgent_downgraded＝主管將工務單急件降級為一般件；repair_verified＝主管驗收通過（done→closed）；repair_verification_failed＝主管驗收不通過（done→accepted 或 pool）；後三者只適用 type=repair。資料庫不對本欄設 CHECK（加值不改表），值集以這裡為準。repair_approved、repair_rejected、repair_resubmitted 已停用，不再寫入，歷史列的讀法見表 Note']
+  type       text        [not null, note: '25 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled|resumed|inspection_waived|repair_photos_appended|urgent_downgraded|repair_verified|repair_verification_failed|triage_undone。triage_undone＝櫃檯在派出後復原（pool→triage），只接在 triaged 之後（唯一例外是 V29 由 system 寫的退回待派單，見 tasks Note）；urgent_downgraded＝主管將工務單急件降級為一般件；repair_verified＝主管驗收通過（done→closed）；repair_verification_failed＝主管驗收不通過（done→accepted 或 pool）；後三者只適用 type=repair。資料庫不對本欄設 CHECK（加值不改表），值集以這裡為準。repair_approved、repair_rejected、repair_resubmitted 已停用，不再寫入，歷史列的讀法見表 Note']
   actor_role text        [not null, note: 'CHECK: guest|frontdesk|housekeeping|engineering|manager|duty_manager|system。記操作者當下的 staff_accounts.role；值班主管在櫃檯畫面派單、復原、當場回答時記 duty_manager，不借用 manager']
   actor_id   uuid        [note: '住客與系統為空']
-  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照，含 task_no）；triaged 帶 dept（派去的部門 housekeeping｜engineering）與 via（button｜drag；沒有這個鍵的舊列視為 button）；triage_undone 帶 dept（被收回的部門）；answered 帶 answer（回覆全文，即 tasks.answer）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）；repair_verification_failed 帶 reason（不通過原因，即 repair_tickets.last_verify_failed_reason）與 destination（assignee＝回原處理人名下｜pool＝回工務待認領），另帶 assigneeId（原處理人，兩種去處都帶，pool 時是重放還原「推播給誰、退的是誰的單」的唯一來源）；repair_verified 不帶 payload；type=repair 的 completed 必帶 resolutionType（fixed｜temporary｜cannot_fix｜no_action_needed，請求省略時寫 fixed，即 repair_tickets.resolution_type），no_action_needed 時這一筆 completed 就是結案事件（state 直接成為 closed），不另寫 repair_verified，temporary 時另帶 originTicketTaskId（新建追蹤單的 task_id，即 repair_tickets.origin_ticket_task_id 的對方）；打掃類 completed 帶 skipped_items（完成時被自動標為跳過的 SOP 項目標籤）']
+  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照，含 task_no）；triaged 帶 dept（派去的部門 housekeeping｜engineering）與 via（button｜drag；沒有這個鍵的舊列視為 button），dept=engineering 時另帶 former_type 與 former_urgent（派單前的 type 與 urgent，復原時還原）；triage_undone 帶 dept（被收回的部門），V29 由 system 寫的那筆另帶 type、task_no 與 reason=guest_not_direct_backfill；answered 帶 answer（回覆全文，即 tasks.answer）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）；repair_verification_failed 帶 reason（不通過原因，即 repair_tickets.last_verify_failed_reason）與 destination（assignee＝回原處理人名下｜pool＝回工務待認領），另帶 assigneeId（原處理人，兩種去處都帶，pool 時是重放還原「推播給誰、退的是誰的單」的唯一來源）；repair_verified 不帶 payload；type=repair 的 completed 必帶 resolutionType（fixed｜temporary｜cannot_fix｜no_action_needed，請求省略時寫 fixed，即 repair_tickets.resolution_type），no_action_needed 時這一筆 completed 就是結案事件（state 直接成為 closed），不另寫 repair_verified，temporary 時另帶 originTicketTaskId（新建追蹤單的 task_id，即 repair_tickets.origin_ticket_task_id 的對方）；打掃類 completed 帶 skipped_items（完成時被自動標為跳過的 SOP 項目標籤）']
   created_at timestamptz [not null]
   Indexes {
     (tenant_id, task_id, seq) [unique]
@@ -622,13 +629,13 @@ Ref: tenant_config.(tenant_id, updated_by) > staff_accounts.(tenant_id, id)
 // ───────── 本 plan（001-staff-app-increment）新增 ─────────
 
 Table repair_tickets {
-  task_id         uuid        [pk, note: '= tasks.id（type=repair、dept=engineering、source=staff）。工務單是修繕任務的延伸資料，狀態與負責人一律看 tasks']
+  task_id         uuid        [pk, note: '= tasks.id（type=repair、dept=engineering；source 為 staff（房務報修、工務自開）、desk（櫃檯代開）、guest（櫃檯從待派單轉來的住客需求）或 system（追蹤單）。工務單是修繕任務的延伸資料，狀態與負責人一律看 tasks。與 tasks 一對一：dept=engineering 的任務恰好一列，見 tasks.dept']
   tenant_id       bigint      [not null, ref: > tenants.id]
   ticket_no       text        [not null, note: '租戶內遞增單號，格式 W- 加 4 位數，例如 W-0410；由 repair_ticket_counters 取號']
   room_id         uuid        [not null, note: '由原任務帶入；冗餘自 tasks.room_id，供重複單查詢使用']
   category        text        [not null, note: 'CHECK: air_conditioning|plumbing_electrical|furniture_equipment|door_lock|other（冷氣、水電、家具／設備、門鎖、其他）']
   description     text        [note: '報修說明，選填。PII 去識別化範圍']
-  reporter_id     uuid        [not null, note: '報修人；撤回與補照片的授權依據']
+  reporter_id     uuid        [not null, note: '報修人；撤回與補照片的授權依據。櫃檯轉單時是按派單的那一位（櫃檯、主管或值班主管）']
   source_task_id  uuid        [note: '開單時所在的原任務']
   resolution_note text        [note: '工務處理說明，完修時寫入，選填（no_action_needed 也一樣）。驗收不通過退回重修時清空，再完修時寫入這一次的說明']
   resolution_type text        [note: 'nullable。CHECK: fixed|temporary|cannot_fix|no_action_needed（已修好、暫時處理、無法修復、不需處理）。每次完修守衛成功後由 RepairService.resolveOnComplete 在同一交易寫入，請求省略時寫 fixed；驗收不通過退回重修時清空，再完修時寫入這一次的結果。所以 state 為 done 或 closed 時必有值（這個欄位出現前就完修的舊單例外，可能為 NULL），其他狀態為 NULL。no_action_needed 不要求完修照片、不建追蹤單、不改房況，完成當下 tasks 直接 closed，不進待驗收。對應 contracts RepairTicket.resolutionType、CompleteTaskRequest.resolutionType 與待驗收清單每列的完修結果']
@@ -651,8 +658,19 @@ Table repair_tickets {
   工務單（FR-011–021）。狀態與負責人一律看 tasks（轉移全集見 tasks Note）：pool→accepted→doing→done→closed；doing→closed（no_action_needed）；
   done→accepted 或 pool（驗收不通過）；pool→cancelled（staff_withdrew）。
   送出時與原任務的中斷、照片綁定在同一交易：所有照片 status=uploaded 才能建立，否則整筆不落地，原任務也不變（FR-014）。
-  急件改由系統判定（使用者裁決 C）：開單交易同時寫入 is_urgent／urgent_rule 與 tasks.urgent；主管降級（downgradeRepairTicketUrgency）只改 is_urgent 與 urgent_downgrade_reason，urgent_rule 保留原判定理由不變。
+  急件改由系統判定（使用者裁決 C）：開單交易同時寫入 is_urgent／urgent_rule 與 tasks.urgent；急件推播的防重複鍵以工務單為單位（repair_urgent:{ticket_no}:{收件人}），櫃檯派給工務、復原、再派開出的新工務單是另一張，判定為急件時照常推播；主管降級（downgradeRepairTicketUrgency）只改 is_urgent 與 urgent_downgrade_reason，urgent_rule 保留原判定理由不變。
   開單去向：房務報修、工務自開、櫃檯交辦、定期保養一律直接進工務待認領（pool），一般件與急件都一樣，沒有主管審核；直開且帶 assigneeId 時直接 accepted。
+  櫃檯轉單：櫃檯從待派單把住客需求派給工務時，同一張任務在派單交易內成為工務單（不另建任務）：ticket_no 取 repair_ticket_counters 下一號、category=other、
+    description 與 source_task_id 為 NULL、reporter_id 為操作者、不要求照片，is_urgent／urgent_rule 依與其他開單路徑相同的急件規則判定；之後的完修與驗收規則與其他工務單相同。
+    已有 repair_tickets 列的任務再走到開單步驟時原樣沿用，不取號、不改欄位。
+  舊資料修補（V29，一次性；舊版本先停，Flyway 在新版啟動時執行）：對象是 dept=engineering、尚未結束（state 不是 done、inspected、closed、cancelled）、沒有本表列的任務。
+    只認兩種，其餘任何一張都讓遷移以例外停下並帶筆數，不默默搬動：
+    櫃檯派來的（最新一筆 triaged 的 payload.dept=engineering，且它的 actor_id 有值）：type 改成 repair，依櫃檯轉單規則補一列，created_at 取那筆 triaged 的時間、
+      報修人取它的 actor_id、非急件；單號依那筆 triaged 的時間、再依 task id 接續流水號，沒有 repair_ticket_counters 列的飯店先建列，最後推到用掉的最後一號。
+      不另寫事件：既有那筆 triaged 重放時本來就把 type 設為 repair。
+    住客經分類規則直接進來的（source=guest、沒有任何 triaged、state=pool）：退回 triage（dept=frontdesk、type=other，pool_source、reminder_stage 清成 NULL，priority_notify 設回 false）；
+      task_no 是 NULL 的（規則類型是修繕時建單沒有取號）依 created_at、再依 id 從 task_counters 接續取 T- 號，沒有列的飯店先建列；每張補一筆 triage_undone 與對應 outbox（見 tasks Note）。
+    已結束的歷史任務不動。遷移末段自我檢查：dept=engineering、尚未結束、沒有本表列的任務為 0，否則以例外停下。
   急件與一般件的差別只在急件推播與待認領排序。
   完修四選一（CompleteTaskRequest.resolutionType）：結果一律落地到本表 resolution_type（與 resolution_note、verified_by／verified_at、last_verify_failed_* 同一種「工務單延伸狀態放本表」的風格；
   清單與詳情直接讀欄位，不逐單翻 task_events 的 JSON），同時 task_events.completed 的 payload 也必帶同一值，欄位是投影、事件是真相，兩者由同一交易寫入。

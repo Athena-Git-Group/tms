@@ -70,6 +70,9 @@ listGuestRequestsAndcreateGuestRequest:
       支援兩種需求：
       勾選單：帶 itemId，依 tenant_config.request_menu 預先對應的部門直接進 pool，source=guest。
       自由文字：帶 text，可帶 lang；先過規則引擎，命中單一部門就進 pool，否則進 triage。
+      住客不直通工務：勾選項目或自由文字命中的部門是 engineering、或命中的類型是 repair 時，一律改進 triage
+      （dept=frontdesk、type=other，照常取 T- 單號，與沒有命中規則的文字相同；命中的規則照樣記在 note 供追查），
+      由櫃檯以 deskAssignTask 派給工務，派單時才開工務單。住客端看到的是「已送出」、部門「櫃檯」。
       LLM 只做翻譯與建議，不直接決定歸屬（基線 FR-003）。
       進 pool 時推播該部門員工（PushPayload.event=pool_new_request），並標示是否與收件人同樓層（FR-047）。
       同一房 10 分鐘內第 4 筆回 429（基線 E-01）。

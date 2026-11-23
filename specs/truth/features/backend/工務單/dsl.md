@@ -2,11 +2,11 @@
 
 這個模組的專屬句型。跨模組共用句型見 [`../dsl.md`](../dsl.md)。
 
-工務單在權威狀態裡是工務部門的修繕任務：dept `engineering`、type `repair`、source `staff`。工務單狀態用語見共用 DSL 的對照表。
+工務單在權威狀態裡是工務部門的修繕任務：dept `engineering`、type `repair`，source 依開單路徑是 `staff`（房務報修、工務自開）、`desk`（櫃檯代開）、`guest`（櫃檯從待派單轉來的住客需求）或 `system`（追蹤單）。部門是工務的任務一律恰好有一列 `repair_tickets`：開單與從待派單派給工務是讓任務成為工務部門的唯二動作，兩者都在同一交易開立工務單。工務單狀態用語見共用 DSL 的對照表。
 
 本模組也承接工務視角（工務人員操作工務單）的以下部分：認領、暫停（沿用介面根共用 DSL 與 `任務執行` 模組既有的中斷／恢復機制，不另建句型）、完修四種處理結果（已修好、暫時處理、無法修復、不需處理）、工務主動開單、首頁統計。認領撞單直接沿用介面根共用 DSL `"{員工}" 認領 "{任務}"` 與 `這次操作被拒絕，提示 "{提示}"`，不另建句型。
 
-**本輪裁決（櫃檯直通工務）**：櫃檯交辦介面在交辦時選目標部門（房務／工務）；選房務時維持現狀，沿用既有「櫃檯轉單」來源值（目前只是房務待認領 Given 背景資料，見 `../dsl.md` 的 `房務待認領有以下任務：` 與 `../待認領/待認領排序與篩選.feature`，非本模組範圍）。選工務時直接開立工務單進工務待認領，不經過任何房務任務，來源標「櫃檯」（`tasks.source`=desk）；急件沿用既有系統判定規則，不由櫃檯人員填寫。住客掃碼不直通工務：住客掃碼仍只進房務，房務到場後需要工務時才用既有「中斷任務並開立工務單」流程轉工務；工務待認領「住客」來源篩選不建 truth（見本模組 When 句型「只看…的工務待認領」說明）。
+**本輪裁決（櫃檯直通工務）**：櫃檯交辦介面在交辦時選目標部門（房務／工務）；選房務時維持現狀，沿用既有「櫃檯轉單」來源值（目前只是房務待認領 Given 背景資料，見 `../dsl.md` 的 `房務待認領有以下任務：` 與 `../待認領/待認領排序與篩選.feature`，非本模組範圍）。選工務時直接開立工務單進工務待認領，不經過任何房務任務，來源標「櫃檯」（`tasks.source`=desk）；急件沿用既有系統判定規則，不由櫃檯人員填寫。住客掃碼不直通工務：住客的需求不會直接進工務待認領（命中工務的分類規則或服務項目一律停在待派單），要由櫃檯從待派單派給工務，或由房務到場後用既有「中斷任務並開立工務單」流程轉工務；櫃檯派給工務的那一刻同一張單成為工務單，來源同樣標「櫃檯」；工務待認領「住客」來源篩選不建 truth（見本模組 When 句型「只看…的工務待認領」說明）。
 
 **報修與驗收**：工務單沒有主管審核。房務報修、工務自行開單、櫃檯交辦開單與定期保養，不分一般件或急件，送出後直接進工務待認領；開單時指定處理人的直接進該處理人名下。完修結果四選一：已修好、暫時處理、無法修復這三種每次完修都要在這一次請求附至少 1 張完修照片，完修後單轉為已完修（`done`）等主管驗收；不需處理不要求照片，完成當下直接轉為已結案（`closed`），不進待驗收、不建追蹤單、不改房況。四種完修結果都推播報修人，連結的原任務停住原因都改為「工務已修好：<類別>」；退回重修後再完修也一樣推播報修人。驗收只要一次，房務主管與工務主管都能驗收，含工務主管驗收自己完修的單，其他角色回 403 `forbidden`；`verifyRepairTicket` 一支端點帶 `VerifyRepairTicketRequest{result, reason}`，回應 `RepairVerificationOutcome`。只有已完修的單能被驗收，兩位主管同時送出時不論通過或不通過，只有先到的成立，後到的回 409 `state_conflict`。通過：`done→closed`，寫驗收人與驗收時間，寫 `repair_verified` 事件，不推播、不改房況。不通過：原因去掉頭尾空白後為空回 422 `verification_reason_required`；成立時寫最近一次不通過的原因、判定人與時間，清空完修時間、完修結果與處理說明，寫一筆 `repair_verification_failed` 事件，依換人判定退回：原處理人在班時回到他名下待開始（`destination`=assignee）並推播他（`PushPayload.event`=repair_verification_failed），請假或現在落在飯店所有班別時段之外時回到工務待認領（`destination`=pool），不推播原處理人、也不推播工務池。主管在 App 的操作見 `../../ios-app/工務單/主管視角.feature`。
 
@@ -15,11 +15,10 @@
 | DSL 句型 | Gherkin 參數 | Data Table 參數 | 預設參數 | StepDef 實作語意 |
 | --- | --- | --- | --- | --- |
 | `"{工務}" 手上有 {張數} 張維修中的工務單，今天已完修 {已完修張數} 張，其中 {急件數} 張是急件` | `工務`：字串。<br>`張數`：整數。<br>`已完修張數`：整數。<br>`急件數`：整數。 | 不支援 | 無 | `怎麼做`：透過後端測試資料建立符合統計數字的工務單（doing 指派給該工務；今天 done 的；is_urgent 的）。`權威狀態落地`：`repair_tickets` 與 `tasks` 符合各項統計。 |
-| `本飯店下一張工務單號為 "{單號}"` | `單號`：字串；`W-` 加 4 位數字。 | 不支援 | 無 | `怎麼做`：把租戶的工務單序號設定成下一張會是該單號。`權威狀態落地`：`repair_ticket_counters.last_no` 等於單號減 1。 |
-| `"{房號}" 今天是 VIP 房，住客 "{時刻}" 入住` | `房號`：字串。<br>`時刻`：字串 `HH:mm`。 | 不支援 | 無 | `怎麼做`：在訂房快取寫入該房今日入住、`vip=true` 的訂單。`權威狀態落地`：`reservations_cache` 已有該訂單。 |
 | `"{員工}" 已對 "{房號}" 選擇工務單類別 "{類別}" 並看到 "{單號}" 的重複提示` | `員工`：字串。<br>`房號`：字串。<br>`類別`：字串。<br>`單號`：字串；既有工務單號。 | 不支援 | 無 | `怎麼做`：以該員工身分呼叫 `precheckRepairTicket`（`POST /repair-tickets/precheck`），並確認 `duplicate.ticketNo` 是該單號。`權威狀態落地`：`repair_ticket_contributors` 已有該員工與這張單的資料列。 |
 | `"{員工}" 為 "{房號}" 的工務單準備了 {張數} 張照片，其中 {失敗數} 張上傳失敗` | `員工`：字串。<br>`房號`：字串。<br>`張數`：整數。<br>`失敗數`：整數。 | 不支援 | 無 | `怎麼做`：以該員工身分對每張照片呼叫 `createRepairPhoto`（`POST /repair-photos`，purpose=report）取得 id；成功的再呼叫 `uploadRepairPhotoContent`（`PUT /repair-photos/{photoId}/content`），失敗的不上傳內容，模擬上傳中斷。`權威狀態落地`：成功的 `repair_photos.status`=uploaded，失敗的仍是 pending。`回寫`：全部照片 id。 |
 | `"{員工}" 已重新上傳失敗的那張照片並成功` | `員工`：字串。 | 不支援 | 無 | `怎麼做`：用原本的照片 id 呼叫 `uploadRepairPhotoContent`。`權威狀態落地`：所有照片的 `repair_photos.status` 都是 uploaded。 |
+| `"{工務}" 已認領並開始處理 "{單號}"` | `工務`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以該工務身分對該工務單的任務依序呼叫 `tasksClaim`、`tasksStart` 並確認成功。`權威狀態落地`：工務單為 `doing`，負責人是該工務，有 `claimed` 與 `started` 各一筆。 |
 | `"{單號}" 已由 "{工務}" 完修` | `單號`：字串。<br>`工務`：字串。 | 不支援 | 無 | `怎麼做`：以工務身分建立並上傳 1 張 purpose=completion 的照片，再呼叫 `tasksComplete` 帶 `photoIds`。`權威狀態落地`：工務單為 done，連結原任務的停住原因已改為「工務已修好：<類別>」。 |
 | `"{單號}" 已由 "{工務}" 以不需處理結案` | `單號`：字串。<br>`工務`：字串；處理人。 | 不支援 | 無 | `怎麼做`：以工務身分呼叫 `tasksComplete`，body `CompleteTaskRequest{resolutionType: no_action_needed}`，不帶照片。`權威狀態落地`：工務單為 closed、`resolution_type`=no_action_needed、`verified_by` 為空；連結原任務的停住原因已改為「工務已修好：<類別>」，狀態仍為已中斷。 |
 | `"{工務}" 今天的班已經結束` | `工務`：字串；原處理人。 | 不支援 | 無 | `怎麼做`：把測試 `Clock` 設到今天、落在飯店所有班別時段（`tenant_config.shift_times`）之外的時刻，例如所有班別都已結束之後；之後的時間都以此為準。工務人員沒有排房計畫班次，換人判定對工務只看請假與飯店班別時段，所以「班已經結束」用這個時刻表達。`權威狀態落地`：無資料變動；該工務人員不在請假中。 |
@@ -49,7 +48,7 @@
 | `"{員工}" 為 "{房號}" 交辦工務部門，開立以下工務單：` | `員工`：字串；櫃檯員工。<br>`房號`：字串；客房房號或「公共區域」。 | 支援：`類別`（必填，字串）、`說明`（選填，字串）、`照片張數`（必填，整數）、`處理人`（選填，字串；留空則進工務待認領） | 無 | `怎麼做`：以櫃檯身分逐張呼叫 `createRepairPhoto`／`uploadRepairPhotoContent`，再呼叫 `createRepairTicket`，不帶 `sourceTaskId`；請求不帶急件欄位，急件沿用既有 `UrgentJudgement` 系統判定，不由櫃檯人員填寫。待 `/api-plan`：延續上一列同一個欄位缺口（`sourceTaskId` 需改選填並新增 `roomId`／`isPublicArea`／`assigneeId`），另需讓後端依呼叫者部門（櫃檯）寫入 `tasks.source`=desk，與工務自行開單（`staff`）區分。`權威狀態落地`：建立 dept `engineering`、type `repair`、source `desk` 的任務；有指定處理人時直接 accepted 給該人，否則 pool，`listDeptPool` 回應的 `PoolItem.source`=desk_forward（顯示標籤「櫃檯」）。選房務部門時走既有「櫃檯轉單」管道，不呼叫這個句型，非本模組範圍。`回寫`：回應與新單號。 |
 | `"{工務}" 把 "{單號}" 放回工務待認領` | `工務`：字串。<br>`單號`：字串。 | 不支援 | 無 | `怎麼做`：以負責人身分把 accepted／doing 的工務單自行放回 pool。待 `/api-plan`：目前沒有「負責人自行放回待認領」的端點（既有 `tasksRequeue` 是主管在班末附交代退池，主體與語意都不同）。`權威狀態落地`：假設會新增對應端點；成功時單轉為 pool，assignee 清空；只有公共區域（無房號）的工務單允許這個操作，客房工務單不行。`回寫`：回應。 |
 | `"{工務}" 查看工務視角今日進度` | `工務`：字串。 | 不支援 | 無 | `怎麼做`：以該工務身分查詢今日進度統計。待 `/api-plan` 補對應端點或擴充 `getMyToday`。`回寫`：手上張數、今天已完修、急件數。 |
-| `"{工務}" 只看 "{分流}" 的工務待認領` | `工務`：字串。<br>`分流`：字串；全部、急件、房務報修、櫃檯。本輪覆蓋這四種；「住客」分流磚是過時敘述，不建 truth——住客掃碼不直通工務（維持現狀，只進房務），沒有任何來源會以住客身分建立工務單，不存在可篩選的資料。 | 不支援 | 無 | `怎麼做`：以該工務身分呼叫 `listDeptPool`，帶對應篩選（急件＝urgent=true；房務報修＝source=staff；櫃檯＝source=desk；全部＝不篩選）。待 `/api-plan`：目前 `listDeptPool` 的篩選參數是房務的 `category`（備品／打掃／其他），沒有急件／來源這個篩選維度，假設會另開查詢參數。`回寫`：篩選後的清單。 |
+| `"{工務}" 只看 "{分流}" 的工務待認領` | `工務`：字串。<br>`分流`：字串；全部、急件、房務報修、櫃檯。本輪覆蓋這四種；「住客」分流磚是過時敘述，不建 truth——住客掃碼不直通工務（維持現狀，只進房務），沒有任何來源會以住客身分建立工務單，不存在可篩選的資料。 | 不支援 | 無 | `怎麼做`：以該工務身分呼叫 `listDeptPool`，帶對應篩選（急件＝urgent=true；房務報修＝source=staff_report；櫃檯＝source=desk_forward，含櫃檯代開與櫃檯從待派單轉來的單；全部＝不篩選）。待 `/api-plan`：目前 `listDeptPool` 的篩選參數是房務的 `category`（備品／打掃／其他），沒有急件／來源這個篩選維度，假設會另開查詢參數。`回寫`：篩選後的清單。 |
 
 ## Then 句型
 
@@ -57,9 +56,11 @@
 | --- | --- | --- | --- | --- |
 | `系統建立工務單 "{單號}"，房號 "{房號}"、報修人 "{員工}"` | `單號`：字串。<br>`房號`：字串。<br>`員工`：字串。 | 不支援 | 無 | `必查`：`呈現結果`：`RepairTicket.ticketNo` 是該單號。`權威狀態`：`repair_tickets` 有一筆，ticket_no、room_id、reporter_id、source_task_id 相符；對應的 `tasks` 是 source `staff`、dept `engineering`、type `repair`。 |
 | `系統沒有建立工務單` | 無 | 不支援 | 無 | `必查`：`不該發生`：本案例執行前後，`repair_tickets` 與 type=repair 的 `tasks` 筆數不變。 |
-| `"{單號}" 的來源為 "{來源}"` | `單號`：字串。<br>`來源`：字串；房務報修、櫃檯。 | 不支援 | 無 | `必查`：`權威狀態`：該單的 `tasks.source` 對照（房務報修＝staff、櫃檯＝desk）。`跨視角`：工務員工呼叫 `listDeptPool` 時，該單的 `PoolItem.source` 對照同一中文標籤（staff＝staff_report「房務報修」、desk＝desk_forward「櫃檯」）。 |
-| `工務待認領包含 "{單號}"` | `單號`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：該單是 pool。`跨視角`：工務員工呼叫 `listDeptPool`（`GET /pool`）時看得到這張單；它的 `task_events` 沒有 triaged。 |
+| `"{單號}" 的來源為 "{來源}"` | `單號`：字串。<br>`來源`：字串；房務報修、櫃檯。 | 不支援 | 無 | `必查`：`權威狀態`：該單的 `tasks.source` 對照（房務報修＝staff；櫃檯＝desk 或 guest，guest 是櫃檯從待派單轉來的住客需求）。`跨視角`：工務員工呼叫 `listDeptPool` 時，該單的 `PoolItem.source` 對照同一中文標籤（staff＝staff_report「房務報修」、desk 與 guest＝desk_forward「櫃檯」）。 |
+| `工務待認領包含 "{單號}"` | `單號`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：該單是 pool。`跨視角`：工務員工呼叫 `listDeptPool`（`GET /pool`）時看得到這張單，`PoolItem.ticketNo` 等於單號；除了櫃檯從待派單轉來的單（正好一筆 `dept`=engineering 的 triaged），它的 `task_events` 沒有 triaged。 |
 | `工務待認領不包含 "{單號}"` | `單號`：字串。 | 不支援 | 無 | `必查`：`跨視角`：工務員工呼叫 `listDeptPool` 時看不到這張單。 |
+| `工務待認領中 "{單號}" 的類別為 "{類別}"` | `單號`：字串。<br>`類別`：字串；冷氣、水電、家具／設備、門鎖、其他。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets.category` 對照類別（冷氣＝air_conditioning、水電＝plumbing_electrical、家具／設備＝furniture_equipment、門鎖＝door_lock、其他＝other）。`跨視角`：工務員工呼叫 `listDeptPool` 時，該單的 `PoolItem.repairCategory` 等於同一個值，`category` 仍是 `repair`。 |
+| `"{房號}" 的住客讀到這張需求的狀態為 "{狀態}"` | `房號`：字串；住客所在的房號，指那位住客自己送出的需求。<br>`狀態`：字串；見共用 DSL 狀態用語對照。 | 不支援 | 無 | `必查`：`跨視角`：以該房的住客 session 呼叫 `listGuestRequests`（`GET /guest-requests`），這張需求的 `state` 對照狀態（已結案＝`closed`），`id` 與工務單的任務 id 相同（住客與工務看的是同一張單）。 |
 | `工務待認領順序為 {單號清單}` | `單號清單`：字串；以 `、` 分隔的單號。 | 不支援 | 無 | `必查`：`跨視角`：工務員工呼叫 `listDeptPool`，`items[].ticketNo` 的順序剛好等於清單。 |
 | `工務待認領中 "{單號}" 帶驗收退回原因 "{原因}"` | `單號`：字串。<br>`原因`：字串。 | 不支援 | 無 | `必查`：`跨視角`：工務員工呼叫 `listDeptPool` 時，該單的 `PoolItem.verificationReturnReason` 等於原因。`權威狀態`：該單是 pool、`pool_source`=verification_return，`repair_tickets.last_verify_failed_reason` 相等。 |
 | `主管待辦的任何一類都不包含 "{單號}"` | `單號`：字串。 | 不支援 | 無 | `必查`：`跨視角`：每一位在職主管呼叫 `getManagerQueues` 時，回應的每一類清單都沒有這張單，`counts` 等於各陣列長度。`權威狀態`：該單不是 `done`。 |
@@ -74,7 +75,6 @@
 | `"{單號}" 的驗收不通過只記下一次` | `單號`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：`task_events` 中該單的 `repair_verification_failed` 剛好一筆、`repair_verified` 一筆都沒有；`outbox` 中 `PushPayload.event`=repair_verification_failed、指向這張單的 push 至多一筆。用於先送出不通過、後到的被拒。 |
 | `這次驗收的結果為 "{結果}"，去處為 "{去處}"` | `結果`：字串；通過、不通過。<br>`去處`：字串；結案、原處理人、工務待認領。對照 `RepairVerificationOutcome`：通過＝result passed、不通過＝failed；結案＝destination closed、原處理人＝assignee、工務待認領＝pool。 | 不支援 | 無 | `必查`：`呈現結果`：上一次 `verifyRepairTicket` 回應 200，`result` 與 `destination` 等於對照值，`decidedBy` 是送出的主管；不通過時 `reason` 是送出的原因，`assigneeName` 是原處理人（去處為工務待認領時也帶）。`權威狀態`：結案＝任務 closed；原處理人＝任務 accepted 且 assignee 不變；工務待認領＝任務 pool 且 assignee 為空。三者必須靠 `destination` 分辨。 |
 | `"{單號}" 最近一次驗收不通過的原因為 "{原因}"，判定人為 "{主管}"` | `單號`：字串。<br>`原因`：字串。<br>`主管`：字串。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets.last_verify_failed_reason` 等於原因、`last_verify_failed_by` 是該主管、`last_verify_failed_at` 等於目前 `Clock`；`tasks.done_at`、`resolution_type`、`resolution_note` 已清空。`再讀確認`：`readRepairTicket` 的 `lastVerifyFailedReason`、`lastVerifyFailedBy`、`lastVerifyFailedAt` 一致。 |
-| `以下員工都收到 "{單號}" 的急件推播：` | `單號`：字串。 | 支援：`員工`（必填，字串） | 無 | `必查`：每位員工都有一筆 kind `push` 的 outbox，`PushPayload.event`=repair_urgent，`target.highlightTaskId` 是該單。`跨視角`：推播消費者已寫入對應資料列。 |
 | `系統提示同房已有未結案的工務單 "{單號}"，狀態為 "{狀態}"` | `單號`：字串。<br>`狀態`：字串。 | 不支援 | 無 | `必查`：`呈現結果`：`duplicate.ticketNo` 與 `duplicate.state` 相符（狀態用語見對照表）。`不該發生`：沒有建立工務單。 |
 | `"{單號}" 共有 {張數} 張照片` | `單號`：字串。<br>`張數`：整數。 | 不支援 | 無 | `必查`：`權威狀態`：該工務單 purpose=report 的 `repair_photos` 筆數等於張數。`跨視角`：處理人呼叫 `readRepairTicket`（`GET /repair-tickets/{ticketId}`）時 `photoCount` 相同。 |
 | `"{房號}" 未結案的 "{類別}" 工務單只有 {張數} 張` | `房號`：字串。<br>`類別`：字串。<br>`張數`：整數。 | 不支援 | 無 | `必查`：`權威狀態`：`repair_tickets` JOIN `tasks`，該房該類別、state 不是 done、closed 也不是 cancelled 的筆數等於張數。`跨視角`：工務員工呼叫 `listDeptPool`，池裡該房出現的單（以 ticketNo 比對）恰好等於上述未結案單中 state 仍是 pool 的那些；池只回 pool 的單，已被認領（doing）的未結案單不在池裡；`PoolItem.category` 是池分類（固定 repair），不是工務類別，所以不得拿它當類別過濾條件。 |

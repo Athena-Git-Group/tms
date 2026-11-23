@@ -49,6 +49,9 @@ listDeptPool:
       回應包含分類筆數；帶 category 時只回傳該類別，但 counts 仍回傳全部類別。
       工務池另支援 urgent、source 兩個篩選維度：urgent=true 只回急件；source 只回該來源（staff_report＝
       房務報修、desk_forward＝櫃檯），可與 category 並用；三者都可省略（全部）。
+      工務池的每一張單都是工務單（部門為工務的任務一律有工務單，見 deskAssignTask），ticketNo 與 repairCategory 必有值。
+      工務池的 source 依開單路徑換算：任務 source 是 desk（櫃檯代開工務單）或 guest（櫃檯從待派單轉來的住客需求）
+      都是 desk_forward「櫃檯」，其餘（房務報修、工務自開、追蹤單）是 staff_report「房務報修」。
       被驗收不通過退回工務待認領的單照常列在工務池，source 仍依開單路徑換算，PoolItem.verificationReturnReason 帶不通過原因。
       要看的是哪個部門的池由 dept 參數決定：現場員工（房務、工務、櫃檯）省略它，看自己部門的池；
       主管與老闆不屬於單一部門，必須帶 dept 才知道要看哪一池，省略時回 422；
