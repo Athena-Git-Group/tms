@@ -111,7 +111,7 @@ PATCH 的 body 寫的是結果（開或關），不是切換，重送同一份 b
 - `lib/paths.ts` 加 `settings: '/settings'`。
 - `lib/route-access.ts` 多一個判斷「這個角色能不能看設定」，只有 `manager` 與 `duty_manager`；`router.tsx` 在 `DeskShell` 底下加設定頁路由，其他角色導回總覽看板。
 - `shell/unopened-entries.ts:15` 刪掉「設定」那一列；`DeskShell` 的側欄改成畫一個真的連結，沿用總覽看板與待派單兩個連結的 `aria-current` 寫法，只對兩種主管角色畫。
-- `DeskShell` 的頁首目前用 `pathname.endsWith(PATHS.triage)` 二選一（`shell/DeskShell.tsx:30`），要擴成三頁：設定頁的頁首只有標題「設定」，沒有副標、搜尋房號與「代開單」。
+- `DeskShell` 的頁首目前用 `pathname.endsWith(PATHS.triage)` 二選一（`shell/DeskShell.tsx:30`），要擴成三頁：設定頁的頁首只有標題「設定」，沒有副標與搜尋房號；工具列的「代開單」跟其他頁一樣保留。
 - 設定頁用 TanStack Query 讀 `GET /desk/settings`。改開關時送一次 PATCH，成功時用回應覆蓋快取；失敗時把開關退回，用既有的 `components/AlertDialog.tsx` 顯示「沒有儲存」。讀取失敗沿用 `components/LoadFailed.tsx`，載入中沿用 `components/SkeletonBlock.tsx`。
 - 開關本身沒有既有元件，用原生的 `<button role="switch" aria-checked>`，外觀沿用既有的按鈕樣式。
 
