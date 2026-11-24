@@ -24,9 +24,17 @@
 | MODIFY | 住客掃碼的每房額度（`RoomRequestRateLimiter.java:22-23`、`:29`）與 `specs/truth/contracts/groups/住客與房間/住客掃碼.yaml` 的額度說明、對應的後端 feature | 既有計數條件 `source IN ('guest', 'desk')`，代開的單佔住客名額；改成只算住客送的，代開的單不算、也不受限 | FR-037 | `/api-plan`、`/dsl-refine` |
 | ADD | `specs/truth/features/backend/櫃檯看板與派單/` -> 代開單 | 後端規則：每個品項一張單、標題組法、部門類型與修繕分類對應、直接進待認領不經 `triage`、全部成立或全部不成立、重送不重開、三種角色可用、不算住客每房額度、歷程操作者與工務單報修人 | FR-011、FR-016 至 FR-019、FR-022、FR-023、FR-034 至 FR-039 | `/dsl-refine` |
 | MODIFY（待判定） | `specs/truth/data/data-model.dbml` -> `tasks`、`repair_tickets` 的 note | 記下櫃檯代開的單（來源 `desk`、直接 `pool`）；類似單提醒若要記「從哪個品項開出」需要的資料；主管代開時工務單的報修人。欄位與值域預期不動 | FR-016、FR-030、FR-039 | `/data-plan` |
-| NOOP（待確認） | `specs/truth/techstack.md` | 沒有引入新技術，預期不需修改 | — | `/technical-research` |
+| NOOP（已由 `/technical-research` 核對，見下方正式列：沒有新套件，有 3 列 MODIFY、1 列 ADD、1 列 NOOP） | `specs/truth/techstack.md` | 沒有引入新技術，預期不需修改 | — | `/technical-research` |
 
 ## /technical-research
+
+| 動作 | Truth 規格 | 改動摘要 | 原因 |
+| --- | --- | --- | --- |
+| MODIFY | `specs/truth/techstack.md` -> `技術堆疊總覽 / 前端 / 櫃檯 Web 框架與建置`、`櫃檯 Web 換頁` | 用途補上代開單畫面；代開單是蓋在總覽看板與待派單頁上的面板，不新增路由。 | 007 新增代開單面板（FR-001、FR-002、FR-014）；technical-research 決策 1。 |
+| MODIFY | `specs/truth/techstack.md` -> `技術堆疊總覽 / 資料與媒體處理 / 冪等` | 一次開多張單的寫入，另在業務交易內以 `pg_advisory_xact_lock` 鎖鍵、在同一個交易裡寫 `processed_ops`。 | 現有過濾器在提交後另寫紀錄、同鍵並發不擋，達不到 FR-036、SC-007 的重複 0 次；technical-research 決策 3。 |
+| ADD | `specs/truth/techstack.md` -> `技術堆疊總覽 / 測試與驗證 / 櫃檯 Web 送出失敗的模擬` | Playwright `route.abort`、`route.fetch()` 後中斷、資料庫暫時觸發器三種模擬。 | 驗收全有或全無與回放不重複（FR-035、FR-036、FR-040）；technical-research 決策 8。 |
+| MODIFY | `specs/truth/techstack.md` -> `技術堆疊總覽 / 測試與驗證 / Web 單元測試` | 用途的例子補上代開單的純計算（張數、摘要、單標題、房號過濾、建議房號、類似單比對、冪等鍵保留規則）。 | 007 的純計算照既有策略只用 `Vitest` 測。 |
+| NOOP | `specs/truth/techstack.md` -> `系統有哪些端`、其餘前端／後端／資料分類、`本次開發不引入的技術` | 已檢查，沿用 004、005 的技術棧，沒有新增或排除任何套件、端與 BDD runner。 | 007 只在既有櫃檯 Web 與 `tms` 上加功能；三題必問題已由 techstack truth 寫明，本輪沒有改判。 |
 
 ## /api-plan
 
