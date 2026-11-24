@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・Flutter App</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="setup.html">第一天</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html" aria-current="page">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">Flutter App</span></p>
+
+<header>
+  <p class="eyebrow">交接 · Flutter App</p>
+  <h1>員工 App 是怎麼組起來的</h1>
+  <p class="stand">一套程式碼、三種殼（房務／工務／主管）。狀態管理、路由、網路都沒有用第三方套件，全部是 Flutter 內建元件自己組的。程式在 <code>app/mobile/</code>，以下路徑都相對它。</p>
+  <p class="readtime">約 8 分鐘</p>
+</header>
+
+<section id="structure">
+  <h2>程式碼是怎麼分層的？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p><code>lib/</code> 底下只有三樣：<code>main.dart</code>、<code>core/</code>（跨功能基礎）、<code>features/</code>（各畫面）。登入後依角色選殼；資料模型全部擠在 <code>core/api_client.dart</code>。</p>
+  </div>
+  <figure>
+    <div class="figwrap">
+    <svg class="sm" viewBox="0 0 820 470" role="img" aria-label="Flutter App 分層：main.dart 啟動後依角色進入三種殼，殼底下是 features 各畫面，畫面共用 core 層的 ApiClient、推播、連線狀態、測試後門與共用元件，core 對外連後端 REST、FCM，並讓 Appium 與測試經 Semantics 與後門 9099 進來">
+      <defs>
+        <marker id="hv-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+      </defs>
+      <rect class="sk-shape sk-fill" x="160" y="16" width="500" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="410" y="42" text-anchor="middle">main.dart</text>
+      <text class="sk-t-s" x="410" y="64" text-anchor="middle">強制開 Semantics → 啟動後門 → 推播服務 → LoginScreen</text>
+      <path class="sk-edge" d="M 410 80 Q 414 96 410 110" marker-end="url(#hv-b)"/>
+      <text class="sk-t-lb" x="422" y="100">登入後 landingShellFor 依角色選殼</text>
+      <rect class="sk-shape sk-fill" x="40" y="112" width="230" height="56" rx="14"/>
+      <text class="sk-t sk-t-b" x="155" y="146" text-anchor="middle">HousekeepingShell</text>
+      <rect class="sk-shape sk-fill" x="295" y="112" width="230" height="56" rx="14"/>
+      <text class="sk-t sk-t-b" x="410" y="146" text-anchor="middle">EngineeringShell</text>
+      <rect class="sk-shape sk-fill" x="550" y="112" width="230" height="56" rx="14"/>
+      <text class="sk-t sk-t-b" x="665" y="146" text-anchor="middle">ManagerShell</text>
+      <path class="sk-edge" d="M 410 168 Q 414 184 410 198" marker-end="url(#hv-b)"/>
+      <rect class="sk-shape sk-fill" x="40" y="200" width="740" height="74" rx="14"/>
+      <text class="sk-t sk-t-b" x="60" y="228">features/&lt;功能&gt;/　畫面＋該畫面專屬的小元件</text>
+      <text class="sk-t-lb" x="60" y="254">login · home · today · pool · task · ticket · engineering · manager · notification · me · celebrate</text>
+      <path class="sk-edge" d="M 410 274 Q 414 290 410 304" marker-end="url(#hv-b)"/>
+      <rect class="sk-shape sk-fill sk-acc" x="40" y="306" width="740" height="84" rx="14"/>
+      <text class="sk-t sk-t-b" x="60" y="334">core/　跨功能基礎</text>
+      <text class="sk-t-lb" x="60" y="358">api_client（HTTP＋全部資料模型）· push_gateway · connection_status · navigation · landing</text>
+      <text class="sk-t-lb" x="60" y="378">theme（設計 token）· tms_semantics · test_backdoor · widgets/tms_*（約 35 個共用元件）</text>
+      <path class="sk-edge" d="M 160 390 Q 150 414 140 430" marker-end="url(#hv-b)"/>
+      <text class="sk-t-lb" x="40" y="462">後端 REST /api/v1</text>
+      <path class="sk-edge" d="M 410 390 Q 414 414 410 430" marker-end="url(#hv-b)"/>
+      <text class="sk-t-lb" x="410" y="462" text-anchor="middle">FCM（推播權杖、點通知）</text>
+      <path class="sk-edge" d="M 680 432 Q 676 414 670 392" marker-end="url(#hv-b)"/>
+      <text class="sk-t-warn" x="780" y="462" text-anchor="end">Appium 經 Semantics、測試經 :9099 進來</text>
+    </svg>
+    </div>
+    <figcaption>沒有獨立的 models、providers 資料夾，資料模型全部在 <code>core/api_client.dart</code>（1795 行）。</figcaption>
+  </figure>
+
+  <p><code>main.dart</code>（54 行）依序：初始化 → <code>SemanticsBinding.ensureSemantics()</code>（強制建立無障礙樹，Appium 才看得到元素，<code>main.dart:15</code>）→ <code>TestBackdoor.maybeStart()</code> → 安裝推播權杖服務 → <code>runApp</code>。</p>
+  <p>外層是 <code>CupertinoApp</code>，首頁 <code>LoginScreen</code>；全域的 <code>rootNavigatorKey</code>（<code>main.dart:11</code>）讓推播能從任何地方導頁。</p>
+  <p>登入後由 <code>core/landing.dart:6-15</code> 的 <code>landingShellFor</code> 決定殼：主管 → <code>ManagerShell</code>，部門是工務 → <code>EngineeringShell</code>，其他 → <code>HousekeepingShell</code>。主管再細分房務主管（可查房、可驗收）與工務主管（只能驗收），見 <code>core/landing.dart:17-37</code> 的 <code>ManagerKind</code>。</p>
+
+  <details>
+    <summary>版本與套件表 <span class="hint">— Flutter／Dart、App 版本、4 個套件、iOS 與 Android 識別碼</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>項目</th><th>值</th><th>出處／用途</th></tr></thead>
+      <tbody>
+        <tr><td>Flutter／Dart</td><td>3.47.9 stable／3.13.7</td><td><code>app/mobile/pubspec.yaml:22</code></td></tr>
+        <tr><td>App 版本</td><td><code>1.0.0+1</code></td><td><code>pubspec.yaml:19</code>；<code>publish_to: none</code></td></tr>
+        <tr><td><code>cupertino_icons</code></td><td>^1.0.8</td><td>iOS 風格圖示字型</td></tr>
+        <tr><td><code>firebase_core</code></td><td>^5.1.0</td><td>Firebase 初始化</td></tr>
+        <tr><td><code>firebase_messaging</code></td><td>^17.0.1</td><td>FCM 推播（取推播權杖、點通知開啟 App）</td></tr>
+        <tr><td><code>shared_preferences</code></td><td>^2.5.6</td><td>存裝置指紋、主管看待認領時選的部門</td></tr>
+        <tr><td>開發用</td><td><code>flutter_test</code>、<code>flutter_lints ^6.0.0</code></td><td>—</td></tr>
+        <tr><td>iOS</td><td>最低 iOS 15.0；bundle id <code>com.athena.tms.tmsStaffApp</code></td><td><code>ios/Runner.xcodeproj/project.pbxproj:365, 389</code></td></tr>
+        <tr><td>Android</td><td><code>com.athena.tms.tms_staff_app</code>；SDK 版本跟 Flutter 預設</td><td><code>android/app/build.gradle.kts:13, 23</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>沒有用的：狀態管理套件、路由套件、HTTP 套件（直接用 <code>dart:io</code> 的 <code>HttpClient</code>）、相機或掃碼套件、多語系套件。工務單拍照在 <code>lib/core/repair_photo_capture.dart</code>。</p>
+    </div>
+  </details>
+</section>
+
+<section id="state">
+  <h2>狀態管理與路由為什麼都是自刻的？代價是什麼？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>全部用 Flutter 內建元件：<code>ValueNotifier</code> 單例管狀態、<code>Navigator</code> 直接 push。好處是相依極少；代價是沒有路由表、「誰改了這個狀態」只能靠搜尋。當初為什麼這樣選，repo 裡沒有寫。</p>
+  </div>
+  <ul class="plain">
+    <li><b>狀態</b>：<code>StatefulWidget</code>＋<code>ValueNotifier</code>／<code>ChangeNotifier</code> 單例＋<code>InheritedWidget</code>（Flutter 內建、把資料往下傳給子元件的機制）。</li>
+    <li><b>路由</b>：沒有命名路由表，<code>Navigator</code>＋<code>CupertinoPageRoute</code> 直接 push；登入後用 <code>core/navigation.dart</code> 的 <code>replaceAllRoutes</code> 換掉整個堆疊。底部分頁列是自刻的 <code>tms_tab_bar.dart</code>。</li>
+    <li><b>依賴注入</b>：靜態單例，<code>ApiClient.instance</code>（<code>api_client.dart:14</code>，測試可替換）、<code>PushGateway.instance</code>、<code>ConnectionStatus.instance</code>、<code>OfflineQueue.instance</code> 等；推播層另有抽象介面（<code>push_token_service.dart:7-27</code>）方便測試換假實作。</li>
+  </ul>
+  <p><b>代價</b>：推播深連結的導頁全部靠 <code>PushGateway</code> 手寫判斷；資料模型與請求擠在同一個 1795 行的檔案，<code>features/task/task_screen.dart</code> 也有 1835 行。要拆時再拆，不需要一開始就重構。</p>
+  <details>
+    <summary>三個狀態的實例 <span class="hint">— 今日資料、切分頁並高亮、主管佇列計數</span></summary>
+    <div class="in">
+    <ul class="plain">
+      <li><code>features/today/my_today_scope.dart</code> 的 <code>MyTodayScope</code> 抓 <code>GET /me/today</code> 往下提供。</li>
+      <li><code>features/shell/main_shell.dart:15-31</code> 的 <code>MainShellTabRequest</code> 是靜態 <code>ValueNotifier</code>，推播要「切到待認領並高亮某張卡」時用它。</li>
+      <li><code>features/manager/manager_queues_store.dart</code> 存主管佇列計數。</li>
+    </ul>
+    </div>
+  </details>
+</section>
+
+<section id="network">
+  <h2>App 怎麼跟後端說話、怎麼收推播？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>連哪個後端是<b>編譯期</b>決定的，換環境要重新編譯。token 只放記憶體，沒有逾時、重試或統一的 401 處理。推播點開後由 <code>core/push_gateway.dart</code> 決定開哪一頁。</p>
+  </div>
+  <ul class="plain">
+    <li><b>連哪個後端</b>：<code>--dart-define=API_BASE_URL=...</code>，預設 <code>http://localhost:8080/api/v1</code>（<code>core/api_client.dart:9-12</code>）。沒有環境檔、沒有執行期切換畫面；simulator 的 localhost 就是 Mac 本身。</li>
+    <li><b>登入</b>：<code>POST /staff-accounts/login</code>，body 只有 <code>{loginId, password}</code>（<code>api_client.dart:35-39</code>）。<b>App 登入畫面沒有飯店代碼欄位</b>，後端怎麼決定飯店見 <a href="backend.html#auth">Java 後端</a>。<code>mustChangePassword</code> 為真時導到強制改密碼頁；429 加 <code>remainingMinutes</code> 表示帳號被鎖。</li>
+    <li><b>token 只放記憶體</b>（<code>api_client.dart:22</code>），重開 App 要重新登入；每個請求帶 <code>Authorization: Bearer</code>。</li>
+    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉（<code>api_client.dart:439-476</code>）。沒有逾時、自動重試、攔截器、統一 401 處理。</li>
+    <li><b>冪等</b>：寫入請求帶 <code>idempotent: true</code> 就自動加 <code>Idempotency-Key</code>（UUID v4，<code>api_client.dart:478-487</code>）——同一操作重送時後端回放上次結果，不會做兩次。</li>
+    <li><b>錯誤</b>：非 2xx 丟 <code>ApiException</code>，從 JSON <code>{code, message, context}</code> 解析錯誤碼（<code>api_client.dart:490-530</code>）。</li>
+    <li><b>離線</b>：沒有 SSE 或 WebSocket。<code>OfflineQueue</code>（<code>core/connection_status.dart:45-120</code>）離線時暫存寫入、恢復後依序重送（最多 5 次、間隔 300ms）；連線不穩時每 5 秒輪詢今日資料。但這兩個旗標<b>只有測試後門會設定</b>，正式環境沒有偵測網路的程式。</li>
+  </ul>
+
+  <h3>推播收到後，App 怎麼決定打開哪一頁？</h3>
+  <p>登入成功後 <code>PushTokenService</code> 啟動：初始化 Firebase → 要通知權限 → 取 FCM 權杖 → <code>PUT /me/push-token {deviceFingerprint, pushToken, platform}</code>；登出時 <code>DELETE /me/push-token</code>。裝置指紋是存在 SharedPreferences 的 UUID。</p>
+  <p>點通知有三個來源：FCM 的「App 在背景時點開」、冷啟動時的初始訊息、iOS 原生的 MethodChannel <code>com.athena.tms/push</code>（<code>ios/Runner/AppDelegate.swift</code>）。同一個訊息 5 秒內只處理一次。</p>
+  <p>payload 有 <code>target</code> 時解析成 <code>{kind: task | ticket | pool | home, taskId, dept, highlightTaskId}</code>（<code>core/push_target.dart</code>）：<code>task</code> 先打 <code>GET /tasks/{id}</code> 查房號再導頁；<code>pool</code> 切到待認領分頁並高亮；<code>ticket</code> 開工務單頁；<code>home</code> 重建殼。</p>
+  <p><code>firebase_messaging</code> 17 把取權杖的舊方法標成過時，但新方法回的是另一種 id、不是後端要的 FCM 註冊權杖，所以程式刻意用 <code>// ignore: deprecated_member_use</code> 繼續用舊方法（檔頭註解有寫原因）。</p>
+</section>
+
+<section id="test-contract">
+  <h2>App 和自動測試之間有什麼約定？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>App 驗收找元素<b>只靠</b> Semantics identifier，改名等於改 API；新畫面或按鈕一定要加。測試版 App 另外內建一個 9099 埠的測試後門，正式版不存在。</p>
+  </div>
+  <ul class="rules">
+    <li>一律用 <code>core/tms_semantics.dart</code> 的 <code>TmsSemantics(id: ...)</code> 包裝，它設了 <code>container: true</code>。</li>
+    <li>可停用的元件要明確傳 <code>enabled</code>：<code>CupertinoButton(onPressed: null)</code> 不會把停用狀態寫進無障礙樹，測試會判斷錯。</li>
+    <li>命名是 <code>畫面.元素</code> 的點分隔小寫，例如 <code>home.screen</code>、<code>engPool.screen</code>、<code>me.logout-button</code>、<code>home.task.&lt;房號&gt;.card</code>、<code>ticket.stepper.&lt;n&gt;--current</code>、<code>system.offline-bar</code>。全專案兩百多處；主管相關的集中在 <code>features/manager/manager_ids.dart</code>。</li>
+  </ul>
+  <p>測試後門只有以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯的 App 才會開（<code>core/test_backdoor.dart</code>），在 <code>127.0.0.1:9099</code> 提供撥時鐘、讀狀態、模擬斷線等能力，也會寫一份 log 到系統暫存目錄的 <code>tms_backdoor_log.txt</code>。</p>
+  <details>
+    <summary>測試後門的端點 <span class="hint">— 8 個路徑與用途</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>路徑</th><th>做什麼</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /state</code></td><td>讀 App 目前狀態；也用來判斷後門就緒</td></tr>
+        <tr><td><code>POST /clock</code></td><td>注入 App 的「現在」（<code>deviceNow()</code> 讀它）</td></tr>
+        <tr><td><code>/offline</code>、<code>/flaky-connection</code></td><td>模擬離線、連線不穩</td></tr>
+        <tr><td><code>/upload-fail</code>、<code>/drop-write-response</code></td><td>模擬上傳失敗、寫入成功但回應遺失</td></tr>
+        <tr><td><code>/offline-queue</code>、<code>/remembered-account</code></td><td>查離線暫存、設定記住的帳號</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+</section>
+
+<section id="build">
+  <h2>本機怎麼跑、怎麼打包？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>本機開發一律帶 <code>API_BASE_URL</code> 指到手動環境 8083，否則會連到被測試清空的 8080。正式打包、簽章、上架在 repo 裡沒有腳本也沒有文件。</p>
+  </div>
+  <div class="cmd"><pre class="api">cd app/mobile
+flutter pub get
+flutter test                                  <span class="c"># 約 60 個 widget／單元測試檔；沒有 integration_test/</span>
+flutter run -d &lt;simulator&gt; --dart-define=API_BASE_URL=http://localhost:8083/api/v1</pre></div>
+  <details>
+    <summary>App 驗收用的建置指令 <span class="hint">— run-*.sh 會自動執行，通常不用手打</span></summary>
+    <div class="in">
+    <div class="cmd"><pre class="api">flutter build ios --simulator --debug \
+  --dart-define=TEST_BACKDOOR=true --dart-define=API_BASE_URL=http://127.0.0.1:8080/api/v1</pre></div>
+    <p><code>test/support/test_environment.dart</code> 把 widget 測試的視窗設成 402×874 並關掉動畫，避免 <code>pumpAndSettle</code> 逾時。</p>
+    </div>
+  </details>
+  <p>正式打包的標準指令是 <code>flutter build ios</code> 或 <code>flutter build apk|appbundle</code> 加上 <code>--dart-define=API_BASE_URL=&lt;正式網址&gt;</code>。<code>ios/Runner/Info.plist</code> 沒有 App Transport Security 例外設定，實機連 http 明碼網址會被 iOS 擋下，正式環境必須用 https。</p>
+  <p>Firebase 設定檔<b>不進版控</b>：iOS 放 <code>ios/Runner/GoogleService-Info.plist</code>，Android 放 <code>android/app/google-services.json</code>（同目錄有 <code>README-firebase.md</code> 與 <code>.example</code> 範本）。目前兩個真檔都沒有，App 照樣能跑，只是推播停用、初始化失敗印一行 log。Android 只有 json 存在時才套用 google-services 外掛（<code>android/app/build.gradle.kts:7-9</code>）。</p>
+  <p>Android 上線前還有幾個洞，見<a href="pitfalls.html#app-gaps">坑與待查</a>。</p>
+</section>
+
+<section id="ui">
+  <h2>介面語言、主題與稱謂是怎麼處理的？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>沒有多語系框架，文案是中文硬寫在程式裡；唯一的語言切換只影響登入頁。對使用者一律稱「您」。</p>
+  </div>
+  <p>主題在 <code>core/theme.dart</code>（<code>TmsColors</code>、<code>TmsText</code>、<code>TmsSpacing</code>、<code>TmsRadius</code>、<code>TmsSize</code>），品牌主色 <code>#0C7680</code>；以 Cupertino 為主、Material 只用於 Theme。</p>
+  <p>登入頁的 <code>LoginLanguage</code> 有 zh-Hant、zh-Hans、en、ja、vi 五種（<code>login_language.dart:8-14</code>），只影響登入頁本身。</p>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="bdd.html"><small>上一頁</small>← BDD 測試</a>
+  <a class="next" href="backend.html"><small>下一頁</small>Java 後端 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

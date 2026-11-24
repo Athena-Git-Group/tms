@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TMS 交接手冊</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html" aria-current="page">總覽</a>
+  <a href="setup.html">第一天</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><span aria-current="page">TMS 交接手冊</span></p>
+
+<header>
+  <p class="eyebrow">TMS 任務交辦系統 · 工程交接</p>
+  <h1>TMS 交接手冊</h1>
+  <p class="stand">這一頁 3 分鐘讀完：系統長什麼樣、你該先讀哪一頁、交接前最要緊的幾件事。細節都在後面五頁，照你手上的任務挑著讀就好。</p>
+</header>
+
+<section id="who">
+  <h2>這份交接給誰？讀完能做什麼？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>給接手這個 repo 的工程師。讀完能在自己的 Mac 上把三條驗收測試跑起來、知道新增一個測試場景要改哪幾個檔，並看懂員工 App 與 Java 後端怎麼組起來、哪裡會咬人。</p>
+  </div>
+  <p>這裡只講「程式怎麼跑、測試怎麼跑、會在哪裡卡住」。需求與系統設計的來龍去脈請看 <a href="../11-requirements-architecture.html">11-requirements-architecture.html</a>，逐欄位的資料模型看 <a href="../12-data-model.html">12-data-model.html</a>。</p>
+</section>
+
+<section id="overview">
+  <h2>整個系統長什麼樣？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>一個 Java 後端，前面接員工 App 與櫃檯／住客網頁，後面接 Postgres 與 Kafka。規格只寫一份，三條驗收測試直接讀它去操作 App、網頁與後端。</p>
+  </div>
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 900 650" role="img" aria-label="系統全景：規格被三條驗收測試讀取；測試操作員工 App、櫃檯住客網頁並呼叫後端；App 與網頁經 REST 連到 Java 後端；後端讀寫 Postgres、把事件寫進 Kafka，並經 FCM 推播通知員工 App">
+      <defs>
+        <marker id="ix-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+        <marker id="ix-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-acc"/></marker>
+      </defs>
+
+      <rect class="sk-shape sk-soft sk-acc" x="320" y="18" width="260" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="450" y="48" text-anchor="middle">specs/truth/features</text>
+      <text class="sk-t-s" x="450" y="72" text-anchor="middle">中文 Gherkin 規格＋dsl.md，只寫一份</text>
+
+      <path class="sk-edge-acc" d="M 450 88 Q 454 108 450 132" marker-end="url(#ix-acc)"/>
+      <text class="sk-t-acc" x="462" y="116">讀 feature 與句型</text>
+
+      <rect class="sk-shape sk-fill" x="300" y="134" width="300" height="72" rx="16" style="stroke-dasharray:7 5"/>
+      <text class="sk-t sk-t-b" x="450" y="164" text-anchor="middle">三條驗收測試</text>
+      <text class="sk-t-s" x="450" y="188" text-anchor="middle">後端 · 員工 App · 網頁</text>
+
+      <path class="sk-edge" d="M 320 200 Q 240 230 180 266" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="150" y="230">Appium 點畫面</text>
+      <path class="sk-edge" d="M 580 200 Q 660 230 720 266" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="672" y="230">Playwright 開瀏覽器</text>
+      <path class="sk-edge" d="M 450 206 Q 446 300 450 398" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="462" y="300">打 API、查資料庫</text>
+
+      <rect class="sk-shape sk-fill" x="40" y="268" width="240" height="72" rx="14"/>
+      <text class="sk-t sk-t-b" x="160" y="298" text-anchor="middle">員工 App</text>
+      <text class="sk-t-s" x="160" y="322" text-anchor="middle">Flutter · app/mobile</text>
+
+      <rect class="sk-shape sk-fill" x="620" y="268" width="240" height="72" rx="14"/>
+      <text class="sk-t sk-t-b" x="740" y="298" text-anchor="middle">櫃檯／住客網頁</text>
+      <text class="sk-t-s" x="740" y="322" text-anchor="middle">React · app/web</text>
+
+      <path class="sk-edge" d="M 230 340 Q 280 380 320 410" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="196" y="384">REST /api/v1</text>
+      <path class="sk-edge" d="M 670 340 Q 620 380 580 410" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="630" y="384">REST＋即時串流</text>
+
+      <rect class="sk-shape sk-fill sk-acc" x="320" y="400" width="260" height="82" rx="16"/>
+      <text class="sk-t sk-t-b" x="450" y="432" text-anchor="middle">Java 後端</text>
+      <text class="sk-t-s" x="450" y="456" text-anchor="middle">Spring Boot · tms/ · 模組化單體</text>
+
+      <rect class="sk-shape sk-fill" x="40" y="414" width="170" height="60" rx="14"/>
+      <text class="sk-t sk-t-b" x="125" y="442" text-anchor="middle">FCM 推播</text>
+      <text class="sk-t-s" x="125" y="462" text-anchor="middle">Firebase</text>
+      <path class="sk-edge" d="M 320 444 Q 266 450 212 444" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="222" y="470">送通知</text>
+      <path class="sk-edge" d="M 110 414 Q 104 378 110 342" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="24" y="384">叫醒 App</text>
+
+      <path class="sk-edge" d="M 390 482 Q 350 510 330 538" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="250" y="514">讀寫（依飯店隔開）</text>
+      <path class="sk-edge" d="M 510 482 Q 550 510 570 538" marker-end="url(#ix-a)"/>
+      <text class="sk-t-lb" x="560" y="510">事件先進待送匣再上 Kafka</text>
+
+      <path class="sk-shape sk-fill" d="M 260 552 L 260 612 Q 330 636 400 612 L 400 552"/>
+      <ellipse class="sk-shape sk-fill" cx="330" cy="552" rx="70" ry="14"/>
+      <text class="sk-t sk-t-b" x="330" y="590" text-anchor="middle">Postgres 16</text>
+
+      <path class="sk-shape sk-fill" d="M 500 552 L 500 612 Q 570 636 640 612 L 640 552"/>
+      <ellipse class="sk-shape sk-fill" cx="570" cy="552" rx="70" ry="14"/>
+      <text class="sk-t sk-t-b" x="570" y="590" text-anchor="middle">Kafka</text>
+    </svg>
+    </div>
+    <figcaption>全景只留 8 個方塊。每條測試線的細部走法見 <a href="bdd.html">BDD 測試</a>，App 內部分層見 <a href="mobile.html">Flutter App</a>，後端的模組與事件流見 <a href="backend.html">Java 後端</a>。</figcaption>
+  </figure>
+</section>
+
+<section id="routes">
+  <h2>我手上有一件事，該從哪頁讀起？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>不用從頭讀到尾。挑最像你今天任務的那一欄，照順序讀；每一欄都不超過三頁。</p>
+  </div>
+  <div class="routes">
+    <div class="route">
+      <h3>我第一天報到</h3>
+      <ol>
+        <li><a href="setup.html">第一天</a>：裝機、確認環境通了</li>
+        <li><a href="pitfalls.html#setup-traps">坑：裝環境時會卡在哪</a></li>
+        <li><a href="bdd.html">BDD 測試</a>的第一節就好</li>
+      </ol>
+    </div>
+    <div class="route">
+      <h3>我要跑測試</h3>
+      <ol>
+        <li><a href="setup.html#environments">第一天：三套環境為什麼隔開</a></li>
+        <li><a href="bdd.html">BDD 測試</a>：挑你要的那條線</li>
+        <li><a href="pitfalls.html#test-traps">坑：跑測試時會卡在哪</a></li>
+      </ol>
+    </div>
+    <div class="route">
+      <h3>我要改員工 App</h3>
+      <ol>
+        <li><a href="mobile.html">Flutter App</a></li>
+        <li><a href="bdd.html#line-app">BDD 測試：員工 App 那條線</a></li>
+        <li><a href="pitfalls.html#app-gaps">坑：App 還沒補的洞</a></li>
+      </ol>
+    </div>
+    <div class="route">
+      <h3>我要改後端</h3>
+      <ol>
+        <li><a href="backend.html">Java 後端</a></li>
+        <li><a href="bdd.html#line-backend">BDD 測試：後端那條線</a></li>
+        <li><a href="pitfalls.html#backend-traps">坑：改後端與遷移要小心什麼</a></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="pages">
+  <h2>各頁在講什麼、要讀多久？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>五頁各自獨立，每頁 10 分鐘內讀完；查表型的細節都收在可展開的區塊裡，需要時再打開。</p>
+  </div>
+  <div class="cards">
+    <a class="card" href="setup.html"><b>第一天</b><span>裝機清單、repo 地圖、三套環境與 port 總表。</span><small>約 8 分鐘</small></a>
+    <a class="card" href="bdd.html"><b>BDD 測試</b><span>規格怎麼變成三條可執行的驗收測試，每條怎麼跑、怎麼加場景。</span><small>約 10 分鐘</small></a>
+    <a class="card" href="mobile.html"><b>Flutter App</b><span>三種殼一套程式、自刻的狀態與路由、網路層、推播、測試約定。</span><small>約 8 分鐘</small></a>
+    <a class="card" href="backend.html"><b>Java 後端</b><span>版本與相依、模組、多飯店隔離、登入授權、資料庫遷移。</span><small>約 9 分鐘</small></a>
+    <a class="card" href="pitfalls.html"><b>坑與待查</b><span>依類別分組的已知坑，以及接手後要先查清楚的事。</span><small>約 7 分鐘</small></a>
+  </div>
+</section>
+
+<section id="top-five">
+  <h2>交接前最要緊的是哪幾件事？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>下面五條任何一條沒注意到，都會讓你白白浪費半天，或毀掉別人的資料。</p>
+  </div>
+  <ol class="top">
+    <li><b>每條 Java 指令都要切到 JDK 25，後端測試還要帶 <code>-DargLine="-Dapi.version=1.44"</code>。</b>原機器 shell 預設是 17；那個參數是 OrbStack 上跑 Testcontainers 的唯一解法，沒寫進任何設定檔。<a href="setup.html#verify">怎麼確認環境通了</a></li>
+    <li><b>目前分支有一批未提交的修改，已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。</b>第一次跑出紅燈，先對照它再懷疑環境。</li>
+    <li><b>App 與網頁驗收每個場景都會清空資料庫。</b>兩條線預設共用 8080／5433，不能同時跑；手動操作一律用 8083／<code>tms_manual</code>。<a href="setup.html#environments">三套環境</a></li>
+    <li><b>既有的 Flyway 遷移檔一個字都不能改，連註解都不行。</b>改了後端就啟動失敗，要修只能新增更高版號的檔。<a href="backend.html#flyway">遷移規矩</a></li>
+    <li><b>Android 正式版缺網路權限。</b><code>INTERNET</code> 只宣告在 debug 與 profile，release APK 會連不上網，是上線前最優先要修的一條。<a href="pitfalls.html#app-gaps">App 還沒補的洞</a></li>
+  </ol>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a class="next" href="setup.html"><small>下一頁</small>第一天 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

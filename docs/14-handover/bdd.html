@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・BDD 測試</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="setup.html">第一天</a>
+  <a href="bdd.html" aria-current="page">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">BDD 測試</span></p>
+
+<header>
+  <p class="eyebrow">交接 · BDD 測試</p>
+  <h1>規格怎麼變成三條可執行的驗收測試</h1>
+  <p class="stand">先看三條線共用的骨架，再挑你要的那一條。每條線都照同一個順序寫：在測什麼、怎麼跑、一句話怎麼走完、怎麼加場景、這條線專屬的坑。</p>
+  <p class="readtime">約 10 分鐘</p>
+</header>
+
+<!-- ============================================================ -->
+<section id="skeleton">
+  <h2>三條測試線共用什麼骨架？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>規格只寫一次，用中文寫在 <code>specs/truth/features/</code>。每一行句子比對到一個 Java 方法，方法再透過各自的驅動層去操作真的系統，最後回頭查資料庫驗證。沒有複製、沒有程式碼產生步驟。</p>
+  </div>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 940 380" role="img" aria-label="共通骨架：左邊一份規格 specs/truth/features 加 dsl.md，分三條線；每條線由 step 定義經驅動層操作被測系統。後端線經 RestClient 打 Spring Boot；App 線經 Appium 操作 simulator 內的 Flutter App；網頁線經 Playwright 操作 vite 上的網頁。三條線的結果句都回頭查 Postgres">
+      <defs>
+        <marker id="sk-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+        <marker id="sk-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-warn"/></marker>
+      </defs>
+      <text class="sk-t-acc" x="110" y="26" text-anchor="middle">① 規格</text>
+      <text class="sk-t-acc" x="355" y="26" text-anchor="middle">② step 定義（Java 方法）</text>
+      <text class="sk-t-acc" x="595" y="26" text-anchor="middle">③ 驅動層</text>
+      <text class="sk-t-acc" x="830" y="26" text-anchor="middle">④ 被測系統</text>
+
+      <rect class="sk-shape sk-soft sk-acc" x="20" y="40" width="180" height="250" rx="16"/>
+      <text class="sk-t sk-t-b" x="110" y="72" text-anchor="middle">feature＋dsl.md</text>
+      <text class="sk-t-lb" x="110" y="112" text-anchor="middle">backend/</text>
+      <text class="sk-t-lb" x="110" y="202" text-anchor="middle">ios-app/</text>
+      <text class="sk-t-lb" x="110" y="276" text-anchor="middle">frontdesk-web/ · guest-web/</text>
+
+      <!-- 後端 -->
+      <path class="sk-edge" d="M 200 100 Q 230 96 262 100" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="264" y="66" width="182" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="355" y="94" text-anchor="middle">tms/…/bdd/steps</text>
+      <text class="sk-t-s" x="355" y="116" text-anchor="middle">線 1 後端</text>
+      <path class="sk-edge" d="M 446 98 Q 476 94 506 98" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="508" y="66" width="174" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="595" y="94" text-anchor="middle">RestClient</text>
+      <text class="sk-t-s" x="595" y="116" text-anchor="middle">打真的 HTTP</text>
+      <path class="sk-edge" d="M 682 98 Q 712 94 742 98" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="744" y="66" width="176" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="832" y="94" text-anchor="middle">Spring Boot</text>
+      <text class="sk-t-s" x="832" y="116" text-anchor="middle">同一個 JVM 起</text>
+
+      <!-- App -->
+      <path class="sk-edge" d="M 200 190 Q 230 186 262 190" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="264" y="156" width="182" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="355" y="184" text-anchor="middle">app/bdd/…/steps</text>
+      <text class="sk-t-s" x="355" y="206" text-anchor="middle">線 2 員工 App</text>
+      <path class="sk-edge" d="M 446 188 Q 476 184 506 188" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="508" y="156" width="174" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="595" y="184" text-anchor="middle">Appium :4723</text>
+      <text class="sk-t-s" x="595" y="206" text-anchor="middle">XCUITest 點畫面</text>
+      <path class="sk-edge" d="M 682 188 Q 712 184 742 188" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="744" y="156" width="176" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="832" y="184" text-anchor="middle">Flutter App</text>
+      <text class="sk-t-s" x="832" y="206" text-anchor="middle">simulator → 後端 8080</text>
+
+      <!-- Web -->
+      <path class="sk-edge" d="M 200 266 Q 230 262 262 266" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="264" y="234" width="182" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="355" y="262" text-anchor="middle">web-bdd/…/steps</text>
+      <text class="sk-t-s" x="355" y="284" text-anchor="middle">線 3 網頁</text>
+      <path class="sk-edge" d="M 446 266 Q 476 262 506 266" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="508" y="234" width="174" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="595" y="262" text-anchor="middle">Playwright</text>
+      <text class="sk-t-s" x="595" y="284" text-anchor="middle">Chromium／WebKit</text>
+      <path class="sk-edge" d="M 682 266 Q 712 262 742 266" marker-end="url(#sk-a)"/>
+      <rect class="sk-shape sk-fill" x="744" y="234" width="176" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="832" y="262" text-anchor="middle">網頁 vite :5199</text>
+      <text class="sk-t-s" x="832" y="284" text-anchor="middle">代理到後端 8080</text>
+
+      <path class="sk-edge-warn sk-dash" d="M 355 298 Q 360 340 470 352 Q 700 360 832 330 L 832 300" marker-end="url(#sk-w)"/>
+      <text class="sk-t-warn" x="560" y="372" text-anchor="middle">結果句（Then）一律回頭查 Postgres，不只看畫面或回應</text>
+    </svg>
+    </div>
+    <figcaption>四段式骨架：① 規格 → ② step 定義 → ③ 驅動層 → ④ 被測系統。三條線只差在 ② 放哪、③ 用什麼工具。</figcaption>
+  </figure>
+
+  <p>幾個會反覆出現的詞：<b>Gherkin</b> 是用「假設／當／那麼」寫測試情境的格式，這裡每份 feature 第一行都是 <code># language: zh-TW</code>，所以關鍵字是中文。<b>Cucumber</b> 是讀 Gherkin 的測試框架，它把每一行句子比對到一個 Java 方法，這個方法叫 <b>step 定義</b>。</p>
+  <p>方法上的註解（例如 <code>@當("{string} 把 {string} 派給 {string}")</code>）就是比對用的句型。一條線去哪些 Java 套件裡找 step 定義，這個設定叫 <b>glue</b>。</p>
+  <p>句型不是隨便寫的。每個子目錄都有一份 <code>dsl.md</code>，它是句型的權威清單：參數、預設值、Java 端怎麼實作、驗證時必須查哪些資料表。後端的 <code>specs/truth/features/backend/dsl.md</code> 開頭寫明：<b>驗證以 Postgres 裡的 <code>tasks</code>、<code>task_events</code>、<code>outbox</code>、<code>processed_ops</code> 為準，不以 API 回應為準</b>。</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>測試線</th><th>讀哪個目錄</th><th>怎麼驅動</th><th>後端從哪來</th><th>資料庫</th></tr></thead>
+    <tbody>
+      <tr><td><b>1 後端</b>（<code>tms/</code>）</td><td><code>backend/</code>（44 份，13 個模組目錄）</td><td>同一個 JVM 起 Spring Boot，<code>RestClient</code> 打真的 HTTP</td><td>測試自己起</td><td>Testcontainers，隨機埠</td></tr>
+      <tr><td><b>2 員工 App</b>（<code>app/bdd/</code>）</td><td><code>ios-app/</code>（23 份）</td><td>Appium＋XCUITest 操作 iOS simulator</td><td>要先手動起好（預設 8080）</td><td>外部 Postgres（5433 或 5434）</td></tr>
+      <tr><td><b>3 網頁</b>（<code>app/web-bdd/</code>）</td><td><code>frontdesk-web/</code>（29 份）、<code>guest-web/</code>（29 份）</td><td>Playwright 操作 Chromium／WebKit</td><td>腳本自動起 8080 與 5199</td><td>外部 Postgres 5433</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="lines">
+  <h2>三條線各自怎麼跑、怎麼加場景？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>後端線完全自給自足，只要 Docker；App 線要先自己起好開測試時鐘的後端；網頁線的腳本會幫你起後端與 vite，但不起容器。挑你要的那一條讀。</p>
+  </div>
+
+  <div class="tabs">
+    <div class="tablist" aria-label="選擇測試線"></div>
+
+    <!-- ---------- 線 1 後端 ---------- -->
+    <div class="tabpanel" id="line-backend" data-tab="線 1 後端">
+      <h3 class="panel-t">線 1：後端行為規格測試</h3>
+
+      <h4 class="sub">① 它在測什麼？</h4>
+      <p>在同一個 JVM 裡起 Spring Boot，用真的 HTTP 打 API，再查資料庫確認權威狀態。資料庫與 Kafka 由 <b>Testcontainers</b>——測試開始時自動用 Docker 起真實容器、結束就丟掉的函式庫——自己起，所以不用先起任何服務。</p>
+
+      <h4 class="sub">② 怎麼跑？</h4>
+      <div class="cmd"><pre class="api">JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
+  ./tms/mvnw -f tms/pom.xml test -DargLine="-Dapi.version=1.44" -Dtest=RunTruthFeaturesTest</pre></div>
+      <details>
+        <summary>其他跑法 <span class="hint">— 全套、只跑一份 feature 或一個模組、只檢查句型</span></summary>
+        <div class="in">
+        <p>拿掉 <code>-Dtest=RunTruthFeaturesTest</code> 就是後端全套（行為規格＋舊整合線＋單元測試）。縮小範圍一律靠 <code>-Dcucumber.features</code> 指路徑（相對 <code>tms/</code>）；feature 檔裡沒有任何 <code>@tag</code>，不用標籤篩選。</p>
+        <div class="cmd"><pre class="api"><span class="c"># 只跑一份 feature（也可以指到模組目錄 ../specs/truth/features/backend/工務單）</span>
+JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
+  ./tms/mvnw -f tms/pom.xml test -DargLine="-Dapi.version=1.44" -Dtest=RunTruthFeaturesTest \
+  -Dcucumber.features=../specs/truth/features/backend/工務單/櫃檯轉來的工務單.feature
+
+<span class="c"># 只檢查有沒有找不到 step 定義的句子（不真的執行）：再加</span>
+  -Dcucumber.execution.dry-run=true</pre></div>
+        <p>報表在 <code>tms/target/cucumber-reports/truth.html</code>、<code>truth.json</code>。</p>
+        </div>
+      </details>
+
+      <h4 class="sub">③ 一行句子怎麼走完？</h4>
+      <p>以 <code>specs/truth/features/backend/工務單/櫃檯轉來的工務單.feature:14</code> 的背景句「<code>並且 "林佩君" 已把 "305" 派給 "工務"</code>」為例：</p>
+      <ol class="flow">
+        <li><code>RunTruthFeaturesTest</code> 讓 Cucumber 找到這份 feature；<code>ResetHooks</code> 先清空資料表。前面的「<code>飯店有以下員工：</code>」經 <code>StaffFixtures</code> 寫進資料庫，並用正式的 <code>JwtService</code> 簽好 JWT 存進 <code>ScenarioWorld</code>。</li>
+        <li>句子比對到 <code>tms/src/test/java/com/athena/tms/bdd/steps/desk/DeskCommonSteps.java:90</code> 的 <code>@假設("{string} 已把 {string} 派給 {string}")</code>：把「工務」轉成 <code>engineering</code>，呼叫 <code>deskApi.assign(...)</code>。</li>
+        <li><code>DeskApi.assign</code>（<code>bdd/support/DeskApi.java:63</code>）經 <code>BddApiClient</code> 對 <code>/api/v1/desk/tasks/{id}/assign</code> 送出真的 HTTP，帶 JWT 與 <code>Idempotency-Key</code>（冪等鍵，同一操作重送不會做兩次）。</li>
+        <li>後端派給工務時同時開一張工務單，寫入 <code>tasks</code>、<code>task_events</code>、<code>repair_tickets</code>、<code>outbox</code>。</li>
+        <li>步驟用 <code>DbProbe</code> 驗證權威狀態（<code>DeskCommonSteps.java:96-110</code>）：狀態待認領、部門 <code>engineering</code>、最新事件是時間等於 <code>MutableClock</code> 現在時間的 <code>triaged</code>、工務單恰好一列。</li>
+        <li>後面的「<code>那麼 工務待認領包含 "W-0621"</code>」比對到 <code>steps/repair/RepairThenSteps.java:201</code>：讀前一個 When 打 <code>GET /pool</code> 的回應找單號，再回頭查資料庫。</li>
+      </ol>
+      <p>同檔 <code>:120</code> 的 When 版「<code>當 "林佩君" 把 "305" 派給 "工務"</code>」會先讓 <code>LastOperationGuard</code> 拍快照，且不假設一定成功。</p>
+
+      <h4 class="sub">④ 新增一個場景要做哪三步？</h4>
+      <ol class="req">
+        <li><b>寫規格</b>：在 <code>specs/truth/features/backend/&lt;模組&gt;/</code> 加場景，句子先查 <code>backend/dsl.md</code>。</li>
+        <li><b>補 step 定義</b>：<code>tms/src/test/java/com/athena/tms/bdd/steps/&lt;模組&gt;/</code>；共用的資料準備放 <code>bdd/support</code>。</li>
+        <li><b>先 dry-run 再實跑</b>：加 <code>-Dcucumber.execution.dry-run=true</code> 確認沒有找不到定義的句子。</li>
+      </ol>
+
+      <h4 class="sub">⑤ 這條線專屬的坑</h4>
+      <ul class="rules">
+        <li><b>指定單一 feature 時會多一個 <code>CucumberTestEngine</code> 的假錯誤</b>，可忽略。</li>
+        <li><b>Cucumber 只能經由 <code>@Suite</code> 入口執行</b>：<code>tms/pom.xml</code> 的 surefire 設了 <code>excludeJUnit5Engines=cucumber</code>；否則帶了 <code>-Dcucumber.features</code> 時，Cucumber 引擎會無視 <code>-Dtest</code>、以整個 classpath 當 glue 再跑一遍。</li>
+        <li><b>同一個 <code>mvn test</code> 裡還有舊線</b>：<code>integration/RunCucumberTest.java</code> 讀 <code>tms/src/test/resources/features/</code> 底下 8 份舊 feature（不是 truth），還在保護舊行為。改行為時一起看，例如 <code>01-guest-requests.feature:114</code>。</li>
+      </ul>
+
+      <details>
+        <summary>後端線的檔案對照 <span class="hint">— 入口、Spring 設定、重置、輔助工具、容器與測試替身</span></summary>
+        <div class="in">
+        <div class="tablewrap"><table>
+          <thead><tr><th>角色</th><th>位置</th></tr></thead>
+          <tbody>
+            <tr><td>入口</td><td><code>tms/src/test/java/com/athena/tms/bdd/RunTruthFeaturesTest.java</code>：<code>@Suite</code>＋<code>@SelectDirectories("../specs/truth/features/backend")</code>，glue＝<code>com.athena.tms.bdd</code></td></tr>
+            <tr><td>Spring 設定與容器</td><td><code>bdd/BddSpringConfiguration.java</code>：<code>@SpringBootTest(RANDOM_PORT)</code>＋<code>@ActiveProfiles("test")</code>；static 區塊起一次 <code>postgres:16-alpine</code> 與 <code>apache/kafka:4.0.0</code>，所有場景共用，並預建 <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code> 三個 topic</td></tr>
+            <tr><td>測試替身</td><td><code>MutableClock</code> 取代正式時鐘（可撥時間）、<code>RecordingPushSender</code> 取代推播發送（只記錄），都標 <code>@Primary</code></td></tr>
+            <tr><td>非同步等待</td><td>Kafka 是真的，「寫入待送匣 → 搬上 Kafka → 消費者處理」整條都會走；<code>OutboxAwait</code>、<code>KafkaGroupAwait</code> 等到完成</td></tr>
+            <tr><td>每場景共享狀態</td><td><code>bdd/ScenarioWorld.java</code>（<code>@ScenarioScope</code>：員工 id 與 JWT、任務 id、工務單號、最後一次回應…）</td></tr>
+            <tr><td>每場景重置</td><td><code>bdd/steps/common/ResetHooks.java</code>：等推播 outbox 清空、消費者群組追平；重置時鐘；<code>TRUNCATE</code> 所有 public 表（保留 <code>flyway_schema_history</code>、<code>tenants</code>）</td></tr>
+            <tr><td>Step 定義</td><td><code>bdd/steps/&lt;模組&gt;/Xxx{Given,When,Then}Steps.java</code>，與 truth 模組目錄大致一一對應</td></tr>
+            <tr><td>輔助工具</td><td><code>bdd/support/</code>：<code>BddApiClient</code>（自動帶冪等鍵與 JWT）、<code>DeskApi</code>、<code>DbProbe</code>、<code>LastOperationGuard</code>（When 前拍快照，給「沒有任何資料被改動」這類 Then）、各種 <code>*Fixtures</code>、<code>Terms</code>（中文用語轉資料值，例如「工務」→<code>engineering</code>）</td></tr>
+            <tr><td>其他測試</td><td><code>relaywake/RunOutboxRelayWakeTest.java</code>（驗證待送匣在交易提交後立刻送出）；其餘是一般 JUnit 測試（<code>auth/</code>、<code>service/</code>、<code>config/</code> 等）。舊整合線的 glue 是 <code>com.athena.tms.integration.stepdefs</code></td></tr>
+          </tbody>
+        </table></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- ---------- 線 2 App ---------- -->
+    <div class="tabpanel" id="line-app" data-tab="線 2 員工 App">
+      <h3 class="panel-t">線 2：員工 App 驗收</h3>
+
+      <h4 class="sub">① 它在測什麼？</h4>
+      <p>在 iOS simulator 裡真的點 App 畫面。<b>Appium</b> 是讓程式遠端操作手機 App 的伺服器：測試對它下「找到這個元素、點它」，它再透過 iOS 的 XCUITest 去操作。</p>
+      <p>這裡用原生 XCUITest driver，不用 appium-flutter-driver，所以 App 裡每個要被找到的元素都要掛一個 <b>Semantics identifier</b>——Flutter 寫進系統無障礙樹的字串 id，Appium 用 <code>AppiumBy.accessibilityId</code> 找它（約定見 <a href="mobile.html#test-contract">Flutter App</a>）。</p>
+      <p>這條線還依賴 App 內的<b>測試後門</b>：以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯時（<code>app/mobile/lib/core/test_backdoor.dart:50</code>），App 在 simulator 內的 <code>127.0.0.1:9099</code> 開小 HTTP 伺服器，讓測試撥時鐘、讀狀態、注入斷線。</p>
+
+      <h4 class="sub">② 怎麼跑？</h4>
+      <p>腳本<b>不會</b>幫你起後端，要先自己起，而且一定要開測試時鐘（<code>TMS_TEST_CLOCK_ENABLED=true</code>，後端才會有 <code>/api/v1/test/clock</code>）：</p>
+      <div class="cmd"><pre class="api"><span class="c"># 先起開發堆疊＋開測試時鐘的後端（8080）</span>
+docker compose up -d
+TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true \
+  JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run</pre></div>
+      <div class="cmd"><pre class="api"><span class="c"># 再跑單一模組（不帶參數會列出可選模組）</span>
+UDID=B07951C2-DF41-4AF6-9C98-0DFC7413ED8C app/bdd/run-module.sh 工務單</pre></div>
+      <details>
+        <summary>其他腳本與腳本做了什麼 <span class="hint">— 全量、只跑推播、改連隔離堆疊、不經腳本直接下 mvn</span></summary>
+        <div class="in">
+        <div class="cmd"><pre class="api">app/bdd/run-all.sh                <span class="c"># 全量，約 60–90 分鐘</span>
+app/bdd/run-f3.sh                 <span class="c"># 只跑推播模組</span>
+
+<span class="c"># 覆寫預設值（見 app/bdd/lib/env.sh）</span>
+UDID=B07951C2-DF41-4AF6-9C98-0DFC7413ED8C \
+BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434 \
+  app/bdd/run-module.sh 工務單</pre></div>
+        <p>腳本開跑前檢查 <code>GET /api/v1/pool</code> 連得上、<code>/api/v1/test/clock</code> 回 200、Postgres 埠連得上。接著做五件事：</p>
+        <ol class="flow">
+          <li>檢查後端就緒；每次也會先 <code>mvn install</code> bdd-support。</li>
+          <li><code>flutter build ios --simulator --debug --dart-define=TEST_BACKDOOR=true --dart-define=API_BASE_URL=...</code>、開機 simulator、安裝 App（裝完會確認，最多重裝 3 次）。</li>
+          <li>在 4723 起 Appium，log 在 <code>/tmp/tms-app-bdd-XXXXXX/appium.log</code>。</li>
+          <li><code>mvn test</code>，帶入 Appium 位址、UDID、bundle id、後端與資料庫位址。</li>
+          <li>收尾時關掉 Appium 與 simulator。</li>
+        </ol>
+        <p>不經腳本直接下 <code>mvn</code> 時，要自己先 <code>JAVA_HOME="$(/usr/libexec/java_home -v 25)" mvn -q -f app/bdd-support/pom.xml install</code>。報表在 <code>app/bdd/target/cucumber-reports/{truth,module,f3-push}.html</code>。</p>
+        </div>
+      </details>
+
+      <h4 class="sub">③ 一行句子怎麼走完？</h4>
+      <p>以 <code>specs/truth/features/ios-app/待認領/待認領列表.feature:4-23</code> 為例：</p>
+      <ol class="flow">
+        <li><code>app/bdd/run-module.sh 待認領</code> 完成就緒檢查、編譯安裝 App、起 Appium，再以 <code>-Dcucumber.features=../../specs/truth/features/ios-app/待認領</code> 執行 <code>RunModuleFeatureTest</code>。</li>
+        <li><code>AppiumWorld</code> 的 <code>@Before(order=0)</code>（<code>AppiumWorld.java:95-100</code>）建好 <code>IOSDriver</code>，呼叫 <code>resetAppState()</code>：清後端資料、重置時鐘、重開 App、等後門 9099 的 <code>/state</code> 回應。</li>
+        <li>「<code>房務待認領有以下任務：</code>」→ <code>steps/pool/PoolGivenSteps.java:20</code> → <code>BackendChannel</code> 用 JDBC 直接把任務寫進資料庫。</li>
+        <li>「<code>"阿美" 在 App 打開待認領</code>」→ <code>steps/pool/PoolWhenSteps.java:21</code> → 透過 Appium 登入這位員工並切到待認領頁，元素都用 <code>accessibilityId</code> 定位。</li>
+        <li>「<code>待認領列表依序為 317、313、314、215、418</code>」→ <code>steps/pool/PoolThenSteps.java:56</code>：先打 <code>GET /pool</code> 比順序，再讀畫面上每張卡片的 Semantics identifier 比順序；不符時印出元素樹。</li>
+      </ol>
+
+      <h4 class="sub">④ 新增一個場景要做哪三步？</h4>
+      <ol class="req">
+        <li><b>寫規格</b>：在 <code>specs/truth/features/ios-app/&lt;模組&gt;/</code> 加場景，句子先查 <code>ios-app/dsl.md</code>。</li>
+        <li><b>補 step 定義，App 新畫面加 Semantics identifier</b>：step 在 <code>app/bdd/src/test/java/com/athena/app/bdd/steps/&lt;模組&gt;/</code>；資料準備放 <code>app/bdd-support</code>（改完要重新 install）。</li>
+        <li><b>先 dry-run 再實跑</b>：<code>-Dcucumber.execution.dry-run=true</code>。</li>
+      </ol>
+
+      <h4 class="sub">⑤ 這條線專屬的坑</h4>
+      <ul class="rules">
+        <li><b>Appium 4723 與 simulator 全機唯一</b>：兩個 App 驗收同時跑會搶同一個 session，整輪作廢。開跑前 <code>lsof -i:4723</code> 與 <code>ps aux | grep RunModuleFeatureTest</code>。</li>
+        <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:90</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器已找不到，一律用 <code>UDID=</code> 指定。</li>
+        <li><b>App 一定要用 <code>TEST_BACKDOOR=true</code> 編譯</b>，否則每個場景都「等測試後門就緒逾時」。偶發的同一錯誤多半是環境訊號，重跑一次再判斷。</li>
+        <li><b>simulator 剛開機時 <code>simctl install</code> 會靜默失敗</b>（<code>env.sh</code> 已加重裝驗證）；另外要接硬體鍵盤，否則螢幕鍵盤會蓋住密碼欄：<code>defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true</code>。</li>
+        <li><b>全量要 60–90 分鐘</b>，電腦睡眠會殺掉它：開跑前掛 <code>caffeinate -dimsu -t 28800</code>。</li>
+        <li><b>只支援 iOS</b>：<code>AppiumWorld.start()</code> 遇到 Android 直接丟 <code>UnsupportedOperationException</code>。</li>
+      </ul>
+
+      <details>
+        <summary>App 線的檔案對照 <span class="hint">— 入口、AppiumWorld、step 目錄、推播與權限</span></summary>
+        <div class="in">
+        <div class="tablewrap"><table>
+          <thead><tr><th>角色</th><th>位置</th></tr></thead>
+          <tbody>
+            <tr><td>入口</td><td><code>app/bdd/src/test/java/com/athena/app/bdd/</code>：<code>RunTruthFeaturesTest</code>（全量）、<code>RunModuleFeatureTest</code>（配合 <code>-Dcucumber.features</code>）、<code>RunF3PushFeatureTest</code>（只跑推播）</td></tr>
+            <tr><td>共享世界與每場景重置</td><td><code>AppiumWorld.java</code>：建立或沿用 Appium session（跨場景共用）；每場景 <code>resetAppState()</code>＝清後端業務資料 → 重置時鐘 → <code>simctl terminate／launch</code> 重開 App → 等後門 9099</td></tr>
+            <tr><td>Step 定義</td><td><code>bdd/steps/{account,ask,common,handover,manager,pool,push,repair,system,taskexecution,today}/</code></td></tr>
+            <tr><td>依賴注入</td><td>PicoContainer（<code>cucumber-picocontainer</code>），不用 Spring</td></tr>
+            <tr><td>腳本</td><td><code>run-module.sh</code>、<code>run-all.sh</code>、<code>run-f3.sh</code>，共用 <code>lib/env.sh</code></td></tr>
+            <tr><td>推播與系統權限</td><td>推播用 <code>xcrun simctl push</code> 送 payload（<code>AppiumWorld.java:920, 937</code>）；偏好設定用 <code>simctl spawn defaults</code> 寫 <code>flutter.&lt;key&gt;</code>。headless 下 <code>simctl privacy grant notifications</code> 會失敗，權限彈窗靠 Appium 的 <code>setAutoAcceptAlerts(true)</code> 自動按掉</td></tr>
+          </tbody>
+        </table></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- ---------- 線 3 Web ---------- -->
+    <div class="tabpanel" id="line-web" data-tab="線 3 網頁">
+      <h3 class="panel-t">線 3：櫃檯與住客網頁驗收</h3>
+
+      <h4 class="sub">① 它在測什麼？</h4>
+      <p>用 <b>Playwright</b>（以程式操作真實瀏覽器的框架，這裡用 Java 版）開櫃檯與住客網頁。同一份 feature 可用三種瀏覽器設定跑，由 <code>-Dweb.profile</code> 選（<code>WebProfile.java</code>），不認得的值直接丟例外：</p>
+      <ul class="plain">
+        <li><code>desktop</code>：Chromium 1280×720，滑鼠操作。</li>
+        <li><code>ipad</code>：WebKit 1180×820，觸控。</li>
+        <li><code>phone</code>：WebKit 393×852，觸控（住客頁專用，語言預設繁中）。</li>
+      </ul>
+
+      <h4 class="sub">② 怎麼跑？</h4>
+      <p>先 <code>docker compose up -d</code>；腳本會自己起 8080 後端與 5199 vite，但<b>不會</b>幫你起容器。</p>
+      <div class="cmd"><pre class="api">bash app/web-bdd/run-feature.sh frontdesk-web/待派單/待派單清單.feature desktop</pre></div>
+      <details>
+        <summary>完整參數、路徑規則與腳本流程 <span class="hint">— --keep／--stop、住客頁、dry-run、結束碼、日誌位置</span></summary>
+        <div class="in">
+        <div class="cmd"><pre class="api">bash app/web-bdd/run-feature.sh [--keep] [--stop] [--rebuild] [feature 路徑] [desktop|ipad|phone]
+
+bash app/web-bdd/run-feature.sh --keep frontdesk-web/ desktop       <span class="c"># 櫃檯全部，跑完保留後端與 vite</span>
+bash app/web-bdd/run-feature.sh --keep guest-web/ phone             <span class="c"># 住客全部</span>
+bash app/web-bdd/run-feature.sh guest-web/設備報修/組成文字送出.feature phone
+bash app/web-bdd/run-feature.sh --stop                              <span class="c"># 收掉 --keep 留下的行程</span>
+
+<span class="c"># 只檢查句型（仍會先起後端與 vite）</span>
+MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &lt;路徑&gt;</pre></div>
+        <p><b>路徑規則</b>：以 <code>guest-web/</code> 或 <code>frontdesk-web/</code> 開頭就相對於 <code>specs/truth/features/</code>，否則相對於 <code>frontdesk-web/</code>。可以指整份 feature、一個模組目錄，或單一場景（<code>xxx.feature:18</code>，冒號後是場景那一行的行號）。不給 profile 時 <code>guest-web/</code> 用 <code>phone</code>，其餘用 <code>desktop</code>。</p>
+        <p><b>腳本依序</b>：檢查 JDK 25、必要指令與 Playwright 瀏覽器 → 取目錄鎖（<code>app/web-bdd/target/run-feature/lock</code>）→ 確認 5433 與 9092 連得上 → install bdd-support → 起 8080 後端（沒有 jar 或原始碼比 jar 新就重建，約 30 秒）→ 起 vite 5199 → <code>mvn test</code> → 收掉自己起的行程。</p>
+        <p><b>結束碼</b>：0 通過、2 環境問題、130／143 被中斷，其他是 mvn 的結束碼。日誌在 <code>app/web-bdd/target/run-feature/{backend,web,test}.log</code>，報表在 <code>app/web-bdd/target/cucumber-reports/frontdesk-web.html</code>，失敗時會把開著的分頁截圖附進報表。</p>
+        </div>
+      </details>
+
+      <h4 class="sub">③ 一行句子怎麼走完？</h4>
+      <p>以 <code>specs/truth/features/frontdesk-web/待派單/待派單清單.feature:3-22</code> 為例：</p>
+      <ol class="flow">
+        <li><code>run-feature.sh</code> 起好 8080 與 5199，以 <code>-Dweb.profile=desktop -Dweb.baseUrl=http://localhost:5199</code> 執行 <code>RunFrontdeskWebFeaturesTest</code>。</li>
+        <li><code>WebWorld.prepareScenario</code>（<code>support/WebWorld.java:72-77</code>）：清業務資料 → 補齊預設飯店「雅典娜酒店」、12 個帳號與客房 → 起時鐘；瀏覽器依 profile 啟動 Chromium。</li>
+        <li>「<code>假設 全館有以下的單：</code>」→ <code>steps/common/CommonGivenSteps.java:69</code> → <code>TaskTableRows</code> 把表格每一列換成資料庫裡一張處於該狀況的單（經 <code>BackendChannel</code> 直寫，含訂房與歷程）。</li>
+        <li>「<code>"林佩君" 登入後打開 "待派單頁"</code>」→ <code>steps/common/CommonWhenSteps.java:64</code>：注入登入狀態、導到 <code>http://localhost:5199/...</code>；vite 把 <code>/api</code> 轉給 8080，等資料載完。</li>
+        <li>「<code>待派單頁的清單由上到下是 305、402、507</code>」→ <code>steps/common/CommonThenSteps.java:654</code>：時限內反覆讀 <code>TriagePage</code> 的畫面順序直到相符，再查資料庫確認待派單依建立時間由新到舊也是同一順序。</li>
+      </ol>
+
+      <h4 class="sub">④ 新增一個場景要做哪三步？</h4>
+      <ol class="req">
+        <li><b>寫規格</b>：在 <code>specs/truth/features/frontdesk-web/</code> 或 <code>guest-web/</code> 的模組目錄加場景，句子先查該目錄的 <code>dsl.md</code>。</li>
+        <li><b>補 step 定義與頁面物件</b>：step 在 <code>app/web-bdd/src/test/java/com/athena/web/bdd/steps/&lt;模組&gt;/</code>；頁面操作封裝進 <code>pages/</code>；資料準備放 <code>app/bdd-support</code>。</li>
+        <li><b>先 dry-run 再實跑</b>：<code>MAVEN_ARGS="-Dcucumber.execution.dry-run=true"</code>。</li>
+      </ol>
+
+      <h4 class="sub">⑤ 這條線專屬的坑</h4>
+      <ul class="rules">
+        <li><b>後端只能是 8080</b>：<code>app/web/vite.config.ts</code> 把後端寫死成 <code>http://localhost:8080</code>，代理 <code>/api</code>、<code>/staff/stream</code>、<code>/guest/stream</code>、<code>/guest</code>。手動環境（8083）是用 <code>node -e</code> 呼叫 vite 的 <code>createServer</code> 在啟動時蓋掉代理，沒有改設定檔。</li>
+        <li><b>沿用既有的 8080 後端時，它沒開測試時鐘會報錯</b>：先 <code>run-feature.sh --stop</code>。</li>
+        <li><b>命令列另指定 <code>cucumber.plugin</code> 時要帶上 <code>StepPhaseListener</code></b>：它不是報表，而是讓「後端沒有任何資料被改動」這類結果句拿得到 When 之前的快照。</li>
+        <li><b>表格欄位有白名單</b>：<code>TaskTableRows</code> 不認得的欄位直接丟錯（<code>TaskTableRows.java:110</code>）。</li>
+        <li><b>住客頁沒有自己的入口</b>：只有 <code>RunFrontdeskWebFeaturesTest</code>，寫死讀 <code>frontdesk-web/</code>；腳本用 <code>-Dcucumber.features=</code> 指路徑時 Cucumber 會忽略寫死的目錄，所以同一個入口也能跑 <code>guest-web/</code>。</li>
+      </ul>
+
+      <details>
+        <summary>網頁線的目錄對照 <span class="hint">— support、pages、steps、預設不跑的測試</span></summary>
+        <div class="in">
+        <div class="tablewrap"><table>
+          <thead><tr><th>目錄</th><th>內容</th></tr></thead>
+          <tbody>
+            <tr><td><code>support/</code></td><td><code>WebWorld</code>（每場景：清資料 → 補齊櫃檯預設飯店與帳號 → 起時鐘）、<code>SessionInjector</code>（直接注入登入狀態）、<code>Network</code>（扣住或放行請求）、<code>Clocks</code>、<code>BrowserProfiles</code>、<code>WebApp</code>（前端網址，<code>WebApp.java:30</code>）、住客用的 <code>GuestHooks</code> 等</td></tr>
+            <tr><td><code>pages/</code></td><td>頁面物件（把「這頁有哪些按鈕、怎麼讀清單」封裝成方法）：<code>BoardPage</code>、<code>TriagePage</code>、<code>DetailPanel</code>、<code>ShellFrame</code>、<code>LoginPage</code>…；住客頁在 <code>pages/guest/</code></td></tr>
+            <tr><td><code>steps/</code></td><td>櫃檯：<code>account, answer, board, common, detail, realtime, shell, triage</code>；住客：<code>steps/guest/{cancelrate, common, entry, guide, home, realtime, repair, requests, shell, supply}</code></td></tr>
+            <tr><td>預設不跑</td><td><code>SmokeTest</code>、<code>GuestBackendSpikeTest</code>、<code>GuestScreenTourTest</code>（pom 排除；指名 <code>-Dtest=</code> 時照跑）</td></tr>
+          </tbody>
+        </table></div>
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="bdd-support">
+  <h2>App 與網頁的測試資料怎麼準備？為什麼不走後端 API？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p><code>app/bdd-support</code> 讓「假設」步驟直接用 JDBC 寫資料庫，「當」與讀回一律走正式 REST。後端刻意沒有測試用的造資料端點。代價是種資料的 SQL 要跟著資料表結構手動維護。</p>
+  </div>
+  <p>黑箱驗收最大的麻煩是「假設」：要讓畫面出現一張「工務已認領、做到一半」的單，得先讓後端資料處於那個狀態。</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>在後端開一組「測試專用」的造資料 API</h4>
+    <p>寫起來最快，但正式程式碼裡多了一批只給測試用的端點；部署時忘了關，就是任何人都能任意改資料的後門。</p>
+  </div>
+  <div class="opt ok">
+    <h4><span class="tag">可行但很慢</span>每個假設都用正式 API 一步一步操作到那個狀態</h4>
+    <p>最真實，但一張「做到一半」的單要經過建單、派單、認領、開始好幾個請求，整套驗收會慢好幾倍；有些狀態（例如三天前建立的單）根本操作不出來。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>假設直接寫資料庫；當與讀回走正式 REST</h4>
+    <p><code>BackendChannel</code>（約 3000 行）以 <code>-Dbackend.db.url／user／password</code>（預設 <code>jdbc:postgresql://127.0.0.1:5433/tms</code>、<code>tms</code>／<code>tms</code>，即 Flyway 管理帳號）直接寫入飯店、員工（bcrypt 雜湊格式與後端一致）、各狀態的單、訂房、住客請求。這個決定寫在 <code>app/bdd-support/pom.xml</code> 的註解。</p>
+    <p><code>resetBusinessData()</code>（<code>BackendChannel.java:436</code>）在同一個交易裡先 <code>LOCK TABLE</code> 再 <code>TRUNCATE … RESTART IDENTITY CASCADE</code>，避免與後端查詢互相卡死。</p>
+    <p><b class="lbl">權衡</b>後端行為規格測試另有自己的 <code>tms/src/test/.../bdd/support/*Fixtures</code>，兩邊的 SQL 是<b>手動對照維護</b>的：改了一邊，要記得檢查另一邊。</p>
+  </div>
+
+  <p>內建兩組預設資料：App 線的「測試飯店」（代碼 <code>test-hotel</code>，密碼 <code>demo1234</code>）；櫃檯網頁的「雅典娜酒店」（代碼 <code>athena</code>，密碼 <code>Tms12345</code>，12 個帳號 <code>F0101</code>…<code>O0001</code>，客房 2–5 樓每層 01–16）。</p>
+  <p>員工編號刻意不跟其他飯店重複，因為後端登入沒帶飯店代碼時會跨飯店找帳號（<a href="backend.html#auth">登入怎麼決定飯店</a>）。</p>
+  <div class="callout warn">
+    <p><b>多個工作目錄同時 install bdd-support 會互相覆蓋</b> <code>~/.m2</code> 裡同一份 SNAPSHOT。多個 git worktree 平行開發時，改用獨立的本機倉庫（後端測試不依賴 bdd-support，不需要）：</p>
+    <div class="cmd"><pre class="api">export MAVEN_ARGS="-Dmaven.repo.local=$HOME/.m2-004/repository \
+  -Dmaven.repo.local.tail=$HOME/.m2/repository \
+  -Dmaven.repo.local.tail.ignoreAvailability=true"</pre></div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="concurrency">
+  <h2>三條線能不能同時跑？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>後端線可以跟誰都同時跑。App 線與網頁線預設共用 8080 與 5433 的 <code>tms</code> 資料庫，而每個場景開頭都清空它，所以<b>不能同時跑</b>；要同時跑，App 線改連 8081／5434 的隔離堆疊。</p>
+  </div>
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 980 710" role="img" aria-label="三條測試線與共用件：specs/truth/features 分別被後端、App、網頁三條測試線讀取；後端線用 Testcontainers 自帶 Postgres 與 Kafka；App 線經 Appium 4723 操作 simulator 內的 Flutter App，App 有測試後門 9099；網頁線經 Playwright 三組瀏覽器開 vite 5199；App 與 vite 都連到 8080 的後端 jar，後端讀寫開發 Postgres 5433 與 Kafka 9092；bdd-support 直接寫 Postgres 種資料">
+      <defs>
+        <marker id="hv-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+        <marker id="hv-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-acc"/></marker>
+      </defs>
+      <rect class="sk-shape sk-soft sk-acc" x="290" y="18" width="400" height="82" rx="16"/>
+      <text class="sk-t sk-t-b" x="490" y="50" text-anchor="middle">specs/truth/features</text>
+      <text class="sk-t-lb" x="490" y="74" text-anchor="middle">backend/ · ios-app/ · frontdesk-web/ · guest-web/</text>
+      <text class="sk-t-s" x="490" y="92" text-anchor="middle">中文 Gherkin，每個子目錄一份 dsl.md（句型權威）</text>
+      <path class="sk-edge-acc" d="M 360 100 Q 260 118 165 148" marker-end="url(#hv-acc)"/>
+      <text class="sk-t-acc" x="232" y="118" text-anchor="middle">讀 backend/</text>
+      <path class="sk-edge-acc" d="M 490 100 Q 494 124 490 148" marker-end="url(#hv-acc)"/>
+      <text class="sk-t-acc" x="540" y="130" text-anchor="middle">讀 ios-app/</text>
+      <path class="sk-edge-acc" d="M 620 100 Q 720 118 815 148" marker-end="url(#hv-acc)"/>
+      <text class="sk-t-acc" x="790" y="118" text-anchor="middle">讀 frontdesk-web/、guest-web/</text>
+
+      <rect class="sk-shape sk-fill" x="20" y="150" width="280" height="92" rx="14"/>
+      <text class="sk-t sk-t-b" x="36" y="178">線 1　後端</text>
+      <text class="sk-t-lb" x="36" y="202">tms/ · RunTruthFeaturesTest</text>
+      <text class="sk-t-s" x="36" y="224">Cucumber＋Spring，同一個 JVM</text>
+      <rect class="sk-shape sk-fill" x="350" y="150" width="280" height="92" rx="14"/>
+      <text class="sk-t sk-t-b" x="366" y="178">線 2　員工 App</text>
+      <text class="sk-t-lb" x="366" y="202">app/bdd · run-module.sh</text>
+      <text class="sk-t-s" x="366" y="224">Cucumber＋Appium java-client＋bdd-support</text>
+      <rect class="sk-shape sk-fill" x="680" y="150" width="280" height="92" rx="14"/>
+      <text class="sk-t sk-t-b" x="696" y="178">線 3　網頁</text>
+      <text class="sk-t-lb" x="696" y="202">app/web-bdd · run-feature.sh</text>
+      <text class="sk-t-s" x="696" y="224">Cucumber＋Playwright＋bdd-support</text>
+
+      <path class="sk-edge" d="M 160 242 Q 164 270 160 298" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="172" y="274">RestClient 打真 HTTP</text>
+      <rect class="sk-shape sk-fill" x="20" y="300" width="280" height="70" rx="14"/>
+      <text class="sk-t sk-t-b" x="36" y="328">Spring Boot 後端</text>
+      <text class="sk-t-s" x="36" y="352">隨機埠；時鐘與推播換成測試替身</text>
+      <path class="sk-edge" d="M 110 370 Q 100 392 94 410" marker-end="url(#hv-a)"/>
+      <path class="sk-edge" d="M 210 370 Q 220 392 226 410" marker-end="url(#hv-a)"/>
+      <circle class="sk-shape sk-fill" cx="90" cy="468" r="56"/>
+      <text class="sk-t sk-t-b" x="90" y="466" text-anchor="middle">Postgres 16</text>
+      <text class="sk-t-s" x="90" y="488" text-anchor="middle">容器</text>
+      <circle class="sk-shape sk-fill" cx="230" cy="468" r="56"/>
+      <text class="sk-t sk-t-b" x="230" y="466" text-anchor="middle">Kafka 4.0.0</text>
+      <text class="sk-t-s" x="230" y="488" text-anchor="middle">容器</text>
+      <text class="sk-t-acc" x="160" y="550" text-anchor="middle">Testcontainers 自己起，埠隨機</text>
+      <text class="sk-t-s" x="160" y="570" text-anchor="middle">不碰 5433／9092，不需先 docker compose</text>
+
+      <path class="sk-edge" d="M 490 242 Q 494 266 490 288" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="502" y="270">點擊、輸入</text>
+      <rect class="sk-shape sk-fill" x="350" y="290" width="280" height="58" rx="14"/>
+      <text class="sk-t sk-t-b" x="366" y="316">Appium server :4723</text>
+      <text class="sk-t-s" x="366" y="336">XCUITest driver；全機只能一個</text>
+      <path class="sk-edge" d="M 490 348 Q 494 368 490 386" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="502" y="372">accessibilityId 找元素</text>
+      <rect class="sk-shape sk-fill" x="350" y="388" width="280" height="84" rx="14"/>
+      <text class="sk-t sk-t-b" x="366" y="414">iOS simulator：Flutter App</text>
+      <text class="sk-t-lb" x="366" y="438">以 TEST_BACKDOOR=true 編譯</text>
+      <text class="sk-t-warn" x="366" y="460">測試後門 127.0.0.1:9099（撥時鐘、查狀態）</text>
+
+      <path class="sk-edge" d="M 820 242 Q 824 266 820 286" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="832" y="270">-Dweb.profile</text>
+      <rect class="sk-shape sk-fill" x="680" y="288" width="280" height="100" rx="14"/>
+      <text class="sk-t sk-t-b" x="696" y="314">Playwright 三組瀏覽器</text>
+      <text class="sk-t-lb" x="696" y="338">desktop：Chromium 1280×720</text>
+      <text class="sk-t-lb" x="696" y="358">ipad：WebKit 1180×820 觸控</text>
+      <text class="sk-t-lb" x="696" y="378">phone：WebKit 393×852（住客頁）</text>
+      <path class="sk-edge" d="M 820 388 Q 824 400 820 410" marker-end="url(#hv-a)"/>
+      <rect class="sk-shape sk-fill" x="680" y="412" width="280" height="50" rx="14"/>
+      <text class="sk-t sk-t-b" x="696" y="436">vite 開發伺服器 :5199</text>
+      <text class="sk-t-s" x="696" y="454">代理寫死到 localhost:8080</text>
+
+      <rect class="sk-shape sk-fill sk-acc" x="380" y="522" width="230" height="70" rx="14"/>
+      <text class="sk-t sk-t-b" x="396" y="550">後端 jar :8080</text>
+      <text class="sk-t-s" x="396" y="572">TMS_TEST_CLOCK_ENABLED=true</text>
+      <text class="sk-t-s" x="396" y="586">（App 線可改連隔離的 8081）</text>
+      <path class="sk-edge" d="M 470 472 Q 466 498 474 520" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="352" y="503">API_BASE_URL（編譯期決定）</text>
+      <path class="sk-edge" d="M 700 462 Q 660 500 612 532" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="664" y="492">代理 /api</text>
+
+      <circle class="sk-shape sk-fill" cx="905" cy="530" r="50"/>
+      <text class="sk-t sk-t-b" x="905" y="528" text-anchor="middle">Kafka</text>
+      <text class="sk-t-s" x="905" y="548" text-anchor="middle">:9092</text>
+      <path class="sk-edge" d="M 612 552 Q 740 520 853 532" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="760" y="520">outbox → Kafka</text>
+
+      <path class="sk-shape sk-fill" d="M 670 600 L 670 664 Q 740 690 810 664 L 810 600"/>
+      <ellipse class="sk-shape sk-fill" cx="740" cy="600" rx="70" ry="14"/>
+      <text class="sk-t sk-t-b" x="740" y="636" text-anchor="middle">開發 Postgres</text>
+      <text class="sk-t-s" x="740" y="656" text-anchor="middle">:5433 · database tms</text>
+      <path class="sk-edge" d="M 612 578 Q 646 590 668 612" marker-end="url(#hv-a)"/>
+      <text class="sk-t-lb" x="622" y="610">讀寫</text>
+
+      <rect class="sk-shape sk-fill" x="380" y="622" width="230" height="66" rx="14" style="stroke-dasharray:7 5"/>
+      <text class="sk-t sk-t-b" x="396" y="648">app/bdd-support</text>
+      <text class="sk-t-s" x="396" y="670">BackendChannel；線 2、線 3 共用</text>
+      <path class="sk-edge-warn" d="M 610 662 Q 640 668 668 650" marker-end="url(#hv-a)"/>
+      <text class="sk-t-warn" x="520" y="704" text-anchor="middle">JDBC 直寫種資料、每場景 TRUNCATE</text>
+    </svg>
+    </div>
+    <figcaption>線 1 完全自給自足（左）；線 2 與線 3 都是「黑箱驗收」：打一個事先起好、開了測試時鐘的後端，並由 bdd-support 直接對資料庫種資料與清資料（中下）。</figcaption>
+  </figure>
+  <p>改連隔離堆疊用環境變數切換：<code>BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434</code>。這套堆疊目前 repo 裡沒有啟動腳本，見<a href="pitfalls.html#todo">接手待查</a>。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="rules">
+  <h2>新增場景時，三條線共通的規矩是什麼？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>句型先查 <code>dsl.md</code>，沒有就先補進去再寫；規格本身有缺口時不要自己補腦，回到規格流程處理。</p>
+  </div>
+  <ul class="rules">
+    <li><b>新句型先寫進 <code>dsl.md</code></b>：寫清楚「怎麼做、權威狀態落在哪、要查什麼」。</li>
+    <li><b>句型裡有斜線</b>：Cucumber Expression 的裸 <code>/</code> 代表「或」，中文句裡的斜線要寫成 <code>\\/</code>。</li>
+    <li><b>規格有缺口</b>（會影響驗收意圖或句型邊界）時回到規格流程；<code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code> 有多筆「待回交」的範例。</li>
+    <li><b><code>specs/plans/NNN-*/features/acceptance/*.feature</code> 不被任何測試線執行</b>：它是需求階段的業務流程驗收稿，要先拆成介面層級的 truth feature 才會變成可執行測試。</li>
+  </ul>
+  <p>完整的需求流程是 <code>/specify</code> → … → <code>/dsl-refine</code>（寫 truth feature 與 dsl）→ <code>/tasks</code> → <code>/implement</code> → <code>/bdd</code>，這些是 repo 內 <code>.athena</code> 與 Claude Code 的流程指令。</p>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="setup.html"><small>上一頁</small>← 第一天</a>
+  <a class="next" href="mobile.html"><small>下一頁</small>Flutter App →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>
