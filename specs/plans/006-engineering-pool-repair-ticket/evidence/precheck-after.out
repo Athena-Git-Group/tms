@@ -1,0 +1,8 @@
+== query 5: totals
+BEGIN
+ total | desk_forwarded | guest_direct 
+-------+----------------+--------------
+     0 |              0 |            0
+(1 row)
+
+ROLLBACK
