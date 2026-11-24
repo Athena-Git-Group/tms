@@ -7,11 +7,6 @@ import com.athena.web.bdd.support.WebWorld;
 import com.microsoft.playwright.Locator;
 import io.cucumber.java.zh_tw.當;
 
-/**
- * 「首頁」模組的 When 句型（{@code specs/truth/features/guest-web/首頁/dsl.md}）。
- *
- * <p>房號膠囊與即將開放的入口都不是按鈕，所以不經過「住客按」的找法，直接點它的字；點完不等任何東西，等 1 秒就往下驗。
- */
 public class HomeWhenSteps {
 
     private static final double AFTER_TAP_MS = 1_000;
@@ -36,7 +31,6 @@ public class HomeWhenSteps {
         tapAndWait(homePage.roomCapsule(scenario.phoneRoom()));
     }
 
-    /** 點該入口的整條（點它的字就是點在那一條上）；點之前記下網址與畫面文字。 */
     @當("住客點即將開放的入口 {string}")
     public void guestTapsComingSoon(String entry) {
         Locator text = homePage.main().getByText(entry.strip(), new Locator.GetByTextOptions().setExact(true))

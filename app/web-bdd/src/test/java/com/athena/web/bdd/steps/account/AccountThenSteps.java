@@ -16,6 +16,7 @@ import com.athena.web.bdd.pages.UiWords.Language;
 import com.athena.web.bdd.steps.guest.common.GuestCommonThenSteps;
 import com.athena.web.bdd.support.AccountScenario;
 import com.athena.web.bdd.support.GuestScenario;
+import com.athena.web.bdd.support.JsResult;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.ScenarioTasks.Entry;
 import com.athena.web.bdd.support.SessionInjector;
@@ -49,37 +50,28 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/** 「帳號與登入」模組的 Then 句型。 */
 public class AccountThenSteps {
 
-    /** 等畫面變成預期的樣子最久等這麼久（共通約定：輪詢，上限 5 秒）。 */
     private static final double SCREEN_TIMEOUT_MS = 5_000;
 
-    /** 測試直接打後端時用的位址，和 {@code BackendChannel} 讀同一個系統屬性。 */
     private static final String BACKEND_API =
             System.getProperty("backend.base.url", "http://127.0.0.1:8080").replaceAll("/+$", "") + "/api/v1";
 
-    /** 拿來重送「同一帳號輸入錯誤密碼」的密碼，不會是任何人真的密碼。 */
     private static final String WRONG_PASSWORD = "WebBddWrong-0000";
 
-    /** 錯誤回應裡每次都不一樣的欄位，比對「內容相同」時不看。 */
     private static final List<String> VOLATILE_ERROR_FIELDS =
             List.of("timestamp", "traceId", "requestId", "path", "instance");
 
-    /** 顯示密碼鈕的兩種名稱，按一下就換成另一個。 */
     private static final Map<String, String> TOGGLE_OPPOSITE = Map.of("顯示密碼", "隱藏密碼", "隱藏密碼", "顯示密碼");
 
     private static final String LOGIN_PAGE_TITLE = "登入 TMS 櫃檯";
 
     private static final String CHANGE_PASSWORD_TITLE = "設定新密碼";
 
-    /** 共用裝置的說明，登入頁上飯店名稱那一行在大標題與它之間。 */
     private static final String SHARED_DEVICE_NOTE = "這台裝置是櫃檯共用的，請用自己的帳號登入";
 
-    /** 共通約定的預設飯店名稱。 */
     private static final String DEFAULT_HOTEL_NAME = "雅典娜酒店";
 
-    /** 詳情面板上繁體中文的固定字句：關閉、兩個區塊標題與「內容」的六個欄名。 */
     private static final List<String> DETAIL_PANEL_CHINESE_LABELS =
             List.of("關閉", "內容", "歷程", "房號", "住客", "部門", "負責人", "來源", "建立");
 
@@ -103,12 +95,10 @@ public class AccountThenSteps {
 
     private final DetailPanel detail;
 
-    /** 每一步結束時這個場景送出過幾個請求、目前分頁的網址；給「什麼都沒發生」這類檢查找 When 之前的樣子。 */
     private final List<Integer> requestCountAfterStep = new ArrayList<>();
 
     private final List<String> urlAfterStep = new ArrayList<>();
 
-    /** 住客掃碼頁也有「畫面是 "{頁}"」這一句，頁的種類不同；住客場景由住客那邊判斷。 */
     private final GuestScenario guestScenario;
 
     private final GuestCommonThenSteps guestThen;
@@ -128,14 +118,11 @@ public class AccountThenSteps {
         this.detail = new DetailPanel(world);
     }
 
-    /** 只記數字與網址，不碰畫面，每一步多花的時間可以忽略。 */
     @AfterStep
     public void rememberAfterStep() {
         requestCountAfterStep.add(world.network().sentRequestCount());
         urlAfterStep.add(world.hasPage() ? world.page().url() : null);
     }
-
-    // ---------------------------------------------------------------- 登入頁
 
     @那麼("登入頁的員工編號欄與密碼欄都是空的")
     public void loginFieldsEmpty() {
@@ -171,11 +158,6 @@ public class AccountThenSteps {
         assertToggleNamed(toggleName);
     }
 
-    /**
-     * 畫面、帳號卡、分頁裡的登入憑證三者都要對；憑證另外拿去讀看板資料，確認它真的能用。
-     * 送出的員工編號和輸入的照字面相同，看的是最近一次在登入頁按「登入」送出的請求；
-     * 登入是前置句自己走的、沒有輸入紀錄時，和這位員工的員工編號比。
-     */
     @那麼("{string} 登入成功，畫面是 {string}")
     public void loggedInOn(String staffName, String pageName) {
         CreatedStaff staff = scenario.current(world.staff(staffName));
@@ -205,7 +187,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 畫面停在登入頁、分頁沒有登入憑證，而且直接開總覽看板的網址會被帶回登入頁。 */
     @那麼("這個分頁沒有登入，畫面是 {string}")
     public void notLoggedInOn(String pageName) {
         if (!"登入頁".equals(pageName.strip())) {
@@ -229,7 +210,6 @@ public class AccountThenSteps {
         assertOnPage(pageName);
     }
 
-    /** 畫面上沒有看板卡片與待派單列，這個分頁也從來沒有讀過看板資料。 */
     @那麼("畫面上看不到任何一張單")
     public void noTaskOnScreen() {
         Page page = world.page();
@@ -247,7 +227,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 一行紅字（不是提示卡）、密碼欄清空、員工編號欄照字面留著剛才輸入的員工編號，送出的也是它。 */
     @那麼("登入頁顯示紅字 {string}，密碼欄被清空，員工編號欄保留")
     public void loginErrorLine(String text) {
         assertSingleNoticeLine(text);
@@ -262,10 +241,6 @@ public class AccountThenSteps {
         assertThat(login.field("員工編號")).hasValue(sentLoginId);
     }
 
-    /**
-     * 提示位置只有這一句，沒有提示卡、對話框，也沒有進設定新密碼畫面；
-     * 這次的登入回應是 401，內容和同一帳號以錯誤密碼登入時一樣（另外以錯誤密碼重送一次來比）。
-     */
     @那麼("登入頁除了 {string} 沒有其他提示")
     public void onlyThisNotice(String text) {
         assertSingleNoticeLine(text);
@@ -305,7 +280,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 白卡下方是一張有標題與內文的提示卡，不是一行紅字；密碼欄是空的。 */
     @那麼("登入頁顯示提示卡，標題 {string}、內文 {string}")
     public void loginNoticeCard(String title, String body) {
         Locator notices = login.visibleNotices();
@@ -316,7 +290,6 @@ public class AccountThenSteps {
         assertThat(login.field("密碼")).hasValue("");
     }
 
-    /** 大標題與共用裝置說明之間沒有任何字；兩欄、「登入」「忘記密碼？」都在。 */
     @那麼("登入頁沒有飯店名稱那一行，其餘文字與欄位照常")
     public void noHotelNameLine() {
         login.waitUntilShown();
@@ -340,8 +313,6 @@ public class AccountThenSteps {
         assertThat(page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("忘記密碼？").setExact(true)))
                 .isVisible();
     }
-
-    // ---------------------------------------------------------------- 設定新密碼畫面
 
     @那麼("設定新密碼畫面只有 {string} 與 {string} 兩個輸入欄")
     public void onlyTwoPasswordFields(String first, String second) {
@@ -371,7 +342,6 @@ public class AccountThenSteps {
         assertRules(null);
     }
 
-    /** 以後端確認：用臨時密碼登入仍成功，而且仍要求先設定新密碼。 */
     @那麼("後端 {string} 的密碼仍是臨時密碼")
     public void backendStillTemporary(String staffName) {
         CreatedStaff staff = world.staff(staffName);
@@ -382,7 +352,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 以後端（登入不帶 client）確認：臨時密碼登入回 401；新密碼登入成功，不再要求設定新密碼。 */
     @那麼("後端 {string} 的密碼已是 {string}，臨時密碼不能再用，也不再需要設定新密碼")
     public void backendPasswordChanged(String staffName, String newPassword) {
         CreatedStaff staff = world.staff(staffName);
@@ -396,9 +365,6 @@ public class AccountThenSteps {
         }
     }
 
-    // ---------------------------------------------------------------- 帳號面板與登出
-
-    /** 面板標題相符；裡面依序是身分卡、第一列、第二列，沒有別的可以按的東西（標題列的「完成」除外）。 */
     @那麼("標題 {string} 的面板打開，裡面只有身分卡、{string} 與 {string} 三項")
     public void accountPanelOpened(String title, String first, String second) {
         Locator panel = account.panelTitled(title);
@@ -425,7 +391,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 身分卡四處文字照字面相符，飯店名稱等於登入回應的 {@code hotelName}。 */
     @那麼("身分卡顯示頭像 {string}、姓名 {string}、{string} 與 {string}")
     public void identityCardShows(String avatar, String name, String secondLine, String hotel) {
         Locator panel = account.panel();
@@ -440,7 +405,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 帳號面板還開著、還是三項；沒有新的對話框，網址沒變，When 之後這個分頁沒有送出任何請求（事件串流的重連除外）。 */
     @那麼("帳號面板維持原樣，沒有開任何頁面或對話框")
     public void accountPanelUnchanged() {
         if (requestCountAfterStep.size() < 2) {
@@ -449,7 +413,6 @@ public class AccountThenSteps {
         int beforeWhen = requestCountAfterStep.get(requestCountAfterStep.size() - 2);
         String urlBeforeWhen = urlAfterStep.get(urlAfterStep.size() - 2);
         Page page = world.page();
-        // 點了沒有反應的東西不等待；留一點時間讓可能引發的請求或對話框出現，才看得出來。
         page.waitForTimeout(500);
 
         assertThat(account.panel()).isVisible();
@@ -476,7 +439,6 @@ public class AccountThenSteps {
         assertThat(world.page().getByRole(AriaRole.DIALOG)).hasCount(0);
     }
 
-    /** 最上層是一個對話框，標題與內文照字面相符，剛好兩顆按鈕、順序相符。 */
     @那麼("畫面出現確認對話框，標題 {string}、內文 {string}、按鈕是 {string} 與 {string}")
     public void confirmDialogShown(String title, String body, String first, String second) {
         Page page = world.page();
@@ -497,7 +459,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 登入頁的文字與欄位值都不含他的姓名與員工編號；沒有帳號清單或切換帳號；分頁沒有他的登入回應。 */
     @那麼("登入頁上沒有 {string} 的姓名或員工編號，也沒有可以點選或切換的帳號")
     public void loginPageForgetsStaff(String staffName) {
         CreatedStaff staff = world.staff(staffName);
@@ -521,9 +482,6 @@ public class AccountThenSteps {
         }
     }
 
-    // ---------------------------------------------------------------- 登入狀態跟著分頁
-
-    /** 還是登入後的那一頁、帳號卡是他；詳情面板、當場回答面板、帳號面板與對話框都不在。 */
     @那麼("{string} 仍是登入狀態，沒有任何面板或對話框開著")
     public void stillLoggedInNothingOpen(String staffName) {
         String pageName = loggedInPageName(world.page());
@@ -535,7 +493,6 @@ public class AccountThenSteps {
         assertThat(page.getByRole(AriaRole.ALERTDIALOG)).hasCount(0);
     }
 
-    /** 數量卡是選中的樣子、搜尋房號與泳道相符；看板只剩那張數量卡的欄，卡片都是搜尋的房號。 */
     @那麼("總覽看板的數量卡篩選是 {string}、搜尋房號是 {string}、泳道是 {string}")
     public void boardSelectionKept(String countCard, String roomNo, String lane) {
         shell.waitForPage("總覽看板");
@@ -558,7 +515,6 @@ public class AccountThenSteps {
         });
     }
 
-    /** 重新整理之後還是他的登入狀態，才代表登入狀態真的存在這個分頁裡，不只是畫面還沒換。 */
     @那麼("原本的分頁仍是 {string} 的登入狀態")
     public void originalTabStillLoggedIn(String staffName) {
         CreatedStaff staff = world.staff(staffName);
@@ -590,9 +546,6 @@ public class AccountThenSteps {
         });
     }
 
-    // ---------------------------------------------------------------- 介面語言
-
-    /** 「登入」鈕與欄名是該語言的寫法；右上語言選單上的名稱相符。 */
     @那麼("登入頁的介面語言是 {string}，語言選單顯示 {string}")
     public void loginPageLanguage(String languageName, String option) {
         Language language = Language.of(languageName);
@@ -636,10 +589,6 @@ public class AccountThenSteps {
         onTab(scenario.newTab(), () -> assertShellLanguage(language));
     }
 
-    /**
-     * 規格要求「登出再登入後介面仍是該語言」。登出會改掉目前分頁的樣子，影響後面的步驟，
-     * 所以改在同一台裝置另開一個分頁重新登入：分頁的登入狀態各自獨立，讀到的語言紀錄和登出再登入時相同。
-     */
     @那麼("這台裝置記下 {string} 的介面語言是 {string}")
     public void deviceRemembersLanguage(String staffName, String languageName) {
         CreatedStaff staff = world.staff(staffName);
@@ -664,7 +613,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 帳號面板那一列（列名在任何一種語言都認得）右側的文字相符。 */
     @那麼("帳號面板 {string} 那一列的右邊寫著 {string}")
     public void accountRowValue(String rowName, String value) {
         assertThat(account.panel()).isVisible();
@@ -674,7 +622,6 @@ public class AccountThenSteps {
                 () -> valueOfRow(row.innerText(), rowName).equals(value));
     }
 
-    /** 段落標題相符；選項剛好四列，兩行文字與順序都與表格相同；只有那一個選項打勾。 */
     @那麼("語言頁的段落標題是 {string}，四個選項依序如下，打勾的是 {string}：")
     public void languagePageLists(String title, String selected, DataTable table) {
         assertThat(account.panel()).isVisible();
@@ -714,11 +661,6 @@ public class AccountThenSteps {
         });
     }
 
-    /**
-     * 詳情面板的固定字句（「內容」的欄名、區塊標題、狀態標籤、「關閉」）不是繁體中文。
-     * 規格沒有給英文、日文、越南文的譯文，所以這裡確認的是：文件語言是該語言、繁體中文的固定字句都不在面板上，
-     * 而且面板上仍有按鈕可以關閉、只是換了名稱。
-     */
     @那麼("詳情面板的欄名與按鈕是 {string}")
     public void detailPanelLanguage(String languageName) {
         Language language = Language.of(languageName);
@@ -746,13 +688,10 @@ public class AccountThenSteps {
         }
     }
 
-    // ---------------------------------------------------------------- 共用的讀取與比對
-
     private void assertLoginFieldsEmpty() {
         login.waitUntilShown();
         assertThat(login.field("員工編號")).hasValue("");
         assertThat(login.field("密碼")).hasValue("");
-        // 瀏覽器的自動填入會在畫完之後才補上，隔一下再看一次。
         world.page().waitForTimeout(300);
         String loginId = login.field("員工編號").inputValue();
         String password = login.field("密碼").inputValue();
@@ -772,14 +711,12 @@ public class AccountThenSteps {
         }
     }
 
-    /** 提示位置只有一個提示，而且整個就是這一句：一行紅字，不是有標題與內文的提示卡。 */
     private void assertSingleNoticeLine(String text) {
         Locator notices = login.visibleNotices();
         assertThat(notices).hasCount(1);
         assertThat(notices.first()).hasText(Pattern.compile("^\\s*" + BrowserRegex.literal(text) + "\\s*$"));
     }
 
-    /** 以網址與大標題判斷畫面是哪一頁：登入頁、設定新密碼畫面、總覽看板、待派單頁。 */
     private void assertOnPage(String pageName) {
         Page page = world.page();
         switch (pageName.strip()) {
@@ -801,10 +738,6 @@ public class AccountThenSteps {
         }
     }
 
-    /**
-     * 帳號卡是這位員工。側欄收起時卡片若只是藏起來，直接看藏起來的那張；
-     * 收起時整個不在畫面裡的話，打開側欄看完再收回去。
-     */
     private void assertAccountCardIs(CreatedStaff staff) {
         Locator card = account.accountCardOf(staff.name(), staff.loginId());
         if (card.count() > 0 || shell.sidebarOpen()) {
@@ -819,7 +752,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 分頁沒有任何登入憑證：沒有登入狀態那一筆，其他筆也不含通行憑證。 */
     private void assertNoCredentials(Page page) {
         Object session = page.evaluate("key => sessionStorage.getItem(key)", SessionInjector.SESSION_KEY);
         if (session != null) {
@@ -832,11 +764,6 @@ public class AccountThenSteps {
         }
     }
 
-    /**
-     * 登入後畫面的固定字句是該語言：文件語言相符；繁體中文時頁標題是「總覽看板」或「待派單」、
-     * 有「打開側欄」或「收合側欄」；其他語言時這幾句繁體中文都不在畫面上，頁標題也不是空的。
-     * 規格沒有給這幾句的其他語言譯文，所以其他語言只能確認「換掉了」。
-     */
     private void assertShellLanguage(Language language) {
         Page page = world.page();
         waitUntil("畫面應該是登入後的頁面，網址是 " + page.url(),
@@ -856,7 +783,6 @@ public class AccountThenSteps {
         assertThat(chineseSidebarButtons).hasCount(0);
     }
 
-    /** {@code <html lang>} 的主語言相符，例如 {@code zh-TW} 只看 {@code zh}。 */
     private void assertDocumentLanguage(Page page, Language language) {
         String primary = language.code().split("-")[0];
         waitUntil("文件語言應該是 " + language.code(), () -> {
@@ -865,7 +791,6 @@ public class AccountThenSteps {
         });
     }
 
-    /** 規則清單上指定的那一條沒有打勾、其餘打勾；{@code unmet} 是 null 時四條都要打勾。 */
     private void assertRules(String unmet) {
         List<String> rules = List.of("至少 8 碼", "包含英文字母", "包含數字", "兩次輸入相同");
         String target = unmet == null ? null : unmet.strip();
@@ -882,13 +807,11 @@ public class AccountThenSteps {
         }
     }
 
-    /** 帳號面板標題列上的按鈕（「完成」、語言頁的返回）不算在面板內容裡。 */
     private static boolean isPanelHeaderButton(String name) {
         return UiWords.anyLanguage("帳號").matcher(name).matches()
                 || Pattern.compile("^(完成|Done|完了|Hoàn thành)$").matcher(name).matches();
     }
 
-    /** 面板列名在四種語言的寫法，比對時只要列的名稱以其中一種開頭；譯文表沒有這個列名時只認繁體中文。 */
     private static Pattern rowNamePattern(String rowName) {
         List<String> names = new ArrayList<>();
         for (Language language : Language.values()) {
@@ -902,14 +825,12 @@ public class AccountThenSteps {
                 .collect(Collectors.joining("|")) + ")");
     }
 
-    /** 帳號面板一列的文字去掉開頭的列名，剩下的就是右邊寫的字。 */
     private static String valueOfRow(String rowText, String rowName) {
         String text = rowText.strip();
         Matcher label = rowNamePattern(rowName).matcher(text);
         return label.find() ? text.substring(label.end()).strip() : text;
     }
 
-    /** 目前分頁停在哪一頁（總覽看板或待派單頁）；兩頁都不是時直接失敗。 */
     private String loggedInPageName(Page page) {
         if (shell.onPage("總覽看板")) {
             return "總覽看板";
@@ -920,7 +841,6 @@ public class AccountThenSteps {
         throw new AssertionError("畫面應該是登入後的頁面，實際網址是 " + page.url());
     }
 
-    /** 這個分頁存的登入回應；沒有登入時是 null。 */
     private static JsonNode storedLoginResponse(Page page) {
         Object raw = page.evaluate("key => sessionStorage.getItem(key)", SessionInjector.SESSION_KEY);
         if (!(raw instanceof String text)) {
@@ -941,16 +861,11 @@ public class AccountThenSteps {
         return stored.get("name").asText();
     }
 
-    @SuppressWarnings("unchecked")
     private static List<String> sessionValues(Page page) {
         Object values = page.evaluate("() => Object.keys(sessionStorage).map(k => sessionStorage.getItem(k))");
-        return values instanceof List<?> list ? (List<String>) list : List.of();
+        return values instanceof List<?> ? JsResult.strings(values) : List.of();
     }
 
-    /**
-     * 最近一次送出的員工編號：優先用 When 句記下的送出紀錄。
-     * 前置句自己走登入頁登入時不會記進那份紀錄，這時改看這個分頁的請求紀錄。
-     */
     private Optional<String> lastSentLoginId(Page page) {
         Optional<String> recorded = attempts.last().map(Submission::loginId);
         if (recorded.isPresent()) {
@@ -965,11 +880,9 @@ public class AccountThenSteps {
         return seen.isEmpty() ? 0 : seen.get(seen.size() - 1).status();
     }
 
-    /** 分頁送出過的一次登入請求。 */
     private record SeenLogin(String loginId, int status) {
     }
 
-    /** 這個分頁送出過的登入請求，依送出的先後。 */
     private static List<SeenLogin> loginRequestsOn(Page page) {
         List<SeenLogin> seen = new ArrayList<>();
         for (Request request : page.requests()) {
@@ -993,7 +906,6 @@ public class AccountThenSteps {
         return new CreatedStaff(staff.id(), staff.name(), staff.loginId(), password, staff.role(), staff.dept());
     }
 
-    /** 讓檢查只影響指定的分頁：檢查完把步驟操作的對象換回原來的分頁，後面的步驟不受影響。 */
     private void onTab(Page tab, Runnable check) {
         Page before = world.page();
         world.switchTo(tab);
@@ -1004,7 +916,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 輪詢到條件成立，最多 5 秒；逾時以斷言失敗回報。 */
     private void waitUntil(String what, BooleanSupplier condition) {
         try {
             world.page().waitForCondition(condition,
@@ -1014,7 +925,6 @@ public class AccountThenSteps {
         }
     }
 
-    /** 錯誤回應拿掉每次都不同的欄位，剩下的拿來比內容；不是 JSON 時整段當文字比。 */
     private static JsonNode comparableError(String body) {
         try {
             JsonNode node = JSON.readTree(body == null || body.isBlank() ? "null" : body);
@@ -1030,13 +940,11 @@ public class AccountThenSteps {
     private record HttpResult(int status, String body) {
     }
 
-    /** 拿畫面存的登入憑證直接讀後端；{@code BackendChannel} 只能用測試自己登入拿到的憑證。 */
     private static HttpResult backendGet(String path, String token) {
         return send(HttpRequest.newBuilder(URI.create(BACKEND_API + path)).GET()
                 .header("Authorization", "Bearer " + token));
     }
 
-    /** 照畫面送出的內容（含 client）重送登入；{@code BackendChannel} 的登入不帶 client，也不回錯誤內容。 */
     private static HttpResult backendPost(String path, String json) {
         return send(HttpRequest.newBuilder(URI.create(BACKEND_API + path))
                 .header("Content-Type", "application/json")

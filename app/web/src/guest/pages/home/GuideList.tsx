@@ -5,7 +5,6 @@ import { Icon } from '../../components/Icon';
 import { listableInfoPages } from '../../lib/info-pages';
 import { guestPath } from '../../paths';
 
-/** 「住宿指南」：每一頁一列，只有標題與箭頭，順序照後端；一頁都不能列時整段不出現。 */
 export function GuideList({ qrToken, pages }: { qrToken: string; pages: readonly GuestInfoPage[] }) {
   const { t } = useTranslation();
   const listed = listableInfoPages(pages);

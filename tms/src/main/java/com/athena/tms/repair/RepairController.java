@@ -47,6 +47,11 @@ public class RepairController {
     public record DowngradeUrgencyRequest(String note) {
     }
 
+    @GetMapping("/repair-categories")
+    public List<RepairService.CategoryOption> listRepairCategories() {
+        return repairService.categories();
+    }
+
     @PostMapping("/repair-photos")
     public ResponseEntity<Map<String, Object>> createRepairPhoto(@RequestBody CreatePhotoRequest request) {
         if (request == null || request.purpose() == null) {

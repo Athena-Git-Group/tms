@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.given;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.Awaits;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
@@ -15,8 +16,6 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.listener.MessageListenerContainer;
 
 public class StreamGivenSteps {
-
-    public static final String CLIENTS_KEY = "sseClients";
 
     private final ScenarioContext ctx;
     private final ApiClient api;
@@ -43,10 +42,10 @@ public class StreamGivenSteps {
         String session = ctx.guestSession(sessionSymbol);
         SseSupport.SseStreamClient client = sse.open("/guest/stream", session);
         register(client);
-        ctx.put("sse:guest:" + label, client);
+        ctx.put(ScenarioKeys.guestStream(label), client);
         UUID reservationId = db.admin().queryForObject(
                 "SELECT reservation_id FROM guest_sessions WHERE session_token = ?", UUID.class, session);
-        ctx.put("reservation:" + label, reservationId);
+        ctx.put(ScenarioKeys.reservation(label), reservationId);
     }
 
     @Given("^(?:房務|工務)「(小美|阿強)」開啟員工事件串流$")
@@ -54,7 +53,7 @@ public class StreamGivenSteps {
         waitForListenerAssignment();
         SseSupport.SseStreamClient client = sse.open("/staff/stream", api.staffToken(1L, ctx.staffLogin(name)));
         register(client);
-        ctx.put("sse:staff:" + name, client);
+        ctx.put(ScenarioKeys.staffStream(name), client);
     }
 
     private void waitForListenerAssignment() {
@@ -65,10 +64,10 @@ public class StreamGivenSteps {
     }
 
     private void register(SseSupport.SseStreamClient client) {
-        List<SseSupport.SseStreamClient> clients = ctx.get(CLIENTS_KEY);
+        List<SseSupport.SseStreamClient> clients = ctx.get(ScenarioKeys.SSE_CLIENTS);
         if (clients == null) {
             clients = new ArrayList<>();
-            ctx.put(CLIENTS_KEY, clients);
+            ctx.put(ScenarioKeys.SSE_CLIENTS, clients);
         }
         clients.add(client);
     }

@@ -35,7 +35,6 @@ class V29EngineeringTaskBackfillTest {
     private String jdbcUrl;
     private JdbcTemplate jdbc;
 
-    // 每個案例各開一個資料庫，停在 V28 上鋪資料，再看 V29 把它變成什麼樣子。
     @BeforeEach
     void freshDatabaseAtV28() {
         String database = "v29_case_" + DATABASE_SEQ.incrementAndGet();
@@ -317,7 +316,6 @@ class V29EngineeringTaskBackfillTest {
             OffsetDateTime createdAt) {
     }
 
-    // dbml tasks Note 重放規則點名的欄位，加上 urgent。
     record TaskProjection(String state, String dept, String type, String reminderStage, String poolSource,
             String taskNo, boolean urgent) {
     }
@@ -398,7 +396,6 @@ class V29EngineeringTaskBackfillTest {
         flyway(null).migrate();
     }
 
-    // 「讓遷移停下」的案例拿這段訊息斷言：V29 的 RAISE EXCEPTION 文字包在 Flyway 例外的 cause 裡。
     String migrateToLatestExpectingFailure() {
         FlywayException failure = catchThrowableOfType(FlywayException.class, this::migrateToLatest);
         assertThat(failure).as("遷移應該以例外停下").isNotNull();
@@ -427,8 +424,6 @@ class V29EngineeringTaskBackfillTest {
                 tenantId, taskId);
     }
 
-    // 只認 created、triaged、claimed、triage_undone 四種事件，照 dbml tasks Note 的重放規則把事件疊成任務列。
-    // created 快照不帶 urgent，所以 urgent 從 false 起算，只由 triaged 的 former_urgent 在復原時還原。
     TaskProjection replay(long tenantId, UUID taskId) {
         List<Map<String, Object>> events = jdbc.queryForList(
                 "SELECT type, payload::text AS payload FROM task_events WHERE tenant_id = ? AND task_id = ? ORDER BY seq",

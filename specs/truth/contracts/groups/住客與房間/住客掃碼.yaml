@@ -1,7 +1,7 @@
-guestSessionsScan:
+openGuestSession:
   post:
-    operationId: guestSessionsScan
-    summary: 櫃檯替住客開一個住客 session
+    operationId: openGuestSession
+    summary: 櫃檯替住客開一個住客 session，到期時間由後端定為退房時刻
     description: >-
       櫃檯或主管替某間房的住客開一個住客 session，住客拿回應裡的 sessionToken 就能提需求、看進度。
       只有 frontdesk、manager、duty_manager 可以呼叫；沒登入回 401 unauthorized，其他角色回 403 forbidden。
@@ -48,6 +48,10 @@ listGuestRequestsAndcreateGuestRequest:
     description: >-
       只用 session 綁定的 reservation_id 過濾，不按房號查（基線 FR-005）。
       櫃檯當場回答的需求，回應的 answer 帶回覆全文，住客的進度頁據此顯示櫃檯的回覆。
+      清單的順序就是畫面該顯示的順序：新送的在前；createdAt 相同時（同一刻送出多筆）依送出的先後，後送的在前。
+      畫面照回應的順序顯示，不必自己記送出順序再重排。
+      回應標頭帶住客這次住宿的送單名額（見 RateLimit-Limit、RateLimit-Remaining、RateLimit-Reset），
+      畫面照著估算「還能送幾筆」，不必自己複製限流規則。
     tags:
     - 住客掃碼 API
     parameters:
@@ -55,6 +59,13 @@ listGuestRequestsAndcreateGuestRequest:
     responses:
       '200':
         description: 成功
+        headers:
+          RateLimit-Limit:
+            $ref: '../../components/headers.yaml#/RateLimitLimit'
+          RateLimit-Remaining:
+            $ref: '../../components/headers.yaml#/RateLimitRemaining'
+          RateLimit-Reset:
+            $ref: '../../components/headers.yaml#/RateLimitReset'
         content:
           application/json:
             schema:
@@ -75,7 +86,9 @@ listGuestRequestsAndcreateGuestRequest:
       由櫃檯以 deskAssignTask 派給工務，派單時才開工務單。住客端看到的是「已送出」、部門「櫃檯」。
       LLM 只做翻譯與建議，不直接決定歸屬（基線 FR-003）。
       進 pool 時推播該部門員工（PushPayload.event=pool_new_request），並標示是否與收件人同樓層（FR-047）。
-      同一房 10 分鐘內第 4 筆回 429（基線 E-01）。
+      同一房 10 分鐘內第 4 筆回 429（基線 E-01）。張數以 tasks 的建立時間（營業時鐘）現數：
+      住客送的（勾選單與自由文字合併）與櫃檯替這間房代開的都算，已取消的也算，不分是哪一筆訂房；
+      建立剛好滿 10 分鐘的那一筆不再佔名額。成功時回應標頭帶送出這筆之後住客這次住宿剩下的名額，標頭與 listGuestRequests 相同。
     tags:
     - 住客掃碼 API
     parameters:
@@ -90,6 +103,13 @@ listGuestRequestsAndcreateGuestRequest:
     responses:
       '201':
         description: 已建立
+        headers:
+          RateLimit-Limit:
+            $ref: '../../components/headers.yaml#/RateLimitLimit'
+          RateLimit-Remaining:
+            $ref: '../../components/headers.yaml#/RateLimitRemaining'
+          RateLimit-Reset:
+            $ref: '../../components/headers.yaml#/RateLimitReset'
         content:
           application/json:
             schema:

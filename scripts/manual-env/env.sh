@@ -4,7 +4,6 @@
 MANUAL_ENV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$MANUAL_ENV_DIR/../.." && pwd -P)"
 
-# pid、log、複製出來的 jar、QR 圖都放這裡，不放專案內。
 STATE_DIR="${MANUAL_ENV_STATE_DIR:-$HOME/.tms-manual-env}"
 
 DB_HOST="${MANUAL_DB_HOST:-127.0.0.1}"
@@ -16,7 +15,6 @@ DB_ADMIN_PASSWORD="${MANUAL_DB_ADMIN_PASSWORD:-tms}"
 
 BACKEND_PORT="${MANUAL_BACKEND_PORT:-8083}"
 WEB_PORT="${MANUAL_WEB_PORT:-5300}"
-# 要讓同一個區網的手機掃碼連進來，設成 0.0.0.0；預設只聽本機。
 WEB_HOST="${MANUAL_WEB_HOST:-localhost}"
 KAFKA_BOOTSTRAP="${MANUAL_KAFKA_BOOTSTRAP:-localhost:9092}"
 # 這套環境用的 Kafka topic 一律加這個前綴，跟驗收測試的 tms.* 分開。
@@ -35,7 +33,6 @@ WEB_PID_FILE="$STATE_DIR/web.pid"
 BACKEND_LOG="$STATE_DIR/backend.log"
 WEB_LOG="$STATE_DIR/web.log"
 
-# 員工 App：API 位址是編譯期參數，App 只會連它被編譯進去的那個後端。
 APP_DIR="$REPO_ROOT/app/mobile"
 APP_BUNDLE_ID="com.athena.tms.tmsStaffApp"
 APP_API_BASE_URL="http://localhost:${BACKEND_PORT}/api/v1"
@@ -61,7 +58,6 @@ lan_ip() {
   ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true
 }
 
-# 網頁有聽所有網卡（0.0.0.0），區網的手機才連得到。
 web_listens_all() {
   lsof -nP -iTCP:"$WEB_PORT" -sTCP:LISTEN 2>/dev/null | grep "\*:${WEB_PORT}" >/dev/null
 }

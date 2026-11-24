@@ -11,18 +11,10 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import org.junit.jupiter.api.Test;
 
-/**
- * 只確認這條測試線連得上：瀏覽器開得起來、載得到開發伺服器的首頁、經開發伺服器的代理打得到後端。
- * 不驗任何產品行為，也不屬於任何 Feature。
- *
- * <p>平常的 {@code mvn test} 不會跑到它（pom 的 surefire 把它排除了），因為它需要開發伺服器與 8080 後端
- * 都已經開著。要跑時指名：{@code mvn -q test -Dtest=SmokeTest -Dweb.profile=desktop|ipad|phone}。
- */
 class SmokeTest {
 
     private static final String BASE_URL = WebApp.baseUrl();
 
-    /** 用不存在的帳號登入：後端有收到就會回 401；代理沒通或後端沒開會是 502 或 404。 */
     private static final String LOGIN_WITH_UNKNOWN_ACCOUNT = """
             async () => {
               const response = await fetch('/api/v1/staff-accounts/login', {

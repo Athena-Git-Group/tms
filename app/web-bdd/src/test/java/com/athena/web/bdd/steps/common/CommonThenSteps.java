@@ -7,6 +7,7 @@ import com.athena.web.bdd.pages.BoardPage;
 import com.athena.web.bdd.pages.DetailPanel;
 import com.athena.web.bdd.pages.ShellFrame;
 import com.athena.web.bdd.pages.TriagePage;
+import com.athena.web.bdd.support.JsResult;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.WebApp;
 import com.athena.web.bdd.support.WebWorld;
@@ -33,47 +34,26 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 跨模組共用的 Then 句型。
- *
- * <p>每一句都先看畫面，寫「後端」的再以 {@code BackendChannel} 讀後端的權威狀態，兩邊都要成立。
- * 畫面會晚一點才跟上，所以檢查一律重讀到成立為止，最多 5 秒；5 秒到了還不成立，訊息寫的是最後一次讀到的樣子。
- * 畫面元素怎麼找都放在 page object，這裡只決定要看什麼、怎樣才算對。
- */
 public class CommonThenSteps {
 
-    /** 等畫面或後端跟上的上限。 */
     private static final long SETTLE_LIMIT_MS = 5_000;
 
-    /**
-     * 確認「沒有派單浮條」時最多等這麼久。浮條出現 5 秒後自己消失，
-     * 等滿 5 秒的話，不該出現的浮條也會自己不見而讓檢查誤過，所以這裡的上限要比浮條的壽命短。
-     */
     private static final long NO_TOAST_LIMIT_MS = 2_000;
 
-    /** 兩次重讀之間隔多久。 */
     private static final long POLL_INTERVAL_MS = 100;
 
-    /**
-     * 硬按停用的按鈕之後等多久再看有沒有送出請求。按鈕若會送請求，瀏覽器在這一下的事件處理裡就會發出，
-     * 半秒足以讓它出現在請求紀錄裡。
-     */
     private static final long AFTER_FORCED_PRESS_MS = 500;
 
-    /** 浮條的垂直中心落在視窗下方三分之一以內，才算在畫面底部。 */
     private static final double BOTTOM_AREA_FROM = 2.0 / 3.0;
 
-    /** 面板的水平中心離視窗中線不超過視窗寬度的一成，才算在畫面中央。 */
     private static final double CENTER_TOLERANCE = 0.1;
 
-    /** 詳情面板關掉之後，內容區的右緣要貼到視窗右緣；容許差這幾個像素，吸收小數點的捨入。 */
     private static final double FULL_WIDTH_TOLERANCE_PX = 2;
 
     private static final Set<String> DESK_ROLES = Set.of("frontdesk", "manager", "duty_manager");
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /** 讀後端看板（{@code getDeskBoard}）用的帳號：預設的櫃檯同仁，和總覽看板結果句讀後端時用的是同一位。 */
     private static final String DESK_BOARD_READER = "林佩君";
 
     private final WebWorld world;
@@ -110,7 +90,6 @@ public class CommonThenSteps {
         assertLacks(textColumn(table));
     }
 
-    /** 自己組的表格沒有 Cucumber 的型別轉換器，讀不了欄名，所以單句直接傳字串清單。 */
     @那麼("畫面上看得到 {string}")
     public void screenShowsText(String text) {
         assertShows(List.of(text));
@@ -135,7 +114,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 看得到、不是停用的樣子，而且 Playwright 確認得了它真的按得下去（不會被別的東西蓋住）；只試按，不真的按。 */
     @那麼("按鈕 {string} 可以按")
     public void buttonPressable(String name) {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -148,11 +126,6 @@ public class CommonThenSteps {
         tryPress(shell.topmostPressable(name));
     }
 
-    /**
-     * 是停用的樣子；略過 Playwright 的可按檢查硬按一下，之後這個分頁沒有送出請求，畫面上的文字也和按之前相同。
-     * 看板資料與即時訊號是畫面自己定時或收到訊號時打的，和這一下無關，不算在內；住客頁的首頁資料、需求清單與
-     * 即時訊號同理。
-     */
     @那麼("按鈕 {string} 不能按")
     public void buttonNotPressable(String name) {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -216,7 +189,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 頁面上的對話框與瀏覽器內建的提示框都沒有；後者從前置走完起開始記。 */
     @那麼("畫面上沒有任何對話框")
     public void noDialog() {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -264,7 +236,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 後端這張單在該部門待認領、沒有負責人；該部門的待認領清單有它，另一個部門沒有；畫面上它也不在待派單。 */
     @那麼("後端 {string} 的單在 {string} 待認領")
     public void backendInDeptPool(String roomNo, String deptTerm) {
         UUID taskId = world.tasks().idOf(roomNo);
@@ -284,13 +255,6 @@ public class CommonThenSteps {
                 ? "後端已經派出去了，畫面上 " + roomNo + " 還在待派單" : null);
     }
 
-    /**
-     * 後端這張單還在櫃檯手上，而且給人看的歷程沒有多出任何一筆。
-     *
-     * <p>歷程拿 When 之前讀到的那一份比：現在每一筆都必須是那時就有的，用事件序號認。
-     * 那時有、現在沒有的只能是派單：派出後復原時，後端把這一對事件成對略過，歷程讀起來就是派單前的樣子；
-     * 所以「剛派出、按復原」的案例，When 之前的歷程多一筆派單，現在少了它，仍算沒有多任何一筆。
-     */
     @那麼("後端 {string} 的單仍是待派單，歷程沒有多任何一筆")
     public void backendStillTriage(String roomNo) {
         UUID taskId = world.tasks().idOf(roomNo);
@@ -326,7 +290,6 @@ public class CommonThenSteps {
         assertThat(removed.isEmpty(), roomNo + " 的歷程少了派單以外的事件：" + removed);
     }
 
-    /** 後端這張單最新一筆派單事件的操作者、操作當下的角色、派法與派去的部門。 */
     @那麼("後端 {string} 的派單紀錄是 {string} 以 {string} 派給 {string}")
     public void backendAssignRecord(String roomNo, String staffName, String method, String deptTerm) {
         UUID taskId = world.tasks().idOf(roomNo);
@@ -356,7 +319,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 後端這張單是住客收回的取消；從 When 之前到現在，櫃檯這一側沒有在這張單上留下任何事件。 */
     @那麼("後端 {string} 的單已取消，原因是住客收回")
     public void backendGuestWithdrew(String roomNo) {
         UUID taskId = world.tasks().idOf(roomNo);
@@ -371,7 +333,6 @@ public class CommonThenSteps {
         assertThat(deskEvents.isEmpty(), "櫃檯這次送出的動作在 " + roomNo + " 上留下了事件：" + deskEvents);
     }
 
-    /** 後端這張單由這位員工當場回答結束，仍是未分部門，從來沒有被派出去，兩個部門的待認領都沒有它。 */
     @那麼("後端 {string} 的單已由 {string} 當場回答，沒有進任何部門的待認領")
     public void backendAnsweredBy(String roomNo, String staffName) {
         UUID taskId = world.tasks().idOf(roomNo);
@@ -401,7 +362,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 從 When 之前到現在，分頁沒有送出任何寫入，後端三張表的內容也和那時一模一樣。 */
     @那麼("後端沒有任何資料被改動")
     public void backendUnchanged() {
         List<String> writes = whenStart.requestsSince().stream()
@@ -417,7 +377,6 @@ public class CommonThenSteps {
         assertThat(changed.isEmpty(), "後端這幾張表的內容和 When 之前不同：" + changed);
     }
 
-    /** 側欄收起時先打開再看；徽章的數字要等於後端現在待派單的張數。 */
     @那麼("側欄 \"待派單\" 的徽章是 {int}")
     public void triageBadge(int expected) {
         if (!shell.sidebarOpen()) {
@@ -456,7 +415,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 帳號卡上的頭像、姓名與第二行；第二行同時要等於這個分頁存著的登入回應裡的角色與員工編號。 */
     @那麼("側欄的帳號卡顯示頭像 {string}、姓名 {string} 與 {string}")
     public void accountCardShows(String avatar, String name, String secondLine) {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -464,12 +422,9 @@ public class CommonThenSteps {
             if (card.count() == 0) {
                 return "側欄上看不到帳號卡";
             }
-            // 頭像就是姓名的最後一個字，只看「卡上有沒有這個字」一定會過；所以三處各自要等於卡上的一整行，
-            // 或卡裡某個元素的完整文字（頭像這類排在同一行的小元素，整行會和旁邊的字連在一起）。
             Set<String> pieces = new HashSet<>(ShellFrame.linesOf(card.first().innerText()));
-            @SuppressWarnings("unchecked")
-            List<String> elementTexts = (List<String>) card.first().evaluate(
-                    "card => [...card.querySelectorAll('*')].map(el => el.innerText || '')");
+            List<String> elementTexts = JsResult.strings(card.first().evaluate(
+                    "card => [...card.querySelectorAll('*')].map(el => el.innerText || '')"));
             elementTexts.stream().map(ShellFrame::normalizeSpaces).filter(text -> !text.isEmpty()).forEach(pieces::add);
             List<String> missing = new ArrayList<>();
             if (!pieces.contains(ShellFrame.normalizeSpaces(avatar))) {
@@ -493,7 +448,6 @@ public class CommonThenSteps {
                 "帳號卡的姓名應該是登入回應的「" + login.path("name").asText() + "」");
     }
 
-    /** 卡片只在這一欄；這一欄也是後端這張單的狀態照「單的狀況對照」該在的欄。 */
     @那麼("{string} 的卡片在 {string} 欄")
     public void cardInColumn(String roomNo, String column) {
         String wanted = column.strip();
@@ -525,7 +479,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 詳情面板在畫面右側、顯示這個房號、內容已載入；停在總覽看板時，那張卡片標成開著面板的樣子。 */
     @那麼("{string} 的詳情面板是打開的")
     public void detailOpen(String roomNo) {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -551,10 +504,6 @@ public class CommonThenSteps {
         });
     }
 
-    /**
-     * 詳情面板開著時會擠窄看板或清單，關掉之後它們要佔回整個寬度。
-     * 所以除了找不到面板，還要看內容區的右緣貼回視窗右緣；面板只是被藏起來但還佔著位置時，這一點會抓到。
-     */
     @那麼("詳情面板是關的")
     public void detailClosed() {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -572,7 +521,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 當場回答面板在畫面中央、標題相符，是蓋住後面畫面的對話框（有遮罩）。 */
     @那麼("當場回答面板是打開的，標題是 {string}")
     public void answerPanelOpen(String title) {
         eventually(SETTLE_LIMIT_MS, () -> {
@@ -592,10 +540,6 @@ public class CommonThenSteps {
         });
     }
 
-    /**
-     * 分頁裡仍有這位員工的登入回應，網址與頁標題是該頁，帳號卡是他的姓名。
-     * 帳號卡在側欄裡，側欄收起時先打開再看。
-     */
     @那麼("{string} 仍是登入狀態，畫面是 {string}")
     public void stillLoggedIn(String staffName, String pageName) {
         CreatedStaff staff = world.staff(staffName);
@@ -629,7 +573,6 @@ public class CommonThenSteps {
         });
     }
 
-    /** 從前置走完到現在，這個分頁沒有整頁重新載入，也沒有被按過任何一下。 */
     @那麼("這段期間 {string} 沒有重新整理網頁")
     public void noReload(String staffName) {
         assertThat(!whenStart.pageReloadedSince(), staffName + " 的分頁在這段期間整頁重新載入過");
@@ -650,7 +593,6 @@ public class CommonThenSteps {
         assertThat(!"triage".equals(row.get("state")), "畫面上沒有 " + roomNo + " 了，但後端它還是待派單");
     }
 
-    /** 清單各列的房號與順序剛好是這幾間；也剛好是後端待派單的單依建立時間由新到舊。 */
     @那麼("待派單頁的清單由上到下是 {}")
     public void triageListOrder(String roomList) {
         List<String> expected = Arrays.stream(roomList.split("、")).map(String::strip).toList();
@@ -668,7 +610,6 @@ public class CommonThenSteps {
         assertThat(backendOrder.equals(expected), "後端的待派單依建立時間由新到舊是 " + backendOrder + "，不是 " + expected);
     }
 
-    /** 工具列頁標題下那一行照字面相符；裡面寫的張數等於後端現在的張數。 */
     @那麼("頁副標是 {string}")
     public void pageSubtitle(String text) {
         String wanted = ShellFrame.normalizeSpaces(text);
@@ -693,11 +634,6 @@ public class CommonThenSteps {
         }
     }
 
-    /**
-     * 重讀到 {@code problem} 回 {@code null} 為止，最多等 {@code limitMs}。
-     * 讀的時候丟出例外也當成還不成立，繼續重讀，因為畫面可能正在換頁、後端可能正在寫。
-     * 間隔用 Playwright 的等待，等的時候瀏覽器送來的事件照常處理。
-     */
     private void eventually(long limitMs, Supplier<String> problem) {
         long deadline = System.nanoTime() + limitMs * 1_000_000;
         while (true) {
@@ -730,7 +666,6 @@ public class CommonThenSteps {
         }
     }
 
-    /** 只試按：Playwright 確認這一下按得到它（看得到、沒被蓋住、不是停用），但不真的送出。 */
     private void tryPress(Locator target) {
         if (world.profile().touch()) {
             target.tap(new Locator.TapOptions().setTrial(true).setTimeout(SETTLE_LIMIT_MS));
@@ -759,7 +694,6 @@ public class CommonThenSteps {
         }).toList();
     }
 
-    /** 規格的部門說法換成資料上的值；這裡的句子只會派給房務或工務。 */
     private static String fieldDept(String deptTerm) {
         String dept = BackendChannel.dept(deptTerm.strip());
         if (!"housekeeping".equals(dept) && !"engineering".equals(dept)) {
@@ -768,7 +702,6 @@ public class CommonThenSteps {
         return dept;
     }
 
-    /** 以主管的身分看這個部門的待認領清單，看有沒有這張單。 */
     private boolean inDeptPool(String dept, UUID taskId) {
         JsonNode pool = world.backend().getJson("/pool?dept=" + dept, world.staff(WhenStart.BACKEND_READER));
         for (JsonNode item : pool.path("items")) {
@@ -779,7 +712,6 @@ public class CommonThenSteps {
         return false;
     }
 
-    /** 畫面上這張單還顯示成待派單：待派單頁上還有那一列，或總覽看板上卡片還在「待派單」欄。 */
     private boolean stillShownAsTriage(String roomNo) {
         if (shell.onPage("待派單頁")) {
             return triage.hasRow(roomNo);
@@ -790,7 +722,6 @@ public class CommonThenSteps {
         return false;
     }
 
-    /** 後端這張單照「單的狀況對照」該放在看板的哪一欄：完成的單有結束時刻就已經結案，沒有的還在等查房或驗收。 */
     private static String columnOf(Map<String, Object> row) {
         String state = String.valueOf(row.get("state"));
         return switch (state) {
@@ -806,7 +737,6 @@ public class CommonThenSteps {
         };
     }
 
-    /** 從 When 之前到現在，這張單多出來的事件，依先後。 */
     private List<Map<String, Object>> eventsSinceWhen(UUID taskId) {
         return world.backend().queryRows("""
                 SELECT seq, type, actor_role, actor_id FROM task_events
@@ -821,7 +751,6 @@ public class CommonThenSteps {
         return ((Number) count).intValue();
     }
 
-    /** 歷程每一筆的事件序號對到事件種類。 */
     private static Map<Integer, String> typesBySeq(JsonNode timeline) {
         Map<Integer, String> bySeq = new LinkedHashMap<>();
         for (JsonNode entry : timeline) {
@@ -830,16 +759,11 @@ public class CommonThenSteps {
         return bySeq;
     }
 
-    /** 側欄一項的文字裡，名稱後面的徽章數字；沒有數字就是沒有徽章。 */
     private static Integer badgeNumber(String itemText) {
         Matcher number = Pattern.compile("(\\d+)").matcher(itemText.replace("待派單", ""));
         return number.find() ? Integer.valueOf(number.group(1)) : null;
     }
 
-    /**
-     * 從元素的無障礙樹摘要讀出它的角色與名稱。摘要的第一行是「- 角色 "名稱"」，
-     * 名稱是輔助科技讀到的那一個，對話框的名稱就是它的標題。
-     */
     private static String[] roleAndNameOf(Locator element) {
         String firstLine = element.ariaSnapshot().lines().findFirst().orElse("");
         Matcher matcher = Pattern.compile("^-\\s+(\\S+?)(?:\\s+\"((?:[^\"\\\\]|\\\\.)*)\")?:?\\s*$").matcher(firstLine.strip());

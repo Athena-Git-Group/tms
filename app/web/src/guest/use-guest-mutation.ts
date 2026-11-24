@@ -1,12 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { ApiError, newIdempotencyKey } from '../api/errors';
-import type { GuestTask } from './api/types';
+import type { GuestRequestList, GuestTask } from './api/types';
 import { useToast } from './components/Toast';
 import { guestQueryKey } from './queries';
 import { currentSessionToken, useReadySession } from './session';
 
-/** 一張需求上的寫入；`refused` 是後端回 `409` 時要浮出的字，`null` 代表不提示。 */
 interface GuestMutation<A> {
   send: (sessionToken: string, args: A, idempotencyKey: string) => Promise<GuestTask>;
   succeeded: string;
@@ -14,10 +13,6 @@ interface GuestMutation<A> {
   notSent: string;
 }
 
-/**
- * 進度頁上取消與評分共用的寫入：送出中鎖住；成功時拿後端回的這張蓋掉清單裡的舊資料、提示、再重讀；
- * 被拒（`409`）時重讀到真正的狀態；連不上或 `5xx` 只提示，不動畫面上的資料。
- */
 export function useGuestMutation<A>({ send, succeeded, refused, notSent }: GuestMutation<A>) {
   const { qrToken } = useReadySession();
   const queryClient = useQueryClient();
@@ -33,8 +28,8 @@ export function useGuestMutation<A>({ send, succeeded, refused, notSent }: Guest
     setBusy(true);
     try {
       const updated = await send(currentSessionToken(), args, newIdempotencyKey());
-      queryClient.setQueryData<GuestTask[]>(requestsKey, (list) =>
-        list?.map((each) => (each.id === updated.id ? updated : each)),
+      queryClient.setQueryData<GuestRequestList>(requestsKey, (list) =>
+        list && { ...list, requests: list.requests.map((each) => (each.id === updated.id ? updated : each)) },
       );
       show(succeeded, 'ok');
       void queryClient.invalidateQueries({ queryKey: requestsKey });

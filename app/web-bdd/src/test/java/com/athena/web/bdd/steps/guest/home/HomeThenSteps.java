@@ -7,6 +7,7 @@ import com.athena.web.bdd.pages.guest.GuestHomePage;
 import com.athena.web.bdd.pages.guest.LanguageMenu;
 import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.GuestTerms;
+import com.athena.web.bdd.support.JsResult;
 import com.athena.web.bdd.support.WebWorld;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
@@ -19,14 +20,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * 「首頁」模組的 Then 句型（{@code specs/truth/features/guest-web/首頁/dsl.md}）。
- *
- * <p>首頁是換 session 加讀需求清單都回來才一次畫出來的，所以每一句先等畫面成立，最多 5 秒。
- */
 public class HomeThenSteps {
 
-    /** 四個即將開放的入口：提問列與「服務」三列。 */
     private static final List<String> COMING_SOON_ENTRIES =
             List.of(GuestHomePage.ASK_ROW, "晚點 退房", "寄放 行李", "幫我 叫車");
 
@@ -50,7 +45,6 @@ public class HomeThenSteps {
         this.homePage = new GuestHomePage(world);
     }
 
-    /** 表格的區塊都看得到、在畫面上由上到下剛好是表格的順序；表格沒列的區塊不在畫面上。 */
     @那麼("首頁由上到下依序是以下區塊：")
     public void blocksInOrder(DataTable table) {
         String roomNo = scenario.phoneRoom();
@@ -81,7 +75,6 @@ public class HomeThenSteps {
         });
     }
 
-    /** 房號膠囊（只顯示、不能按、沒有選單、沒有向下箭頭）在語言膠囊（按鈕，字是短寫法）左邊，兩個都在頂列右邊。 */
     @那麼("頂列右上是房號膠囊 {string} 與語言膠囊 {string}")
     public void topBarCapsules(String roomNo, String shortName) {
         LanguageMenu languageMenu = new LanguageMenu(world);
@@ -129,7 +122,6 @@ public class HomeThenSteps {
         });
     }
 
-    /** 「{房號} 號房」下面的問候兩行照字面相符；第一行沒有逗號、稱呼或姓名。 */
     @那麼("問候是 {string} 與 {string}")
     public void greetingIs(String firstLine, String secondLine) {
         String roomLine = scenario.phoneRoom() + " 號房";
@@ -154,7 +146,6 @@ public class HomeThenSteps {
         });
     }
 
-    /** 點之後的網址與畫面文字和點之前相同；沒有對話框、選單、提示浮層。 */
     @那麼("畫面沒有任何變化")
     public void nothingChanged() {
         HomeScenario.Before before = home.beforeTap();
@@ -170,7 +161,6 @@ public class HomeThenSteps {
         assertThat(toasts.isEmpty(), "畫面上出現了提示浮層：" + toasts);
     }
 
-    /** 進度卡四個步名亮到該步（含）、之後的不亮，四格進度條畫成同樣的亮法；底列那一行說明照字面相符。 */
     @那麼("首頁的進度卡的進度條亮到 {string}，說明是 {string}")
     public void progressCardLitUpTo(String step, String description) {
         int expected = GuestTerms.STEPS.indexOf(step.strip());
@@ -210,11 +200,6 @@ public class HomeThenSteps {
         assertThat(eyebrows == 0, "首頁上有眉標「" + GuestHomePage.PROGRESS_CARD_EYEBROW + "」");
     }
 
-    /**
-     * 首頁上「即將開放」的標籤恰好這麼多個，每一個屬於不同的入口：提問列，或「服務」底下的三列；
-     * 四個入口都不是按鈕或連結，也不在按鈕或連結裡面，右端沒有箭頭。入口那一列是包著標籤與入口文字、
-     * 寬到內容區八成的最小一層。
-     */
     @那麼("首頁上「即將開放」的標籤有 {int} 個")
     public void comingSoonTags(int count) {
         frame.eventually(() -> {
@@ -227,8 +212,7 @@ public class HomeThenSteps {
                 Locator row = null;
                 Object owner = null;
                 for (Locator up = tag.locator("xpath=ancestor::*[1]"); up.count() > 0; up = up.locator("xpath=ancestor::*[1]")) {
-                    @SuppressWarnings("unchecked")
-                    List<Object> found = (List<Object>) up.evaluate("""
+                    List<Object> found = JsResult.list(up.evaluate("""
                             (el, entries) => {
                               const text = el.innerText.replace(/\\s+/g, ' ');
                               const hit = entries.filter(e => text.includes(e));
@@ -236,7 +220,7 @@ public class HomeThenSteps {
                               const fullWidth = el.getBoundingClientRect().width >= main.getBoundingClientRect().width * 0.8;
                               return [hit.length === 1 ? hit[0] : hit.length > 1 ? false : null, fullWidth];
                             }
-                            """, COMING_SOON_ENTRIES);
+                            """, COMING_SOON_ENTRIES));
                     Object hit = found.get(0);
                     if (hit == null) {
                         continue;

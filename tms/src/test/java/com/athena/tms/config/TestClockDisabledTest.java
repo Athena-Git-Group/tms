@@ -3,6 +3,7 @@ package com.athena.tms.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.athena.tms.controller.TestClockController;
+import com.athena.tms.controller.TestSupportController;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -52,6 +53,7 @@ class TestClockDisabledTest {
         assertThat(clock).isNotInstanceOf(AdjustableClock.class);
         assertThat(context.getBeansOfType(AdjustableClock.class)).isEmpty();
         assertThat(context.getBeansOfType(TestClockController.class)).isEmpty();
+        assertThat(context.getBeansOfType(TestSupportController.class)).isEmpty();
 
         HttpClient http = HttpClient.newHttpClient();
         URI uri = URI.create("http://127.0.0.1:" + port + "/api/v1/test/clock");
@@ -59,9 +61,9 @@ class TestClockDisabledTest {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("{\"isoTime\":\"2026-11-11T18:00:00+08:00\"}"))
                 .build(), HttpResponse.BodyHandlers.ofString());
-        assertThat(post.statusCode()).isEqualTo(404);
+        assertThat(post.statusCode()).isEqualTo(401);
         HttpResponse<String> delete = http.send(HttpRequest.newBuilder(uri).DELETE().build(),
                 HttpResponse.BodyHandlers.ofString());
-        assertThat(delete.statusCode()).isEqualTo(404);
+        assertThat(delete.statusCode()).isEqualTo(401);
     }
 }

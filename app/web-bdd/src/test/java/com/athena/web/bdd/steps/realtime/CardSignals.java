@@ -14,38 +14,21 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 
-/**
- * 代替後端送的 {@code task} 訊號，形狀照契約的 {@code StaffStreamTask}，卡片照 {@code DeskTask}。
- *
- * <p>卡片一律以畫面上那張單目前的卡片為底，只改介面根「單的狀況對照」裡那個狀況需要的欄位：狀態、負責人、時間與步數。
- * 其他欄位（房號、標題、住客、類型）沿用原樣，畫面換上之後除了狀況以外看起來是同一張卡片，結果句才比得出是不是換上了。
- * 和前一個狀況才有關的欄位（例如中斷原因、延後說明、結束時間）先清掉，不然換上的卡片會同時帶著兩種狀況的說明。
- */
 final class CardSignals {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /** 秒數為 0 時也寫出秒，和後端送的時間同一種寫法。 */
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
 
-    /** 換狀況時一律先清掉、再依新狀況補上的欄位。 */
     private static final List<String> SITUATION_FIELDS = List.of(
             "waitingSince", "acceptedAt", "acceptedVia", "startedAt", "doneAt", "interruptedAt", "endedAt",
             "inspection", "interruption", "deferral");
 
-    /** 只有這幾個狀態會帶清潔 SOP 進度，其餘狀態的卡片不帶。 */
     private static final List<String> STATES_WITH_SOP = List.of("accepted", "doing", "interrupted");
 
     private CardSignals() {
     }
 
-    /**
-     * 把畫面上這張卡片改成這個狀況、這一步的樣子。
-     *
-     * @param base 畫面上這張單目前的卡片；會被直接改掉，呼叫端給副本
-     * @param at 卡片上新的時間，例如到手、開工、結束的時刻
-     * @param assigneeOf 給部門代碼、回那個部門的預設同仁；案例沒寫負責人、狀況又一定要有人時用它
-     */
     static ObjectNode situated(ObjectNode base, TaskSituation situation, int step, OffsetDateTime at,
             Function<String, CreatedStaff> assigneeOf) {
         String now = at.truncatedTo(ChronoUnit.SECONDS).format(TIME);
@@ -135,7 +118,6 @@ final class CardSignals {
         return card;
     }
 
-    /** 帶卡片的 {@code task}：{@code card} 為 {@code null} 時是「這張單已經不在看板上」。 */
     static String withCard(UUID taskId, int step, LocalDate businessDate, ObjectNode card) {
         ObjectNode signal = bare(taskId, step);
         signal.put("board", card == null ? "remove" : "upsert");
@@ -147,12 +129,10 @@ final class CardSignals {
         return write(signal);
     }
 
-    /** 沒有帶卡片的 {@code task}，和房務、工務連線收到的一樣；畫面收到只能重讀整份看板。 */
     static String withoutCard(UUID taskId, int step) {
         return write(bare(taskId, step));
     }
 
-    /** {@code board} 不是 {@code upsert} 也不是 {@code remove} 的 {@code task}，其餘欄位都齊全。 */
     static String unreadable(UUID taskId, int step, LocalDate businessDate, ObjectNode card) {
         ObjectNode signal = bare(taskId, step);
         signal.put("board", "replace");
@@ -162,7 +142,6 @@ final class CardSignals {
         return write(signal);
     }
 
-    /** 畫面不看事件種類，種類只要是契約裡有的值；用評分這種不改變卡片狀況的事件。 */
     private static ObjectNode bare(UUID taskId, int step) {
         ObjectNode signal = JSON.createObjectNode();
         signal.put("stream_pos", 0);
@@ -185,14 +164,12 @@ final class CardSignals {
         });
     }
 
-    /** 做過的單：到手、開工、完成三個時刻都有。 */
     private static void worked(ObjectNode card, String now, Function<String, CreatedStaff> assigneeOf) {
         accepted(card, TaskSituation.ACCEPTED_BY_CLAIM, now, assigneeOf);
         card.put("startedAt", now);
         card.put("doneAt", now);
     }
 
-    /** 從櫃檯手上進到部門的單，部門跟著類型走：修繕給工務，其餘給房務。 */
     private static void leaveFrontdesk(ObjectNode card) {
         if ("frontdesk".equals(card.path("dept").asText())) {
             card.put("dept", "repair".equals(card.path("type").asText()) ? "engineering" : "housekeeping");

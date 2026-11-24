@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** 「設備報修」模組的 Given 句型（{@code specs/truth/features/guest-web/設備報修/dsl.md}）。 */
 public class RepairGivenSteps {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -47,10 +46,6 @@ public class RepairGivenSteps {
         this.repair = new RepairPage(world);
     }
 
-    /**
-     * 預設飯店沒有任何一條分類規則會命中含這個關鍵字的文字：規則的關鍵字出現在這個關鍵字裡，或這個關鍵字出現在
-     * 規則的關鍵字裡，都算會命中（後端以「文字含規則關鍵字」比對，不分大小寫）。每個場景開頭清空業務資料，預設就沒有規則。
-     */
     @假設("這家飯店的分類規則沒有對 {string} 的規則")
     public void noRuleFor(String keyword) {
         String wanted = keyword.strip().toLowerCase(Locale.ROOT);
@@ -72,13 +67,11 @@ public class RepairGivenSteps {
         }
     }
 
-    /** 替預設飯店加一條分類規則：文字含這個關鍵字時分到工務、類型是修繕。 */
     @假設("這家飯店的分類規則把含 {string} 的文字分給工務")
     public void ruleRoutesToEngineering(String keyword) {
         world.backend().setClassificationRule(keyword.strip(), "engineering", "repair");
     }
 
-    /** 開首頁再開設備報修頁，等它畫完：沒有選類別、補充說明是空的。 */
     @假設("{string} 房的住客在設備報修頁")
     public void onRepairPage(String roomNo) {
         phone.ensureHome(roomNo);
@@ -98,7 +91,6 @@ public class RepairGivenSteps {
         typeNote(note);
     }
 
-    /** 同上，補充說明打滿 200 個測試自編、不含空白的中文字，記下這 200 個字。 */
     @假設("{string} 房的住客在設備報修頁，已選類別 {string}，補充說明已有 200 個字")
     public void onRepairPageWithFullNote(String roomNo, String category) {
         onRepairPageWithCategory(roomNo, category);
@@ -107,10 +99,6 @@ public class RepairGivenSteps {
         draft.rememberFullNote(note);
     }
 
-    /**
-     * 開設備報修頁，照標題選類別與輸入補充說明，按「送出報修」，等送出成功頁畫完，記下建立的需求。
-     * 標題拆法照送出的文字反推：「{類別}：{補充說明}」拆開；剛好是一個類別名稱時只選類別；其餘是「其他」加補充說明。
-     */
     @假設("{string} 房的住客剛送出報修 {string}，停在送出成功頁")
     public void justSubmittedRepair(String roomNo, String title) {
         String text = title.strip();

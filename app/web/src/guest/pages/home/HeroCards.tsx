@@ -5,7 +5,6 @@ import type { IconName } from '../../components/icon-paths';
 import { GUEST_PATHS, guestPath } from '../../paths';
 import { Illustration, TONES, type Tone } from './Illustration';
 
-/** 兩張主視覺卡：備品補充與設備報修。 */
 export function HeroCards({ qrToken }: { qrToken: string }) {
   const { t } = useTranslation();
   return (
@@ -30,7 +29,6 @@ export function HeroCards({ qrToken }: { qrToken: string }) {
   );
 }
 
-/** 整張卡是一個連結，名稱就是底列要去的地方。 */
 function HeroCard({
   to,
   tone,

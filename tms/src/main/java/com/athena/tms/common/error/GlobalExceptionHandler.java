@@ -2,6 +2,8 @@ package com.athena.tms.common.error;
 
 import com.athena.tms.common.error.ApiError;
 import com.athena.tms.common.error.ApiException;
+import com.athena.tms.common.codes.ErrorCode;
+import com.athena.tms.filter.IdempotencyFilter;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -18,6 +20,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(value={MissingRequestHeaderException.class})
     public ResponseEntity<ApiError> handleMissingHeader(MissingRequestHeaderException ex) {
+        if (IdempotencyFilter.IDEMPOTENCY_KEY_HEADER.equalsIgnoreCase(ex.getHeaderName())) {
+            return ResponseEntity.badRequest().body(new ApiError(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, "這個操作必須帶 Idempotency-Key", null, null));
+        }
         return ResponseEntity.badRequest().body(new ApiError("validation_failed", "缺少必帶的標頭 " + ex.getHeaderName(), null, null));
     }
 

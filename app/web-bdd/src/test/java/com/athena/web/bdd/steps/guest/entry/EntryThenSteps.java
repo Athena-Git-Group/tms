@@ -27,17 +27,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * 「進入層」模組的 Then 句型（{@code specs/truth/features/guest-web/進入層/dsl.md}）。
- *
- * <p>「過程中」的兩句看 {@link ScreenWatch} 從 When 開始記下的每一個畫面樣子，不只看最後的畫面。
- */
 public class EntryThenSteps {
 
-    /** 「錯誤訊息」的字：重試狀態的標題與任何寫著錯誤、失敗的字。 */
     private static final List<String> ERROR_WORDS = List.of("連線失敗", "錯誤", "失敗");
 
-    /** 要住客做事的字：登入、同意。 */
     private static final List<String> ASKING_WORDS = List.of("登入", "同意");
 
     private static final String EMPTY_ROOM = "308";
@@ -69,7 +62,6 @@ public class EntryThenSteps {
         this.entryPage = new GuestEntryPage(world);
     }
 
-    /** When 記下的點按與輸入都是 0；過程中這個分頁沒有出現過輸入欄、登入頁或要按「同意」的東西。 */
     @那麼("從打開網址到看到首頁，住客沒有輸入或按過任何東西")
     public void nothingTypedOrPressed() {
         assertThat(scenario.openingTaps() == 0 && scenario.openingInputs() == 0,
@@ -85,12 +77,6 @@ public class EntryThenSteps {
         }
     }
 
-    /**
-     * 從 When 開始網址裡的代碼沒有變、沒有出現重試狀態或錯誤字、沒有輸入欄；現在畫面上沒有提示浮層。
-     *
-     * <p>住客在重試狀態按「重試」時，重試狀態的字會一直留到下一個畫面畫出來；這段期間的字是 When 開始時就在畫面上的，
-     * 所以不算過程中出現的錯誤。畫面離開重試狀態之後再出現錯誤字就算。
-     */
     @那麼("過程中沒有要住客再掃一次 QR Code，也沒有出現錯誤訊息")
     public void noRescanNoError() {
         Set<String> codes = new LinkedHashSet<>();
@@ -124,7 +110,6 @@ public class EntryThenSteps {
         assertThat(entryPage.toasts().isEmpty(), "現在畫面上有提示浮層：" + entryPage.toasts());
     }
 
-    /** 畫面上的全部可見文字，與另一個瀏覽器環境用 308 房（空房）的代碼開出來的無法使用頁逐字相同。 */
     @那麼("無法使用頁的文字與空房那一頁完全相同")
     public void sameAsEmptyRoomPage() {
         Page phonePage = world.page();
@@ -143,7 +128,6 @@ public class EntryThenSteps {
         }
     }
 
-    /** 畫面上沒有按鈕、連結、可點的列或輸入欄；「櫃檯（24 小時）／房內電話撥 9」那張卡也不是連結。 */
     @那麼("畫面上沒有任何可以點的東西")
     public void nothingClickable() {
         phone.waitUntilAnyScreen();
@@ -151,10 +135,6 @@ public class EntryThenSteps {
         assertThat(clickables.isEmpty(), "畫面上有可以點的東西：" + clickables);
     }
 
-    /**
-     * 這個分頁從 When 開始對後端的每一次請求都沒有 {@code Authorization} 標頭，換 session 以外的都帶 {@code X-Guest-Session}；
-     * 帶的住客 session 都是這間房的，首頁的房號膠囊也是這間房。
-     */
     @那麼("住客頁向後端的請求沒有帶員工的登入憑證")
     public void guestRequestsCarryNoStaffCredential() {
         List<Request> requests = watch.backendRequests(world.page());
@@ -188,7 +168,6 @@ public class EntryThenSteps {
         assertThat(new GuestHomePage(world).roomCapsule(roomNo).count() > 0, "首頁看不到 " + roomNo + " 房的房號膠囊");
     }
 
-    /** 櫃檯 Web 那個分頁仍存著這位員工的登入憑證，畫面是總覽看板、帳號卡是他，沒有回到登入頁。 */
     @那麼("櫃檯 Web 仍是 {string} 的登入狀態，畫面是總覽看板")
     public void deskStillLoggedIn(String staffName) {
         CreatedStaff staff = world.staff(staffName);
@@ -206,7 +185,6 @@ public class EntryThenSteps {
         assertThat(card.count() == 1, "帳號卡不是 " + staffName + "（" + staff.loginId() + "）");
     }
 
-    /** 櫃檯 Web 的分頁畫的是登入頁（有「登入」鈕），沒有總覽看板；它的儲存空間裡沒有員工的登入憑證。 */
     @那麼("櫃檯 Web 顯示登入頁")
     public void deskShowsLogin() {
         Page desk = switchToDeskTab();
@@ -248,7 +226,6 @@ public class EntryThenSteps {
         return lines.stream().filter(line -> ERROR_WORDS.stream().anyMatch(line::contains)).toList();
     }
 
-    /** {@code /g/{代碼}/…} 裡的代碼；不在住客頁時是 {@code null}。 */
     private static String codeOf(String path) {
         if (path == null || !path.startsWith("/g/")) {
             return null;

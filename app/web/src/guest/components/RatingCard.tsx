@@ -13,10 +13,6 @@ const WORDS = [
   'guest.rating.excellent',
 ] as const;
 
-/**
- * 評分卡：五顆星是單選群組，點第 k 顆前 k 顆變實心，可以改點；送出中星星不能改。沒有留言欄。
- * 選的星等留在這張卡自己身上，即時更新重畫時不會被洗掉；這張不能評了，整張卡就不畫。
- */
 export function RatingCard({
   task,
   sending,

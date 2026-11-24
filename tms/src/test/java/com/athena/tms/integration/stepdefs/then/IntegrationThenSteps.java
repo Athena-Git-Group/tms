@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.IntegrationSseSupport;
 import com.athena.tms.integration.stepdefs.utils.SseSupport;
@@ -96,12 +97,12 @@ public class IntegrationThenSteps {
     public void integrationStreamReceivesRoomStatus(DataTable table) throws InterruptedException {
         IntegrationSseSupport.IntegrationSseClient.Event event = integrationStream().awaitNamed("room_status", Duration.ofSeconds(10L));
         assertEventFields(event.data(), table);
-        ctx.put("integration:lastSseEvent", event);
+        ctx.put(ScenarioKeys.INTEGRATION_LAST_SSE_EVENT, event);
     }
 
     @Then("^該 SSE 事件的 id 欄位等於其資料中的 event_id$")
     public void sseEventIdMatchesPayloadEventId() {
-        IntegrationSseSupport.IntegrationSseClient.Event event = ctx.get("integration:lastSseEvent");
+        IntegrationSseSupport.IntegrationSseClient.Event event = ctx.get(ScenarioKeys.INTEGRATION_LAST_SSE_EVENT);
         assertNotNull(event, "尚未收到 room_status 事件——前一個斷言步驟漏了");
         assertEquals(event.data().get("event_id").asText(), event.id(),
                 "SSE 的 id: 行該等於 payload 的 event_id（斷線重連拿它當 cursor）");
@@ -114,7 +115,7 @@ public class IntegrationThenSteps {
 
     @Then("^員工連線收到該任務的變化事件$")
     public void staffStreamReceivesTaskChange() throws InterruptedException {
-        SseSupport.SseStreamClient staff = ctx.get("sse:staff:小美");
+        SseSupport.SseStreamClient staff = ctx.get(ScenarioKeys.staffStream("小美"));
         assertNotNull(staff, "員工串流尚未開啟——Given 漏了");
         staff.awaitTask(ctx.taskId(), "inspection_failed", Duration.ofSeconds(10L));
     }
@@ -144,7 +145,7 @@ public class IntegrationThenSteps {
     }
 
     private IntegrationSseSupport.IntegrationSseClient integrationStream() {
-        IntegrationSseSupport.IntegrationSseClient client = ctx.get("integration:sse");
+        IntegrationSseSupport.IntegrationSseClient client = ctx.get(ScenarioKeys.INTEGRATION_SSE);
         assertNotNull(client, "整合 SSE 連線尚未開啟——Given 漏了");
         return client;
     }

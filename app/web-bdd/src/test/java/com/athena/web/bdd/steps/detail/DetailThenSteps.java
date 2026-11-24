@@ -33,35 +33,19 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 「單筆詳情」模組的 Then 句型：詳情面板的版面、內容、狀態標籤與狀態訊息卡、歷程、底部的派單區與「單據管理」動作列。
- *
- * <p>畫面更新要時間，所以每一句都在 5 秒內反覆檢查，最後一次還不成立才算失敗。
- * 句子寫到後端的，另外以主管的身分讀這張單的單筆詳情（{@code readDeskTask}），畫面與後端都要成立。
- * 歷程上沒有定案句子的事件，畫面不顯示那一筆，所以比對歷程時只照規格寫出來的句子，不替其他事件編句子。
- */
 public class DetailThenSteps {
 
-    /** 畫面斷言最多等這麼久，是共通實作約定的輪詢上限。 */
     private static final double ASSERT_TIMEOUT_MS = 5_000;
 
-    /** 瀏覽器的版面座標有小數，捨入後可能差到 1px，量位置與寬度時容許這麼多誤差。 */
     private static final double TOLERANCE_PX = 1;
 
-    /** 後端單的狀態只有這十個值；狀態標籤是畫面依它分組的顯示文字，不是新的狀態。 */
     private static final Set<String> BACKEND_STATES = Set.of("triage", "pool", "accepted", "doing", "done",
             "inspected", "closed", "deferred", "interrupted", "cancelled");
 
-    /** 「單據管理」動作列上可能出現的入口。 */
     private static final List<String> MANAGEMENT_BUTTONS = List.of("取消", "延後…", "指派…", "轉派…");
 
-    /** 規格寫「整列不出現」時，動作列整列都不在畫面上。 */
     private static final String NO_MANAGEMENT_ROW = "整列不出現";
 
-    /**
-     * 登入者的角色與單的狀態對到動作列上該有哪幾顆，只收規格案例寫到的組合；其他組合不在這裡比對。
-     * 櫃檯只有待認領的單有「取消」「延後…」；主管與值班主管多一顆指派或轉派，完成之後整列不出現。
-     */
     private static final Map<String, List<String>> MANAGEMENT_BY_ROLE_AND_STATE = Map.ofEntries(
             Map.entry("frontdesk/pool", List.of("取消", "延後…")),
             Map.entry("frontdesk/accepted", List.of()),
@@ -78,17 +62,14 @@ public class DetailThenSteps {
             Map.entry("duty_manager/doing", List.of("取消", "延後…", "轉派…")),
             Map.entry("duty_manager/done", List.of()));
 
-    /** 住客人數的寫法，例如「2 人」「3 位」「2 名」或「人數」。 */
     private static final Pattern GUEST_COUNT = Pattern.compile("\\d+\\s*(人|位|名)|人數");
 
-    /** 「住客」列只有姓名與入住、退房日期，空房時只寫「空房」。 */
     private static final Pattern GUEST_ROW = Pattern.compile("^\\S+ · \\d{1,2}/\\d{1,2}–\\d{1,2}/\\d{1,2}$|^空房$");
 
     private static final Pattern CLOCK_TIME = Pattern.compile("(?<!\\d)(\\d{1,2}:\\d{2})(?!\\d)");
 
     private static final Pattern ELAPSED_MINUTES = Pattern.compile("已(?:等)?\\s*(\\d+)\\s*分");
 
-    /** 住客與同仁輸入的文字原樣放在「」裡，裡面的時刻不是這張單的時間，比對時先拿掉。 */
     private static final Pattern QUOTED = Pattern.compile("「[^」]*」");
 
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
@@ -105,7 +86,6 @@ public class DetailThenSteps {
         this.timelineBefore = timelineBefore;
     }
 
-    /** 面板的右緣等於視窗右緣、從視窗頂端佔滿整個高度，看板的右緣不伸進面板底下。 */
     @那麼("詳情面板貼齊畫面右側")
     public void panelDockedRight() {
         BoardPage board = new BoardPage(world);
@@ -132,7 +112,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 各區塊都在、由上到下的順序相符，引號內的文字照字面相符。 */
     @那麼("詳情面板由上到下依序是 {string} 與單號、房號 {string} 與狀態標籤、標題 {string}、{string}、狀態訊息卡、{string}、{string}")
     public void panelTopToBottom(String close, String roomNo, String title, String subtitle, String contentTitle,
             String timelineTitle) {
@@ -202,7 +181,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 住客或同仁拿單號來問時，櫃檯要能用同一個號碼對到這張單，所以畫面上的單號必須就是後端的 {@code displayNo}。 */
     @那麼("詳情面板的單號是 {string}")
     public void ticketNo(String ticketNo) {
         eventually("詳情面板的單號不對", () -> {
@@ -215,7 +193,6 @@ public class DetailThenSteps {
         }
     }
 
-    /** 「內容」區塊的列數、列名、順序與每一列的值都與表格相同。 */
     @那麼("詳情面板的「內容」如下：")
     public void contentRows(DataTable table) {
         List<List<String>> expected = new ArrayList<>();
@@ -228,7 +205,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 「內容」區塊那一列的值照字面相符。 */
     @那麼("詳情面板「內容」的 {string} 是 {string}")
     public void contentRow(String name, String value) {
         eventually("詳情面板「內容」的「" + name + "」不對", () -> {
@@ -237,7 +213,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板上沒有人數字樣；「住客」列只有姓名與入住、退房日期。 */
     @那麼("詳情面板上沒有住客人數")
     public void noGuestCount() {
         eventually("詳情面板上有住客人數", () -> {
@@ -256,7 +231,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 標題下的灰字照字面相符。 */
     @那麼("詳情面板標題下那一行是 {string}")
     public void subtitle(String text) {
         eventually("詳情面板標題下那一行不對", () -> {
@@ -265,7 +239,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板的標題照字面相符，「」也要相符。 */
     @那麼("詳情面板的標題是 {string}")
     public void title(String title) {
         eventually("詳情面板的標題不對", () -> {
@@ -274,7 +247,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 標題下的原文列照字面相符。 */
     @那麼("詳情面板的原文列是 {string}")
     public void originalLine(String text) {
         eventually("詳情面板的原文列不對", () -> {
@@ -283,7 +255,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板上沒有以「原文：」結尾的字開頭的那一列；面板要先載入完才算數。 */
     @那麼("詳情面板沒有原文列")
     public void noOriginalLine() {
         eventually("詳情面板有原文列", () -> {
@@ -295,7 +266,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 「有」時面板有「清潔 SOP」區塊，「沒有」時找不到。 */
     @那麼("詳情面板的「清潔 SOP」區塊：{word}")
     public void sopSection(String presence) {
         boolean expected = switch (presence.strip()) {
@@ -312,7 +282,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 區塊裡的文字相符，下面有進度條，比例等於後端這張單已做項數除以總項數。 */
     @那麼("詳情面板的清潔 SOP 顯示 {string} 與進度條")
     public void sopProgress(String text) {
         JsonNode sop = backendDetail().path("sop");
@@ -336,7 +305,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板上沒有「急件」字樣，也沒有以「急件」為名的圖示。 */
     @那麼("詳情面板上沒有急件標記")
     public void noUrgentMark() {
         eventually("詳情面板上有急件標記", () -> {
@@ -351,7 +319,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 房號右側的狀態標籤文字相符；後端的狀態仍在十個值之內。 */
     @那麼("詳情面板的狀態標籤是 {string}")
     public void statusTag(String tag) {
         eventually("詳情面板的狀態標籤不對", () -> {
@@ -364,7 +331,6 @@ public class DetailThenSteps {
         }
     }
 
-    /** 狀態訊息卡的標題與說明照字面相符；卡上的人名、時刻、分鐘數都要對得上後端這張單的資料。 */
     @那麼("詳情面板的狀態訊息卡標題是 {string}，說明是 {string}")
     public void statusCard(String title, String description) {
         eventually("詳情面板的狀態訊息卡不對", () -> {
@@ -381,7 +347,6 @@ public class DetailThenSteps {
         crossCheckWithBackend(title + " " + description);
     }
 
-    /** 狀態訊息卡的標題照字面相符，卡上沒有第二行。 */
     @那麼("詳情面板的狀態訊息卡只有標題 {string}，沒有說明")
     public void statusCardTitleOnly(String title) {
         eventually("詳情面板的狀態訊息卡不對", () -> {
@@ -390,7 +355,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 標題那一塊下面直接是「內容」，中間沒有狀態訊息卡。 */
     @那麼("詳情面板沒有狀態訊息卡")
     public void noStatusCard() {
         eventually("詳情面板有狀態訊息卡", () -> {
@@ -404,7 +368,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 狀態訊息卡的文字不含這幾個字。 */
     @那麼("詳情面板的狀態訊息卡沒有 {string}")
     public void statusCardWithout(String text) {
         eventually("詳情面板的狀態訊息卡有「" + text + "」", () -> {
@@ -416,7 +379,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 狀態訊息卡的說明含這位主管的姓名，而且後端記的延後者或取消者就是他。 */
     @那麼("詳情面板的狀態訊息卡寫出經手的主管是 {string}")
     public void statusCardManager(String manager) {
         eventually("詳情面板的狀態訊息卡沒有寫出經手的主管", () -> {
@@ -436,7 +398,6 @@ public class DetailThenSteps {
         }
     }
 
-    /** 歷程區塊的標題照字面相符。 */
     @那麼("詳情面板的歷程標題是 {string}")
     public void timelineTitle(String title) {
         eventually("詳情面板的歷程標題不對", () -> {
@@ -445,10 +406,6 @@ public class DetailThenSteps {
         });
     }
 
-    /**
-     * 歷程由上到下的筆數、句子、時間與操作者都與表格相同；畫面上每一筆的時間依序對得上後端歷程的事件。
-     * 後端歷程可能多出畫面沒有句子的事件，所以畫面各筆在後端歷程裡依序找得到就算一一對應。
-     */
     @那麼("詳情面板的歷程由舊到新包含以下各筆：")
     public void timelineRows(DataTable table) {
         List<List<String>> expected = new ArrayList<>();
@@ -479,7 +436,6 @@ public class DetailThenSteps {
         }
     }
 
-    /** 歷程最下面那一筆的句子與操作者照字面相符。 */
     @那麼("詳情面板的歷程最新一筆是 {string}，操作者是 {string}")
     public void latestTimelineRow(String sentence, String actor) {
         eventually("詳情面板的歷程最新一筆不對", () -> {
@@ -493,7 +449,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 歷程最下面那一筆句子下方的灰字照字面相符。 */
     @那麼("詳情面板的歷程最新一筆的時間與操作者寫的是 {string}")
     public void latestTimelineMeta(String text) {
         eventually("詳情面板的歷程最新一筆的灰字不對", () -> {
@@ -506,7 +461,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 歷程的每一筆都不是這一句；面板要先載入完才算數。 */
     @那麼("詳情面板的歷程沒有 {string}")
     public void timelineWithout(String sentence) {
         eventually("詳情面板的歷程有「" + sentence + "」", () -> {
@@ -522,7 +476,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 歷程比動作之前多一筆，在最下面、句子相符；之前每一筆的句子、時間、操作者與順序都沒有變。 */
     @那麼("詳情面板的歷程比原本多一筆 {string}，原本的各筆都沒有變")
     public void timelineGrewByOne(String sentence) {
         List<TimelineRow> before = timelineBefore.rows();
@@ -539,7 +492,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板底部固定的「派單」區剛好三格、等寬，名稱與順序相符。 */
     @那麼("詳情面板底部的派單區依序是 {string}、{string}、{string} 三格")
     public void dispatchArea(String one, String two, String three) {
         List<String> expected = List.of(one, two, three);
@@ -564,7 +516,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 派單區三格裡只有按鈕文字：沒有數字、沒有「在班」字樣，也沒有這個小標。 */
     @那麼("派單區的格子裡沒有待接數、在班人數與 {string} 小標")
     public void dispatchAreaPlain(String label) {
         eventually("派單區的格子裡有按鈕文字以外的字", () -> {
@@ -585,7 +536,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板底部沒有「取消」「延後…」「指派…」「轉派…」任何一顆。 */
     @那麼("詳情面板沒有「單據管理」動作列")
     public void noManagementRow() {
         eventually("詳情面板有「單據管理」動作列", () -> {
@@ -604,7 +554,6 @@ public class DetailThenSteps {
         });
     }
 
-    /** 面板底部沒有「派給房務」「派給工務」，整個面板也找不到這顆按鈕。 */
     @那麼("詳情面板沒有派單區，也沒有 {string}")
     public void noDispatchArea(String button) {
         eventually("詳情面板還有派單區或「" + button + "」", () -> {
@@ -620,10 +569,6 @@ public class DetailThenSteps {
         });
     }
 
-    /**
-     * 以「、」分隔的按鈕名稱時，面板底部剛好是這幾顆、順序相符；「整列不出現」時底部沒有這一列。
-     * 規格案例寫到的角色與狀態組合，另外對照登入回應的角色與後端這張單的狀態。
-     */
     @那麼("詳情面板的「單據管理」動作列是：{}")
     public void managementRow(String row) {
         List<String> expected = NO_MANAGEMENT_ROW.equals(row.strip()) ? List.of()
@@ -661,7 +606,6 @@ public class DetailThenSteps {
         }
     }
 
-    /** 「內容」區塊裡名稱是這個列名的每一列的值。 */
     private List<String> contentValues(String name) {
         List<String> values = new ArrayList<>();
         for (List<String> row : detail.contentRows()) {
@@ -672,10 +616,6 @@ public class DetailThenSteps {
         return values;
     }
 
-    /**
-     * 狀態訊息卡上的人名、時刻與「已 N 分」要對得上後端這張單：人名是這張單上記著的某一位，
-     * 時刻是這張單某個時間點的時刻，分鐘數是從某個時間點到後端回應時刻經過的分鐘。「」裡是輸入的原文，不比對。
-     */
     private void crossCheckWithBackend(String cardText) {
         JsonNode task = backendDetail();
         String text = QUOTED.matcher(cardText).replaceAll("");
@@ -724,12 +664,10 @@ public class DetailThenSteps {
         }
     }
 
-    /** 面板現在顯示的那一張單在後端的單筆詳情，以主管的身分讀。 */
     private JsonNode backendDetail() {
         return world.backend().getJson("/desk/tasks/" + shownTaskId(), world.staff(WhenStart.BACKEND_READER));
     }
 
-    /** 面板現在顯示的那一張單：依房號找；同一間房有兩張以上時，再用面板上的標題分辨。 */
     private UUID shownTaskId() {
         HeaderReading header = detail.readHeader();
         String roomNo = header.roomNo();
@@ -758,7 +696,6 @@ public class DetailThenSteps {
         return top1 < bottom2 && top2 < bottom1;
     }
 
-    /** 在 5 秒內反覆檢查，檢查回傳 null 代表成立；時間到還不成立時以最後一次的原因失敗。 */
     private void eventually(String what, Supplier<String> problem) {
         String[] last = {null};
         try {

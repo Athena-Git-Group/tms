@@ -2,6 +2,7 @@ package com.athena.tms.integration.stepdefs.given;
 
 import com.athena.tms.dto.Actor;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.Awaits;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
@@ -71,7 +72,7 @@ public class BackboneGivenSteps {
 
     @Given("^待送匣 \"([^\"]+)\" 其實已經送過一次 Kafka（模擬 relay 上一輪送出成功、標記前當機）$")
     public void outboxAlreadyDeliveredOnce(String idempotencyKey) throws Exception {
-        Long outboxId = ctx.get("outbox:" + idempotencyKey);
+        Long outboxId = ctx.get(ScenarioKeys.outboxId(idempotencyKey));
         String aggregateKey = db.admin().queryForObject(
                 "SELECT aggregate_key FROM outbox WHERE id = ?", String.class, outboxId);
         String payload = db.admin().queryForObject(

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.SseSupport;
 import io.cucumber.java.en.Then;
 import java.time.Duration;
@@ -22,13 +23,13 @@ public class StreamThenSteps {
 
     @Then("^住客 A 收到自己任務 seq (\\d+) 的 \"created\"$")
     public void guestAReceivesOwnCreated(int seq) throws InterruptedException {
-        JsonNode created = guest("A").awaitTask(ctx.get("sseTask:A"), "created", AWAIT);
+        JsonNode created = guest("A").awaitTask(ctx.get(ScenarioKeys.sseTask("A")), "created", AWAIT);
         assertEquals(seq, created.get("seq").asInt(), "created 是該任務第一筆事件");
     }
 
     @Then("^住客 B 收到自己任務的 \"created\"$")
     public void guestBReceivesOwnCreated() throws InterruptedException {
-        UUID taskB = ctx.get("sseTask:B");
+        UUID taskB = ctx.get(ScenarioKeys.sseTask("B"));
         JsonNode created = guest("B").awaitTask(taskB, "created", AWAIT);
         assertEquals(taskB.toString(), created.get("task_id").asText());
     }
@@ -36,14 +37,14 @@ public class StreamThenSteps {
     @Then("^彼此的串流不出現對方任務的任何事件$")
     public void guestStreamsAreIsolated() throws InterruptedException {
         Thread.sleep(1500L);
-        assertTrue(guest("A").taskEventsFor(ctx.get("sseTask:B")).isEmpty(), "住客 A 的串流不得出現別訂單（B）的任務（FR-008）");
-        assertTrue(guest("B").taskEventsFor(ctx.get("sseTask:A")).isEmpty(), "住客 B 的串流不得出現別訂單（A）的任務（FR-008）");
+        assertTrue(guest("A").taskEventsFor(ctx.get(ScenarioKeys.sseTask("B"))).isEmpty(), "住客 A 的串流不得出現別訂單（B）的任務（FR-008）");
+        assertTrue(guest("B").taskEventsFor(ctx.get(ScenarioKeys.sseTask("A"))).isEmpty(), "住客 B 的串流不得出現別訂單（A）的任務（FR-008）");
     }
 
     @Then("^「小美」依序收到該單的 \"created\"、\"claimed\"、\"started\"$")
     public void housekeeperReceivesOwnChain() throws InterruptedException {
         SseSupport.SseStreamClient housekeeper = staff("小美");
-        UUID taskId = ctx.get("sseTask:hk");
+        UUID taskId = ctx.get(ScenarioKeys.sseTask("hk"));
         housekeeper.awaitTask(taskId, "created", AWAIT);
         housekeeper.awaitTask(taskId, "claimed", AWAIT);
         housekeeper.awaitTask(taskId, "started", AWAIT);
@@ -51,14 +52,14 @@ public class StreamThenSteps {
 
     @Then("^「阿強」收到工務新單的 \"created\"$")
     public void engineerReceivesDeptPoolCreated() throws InterruptedException {
-        staff("阿強").awaitTask(ctx.get("sseTask:eng"), "created", AWAIT);
+        staff("阿強").awaitTask(ctx.get(ScenarioKeys.sseTask("eng")), "created", AWAIT);
     }
 
     @Then("^兩人的串流互不出現對方部門的任務事件$")
     public void staffStreamsAreIsolatedByDept() throws InterruptedException {
         Thread.sleep(1500L);
-        assertTrue(staff("阿強").taskEventsFor(ctx.get("sseTask:hk")).isEmpty(), "工務串流不得出現房務部門的任務（非本部門、非本人）");
-        assertTrue(staff("小美").taskEventsFor(ctx.get("sseTask:eng")).isEmpty(), "房務串流不得出現工務池的任務");
+        assertTrue(staff("阿強").taskEventsFor(ctx.get(ScenarioKeys.sseTask("hk"))).isEmpty(), "工務串流不得出現房務部門的任務（非本部門、非本人）");
+        assertTrue(staff("小美").taskEventsFor(ctx.get(ScenarioKeys.sseTask("eng"))).isEmpty(), "房務串流不得出現工務池的任務");
     }
 
     @Then("^住客 A 的連線依序收到 \"init\"、\"resync\"$")
@@ -125,7 +126,7 @@ public class StreamThenSteps {
     }
 
     private SseSupport.SseStreamClient guest(String label) {
-        SseSupport.SseStreamClient client = ctx.get("sse:guest:" + label);
+        SseSupport.SseStreamClient client = ctx.get(ScenarioKeys.guestStream(label));
         if (client == null) {
             throw new IllegalStateException("住客 " + label + " 尚未開流——Given 步驟漏了");
         }
@@ -133,7 +134,7 @@ public class StreamThenSteps {
     }
 
     private SseSupport.SseStreamClient staff(String name) {
-        SseSupport.SseStreamClient client = ctx.get("sse:staff:" + name);
+        SseSupport.SseStreamClient client = ctx.get(ScenarioKeys.staffStream(name));
         if (client == null) {
             throw new IllegalStateException("員工 " + name + " 尚未開流——Given 步驟漏了");
         }

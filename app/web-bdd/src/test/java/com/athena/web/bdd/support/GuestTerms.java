@@ -3,26 +3,15 @@ package com.athena.web.bdd.support;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 住客畫面上會跟著介面語言換字、而規格一律寫繁體中文的那幾個字：狀態標籤、清單的段落名、四步進度的步名、
- * 子頁標題列的返回鈕（{@code dsl.md}「共通實作約定」的文字比對那一條），以及找四步進度那一塊用的名稱。
- *
- * <p>譯文照 {@code specs/plans/005-guest-web-main-flow/ui/guest.js} 的原型字典。
- * 其他畫面文字規格照字面比對，不經過這裡。
- */
 public final class GuestTerms {
 
-    /** 住客介面的四種語言代碼，和產品 {@code tms.guest.language} 存的值相同。 */
     public static final List<String> LANGUAGES = List.of("zh-TW", "en", "ja", "vi");
 
-    /** 規格裡語言的說法 → 語言代碼。 */
     public static final Map<String, String> LANGUAGE_BY_NAME = Map.of(
             "繁體中文", "zh-TW", "English", "en", "日本語", "ja", "Tiếng Việt", "vi");
 
-    /** 狀態標籤，依「需求的狀況對照」的五種。 */
     public static final List<String> TAGS = List.of("已送出", "已受理", "處理中", "已完成", "已取消");
 
-    /** 四步進度的步名，由左到右。 */
     public static final List<String> STEPS = List.of("已送出", "已受理", "處理中", "已完成");
 
     private static final Map<String, List<String>> TRANSLATIONS = Map.of(
@@ -38,7 +27,6 @@ public final class GuestTerms {
     private GuestTerms() {
     }
 
-    /** 這個字在某個介面語言下的樣子；繁體中文就是原字。 */
     public static String in(String language, String zhTw) {
         int index = LANGUAGES.indexOf(language);
         if (index < 0) {
@@ -54,7 +42,6 @@ public final class GuestTerms {
         return others.get(index - 1);
     }
 
-    /** 規格的語言說法換成語言代碼，例如「English」→ {@code en}。 */
     public static String languageCode(String name) {
         String code = LANGUAGE_BY_NAME.get(name.strip());
         if (code == null) {

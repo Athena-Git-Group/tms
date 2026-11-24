@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { ComingSoonEntry, SERVICE_ENTRIES } from './ComingSoon';
 
-/** 「服務」區段。 */
 export function Services() {
   const { t } = useTranslation();
   return (

@@ -6,7 +6,6 @@ import { guestPath } from '../paths';
 import { useGuestHome } from '../queries';
 import { useReadySession } from '../session';
 
-/** 網址上的鍵找不到列得出來的那一頁（飯店改了設定、或是亂打的鍵）時回首頁。 */
 export function GuidePage() {
   const session = useReadySession();
   const home = useGuestHome(session.qrToken);
@@ -18,7 +17,6 @@ export function GuidePage() {
   return <InfoPageContent page={page} />;
 }
 
-/** 標題與內文照飯店設定的原文，不翻譯、不解析任何標記；換行與空白照原文。內文空的就留白。 */
 function InfoPageContent({ page }: { page: ListedInfoPage }) {
   return (
     <>

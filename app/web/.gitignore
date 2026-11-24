@@ -1,18 +1,13 @@
-# 套件
 node_modules/
 
-# 建置產物與工具快取
 dist/
 .vite/
 *.tsbuildinfo
 
-# 測試覆蓋率輸出
 coverage/
 
-# 本機環境變數（.env.example 要進 repo）
 .env
 .env.*
 !.env.example
 
-# 記錄檔
 *.log

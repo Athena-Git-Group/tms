@@ -120,7 +120,13 @@ describe('派單與即時訊號帶來的卡片', () => {
     await vi.waitFor(() => expect(assignDeskTask).toHaveBeenCalled());
 
     const claimed = task('a', { seq: 3, state: 'accepted', dept: 'housekeeping', assigneeName: '小美' });
-    receiveCardPush(queryClient, { taskId: 'a', seq: 3, cardSeq: 3, businessDate: '2026-10-26', card: claimed });
+    receiveCardPush(queryClient, {
+      taskId: 'a',
+      seq: 3,
+      cardSeq: 3,
+      businessDate: '2026-10-26',
+      change: { kind: 'upsert', card: claimed },
+    });
     respond(task('a', { seq: 2, state: 'pool', dept: 'housekeeping' }));
     await flow;
 
@@ -138,7 +144,13 @@ describe('派單與即時訊號帶來的卡片', () => {
     void assignTaskFlow(queryClient, task('a', { seq: 1 }), 'housekeeping', 'button');
     await vi.waitFor(() => expect(assignDeskTask).toHaveBeenCalled());
 
-    receiveCardPush(queryClient, { taskId: 'a', seq: 1, cardSeq: 1, businessDate: '2026-10-26', card: task('a', { seq: 1 }) });
+    receiveCardPush(queryClient, {
+      taskId: 'a',
+      seq: 1,
+      cardSeq: 1,
+      businessDate: '2026-10-26',
+      change: { kind: 'upsert', card: task('a', { seq: 1 }) },
+    });
 
     const tasks = (queryClient.getQueryData(deskBoardQuery.queryKey) as DeskBoard).tasks;
     expect(tasks[0]).toMatchObject({ state: 'pool', dept: 'housekeeping' });

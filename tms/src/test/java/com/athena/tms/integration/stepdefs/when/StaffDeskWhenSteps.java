@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Given;
@@ -82,16 +83,16 @@ public class StaffDeskWhenSteps {
         String token = api.staffToken(1L, ctx.staffLogin("小美"));
         ScenarioContext.HttpResult started = api.post("/api/v1/tasks/" + ctx.taskId() + "/start", token, newIdempotencyKey());
         Assertions.assertEquals(200, started.status(), "開始該成功: " + started.body());
-        ctx.put("startedResponse", started);
+        ctx.put(ScenarioKeys.STARTED_RESPONSE, started);
         ScenarioContext.HttpResult completed = api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey());
-        ctx.put("completedResponse", completed);
+        ctx.put(ScenarioKeys.COMPLETED_RESPONSE, completed);
         ctx.lastResponse(completed);
     }
 
     @When("^「小美」勾選「([^」]+)」「([^」]+)」「([^」]+)」並跳過「([^」]+)」再按完成$")
     public void checksThreeSkipsOneThenCompletes(String first, String second, String third, String skipped) {
         String token = api.staffToken(1L, ctx.staffLogin("小美"));
-        ctx.put("sopActorId", staffIdOf(ctx.staffLogin("小美")));
+        ctx.put(ScenarioKeys.SOP_ACTOR_ID, staffIdOf(ctx.staffLogin("小美")));
         for (String label : List.of(first, second, third)) {
             ScenarioContext.HttpResult checked = sop(ctx.taskId(), Map.of("sopItemId", ctx.sopItemId(label), "result", "checked"), token);
             Assertions.assertEquals(200, checked.status(), "勾選「" + label + "」該成功: " + checked.body());
@@ -99,7 +100,7 @@ public class StaffDeskWhenSteps {
         ScenarioContext.HttpResult skippedResult =
                 sop(ctx.taskId(), Map.of("sopItemId", ctx.sopItemId(skipped), "result", "skipped"), token);
         Assertions.assertEquals(200, skippedResult.status(), "跳過「" + skipped + "」該成功: " + skippedResult.body());
-        ctx.put("skippedLabel", skipped);
+        ctx.put(ScenarioKeys.SKIPPED_LABEL, skipped);
         ctx.lastResponse(api.post("/api/v1/tasks/" + ctx.taskId() + "/complete", token, newIdempotencyKey()));
     }
 
@@ -127,7 +128,7 @@ public class StaffDeskWhenSteps {
     public void staffListsPool(String name) {
         ScenarioContext.HttpResult pool = api.get("/api/v1/pool", api.staffToken(1L, ctx.staffLogin(name)));
         Assertions.assertEquals(200, pool.status(), "查池該成功: " + pool.body());
-        ctx.put("poolBody:" + name, pool.body());
+        ctx.put(ScenarioKeys.poolBody(name), pool.body());
         ctx.lastResponse(pool);
     }
 

@@ -2,8 +2,8 @@ package com.athena.web.bdd.steps.guest.repair;
 
 import com.athena.web.bdd.pages.guest.GuestFrame;
 import com.athena.web.bdd.pages.guest.RepairPage;
-import com.athena.web.bdd.support.GuestRequestLimitStub;
-import com.athena.web.bdd.support.GuestRequestLimitStub.SentCreate;
+import com.athena.web.bdd.support.GuestCreateRecorder;
+import com.athena.web.bdd.support.GuestCreateRecorder.SentCreate;
 import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.GuestStay;
 import com.athena.web.bdd.support.GuestStay.Request;
@@ -15,10 +15,6 @@ import io.cucumber.java.zh_tw.那麼;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * 「設備報修」模組的 Then 句型（{@code specs/truth/features/guest-web/設備報修/dsl.md}）。
- * 畫面會晚一點才跟上，每一句都重讀到成立為止，最多 5 秒。
- */
 public class RepairThenSteps {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -29,7 +25,7 @@ public class RepairThenSteps {
 
     private final GuestStay stay;
 
-    private final GuestRequestLimitStub limitStub;
+    private final GuestCreateRecorder createRecorder;
 
     private final RepairDraft draft;
 
@@ -37,18 +33,17 @@ public class RepairThenSteps {
 
     private final RepairPage repair;
 
-    public RepairThenSteps(WebWorld world, GuestScenario scenario, GuestStay stay, GuestRequestLimitStub limitStub,
+    public RepairThenSteps(WebWorld world, GuestScenario scenario, GuestStay stay, GuestCreateRecorder createRecorder,
             RepairDraft draft) {
         this.world = world;
         this.scenario = scenario;
         this.stay = stay;
-        this.limitStub = limitStub;
+        this.createRecorder = createRecorder;
         this.draft = draft;
         this.frame = new GuestFrame(world);
         this.repair = new RepairPage(world);
     }
 
-    /** 六顆膠囊裡只有這一顆是選中的樣子，其餘五顆都不是。 */
     @那麼("只有 {string} 一顆類別是選中的")
     public void onlyCategoryChecked(String category) {
         frame.eventually(() -> {
@@ -58,7 +53,6 @@ public class RepairThenSteps {
         });
     }
 
-    /** 補充說明是空的，佔位提示字照字面相符。 */
     @那麼("補充說明的提示字是 {string}")
     public void notePlaceholderIs(String placeholder) {
         frame.eventually(() -> {
@@ -80,7 +74,6 @@ public class RepairThenSteps {
         });
     }
 
-    /** 輸入框的內容就是前置打滿的那 200 個字，When 打的字沒有進去。 */
     @那麼("補充說明裡仍是原本的 200 個字")
     public void noteStillFull() {
         String expected = draft.fullNote();
@@ -91,10 +84,6 @@ public class RepairThenSteps {
         });
     }
 
-    /**
-     * 這次 When 建立的那張需求在後端是自由文字：住客原文有值、沒有服務項目的鍵，語言是該語言的代碼；
-     * 而且這個分頁送出的建立請求都沒有帶 {@code itemId}。
-     */
     @那麼("後端這張需求是打字的、帶語言 {string}，沒有帶服務項目")
     public void backendIsTypedRequest(String language) {
         String code = GuestTerms.languageCode(language);
@@ -115,7 +104,7 @@ public class RepairThenSteps {
             return code.equals(lang) ? null
                     : "後端「" + added.get(0).title() + "」的語言是 " + lang + "，不是 " + code + "（" + language + "）";
         });
-        List<SentCreate> fromThisPage = limitStub.creates().stream()
+        List<SentCreate> fromThisPage = createRecorder.creates().stream()
                 .filter(create -> create.page() == world.page())
                 .toList();
         assertThat(!fromThisPage.isEmpty(), "這個分頁沒有送出任何建立需求的請求");

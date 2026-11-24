@@ -39,8 +39,8 @@ final class StreamConnection {
         return this.subscriber.wants(change);
     }
 
-    boolean isStaff() {
-        return this.subscriber.audience() == StreamSubscriber.Audience.STAFF;
+    boolean followsDegradation() {
+        return this.subscriber.audience() != StreamSubscriber.Audience.INTEGRATION;
     }
 
     boolean wantsIntegration(long tenantId) {
@@ -68,14 +68,25 @@ final class StreamConnection {
         return this.subscriber.seesDeskBoard() && this.subscriber.tenantId() == tenantId;
     }
 
-    /**
-     * {@code boardFields} 是 {@link #boardFields} 組好的看板內容，同一則事件的每條連線共用同一份；
-     * 是 null 時表示後端沒組出來，訊號照送、不帶看板內容，畫面就會重抓整份看板。
-     */
-    synchronized boolean sendTask(TaskChange change, ObjectNode boardFields, ObjectMapper mapper) {
+    synchronized boolean sendCardlessTask(TaskChange change, ObjectMapper mapper) {
         if (this.closed) {
             return false;
         }
+        return this.write("task", this.taskSignal(change, mapper).toString());
+    }
+
+    synchronized boolean sendTaskWithCard(TaskChange change, ObjectNode boardFields, ObjectMapper mapper) {
+        if (this.closed) {
+            return false;
+        }
+        ObjectNode data = this.taskSignal(change, mapper);
+        if (this.seesDeskBoard()) {
+            data.setAll(boardFields);
+        }
+        return this.write("task", data.toString());
+    }
+
+    private ObjectNode taskSignal(TaskChange change, ObjectMapper mapper) {
         ObjectNode data = mapper.createObjectNode();
         data.put("stream_pos", ++this.streamPos);
         data.put("task_id", change.taskId().toString());
@@ -84,10 +95,7 @@ final class StreamConnection {
         if (change.occurredAt() != null) {
             data.put("occurred_at", change.occurredAt());
         }
-        if (boardFields != null && this.seesDeskBoard()) {
-            data.setAll(boardFields);
-        }
-        return this.write("task", data.toString());
+        return data;
     }
 
     static ObjectNode boardFields(DeskBoardChange change, ObjectMapper mapper) {
@@ -119,7 +127,7 @@ final class StreamConnection {
         if (this.subscriber.audience() != StreamSubscriber.Audience.INTEGRATION) {
             data.put("stream_pos", this.streamPos);
         }
-        if (this.isStaff()) {
+        if (this.followsDegradation()) {
             data.put("degraded", degraded);
         }
         return this.write("heartbeat", data.toString());

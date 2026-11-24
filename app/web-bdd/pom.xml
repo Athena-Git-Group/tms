@@ -17,14 +17,11 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-		<!-- 與 app/bdd/pom.xml、tms/pom.xml 同一組 -->
 		<cucumber.version>7.22.1</cucumber.version>
 		<junit-bom.version>6.0.3</junit-bom.version>
 		<!-- 瀏覽器的版本跟著這個版號走：改版號之後要重跑一次下面的瀏覽器安裝指令 -->
 		<playwright.version>1.65.0</playwright.version>
 
-		<!-- 瀏覽器設定：desktop＝Chromium 1280×720 滑鼠；ipad＝WebKit 1180×820 觸控。
-			指令列用 -Dweb.profile=ipad 切換（見 WebProfile） -->
 		<web.profile>desktop</web.profile>
 	</properties>
 
@@ -47,7 +44,6 @@
 			<version>${cucumber.version}</version>
 			<scope>test</scope>
 		</dependency>
-		<!-- 本模組沒有 Spring，step 類別之間用建構子注入共用狀態，靠 PicoContainer -->
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-picocontainer</artifactId>
@@ -71,7 +67,6 @@
 			<artifactId>junit-platform-launcher</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- 只給 SmokeTest 用（一般的 JUnit 測試）；Cucumber 那條線不靠它 -->
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter</artifactId>
@@ -85,8 +80,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- 後端資料準備（BackendChannel）：與員工 App 測試線共用，住在獨立模組 app/bdd-support/。
-			本 repo 沒有上層 pom：要先 `mvn -q -f app/bdd-support/pom.xml install` 才解析得到。 -->
 		<dependency>
 			<groupId>com.athena</groupId>
 			<artifactId>app-bdd-support</artifactId>
@@ -112,8 +105,6 @@
 					<excludeJUnit5Engines>
 						<engine>cucumber</engine>
 					</excludeJUnit5Engines>
-					<!-- SmokeTest 與量測用的 spike 要開發伺服器與 8080 後端都開著才跑得過，平常的 mvn test（含 dry-run）
-						不跑它們；指名 -Dtest=SmokeTest 時 surefire 不看這個排除，照跑 -->
 					<excludes>
 						<exclude>**/SmokeTest.java</exclude>
 						<exclude>**/GuestBackendSpikeTest.java</exclude>
@@ -129,8 +120,6 @@
 					</systemPropertyVariables>
 				</configuration>
 			</plugin>
-			<!-- 安裝 Playwright 的瀏覽器（裝在 Playwright 預設的快取位置，不進專案）：
-				mvn -q -f app/web-bdd/pom.xml exec:java -Dexec.args="install chromium webkit" -->
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>exec-maven-plugin</artifactId>

@@ -2,7 +2,7 @@ import i18next, { type TFunction } from 'i18next';
 import { describe, expect, it } from 'vitest';
 import type { DeskTaskDetail, DeskTimelineEntry } from '../api/types';
 import { zhTW } from '../i18n/locales/zh-TW';
-import { displayString } from './display-text';
+import { displayString, type DisplayText } from './display-text';
 import { type TimelineDotTone, timelineMeta, timelineSentence } from './timeline-sentence';
 
 const zh = i18next.createInstance();
@@ -260,7 +260,7 @@ describe('timelineSentence：feature 沒寫句子的事件不顯示', () => {
 });
 
 describe('timelineMeta', () => {
-  const actor = { key: 'detail.events.actors.guest', values: { name: '陳怡安' } } as const;
+  const actor: DisplayText = (translate) => translate('detail.events.actors.guest', { name: '陳怡安' });
   const metaOf = (at: string, now: Date | undefined, offset = TAIPEI) =>
     displayString(timelineMeta(entry({ at }), actor, now, offset), t);
 

@@ -3,14 +3,6 @@ package com.athena.web.bdd.pages.guest;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * 需求依類型的圖示：後端 {@code type} 對到一個固定的圖形（{@code amenity} 方盒、{@code repair} 鎚子、
- * {@code cleaning} 星光、{@code other} 對話泡泡）。
- *
- * <p>圖示不給報讀軟體、沒有名稱，所以用圖形本身認：每個圖示是一個 {@code svg}，裡面一條 {@code path}，
- * {@code d} 照原型 {@code ui/guest.js} 的圖示表（{@code cube_box}、{@code hammer}、{@code sparkles}、
- * {@code bubble_left}）。產品在 Phase 4 照這份圖形畫。
- */
 public final class RequestIcons {
 
     private static final Map<String, String> PATH_BY_TYPE = Map.of(
@@ -22,7 +14,6 @@ public final class RequestIcons {
     private RequestIcons() {
     }
 
-    /** 這個圖形是哪一種需求類型的圖示；不是四種之一時是空的。 */
     public static Optional<String> typeOf(String path) {
         String wanted = path.strip();
         return PATH_BY_TYPE.entrySet().stream().filter(e -> e.getValue().equals(wanted)).map(Map.Entry::getKey).findFirst();

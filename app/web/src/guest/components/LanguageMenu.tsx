@@ -4,10 +4,6 @@ import { LANGUAGE_OWN_NAMES, LANGUAGES, type Language } from '../../i18n/languag
 import { useSetGuestLanguage } from '../use-guest-language';
 import { Icon } from './Icon';
 
-/**
- * 首頁頂列的語言膠囊與選單：膠囊看得到的是目前語言的短寫法，給報讀軟體的名稱是這個語言的「語言」。
- * 選單列出四種語言各自的寫法，目前的加粗打勾；點選單外、Esc 都收起，焦點回到膠囊。
- */
 export function LanguageMenu() {
   const { t, i18n } = useTranslation();
   const setLanguage = useSetGuestLanguage();

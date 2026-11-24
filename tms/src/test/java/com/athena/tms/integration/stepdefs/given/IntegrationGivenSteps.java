@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.given;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.IntegrationSseSupport;
@@ -19,14 +20,6 @@ import java.util.UUID;
 import org.springframework.core.env.Environment;
 
 public class IntegrationGivenSteps {
-
-    public static final String KEYS_KEY = "integration:apiKeys";
-    public static final String EVENT_IDS_KEY = "integration:eventIds";
-    public static final String EVENT_ID_BY_ROOM_KEY = "integration:eventIdByRoom";
-    public static final String TAMPERED_KEY = "integration:tamperedKey";
-    public static final String STAFF_TOKENS_KEY = "integration:staffTokens";
-    public static final String SSE_CLIENTS_KEY = "integration:sseClients";
-    public static final String CURRENT_SSE_KEY = "integration:sse";
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -55,12 +48,12 @@ public class IntegrationGivenSteps {
     @Given("^租戶 (\\d+) 存在有效整合金鑰，別名 \"([^\"]+)\"，但其明文的租戶段被改寫為 (\\d+)$")
     public void tamperedApiKeyExists(long issuerTenantId, String alias, long claimedTenantId) {
         String tampered = issueKey(issuerTenantId, alias, claimedTenantId, null);
-        ctx.put(TAMPERED_KEY, tampered);
+        ctx.put(ScenarioKeys.INTEGRATION_TAMPERED_KEY, tampered);
     }
 
     @Given("^租戶 1 存在已登入的 manager 員工，別名 \"([^\"]+)\"$")
     public void loggedInManagerExists(String alias) {
-        Map<String, String> tokens = mapIn(STAFF_TOKENS_KEY);
+        Map<String, String> tokens = mapIn(ScenarioKeys.INTEGRATION_STAFF_TOKENS);
         tokens.put(alias, api.staffToken(1L, "mg1"));
     }
 
@@ -104,18 +97,18 @@ public class IntegrationGivenSteps {
     public IntegrationSseSupport.IntegrationSseClient openIntegrationStream(String path, String apiKey) throws Exception {
         int port = environment.getRequiredProperty("local.server.port", Integer.class);
         IntegrationSseSupport.IntegrationSseClient client = IntegrationSseSupport.open(port, path, apiKey);
-        List<IntegrationSseSupport.IntegrationSseClient> clients = ctx.get(SSE_CLIENTS_KEY);
+        List<IntegrationSseSupport.IntegrationSseClient> clients = ctx.get(ScenarioKeys.INTEGRATION_SSE_CLIENTS);
         if (clients == null) {
             clients = new ArrayList<>();
-            ctx.put(SSE_CLIENTS_KEY, clients);
+            ctx.put(ScenarioKeys.INTEGRATION_SSE_CLIENTS, clients);
         }
         clients.add(client);
-        ctx.put(CURRENT_SSE_KEY, client);
+        ctx.put(ScenarioKeys.INTEGRATION_SSE, client);
         return client;
     }
 
     public String apiKey(String alias) {
-        Map<String, String> keys = mapIn(KEYS_KEY);
+        Map<String, String> keys = mapIn(ScenarioKeys.INTEGRATION_API_KEYS);
         String plaintext = keys.get(alias);
         if (plaintext == null) {
             throw new IllegalStateException("金鑰別名「" + alias + "」沒有登記——Given 漏了");
@@ -134,7 +127,7 @@ public class IntegrationGivenSteps {
                 VALUES (?, ?, ?, ?, ?, now(), ?)
                 """,
                 UUID.randomUUID(), issuerTenantId, alias, plaintext.substring(0, 16), sha256Hex(plaintext), revokedAt);
-        mapIn(KEYS_KEY).put(alias, plaintext);
+        mapIn(ScenarioKeys.INTEGRATION_API_KEYS).put(alias, plaintext);
         return plaintext;
     }
 
@@ -158,11 +151,11 @@ public class IntegrationGivenSteps {
                 """,
                 Long.class, tenantId, taskId, eventType, (double) secondsAgo);
         ctx.taskId(taskId);
-        listIn(EVENT_IDS_KEY).add(Long.toString(eventId));
-        mapIn(EVENT_ID_BY_ROOM_KEY).put(roomNo, Long.toString(eventId));
+        listIn(ScenarioKeys.INTEGRATION_EVENT_IDS).add(Long.toString(eventId));
+        mapIn(ScenarioKeys.INTEGRATION_EVENT_ID_BY_ROOM).put(roomNo, Long.toString(eventId));
     }
 
-    private Map<String, String> mapIn(String key) {
+    private Map<String, String> mapIn(ScenarioContext.Key<Map<String, String>> key) {
         Map<String, String> map = ctx.get(key);
         if (map == null) {
             map = new HashMap<>();
@@ -171,7 +164,7 @@ public class IntegrationGivenSteps {
         return map;
     }
 
-    private List<String> listIn(String key) {
+    private List<String> listIn(ScenarioContext.Key<List<String>> key) {
         List<String> list = ctx.get(key);
         if (list == null) {
             list = new ArrayList<>();

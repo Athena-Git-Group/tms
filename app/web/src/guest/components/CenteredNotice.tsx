@@ -8,7 +8,6 @@ const ICON_TONE = {
   neutral: 'text-guest-text-secondary',
 } as const;
 
-/** 整頁置中的提示：無法使用頁、重試狀態與送出成功頁共用。 */
 export function CenteredNotice({
   icon,
   tone,

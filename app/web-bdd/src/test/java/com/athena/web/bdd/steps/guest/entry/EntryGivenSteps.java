@@ -9,20 +9,18 @@ import com.athena.web.bdd.support.GuestPhone;
 import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.GuestStay;
 import com.athena.web.bdd.support.Network;
+import com.athena.web.bdd.support.WebApp;
 import com.athena.web.bdd.support.WebWorld;
+import com.microsoft.playwright.APIRequestContext;
+import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.RequestOptions;
 import io.cucumber.java.zh_tw.假設;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/**
- * 「進入層」模組的 Given 句型（{@code specs/truth/features/guest-web/進入層/dsl.md}）。
- *
- * <p>「掃碼被限流」與「後端出錯」都在這個分頁的換 session 請求上用網路攔截做出來（測試策略：不靠真的限流器）；
- * 「連不上」用 {@link Network#cutOffBackend(Page)}，它比換 session 的攔截後裝，所以兩者同時在時是連不上。
- */
 public class EntryGivenSteps {
 
     private final WebWorld world;
@@ -50,10 +48,6 @@ public class EntryGivenSteps {
         this.entryPage = new GuestEntryPage(world);
     }
 
-    /**
-     * 以主管身分換這間房的 QR；後端把舊代碼作廢、撤銷這間房所有住客 session。記下新舊代碼：之後「QR Code 的網址」
-     * 用新的、「舊代碼的網址」用舊的。已經開著的畫面不通知。
-     */
     @假設("主管在後台換掉了 {string} 房的 QR Code")
     public void managerRotatedQr(String roomNo) {
         RotatedQr rotated = world.backend().rotateRoomQr(roomNo);
@@ -61,7 +55,6 @@ public class EntryGivenSteps {
         scenario.rememberQrToken(roomNo, rotated.newToken());
     }
 
-    /** 清掉這個分頁儲存空間裡的住客憑證，網址不變；後端那邊的 session 仍有效。 */
     @假設("這支手機上的住客憑證已經不見")
     public void guestCredentialGone() {
         Object removed = world.page().evaluate("""
@@ -80,13 +73,11 @@ public class EntryGivenSteps {
         }
     }
 
-    /** 把這個分頁手上那枚 session 在後端標成撤銷；分頁裡的憑證還在，網址裡的代碼仍換得到新 session。 */
     @假設("這支手機上的住客憑證已經失效")
     public void guestCredentialRevoked() {
         world.backend().revokeGuestSession(currentSession());
     }
 
-    /** 把後端與瀏覽器的時鐘撥到這筆訂房的退房時刻之後；session 過期，代碼也換不到新的。 */
     @假設("{string} 房這筆訂房已經過了退房時刻")
     public void pastCheckout(String roomNo) {
         UUID reservation = stay.reservationId(roomNo)
@@ -99,24 +90,32 @@ public class EntryGivenSteps {
         world.clocks().moveTo(checkoutAt.plusMinutes(1));
     }
 
-    /**
-     * 規格允許的退路：真的讓後端數到失敗門檻要用系統時鐘、而且整台測試機共用，所以改以網路攔截讓這個分頁的換 session
-     * 都回 {@code 429}。
-     */
     @假設("這支手機短時間內多次掃碼失敗，後端暫時不受理它的掃碼")
     public void scanRateLimited() {
-        world.network().respondWithError(world.page(), Network.GUEST_SCAN, 429, "rate_limited",
-                "掃碼失敗太多次，請稍後再試", Map.of());
+        // 從這支手機（同一個瀏覽器、經同一個開發伺服器轉送，後端看到的來源相同）連續用不存在的代碼換 session，
+        // 直到後端的掃碼限流器開始回 429；之後這個來源的換 session 都會被擋。
+        APIRequestContext phoneRequests = world.page().request();
+        RequestOptions badScan = RequestOptions.create()
+                .setHeader("Content-Type", "application/json")
+                .setData(Map.of("token", "bdd-no-such-qr-" + UUID.randomUUID()));
+        for (int attempt = 1; attempt <= MAX_SCAN_ATTEMPTS_TO_RATE_LIMIT; attempt++) {
+            APIResponse response = phoneRequests.post(WebApp.url(Network.GUEST_SCAN.path()), badScan);
+            if (response.status() == 429) {
+                return;
+            }
+        }
+        throw new IllegalStateException("連續用不存在的代碼換 session " + MAX_SCAN_ATTEMPTS_TO_RATE_LIMIT
+                + " 次，後端的掃碼限流器還是沒有回 429");
     }
 
-    /** 這個分頁的換 session 請求都回 {@code 500}，其他請求不動，直到「後端已恢復」。 */
+    private static final int MAX_SCAN_ATTEMPTS_TO_RATE_LIMIT = 50;
+
     @假設("後端暫時出錯，任何掃碼都失敗")
     public void scanFails() {
         world.network().respondWithError(world.page(), Network.GUEST_SCAN, 500, "internal_error",
                 "後端暫時出錯", Map.of());
     }
 
-    /** 先讓這個分頁連不上後端，再開這間房的網址，等重試狀態畫完；網路維持斷線，由之後的句子放行。 */
     @假設("{string} 房的住客的畫面停在重試狀態")
     public void guestOnRetry(String roomNo) {
         world.network().cutOffBackend(world.page());
@@ -134,7 +133,6 @@ public class EntryGivenSteps {
         world.network().passThrough(world.page(), Network.GUEST_SCAN);
     }
 
-    /** 先開首頁、讓憑證失效、讓換 session 出錯，再開我的需求清單的網址；等重試狀態畫完，網址仍是清單那一頁。 */
     @假設("{string} 房的住客打開清單時因為後端出錯停在重試狀態")
     public void requestsStuckOnRetry(String roomNo) {
         phone.ensureHome(roomNo);
@@ -146,10 +144,6 @@ public class EntryGivenSteps {
                 () -> entryPage.retryShown() && frame.path().equals(requestsPath));
     }
 
-    /**
-     * 在這個瀏覽器環境的一個分頁以該員工登入櫃檯 Web、停在總覽看板，登入憑證留在那個分頁；
-     * 之後的住客用同一個瀏覽器環境的新分頁。
-     */
     @假設("{string} 已在這支手機上登入過櫃檯 Web，登入狀態還在")
     public void staffLoggedInOnPhone(String staffName) {
         Page desk = world.page();
@@ -158,7 +152,6 @@ public class EntryGivenSteps {
         world.openTab();
     }
 
-    /** 在住客的分頁（不是櫃檯 Web 那個分頁）用代碼開這間房的首頁。 */
     @假設("{string} 已在這支手機上打開過 {string} 房的住客頁")
     public void staffOpenedGuestPage(String staffName, String roomNo) {
         if (entry.deskTab().filter(desk -> desk == world.page()).isPresent()) {

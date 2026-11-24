@@ -79,7 +79,6 @@ public class BddApiClient {
         return exchange(HttpMethod.PATCH, path, auth, body, idempotencyKey);
     }
 
-    /** 打不在 {@code /api/v1} 底下的舊端點，例如住客評分 {@code /guest/requests/{taskId}/rating}。 */
     public ScenarioWorld.ApiResponse postUnversioned(String path, Auth auth, Object body) {
         return exchange(HttpMethod.POST, "", path, auth, body, UUID.randomUUID().toString());
     }

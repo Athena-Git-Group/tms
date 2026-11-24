@@ -339,7 +339,7 @@ Table task_events {
 Table outbox {
   id              bigint      [pk, increment]
   tenant_id       bigint      [not null, ref: > tenants.id]
-  aggregate_key   text        [not null, note: 'Kafka 分區鍵，也是 relay 排隊的單位（同一把鍵一筆一筆按順序送）。task_event 用 task:<uuid>；push 一律以 push: 開頭（例如 push:task:<uuid>、push:staff:<uuid>、push:leave:<uuid>），不和單的事件共用一把鍵；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）']
+  aggregate_key   text        [not null, note: 'Kafka 分區鍵。relay 排隊的單位是 kind 加上 aggregate_key（同一隊一筆一筆按順序送），所以推播和單的事件即使鍵相同也各排一隊。task_event 與這張單的推播都用 task:<uuid>；其他推播用推播對象（例如 staff:<uuid>、leave:<uuid>）；pms_status 一律 room:<tenant_id>:<uuid>（跟一致性邊界走）。舊資料裡以 push: 開頭的推播鍵照樣可送']
   kind            text        [not null, note: 'CHECK: task_event|push|pms_status（minibar 啟用時再加 pms_minibar）。push 的 payload 形狀＝contracts PushPayload（event、title、target）；pms_status 的值為 inspected（查房通過）；免查結案不回寫']
   payload         jsonb       [not null]
   idempotency_key text        [not null, note: '下游去重：重送不重做']
@@ -354,7 +354,7 @@ Table outbox {
   }
   Note: '''
   待送匣=交易護欄：與狀態變更同交易落庫。
-  不變條件：relay 同鍵串行（同 aggregate_key 最早一筆未 sent 不送後續，E-14）；同一把鍵有一筆 failed，整把鍵後面的都停送、等人工處理。
+  不變條件：relay 同隊串行（同 kind 與 aggregate_key 最早一筆未 sent 不送後續，E-14）；同一隊有一筆 failed，整隊後面的都停送、等人工處理，別的 kind 不受影響。
   推播用自己的鍵，就是為了讓某一則推播重試用完時，只擋住後面的推播，不擋住那張單的事件（員工事件串流的訊號照常送出）；
   sent 保留 3 天後排程清除；Kafka 下游一律不回寫 tasks。
   '''

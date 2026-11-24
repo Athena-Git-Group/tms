@@ -333,7 +333,7 @@ public class InspectionThenSteps {
                 taskId);
         check("inspections 列數（應與查房結果事件數一致，沒有新增）", resultEvents, inspectionRows);
         int outboxNow = dbProbe.outboxRows("task_event", "task:" + taskId).size()
-                + dbProbe.outboxRows("push", "push:task:" + taskId).size();
+                + dbProbe.outboxRows("push", "task:" + taskId).size();
         check("outbox 筆數（清房者不該因這次送出收到推播）", before.outboxCount(), outboxNow);
     }
 

@@ -22,15 +22,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
-/**
- * 「共用外框」模組的 Then 句型。畫面跟上要一點時間，檢查一律重讀到成立為止，最多 5 秒。
- *
- * <p>介面語言以 {@link LanguageMenu#FIXED_PHRASES} 的固定字句認：該語言的寫法看得到、其他三種語言的同一句看不到，
- * 網頁的 {@code lang} 屬性是該語言的語系代碼。
- */
 public class ShellThenSteps {
 
-    /** 規格要求可點的東西至少這麼寬、這麼高（點）。 */
     private static final double MIN_TARGET = 44;
 
     private static final String ROOM_LINE_PREFIX = "房號 ";
@@ -106,10 +99,6 @@ public class ShellThenSteps {
                 : frame.scrimShown() ? "畫面上還有蓋住整個視窗的遮罩" : null);
     }
 
-    /**
-     * 「關掉再開」用同一支手機的新分頁做，不用重新整理：住客的 session 放在分頁自己的 {@code sessionStorage}，
-     * 只有新分頁才會像真的關掉再掃一次那樣重新換 session，語言只能從這支手機的 {@code localStorage} 來。
-     */
     @那麼("這支手機記住的介面語言是 {string}")
     public void rememberedLanguageIs(String languageName) {
         String code = GuestTerms.languageCode(languageName);
@@ -283,7 +272,6 @@ public class ShellThenSteps {
         });
     }
 
-    /** 目前這一頁的介面語言是不是這個語言的代碼；是的話回 {@code null}，不是的話回差在哪裡。 */
     private String languageProblem(String code) {
         Object htmlLang = world.page().evaluate("() => document.documentElement.lang");
         if (!code.equals(htmlLang)) {
@@ -295,7 +283,6 @@ public class ShellThenSteps {
                     new Locator.GetByRoleOptions().setLevel(2).setName(phrase).setExact(true)).count() > 0);
         }
         if (path.matches("^/g/[^/]+/requests/[^/]+$")) {
-            // 櫃檯回答過、已取消的需求不顯示四步，這時和其他子頁一樣看標題列的頁標題。
             if (GuestTerms.LANGUAGES.stream().noneMatch(other -> request.fourSteps(other).isPresent())) {
                 return phraseProblem("需求進度", code, phrase -> phrase.equals(frame.pageTitle()));
             }
@@ -336,5 +323,4 @@ public class ShellThenSteps {
         return ShellFrame.linesOf(world.page().locator("body").innerText());
     }
 
-    /** 規格寫錯的參數（{@link IllegalStateException}、{@link IllegalArgumentException}）直接丟出去，不要等到 5 秒才報。 */
 }

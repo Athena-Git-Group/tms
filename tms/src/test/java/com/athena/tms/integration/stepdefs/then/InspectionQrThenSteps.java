@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Then;
@@ -33,7 +34,7 @@ public class InspectionQrThenSteps {
     @Then("^查房不留記錄、任務狀態不變$")
     public void inspectionLeftNoTrace() {
         assertEquals(0, inspectionCount(ctx.taskId()), "被擋的查房不得留下記錄");
-        assertEquals(ctx.get("preInspectionState"), db.taskRow(ctx.taskId()).get("state"), "被擋的查房不得改動任務");
+        assertEquals(ctx.get(ScenarioKeys.PRE_INSPECTION_STATE), db.taskRow(ctx.taskId()).get("state"), "被擋的查房不得改動任務");
     }
 
     @Then("^房務以自己的身分對查房端點送出判定的請求也應該失敗，回應為 403$")
@@ -88,7 +89,7 @@ public class InspectionQrThenSteps {
                 "SELECT id FROM staff_accounts WHERE tenant_id = 1 AND login_id = ?", UUID.class, ctx.staffLogin("王主管"));
         assertEquals(inspector.toString(), rows.getFirst().get("inspector_id").toString());
         JsonNode items = objectMapper.readTree((String) rows.getFirst().get("items"));
-        List<String> inspectionKeys = ctx.get("inspectionKeys");
+        List<String> inspectionKeys = ctx.get(ScenarioKeys.INSPECTION_KEYS);
         assertEquals(inspectionKeys.size(), items.size(), "items jsonb 存判定全集");
     }
 
@@ -162,14 +163,14 @@ public class InspectionQrThenSteps {
         assertFalse(token.contains("301"), "token 不含房號資訊");
         assertEquals(version, body.get("version").asInt(), "首簽 version=1");
         assertEquals("301", body.get("roomNo").asText());
-        ctx.put("printedToken", token);
+        ctx.put(ScenarioKeys.PRINTED_TOKEN, token);
     }
 
     @Then("^再列印回同一枚 token$")
     public void reprintReturnsSameToken() {
         ScenarioContext.HttpResult second = api.get("/admin/rooms/301/qr", api.staffToken(1L, ctx.staffLogin("王主管")));
         assertEquals(200, second.status(), second.body());
-        assertEquals(ctx.get("printedToken"), objectMapper.readTree(second.body()).get("token").asText(), "再列印回同一枚，GET 不重簽");
+        assertEquals(ctx.get(ScenarioKeys.PRINTED_TOKEN), objectMapper.readTree(second.body()).get("token").asText(), "再列印回同一枚，GET 不重簽");
     }
 
     @Then("^列印查無房號 \"(\\d+)\" 的請求應該失敗，回應為 404$")
@@ -185,8 +186,8 @@ public class InspectionQrThenSteps {
 
     @Then("^寫入被 partial unique 約束以 (\\d+) 拒絕$")
     public void insertRejectedByPartialUnique(String sqlState) {
-        assertEquals(sqlState, ctx.get("sqlState"), "必須是唯一約束違反（23505）");
-        String message = ctx.get("sqlMessage");
+        assertEquals(sqlState, ctx.get(ScenarioKeys.SQL_STATE), "必須是唯一約束違反（23505）");
+        String message = ctx.get(ScenarioKeys.SQL_MESSAGE);
         assertTrue(message.contains("uq_room_qr_tokens_one_active"), "擋下的必須是同房只能一枚 active 的約束: " + message);
     }
 
@@ -196,9 +197,9 @@ public class InspectionQrThenSteps {
         assertEquals(200, last.status(), "輪替該成功: " + last.body());
         JsonNode body = objectMapper.readTree(last.body());
         String newToken = body.get("token").asText();
-        String oldToken = ctx.get("oldQrToken");
+        String oldToken = ctx.get(ScenarioKeys.OLD_QR_TOKEN);
         assertNotEquals(oldToken, newToken);
-        int oldVersion = ctx.get("oldQrVersion");
+        int oldVersion = ctx.get(ScenarioKeys.OLD_QR_VERSION);
         assertEquals(oldVersion + 1, body.get("version").asInt(), "輪替後新 token 的 version 要 +1 生效");
         Map<String, Object> oldRow = db.admin().queryForMap("SELECT status, revoked_at FROM room_qr_tokens WHERE token = ?", oldToken);
         assertEquals("revoked", oldRow.get("status"), "舊 token 標 revoked——掃碼側只認 active，掃它即被拒");
@@ -218,7 +219,7 @@ public class InspectionQrThenSteps {
 
     @Then("^該住客的下一個請求應該失敗，回應為 401$")
     public void guestNextRequestIs401() {
-        ScenarioContext.HttpResult context = api.get("/guest/context", ctx.get("sessionToken"));
+        ScenarioContext.HttpResult context = api.get("/guest/context", ctx.get(ScenarioKeys.SESSION_TOKEN));
         assertEquals(401, context.status(), "輪替連坐：輪替前掃過的人下一個請求 401");
     }
 

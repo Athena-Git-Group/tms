@@ -12,7 +12,7 @@ function harness(results: (() => Promise<ScanResponse>)[]) {
   const renewed: string[] = [];
   const failures: unknown[] = [];
   let scans = 0;
-  const renew = createRenewal({
+  const renewal = createRenewal({
     currentSession: () => session,
     rescan: () => {
       scans += 1;
@@ -24,7 +24,7 @@ function harness(results: (() => Promise<ScanResponse>)[]) {
     },
     failed: (error) => failures.push(error),
   });
-  return { renew, renewed, failures, scans: () => scans };
+  return { renew: renewal.renew, renewal, renewed, failures, scans: () => scans };
 }
 
 describe('createRenewal', () => {
@@ -42,12 +42,13 @@ describe('createRenewal', () => {
     expect(h.failures).toEqual([vacant]);
   });
 
-  it('剛換到的又被拒：不再重換，交給失敗處理', async () => {
+  it('換到的 session 重發又被拒：交給失敗處理，不再重換', async () => {
     const h = harness([() => Promise.resolve(scanned('gs_new'))]);
     await h.renew('gs_old');
-    await expect(h.renew('gs_new')).rejects.toThrow();
+    const rejected = new ApiError(401, { code: 'unauthorized', message: 'x' });
+    h.renewal.renewedSessionRejected(rejected);
     expect(h.scans()).toBe(1);
-    expect(h.failures).toHaveLength(1);
+    expect(h.failures).toEqual([rejected]);
   });
 
   it('同時被拒的幾個呼叫共用同一次重換', async () => {

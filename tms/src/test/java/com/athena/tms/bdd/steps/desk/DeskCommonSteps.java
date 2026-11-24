@@ -121,13 +121,7 @@ public class DeskCommonSteps {
     public void deskAssigns(String staffName, String roomNo, String deptTerm) {
         UUID taskId = taskIdOf(roomNo);
         lastOperationGuard.captureFor(taskId);
-        ScenarioWorld.ApiResponse response = deskApi.assign(staffName, taskId, Terms.dept(deptTerm), VIA_BUTTON);
-        if (response.status() >= 200 && response.status() <= 299) {
-            String ticketNo = repairTicketNoOf(taskId);
-            if (ticketNo != null) {
-                world.rememberRepairTicket(ticketNo, taskId.toString());
-            }
-        }
+        deskApi.assign(staffName, taskId, Terms.dept(deptTerm), VIA_BUTTON);
     }
 
     @當("{string} 復原 {string} 的派單")

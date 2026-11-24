@@ -59,14 +59,13 @@ start_backend() {
   echo "[manual-env] 起後端 :${BACKEND_PORT}，資料庫 ${DB_NAME}，Kafka topic 前綴 ${KAFKA_TOPIC_PREFIX}"
   (
     cd "$STATE_DIR"
-    # 真實時鐘：明確拿掉 TMS_TEST_CLOCK_ENABLED，避免從外層 shell 繼承到。
-    env -u TMS_TEST_CLOCK_ENABLED \
-      TMS_DB_URL="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}" \
+    # test-support profile 讓 qr.sh 能查現在有人入住的房間；時鐘照樣走真實時間，沒有人撥它就不會動。
+    env TMS_DB_URL="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}" \
       TMS_DB_ADMIN_USER="$DB_ADMIN_USER" TMS_DB_ADMIN_PASSWORD="$DB_ADMIN_PASSWORD" \
       TMS_KAFKA_BOOTSTRAP="$KAFKA_BOOTSTRAP" \
       SERVER_PORT="$BACKEND_PORT" \
       nohup "$JAVA_BIN" -jar "$RUN_JAR" \
-        --tms.test-clock.enabled=false \
+        --spring.profiles.active=test-support \
         --tms.kafka.topic.task-events="${KAFKA_TOPIC_PREFIX}tms.task-events" \
         --tms.kafka.topic.push="${KAFKA_TOPIC_PREFIX}tms.push" \
         --tms.kafka.topic.push-dead-letter="${KAFKA_TOPIC_PREFIX}tms.push.DLT" \

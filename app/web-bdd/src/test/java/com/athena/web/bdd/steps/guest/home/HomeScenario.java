@@ -2,10 +2,8 @@ package com.athena.web.bdd.steps.guest.home;
 
 import java.util.List;
 
-/** 「首頁」的句子之間要傳的東西：住客點下去之前的網址與畫面文字。一個場景一份。 */
 public final class HomeScenario {
 
-    /** 點之前的樣子。 */
     public record Before(String url, List<String> lines) {
     }
 

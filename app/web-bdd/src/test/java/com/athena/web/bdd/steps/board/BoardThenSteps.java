@@ -33,18 +33,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/**
- * 「總覽看板」模組的 Then 句型。
- *
- * <p>畫面怎麼讀收在 {@link BoardPage}；這裡只放比對。凡是規格要求和後端一致的句子，另以 {@code getDeskBoard}
- * 讀後端的權威狀態一起比。畫面跟上需要時間，所以每一句都在 5 秒內反覆讀，直到相符或時間到。
- */
 public class BoardThenSteps {
 
-    /** 共通實作約定：等待畫面更新用輪詢，上限 5 秒。 */
     private static final long POLL_LIMIT_MS = 5_000;
 
-    /** 讀後端看板用的帳號：看板內容對每個櫃檯角色都一樣，取預設的櫃檯同仁。 */
     private static final String BOARD_READER = "林佩君";
 
     private static final Pattern MINUTES = Pattern.compile("(\\d+) 分");
@@ -66,7 +58,6 @@ public class BoardThenSteps {
             BoundingBox tileRow = board.tileRow().boundingBox();
             BoundingBox controls = world.page().getByRole(AriaRole.GROUP,
                     new Page.GetByRoleOptions().setName("泳道").setExact(true)).boundingBox();
-            // 找得到看板本體就表示它是一塊可以橫向捲動的區塊（往上找第一個 overflow-x 是 auto 或 scroll 的）。
             BoundingBox body = board.boardBodyBox();
             check(tileRow.y < controls.y && controls.y < body.y,
                     "由上到下應該是數量卡、控制列、看板本體，實際上緣依序是 " + tileRow.y + "、" + controls.y + "、" + body.y);
@@ -190,7 +181,6 @@ public class BoardThenSteps {
                 check(tile.number().equals(number),
                         "第 " + (i + 1) + " 張數量卡的數字應該是「" + number + "」，畫面上是「" + tile.number() + "」");
             }
-            // 前三張的數字要和看板上對應欄的卡片張數一致；等最久不是張數，不比。
             List<List<String>> columnsOfTile = List.of(List.of("待派單"), List.of("待認領"), List.of("已接", "進行中"));
             for (int i = 0; i < Math.min(3, tiles.size()); i++) {
                 List<String> columns = columnsOfTile.get(i);
@@ -421,7 +411,6 @@ public class BoardThenSteps {
             JsonNode deskBoard = deskBoard();
             JsonNode task = onlyTaskOfRoom(deskBoard, room);
             String column = BoardPage.columnOfTask(task);
-            // 膠囊顏色照一般的門檻：等不到 10 分灰、10 分起橘、20 分起紅；位置照一般的排序規則。
             if ("待派單".equals(column) || "待認領".equals(column)) {
                 long minutes = waitedMinutes(task, deskBoard);
                 String tone = minutes >= 20 ? "red" : minutes >= 10 ? "orange" : "gray";
@@ -467,7 +456,6 @@ public class BoardThenSteps {
             List<CardReading> cards = allCardsOnBoard();
             check(cards.size() == expected.size(),
                     "看板上應該有 " + expected.size() + " 張卡片，畫面上有 " + cards.size() + " 張");
-            // 長的標題先配，避免較短的標題剛好是另一個標題的開頭時被先配走。
             List<String> remaining = new ArrayList<>(expected);
             remaining.sort(Comparator.comparingInt(String::length).reversed());
             for (CardReading card : cards) {
@@ -596,7 +584,6 @@ public class BoardThenSteps {
                 String description = board.dropZoneDescription(inColumn.first());
                 check(description.equals(cell(row, "說明")),
                         "拖放區「" + zone + "」的說明應該是「" + cell(row, "說明") + "」，畫面上是「" + description + "」");
-                // 拖放區在那一欄最上面：比那一欄的第一張卡片還高。
                 Locator cards = board.cardsIn(cells.first());
                 if (cards.count() > 0) {
                     check(inColumn.first().boundingBox().y < cards.first().boundingBox().y,
@@ -624,7 +611,6 @@ public class BoardThenSteps {
                 "看板上不應該有拖放區，畫面上有 " + board.anyDropZone().allInnerTexts()));
     }
 
-    /** 規格要看手勢期間的畫面，放開之後一定看不出來，所以讀「試著拖」那一步在手勢期間記下的樣子。 */
     @那麼("{string} 的卡片沒有被拖起來，看板上沒有任何拖放區")
     public void cardNotLifted(String room) {
         TriedDrag tried = board.lastTriedDrag()
@@ -704,7 +690,6 @@ public class BoardThenSteps {
     private static final Map<String, String> SOURCES =
             Map.of("guest", "住客掃碼", "desk", "櫃檯開單", "system", "系統排房", "staff", "同仁報修");
 
-    /** 規格的顏色說法換成畫面上的顏色標記（和 lib/wait-pill.ts 的 WaitPillTone 同一組值）。 */
     private static String toneOf(String color) {
         return switch (color.strip()) {
             case "灰色", "一般" -> "gray";
@@ -715,7 +700,6 @@ public class BoardThenSteps {
         };
     }
 
-    /** 反覆執行檢查，直到通過或過了 5 秒；只有斷言失敗與畫面讀取失敗會重試，表格寫錯直接失敗。 */
     private void eventually(Runnable check) {
         long deadline = System.currentTimeMillis() + POLL_LIMIT_MS;
         while (true) {
@@ -751,7 +735,6 @@ public class BoardThenSteps {
         };
     }
 
-    /** 規格以「、」分隔的清單；空字串是空清單。 */
     private static List<String> splitList(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
@@ -769,7 +752,6 @@ public class BoardThenSteps {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** 這一欄由上到下的卡片；有泳道時把每一格的卡片依畫面上的高低排在一起。 */
     private List<CardReading> cardsTopToBottom(String column) {
         List<CardReading> cards = new ArrayList<>(board.readCardsIn(board.column(column)));
         cards.sort(Comparator.comparingDouble(CardReading::top));
@@ -788,14 +770,12 @@ public class BoardThenSteps {
         return allCardsOnBoard().stream().map(CardReading::roomNo).collect(Collectors.toCollection(HashSet::new));
     }
 
-    /** 這間房在畫面上唯一的那張卡片。用到這個的句子，案例裡每間房都只有一張單。 */
     private CardReading onlyCardOf(String room) {
         List<CardReading> cards = board.readCardsOf(room);
         check(cards.size() == 1, "「" + room + "」的卡片應該剛好一張，畫面上有 " + cards.size() + " 張");
         return cards.get(0);
     }
 
-    /** 卡片標題之後到 SOP 之前的字就是副標。 */
     private static String subtitleOf(CardReading card, String title) {
         String rest = card.middle().startsWith(title) ? card.middle().substring(title.length()) : card.middle();
         return rest.replaceAll("SOP \\d+/\\d+", "").strip();
@@ -808,12 +788,10 @@ public class BoardThenSteps {
         return world.page().getByLabel(name.strip(), new Page.GetByLabelOptions().setExact(true));
     }
 
-    /** 以後端 {@code getDeskBoard} 讀全館看板，當作權威狀態。 */
     private JsonNode deskBoard() {
         return world.backend().getJson("/desk/board", world.staff(BOARD_READER));
     }
 
-    /** 後端看板裡這間房的單：先用這個場景登記的 task id 找，沒有登記的房才用房號找。 */
     private List<JsonNode> tasksOfRoom(JsonNode deskBoard, String room) {
         Set<String> ids = world.tasks().entriesIn(room).stream().map(Entry::taskId).map(UUID::toString)
                 .collect(Collectors.toSet());
@@ -834,17 +812,12 @@ public class BoardThenSteps {
         return tasks.get(0);
     }
 
-    /** 待派單、待認領的單等了幾分鐘：後端的現在減去 {@code waitingSince}，無條件捨去。 */
     private static long waitedMinutes(JsonNode task, JsonNode deskBoard) {
         OffsetDateTime now = OffsetDateTime.parse(deskBoard.path("serverTime").asText());
         OffsetDateTime since = OffsetDateTime.parse(task.path("waitingSince").asText());
         return Duration.between(since, now).toMinutes();
     }
 
-    /**
-     * 膠囊裡的分鐘數要等於後端的現在減去起算時刻。只有待派單與待認領有後端給的起算時刻（{@code waitingSince}）；
-     * 「逾時 · N 分」寫的是超過 10 分的部分，「剛剛」是不到 1 分。
-     */
     private void checkWaitingMinutes(String room, String pillText, JsonNode deskBoard) {
         JsonNode task = onlyTaskOfRoom(deskBoard, room);
         String state = task.path("state").asText();
@@ -862,7 +835,6 @@ public class BoardThenSteps {
         check(onPill == minutes, "「" + room + "」膠囊「" + pillText + "」的分鐘數和後端算出的已等 " + minutes + " 分不符");
     }
 
-    /** 一欄依規則該有的先後：待派單最新進來的在上、待認領等最久的在上、其他欄最後更新最新的在上。 */
     private List<String> expectedOrder(String column, JsonNode deskBoard) {
         List<JsonNode> tasks = new ArrayList<>();
         deskBoard.path("tasks").forEach(task -> {

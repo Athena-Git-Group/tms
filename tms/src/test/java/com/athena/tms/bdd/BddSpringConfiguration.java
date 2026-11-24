@@ -14,6 +14,7 @@ import com.athena.tms.bdd.support.RecordingPushSender;
 import com.athena.tms.bdd.support.RepairCountGuard;
 import com.athena.tms.push.PushSender;
 import com.athena.tms.bdd.support.MutableClock;
+import com.athena.tms.bdd.support.ScriptedRepairTicketNumbers;
 import com.athena.tms.bdd.support.OutboxAwait;
 import com.athena.tms.bdd.support.PmsProbe;
 import com.athena.tms.bdd.support.ReservationFixtures;
@@ -120,6 +121,12 @@ public class BddSpringConfiguration {
 
         @Bean
         @Primary
+        ScriptedRepairTicketNumbers scriptedRepairTicketNumbers(org.springframework.jdbc.core.JdbcTemplate jdbcTemplate) {
+            return new ScriptedRepairTicketNumbers(jdbcTemplate);
+        }
+
+        @Bean
+        @Primary
         RecordingPushSender recordingPushSender() {
             return new RecordingPushSender();
         }
@@ -160,8 +167,10 @@ public class BddSpringConfiguration {
                 JdbcClient jdbcClient,
                 TenantFixtures tenantFixtures,
                 RoomFixtures roomFixtures,
-                MutableClock mutableClock) {
-            return new TaskFixtures(taskEngine, jdbcClient, tenantFixtures, roomFixtures, mutableClock);
+                MutableClock mutableClock,
+                ScriptedRepairTicketNumbers scriptedRepairTicketNumbers) {
+            return new TaskFixtures(
+                    taskEngine, jdbcClient, tenantFixtures, roomFixtures, mutableClock, scriptedRepairTicketNumbers);
         }
 
         @Bean

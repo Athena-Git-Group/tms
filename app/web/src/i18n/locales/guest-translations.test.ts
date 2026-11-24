@@ -10,7 +10,6 @@ function leaves(node: object, prefix = ''): [string, string][] {
   );
 }
 
-/** 拿掉插值之後沒有任何文字的值（例如 `{{count}} / {{max}}`）本來就各語言相同，不算占位。 */
 function hasWords(text: string): boolean {
   return /\p{L}/u.test(text.replace(/\{\{[^}]*\}\}/g, ''));
 }

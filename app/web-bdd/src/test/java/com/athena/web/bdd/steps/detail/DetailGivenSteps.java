@@ -10,7 +10,6 @@ import com.microsoft.playwright.Locator;
 import io.cucumber.java.zh_tw.假設;
 import java.util.UUID;
 
-/** 「單筆詳情」模組的 Given 句型。 */
 public class DetailGivenSteps {
 
     private final WebWorld world;
@@ -31,11 +30,6 @@ public class DetailGivenSteps {
         this.detail = new DetailPanel(world);
     }
 
-    /**
-     * 以這位員工登入（已登入就沿用）並開這一頁，打開該房的詳情面板按「派給{部門}」，
-     * 再在浮條上按「復原」，等復原成功、浮條消失後關閉面板。
-     * 做完之後這張單回到待派單，歷程上不留這一次派單。
-     */
     @假設("{string} 剛在 {string} 把 {string} 派給 {string} 又按了「復原」")
     public void assignedThenUndone(String staffName, String pageName, String roomNo, String dept) {
         CreatedStaff staff = world.staff(staffName);

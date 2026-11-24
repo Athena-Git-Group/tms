@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_STATE } from '../lib/persistence';
 import { memoryStorage } from '../test-support/memory-storage';
+import { restoreSession, useSessionStore } from './session';
 
 const loginResponse = {
   token: 'token',
@@ -16,7 +17,6 @@ const loginResponse = {
 let sessionStorage: Storage;
 
 beforeEach(() => {
-  vi.resetModules();
   sessionStorage = memoryStorage();
   vi.stubGlobal('window', { sessionStorage, localStorage: memoryStorage() });
 });
@@ -26,19 +26,18 @@ afterEach(() => {
 });
 
 describe('登入狀態記下登入的飯店', () => {
-  it('登入時把網址上的飯店識別代碼和登入回應一起存起來，重新整理後讀得回來', async () => {
-    const first = await import('./session');
-    first.useSessionStore.getState().setSession(loginResponse, 'athena');
+  it('登入時把網址上的飯店識別代碼和登入回應一起存起來，重新整理後讀得回來', () => {
+    useSessionStore.getState().setSession(loginResponse, 'athena');
     expect(JSON.parse(sessionStorage.getItem(SESSION_STATE.key)!)).toEqual({ ...loginResponse, hotelCode: 'athena' });
 
-    vi.resetModules();
-    const reloaded = await import('./session');
-    expect(reloaded.useSessionStore.getState().session).toEqual({ ...loginResponse, hotelCode: 'athena' });
+    useSessionStore.setState({ session: null });
+    restoreSession();
+    expect(useSessionStore.getState().session).toEqual({ ...loginResponse, hotelCode: 'athena' });
   });
 
-  it('加上飯店識別代碼之前存的登入狀態分不出是哪一家，當作沒有登入', async () => {
+  it('加上飯店識別代碼之前存的登入狀態分不出是哪一家，當作沒有登入', () => {
     sessionStorage.setItem(SESSION_STATE.key, JSON.stringify(loginResponse));
-    const { useSessionStore } = await import('./session');
+    restoreSession();
     expect(useSessionStore.getState().session).toBeNull();
   });
 });

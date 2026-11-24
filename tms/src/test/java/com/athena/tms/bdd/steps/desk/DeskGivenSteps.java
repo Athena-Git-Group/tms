@@ -224,7 +224,6 @@ public class DeskGivenSteps {
                 menu.add(menuItem(item.key(), item.label(), item.dept(), item.type()));
             }
         }
-        // 類型刻意不給 repair：用到這句的案例要證明單靠部門是工務就會留在待派單
         menu.add(menuItem(label, label, dept, "amenity"));
         jdbcClient
                 .sql(

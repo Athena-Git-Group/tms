@@ -1,6 +1,19 @@
 import { QueryClient } from '@tanstack/react-query';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { useBoardDragStore } from '../stores/board-drag';
+import { useBoardViewStore } from '../stores/board-view';
+import { useDeskPanelsStore } from '../stores/desk-panels';
+import { useLoginNoticeStore } from '../stores/login-notice';
+import { useSessionStore } from '../stores/session';
 import { memoryStorage } from '../test-support/memory-storage';
+import { logOut } from './log-out';
+import {
+  BOARD_VIEW_STATE,
+  LOGIN_PAGE_LANGUAGE_STATE,
+  SESSION_STATE,
+  STAFF_LANGUAGE_STATE,
+  TAB_STORED_STATES,
+} from './persistence';
 
 const sessionStorage = memoryStorage();
 const localStorage = memoryStorage();
@@ -14,16 +27,7 @@ afterAll(() => {
 });
 
 describe('logOut', () => {
-  it('清掉看板的選擇、開著的面板、後端資料快取、登入頁提示與登入狀態，介面語言留著', async () => {
-    const { BOARD_VIEW_STATE, SESSION_STATE, STAFF_LANGUAGE_STATE, LOGIN_PAGE_LANGUAGE_STATE, TAB_STORED_STATES } =
-      await import('./persistence');
-    const { useBoardViewStore } = await import('../stores/board-view');
-    const { useLoginNoticeStore } = await import('../stores/login-notice');
-    const { useDeskPanelsStore } = await import('../stores/desk-panels');
-    const { useBoardDragStore } = await import('../stores/board-drag');
-    const { useSessionStore } = await import('../stores/session');
-    const { logOut } = await import('./log-out');
-
+  it('清掉看板的選擇、開著的面板、後端資料快取、登入頁提示與登入狀態，介面語言留著', () => {
     const initialView = {
       lane: useBoardViewStore.getState().lane,
       cardFilter: useBoardViewStore.getState().cardFilter,

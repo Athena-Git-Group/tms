@@ -12,13 +12,6 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * 「取消與評分」模組的 Given 句型（{@code specs/truth/features/guest-web/取消與評分/dsl.md}）。
- *
- * <p>「住客的畫面還沒跟上」這兩句先讓這個分頁的事件串流維持連線、但後端送來的訊號一則都不交給畫面
- * （{@code Network#holdLiveSignals}），再在後端改這張需求。連線仍算正常，畫面就不會開始定時重讀；
- * 住客按下按鈕之後，畫面因為被後端拒絕而重讀這張需求的請求照常送出，結果句看得到畫面更新成真正的狀態。
- */
 public class CancelRateGivenSteps {
 
     static final String CONFIRM_CANCEL = "取消需求";
@@ -45,7 +38,6 @@ public class CancelRateGivenSteps {
         this.request = new RequestPage(world);
     }
 
-    /** 開這張需求的進度頁，按「取消這個需求」，等確認框出現。 */
     @假設("{string} 房的住客開著 {string} 的進度頁，取消確認框開著")
     public void cancelDialogOpen(String roomNo, String title) {
         openRequest(roomNo, title);
@@ -54,7 +46,6 @@ public class CancelRateGivenSteps {
         require(request.dialog().isPresent(), "按了「" + RequestPage.CANCEL_BUTTON + "」之後沒有出現確認框");
     }
 
-    /** 開這張需求的進度頁，點評分卡的第 N 顆星，等字樣更新、「送出評分」可以按。 */
     @假設("{string} 房的住客開著 {string} 的進度頁，已點第 {int} 顆星")
     public void starPicked(String roomNo, String title, int stars) {
         openRequest(roomNo, title);
@@ -63,10 +54,6 @@ public class CancelRateGivenSteps {
                 && request.button(RequestPage.RATING_SUBMIT).first().isEnabled());
     }
 
-    /**
-     * 先讓畫面收不到即時訊號，再以這位員工的身分在後端認領這張需求。畫面仍把它顯示成還沒有人接手，
-     * 確認框也還開著。
-     */
     @假設("住客的畫面還沒跟上，{string} 已在手機上認領了 {string}")
     public void staffClaimedBehindScreen(String staff, String title) {
         world.network().holdLiveSignals(world.page());
@@ -75,7 +62,6 @@ public class CancelRateGivenSteps {
         require("accepted".equals(state(taskId)), "「" + staff + "」認領「" + title + "」之後後端不是已接：" + state(taskId));
     }
 
-    /** 先讓畫面收不到即時訊號，再以同一筆訂房的另一個住客工作階段在後端替這張需求評分。畫面上評分卡還在。 */
     @假設("住客的畫面還沒跟上，另一支手機已替 {string} 送出了 {int} 顆星")
     public void otherPhoneRatedBehindScreen(String title, int stars) {
         world.network().holdLiveSignals(world.page());
@@ -84,11 +70,6 @@ public class CancelRateGivenSteps {
         world.backend().guestRateRequest(otherSession, taskId, stars);
     }
 
-    /**
-     * 開進度頁、按「取消這個需求」、按「取消需求」，等「已取消需求」浮出又消失、標籤變成「已取消」。
-     * 進度頁是直接開網址進來的，返回算從清單進來的。這句之前沒有種過這張需求時，先替這間房種一張房務待認領的備品，
-     * 才有東西可以取消。
-     */
     @假設("{string} 房的住客剛取消了 {string}，停在它的進度頁")
     public void justCancelled(String roomNo, String title) {
         if (!scenario.knowsRequest(title)) {
@@ -104,10 +85,6 @@ public class CancelRateGivenSteps {
         require(showsCancelled(), "取消之後「" + title + "」的標籤沒有變成「已取消」");
     }
 
-    /**
-     * 開進度頁、點第 N 顆星、按「送出評分」，等「謝謝您的評分」浮出又消失、評分卡消失。
-     * 這句之前沒有種過這張需求時，先替這間房種一張阿美完成、還沒評過的備品，才有評分卡可以評。
-     */
     @假設("{string} 房的住客剛替 {string} 送出了 {int} 顆星，停在它的進度頁")
     public void justRated(String roomNo, String title, int stars) {
         if (!scenario.knowsRequest(title)) {

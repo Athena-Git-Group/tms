@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -13,6 +14,11 @@ public class ScanIpRateLimiter {
     private static final Duration WINDOW = Duration.ofMinutes(10L);
     private final Map<String, Deque<Instant>> failuresByIp = new ConcurrentHashMap<String, Deque<Instant>>();
     private final Map<String, Integer> thresholdByIp = new ConcurrentHashMap<String, Integer>();
+    private final Clock clock;
+
+    public ScanIpRateLimiter(Clock clock) {
+        this.clock = clock;
+    }
 
     public int recentFailures(String ip) {
         Deque<Instant> failures = this.failuresByIp.get(ip);
@@ -21,7 +27,7 @@ public class ScanIpRateLimiter {
         }
         Deque<Instant> deque = failures;
         synchronized (deque) {
-            ScanIpRateLimiter.prune(failures);
+            this.prune(failures);
             if (failures.isEmpty()) {
                 this.failuresByIp.remove(ip, failures);
                 return 0;
@@ -31,11 +37,10 @@ public class ScanIpRateLimiter {
     }
 
     public void recordFailure(String ip) {
-        Deque failures;
-        Deque deque = failures = this.failuresByIp.computeIfAbsent(ip, key -> new ArrayDeque());
-        synchronized (deque) {
-            ScanIpRateLimiter.prune(failures);
-            failures.addLast(Instant.now());
+        Deque<Instant> failures = this.failuresByIp.computeIfAbsent(ip, key -> new ArrayDeque<Instant>());
+        synchronized (failures) {
+            this.prune(failures);
+            failures.addLast(this.clock.instant());
         }
     }
 
@@ -53,8 +58,8 @@ public class ScanIpRateLimiter {
         this.thresholdByIp.clear();
     }
 
-    private static void prune(Deque<Instant> failures) {
-        Instant cutoff = Instant.now().minus(WINDOW);
+    private void prune(Deque<Instant> failures) {
+        Instant cutoff = this.clock.instant().minus(WINDOW);
         while (!failures.isEmpty() && failures.peekFirst().isBefore(cutoff)) {
             failures.removeFirst();
         }

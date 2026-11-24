@@ -37,8 +37,13 @@ public class RoomQrService {
     public RoomQrResponse printData(String roomNo) {
         long tenantId = TenantContext.require();
         Room room = this.findRoom(tenantId, roomNo);
-        RoomQrToken token = this.roomQrTokenRepository.findByTenantIdAndRoomIdAndStatus(tenantId, room.getId(), "active").orElseGet(() -> this.issue(tenantId, room.getId()));
+        RoomQrToken token = this.activeToken(tenantId, room.getId());
         return new RoomQrResponse(room.getRoomNo(), token.getToken(), token.getVersion(), token.getCreatedAt());
+    }
+
+    @Transactional
+    public RoomQrToken activeToken(long tenantId, UUID roomId) {
+        return this.roomQrTokenRepository.findByTenantIdAndRoomIdAndStatus(tenantId, roomId, "active").orElseGet(() -> this.issue(tenantId, roomId));
     }
 
     @Transactional

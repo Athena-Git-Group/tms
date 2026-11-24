@@ -6,9 +6,6 @@ import { buttonClass } from './button-class';
 
 const ACTION = 'min-w-0 flex-1 basis-0';
 
-/**
- * 取消的確認框：遮罩加置中白框。打開時焦點在「返回」，Tab 只在兩顆按鈕之間；Esc、點遮罩、「返回」都只關閉。
- */
 export function CancelDialog({ title, onKeep, onConfirm }: { title: string; onKeep: () => void; onConfirm: () => void }) {
   const { t } = useTranslation();
   const keep = useRef<HTMLButtonElement>(null);

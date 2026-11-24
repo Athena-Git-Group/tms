@@ -4,10 +4,6 @@ import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/icon-paths';
 import { Illustration, type Tone } from './Illustration';
 
-/**
- * 首頁上還沒開放的四個入口：提問列與「服務」三列。都是純文字、沒有箭頭、點了什麼都不發生；
- * 之後哪一個開放，從這張表拿掉它再畫成真的入口。
- */
 export const ASK_ENTRY = { placement: 'ask', text: 'guest.home.ask', icon: 'chat_bubble_2' } as const;
 
 export const SERVICE_ENTRIES = [

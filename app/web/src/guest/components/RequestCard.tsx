@@ -3,7 +3,6 @@ import { RequestIcon } from './RequestIcon';
 import { useRequestMeta } from './RequestMeta';
 import { StatusTag } from './StatusTag';
 
-/** 進度頁的第一張卡：類型圖示、狀態標籤、標題（完整換行不截斷）、「{送出時間} 送出 · {部門}」。 */
 export function RequestCard({ task }: { task: GuestTask }) {
   const meta = useRequestMeta();
   return (

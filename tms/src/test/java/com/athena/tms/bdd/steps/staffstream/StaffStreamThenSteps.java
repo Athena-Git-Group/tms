@@ -41,8 +41,7 @@ public class StaffStreamThenSteps {
             "正常", false,
             "降級", true);
 
-    /** 不帶卡片的連線，{@code task} 訊號只會有這幾個欄位；多出任何一欄就代表帶了單的內容。 */
-    private static final Set<String> TASK_SIGNAL_FIELDS = Set.of("stream_pos", "task_id", "seq", "type", "occurred_at");
+    private static final Set<String> CARDLESS_TASK_SIGNAL_FIELDS = Set.of("stream_pos", "task_id", "seq", "type", "occurred_at");
 
     private static final Set<String> HOTEL_WIDE_ROLES = Set.of("frontdesk", "manager", "duty_manager");
 
@@ -75,10 +74,6 @@ public class StaffStreamThenSteps {
         this.deskApi = deskApi;
     }
 
-    /**
-     * 保證訊號帶的卡片就是看板上的那一張：同一張單在看板讀取裡的每個欄位都和卡片相同，營業日也相同。
-     * 比對的是這張單目前最後一步的訊號，所以先等到 {@code seq} 追上 {@code tasks.event_seq} 的那一則。
-     */
     @那麼("{string} 收到的 {string} 訊號帶著它在櫃檯看板上的卡片，和他讀到的櫃檯看板上那一張一模一樣")
     public void signalCarriesBoardCard(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
@@ -139,7 +134,7 @@ public class StaffStreamThenSteps {
         for (Event signal : signals) {
             List<String> extraFields = new ArrayList<>();
             for (String field : signal.data().propertyNames()) {
-                if (!TASK_SIGNAL_FIELDS.contains(field)) {
+                if (!CARDLESS_TASK_SIGNAL_FIELDS.contains(field)) {
                     extraFields.add(field);
                 }
             }
@@ -149,10 +144,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /**
-     * 保證連上之後這張單的每一步都有訊號：收到的 {@code seq} 依序剛好連續，最後一則就是單目前的步數。
-     * 連上之前就寫進去的事件可能還在路上、也可能早已送完，所以從收到的第一則開始算，不要求從第 1 步開始。
-     */
     @那麼("{string} 收到的 {string} 訊號一步一步往上加，沒有跳號")
     public void signalsAreConsecutive(String staffName, String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
@@ -181,10 +172,6 @@ public class StaffStreamThenSteps {
         }
     }
 
-    /**
-     * 這張單最後一步的訊號。先等到 {@code seq} 等於 {@code tasks.event_seq} 的那一則出現，
-     * 同一張單的訊號依步數順序送達，所以它就是最新的一則。
-     */
     private JsonNode latestSignal(String staffName, String taskKey, UUID taskId) {
         int eventSeq = taskEventSeq(taskId);
         Connection connection = streamClient.connection(staffName);

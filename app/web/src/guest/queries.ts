@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import { listRequests, readHome } from './api/client';
+import type { GuestQuota, GuestRequestList } from './api/types';
 import type { GuestData } from './lib/live-rereads';
+import { quotaRefreshMs } from './lib/quota';
 import { useGuestSessionStore } from './session';
 
-/** 需求清單定時重讀的間隔；連線正常時是 `false`。由進入層依串流的狀態提供。 */
 export const GuestRereadContext = createContext<number | false>(false);
 
 export function guestQueryKey(qrToken: string, data: GuestData) {
   return ['guest', qrToken, data] as const;
 }
 
-/** 換 session 的回應已經帶了首頁資料，先拿它當初值，首頁不用等第二次讀取才畫得出來。 */
 export function useGuestHome(qrToken: string) {
   const session = useGuestSessionStore((state) => (state.session?.qrToken === qrToken ? state.session : null));
   return useQuery({
@@ -22,7 +22,11 @@ export function useGuestHome(qrToken: string) {
   });
 }
 
-export function useGuestRequests(qrToken: string) {
+function useRequestListQuery<T>(
+  qrToken: string,
+  select: (list: GuestRequestList) => T,
+  refetchInterval: number | false | ((query: { state: { data?: GuestRequestList } }) => number | false),
+) {
   const sessionToken = useGuestSessionStore((state) =>
     state.session?.qrToken === qrToken ? state.session.sessionToken : null,
   );
@@ -30,6 +34,19 @@ export function useGuestRequests(qrToken: string) {
     queryKey: guestQueryKey(qrToken, 'requests'),
     queryFn: ({ signal }) => listRequests(sessionToken!, signal),
     enabled: sessionToken !== null,
-    refetchInterval: useContext(GuestRereadContext),
+    select,
+    refetchInterval,
   });
+}
+
+const selectRequests = (list: GuestRequestList) => list.requests;
+const selectQuota = (list: GuestRequestList) => list.quota;
+const refreshWhenSlotFrees = (query: { state: { data?: GuestRequestList } }) => quotaRefreshMs(query.state.data?.quota ?? null);
+
+export function useGuestRequests(qrToken: string) {
+  return useRequestListQuery(qrToken, selectRequests, useContext(GuestRereadContext));
+}
+
+export function useGuestQuota(qrToken: string): GuestQuota | null {
+  return useRequestListQuery(qrToken, selectQuota, refreshWhenSlotFrees).data ?? null;
 }

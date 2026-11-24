@@ -12,11 +12,6 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import io.cucumber.java.zh_tw.假設;
 
-/**
- * 「我的需求」模組的 Given 句型（{@code specs/truth/features/guest-web/我的需求/dsl.md}）。
- *
- * <p>這兩句真的經畫面在備品補充送出一項，每一筆都經過送出需求的限流替身，算在這間房 3 筆的預算裡。
- */
 public class RequestsGivenSteps {
 
     private static final String VIEW_PROGRESS = "查看進度";
@@ -45,7 +40,6 @@ public class RequestsGivenSteps {
         this.supply = new SupplyPage(world);
     }
 
-    /** 在另一支手機開備品補充頁、把這一項調到 1、送出，等它的成功頁畫完；記下建立的需求。之後的「住客」仍指這支手機。 */
     @假設("另一支手機已在備品補充送出 {string}")
     public void secondPhoneSubmitted(String item) {
         String roomNo = scenario.phoneRoom();
@@ -59,10 +53,6 @@ public class RequestsGivenSteps {
         }
     }
 
-    /**
-     * 從這個入口進這張需求的進度頁：首頁的進度卡是開首頁按卡上的「查看」；我的需求清單是開清單點這一列；
-     * 送出成功頁是在備品補充送出這一項（標題就是項目名稱）再按「查看進度」。等進度頁畫完。
-     */
     @假設("{string} 房的住客從 {string} 進了 {string} 的進度頁")
     public void enteredRequestFrom(String roomNo, String entry, String title) {
         switch (entry.strip()) {
@@ -86,7 +76,6 @@ public class RequestsGivenSteps {
         phone.waitUntilRequest(roomNo, title);
     }
 
-    /** 在目前的分頁開備品補充頁、把這一項調到 1、按頁底的送出，等成功頁畫完，記下建立的需求。 */
     private void submitOne(String roomNo, String item) {
         phone.openScreen(roomNo, GuestScreen.SUPPLY);
         frame.settleAfter(() -> tap(supply.increase(item)));

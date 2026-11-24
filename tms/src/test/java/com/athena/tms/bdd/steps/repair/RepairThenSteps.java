@@ -966,10 +966,9 @@ public class RepairThenSteps {
     }
 
     private UUID ticketTaskId(String ticketNo) {
-        return RepairTicketRefs.taskId(world, dbProbe, tenantFixtures.testTenantId(), ticketNo);
+        return RepairTicketRefs.taskId(world, ticketNo);
     }
 
-    // 「只看…的工務待認領」讀過的清單優先，篩選條件才真的被斷言到；沒有就以工務員工身分讀全部。
     private ScenarioWorld.ApiResponse engineeringPoolListing() {
         return world.lastEngineeringPoolResponse()
                 .orElseGet(() -> apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt())));

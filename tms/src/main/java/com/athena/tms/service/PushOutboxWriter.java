@@ -25,7 +25,7 @@ public class PushOutboxWriter {
 
     public void enqueue(long tenantId, String aggregateKey, ObjectNode payload, String idempotencyKey) {
         boolean inserted = outboxWriter.enqueueIfAbsent(
-                tenantId, "push", OutboxWriter.pushKey(aggregateKey), payload.toString(), idempotencyKey,
+                tenantId, "push", aggregateKey, payload.toString(), idempotencyKey,
                 OffsetDateTime.now(clock));
         if (inserted) {
             writeNotification(tenantId, payload);

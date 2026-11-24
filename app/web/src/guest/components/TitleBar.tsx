@@ -6,10 +6,6 @@ import { useReadySession } from '../session';
 import { useDocumentTitle } from '../use-document-title';
 import { Icon } from './Icon';
 
-/**
- * 子頁共用的標題列：返回鈕、頁標題、介面語言的房號標籤，黏在頂端；內容捲到它底下才出現細線。
- * 也決定分頁上的標題「{頁標題} · {房號} 號房」。首頁、送出成功頁與進入層沒有標題列。返回沒有指定去處時回首頁。
- */
 export function TitleBar({ title, backTo }: { title: string; backTo?: string }) {
   const { t } = useTranslation();
   const { roomNo, qrToken } = useReadySession();

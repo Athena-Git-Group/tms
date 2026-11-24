@@ -1,4 +1,5 @@
 import type { DeskTask, DeskTaskDetail } from '../api/types';
+import type { zhTW } from '../i18n/locales/zh-TW';
 import type { DisplayText } from './display-text';
 import { clockTime, minutesSince } from './wait-pill';
 
@@ -57,10 +58,9 @@ export function statusTag(task: DeskTask): StatusTag {
 export function statusCard(task: DeskTaskDetail, now: Date, serverUtcOffsetMinutes: number): StatusCard | null {
   const time = (at: string) => clockTime(at, serverUtcOffsetMinutes);
   if (task.answered) {
-    return card('green', { key: 'detail.answeredTitle' }, {
-      key: 'detail.answeredBody',
-      values: { answer: task.answer ?? '', name: task.answeredByName ?? '' },
-    });
+    const answer = task.answer ?? '';
+    const name = task.answeredByName ?? '';
+    return card('green', (t) => t('detail.answeredTitle'), (t) => t('detail.answeredBody', { answer, name }));
   }
   switch (task.state) {
     case 'triage':
@@ -68,68 +68,78 @@ export function statusCard(task: DeskTaskDetail, now: Date, serverUtcOffsetMinut
     case 'pool':
       return card(
         'brand-soft',
-        { key: 'detail.cards.poolTitle', values: { dept: { key: `board.card.depts.${task.dept}` } } },
-        { key: 'detail.cards.poolBody', values: { minutes: minutesSince(task.waitingSince ?? task.createdAt, now) } },
+        (t) => t('detail.cards.poolTitle', { dept: t(`board.card.depts.${task.dept}`) }),
+        (t) => t('detail.cards.poolBody', { minutes: minutesSince(task.waitingSince ?? task.createdAt, now) }),
       );
     case 'accepted':
       return card(
         'white',
-        { key: 'detail.cards.acceptedTitle', values: { name: task.assigneeName ?? '' } },
+        (t) => t('detail.cards.acceptedTitle', { name: task.assigneeName ?? '' }),
         acceptedDescription(task, time),
       );
     case 'doing': {
       const startedAt = task.startedAt ?? task.updatedAt;
       return card(
         'green',
-        { key: 'detail.cards.doingTitle', values: { name: task.assigneeName ?? '', minutes: minutesSince(startedAt, now) } },
-        { key: 'detail.cards.doingBody', values: { time: time(startedAt) } },
+        (t) => t('detail.cards.doingTitle', { name: task.assigneeName ?? '', minutes: minutesSince(startedAt, now) }),
+        (t) => t('detail.cards.doingBody', { time: time(startedAt) }),
       );
     }
     case 'done':
       if (task.type === 'repair') {
-        return card('green', { key: 'detail.cards.repairedTitle' }, null);
+        return card('green', (t) => t('detail.cards.repairedTitle'), null);
       }
       if (task.type === 'cleaning') {
-        return card('green', { key: 'detail.cards.awaitingInspectionTitle' }, { key: 'detail.cards.awaitingInspectionBody' });
+        return card(
+          'green',
+          (t) => t('detail.cards.awaitingInspectionTitle'),
+          (t) => t('detail.cards.awaitingInspectionBody'),
+        );
       }
-      return card('green', { key: 'detail.cards.doneTitle' }, {
-        key: 'detail.cards.doneBody',
-        values: { time: time(task.doneAt ?? task.updatedAt) },
-      });
+      return card(
+        'green',
+        (t) => t('detail.cards.doneTitle'),
+        (t) => t('detail.cards.doneBody', { time: time(task.doneAt ?? task.updatedAt) }),
+      );
     case 'inspected':
       if (task.inspection === 'waived') {
-        return card('green', { key: 'detail.cards.waivedTitle' }, { key: 'detail.cards.waivedBody' });
+        return card('green', (t) => t('detail.cards.waivedTitle'), (t) => t('detail.cards.waivedBody'));
       }
-      return card('green', { key: 'detail.cards.inspectedTitle' }, { key: 'detail.cards.inspectedBody' });
+      return card('green', (t) => t('detail.cards.inspectedTitle'), (t) => t('detail.cards.inspectedBody'));
     case 'closed':
       if (task.repair?.resolutionType === 'no_action_needed') {
-        return card('green', { key: 'detail.cards.closedNoActionTitle' }, null);
+        return card('green', (t) => t('detail.cards.closedNoActionTitle'), null);
       }
       if (task.repair?.verifiedByName) {
-        return card('green', { key: 'detail.cards.closedVerifiedTitle', values: { name: task.repair.verifiedByName } }, null);
+        const name = task.repair.verifiedByName;
+        return card('green', (t) => t('detail.cards.closedVerifiedTitle', { name }), null);
       }
-      return card('green', { key: 'detail.cards.closedTitle' }, null);
+      return card('green', (t) => t('detail.cards.closedTitle'), null);
     case 'interrupted':
       return interruptedCard(task);
     case 'deferred':
       if (task.deferral?.bySelf) {
+        const name = task.deferral.byName ?? task.assigneeName ?? '';
+        const reason = task.deferral.reason || '—';
         return card(
           'white',
-          { key: 'detail.cards.deferredSelfTitle', values: { name: task.deferral.byName ?? task.assigneeName ?? '' } },
-          { key: 'detail.cards.reasonBody', values: { reason: task.deferral.reason || '—' } },
+          (t) => t('detail.cards.deferredSelfTitle', { name }),
+          (t) => t('detail.cards.reasonBody', { reason }),
         );
       }
-      return card('white', { key: 'detail.cards.deferredTitle' }, {
-        key: 'detail.cards.deferredBody',
-        values: { name: task.deferral?.byName ?? '' },
-      });
+      const deferredBy = task.deferral?.byName ?? '';
+      return card(
+        'white',
+        (t) => t('detail.cards.deferredTitle'),
+        (t) => t('detail.cards.deferredBody', { name: deferredBy }),
+      );
     case 'cancelled':
-      return card('white', { key: 'detail.cards.cancelledTitle' }, cancelledDescription(task, time));
+      return card('white', (t) => t('detail.cards.cancelledTitle'), cancelledDescription(task, time));
   }
 }
 
-function tag(key: DisplayText['key'], tone: StatusTagTone): StatusTag {
-  return { text: { key }, tone };
+function tag(key: `detail.tags.${keyof typeof zhTW.detail.tags}`, tone: StatusTagTone): StatusTag {
+  return { text: (t) => t(key), tone };
 }
 
 function card(tone: StatusCardTone, title: DisplayText, description: DisplayText | null): StatusCard {
@@ -139,16 +149,18 @@ function card(tone: StatusCardTone, title: DisplayText, description: DisplayText
 function interruptedCard(task: DeskTaskDetail): StatusCard {
   const name = task.assigneeName ?? '';
   if (task.interruption?.bySelf) {
+    const reason = task.interruption.reason || '—';
     return card(
       'red',
-      { key: 'detail.cards.pausedTitle', values: { name } },
-      { key: 'detail.cards.reasonBody', values: { reason: task.interruption.reason || '—' } },
+      (t) => t('detail.cards.pausedTitle', { name }),
+      (t) => t('detail.cards.reasonBody', { reason }),
     );
   }
+  const note = task.interruption?.handoverNote || '—';
   return card(
     'red',
-    { key: 'detail.cards.leaveTitle', values: { name } },
-    { key: 'detail.cards.leaveBody', values: { note: task.interruption?.handoverNote || '—' } },
+    (t) => t('detail.cards.leaveTitle', { name }),
+    (t) => t('detail.cards.leaveBody', { note }),
   );
 }
 
@@ -158,16 +170,15 @@ function acceptedDescription(task: DeskTaskDetail, time: (at: string) => string)
   const byName = task.accepted?.byName ?? '';
   switch (via) {
     case 'plan_assigned':
-      return { key: 'detail.cards.acceptedByPlan' };
+      return (t) => t('detail.cards.acceptedByPlan');
     case 'self_claimed':
-      return { key: 'detail.cards.acceptedByClaim', values: { time: time(at) } };
+      return (t) => t('detail.cards.acceptedByClaim', { time: time(at) });
     case 'manager_assigned':
-      return { key: 'detail.cards.acceptedByManager', values: { name: byName, time: time(at) } };
-    case 'reassigned':
-      return {
-        key: 'detail.cards.acceptedByReassign',
-        values: { name: byName, time: time(at), previous: task.accepted?.previousAssigneeName ?? '' },
-      };
+      return (t) => t('detail.cards.acceptedByManager', { name: byName, time: time(at) });
+    case 'reassigned': {
+      const previous = task.accepted?.previousAssigneeName ?? '';
+      return (t) => t('detail.cards.acceptedByReassign', { name: byName, time: time(at), previous });
+    }
     default:
       return null;
   }
@@ -175,18 +186,16 @@ function acceptedDescription(task: DeskTaskDetail, time: (at: string) => string)
 
 function cancelledDescription(task: DeskTaskDetail, time: (at: string) => string): DisplayText | null {
   const at = time(task.endedAt ?? task.updatedAt);
+  const byName = task.cancellation?.byName;
   switch (task.cancellation?.reason) {
     case 'manager_void':
-      return { key: 'detail.cards.cancelledByManager', values: { name: task.cancellation.byName ?? '', time: at } };
+      return (t) => t('detail.cards.cancelledByManager', { name: byName ?? '', time: at });
     case 'guest_withdrew':
-      return { key: 'detail.cards.cancelledByGuest' };
+      return (t) => t('detail.cards.cancelledByGuest');
     case 'plan_superseded':
-      return { key: 'detail.cards.cancelledByPlan' };
+      return (t) => t('detail.cards.cancelledByPlan');
     case 'staff_withdrew':
-      return {
-        key: 'detail.cards.cancelledByStaff',
-        values: { name: task.cancellation.byName ?? task.createdByName ?? '', time: at },
-      };
+      return (t) => t('detail.cards.cancelledByStaff', { name: byName ?? task.createdByName ?? '', time: at });
     default:
       return null;
   }

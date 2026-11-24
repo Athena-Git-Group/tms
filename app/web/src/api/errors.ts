@@ -1,11 +1,6 @@
 import { API_BASE_URL } from '../config';
 import type { ApiErrorBody } from './types';
 
-/**
- * 櫃檯與住客兩邊呼叫後端都用的部分：錯誤型別、冪等鍵、後端位址與回應的解析。
- * 這裡不碰任何一方的登入狀態，住客的程式引用它時不會把櫃檯的 store 一起帶進住客的手機。
- */
-
 const BACKEND_ORIGIN = API_BASE_URL.replace(/\/+$/, '');
 
 export class ApiError extends Error {
@@ -60,8 +55,11 @@ export function backendUrl(path: string): string {
   return `${BACKEND_ORIGIN}${path}`;
 }
 
-/** 連不上丟 `NetworkError`，後端回錯誤丟 `ApiError`，成功回解析好的內容；中途取消原樣往外丟。 */
 export async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
+  return (await fetchJsonResponse<T>(url, init)).body;
+}
+
+export async function fetchJsonResponse<T>(url: string, init: RequestInit): Promise<{ body: T; headers: Headers }> {
   let response: Response;
   let text: string;
   try {
@@ -73,9 +71,9 @@ export async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
   }
 
   if (!response.ok) throw new ApiError(response.status, toErrorBody(text));
-  if (text === '') return undefined as T;
+  if (text === '') return { body: undefined as T, headers: response.headers };
   try {
-    return JSON.parse(text) as T;
+    return { body: JSON.parse(text) as T, headers: response.headers };
   } catch {
     throw new ApiError(response.status, UNKNOWN_ERROR_BODY);
   }

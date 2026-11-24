@@ -7,7 +7,6 @@ import { RequestIcon } from './RequestIcon';
 import { useRequestMeta } from './RequestMeta';
 import { StatusTag } from './StatusTag';
 
-/** 清單的一列，整列是進那一筆進度頁的連結。 */
 export function RequestRow({ task, link }: { task: GuestTask; link: RequestLink }) {
   const meta = useRequestMeta();
   const ended = stageOf(task).section === 'ended';

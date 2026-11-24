@@ -23,7 +23,7 @@ interface SessionState {
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
-  session: readStoredSession(),
+  session: null,
   setSession: (response, hotelCode) => {
     const session: Session = { ...response, hotelCode };
     writeJson(SESSION_STATE.kind, SESSION_STATE.key, session);
@@ -34,6 +34,10 @@ export const useSessionStore = create<SessionState>((set) => ({
     set({ session: null });
   },
 }));
+
+export function restoreSession(): void {
+  useSessionStore.setState({ session: readStoredSession() });
+}
 
 function readStoredSession(): Session | null {
   const stored = readJson(SESSION_STATE.kind, SESSION_STATE.key);

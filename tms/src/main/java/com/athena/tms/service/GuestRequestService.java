@@ -22,6 +22,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -38,8 +40,9 @@ public class GuestRequestService {
     private final PushNotifier pushNotifier;
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+    private final TransactionTemplate transactionTemplate;
 
-    public GuestRequestService(TaskEngine taskEngine, TaskRepository taskRepository, GuestTenantConfigReader configReader, ClassificationRuleEngine ruleEngine, GuestTextAdvisor textAdvisor, RoomRequestRateLimiter roomRequestRateLimiter, ObjectMapper objectMapper, PushNotifier pushNotifier, JdbcTemplate jdbcTemplate, Clock clock) {
+    public GuestRequestService(TaskEngine taskEngine, TaskRepository taskRepository, GuestTenantConfigReader configReader, ClassificationRuleEngine ruleEngine, GuestTextAdvisor textAdvisor, RoomRequestRateLimiter roomRequestRateLimiter, ObjectMapper objectMapper, PushNotifier pushNotifier, JdbcTemplate jdbcTemplate, Clock clock, PlatformTransactionManager transactionManager) {
         this.taskEngine = taskEngine;
         this.taskRepository = taskRepository;
         this.configReader = configReader;
@@ -50,6 +53,7 @@ public class GuestRequestService {
         this.pushNotifier = pushNotifier;
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     public GuestTaskView create(GuestRequestCreate request) {
@@ -63,21 +67,17 @@ public class GuestRequestService {
         TaskCreateCommand command = hasItem
                 ? this.menuCommand(tenantId, actor, request.itemId().trim(), request.quantity())
                 : this.freeTextCommand(tenantId, actor, request.text().trim(), request.lang());
-        if (!this.roomRequestRateLimiter.tryAcquire(tenantId, actor.roomId())) {
-            throw new TooManyRequestsException("同一房 10 分鐘內最多 3 筆需求，請洽櫃檯協助");
-        }
-        try {
+        return this.transactionTemplate.execute(status -> {
+            if (!this.roomRequestRateLimiter.tryAcquire(tenantId, actor.roomId())) {
+                throw new TooManyRequestsException("同一房 10 分鐘內最多 3 筆需求，請洽櫃檯協助");
+            }
             Task task = this.taskEngine.create(command);
             if ("pool".equals(task.getState())) {
                 this.markGuestScanPoolSource(tenantId, task.getId());
                 this.pushNotifier.notifyPoolNewRequest(tenantId, task.getId());
             }
             return GuestTaskView.from(task);
-        }
-        catch (RuntimeException e) {
-            this.roomRequestRateLimiter.release(tenantId, actor.roomId());
-            throw e;
-        }
+        });
     }
 
     private void markGuestScanPoolSource(long tenantId, UUID taskId) {
@@ -89,7 +89,11 @@ public class GuestRequestService {
     public List<GuestTaskView> list() {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
-        return this.taskRepository.findByTenantIdAndReservationIdOrderByCreatedAtDesc(tenantId, actor.reservationId()).stream().map(GuestTaskView::from).toList();
+        return this.taskRepository.findByTenantIdAndReservationIdOrderByCreatedAtDescIdDesc(tenantId, actor.reservationId()).stream().map(GuestTaskView::from).toList();
+    }
+
+    public RoomRequestRateLimiter.Quota quota() {
+        return this.roomRequestRateLimiter.stayQuota(TenantContext.require(), CurrentActor.require().reservationId());
     }
 
     public GuestTaskView cancel(UUID taskId) {
@@ -143,7 +147,6 @@ public class GuestRequestService {
         return this.guestCommand(tenantId, actor, routing.type(), routing.dept(), routing.initialState(), title, this.noteJson(noteFields));
     }
 
-    // 住客不直通工務：工務單要有報修人，給工務或修繕的需求一律先到待派單，由櫃檯派給工務時開單。
     private TaskCreateCommand guestCommand(long tenantId, CurrentActor actor, String type, String dept, String initialState, String title, String note) {
         if ("engineering".equals(dept) || "repair".equals(type)) {
             return this.guestCommand(tenantId, actor, "other", "frontdesk", "triage", title, note);

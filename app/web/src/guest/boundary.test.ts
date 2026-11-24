@@ -6,7 +6,6 @@ const sources = import.meta.glob(['./**/*.{ts,tsx}', '!./boundary.test.ts'], {
   eager: true,
 }) as Record<string, string>;
 
-/** 櫃檯的登入狀態、權限判斷與帶員工憑證的標頭；住客的程式一碰到，同一支手機上兩邊就可能互相影響。 */
 const FORBIDDEN = [
   { what: '櫃檯的登入狀態 stores/session', pattern: /from\s+['"][^'"]*\/stores\/session['"]/ },
   { what: '櫃檯的權限判斷 lib/route-access', pattern: /from\s+['"][^'"]*\/lib\/route-access['"]/ },

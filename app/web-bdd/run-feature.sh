@@ -18,12 +18,13 @@
 # 選項：
 #   --keep     跑完不關這一次起的後端與開發伺服器。之後每一次執行都會直接沿用它們，
 #              連續跑很多份 feature 時不必每次重啟。用完要自己下 --stop。
-#   --stop     不跑測試，只把這個工作目錄留著的後端（8080）與開發伺服器關掉。
+#   --stop     不跑測試，只把這個工作目錄留著的後端（BACKEND_PORT）與開發伺服器關掉。
 #   --rebuild  不管後端 jar 新舊，一律重建。
 #   -h, --help 印出這段說明。
 #
 # 環境變數（都可以不設）：
 #   WEB_PORT             開發伺服器的埠，預設 5199。
+#   BACKEND_PORT         後端的埠，預設 8080。開發伺服器透過 TMS_BACKEND_ORIGIN 轉送到這個埠。
 #   TMS_DB_URL           後端與測試資料準備要連的資料庫，預設 jdbc:postgresql://localhost:5433/tms。
 #   TMS_KAFKA_BOOTSTRAP  後端要連的 Kafka，預設 localhost:9092。
 #   MAVEN_ARGS           原樣交給 mvn。本腳本不指定 Maven 本機倉庫的位置，要換位置由這裡給。
@@ -39,7 +40,7 @@
 #   1. 檢查參數、JDK 25、node、Playwright 瀏覽器。
 #   2. 確認資料庫與 Kafka 連得上。這兩個容器不歸本腳本管，連不上就停下來。
 #   3. 把 app-bdd-support 裝進 Maven 本機倉庫。
-#   4. 準備 8080 的後端：已經有本工作目錄的後端在跑就沿用，沒有就建置並啟動。
+#   4. 準備 BACKEND_PORT 的後端：已經有本工作目錄的後端在跑就沿用，沒有就建置並啟動。
 #   5. 準備開發伺服器：已經有本工作目錄的在跑就沿用，沒有就啟動。
 #   6. 跑 RunFrontdeskWebFeaturesTest。
 #   7. 關掉這一次自己起的行程（加了 --keep 就留著）。
@@ -62,9 +63,9 @@ BACKEND_LOG="$STATE_DIR/backend.log"
 WEB_LOG="$STATE_DIR/web.log"
 TEST_LOG="$STATE_DIR/test.log"
 LOCK_DIR="$STATE_DIR/lock"
+WEB_ORIGIN_FILE="$STATE_DIR/web-backend-origin"
 
-# 開發伺服器的代理把後端位址寫死在 app/web/vite.config.ts（localhost:8080），所以後端的埠不開放調整。
-BACKEND_PORT=8080
+BACKEND_PORT="${BACKEND_PORT:-8080}"
 BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 WEB_PORT="${WEB_PORT:-5199}"
 WEB_URL="http://localhost:${WEB_PORT}"
@@ -79,7 +80,6 @@ FORCE_REBUILD=0
 FEATURE_ARG=""
 PROFILE=""
 
-# 收尾只關下面這幾個變數記下的行程，也就是這一次執行自己起的；同一台機器上別人的行程不會被關到。
 STARTED_BACKEND_PID=""
 STARTED_WEB_PID=""
 FOREGROUND_PID=""
@@ -98,7 +98,7 @@ fail() {
 }
 
 usage() {
-  sed -n '3,49p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 listener_pid() {
@@ -140,8 +140,6 @@ process_tree() {
   echo "$1"
 }
 
-# 關掉一個行程與它的子孫，保證函式返回時它們都不在了。
-# 先請它們自己結束，第三個參數的秒數內沒結束就強制結束；只送一般的停止訊號，瀏覽器或後端可能留在背景。
 stop_tree() {
   local root="$1" name="$2" grace="${3:-5}" pids pid waited=0 alive
   kill -0 "$root" 2>/dev/null || return 0
@@ -192,8 +190,6 @@ cleanup() {
       stop_tree "$STARTED_WEB_PID" "開發伺服器" 3
     fi
     if [ -n "$STARTED_BACKEND_PID" ]; then
-      # 後端收到一般的停止訊號時，只要還有連線開著就會先等最多 30 秒才結束。
-      # 它只服務這一次測試、資料每個場景都會重建，所以等 5 秒還沒結束就強制結束。
       stop_tree "$STARTED_BACKEND_PID" "後端" 5
     fi
   fi
@@ -222,7 +218,6 @@ for arg in "$@"; do
       ;;
   esac
 done
-# feature 路徑開頭是哪個根就在哪個根底下找；不帶根的沿用原本的寫法，相對於 frontdesk-web/。
 case "$FEATURE_ARG" in
   guest-web|guest-web/*) FEATURES_ROOT_NAME="guest-web" ;;
   frontdesk-web|frontdesk-web/*) FEATURES_ROOT_NAME="frontdesk-web" ;;
@@ -248,6 +243,9 @@ fi
 
 case "$WEB_PORT" in
   ''|*[!0-9]*) fail "WEB_PORT 要是數字，收到的是「${WEB_PORT}」。" ;;
+esac
+case "$BACKEND_PORT" in
+  ''|*[!0-9]*) fail "BACKEND_PORT 要是數字，收到的是「${BACKEND_PORT}」。" ;;
 esac
 if [ "$WEB_PORT" = "$BACKEND_PORT" ]; then
   fail "WEB_PORT 不能和後端同一個埠（${BACKEND_PORT}）。"
@@ -279,8 +277,6 @@ else
   CUCUMBER_FEATURES="../../specs/truth/features/${FEATURES_ROOT_NAME}"
 fi
 
-# 只沿用從這個工作目錄起的後端：別的工作目錄的後端跑的可能是另一版程式，拿來測會得到錯的結果。
-# 認定方式是指令裡有這裡的 tms/target，或它是在這裡的 repo 根目錄、tms/ 目錄下啟動的 java。
 is_backend_of_this_checkout() {
   local pid="$1" command cwd
   command="$(ps -o command= -p "$pid" 2>/dev/null || true)"
@@ -313,23 +309,23 @@ backend_is_healthy() {
   curl -s --max-time 3 "$BACKEND_URL/actuator/health" 2>/dev/null | grep -q '"status":"UP"'
 }
 
-# 用來判斷後端的 jar 或跑著的後端是不是比原始碼舊：
-# 印出 tms/src/main 或 tms/pom.xml 裡比參考檔還新的第一個檔案，沒有就印空字串。
+# readiness 群組含即時推送的 Kafka 消費者：它分到 partition 之後才會回 UP。
+backend_is_ready() {
+  curl -s --max-time 3 "$BACKEND_URL/actuator/health/readiness" 2>/dev/null | grep -q '"status":"UP"'
+}
+
 first_source_newer_than() {
   find "$REPO_ROOT/tms/src/main" "$REPO_ROOT/tms/pom.xml" -type f -newer "$1" -print -quit 2>/dev/null || true
 }
 
-# 同一個工作目錄一次只讓一個 run-feature.sh 跑。
-# 兩個同時跑會共用同一個資料庫、8080 與 app/web-bdd/target，互相清掉對方場景的資料。
 take_lock() {
   mkdir -p "$STATE_DIR"
   if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     local owner
     owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
     if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
-      fail "這個工作目錄已經有另一個 run-feature.sh 在跑（PID ${owner}）。兩邊共用同一個資料庫與 8080，同時跑會互相清掉資料；等它結束再跑。"
+      fail "這個工作目錄已經有另一個 run-feature.sh 在跑（PID ${owner}）。兩邊共用同一個資料庫與後端，同時跑會互相清掉資料；等它結束再跑。"
     fi
-    # 上一次執行被強制結束時會留下鎖。持有者已經不在，接手不會撞到任何人。
     rm -rf "$LOCK_DIR"
     mkdir "$LOCK_DIR"
   fi
@@ -364,8 +360,6 @@ fi
 
 log "1/6 檢查工具（瀏覽器設定：${PROFILE}；要跑的規格：${FEATURES_ROOT_NAME}/${FEATURE_ARG}）"
 
-# 在 git worktree 裡，app-bdd-support 會被裝進和主工作目錄共用的 ~/.m2。兩邊的版本不同時，
-# 這裡裝進去的會蓋掉另一邊正在用的那一份。只提醒不擋下：只有一個工作目錄時照常裝進 ~/.m2 就對了。
 git_dir="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-dir 2>/dev/null || echo /nonexistent)" 2>/dev/null && pwd -P || true)"
 git_common_dir="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir 2>/dev/null || echo /nonexistent)" 2>/dev/null && pwd -P || true)"
 if [ -n "$git_dir" ] && [ -n "$git_common_dir" ] && [ "$git_dir" != "$git_common_dir" ]; then
@@ -400,8 +394,7 @@ if [ "$PROFILE" = "desktop" ]; then
 else
   browser_pattern="webkit-*"
 fi
-# shellcheck disable=SC2086
-if ! ls -d "$BROWSERS_DIR"/$browser_pattern >/dev/null 2>&1; then
+if ! compgen -G "${BROWSERS_DIR}/${browser_pattern}" >/dev/null; then
   fail "${PROFILE} 要用的 Playwright 瀏覽器還沒有裝（在 ${BROWSERS_DIR} 找不到 ${browser_pattern}）。在 repo 根目錄跑一次：${INSTALL_BROWSERS_HINT}"
 fi
 
@@ -454,7 +447,7 @@ start_backend() {
   fi
 
   log "啟動後端（log：${BACKEND_LOG}）"
-  TMS_DB_URL="$TMS_DB_URL" TMS_KAFKA_BOOTSTRAP="$TMS_KAFKA_BOOTSTRAP" TMS_TEST_CLOCK_ENABLED=true \
+  TMS_DB_URL="$TMS_DB_URL" TMS_KAFKA_BOOTSTRAP="$TMS_KAFKA_BOOTSTRAP" SPRING_PROFILES_ACTIVE=test-support \
     SERVER_PORT="$BACKEND_PORT" \
     nohup "$JAVA_HOME/bin/java" -jar "$BACKEND_JAR" > "$BACKEND_LOG" 2>&1 &
   STARTED_BACKEND_PID=$!
@@ -476,14 +469,10 @@ start_backend() {
     waited=$(( waited + 1 ))
   done
 
-  # 測試開始前，後端的事件串流必須已經在收事件。健康檢查通過後，後端還要 3 到 4 秒才開始收 Kafka 的事件，
-  # 在那之前發生的事件不會出現在任何串流上、之後也不會補，「畫面即時跟上」的步驟會等不到。
-  # 所以等到 log 出現串流消費者（群組名稱以 sse- 開頭）的 partitions assigned 才往下走。
-  # 最多等 30 秒；實測健康檢查通過後約 3.4 秒就會出現。
   waited=0
-  until grep -q 'sse-.*partitions assigned' "$BACKEND_LOG" 2>/dev/null; do
+  until backend_is_ready; do
     if [ "$waited" -ge 30 ]; then
-      log "警告：等了 30 秒，後端 log 沒有出現事件串流消費者的 partitions assigned。照常往下跑，但即時更新的場景可能等不到事件。"
+      log "警告：等了 30 秒，後端的 readiness（${BACKEND_URL}/actuator/health/readiness）還不是 UP：事件串流消費者還沒分到 partition。照常往下跑，但即時更新的場景可能等不到事件。"
       break
     fi
     sleep 1
@@ -501,14 +490,12 @@ reuse_backend() {
     fail "${BACKEND_PORT} 上有這個工作目錄的後端（PID ${pid}），但健康檢查沒有通過。它可能還在啟動或已經壞了；稍等再跑，或下 bash app/web-bdd/run-feature.sh --stop 關掉它再重跑。"
   fi
   if [ "$(http_status "$BACKEND_URL/api/v1/test/clock")" != "200" ]; then
-    fail "${BACKEND_PORT} 上的後端（PID ${pid}）沒有開放撥時鐘（啟動時沒帶 TMS_TEST_CLOCK_ENABLED=true），驗收測試不能用。下 bash app/web-bdd/run-feature.sh --stop 關掉它再重跑，本腳本會用對的設定啟動。"
+    fail "${BACKEND_PORT} 上的後端（PID ${pid}）沒有開放撥時鐘（啟動時沒帶 test-support profile），驗收測試不能用。下 bash app/web-bdd/run-feature.sh --stop 關掉它再重跑，本腳本會用對的設定啟動。"
   fi
   if [ "$FORCE_REBUILD" -eq 1 ]; then
     fail "給了 --rebuild，但 ${BACKEND_PORT} 上的後端（PID ${pid}）還在跑。先下 bash app/web-bdd/run-feature.sh --stop 再重跑。"
   fi
 
-  # 不沿用比原始碼舊的後端。跑著的後端是它啟動當下那一版程式，
-  # 原始碼在那之後改過的話，測試會拿舊的程式去驗新的規格，而且結果看不出來。
   uptime="$(uptime_seconds "$pid")" || fail "查不到後端（PID ${pid}）已經跑了多久。"
   started_at=$(( $(date +%s) - uptime ))
   reference="$STATE_DIR/backend-started-at"
@@ -518,14 +505,12 @@ reuse_backend() {
     fail "${BACKEND_PORT} 上的後端（PID ${pid}）比後端原始碼舊（例如 ${newer#"$REPO_ROOT"/} 在它啟動之後改過），拿它測會測到舊的程式。先下 bash app/web-bdd/run-feature.sh --stop 再重跑，本腳本會重建並重新啟動。"
   fi
 
-  # 剛啟動的後端要幾秒才開始收事件，理由見 start_backend。沿用時讀不到它的 log，改成至少等它跑滿 10 秒。
   if [ "$uptime" -lt 10 ]; then
     sleep $(( 10 - uptime ))
   fi
   log "沿用已經在跑的後端（PID ${pid}，已跑 ${uptime} 秒）"
 }
 
-# 開發伺服器的埠被別人占用時，在建置與啟動後端之前就停下來，不讓人白等半分鐘才看到錯誤。
 refuse_foreign_web_listener() {
   local pid="$1"
   if [ -n "$pid" ] && ! is_web_of_this_checkout "$pid"; then
@@ -558,8 +543,10 @@ start_web() {
   [ -x "$WEB_DIR/node_modules/.bin/vite" ] || fail "找不到 app/web/node_modules/.bin/vite。刪掉 app/web/node_modules 再重跑，本腳本會重新 npm ci。"
 
   log "啟動開發伺服器（log：${WEB_LOG}）"
-  (cd "$WEB_DIR" && exec nohup node_modules/.bin/vite --port "$WEB_PORT" --strictPort) > "$WEB_LOG" 2>&1 &
+  (cd "$WEB_DIR" && TMS_BACKEND_ORIGIN="$BACKEND_URL" exec nohup node_modules/.bin/vite --port "$WEB_PORT" --strictPort) \
+    > "$WEB_LOG" 2>&1 &
   STARTED_WEB_PID=$!
+  echo "$BACKEND_URL" > "$WEB_ORIGIN_FILE"
 
   local waited=0
   until [ "$(http_status "$WEB_URL/")" = "200" ]; do
@@ -583,6 +570,9 @@ if [ -n "$pid" ]; then
   refuse_foreign_web_listener "$pid"
   if [ "$(http_status "$WEB_URL/")" != "200" ]; then
     fail "${WEB_PORT} 上有這個工作目錄的開發伺服器（PID ${pid}），但首頁沒有回 200。下 bash app/web-bdd/run-feature.sh --stop 關掉它再重跑。"
+  fi
+  if [ "$(cat "$WEB_ORIGIN_FILE" 2>/dev/null || true)" != "$BACKEND_URL" ]; then
+    fail "${WEB_PORT} 上的開發伺服器（PID ${pid}）不是轉送到 ${BACKEND_URL} 啟動的。下 bash app/web-bdd/run-feature.sh --stop 關掉它再重跑。"
   fi
   log "沿用已經在跑的開發伺服器（PID ${pid}）"
 else

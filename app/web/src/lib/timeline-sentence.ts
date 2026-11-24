@@ -16,16 +16,16 @@ type EntryDetail = NonNullable<DeskTimelineEntry['detail']>;
 function actorText(entry: DeskTimelineEntry): DisplayText {
   const { kind, name } = entry.actor;
   if (kind === 'guest') {
-    return name ? { key: 'detail.events.actors.guest', values: { name } } : { key: 'detail.events.actors.guestUnnamed' };
+    return name ? (t) => t('detail.events.actors.guest', { name }) : (t) => t('detail.events.actors.guestUnnamed');
   }
   if (kind === 'system') {
-    return { key: 'detail.events.actors.system' };
+    return (t) => t('detail.events.actors.system');
   }
-  return { key: 'detail.events.actors.staff', values: { name: name ?? '' } };
+  return (t) => t('detail.events.actors.staff', { name: name ?? '' });
 }
 
 function deptText(detail: EntryDetail, task: DeskTaskDetail): DisplayText {
-  return { key: `board.card.depts.${detail.dept ?? task.dept}` };
+  return (t) => t(`board.card.depts.${detail.dept ?? task.dept}`);
 }
 
 function createdSentence(entry: DeskTimelineEntry, detail: EntryDetail, task: DeskTaskDetail): TimelineSentence | null {
@@ -34,15 +34,15 @@ function createdSentence(entry: DeskTimelineEntry, detail: EntryDetail, task: De
   if (entry.actor.kind === 'guest') {
     if (detail.guestTyped ?? task.guestTyped) {
       const text = task.guestText?.original || task.title;
-      return { text: { key: 'detail.events.guestTyped', values: { text } }, actor, dot: 'brand' };
+      return { text: (t) => t('detail.events.guestTyped', { text }), actor, dot: 'brand' };
     }
-    return { text: { key: 'detail.events.guestPicked', values: { title: task.title, dept } }, actor, dot: 'brand' };
+    return { text: (t) => t('detail.events.guestPicked', { title: task.title, dept: dept(t) }), actor, dot: 'brand' };
   }
   if (task.source === 'desk') {
-    return { text: { key: 'detail.events.deskCreated', values: { title: task.title, dept } }, actor, dot: 'purple' };
+    return { text: (t) => t('detail.events.deskCreated', { title: task.title, dept: dept(t) }), actor, dot: 'purple' };
   }
   if (task.source === 'staff') {
-    return { text: { key: 'detail.events.staffReported', values: { title: task.title, dept } }, actor, dot: 'brand' };
+    return { text: (t) => t('detail.events.staffReported', { title: task.title, dept: dept(t) }), actor, dot: 'brand' };
   }
   return null;
 }
@@ -62,58 +62,62 @@ export function timelineSentence(entry: DeskTimelineEntry, task: DeskTaskDetail)
       return createdSentence(entry, detail, task);
     case 'triaged': {
       const key = detail.via === 'drag' ? 'detail.events.triagedByDrag' : 'detail.events.triaged';
-      return { text: { key, values: { dept: deptText(detail, task) } }, actor, dot: 'purple' };
+      const dept = deptText(detail, task);
+      return { text: (t) => t(key, { dept: dept(t) }), actor, dot: 'purple' };
     }
     case 'answered':
-      return { text: { key: 'detail.events.answered', values: { answer: detail.answer ?? '' } }, actor, dot: 'purple' };
+      return { text: (t) => t('detail.events.answered', { answer: detail.answer ?? '' }), actor, dot: 'purple' };
     case 'assigned':
       if (entry.actor.kind !== 'system') return null;
       return {
-        text: { key: 'detail.events.planAssigned', values: { name: detail.assigneeName ?? '' } },
-        actor: { key: 'detail.events.actors.plan' },
+        text: (t) => t('detail.events.planAssigned', { name: detail.assigneeName ?? '' }),
+        actor: (t) => t('detail.events.actors.plan'),
         dot: 'brand',
       };
     case 'claimed':
       return {
-        text: { key: 'detail.events.claimed', values: { name: detail.assigneeName ?? entry.actor.name ?? '' } },
+        text: (t) => t('detail.events.claimed', { name: detail.assigneeName ?? entry.actor.name ?? '' }),
         actor,
         dot: 'brand',
       };
     case 'reassigned':
       return {
-        text: {
-          key: 'detail.events.reassigned',
-          values: { name: detail.assigneeName ?? '', previous: detail.previousAssigneeName ?? '—' },
-        },
+        text: (t) =>
+          t('detail.events.reassigned', {
+            name: detail.assigneeName ?? '',
+            previous: detail.previousAssigneeName ?? '—',
+          }),
         actor,
         dot: 'orange',
       };
     case 'started':
-      return { text: { key: 'detail.events.started' }, actor, dot: 'brand' };
+      return { text: (t) => t('detail.events.started'), actor, dot: 'brand' };
     case 'completed': {
       const awaitingInspection = task.type === 'cleaning' && task.inspection !== 'waived';
       const key = awaitingInspection ? 'detail.events.completedAwaitingInspection' : 'detail.events.completed';
-      return { text: { key }, actor, dot: 'green' };
+      return { text: (t) => t(key), actor, dot: 'green' };
     }
     case 'inspection_passed':
-      return { text: { key: 'detail.events.inspectionPassed' }, actor, dot: 'green' };
+      return { text: (t) => t('detail.events.inspectionPassed'), actor, dot: 'green' };
     case 'repair_verified':
-      return { text: { key: 'detail.events.repairVerified' }, actor, dot: 'green' };
+      return { text: (t) => t('detail.events.repairVerified'), actor, dot: 'green' };
     case 'interrupted':
       if (detail.bySelf) {
-        return { text: { key: 'detail.events.paused', values: { reason: detail.reason ?? '—' } }, actor, dot: 'orange' };
+        return { text: (t) => t('detail.events.paused', { reason: detail.reason ?? '—' }), actor, dot: 'orange' };
       }
       return {
-        text: { key: 'detail.events.leaveInterrupted', values: { name: task.assigneeName ?? '' } },
+        text: (t) => t('detail.events.leaveInterrupted', { name: task.assigneeName ?? '' }),
         actor,
         dot: 'orange',
       };
     case 'deferred':
       if (detail.bySelf) return null;
-      return { text: { key: 'detail.events.deferred' }, actor, dot: 'orange' };
-    case 'cancelled':
+      return { text: (t) => t('detail.events.deferred'), actor, dot: 'orange' };
+    case 'cancelled': {
       if (!detail.cancelReason) return null;
-      return { text: { key: CANCEL_KEYS[detail.cancelReason] }, actor, dot: 'orange' };
+      const key = CANCEL_KEYS[detail.cancelReason];
+      return { text: (t) => t(key), actor, dot: 'orange' };
+    }
     default:
       return null;
   }
@@ -128,11 +132,8 @@ export function timelineMeta(
   const time = clockTime(entry.at, serverUtcOffsetMinutes);
   const day = dateAtUtcOffset(new Date(Date.parse(entry.at)), serverUtcOffsetMinutes);
   if (!now || day === dateAtUtcOffset(now, serverUtcOffsetMinutes)) {
-    return { key: 'detail.events.meta', values: { time, actor } };
+    return (t) => t('detail.events.meta', { time, actor: actor(t) });
   }
   const [, month, date] = day.split('-');
-  return {
-    key: 'detail.events.metaWithDate',
-    values: { date: `${Number(month)}/${Number(date)}`, time, actor },
-  };
+  return (t) => t('detail.events.metaWithDate', { date: `${Number(month)}/${Number(date)}`, time, actor: actor(t) });
 }

@@ -199,10 +199,11 @@ public class RepairGivenSteps {
                     ? parkDoingTasks(tenantId, assigneeId)
                     : List.of();
             UUID sourceTaskId = linkedRoom != null ? UUID.fromString(world.taskId(linkedRoom)) : null;
-            builder.repairTicket(new RepairTicketDraft(category, description, reporterId, sourceTaskId, null));
+            builder.repairTicket(new RepairTicketDraft(category, description, reporterId, sourceTaskId, null))
+                    .repairTicketNo(ticketNo);
             UUID taskId;
             try {
-                taskId = taskFixtures.withRepairTicketNo(ticketNo, builder::create);
+                taskId = builder.create();
             } finally {
                 restoreDoingTasks(tenantId, parked);
             }
@@ -436,7 +437,7 @@ public class RepairGivenSteps {
 
     @假設("{string} 已認領並開始處理 {string}")
     public void engineerClaimedAndStarted(String staffName, String ticketNo) {
-        UUID ticketTaskId = RepairTicketRefs.taskId(world, dbProbe, tenantFixtures.testTenantId(), ticketNo);
+        UUID ticketTaskId = RepairTicketRefs.taskId(world, ticketNo);
         BddApiClient.Auth auth = BddApiClient.Auth.staff(world.jwt(staffName));
         requireArranged(apiClient.post("/tasks/" + ticketTaskId + "/claim", auth, null), staffName + " 認領 " + ticketNo);
         requireArranged(apiClient.post("/tasks/" + ticketTaskId + "/start", auth, null), staffName + " 開始處理 " + ticketNo);

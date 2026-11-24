@@ -7,17 +7,15 @@ import { TitleBar } from '../components/TitleBar';
 import { requestLink } from '../lib/back-target';
 import { splitSections, type StageSection } from '../lib/stage';
 import { useGuestRequests } from '../queries';
-import { readSentOrder } from '../sent-order';
 import { useReadySession } from '../session';
 
-/** 我的需求清單：「進行中」「已結束」兩段，各自新到舊；沒有內容的段落整段不出現。 */
 export function RequestsPage() {
   const { t } = useTranslation();
   const session = useReadySession();
   const requests = useGuestRequests(session.qrToken);
 
   if (!requests.data) return <PageLoading />;
-  const sections = splitSections(requests.data, readSentOrder(session.qrToken));
+  const sections = splitSections(requests.data);
   return (
     <>
       <TitleBar title={t('guest.requests.title')} />

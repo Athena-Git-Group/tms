@@ -40,7 +40,6 @@ public class StaffStreamWhenSteps {
         this.deskApi = deskApi;
     }
 
-    /** 住客工作階段掛在這間房現在住著的那筆訂房上，和單上連結的是同一筆，評分才認得這張單。 */
     @當("{string} 的住客給了評分")
     public void guestRates(String roomNo) {
         String path = "/guest/requests/" + world.taskId(roomNo) + "/rating";

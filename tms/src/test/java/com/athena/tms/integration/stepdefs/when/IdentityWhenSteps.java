@@ -2,6 +2,7 @@ package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.dto.GuestSessionTokens;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.TestData;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -39,7 +40,7 @@ public class IdentityWhenSteps {
         ScenarioContext.HttpResult first = api.loginRaw(1L, ctx.staffLogin("小美"), "demo1234", fingerprint, "apns-token-1");
         Assertions.assertEquals(200, first.status(), "第一次登入該成功: " + first.body());
         ScenarioContext.HttpResult second = api.loginRaw(1L, ctx.staffLogin("小美"), "demo1234", fingerprint, "apns-token-2");
-        ctx.put("fingerprint", fingerprint);
+        ctx.put(ScenarioKeys.FINGERPRINT, fingerprint);
         ctx.lastResponse(second);
     }
 
@@ -55,7 +56,7 @@ public class IdentityWhenSteps {
 
     @When("^分別以 錯誤密碼、不存在的帳號、不存在的租戶 登入$")
     public void threeIndistinguishableLoginFailures() {
-        ctx.put("loginAttempts", List.of(
+        ctx.put(ScenarioKeys.LOGIN_ATTEMPTS, List.of(
                 api.loginRaw(1L, "hk1", "wrong-password", null, null),
                 api.loginRaw(1L, "no-such-user", "demo1234", null, null),
                 api.loginRaw(99L, "hk1", "demo1234", null, null)));
@@ -63,8 +64,8 @@ public class IdentityWhenSteps {
 
     @When("^他登入並以舊憑證呼叫員工 API$")
     public void deactivatedLoginAndOldTokenCall() {
-        ctx.put("reloginResult", api.loginRaw(1L, ctx.staffLogin("阿強"), "demo1234", null, null));
-        ctx.put("oldTokenResult", api.get("/staff/probe", ctx.get("oldToken")));
+        ctx.put(ScenarioKeys.RELOGIN_RESULT, api.loginRaw(1L, ctx.staffLogin("阿強"), "demo1234", null, null));
+        ctx.put(ScenarioKeys.OLD_TOKEN_RESULT, api.get("/staff/probe", ctx.get(ScenarioKeys.OLD_TOKEN)));
     }
 
     @When("^分別以 無憑證、垃圾字串、偽造簽章的 JWT 呼叫員工 API$")
@@ -79,7 +80,7 @@ public class IdentityWhenSteps {
                         .expirationTime(new Date(System.currentTimeMillis() + 3600_000L))
                         .build());
         forged.sign(forger);
-        ctx.put("credentialAttempts", List.of(
+        ctx.put(ScenarioKeys.CREDENTIAL_ATTEMPTS, List.of(
                 api.get("/staff/probe", null),
                 api.get("/staff/probe", "not-a-jwt-at-all"),
                 api.get("/staff/probe", forged.serialize())));
@@ -114,7 +115,7 @@ public class IdentityWhenSteps {
     @When("^以 session \"([^\"]+)\" 讀取住客上下文$")
     public void readGuestContextWithSession(String sessionSymbol) {
         String token = ctx.guestSession(sessionSymbol);
-        ctx.put("sessionToken", token);
+        ctx.put(ScenarioKeys.SESSION_TOKEN, token);
         ctx.lastResponse(api.get("/guest/context", token));
     }
 

@@ -2,7 +2,7 @@ package com.athena.web.bdd.steps.guest.supply;
 
 import com.athena.web.bdd.pages.guest.GuestFrame;
 import com.athena.web.bdd.pages.guest.SupplyPage;
-import com.athena.web.bdd.support.GuestRequestLimitStub;
+import com.athena.web.bdd.support.GuestCreateRecorder;
 import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.WebWorld;
 import com.microsoft.playwright.Locator;
@@ -15,10 +15,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
 
-/** 「備品補充」模組的 When 句型（{@code specs/truth/features/guest-web/備品補充/dsl.md}）。 */
 public class SupplyWhenSteps {
 
-    /** 「連按兩下」之後等全部請求結束的上限：每一張建立請求可能被扣 3 秒，兩項就是 6 秒，再留一些給畫面。 */
     private static final long DOUBLE_PRESS_SETTLE_MS = 20_000;
 
     private static final double POLL_MS = 100;
@@ -35,34 +33,28 @@ public class SupplyWhenSteps {
 
     private final SupplyPage supplyPage;
 
-    private final GuestRequestLimitStub limitStub;
+    private final GuestCreateRecorder createRecorder;
 
     public SupplyWhenSteps(WebWorld world, GuestScenario scenario, SupplyScenario supply,
-            GuestRequestLimitStub limitStub) {
+            GuestCreateRecorder createRecorder) {
         this.world = world;
         this.scenario = scenario;
         this.supply = supply;
         this.frame = new GuestFrame(world);
         this.supplyPage = new SupplyPage(world);
-        this.limitStub = limitStub;
+        this.createRecorder = createRecorder;
     }
 
-    /** 按名稱「增加{項目}」的按鈕這麼多次，停用時也照按（不會有效果）；等數字與頁底按鈕的字更新。 */
     @當("住客按 {string} 的加號 {int} 次")
     public void pressIncrease(String item, int times) {
         pressRepeatedly(item, times, +1);
     }
 
-    /** 同上，按名稱「減少{項目}」的按鈕。 */
     @當("住客按 {string} 的減號 {int} 次")
     public void pressDecrease(String item, int times) {
         pressRepeatedly(item, times, -1);
     }
 
-    /**
-     * 按頁底這顆按鈕，不等回應立刻再按一次，記下第二下按下時它是不是停用的；
-     * 再等兩下引發的請求全部結束（期間放行扣滿 3 秒的回應）、畫面不再標成載入中。
-     */
     @當("住客連按兩下 {string}")
     public void doublePress(String name) {
         Page page = world.page();
@@ -91,8 +83,8 @@ public class SupplyWhenSteps {
             scenario.countTap();
             long deadline = System.nanoTime() + DOUBLE_PRESS_SETTLE_MS * 1_000_000;
             while (System.nanoTime() < deadline) {
-                limitStub.releaseDueReplies();
-                if (limitStub.heldReplies() == 0 && pending.isEmpty()) {
+                createRecorder.releaseDueReplies();
+                if (createRecorder.heldReplies() == 0 && pending.isEmpty()) {
                     break;
                 }
                 page.waitForTimeout(POLL_MS);
@@ -126,7 +118,6 @@ public class SupplyWhenSteps {
         }
     }
 
-    /** 停用的按鈕也照點：瀏覽器不會把點在停用按鈕上的動作當成一次點按。 */
     private void tapForced(Locator button) {
         supplyPage.tapEvenIfDisabled(button);
     }

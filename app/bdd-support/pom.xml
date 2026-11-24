@@ -19,8 +19,6 @@
 	</properties>
 
 	<dependencies>
-		<!-- 後端沒有測試資料 REST 端點，fixture 走 JDBC 直接落地（SQL 對照 tms/src/test 的 bdd/support），
-			讀回與狀態轉移走正式 REST。 -->
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
@@ -31,8 +29,6 @@
 			<artifactId>jackson-databind</artifactId>
 			<version>2.19.4</version>
 		</dependency>
-		<!-- bcrypt：fixture 員工帳號的 password_hash 要與後端 SecurityConfig 的
-			BCryptPasswordEncoder 同格式，直接用同一套實作，不自己拼雜湊 -->
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-crypto</artifactId>

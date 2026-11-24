@@ -9,7 +9,6 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import io.cucumber.java.zh_tw.當;
 
-/** 「共用外框」模組的 When 句型。 */
 public class ShellWhenSteps {
 
     private final WebWorld world;
@@ -27,7 +26,6 @@ public class ShellWhenSteps {
         this.layout = new PhoneLayout(world);
     }
 
-    /** 觸控設定下用點觸；等語言選單出現，最多 5 秒。 */
     @當("住客點語言膠囊")
     public void tapLanguageCapsule() {
         Locator capsule = language.capsule();
@@ -49,10 +47,6 @@ public class ShellWhenSteps {
         }
     }
 
-    /**
-     * 行動版 WebKit 不支援滑鼠滾輪，Playwright 也沒有觸控滑動的手勢，所以直接把頁面與裡面每一塊能捲的區域捲到底，
-     * 對版面來說和手指滑到底的結果相同。
-     */
     @當("住客把頁面捲到底")
     public void scrollToBottom() {
         layout.scrollToBottom();

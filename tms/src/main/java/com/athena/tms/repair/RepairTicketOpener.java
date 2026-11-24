@@ -1,5 +1,6 @@
 package com.athena.tms.repair;
 
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.service.PushOutboxWriter;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -23,13 +24,16 @@ public class RepairTicketOpener {
     private final Clock clock;
     private final PushOutboxWriter pushOutboxWriter;
     private final ObjectMapper objectMapper;
+    private final RepairTicketNumbers ticketNumbers;
 
     public RepairTicketOpener(
-            JdbcTemplate jdbcTemplate, Clock clock, PushOutboxWriter pushOutboxWriter, ObjectMapper objectMapper) {
+            JdbcTemplate jdbcTemplate, Clock clock, PushOutboxWriter pushOutboxWriter, ObjectMapper objectMapper,
+            RepairTicketNumbers ticketNumbers) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
         this.pushOutboxWriter = pushOutboxWriter;
         this.objectMapper = objectMapper;
+        this.ticketNumbers = ticketNumbers;
     }
 
     public String open(long tenantId, UUID taskId, RepairTicketDraft draft) {
@@ -47,12 +51,11 @@ public class RepairTicketOpener {
                 """,
                 tenantId, taskId);
         UUID roomId = (UUID) task.get("room_id");
-        // 追蹤單接續原單的處理，不是新的報修，所以不做急件判定。
         String urgentRule = draft.originTicketTaskId() == null
                 ? (String) judgeUrgent(tenantId, roomId).get("rule")
                 : null;
         boolean urgent = urgentRule != null;
-        String ticketNo = nextTicketNo(tenantId);
+        String ticketNo = ticketNumbers.next(tenantId);
         jdbcTemplate.update(
                 """
                 INSERT INTO repair_tickets
@@ -79,7 +82,7 @@ public class RepairTicketOpener {
         judgement.put("rule", null);
 
         LocalDate today = OffsetDateTime.now(clock).toLocalDate();
-        List<Map<String, Object>> reservations = jdbcTemplate.queryForList(
+        List<Map<String, Object>> reservations = jdbcTemplate.query(
                 """
                 SELECT checkin_at, (attrs ->> 'vip') = 'true' AS vip
                   FROM reservations_cache
@@ -88,11 +91,12 @@ public class RepairTicketOpener {
                  ORDER BY checkin_at
                  LIMIT 1
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, roomId, clock.getZone().getId(), today);
         if (!reservations.isEmpty()) {
             Map<String, Object> reservation = reservations.get(0);
             boolean vip = Boolean.TRUE.equals(reservation.get("vip"));
-            String checkinTime = toOffsetDateTime(reservation.get("checkin_at"))
+            String checkinTime = ((OffsetDateTime) reservation.get("checkin_at"))
                     .atZoneSameInstant(clock.getZone())
                     .format(CHECKIN_TIME);
             judgement.put("suggested", true);
@@ -101,18 +105,6 @@ public class RepairTicketOpener {
         return judgement;
     }
 
-    private String nextTicketNo(long tenantId) {
-        Integer lastNo = jdbcTemplate.queryForObject(
-                """
-                INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
-                ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
-                RETURNING last_no
-                """,
-                Integer.class, tenantId);
-        return String.format("W-%04d", lastNo);
-    }
-
-    // 防重複鍵以工務單號為單位：同一張任務復原後再派開出的新單是另一張單，要再推一次。
     private void notifyUrgent(long tenantId, UUID taskId, String ticketNo, String roomNo, String category) {
         String categoryLabel = RepairService.CATEGORY_LABELS.getOrDefault(category, category);
         List<UUID> recipients = jdbcTemplate.queryForList(
@@ -129,15 +121,5 @@ public class RepairTicketOpener {
             pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload,
                     "repair_urgent:" + ticketNo + ":" + recipient);
         }
-    }
-
-    private static OffsetDateTime toOffsetDateTime(Object value) {
-        if (value instanceof OffsetDateTime odt) {
-            return odt;
-        }
-        if (value instanceof java.sql.Timestamp ts) {
-            return ts.toInstant().atOffset(java.time.ZoneOffset.UTC);
-        }
-        throw new IllegalStateException("預期時間型別，實際 " + (value == null ? "null" : value.getClass()));
     }
 }

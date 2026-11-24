@@ -354,10 +354,6 @@ public class TaskEngine {
         return this.recordEvent(tenantId, taskId, seq, "returned_to_pool", actor, TaskEngine.payload("reason", "leave_return"));
     }
 
-    /**
-     * 班末把這位員工名下還沒開始的單退回待認領，回傳退回幾張。已接與本人延後的退回，進行中與中斷的不動。
-     * 每一張都和其他轉換一樣寫事件、在同一個交易寫進待送匣，員工事件串流才會送出這則訊號，同一張單的步數不跳號。
-     */
     @Transactional
     public int returnNotStartedAtShiftEnd(long tenantId, UUID staffId) {
         List<Map.Entry<UUID, Integer>> returned = this.jdbcTemplate.query(

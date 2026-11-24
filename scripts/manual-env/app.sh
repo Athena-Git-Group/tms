@@ -35,7 +35,6 @@ if [[ $mode != reuse ]]; then
   command -v flutter >/dev/null || die "找不到 flutter：裝好 Flutter SDK 並把它的 bin 加進 PATH（flutter doctor 要過 iOS 那項）"
 fi
 
-# 輸出「UDID<tab>名稱<tab>狀態」。指定了就照指定挑；否則用已開機的 iPhone；都沒有就挑最新 iOS 版本上的第一台 iPhone。
 pick_device() {
   xcrun simctl list devices available -j | python3 -c '
 import json, re, sys

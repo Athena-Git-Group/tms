@@ -15,7 +15,6 @@ const TOAST_MS = 2_600;
 
 const ToastContext = createContext<ShowToast | null>(null);
 
-/** 外框層級的提示浮層：同時只有一則，新的蓋掉舊的，2.6 秒後自己消失；換頁時照樣留著。 */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const show = useCallback<ShowToast>((text, tone) => setToast((last) => ({ id: (last?.id ?? 0) + 1, text, tone })), []);
@@ -40,7 +39,6 @@ export function useToast(): ShowToast {
   return show;
 }
 
-/** 固定在畫面頂端、不接收點擊，蓋在標題列上時底下的返回鈕照樣按得到。 */
 function ToastBar({ toast }: { toast: ToastMessage }) {
   return (
     <div

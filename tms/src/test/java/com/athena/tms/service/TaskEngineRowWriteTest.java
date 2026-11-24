@@ -35,7 +35,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class TaskEngineRowWriteTest {
 
     private static final long TENANT_ID = 1L;
-    // 502 今天沒有入住，開工務單時不會被判成急件，急件旗標只來自建單指令。
     private static final UUID ROOM_502 = UUID.fromString("00000000-0000-7000-8000-000000000502");
     private static final UUID STAFF_FD1 = UUID.fromString("00000000-0000-7000-8000-00000000a004");
     private static final Instant FIXED_NOW = Instant.parse("2026-10-19T04:00:00Z");

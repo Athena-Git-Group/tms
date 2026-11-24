@@ -1,10 +1,6 @@
-import { ApiError, backendUrl, fetchJson } from '../../api/errors';
-import type { CreateRequestBody, GuestHome, GuestTask, RatingBody, ScanResponse } from './types';
-
-/**
- * 住客自己的一層呼叫：路徑前綴 `/guest`，session 放 `X-Guest-Session`。
- * 絕不帶 `Authorization`，那是櫃檯登入用的標頭；兩種憑證不混在同一個標頭名下，同一支手機上兩邊才互不影響。
- */
+import { ApiError, backendUrl, fetchJsonResponse } from '../../api/errors';
+import { quotaFromHeaders } from '../lib/quota';
+import type { CreateRequestBody, GuestHome, GuestRequestList, GuestTask, RatingBody, ScanResponse } from './types';
 
 const GUEST_PREFIX = '/guest';
 
@@ -18,36 +14,55 @@ export interface GuestSendOptions {
   signal?: AbortSignal;
 }
 
-let onUnauthorized: ((rejectedSession: string) => Promise<string>) | null = null;
-
-/**
- * 帶著 session 的呼叫被回 401 時交給這裡換一把新的 session，拿到就用它重發一次；
- * 換不到時這裡丟出的錯誤就是這次呼叫的錯誤。由進入層用網址上的代碼重換。
- */
-export function setUnauthorizedHandler(handler: ((rejectedSession: string) => Promise<string>) | null): void {
-  onUnauthorized = handler;
+export interface SessionRenewal {
+  renew: (rejectedSession: string) => Promise<string>;
+  renewedSessionRejected: (error: ApiError) => void;
 }
 
-export async function guestSend<T>(path: string, options: GuestSendOptions, renewed = false): Promise<T> {
+let renewal: SessionRenewal | null = null;
+
+export function setSessionRenewal(next: SessionRenewal | null): void {
+  renewal = next;
+}
+
+type GuestCredential = { kind: 'held'; sessionToken: string } | { kind: 'renewed'; sessionToken: string };
+
+async function exchange<T>(path: string, options: GuestSendOptions): Promise<{ body: T; headers: Headers }> {
+  const credential: GuestCredential | null =
+    options.sessionToken === undefined ? null : { kind: 'held', sessionToken: options.sessionToken };
+  return attempt<T>(path, options, credential);
+}
+
+async function attempt<T>(
+  path: string,
+  options: GuestSendOptions,
+  credential: GuestCredential | null,
+): Promise<{ body: T; headers: Headers }> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (options.sessionToken !== undefined) headers[GUEST_SESSION_HEADER] = options.sessionToken;
+  if (credential !== null) headers[GUEST_SESSION_HEADER] = credential.sessionToken;
   if (options.idempotencyKey !== undefined) headers['Idempotency-Key'] = options.idempotencyKey;
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
 
   try {
-    return await fetchJson<T>(backendUrl(GUEST_PREFIX + path), {
+    return await fetchJsonResponse<T>(backendUrl(GUEST_PREFIX + path), {
       method: options.method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: options.signal,
     });
   } catch (error) {
-    const rejected = options.sessionToken;
-    if (!(error instanceof ApiError && error.status === 401) || rejected === undefined || !onUnauthorized) throw error;
-    const fresh = await onUnauthorized(rejected);
-    if (renewed) throw error;
-    return guestSend(path, { ...options, sessionToken: fresh }, true);
+    if (!(error instanceof ApiError && error.status === 401) || credential === null || !renewal) throw error;
+    if (credential.kind === 'renewed') {
+      renewal.renewedSessionRejected(error);
+      throw error;
+    }
+    const fresh = await renewal.renew(credential.sessionToken);
+    return attempt<T>(path, options, { kind: 'renewed', sessionToken: fresh });
   }
+}
+
+async function guestSend<T>(path: string, options: GuestSendOptions): Promise<T> {
+  return (await exchange<T>(path, options)).body;
 }
 
 export function scan(token: string): Promise<ScanResponse> {
@@ -58,8 +73,9 @@ export function readHome(sessionToken: string, signal?: AbortSignal): Promise<Gu
   return guestSend('/home', { method: 'GET', sessionToken, signal });
 }
 
-export function listRequests(sessionToken: string, signal?: AbortSignal): Promise<GuestTask[]> {
-  return guestSend('/requests', { method: 'GET', sessionToken, signal });
+export async function listRequests(sessionToken: string, signal?: AbortSignal): Promise<GuestRequestList> {
+  const { body, headers } = await exchange<GuestTask[]>('/requests', { method: 'GET', sessionToken, signal });
+  return { requests: body, quota: quotaFromHeaders(headers) };
 }
 
 export function createRequest(

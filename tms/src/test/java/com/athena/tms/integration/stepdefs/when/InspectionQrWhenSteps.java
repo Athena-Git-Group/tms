@@ -2,6 +2,7 @@ package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.dto.Actor;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.TaskFixtures;
@@ -61,7 +62,7 @@ public class InspectionQrWhenSteps {
 
     @When("^原清房者重掃重交、王主管再送出全過的查房$")
     public void cleanerRedoesThenReinspectionPasses() {
-        Actor cleaner = ctx.get("cleanerActor");
+        Actor cleaner = ctx.get(ScenarioKeys.CLEANER_ACTOR);
         Tenants.runAsTenant(1L, () -> {
             fixtures.engine().start(1L, ctx.taskId(), cleaner);
             fixtures.engine().complete(1L, ctx.taskId(), cleaner);
@@ -74,7 +75,7 @@ public class InspectionQrWhenSteps {
     @When("^王主管列印房 (\\d+) 的 QR$")
     public void managerPrintsRoomQr(String roomNo) {
         ScenarioContext.HttpResult print = api.get("/admin/rooms/" + roomNo + "/qr", managerToken());
-        ctx.put("printBody", print.body());
+        ctx.put(ScenarioKeys.PRINT_BODY, print.body());
         ctx.lastResponse(print);
     }
 
@@ -92,8 +93,8 @@ public class InspectionQrWhenSteps {
                 Assertions.fail("該是 SQLException 根因: " + cause);
                 return;
             }
-            ctx.put("sqlState", sqlException.getSQLState());
-            ctx.put("sqlMessage", sqlException.getMessage());
+            ctx.put(ScenarioKeys.SQL_STATE, sqlException.getSQLState());
+            ctx.put(ScenarioKeys.SQL_MESSAGE, sqlException.getMessage());
         }
     }
 
@@ -103,8 +104,8 @@ public class InspectionQrWhenSteps {
                 "SELECT token, version FROM room_qr_tokens q JOIN rooms r ON r.id = q.room_id "
                         + "WHERE r.tenant_id = 1 AND r.room_no = ? AND q.status = 'active'",
                 roomNo);
-        ctx.put("oldQrToken", active.get("token"));
-        ctx.put("oldQrVersion", ((Number) active.get("version")).intValue());
+        ctx.put(ScenarioKeys.OLD_QR_TOKEN, (String) active.get("token"));
+        ctx.put(ScenarioKeys.OLD_QR_VERSION, ((Number) active.get("version")).intValue());
         ctx.lastResponse(api.postJson("/admin/rooms/" + roomNo + "/qr/rotate", managerToken(), Map.of(), null));
     }
 
@@ -124,7 +125,7 @@ public class InspectionQrWhenSteps {
     }
 
     private List<String> inspectionKeys() {
-        List<String> keys = ctx.get("inspectionKeys");
+        List<String> keys = ctx.get(ScenarioKeys.INSPECTION_KEYS);
         if (keys == null) {
             throw new IllegalStateException("查房項目全集尚未就緒——背景的 SOP項目 表格漏了");
         }
@@ -132,7 +133,7 @@ public class InspectionQrWhenSteps {
     }
 
     private ScenarioContext.HttpResult inspect(UUID taskId, Map<String, Object> body) {
-        ctx.put("preInspectionState", db.taskRow(taskId).get("state"));
+        ctx.put(ScenarioKeys.PRE_INSPECTION_STATE, (String) db.taskRow(taskId).get("state"));
         return api.postJson("/admin/inspections/" + taskId, managerToken(), body, null);
     }
 

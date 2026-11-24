@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,21 +43,14 @@ public class BackendChannel {
 
     private static final String TEST_TENANT_NAME = "測試飯店";
 
-    /**
-     * 員工 App 測試線那家「測試飯店」的識別代碼。每家飯店都必須有一個不重複的代碼，沒給就建不出飯店。
-     * 後端自己的測試也替「測試飯店」用這個值，兩邊共用同一個資料庫時才會認成同一家。
-     */
     private static final String TEST_TENANT_CODE = "test-hotel";
 
-    /** 櫃檯 Web 驗收的預設飯店。代碼會出現在櫃檯畫面的網址裡。 */
     public static final String FRONTDESK_TENANT_NAME = "雅典娜酒店";
 
     public static final String FRONTDESK_TENANT_CODE = "athena";
 
-    /** 櫃檯 Web 預設帳號共用的密碼。 */
     public static final String FRONTDESK_PASSWORD = "Tms12345";
 
-    /** 預設飯店的客房在 2 至 5 樓，每層 01 到 16 號；房號第一碼就是樓層。 */
     private static final int FRONTDESK_FIRST_FLOOR = 2;
 
     private static final int FRONTDESK_LAST_FLOOR = 5;
@@ -65,10 +59,6 @@ public class BackendChannel {
 
     private record DefaultStaff(String name, String loginId, String role, String dept) {}
 
-    /**
-     * 櫃檯 Web 的 12 個預設帳號。員工編號刻意不與同一個資料庫裡其他飯店的帳號重複：
-     * 後端登入不帶飯店，是逐家找第一個有這個員工編號的飯店，重複時會登進別家。
-     */
     private static final List<DefaultStaff> FRONTDESK_STAFF = List.of(
             new DefaultStaff("林佩君", "F0101", "frontdesk", "frontdesk"),
             new DefaultStaff("何志偉", "F0102", "frontdesk", "frontdesk"),
@@ -83,7 +73,6 @@ public class BackendChannel {
             new DefaultStaff("阿強", "E0301", "engineering", "engineering"),
             new DefaultStaff("陳老闆", "O0001", "owner", null));
 
-    /** 預設飯店的住客資訊頁，順序就是櫃檯看到的常用回覆順序。 */
     private static final List<Map<String, String>> FRONTDESK_INFO_PAGES = List.of(
             infoPage("breakfast", "早餐時間", "早餐 07:00–10:00，在 2 樓自助餐廳，憑房卡入場。"),
             infoPage("wifi", "Wi-Fi", "Wi-Fi 名稱 Athena-Guest，密碼是房號加姓氏拼音。"),
@@ -91,21 +80,17 @@ public class BackendChannel {
             infoPage("gym", "健身房", "健身房在 B1，06:00–22:00 開放。"),
             infoPage("taxi", "叫車", "需要叫車請告訴櫃檯時間與目的地，我們幫您安排。"));
 
-    /** 住客掃碼頁驗收的資訊頁。標題與內文照規格的字面，「Wi‑Fi」中間是不換行的連字號。 */
     private static final List<Map<String, String>> GUEST_INFO_PAGES = List.of(
             infoPage("breakfast", "早餐", "一樓餐廳 06:30–10:00"),
             infoPage("wifi", "Wi‑Fi", "Wi‑Fi 名稱 Athena-Guest，密碼是房號加姓氏拼音。"),
             infoPage("checkout", "退房時間", "中午 12:00 前"));
 
-    /** 住客掃碼頁驗收裡「沒有宣告時有人住」的那間房。 */
     private static final String GUEST_STAYING_ROOM_NO = "311";
 
     private static final String GUEST_STAYING_NAME = "測試住客";
 
-    /** 換 QR 只放行主管；延後、作廢、查房與驗收也是主管的動作。 */
     private static final String MANAGER_NAME = "張主管";
 
-    /** 當場回答住客與代開單的櫃檯。 */
     private static final String DESK_CLERK_NAME = "林佩君";
 
     private static final String DESK_TASK_TITLE = "櫃檯代開的備品";
@@ -135,7 +120,6 @@ public class BackendChannel {
             Map.entry("工務", "engineering"),
             Map.entry("櫃檯", "frontdesk"));
 
-    /** 「值班經理」是員工 App 測試線的說法，「值班主管」是櫃檯 Web 的說法，兩個都是同一種角色。 */
     private static final Map<String, String> ROLE = Map.ofEntries(
             Map.entry("主管", "manager"),
             Map.entry("值班經理", "duty_manager"),
@@ -307,13 +291,6 @@ public class BackendChannel {
         return ((Number) id).longValue();
     }
 
-    /**
-     * 櫃檯 Web 驗收的預設資料：飯店、客房、帳號與住客資訊頁。
-     *
-     * @param tenantId 預設飯店的內部編號
-     * @param tenantCode 預設飯店的識別代碼，櫃檯畫面的網址用它
-     * @param staffByName 以姓名找預設帳號；順序與規格的帳號表相同
-     */
     public record FrontdeskDefaults(long tenantId, String tenantCode, Map<String, CreatedStaff> staffByName) {
 
         public CreatedStaff staff(String name) {
@@ -326,14 +303,6 @@ public class BackendChannel {
         }
     }
 
-    /**
-     * 把櫃檯 Web 驗收的預設資料準備好，並把這個物件之後的資料準備都改成對「雅典娜酒店」做。
-     *
-     * <p>每個場景開始前都可以呼叫：飯店與客房沒有才建；帳號與住客資訊頁每次都寫回預設值，
-     * 所以上一個場景改過密碼、被鎖定或被停用的帳號，到這裡都會恢復成可以登入的樣子。
-     *
-     * <p>員工 App 測試線不呼叫這個方法，它的資料準備仍然對「測試飯店」做。
-     */
     public synchronized FrontdeskDefaults ensureFrontdeskDefaults() {
         long tenantId = ensureFrontdeskTenant();
         cachedTenantId = tenantId;
@@ -360,16 +329,6 @@ public class BackendChannel {
                 java.util.Collections.unmodifiableMap(staffByName));
     }
 
-    /**
-     * 在櫃檯 Web 的預設資料之上，準備住客掃碼頁場景的預設訂房與資訊頁。
-     *
-     * <p>311 房有一筆今天入住、後天中午退房的訂房。入住時刻放在今天零點，場景把時間撥到今天任何一刻，
-     * 掃碼都換得到住客工作階段；放在一般的下午入住時刻的話，預設的 14:10 就換不到。
-     * 308 房是空房：場景開頭清空了所有訂房，這裡不替它建。
-     * 需求選單與分類規則也因為清空而沒有設定，後端就用出廠的五項選單，打字的需求一律進待派單。
-     *
-     * <p>要先呼叫過 {@link #ensureFrontdeskDefaults()}，訂房才會建在「雅典娜酒店」。
-     */
     public synchronized void ensureGuestDefaults() {
         long tenantId = ensureFrontdeskTenant();
         if (!Long.valueOf(tenantId).equals(cachedTenantId)) {
@@ -398,7 +357,6 @@ public class BackendChannel {
     }
 
     private CreatedStaff upsertFrontdeskStaff(long tenantId, DefaultStaff staff, OffsetDateTime now) {
-        // 算密碼雜湊很慢，12 個帳號共用同一個密碼，所以整個物件只算一次。
         if (frontdeskPasswordHash == null) {
             frontdeskPasswordHash = passwordEncoder.encode(FRONTDESK_PASSWORD);
         }
@@ -450,14 +408,12 @@ public class BackendChannel {
         jwtByStaffId.clear();
     }
 
-    /** 鎖表這一步最多等多久，必須比資料庫的 deadlock_timeout（預設 1 秒）短。 */
     private static final Duration RESET_LOCK_WAIT = Duration.ofMillis(400);
 
     private static final Duration RESET_PATIENCE = Duration.ofSeconds(30);
 
     private static final long RESET_RETRY_PAUSE_MS = 20;
 
-    /** 鎖表時間到（57014）、拿不到鎖（55P03）或仍被判定互相等待（40P01）時整批重來，其他錯誤照常拋出。 */
     private static final List<String> RESET_RETRYABLE_STATES = List.of("57014", "55P03", "40P01");
 
     private void lockAllThenTruncate(String lockSql, String truncateSql) {
@@ -498,8 +454,8 @@ public class BackendChannel {
     }
 
     private static final String TEST_CLOCK_RESTART_HINT =
-            "後端沒有開放撥時鐘端點（/api/v1/test/clock）。請用最新程式碼、帶旗標重啟後端："
-                    + "TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true "
+            "後端沒有開放測試端點（/api/v1/test/**）。請用最新程式碼、帶 test-support profile 重啟後端："
+                    + "TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support "
                     + "./tms/mvnw -f tms/pom.xml spring-boot:run";
 
     public void setBackendClock(OffsetDateTime moment) {
@@ -569,15 +525,6 @@ public class BackendChannel {
         requireTestClock(response, "後端時鐘回到系統時間");
     }
 
-    /**
-     * 後端此刻認定的「現在」。
-     *
-     * <p>回推「這段工作從幾點開始做」一定要用這個時刻，不能用測試機自己的時間：後端算已做工時是拿
-     * 「它的現在」減掉開始時刻，劇本把後端時鐘撥到 10:00、測試機卻已是下午時，用測試機時間回推出來的
-     * 開始時刻會落在後端的「現在」之後，那段工時就整段不算。
-     *
-     * <p>後端時鐘沒被撥定、或後端根本沒開放撥時鐘端點時，後端用的就是系統時間，這裡回測試機的現在。
-     */
     public OffsetDateTime backendNow() {
         HttpResponse<String> response = send(request("GET", "/test/clock", null).GET());
         int status = response.statusCode();
@@ -595,12 +542,16 @@ public class BackendChannel {
     }
 
     private static void requireTestClock(HttpResponse<String> response, String what) {
+        requireTestSupport(response, 200, what);
+    }
+
+    private static void requireTestSupport(HttpResponse<String> response, int expected, String what) {
         int status = response.statusCode();
         if (status == 404 || status == 401 || status == 403) {
             throw new IllegalStateException(TEST_CLOCK_RESTART_HINT + "（HTTP " + status + "）");
         }
-        if (response.statusCode() != 200) {
-            throw new IllegalStateException(what + " 失敗：HTTP " + response.statusCode() + " " + response.body());
+        if (status != expected) {
+            throw new IllegalStateException(what + " 失敗：HTTP " + status + " " + response.body());
         }
     }
 
@@ -970,13 +921,21 @@ public class BackendChannel {
         return taskId;
     }
 
-    // 與後端開工務單時的標題同一套中文（RepairService.CATEGORY_LABELS），畫面上不該出現類別代碼。
-    private static final Map<String, String> REPAIR_CATEGORY_LABELS = Map.of(
-            "air_conditioning", "冷氣",
-            "plumbing_electrical", "水電",
-            "furniture_equipment", "家具／設備",
-            "door_lock", "門鎖",
-            "other", "其他");
+    private Map<String, String> repairCategoryLabels;
+
+    /** 報修類別代碼對應的中文名稱，照後端 {@code GET /api/v1/repair-categories} 的順序；同一個 channel 只讀一次。 */
+    public Map<String, String> repairCategoryLabels(CreatedStaff reader) {
+        if (repairCategoryLabels == null) {
+            HttpResponse<String> response = send(request("GET", "/repair-categories", jwt(reader)).GET());
+            requireSuccess(response, "讀報修類別：GET /repair-categories");
+            Map<String, String> labels = new LinkedHashMap<>();
+            for (JsonNode category : parseJson(response.body())) {
+                labels.put(category.path("code").asText(), category.path("label").asText());
+            }
+            repairCategoryLabels = Collections.unmodifiableMap(labels);
+        }
+        return repairCategoryLabels;
+    }
 
     public UUID createRepairTicket(
             String ticketNo, String roomNo, String categoryCode, String stateCode,
@@ -985,7 +944,7 @@ public class BackendChannel {
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
 
         String taskState = "done".equals(stateCode) ? "doing" : stateCode;
-        UUID taskId = createTask(roomNo, REPAIR_CATEGORY_LABELS.getOrDefault(categoryCode, categoryCode) + " 工務單",
+        UUID taskId = createTask(roomNo, repairCategoryLabels(reporter).getOrDefault(categoryCode, categoryCode) + " 工務單",
                 "repair", "engineering", null,
                 taskState, assignee, null, null);
         execute("UPDATE tasks SET source = 'staff' WHERE tenant_id = ? AND id = ?", tenantId, taskId);
@@ -1496,56 +1455,17 @@ public class BackendChannel {
     private static final java.util.regex.Pattern REPAIR_TICKET_NO_FORMAT =
             java.util.regex.Pattern.compile("W-(\\d{4,})");
 
-    /** 空房的住客連線掛的那筆訂房，住期放在這麼多天以前，才不會和場景裡「現在有住客」的訂房住期重疊。 */
     private static final int VACANT_ROOM_STAY_DAYS_AGO = 30;
 
     private static final String GUEST_SESSION_HEADER = "X-Guest-Session";
     private static final String GUEST_SESSION_ISSUER_NAME = "測試資料櫃檯";
 
-    /**
-     * 直接在資料庫建一張已經處在指定狀況的單，連同走到這個狀況會留下的整串事件。
-     *
-     * <h2>要保證什麼</h2>
-     *
-     * 建出來的單要和後端自己一步一步走到這個狀況時寫出來的資料分不出來：
-     * 任務列的狀態、負責人與各個時間欄位、事件的種類、順序、操作者與內容都一致，
-     * 而且事件序號從 1 連號、任務列記的序號等於最後一筆。
-     * 這樣櫃檯看板讀到的卡片、詳情與歷程才是真的，之後再用後端的動作接著推進這張單也不會被拒絕。
-     *
-     * <h2>為什麼不呼叫後端來建</h2>
-     *
-     * 驗收要的是「25 分鐘前送出的待派單」「昨天結案的單」這種單。後端的每個動作都以它的現在記時間，
-     * 要排出過去的時刻只能直接寫資料庫。另外有幾種狀況（主管指派、主管延後、請假造成的中斷、排房被取代）
-     * 後端還沒有對應的動作可以呼叫。所以這裡一律直接寫，每一種狀況只有一條寫法。
-     *
-     * <h2>怎麼做到</h2>
-     *
-     * 每一筆事件的操作者與內容照後端任務引擎的寫法；資料模型有規定、後端還沒寫出來的部分照資料模型：
-     * 非工務單向取號表領單號、已結束的單寫結束時間、當場回答的單寫回覆。
-     * 整張單在同一個資料庫交易裡寫完，中途發現內容不合就什麼都不留。
-     *
-     * <h2>刻意沒有做的事</h2>
-     *
-     * 不寫事件的對外通知。後端每寫一筆事件都會排一則通知給即時更新與推播，這裡不排，
-     * 所以開著的櫃檯畫面不會因為測試在準備資料而收到一串訊號；畫面要看到這些單，靠的是下一次讀看板。
-     * 也不做完修的附帶動作：完修照片、暫時處理的追蹤單、無法修復時把房間轉成停用。
-     *
-     * <p>時刻一律由呼叫端給，而且應該從 {@link #backendNow()} 推算；沒有給的以後端的現在為準。
-     * 用測試機的時間推算的話，後端時鐘被撥定時，「等了幾分鐘」會算錯。
-     */
     public synchronized UUID createTaskInSituation(TaskSituation situation, TaskSituationSpec spec) {
         long tenantId = ensureTenant();
         OffsetDateTime[] times = resolveSituationTimes(situation, spec, this::backendNow);
         return inTransaction(() -> new SituationTaskWriter(tenantId, situation, spec, times).write());
     }
 
-    /**
-     * 把規格裡有給的時刻補成完整的六個，順序是建立、派出、到手、開工、完成、進入這個狀況。
-     *
-     * <p>{@code spec.at} 是這個狀況的計時起點，它對應六個裡的哪一個依狀況而定。
-     * 在它之前沒有給的時刻沿用後一個，在它之後的時刻這張單還沒走到，所以不收；
-     * 唯一的例外是待認領：等待從建立起算，櫃檯派出發生在那之後。
-     */
     private static OffsetDateTime[] resolveSituationTimes(
             TaskSituation situation, TaskSituationSpec spec,
             java.util.function.Supplier<OffsetDateTime> backendNow) {
@@ -1577,7 +1497,6 @@ public class BackendChannel {
             }
         }
         for (int i = 0; i < times.length; i++) {
-            // 資料庫的時間只記到微秒，先截掉，讀回來才會與這裡算的相等。
             times[i] = times[i].truncatedTo(java.time.temporal.ChronoUnit.MICROS);
             if (i > 0 && times[i].isBefore(times[i - 1])) {
                 throw new IllegalArgumentException("「" + situation.term() + "」的時刻前後顛倒："
@@ -1591,13 +1510,6 @@ public class BackendChannel {
     private static final List<String> RETURN_POOL_SOURCES =
             List.of("manager_requeue", "leave_return", "shift_end_return");
 
-    /**
-     * 這張待認領的單是不是被退回來的。
-     *
-     * <p>後端算等待時間，取的是建立與退回待認領兩種事件裡最新的那一筆。
-     * 所以開始等待的時刻晚於建立，就只可能是被退回過；呼叫端明講了誰退回、退回前誰拿著、
-     * 或指定了退回的來源，也算。
-     */
     private static boolean isReturnedToPool(TaskSituation situation, TaskSituationSpec spec) {
         if (situation != TaskSituation.POOL) {
             return false;
@@ -1625,13 +1537,6 @@ public class BackendChannel {
     private record PendingEvent(
             String type, String actorRole, UUID actorId, Map<String, Object> payload, OffsetDateTime at) {}
 
-    /**
-     * 一張單從建立走到指定狀況的寫入過程。
-     *
-     * <p>先在記憶體裡把任務列的欄位與事件一筆一筆排好，全部排完才寫進資料庫：
-     * 任務列只寫一次，寫進去就是最後的樣子，事件序號照排入的順序從 1 編起。
-     * 每個小方法對應後端任務引擎的一個動作，改的欄位與事件內容照那個動作。
-     */
     private final class SituationTaskWriter {
 
         private final long tenantId;
@@ -1713,12 +1618,10 @@ public class BackendChannel {
             UUID roomId = ensureRoom(spec.roomNo, floorFromRoomNo(spec.roomNo));
             String taskNo = repair ? null : takeDisplayNo("task_counters", "T-", TASK_NO_FORMAT, spec.displayNo);
             String title = spec.title != null ? spec.title : titleFromGuestText();
-            // 工務單的說明記在工務單上；住客打字後被櫃檯派給工務的單，原文仍留在任務上。
             String note = repair && spec.guestText == null ? null : taskNote();
             LocalDate workDate = cleaning ? times[TIME_CREATED].toLocalDate() : null;
             boolean planAssigned = "accepted".equals(initialState);
             if (spec.urgent && !repair) {
-                // 急件只存在工務單上；其他類型的單寫進去也不會出現在任何畫面，案例以為建了急件卻沒有，所以直接擋下。
                 throw new IllegalArgumentException("只有修繕單可以是急件，" + spec.roomNo + " 的類型是 " + spec.type);
             }
 
@@ -1738,7 +1641,6 @@ public class BackendChannel {
             columns.put("urgent", spec.urgent);
             columns.put("created_at", times[TIME_CREATED]);
             if ("pool".equals(initialState)) {
-                // 待認領清單靠這一欄顯示單是從哪裡進來的；後端只在這三種單直接進待認領時填它。
                 boolean explicitEntry = spec.poolSource != null && !RETURN_POOL_SOURCES.contains(spec.poolSource);
                 if (explicitEntry) {
                     columns.put("pool_source", spec.poolSource);
@@ -1773,7 +1675,6 @@ public class BackendChannel {
                 prepareRepairTicket(roomId);
             }
             if (planAssigned) {
-                // 看板靠「指派的操作者是系統」認出班前排房，所以這筆指派的操作者要和建立事件是同一個。
                 columns.put("assignee_id", spec.assignee.id());
                 event("assigned", creatorRole, creatorId,
                         Map.of("assignee_id", spec.assignee.id().toString()), times[TIME_ACCEPTED]);
@@ -1812,7 +1713,6 @@ public class BackendChannel {
                 case MANAGER_ASSIGNED -> event("assigned", actorRole(spec.assignedBy), spec.assignedBy.id(),
                         toAssignee, times[TIME_ACCEPTED]);
                 case REASSIGNED -> {
-                    // 後端只允許轉派已經在某人手上的單，所以歷程要先有前一位負責人的認領，轉派才接得上。
                     event("claimed", actorRole(spec.previousAssignee), spec.previousAssignee.id(),
                             Map.of("assignee_id", spec.previousAssignee.id().toString()), times[TIME_TRIAGED]);
                     event("reassigned", actorRole(spec.assignedBy), spec.assignedBy.id(),
@@ -1823,13 +1723,6 @@ public class BackendChannel {
             columns.put("assignee_id", spec.assignee.id());
         }
 
-        /**
-         * 把一張有人認領過的單退回待認領，等待時間就會從退回那一刻重算。
-         *
-         * <p>後端有三條不必先開工或查房就能退回的路，各自寫的欄位與事件內容不同，這裡照來源分開寫：
-         * 主管附交代退回會標成優先通知並留下交代；登記請假時退回也標成優先通知；
-         * 班末由系統退回則沒有操作者，另外留一句退回原因。
-         */
         private void returnToPool() {
             CreatedStaff holder = spec.previousAssignee != null ? spec.previousAssignee : anyStaffOfDept();
             event("claimed", actorRole(holder), holder.id(),
@@ -1866,7 +1759,6 @@ public class BackendChannel {
             return spec.returnedBy != null ? "manager_requeue" : "shift_end_return";
         }
 
-        /** 退回之前一定有人拿過這張單。呼叫端沒說是誰時，挑這個部門員工編號最前面的在職同仁，每次挑到的都是同一位。 */
         private CreatedStaff anyStaffOfDept() {
             List<Map<String, Object>> rows = queryRows("SELECT id, name, login_id, role, dept FROM staff_accounts"
                     + " WHERE tenant_id = ? AND dept = ? AND active ORDER BY login_id LIMIT 1", tenantId, spec.dept);
@@ -1885,7 +1777,6 @@ public class BackendChannel {
             checkSopItems(times[TIME_STARTED]);
         }
 
-        /** 已做時間只算真的在做的那幾段，所以離開進行中時要把這一段結算進累計秒數，完成與中斷都一樣。 */
         private void closeWorkSegment(OffsetDateTime at) {
             columns.put("worked_sec", (int) Duration.between(times[TIME_STARTED], at).getSeconds());
             columns.put("segment_started_at", null);
@@ -1970,7 +1861,6 @@ public class BackendChannel {
             CreatedStaff actor = bySelf ? spec.assignee : spec.actedBy;
             columns.put("state", "deferred");
             columns.put("deferred_by_self", bySelf);
-            // 主管延後的事件後端不帶任何內容，是不是本人延後要看任務列的 deferred_by_self；只有本人延後才帶原因與標記。
             Map<String, Object> payload = null;
             if (bySelf) {
                 columns.put("hold_reason", spec.reason);
@@ -2031,10 +1921,6 @@ public class BackendChannel {
             }
         }
 
-        /**
-         * 打掃單完成後，每一項清潔 SOP 都要有紀錄，主管查房時才看得出哪幾項沒做。
-         * 所以還沒勾的項目在完成時一律記成跳過，名稱另外交給完成事件帶著，和後端完成時的做法相同。
-         */
         private List<String> skipUncheckedSopItems(OffsetDateTime at) {
             List<String> skipped = new ArrayList<>();
             List<Map<String, Object>> items = activeCleaningSopItems();
@@ -2061,7 +1947,6 @@ public class BackendChannel {
             insertRow("tasks", columns);
             for (int i = 0; i < events.size(); i++) {
                 PendingEvent event = events.get(i);
-                // 後端對沒有內容的事件存的是空值，不是空的 JSON 物件；讀歷程的程式用「有沒有值」判斷。
                 String payload = event.payload() == null || event.payload().isEmpty()
                         ? null : toJson(event.payload());
                 execute("""
@@ -2090,12 +1975,6 @@ public class BackendChannel {
             execute("INSERT INTO " + table + " (" + names + ") VALUES (" + marks + ")", row.values().toArray());
         }
 
-        /**
-         * 領一個給人看的單號，保證之後後端自己建單時不會領到同一號。
-         *
-         * <p>沒有指定時向取號表領下一號，寫法與後端相同。有指定時照寫，並把取號表推到至少這一號：
-         * 取號表落在後面的話，後端之後會領到同一號，被資料庫的不重複限制擋下。
-         */
         private String takeDisplayNo(
                 String counterTable, String prefix, java.util.regex.Pattern format, String requested) {
             if (requested == null) {
@@ -2128,7 +2007,6 @@ public class BackendChannel {
             return toJson(fields);
         }
 
-        /** 這張單從頭到尾都沒有離開櫃檯：待派單、已回答，以及還在待派單時就被取消的單。 */
         private boolean staysInTriage() {
             if (situation == TaskSituation.TRIAGE || situation == TaskSituation.ANSWERED) {
                 return true;
@@ -2283,7 +2161,6 @@ public class BackendChannel {
         }
     }
 
-    /** 任務事件記的是操作者當下的角色。資料庫不收老闆這個角色，所以在寫入之前先講清楚是誰不行。 */
     private static String actorRole(CreatedStaff staff) {
         if ("owner".equals(staff.role())) {
             throw new IllegalArgumentException("「" + staff.name() + "」是老闆，任務事件的操作者不能是老闆");
@@ -2291,10 +2168,6 @@ public class BackendChannel {
         return staff.role();
     }
 
-    /**
-     * 讓一整組寫入要嘛全部成功、要嘛全部不留。
-     * 一張單分成任務列、事件、工務單好幾次寫入，中途失敗若留下半張單，看板會讀到沒有歷程的單。
-     */
     private <T> T inTransaction(java.util.function.Supplier<T> work) {
         Connection transaction = connection();
         try {
@@ -2314,13 +2187,6 @@ public class BackendChannel {
         }
     }
 
-    /**
-     * 替一間房建一筆訂房，回訂房的 id；同一間房同一個入住日再呼叫一次是改寫那一筆。
-     *
-     * <p>看板上「這張單的住客是誰、是不是 VIP」都是從訂房讀的，所以有住客的單要先有訂房。
-     * {@code guestName} 給 null 代表訂房檔沒有住客姓名，畫面會當成空房。
-     * 同一間房的兩筆訂房住期不能重疊，重疊時資料庫會拒絕。
-     */
     public UUID createReservation(
             String roomNo, String guestName, boolean vip, OffsetDateTime checkinAt, OffsetDateTime checkoutAt) {
         long tenantId = ensureTenant();
@@ -2341,12 +2207,6 @@ public class BackendChannel {
         return (UUID) id;
     }
 
-    /**
-     * 以住客的身分送出一段打字的需求，回這張單的 id。
-     *
-     * <p>走後端的住客端點，所以這張單會經過分類規則：沒有命中規則的進待派單，命中的直接進部門的待認領。
-     * 開著的櫃檯畫面也會收到即時訊號。要排出過去的時刻或指定狀況的單，改用 {@link #createTaskInSituation}。
-     */
     public UUID guestSubmitRequest(String roomNo, String text, String lang) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("text", text);
@@ -2361,12 +2221,6 @@ public class BackendChannel {
         return UUID.fromString(parseJson(response.body()).path("id").asText());
     }
 
-    /**
-     * 以住客的身分從需求選單勾選一個品項送出，回這張單的 id。
-     *
-     * <p>勾選的品項不經過分類規則，直接進選單上該品項所屬部門的待認領。{@code itemKey} 要是飯店需求選單
-     * （{@code tenant_config} 的 {@code request_menu}）上有的品項，不在選單上的品項後端會當成打字的需求處理。
-     */
     public UUID guestSubmitMenuItem(String roomNo, String itemKey, int quantity) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("itemId", itemKey);
@@ -2379,7 +2233,6 @@ public class BackendChannel {
         return UUID.fromString(parseJson(response.body()).path("id").asText());
     }
 
-    /** 以住客的身分收回自己送出的需求。只有還在待派單或待認領的單收得回來，其餘後端會拒絕。 */
     public void guestWithdrawRequest(String roomNo, UUID taskId) {
         HttpResponse<String> response = send(request("POST", "/guest-requests/" + taskId + "/cancel", null)
                 .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
@@ -2387,10 +2240,6 @@ public class BackendChannel {
         requireSuccess(response, "住客收回需求：POST /guest-requests/" + taskId + "/cancel（房號 " + roomNo + "）");
     }
 
-    /**
-     * 以這間房住客的身分讀自己這次住宿的需求，回後端給的整份清單，也就是住客進度頁看到的內容。
-     * 只讀不寫；櫃檯當場回答過的單，回應裡的 {@code answer} 是回覆全文。
-     */
     public JsonNode guestRequests(String roomNo) {
         HttpResponse<String> response = send(request("GET", "/guest-requests", null)
                 .header(GUEST_SESSION_HEADER, guestSessionToken(roomNo))
@@ -2399,15 +2248,12 @@ public class BackendChannel {
         return parseJson(response.body());
     }
 
-    /** 換 QR 前後的 QR 權杖。 */
     public record RotatedQr(String oldToken, String newToken) {}
 
-    /** 掃碼換到的住客工作階段，與後端這時候給住客看的服務項目；項目的鍵照後端給的，不另外翻成別的值。 */
     public record GuestScan(String sessionToken, List<GuestMenuItem> menu) {}
 
     public record GuestMenuItem(String key, String label) {}
 
-    /** 後端不肯用這枚 QR 權杖換住客工作階段。{@code code} 是錯誤回應裡的代碼，例如 {@code room_vacant}。 */
     public static final class GuestScanRejected extends IllegalStateException {
 
         private final int status;
@@ -2428,7 +2274,6 @@ public class BackendChannel {
         }
     }
 
-    /** 以主管的身分讀這間房目前的 QR 權杖。這間房還沒有有效的權杖時，後端在讀的當下發一枚。 */
     public String roomQrToken(String roomNo) {
         String path = "/admin/rooms/" + roomNo + "/qr";
         HttpResponse<String> response = send(requestOutsideApi(path, jwt(defaultStaff(MANAGER_NAME))).GET());
@@ -2436,12 +2281,6 @@ public class BackendChannel {
         return parseJson(response.body()).path("token").asText();
     }
 
-    /**
-     * 以主管的身分換掉這間房的 QR Code，回換之前與換之後的 QR 權杖。
-     *
-     * <p>走後端的換 QR 端點而不直接改資料表：後端換 QR 時會一併撤銷這間房所有的住客工作階段，
-     * 場景要驗的正是這個連帶的結果。
-     */
     public RotatedQr rotateRoomQr(String roomNo) {
         String oldToken = roomQrToken(roomNo);
         String path = "/admin/rooms/" + roomNo + "/qr/rotate";
@@ -2451,12 +2290,6 @@ public class BackendChannel {
         return new RotatedQr(oldToken, parseJson(response.body()).path("token").asText());
     }
 
-    /**
-     * 用 QR 權杖換一個新的住客工作階段，就像另一支手機掃了同一張 QR Code。
-     * 每呼叫一次都是新的工作階段，與畫面上那支手機的互不相干。
-     *
-     * @throws GuestScanRejected 後端不給換時，例如權杖已經被換掉，或這間房現在沒有人住
-     */
     public GuestScan guestScan(String qrToken) {
         HttpResponse<String> response = send(requestOutsideApi("/guest/scan", null)
                 .header("Content-Type", "application/json")
@@ -2472,7 +2305,6 @@ public class BackendChannel {
         return new GuestScan(body.path("sessionToken").asText(), List.copyOf(menu));
     }
 
-    /** 錯誤回應不一定有內容，例如被安全設定擋下的請求，這時沒有代碼。 */
     private String errorCode(String body) {
         try {
             return objectMapper.readTree(body).path("code").asText(null);
@@ -2481,7 +2313,6 @@ public class BackendChannel {
         }
     }
 
-    /** 以這個住客工作階段替一張需求評分，就像住客在進度頁按了送出評分。 */
     public void guestRateRequest(String sessionToken, UUID taskId, int rating) {
         String path = "/guest/requests/" + taskId + "/rating";
         HttpResponse<String> response = send(requestOutsideApi(path, null)
@@ -2491,29 +2322,27 @@ public class BackendChannel {
         requireSuccess(response, "住客評分：POST " + path);
     }
 
-    /**
-     * 讓這個住客工作階段失效，後端之後收到它就回 401。
-     *
-     * <p>直接寫撤銷時刻而不換 QR：換 QR 會連房間的 QR 權杖一起換掉，
-     * 場景要的是這支手機手上的工作階段失效、但掃同一張 QR Code 仍換得到新的。
-     */
     public void revokeGuestSession(String sessionToken) {
-        queryScalar("UPDATE guest_sessions SET revoked_at = ? WHERE tenant_id = ? AND session_token = ? RETURNING id",
-                backendNow(), ensureTenant(), sessionToken)
-                .orElseThrow(() -> new IllegalStateException("找不到這個住客工作階段，撤銷不了：" + sessionToken));
+        HttpResponse<String> response = send(request("POST", "/test/guest-sessions/revoke", null)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        toJson(Map.of("sessionToken", sessionToken)), StandardCharsets.UTF_8)));
+        // 沒帶 test-support profile 時，這條路徑落在一般 API 的驗身分規則下、回 401，不會是 404。
+        if (response.statusCode() == 404) {
+            throw new IllegalStateException("找不到這個住客工作階段，撤銷不了：" + sessionToken);
+        }
+        requireTestSupport(response, 204, "撤銷住客工作階段");
     }
 
     /**
-     * 替這間房目前的訂房建一張住客需求，停在指定的狀況，回這張需求的 id。
-     *
-     * <p>不經過住客送出需求的端點。那個端點每間房 10 分鐘只收 3 筆、以系統時鐘計，
-     * 場景開頭備的舊需求若經過它，會吃掉畫面上真的送出要用的額度，送出時間也只能是現在。
-     * 所以這裡用 {@link #createTaskInSituation} 直接寫，住客讀清單時看到的與真的送出過的一樣。
-     *
-     * <p>還在櫃檯手上的需求是住客打字送出的，原文就是標題。
-     * 延後、作廢、查房與驗收由張主管做，當場回答由林佩君做。
-     * 住客的需求不會直接進工務，工務的狀況改走 {@link #seedEngineeringGuestRequest}。
+     * 清空後端掃碼失敗次數的限流器，讓每個情境從零開始算。住客每間房的送單名額是後端從 tasks 現數的，
+     * 這裡清不到；要歸零就清業務資料，或用 seed 的建立時間與後端時鐘安排 10 分鐘內有幾張。
      */
+    public void resetRateLimits() {
+        HttpResponse<String> response = send(request("DELETE", "/test/rate-limits", null).DELETE());
+        requireTestSupport(response, 204, "清空後端限流器");
+    }
+
     public UUID seedGuestRequest(String roomNo, GuestSeed seed) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
@@ -2540,13 +2369,6 @@ public class BackendChannel {
         return createTaskInSituation(situation, spec);
     }
 
-    /**
-     * 住客打字送出、停在待派單，再由林佩君派給工務，讓後端自己把它變成工務單；
-     * 之後依狀況由負責人認領、開始、完修，張主管驗收。
-     *
-     * <p>每一步先把後端時鐘撥到那一刻再呼叫後端，事件時間才會是表格要的送出、到手與開始時刻；
-     * 做完撥回原本的現在。派單與送出同一刻，完修與驗收在現在，和其他狀況的預設相同。
-     */
     private UUID seedEngineeringGuestRequest(String roomNo, UUID reservationId, GuestSeed seed) {
         if (!"repair".equals(seed.type())) {
             throw new IllegalArgumentException("「" + seed.situation().term() + "」是櫃檯派給工務的需求，後端派單時一律改成修繕，"
@@ -2590,10 +2412,6 @@ public class BackendChannel {
         };
     }
 
-    /**
-     * 把一張需求記成住客已經評過分，連同後端評分時留下的那筆事件。
-     * 條件和後端相同：只有已完成或查房通過、還沒評過分的需求能評，不符時直接停下。
-     */
     public void setTaskRating(UUID taskId, int rating) {
         long tenantId = ensureTenant();
         OffsetDateTime now = backendNow();
@@ -2610,10 +2428,6 @@ public class BackendChannel {
         });
     }
 
-    /**
-     * 櫃檯替這間房代開一張不綁訂房的備品單，停在房務待認領，回這張單的 id。
-     * 住客的清單只列自己訂房名下的需求，所以看不到它。
-     */
     public UUID seedDeskTask(String roomNo, OffsetDateTime createdAt) {
         return createTaskInSituation(TaskSituation.POOL,
                 TaskSituationSpec.of(roomNo, "amenity", "desk")
@@ -2623,11 +2437,6 @@ public class BackendChannel {
                         .createdAt(createdAt));
     }
 
-    /**
-     * 把預設飯店的分類規則設成只有這一條：住客打字的需求含這個關鍵字時，分到這個部門與類型。
-     * 分到房務的直接進房務待認領；分到工務的留在待派單，等櫃檯派給工務才成為工務單。
-     * {@code dept} 與 {@code type} 給後端的值，例如 {@code engineering}、{@code repair}。
-     */
     public void setClassificationRule(String keyword, String dept, String type) {
         Map<String, Object> rule = new LinkedHashMap<>();
         rule.put("rule_id", "bdd-" + keyword);
@@ -2637,7 +2446,6 @@ public class BackendChannel {
         setTenantConfig(ensureTenant(), "classification_rules", List.of(rule));
     }
 
-    /** 以姓名找櫃檯 Web 的預設帳號，帳號由 {@link #ensureFrontdeskDefaults()} 建好。 */
     private CreatedStaff defaultStaff(String name) {
         DefaultStaff staff = FRONTDESK_STAFF.stream()
                 .filter(candidate -> candidate.name().equals(name))
@@ -2659,14 +2467,6 @@ public class BackendChannel {
                 .map(UUID.class::cast);
     }
 
-    /**
-     * 把房號換成這間房住客的連線憑證，住客端點靠它認人。
-     *
-     * <p>住客的連線一定要掛在一筆訂房上。這間房現在有人住時，照正式流程由櫃檯開連線，到期時間由後端定成那筆訂房的退房時刻。
-     * 沒有人住時掛一筆住期早已結束的訂房，房間仍然是空房，場景之後再替同一間房建在住的訂房也不會因為住期重疊被資料庫拒絕。
-     * 後端不替已經退房的訂房開連線，所以這種連線直接寫進資料庫，到期時間放在一天後，場景進行中不會失效。
-     * 住客只看得到自己那筆訂房名下的單，所以同一筆訂房沿用同一個連線，送出與收回才會是同一位住客。
-     */
     private String guestSessionToken(String roomNo) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
@@ -2698,7 +2498,6 @@ public class BackendChannel {
         return parseJson(response.body()).path("sessionToken").asText();
     }
 
-    /** 空房住客的連線，權杖格式照後端的「飯店編號.隨機字串」，後端才認得出是哪家飯店的連線。 */
     private String insertVacantRoomGuestSession(long tenantId, UUID roomId, UUID reservationId, OffsetDateTime now) {
         byte[] randomBytes = new byte[32];
         new java.security.SecureRandom().nextBytes(randomBytes);
@@ -2710,10 +2509,6 @@ public class BackendChannel {
         return token;
     }
 
-    /**
-     * 住客連線只能由櫃檯、主管或值班主管開，所以準備住客連線要有一位櫃檯登入。
-     * 用一位專門給測試資料的櫃檯，不借用場景自己的帳號，免得場景要驗的登入次數或鎖定狀態被這裡的登入改掉。
-     */
     private CreatedStaff guestSessionIssuer() {
         return queryRows("SELECT id, login_id FROM staff_accounts WHERE tenant_id = ? AND name = ?",
                         ensureTenant(), GUEST_SESSION_ISSUER_NAME)
@@ -2724,10 +2519,6 @@ public class BackendChannel {
                 .orElseGet(() -> insertStaff(GUEST_SESSION_ISSUER_NAME, "frontdesk", "frontdesk", "active"));
     }
 
-    /**
-     * 以櫃檯畫面使用者的身分把待派單派給部門，回後端給的那張單。
-     * {@code via} 是 {@code button} 或 {@code drag}，給 null 時請求不帶這一欄，後端視為按鈕。
-     */
     public JsonNode deskAssign(UUID taskId, CreatedStaff actor, String deptCode, String via) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("dept", deptCode);
@@ -2737,21 +2528,14 @@ public class BackendChannel {
         return postDeskAction("/desk/tasks/" + taskId + "/assign", actor, body);
     }
 
-    /** 以櫃檯畫面使用者的身分把剛派出的單收回待派單。派出之後這張單只要再發生任何事，後端就會拒絕。 */
     public JsonNode deskUndoAssign(UUID taskId, CreatedStaff actor) {
         return postDeskAction("/desk/tasks/" + taskId + "/assign/undo", actor, null);
     }
 
-    /** 以櫃檯畫面使用者的身分當場回答一張待派單，回答之後這張單就結束，沒有復原。 */
     public JsonNode deskAnswer(UUID taskId, CreatedStaff actor, String answer) {
         return postDeskAction("/desk/tasks/" + taskId + "/answer", actor, Map.of("answer", answer));
     }
 
-    /**
-     * 櫃檯的三個寫入動作共用的送出方式。
-     * 每次帶一把新的防重複鍵，因為畫面每按一次也是一把新的鍵；後端沒有照做就當場停下，
-     * 這三個入口是拿來準備資料的，資料沒備好時後面的斷言只會錯得更難懂。
-     */
     private JsonNode postDeskAction(String path, CreatedStaff actor, Map<String, Object> body) {
         HttpRequest.Builder builder = request("POST", path, jwt(actor))
                 .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString());
@@ -2786,12 +2570,6 @@ public class BackendChannel {
         return token.asText();
     }
 
-    /**
-     * 以這位員工的員工編號與密碼向後端登入，回後端給的整份登入回應。
-     *
-     * <p>櫃檯 Web 的測試把這份回應原樣放進瀏覽器分頁的儲存空間，畫面就會當成已經登入、不必走登入頁；
-     * 畫面要讀回應裡的姓名、角色與是否要先改密碼，所以只給通行憑證不夠。
-     */
     public JsonNode loginResponse(CreatedStaff staff) {
         return parseJson(postLogin(staff.loginId(), staff.password()));
     }
@@ -2808,11 +2586,6 @@ public class BackendChannel {
         return response.body();
     }
 
-    /**
-     * 以員工編號與密碼向後端登入一次，不管成功與否都回 HTTP 狀態碼。
-     *
-     * <p>準備「連續輸錯密碼被鎖定」這類狀態時用：失敗的登入要真的經過後端，連續錯誤次數與鎖定時間才是後端自己算的。
-     */
     public int attemptLogin(String loginId, String password) {
         Map<String, Object> body = Map.of("loginId", loginId, "password", password);
         return send(request("POST", "/staff-accounts/login", null)
@@ -2821,11 +2594,6 @@ public class BackendChannel {
                 .statusCode();
     }
 
-    /**
-     * 拿臨時密碼登入，再把密碼改成新密碼，回改密碼後後端給的登入回應。
-     *
-     * <p>臨時密碼登入時後端要求先設定新密碼，這時改密碼不必帶目前密碼，身分由剛拿到的憑證證明。
-     */
     public JsonNode changeTemporaryPassword(String loginId, String temporaryPassword, String newPassword) {
         String token = login(loginId, temporaryPassword);
         HttpResponse<String> response = send(request("POST", "/staff-accounts/change-password", token)
@@ -2974,7 +2742,6 @@ public class BackendChannel {
         return requestOutsideApi(BASE_PATH + path, jwt);
     }
 
-    /** 住客端點與房間 QR 的管理端點掛在根路徑，不在 {@code /api/v1} 底下。 */
     private HttpRequest.Builder requestOutsideApi(String path, String jwt) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))

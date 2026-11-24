@@ -18,6 +18,9 @@ extends JpaRepository<ReservationCache, UUID> {
     @Query(value="select r from ReservationCache r\nwhere r.tenantId = :tenantId\n  and r.roomId = :roomId\n  and r.supersededAt is null\n  and r.checkinAt <= :at\n  and r.checkoutAt > :at\n")
     public Optional<ReservationCache> findCurrentByRoom(@Param(value="tenantId") Long var1, @Param(value="roomId") UUID var2, @Param(value="at") OffsetDateTime var3);
 
+    @Query(value="select r from ReservationCache r\nwhere r.tenantId = :tenantId\n  and r.supersededAt is null\n  and r.checkinAt <= :at\n  and r.checkoutAt > :at\norder by r.roomId\n")
+    public List<ReservationCache> findCurrent(@Param(value="tenantId") Long tenantId, @Param(value="at") OffsetDateTime at);
+
     @Query(value="select r from ReservationCache r\nwhere r.tenantId = :tenantId\n  and r.supersededAt is null\n  and r.checkoutAt >= :from\n  and r.checkoutAt < :to\norder by r.checkoutAt, r.roomId\n")
     public List<ReservationCache> findCheckoutsBetween(@Param(value="tenantId") Long var1, @Param(value="from") OffsetDateTime var2, @Param(value="to") OffsetDateTime var3);
 }

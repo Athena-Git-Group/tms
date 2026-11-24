@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.GuestFixtures;
@@ -51,13 +52,13 @@ public class GuestWhenSteps {
 
     @When("^以 session \"([^\"]+)\" 讀取資訊頁$")
     public void readInfoPages(String sessionSymbol) {
-        ctx.put("tasksBeforeHome", db.countAll("tasks"));
+        ctx.put(ScenarioKeys.TASKS_BEFORE_HOME, db.countAll("tasks"));
         ctx.lastResponse(api.get("/guest/home", ctx.guestSession(sessionSymbol)));
     }
 
     @When("^住客以 session \"([^\"]+)\" 用自由文字「([^」]+)」送出需求$")
     public void createFreeTextRequest(String sessionSymbol, String text) {
-        ctx.put("freeText", text);
+        ctx.put(ScenarioKeys.FREE_TEXT, text);
         ScenarioContext.HttpResult created = guest.createRequest(
                 ctx.guestSession(sessionSymbol), Map.of("text", text, "lang", "zh-TW"));
         ctx.lastResponse(created);
@@ -97,12 +98,12 @@ public class GuestWhenSteps {
 
     @When("^該 IP 以 token \"([^\"]+)\" 再次掃碼$")
     public void blockedIpScansAgain(String token) {
-        ctx.lastResponse(guest.scan(token, ctx.get("attackerIp")));
+        ctx.lastResponse(guest.scan(token, ctx.get(ScenarioKeys.ATTACKER_IP)));
     }
 
     @When("^該 IP 再以不存在的 token 掃碼$")
     public void blockedIpScansUnknownToken() {
-        ctx.lastResponse(guest.scan("NoSuchTokenAnywhere999", ctx.get("attackerIp")));
+        ctx.lastResponse(guest.scan("NoSuchTokenAnywhere999", ctx.get(ScenarioKeys.ATTACKER_IP)));
     }
 
     @When("^\"([^\"]+)\" 替房 \"([^\"]+)\" 開住客 session \"([^\"]+)\"$")
@@ -162,8 +163,8 @@ public class GuestWhenSteps {
 
     private void openSession(
             String bearer, String roomSymbol, String reservationSymbol, String sessionSymbol, String requestedExpiresAt) {
-        ctx.put("sessionsBefore", db.countAll("guest_sessions"));
-        ctx.put("tasksBefore", db.countAll("tasks"));
+        ctx.put(ScenarioKeys.SESSIONS_BEFORE, db.countAll("guest_sessions"));
+        ctx.put(ScenarioKeys.TASKS_BEFORE, db.countAll("tasks"));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("roomId", ctx.entityId(roomSymbol).toString());
         if (reservationSymbol != null) {
@@ -189,8 +190,8 @@ public class GuestWhenSteps {
     }
 
     private void scanAndSnapshot(String token) {
-        ctx.put("sessionsBefore", db.countAll("guest_sessions"));
-        ctx.put("tasksBefore", db.countAll("tasks"));
+        ctx.put(ScenarioKeys.SESSIONS_BEFORE, db.countAll("guest_sessions"));
+        ctx.put(ScenarioKeys.TASKS_BEFORE, db.countAll("tasks"));
         ctx.lastResponse(guest.scan(token, null));
     }
 

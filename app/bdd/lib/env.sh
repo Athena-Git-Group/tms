@@ -41,15 +41,15 @@ check_backend_ready() {
     # ${} 不能省：macOS 內建的 bash 3.2 會把全形「）」的位元組併進變數名。
     log "後端沒有回應（${BACKEND_URL}）。先起後端："
     log "  docker compose up -d"
-    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
+    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
     return 1
   fi
 
   local clock_code
   clock_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$BACKEND_URL/api/v1/test/clock" || true)"
   if [ "$clock_code" != "200" ]; then
-    log "後端沒有開放撥時鐘端點（/api/v1/test/clock 回 HTTP ${clock_code}）。停掉後端、帶旗標重啟："
-    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
+    log "後端沒有開放撥時鐘端點（/api/v1/test/clock 回 HTTP ${clock_code}）。停掉後端、帶 test-support profile 重啟："
+    log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
     return 1
   fi
 
@@ -109,11 +109,5 @@ start_appium() {
   return 1
 }
 
-# BackendChannel 住在獨立模組 app/bdd-support/（與櫃檯 Web 測試線共用）。本 repo 沒有上層 pom，
-# app/bdd/pom.xml 要從本機 Maven 倉庫解析 app-bdd-support，所以每次 source 都先 install 一次；
-# 三支 run-*.sh 都會 source 本檔，放這一處就夠。
-# 不經腳本、直接下 `mvn -f app/bdd/pom.xml …` 的人要自己先跑一次：
-#   JAVA_HOME="$(/usr/libexec/java_home -v 25)" mvn -q -f app/bdd-support/pom.xml install
-# 否則會找不到 com.athena:app-bdd-support；改過 app/bdd-support/ 之後也要重跑才會生效。
 log "install app-bdd-support 到本機 Maven 倉庫"
 JAVA_HOME="$(/usr/libexec/java_home -v 25)" mvn -q -f "$REPO_ROOT/app/bdd-support/pom.xml" install

@@ -5,6 +5,7 @@ import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.Awaits;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
@@ -144,7 +145,7 @@ public class BackboneWhenSteps {
     }
 
     private void awaitFreeRowsSent() {
-        List<Long> freeIds = ctx.get("outboxFreeIds");
+        List<Long> freeIds = ctx.get(ScenarioKeys.OUTBOX_FREE_IDS);
         for (Long freeId : freeIds) {
             Awaits.waitUntil(Duration.ofSeconds(20), "待送匣列 " + freeId + " 該被照常送出",
                     () -> "sent".equals(db.outboxStatus(freeId)));
@@ -158,13 +159,13 @@ public class BackboneWhenSteps {
 
     @When("^消費者從頭讀取 task-events topic$")
     public void readTaskEventsTopic() {
-        ctx.put("records", KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3)));
+        ctx.put(ScenarioKeys.TASK_EVENT_RECORDS, KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3)));
     }
 
     @When("^應用連線嘗試 UPDATE 或 DELETE task_events 的列$")
     public void appConnectionMutatesEvents() {
-        ctx.put("updateState", sqlStateOf(() -> db.app().update("UPDATE task_events SET type = type")));
-        ctx.put("deleteState", sqlStateOf(() -> db.app().update("DELETE FROM task_events")));
+        ctx.put(ScenarioKeys.UPDATE_STATE, sqlStateOf(() -> db.app().update("UPDATE task_events SET type = type")));
+        ctx.put(ScenarioKeys.DELETE_STATE, sqlStateOf(() -> db.app().update("DELETE FROM task_events")));
     }
 
     private String sqlStateOf(Runnable work) {

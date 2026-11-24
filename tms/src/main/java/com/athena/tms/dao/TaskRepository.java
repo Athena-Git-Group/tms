@@ -15,5 +15,5 @@ extends JpaRepository<Task, UUID> {
 
     public List<Task> findByTenantIdAndRoomIdOrderByCreatedAtDesc(Long var1, UUID var2);
 
-    public List<Task> findByTenantIdAndReservationIdOrderByCreatedAtDesc(Long var1, UUID var2);
+    public List<Task> findByTenantIdAndReservationIdOrderByCreatedAtDescIdDesc(Long var1, UUID var2);
 }

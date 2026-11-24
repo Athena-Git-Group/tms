@@ -145,8 +145,8 @@ public class OutboxRelay implements SmartLifecycle {
         if (pending.isEmpty()) {
             return;
         }
-        block0: for (List<PendingMessage> sameKey : OutboxRelay.groupByKeyKeepingOrder(pending).values()) {
-            for (PendingMessage message : sameKey) {
+        block0: for (List<PendingMessage> sameLane : OutboxRelay.groupByLaneKeepingOrder(pending).values()) {
+            for (PendingMessage message : sameLane) {
                 OffsetDateTime now = OffsetDateTime.now();
                 if (message.nextRetryAt() != null && message.nextRetryAt().isAfter(now)) continue block0;
                 ClaimResult claim = this.claim(tenantId, message);
@@ -161,7 +161,7 @@ public class OutboxRelay implements SmartLifecycle {
     }
 
     private List<PendingMessage> fetchPending(long tenantId) {
-        return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.jdbcTemplate.query("SELECT o.id, o.tenant_id, o.aggregate_key, o.kind, o.payload, o.idempotency_key, o.attempts, o.next_retry_at\n  FROM outbox o\n WHERE o.status = 'pending'\n   AND NOT EXISTS (\n       SELECT 1 FROM outbox f\n        WHERE f.aggregate_key = o.aggregate_key AND f.status = 'failed'\n   )\n ORDER BY o.aggregate_key, o.id\n", PENDING_MAPPER));
+        return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.jdbcTemplate.query("SELECT o.id, o.tenant_id, o.aggregate_key, o.kind, o.payload, o.idempotency_key, o.attempts, o.next_retry_at\n  FROM outbox o\n WHERE o.status = 'pending'\n   AND NOT EXISTS (\n       SELECT 1 FROM outbox f\n        WHERE f.kind = o.kind AND f.aggregate_key = o.aggregate_key AND f.status = 'failed'\n   )\n ORDER BY o.kind, o.aggregate_key, o.id\n", PENDING_MAPPER));
     }
 
     private ClaimResult claim(long tenantId, PendingMessage message) {
@@ -206,12 +206,19 @@ public class OutboxRelay implements SmartLifecycle {
         return this.backoffBase.multipliedBy(1L << Math.min(attempts - 1, 10));
     }
 
-    private static Map<String, List<PendingMessage>> groupByKeyKeepingOrder(List<PendingMessage> pending) {
-        LinkedHashMap<String, List<PendingMessage>> byKey = new LinkedHashMap<String, List<PendingMessage>>();
+    private static Map<Lane, List<PendingMessage>> groupByLaneKeepingOrder(List<PendingMessage> pending) {
+        LinkedHashMap<Lane, List<PendingMessage>> byLane = new LinkedHashMap<Lane, List<PendingMessage>>();
         for (PendingMessage message : pending) {
-            byKey.computeIfAbsent(message.aggregateKey(), key -> new ArrayList()).add(message);
+            byLane.computeIfAbsent(new Lane(message.kind(), message.aggregateKey()), lane -> new ArrayList()).add(message);
         }
-        return byKey;
+        return byLane;
+    }
+
+    /**
+     * 送出的排隊單位是 kind 加上 aggregate_key。同一隊一筆一筆照順序送，有一筆重試用完就整隊停送。
+     * 推播和單的事件即使 aggregate_key 相同也各排一隊，所以某一則推播送不出去時，那張單之後的事件照樣送出。
+     */
+    private record Lane(String kind, String aggregateKey) {
     }
 
     private record PendingMessage(long id, long tenantId, String aggregateKey, String kind, String payload, String idempotencyKey, int attempts, OffsetDateTime nextRetryAt) {

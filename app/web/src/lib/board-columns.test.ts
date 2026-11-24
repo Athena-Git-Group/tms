@@ -10,7 +10,6 @@ import {
 
 const ENDED_AT = '2026-10-19T05:00:00Z';
 
-/** 終點狀態的單後端一定記了結束時刻，`ended` 讓完成的單也能表達「完成當下就結束」。 */
 function task(state: TaskState, ended = false, overrides: Partial<DeskTask> = {}): DeskTask {
   const terminal = state === 'inspected' || state === 'closed' || state === 'cancelled';
   return {

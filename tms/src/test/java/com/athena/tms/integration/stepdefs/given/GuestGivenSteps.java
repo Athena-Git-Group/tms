@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.GuestFixtures;
 import com.athena.tms.service.GuestScanService;
@@ -40,7 +41,7 @@ public class GuestGivenSteps {
         Assertions.assertEquals(201, guest.createRequest(session, Map.of("itemId", "water")).status());
         ScenarioContext.HttpResult third = guest.createRequest(session, Map.of("itemId", "toothbrush"));
         Assertions.assertEquals(201, third.status(), "限流線內的第 3 筆該成功: " + third.body());
-        ctx.put("thirdResponse", third);
+        ctx.put(ScenarioKeys.THIRD_RESPONSE, third);
     }
 
     @Given("^新住客以 session \"([^\"]+)\" 送出需求 選單項「([^」]+)」$")
@@ -48,7 +49,7 @@ public class GuestGivenSteps {
         ScenarioContext.HttpResult created = guest.createRequest(
                 ctx.guestSession(sessionSymbol), Map.of("itemId", GuestFixtures.menuKeyOf(label)));
         Assertions.assertEquals(201, created.status(), "前置建單必須成功: " + created.body());
-        ctx.put("myTitle", label);
+        ctx.put(ScenarioKeys.MY_TITLE, label);
     }
 
     @Given("^同一 IP 在 10 分鐘內已有 10 次掃碼失敗$")
@@ -57,9 +58,9 @@ public class GuestGivenSteps {
         ListAppender<ILoggingEvent> alerts = new ListAppender<>();
         alerts.start();
         scanLogger.addAppender(alerts);
-        ctx.put("alertAppender", alerts);
+        ctx.put(ScenarioKeys.ALERT_APPENDER, alerts);
         String attackerIp = "203.0.113.66";
-        ctx.put("attackerIp", attackerIp);
+        ctx.put(ScenarioKeys.ATTACKER_IP, attackerIp);
         for (int attempt = 0; attempt < 10; attempt++) {
             Assertions.assertEquals(409, guest.scan("GuessedToken" + attempt + "xxxxxxxx", attackerIp).status(),
                     "猜測 token 的掃碼該 409");
@@ -69,7 +70,7 @@ public class GuestGivenSteps {
     @Given("^同一 IP 已有 (\\d+) 次掃碼失敗$")
     public void nScanFailuresFromSameIp(int failures) {
         String ip = "203.0.113.99";
-        ctx.put("attackerIp", ip);
+        ctx.put(ScenarioKeys.ATTACKER_IP, ip);
         for (int attempt = 0; attempt < failures; attempt++) {
             Assertions.assertEquals(409, guest.scan("tok-502-v1", ip).status());
         }

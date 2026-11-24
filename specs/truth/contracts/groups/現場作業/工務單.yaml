@@ -1,3 +1,26 @@
+listRepairCategories:
+  get:
+    operationId: listRepairCategories
+    summary: 列出工務單的類別與顯示名稱
+    description: >-
+      回傳每個類別的 code（RepairCategory 的值）與畫面顯示的中文名稱，依畫面該列出的順序排列。
+      推播文字裡的類別名稱用的也是這一份，畫面與測試照這裡顯示，不必自己維護對照表。
+      房務、工務、主管、櫃檯都可以呼叫。
+    tags:
+    - 工務單 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/工務單.yaml#/RepairCategoryOption'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
 createRepairPhoto:
   post:
     operationId: createRepairPhoto

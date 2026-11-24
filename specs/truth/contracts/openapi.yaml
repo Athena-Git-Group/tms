@@ -87,7 +87,7 @@ paths:
   /daily-stats/dashboard:
     $ref: './groups/營運管理/老闆儀表板.yaml#/statsDailyDashboard'
   /guest-sessions/scan:
-    $ref: './groups/住客與房間/住客掃碼.yaml#/guestSessionsScan'
+    $ref: './groups/住客與房間/住客掃碼.yaml#/openGuestSession'
   /guest-requests:
     $ref: './groups/住客與房間/住客掃碼.yaml#/listGuestRequestsAndcreateGuestRequest'
   /guest-requests/{id}/cancel:
@@ -180,6 +180,8 @@ paths:
     $ref: './groups/現場作業/任務.yaml#/tasksResume'
   /tasks/{id}/handover-read:
     $ref: './groups/現場作業/房間交辦.yaml#/markHandoverRead'
+  /repair-categories:
+    $ref: './groups/現場作業/工務單.yaml#/listRepairCategories'
   /repair-photos:
     $ref: './groups/現場作業/工務單.yaml#/createRepairPhoto'
   /repair-photos/{photoId}/content:
@@ -243,6 +245,13 @@ paths:
   /room-memories/escalations/{escalationId}/reply:
     $ref: './groups/知識與通知/房間記憶與問一下.yaml#/replyKbEscalation'
 components:
+  headers:
+    RateLimitLimit:
+      $ref: './components/headers.yaml#/RateLimitLimit'
+    RateLimitRemaining:
+      $ref: './components/headers.yaml#/RateLimitRemaining'
+    RateLimitReset:
+      $ref: './components/headers.yaml#/RateLimitReset'
   parameters:
     GuestSession:
       $ref: './components/parameters.yaml#/GuestSession'
@@ -411,6 +420,8 @@ components:
       $ref: './components/schemas/任務.yaml#/TaskCompletion'
     RepairCategory:
       $ref: './components/schemas/工務單.yaml#/RepairCategory'
+    RepairCategoryOption:
+      $ref: './components/schemas/工務單.yaml#/RepairCategoryOption'
     CreateRepairPhotoRequest:
       $ref: './components/schemas/工務單.yaml#/CreateRepairPhotoRequest'
     RepairPhoto:

@@ -2,7 +2,7 @@ package com.athena.tms.service;
 
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.DeskAnswerText;
-import com.athena.tms.common.SqlTimestamps;
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.codes.ErrorCode;
 import com.athena.tms.common.error.ApiException;
@@ -39,10 +39,6 @@ public class DeskBoardService {
     private static final Set<String> ACCEPT_EVENTS = Set.of("assigned", "claimed", "reassigned");
     private static final Duration UNDO_WINDOW = Duration.ofSeconds(10);
 
-    /**
-     * 看板範圍：還沒結束的單（不限日期），加上今天結束的單。接在 {@link #TASK_SELECT} 的 WHERE 後面，
-     * 兩個參數依序是今天與明天的 00:00。{@code TASK_SELECT} 以 inner join 接房間，沒有房間的單也因此不在看板上。
-     */
     private static final String ON_BOARD = " AND (t.ended_at IS NULL OR (t.ended_at >= ? AND t.ended_at < ?))";
 
     private static final String TASK_SELECT = """
@@ -143,13 +139,6 @@ public class DeskBoardService {
         return new DeskBoard(day.now(), day.date(), floors, tasks, this.myToday(tenantId, actor.staffId(), day.start(), day.end()));
     }
 
-    /**
-     * 這張單現在在櫃檯看板上的樣子，給員工事件串流帶給櫃檯角色的連線。
-     *
-     * <p>畫面拿它直接換掉看板上的那一張，所以卡片與看板範圍都要和 {@link #board()} 完全一致：
-     * 同一句查詢、同一段範圍條件、同一個「今天」。讀不到就是不在看板上，這時另外讀這張單目前的步數，
-     * 畫面才能判斷這則「拿掉」比自己手上的卡片新還是舊。單不存在時丟例外，由呼叫的一方決定不帶看板內容。
-     */
     public DeskBoardChange boardChange(long tenantId, UUID taskId) {
         BusinessDay day = BusinessDay.at(this.clock);
         List<Map<String, Object>> rows = this.taskRows(
@@ -162,10 +151,6 @@ public class DeskBoardService {
         return new DeskBoardChange.Remove(seq, day.date());
     }
 
-    /**
-     * 看板上的「今天」：注入的時鐘換成伺服器時區的日曆日期，半夜 00:00 換日。
-     * {@code start} 與 {@code end} 是今天與明天的 00:00，今天結束的單落在這兩者之間。
-     */
     private record BusinessDay(OffsetDateTime now, LocalDate date, OffsetDateTime start, OffsetDateTime end) {
         static BusinessDay at(Clock clock) {
             OffsetDateTime now = OffsetDateTime.now(clock);
@@ -200,7 +185,7 @@ public class DeskBoardService {
         all[0] = now;
         all[1] = now;
         System.arraycopy(params, 0, all, 2, params.length);
-        return this.jdbcTemplate.queryForList(TASK_SELECT + whereAndOrder, all);
+        return this.jdbcTemplate.query(TASK_SELECT + whereAndOrder, OffsetDateTimeColumnMapRowMapper.INSTANCE, all);
     }
 
     public DeskTaskDetail detail(UUID taskId) {
@@ -274,7 +259,7 @@ public class DeskBoardService {
     }
 
     private static void requireIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+        if (idempotencyKey.isBlank()) {
             throw new IdempotencyKeyRequired();
         }
     }
@@ -287,7 +272,7 @@ public class DeskBoardService {
     }
 
     private List<Map<String, Object>> eventRows(long tenantId, UUID taskId) {
-        return this.jdbcTemplate.queryForList(
+        return this.jdbcTemplate.query(
                 """
                 SELECT e.seq, e.created_at, e.type, e.actor_role, actor.name AS actor_name,
                        e.payload ->> 'dept' AS dept, e.payload ->> 'via' AS via, e.payload ->> 'answer' AS answer,
@@ -303,6 +288,7 @@ public class DeskBoardService {
                  WHERE e.tenant_id = ? AND e.task_id = ?
                  ORDER BY e.seq
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, taskId);
     }
 
@@ -324,7 +310,7 @@ public class DeskBoardService {
     }
 
     private LocalDate localDate(Object timestamp) {
-        OffsetDateTime at = SqlTimestamps.toOffsetDateTime(timestamp);
+        OffsetDateTime at = (OffsetDateTime) timestamp;
         return at == null ? null : at.atZoneSameInstant(this.clock.getZone()).toLocalDate();
     }
 
@@ -387,7 +373,7 @@ public class DeskBoardService {
         String type = (String) event.get("type");
         return new DeskTimelineEntry(
                 ((Number) event.get("seq")).intValue(),
-                SqlTimestamps.toOffsetDateTime(event.get("created_at")),
+                (OffsetDateTime) event.get("created_at"),
                 type,
                 actorOf((String) event.get("actor_role"), (String) event.get("actor_name"), task.guestName()),
                 timelineDetail(type, event, task, previousAssigneeName));
