@@ -100,7 +100,7 @@ start_web() {
   fi
   [[ -d "$REPO_ROOT/app/web/node_modules" ]] || { echo "[manual-env] app/web 還沒 npm install" >&2; exit 2; }
 
-  echo "[manual-env] 起網頁 :${WEB_PORT}，/api 與 /staff/stream 轉給 :${BACKEND_PORT}"
+  echo "[manual-env] 起網頁 :${WEB_PORT}，/api、/staff/stream 與 /guest 轉給 :${BACKEND_PORT}"
   (
     cd "$REPO_ROOT/app/web"
     # 沿用 vite.config.ts，只在啟動時蓋掉埠與代理目標，不改設定檔。
@@ -108,22 +108,26 @@ start_web() {
     nohup node --input-type=module -e "
 import { createServer } from 'vite';
 const target = process.env.MANUAL_BACKEND_ORIGIN;
+const streamProxy = {
+  target,
+  changeOrigin: true,
+  configure: (proxy) => {
+    proxy.on('proxyRes', (proxyRes, _req, res) => {
+      proxyRes.on('close', () => { if (!proxyRes.complete) res.destroy(); });
+    });
+  },
+};
 const server = await createServer({
   configFile: 'vite.config.ts',
   server: {
     port: Number(process.env.MANUAL_WEB_PORT),
     strictPort: true,
+    // vite 會把這裡和 vite.config.ts 的 proxy 合併；設定檔有的路徑沒在這裡蓋掉，就還是打 8080。
     proxy: {
       '/api': { target, changeOrigin: true },
-      '/staff/stream': {
-        target,
-        changeOrigin: true,
-        configure: (proxy) => {
-          proxy.on('proxyRes', (proxyRes, _req, res) => {
-            proxyRes.on('close', () => { if (!proxyRes.complete) res.destroy(); });
-          });
-        },
-      },
+      '/staff/stream': streamProxy,
+      '/guest/stream': streamProxy,
+      '/guest': { target, changeOrigin: true },
     },
   },
 });
