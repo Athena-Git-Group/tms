@@ -13,6 +13,7 @@
 <nav class="site" aria-label="交接手冊各頁">
   <a href="index.html" aria-current="page">總覽</a>
   <a href="setup.html">第一天</a>
+  <a href="test.html">本機手測</a>
   <a href="bdd.html">BDD 測試</a>
   <a href="mobile.html">Flutter App</a>
   <a href="backend.html">Java 後端</a>
@@ -152,10 +153,11 @@
 <section id="pages">
   <h2>各頁在講什麼、要讀多久？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>五頁各自獨立，每頁 10 分鐘內讀完；查表型的細節都收在可展開的區塊裡，需要時再打開。</p>
+    <p>六頁各自獨立，每頁 10 分鐘內讀完；查表型的細節都收在可展開的區塊裡，需要時再打開。</p>
   </div>
   <div class="cards">
     <a class="card" href="setup.html"><b>第一天</b><span>裝機清單、repo 地圖、三套環境與 port 總表。</span><small>約 8 分鐘</small></a>
+    <a class="card" href="test.html"><b>本機手測</b><span>起手動環境、掃房間 QR，從住客、櫃檯、員工 App、主管一路點回住客。</span><small>約 7 分鐘</small></a>
     <a class="card" href="bdd.html"><b>BDD 測試</b><span>規格怎麼變成三條可執行的驗收測試，每條怎麼跑、怎麼加場景。</span><small>約 10 分鐘</small></a>
     <a class="card" href="mobile.html"><b>Flutter App</b><span>三種殼一套程式、自刻的狀態與路由、網路層、推播、測試約定。</span><small>約 8 分鐘</small></a>
     <a class="card" href="backend.html"><b>Java 後端</b><span>版本與相依、模組、多飯店隔離、登入授權、資料庫遷移。</span><small>約 9 分鐘</small></a>
@@ -170,7 +172,7 @@
   </div>
   <ol class="top">
     <li><b>每條 Java 指令都要切到 JDK 25，後端測試還要帶 <code>-DargLine="-Dapi.version=1.44"</code>。</b>原機器 shell 預設是 17；那個參數是 OrbStack 上跑 Testcontainers 的唯一解法，沒寫進任何設定檔。<a href="setup.html#verify">怎麼確認環境通了</a></li>
-    <li><b>目前分支有一批未提交的修改，已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。</b>第一次跑出紅燈，先對照它再懷疑環境。</li>
+    <li><b>目前分支 <code>bugfix/main_engineering_pool_repair_ticket</code> 還沒合進 main，已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。</b>第一次跑出紅燈，先對照它再懷疑環境。</li>
     <li><b>App 與網頁驗收每個場景都會清空資料庫。</b>兩條線預設共用 8080／5433，不能同時跑；手動操作一律用 8083／<code>tms_manual</code>。<a href="setup.html#environments">三套環境</a></li>
     <li><b>既有的 Flyway 遷移檔一個字都不能改，連註解都不行。</b>改了後端就啟動失敗，要修只能新增更高版號的檔。<a href="backend.html#flyway">遷移規矩</a></li>
     <li><b>Android 正式版缺網路權限。</b><code>INTERNET</code> 只宣告在 debug 與 profile，release APK 會連不上網，是上線前最優先要修的一條。<a href="pitfalls.html#app-gaps">App 還沒補的洞</a></li>
