@@ -165,6 +165,17 @@ DeskTask:
       nullable: true
       allOf:
       - $ref: '#/DeskGuestText'
+    menuKey:
+      type: string
+      nullable: true
+      description: >-
+        這張單對應的品項鍵（tasks.note 的 menu_key），代開單面板的類似單提醒用它判斷「同一個品項」：兩張單的 menuKey 一字不差相等才算。
+        住客在掃碼頁勾選的單是那個選單項目的鍵；櫃檯代開的品項單（含開成工務單的工務品項）是 DeskMenuKey 的鍵；
+        住客打字、比對到帶品項鍵的分類規則的單是那條規則的品項鍵（派給工務、變成工務單之後照樣帶）。
+        給其他需求的代開單、沒有對應到品項的住客打字單、系統建的單與同仁報修的工務單為 null。
+        值不限於 DeskMenuKey 的 12 個：住客選單的項目（例如「衣架」「吹風機」或飯店自訂的項目）也會出現，畫面只拿它和 DeskMenuKey 比對。
+        看板讀取、單筆詳情、派單、復原、當場回答、代開單的回應與員工事件串流的卡片都帶它。
+      example: 毛巾
     assigneeId:
       type: string
       format: uuid
@@ -588,3 +599,158 @@ DeskAnswerRequest:
       minLength: 1
       maxLength: 120
       description: 給住客的回覆。後端先去掉頭尾空白，之後必須是 1–120 字，否則回 422 answer_invalid。存下來與住客看到的都是去掉空白後的字。
+DeskMenuKey:
+  type: string
+  description: >-
+    代開單的品項鍵：櫃檯代開單面板固定的 12 個常用品項，鍵就是中文品名，與住客選單（tenant_config 的 request_menu）的 key、
+    分類規則的 menu_key 是同一套值。這份清單寫在程式裡，不讀飯店設定；畫面照這 12 個鍵寫死，順序就是面板上的順序。
+    每個鍵開出的單：
+    毛巾、浴巾、礦泉水、拖鞋、牙刷組：房務（housekeeping、amenity），上限 9，標題「{品名} ×{數量}」。
+    嬰兒床、加床：房務（housekeeping、amenity），上限 2，標題「{品名} ×{數量}」。
+    冰塊：房務（housekeeping、amenity），上限 2，標題「冰塊 ×{數量} 桶」。
+    冷氣：工務單（engineering、repair），上限 1，標題「冷氣有問題」，修繕分類 air_conditioning。
+    熱水：工務單（engineering、repair），上限 1，標題「熱水有問題」，修繕分類 plumbing_electrical。
+    燈具：工務單（engineering、repair），上限 1，標題「燈具有問題」，修繕分類 plumbing_electrical。
+    電視：工務單（engineering、repair），上限 1，標題「電視有問題」，修繕分類 furniture_equipment。
+  enum:
+  - 毛巾
+  - 浴巾
+  - 礦泉水
+  - 拖鞋
+  - 牙刷組
+  - 嬰兒床
+  - 加床
+  - 冰塊
+  - 冷氣
+  - 熱水
+  - 燈具
+  - 電視
+DeskCreateRequestsRequest:
+  type: object
+  description: >-
+    一次代開送出的內容：房號、選了的品項與數量、選填的其他需求。至少要有一個品項或其他需求，否則回 422 validation_failed。
+    單的標題、部門、類型與修繕分類由後端依品項鍵決定，請求不帶；操作者從登入身分取。
+  required:
+  - roomNo
+  - items
+  properties:
+    roomNo:
+      type: string
+      minLength: 1
+      description: 房號，照飯店的寫法（例 305）。空白回 422 validation_failed；不是這家飯店的客房（含公共區域佔位房）回 404 not_found。
+      example: '305'
+    items:
+      type: array
+      maxItems: 12
+      items:
+        $ref: '#/DeskCreateRequestItem'
+      description: >-
+        選了的品項，只放數量大於 0 的；沒有選品項時是空陣列。同一個品項鍵只能出現一次（重複回 422）。
+        回應的卡片依 DeskMenuKey 的順序排，與這裡的順序無關。
+    other:
+      type: object
+      nullable: true
+      allOf:
+      - $ref: '#/DeskCreateRequestOther'
+      description: 其他需求；沒有填（或只打了空白）時不帶或帶 null，畫面不送只有空白的文字。
+DeskCreateRequestItem:
+  type: object
+  required:
+  - menuKey
+  - quantity
+  properties:
+    menuKey:
+      $ref: '#/DeskMenuKey'
+    quantity:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 9
+      description: 份數，1 到該品項的上限（見 DeskMenuKey：多數房務品項 9，嬰兒床、加床、冰塊 2，工務品項 1）。超過上限回 422 validation_failed。
+DeskCreateRequestOther:
+  type: object
+  required:
+  - text
+  - dept
+  properties:
+    text:
+      type: string
+      minLength: 1
+      maxLength: 60
+      description: >-
+        其他需求的文字，原文照存、不翻譯。後端先去掉頭尾空白，之後必須是 1–60 字，否則回 422 validation_failed；
+        去掉空白後的文字就是這張單的標題。
+      example: 住客明早 6 點要叫車
+    dept:
+      type: string
+      enum:
+      - housekeeping
+      - engineering
+      description: >-
+        這段要給哪個部門。housekeeping 開一般單（type=other、T- 單號）；engineering 開工務單（type=repair、W- 單號、修繕分類 other）。
+        給工務時文字只存在標題，工務單的說明（description）為空。
+DeskCreateRequestsResult:
+  type: object
+  description: 代開單成功（或回放）的回應。
+  required:
+  - serverTime
+  - tasks
+  properties:
+    serverTime:
+      type: string
+      format: date-time
+      description: >-
+        後端產生這份回應的時間，用途同 DeskBoard.serverTime。回放時是第一次執行時的時間，畫面不必用它重新校正時鐘。
+    tasks:
+      type: array
+      minItems: 1
+      maxItems: 13
+      items:
+        $ref: '#/DeskTask'
+      description: >-
+        這次開出的每一張單的看板卡片，形狀與看板讀取相同（含 menuKey、displayNo、waitingSince、seq）。
+        順序：品項依 DeskMenuKey 的順序，其他需求那一張在最後。張數等於品項數加上有沒有其他需求，最多 13 張。
+        每張的 state 為 pool、source 為 desk、沒有負責人、waitingSince 等於 createdAt。
+DeskRoom:
+  type: object
+  description: 代開單面板的一間客房。
+  required:
+  - roomNo
+  - occupied
+  properties:
+    roomNo:
+      type: string
+      description: 房號，照飯店的寫法（rooms.room_no）。
+      example: '305'
+    occupied:
+      type: boolean
+      description: 這間房現在有沒有在住的住客；等於 guest 不為 null。true 時出現住客卡、列入建議房號；false 時是空房提示。
+    guest:
+      type: object
+      nullable: true
+      allOf:
+      - $ref: '#/DeskRoomGuest'
+      description: 在住的住客；空房為 null。
+DeskRoomGuest:
+  type: object
+  description: 在住訂房的住客（認定方式見 listDeskRooms）。訂房資料沒有人數、入住時刻與語言，所以不帶。
+  required:
+  - vip
+  - checkinDate
+  - checkoutDate
+  properties:
+    name:
+      type: string
+      nullable: true
+      description: 住客姓名，照訂房資料原樣（含稱謂，例「王大明 先生」「Sato Yuki 様」）；訂房資料沒有姓名時為 null。
+    vip:
+      type: boolean
+      description: 是不是 VIP（訂房的屬性），與看板卡片的 DeskTask.vip 同一個來源。
+    checkinDate:
+      type: string
+      format: date
+      description: 入住日期（飯店當地日期，口徑同 DeskBoard.businessDate）。
+    checkoutDate:
+      type: string
+      format: date
+      description: 退房日期（飯店當地日期）。

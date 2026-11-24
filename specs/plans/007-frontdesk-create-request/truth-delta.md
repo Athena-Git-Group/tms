@@ -38,6 +38,27 @@
 
 ## /api-plan
 
+| 動作 | Truth 規格 | 改動摘要 | 原因 |
+| --- | --- | --- | --- |
+| ADD | `specs/truth/contracts/openapi.yaml` -> `POST /desk/requests`（`deskCreateRequests`，`groups/現場作業/櫃檯看板與派單.yaml`） | 新增櫃檯代開單：一個房號、品項鍵＋數量、選填其他需求（文字＋部門）；每品項一張、全部 `pool`、`desk`＋`desk_forward`、不經 `triage`；標題由後端依品項鍵組（繁中）；同一交易全有或全無；必帶 `Idempotency-Key`（缺回 400 `idempotency_key_required`），交易鎖＋交易內記冪等、同鍵並發第二個等第一個後回放、4xx 也記下、回放帶 `Idempotency-Replayed`；成功 201；錯誤 403 `forbidden`、404 `not_found`（房號不是客房，含公共區域佔位房，context 帶 `roomNo`）、422 `validation_failed`（details 逐項）、401 `unauthorized`；不算住客每房額度、不回 429。 | 介面 7；FR-011、FR-016、FR-017、FR-022、FR-023、FR-034 至 FR-040；research 決策 2、3、7。 |
+| ADD | `specs/truth/contracts/openapi.yaml` -> `GET /desk/rooms`（`listDeskRooms`） | 新增代開單面板的房間清單：每間客房房號、是否在住、在住住客（姓名、VIP、入住／退房日期）；排除公共區域佔位房；在住依訂房副本認定（與 `DeskTask.guestName` 同一規則），住期不重疊約束保證每間最多一位；三種櫃檯角色可讀。不重做 `listRooms`。 | 介面 8；FR-005、FR-025 至 FR-027；research 決策 5；ui-plan 待決 5（同房兩筆在住）由既有不重疊約束解決。 |
+| ADD | `specs/truth/contracts/components/schemas/櫃檯看板與派單.yaml` -> `DeskMenuKey` | 12 個代開品項鍵（中文品名）列舉，並寫明各鍵的部門、類型、上限、標題組法與工務品項的修繕分類；前端照抄。 | ui-plan「請在契約裡列出這 12 個鍵」；data-plan 的品項鍵決定。 |
+| ADD | `specs/truth/contracts/components/schemas/櫃檯看板與派單.yaml` -> `DeskCreateRequestsRequest`、`DeskCreateRequestItem`、`DeskCreateRequestOther`、`DeskCreateRequestsResult` | 代開單請求與回應形狀；回應為 `serverTime`＋這次開出的 `DeskTask` 陣列（1–13 張，品項依 `DeskMenuKey` 順序、其他需求在最後）；給工務的其他需求文字只在標題、工務單 description 為空。 | 介面 7；research 決策 7（回應帶卡片）；ui-plan 送出段。 |
+| ADD | `specs/truth/contracts/components/schemas/櫃檯看板與派單.yaml` -> `DeskRoom`、`DeskRoomGuest` | 房間清單的一間房與在住住客形狀（`guest.name` 可為 null，照訂房副本）。 | 介面 8。 |
+| MODIFY | `specs/truth/contracts/components/schemas/櫃檯看板與派單.yaml` -> `DeskTask.menuKey` | 看板卡片加可為 null 的品項鍵（讀 `tasks.note.menu_key`）；值不限 12 鍵（住客選單項目也會出現）。連帶出現在 `getDeskBoard`、`readDeskTask`（`DeskTaskDetail`）、`deskAssignTask`、`deskUndoAssign`、`deskAnswerTask`、`deskCreateRequests` 的回應與 `StaffStreamTask.card`。只增欄位，既有欄位不變。 | 介面 8；FR-030；research 決策 4。 |
+| MODIFY | `specs/truth/contracts/openapi.yaml` -> tags `櫃檯看板與派單 API`、`任務 API` | 描述補上房間清單讀取與代開單寫入（櫃檯寫入由三個變四個，都必帶冪等鍵）。 | FR-038。 |
+| MODIFY | `specs/truth/contracts/components/schemas/shared.yaml` -> `Error.description`（`idempotency_key_required` 與代開單錯誤） | `idempotency_key_required` 涵蓋四個櫃檯寫入；代開單不另立 code，沿用 `validation_failed`、`not_found`。 | FR-040 錯誤對照。 |
+| MODIFY | `specs/truth/contracts/groups/現場作業/工務單.yaml` -> `createRepairTicket` 描述；`components/schemas/工務單.yaml` -> `CreateRepairTicketRequest.description` | 只補說明、行為不變：寫明「照片必填、路徑②③依部門決定來源、角色放行（值班主管不能呼叫）」只屬於本端點；櫃檯轉單（`deskAssignTask`）與櫃檯代開（`deskCreateRequests`）是另兩條開工務單的路徑，共用取號、急件判定與推播步驟，但規則各自決定，避免兩個權威來源。 | 介面 9；research 決策 2（不放寬 `POST /repair-tickets`）；plan 風險 1。 |
+| MODIFY | `specs/truth/contracts/groups/住客與房間/住客掃碼.yaml` -> `createGuestRequest` 每房額度；`components/responses.yaml` -> `TooManyRequests` | 額度改為只數住客送的需求（`source=guest`）；櫃檯代開的單不算、不佔名額。另寫明勾選單與命中帶 `menu_key` 的規則時 note 記 `menu_key`。待 `refactor/main_comments_and_workarounds` 合併時，資料庫計數條件 `source IN ('guest', 'desk')` 要改成只數 `guest`（main 上的記憶體計數已只在住客送需求時呼叫）。 | 介面 10；FR-037、SC-011；research 決策 6。 |
+| MODIFY | `specs/truth/contracts/components/schemas/租戶設定.yaml` -> `tenant_config.value`、`tenant_configRequest.value` | 描述補上 `request_menu`、`classification_rules` 的值形狀指向新 schema。 | 介面 10；research 決策 4。 |
+| ADD | `specs/truth/contracts/components/schemas/租戶設定.yaml` -> `RequestMenuItem`、`ClassificationRule`（含選填 `menu_key`） | 兩個設定 JSON 值的形狀（欄位名照存放的 snake_case）；`ClassificationRule.menu_key` 選填，命中時寫進 `tasks.note.menu_key`、看板以 `DeskTask.menuKey` 帶出；沒填不影響分流，舊設定不必改。 | 介面 10；FR-030 第三種「住客打字但已對應到品項」；驗收例 220「冷氣不冷」。 |
+| NOOP | `specs/truth/contracts/groups/現場作業/員工事件串流.yaml` -> `staffStream`、`StaffStreamTask`；`components/schemas/shared.yaml` -> `PushPayload` | 已核對：代開每張單的 `created` 事件照既有規則送 task 訊號（櫃檯角色收全館＋卡片、房務工務收自己部門），推播沿用 `pool_new_request` 與急件推播；不新增訊號種類或推播事件。卡片因 `DeskTask.menuKey` 多一欄已記在上面。 | NFR-003；ui-plan 事件串流段。 |
+| NOOP | `specs/truth/contracts/groups/住客與房間/房間.yaml` -> `listRooms`、`readRooms`；`components/schemas/工務單.yaml` -> `RepairTicket`、`RepairCategory`；`components/parameters.yaml` -> `IdempotencyKey` | 已檢查：房間清單另開在 `/desk/**`，不動房況板端點；修繕分類五值不變；冪等鍵參數沿用。`RepairTicket`（工務單詳情）沒有 title 欄位，本輪不加（見下方風險）。 | 決策 5；spec「值域不動」。 |
+
+資料模型缺口（交 Wave 3 `/data-plan`）：無。契約用到的每一項在 `data-model.dbml` 都有來源（`rooms.room_no`、`reservations_cache` 的 `guest_name`／`attrs.vip`／`checkin_at`／`checkout_at`／`superseded_at`、`tasks.note.menu_key`、`classification_rules.menu_key`、`processed_ops` 交易內寫入、`repair_tickets` 櫃檯代開段）。
+
+風險（不改 truth，交後續）：工務 App 的工務單詳情頂部標題用 `description`，空的時候改顯示修繕分類名稱（`app/mobile/lib/features/ticket/ticket_detail_engineering.dart:222-228`），不讀單的標題；工務待認領、工務首頁與工務單列表顯示的是單的標題（`eng_pool_screen.dart:283`、`eng_home_screen.dart:342`、`core/widgets/tms_repair_ticket_row.dart:73`）。所以代開的工務單在列表上看得到「冷氣有問題」「浴室門卡住」，但點進詳情頂部只看到「冷氣」「其他」，給工務的其他需求原文在詳情裡看不到。`RepairTicket` 契約也沒有 title 欄位。本包範圍寫明「手機 App 畫面不改」，是否要讓詳情改讀標題，或讓代開時把原文也寫進 description，交使用者決定。
+
 ## /data-plan
 
 | 動作 | Truth 規格 | 改動摘要 | 原因 |

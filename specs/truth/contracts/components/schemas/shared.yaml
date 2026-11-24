@@ -36,7 +36,9 @@ Error:
     undo_expired（409，deskUndoAssign 送到時距離派出已超過 10 秒；畫面的復原按鈕只出現 5 秒，多的 5 秒留給網路延遲與重送，context 帶 roomNo、dept）；
     undo_unavailable（409，deskUndoAssign 的其他情形：派出之後這張單又發生了別的事，或它不是櫃檯派出的，context 帶 state、roomNo）；
     answer_invalid（422，deskAnswerTask 的回覆去掉頭尾空白後是空的或超過 120 字，context 帶 maxLength）；
-    idempotency_key_required（400，必須帶 Idempotency-Key 的寫入沒有帶，例如櫃檯的三個寫入、查房送出）；
+    idempotency_key_required（400，必須帶 Idempotency-Key 的寫入沒有帶，例如櫃檯的四個寫入（派單、復原、當場回答、代開單）、查房送出）；
+    deskCreateRequests（櫃檯代開單）不另立 code：內容不合規定一律 422 validation_failed（details 逐項列 field 與 issue），
+    房號不是這家飯店的客房回 404 not_found（context 帶 roomNo）；
     new_password_too_weak（422，新密碼不符合至少 8 碼、含英文字母、含數字，context.failedRules 列出沒過的規則
     min_length、letter_required、digit_required）。
     違反狀態機守衛時沿用 state_conflict（409）：工務單的驗收（通過或不通過）與查房送出撞到單已不在預期狀態
