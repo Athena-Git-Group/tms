@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
+import '../tms_semantics.dart';
 
 class TmsSquarePalette {
   const TmsSquarePalette({required this.background, required this.foreground});
@@ -110,11 +111,14 @@ class TmsRoomSquare extends StatelessWidget {
     required this.where,
     required this.label,
     required this.palette,
+    this.labelId,
   });
 
   final String where;
 
   final String label;
+
+  final String? labelId;
 
   final TmsSquarePalette palette;
 
@@ -151,14 +155,24 @@ class TmsRoomSquare extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 3),
-          Text(
-            label,
-            maxLines: 1,
-            softWrap: false,
-            style: TmsText.caption2.copyWith(color: palette.foreground),
+          _labelWithId(
+            Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              style: TmsText.caption2.copyWith(color: palette.foreground),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _labelWithId(Widget text) {
+    final id = labelId;
+    if (id == null) {
+      return text;
+    }
+    return TmsSemantics(id: id, child: text);
   }
 }

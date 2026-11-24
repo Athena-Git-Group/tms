@@ -244,7 +244,8 @@ class _EngineeringPoolListState extends State<EngineeringPoolList> {
     );
     final roomSquare = TmsRoomSquare(
       where: item.roomNo,
-      label: repairCategoryShortText(item.category),
+      label: repairCategoryShortText(item.repairCategory ?? 'other'),
+      labelId: '$itemId.category-label',
       palette: tmsRepairSquarePalette(isUrgent: item.urgent, isDone: false),
     );
 
