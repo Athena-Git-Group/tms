@@ -52,7 +52,8 @@ class DeptPoolDeptParamTest {
                 Mockito.mock(HandoverService.class),
                 Mockito.mock(NotificationService.class),
                 new ObjectMapper(),
-                Clock.systemUTC());
+                Clock.systemUTC(),
+                Mockito.mock(ManagerReviewSettings.class));
         TenantContext.set(TENANT_ID);
     }
 

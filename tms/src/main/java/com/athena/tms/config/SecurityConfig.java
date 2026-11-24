@@ -66,6 +66,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/guest-requests/**").hasRole("guest")
                         // 櫃檯畫面的端點（看板、詳情、派單、復原、當場回答、常用回覆）只給櫃檯、主管、值班主管，
                         // 要排在下面 GET /api/v1/** 前面，否則房務與工務會被那條放行讀到看板。
+                        .requestMatchers("/api/v1/desk/settings").hasAnyRole("manager", "duty_manager")
                         .requestMatchers("/api/v1/desk/**").hasAnyRole(RolePermissions.frontdeskWebRoles())
                         .requestMatchers(HttpMethod.POST, "/api/v1/desk-notes").hasAnyRole("frontdesk", "manager")
                         .requestMatchers(HttpMethod.POST, "/api/v1/repair-photos", "/api/v1/repair-tickets")

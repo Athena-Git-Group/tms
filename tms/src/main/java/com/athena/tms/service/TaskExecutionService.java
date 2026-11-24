@@ -54,6 +54,7 @@ public class TaskExecutionService {
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final ManagerReviewSettings managerReviewSettings;
 
     public TaskExecutionService(
             TaskEngine taskEngine,
@@ -64,7 +65,8 @@ public class TaskExecutionService {
             HandoverService handoverService,
             NotificationService notificationService,
             ObjectMapper objectMapper,
-            Clock clock) {
+            Clock clock,
+            ManagerReviewSettings managerReviewSettings) {
         this.taskEngine = taskEngine;
         this.jdbcTemplate = jdbcTemplate;
         this.pushOutboxWriter = pushOutboxWriter;
@@ -74,6 +76,7 @@ public class TaskExecutionService {
         this.notificationService = notificationService;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.managerReviewSettings = managerReviewSettings;
     }
 
     public Map<String, Object> detail(UUID taskId) {
@@ -216,10 +219,14 @@ public class TaskExecutionService {
         if (resolution.requiresPhotos()) {
             requireCompletionPhotos(tenantId, taskId, request);
         }
-        Map<String, Object> completedPayload = Map.of("resolutionType", resolution.code());
+        boolean verificationWaived = !resolution.closesOnComplete()
+                && !managerReviewSettings.repairVerificationRequired(tenantId);
+        Map<String, Object> completedPayload = verificationWaived
+                ? Map.of("resolutionType", resolution.code(), "verificationWaived", true)
+                : Map.of("resolutionType", resolution.code());
         Map<String, Object> detail = transition(tenantId, taskId, CurrentActor.require(),
-                (actorRef) -> taskEngine.complete(
-                        tenantId, taskId, actorRef, completedPayload, resolution.closesOnComplete()));
+                (actorRef) -> taskEngine.complete(tenantId, taskId, actorRef, completedPayload,
+                        resolution.closesOnComplete() || verificationWaived));
         repairService.resolveOnComplete(taskId, request.photoIds(), request.resolutionNote(), resolution);
         return withCompletionExtras(tenantId, CurrentActor.require(), task, detail);
     }
