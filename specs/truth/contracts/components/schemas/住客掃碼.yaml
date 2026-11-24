@@ -79,11 +79,14 @@ CreateGuestRequestRequest:
       description: 自由文字的語言，例如 en、ja。
 GuestRequest:
   type: object
-  description: 住客視角的需求。不含員工姓名等內部資訊。
+  description: >-
+    住客視角的需求。不含員工姓名等內部資訊。住客頁實際呼叫的 /guest/requests 回的欄位包含這裡全部欄位，
+    另外多 type、dept、rating 三欄（兩條路徑用同一個 GuestTaskView）。
   required:
   - id
   - title
   - state
+  - endedAt
   - createdAt
   properties:
     id:
@@ -102,9 +105,24 @@ GuestRequest:
       - doing
       - done
       - inspected
+      - closed
       - deferred
       - interrupted
       - cancelled
+      description: >-
+        任務的狀態，就是資料上的十個值。closed 只有工務單會出現：主管驗收通過、以不需處理結案，
+        或飯店不需要工務主管驗收時完修即結案。done 不一定代表結束，要配合 endedAt 看。
+    endedAt:
+      type: string
+      format: date-time
+      nullable: true
+      description: >-
+        這張需求走到終點的時間（tasks.ended_at）；還沒結束為 null。住客頁用它決定要不要顯示「已完成」，
+        規則與櫃檯看板分「已結案」欄相同：state 是 inspected、closed、cancelled，或 endedAt 有值，就是已經結束。
+        state 是 done 而 endedAt 是 null 的單還在等主管把關（打掃單等房務主管查房、工務單等主管驗收），
+        住客頁顯示「處理中」。備品、其他類的單與櫃檯當場回答的單完成當下就有值。
+        評分也看它：後端只收已經結束、state 是 done、inspected 或 closed 的需求的評分；
+        櫃檯當場回答的需求（answer 有值）住客頁不顯示評分卡，後端不另外擋。
     answer:
       type: string
       nullable: true

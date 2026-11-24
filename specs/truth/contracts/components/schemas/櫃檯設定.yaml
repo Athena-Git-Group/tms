@@ -1,0 +1,41 @@
+DeskSettings:
+  type: object
+  description: >-
+    飯店層級的兩個開關。true 是需要主管把關，也是飯店沒設定過時的值，
+    所以升級前就在用的飯店兩個開關都是 true，行為跟以前一樣。
+  required:
+  - inspectionRequired
+  - repairVerificationRequired
+  properties:
+    inspectionRequired:
+      type: boolean
+      description: >-
+        需要房務主管查房。true 時打掃單完成後轉 done 等房務主管查房，查房通過才結案並回寫 PMS 房況；
+        false 時之後才開工的打掃單完成即免查結案（state=inspected、inspection=waived），不回寫 PMS 房況。
+        開工當下鎖定到 tasks.inspection_waived，已經開工或已經在等查房的單照原本的設定走。
+        不分打掃種類，退房清潔與續住整理一起適用。
+        存在 tenant_config 的 inspection_waived_enabled，值相反：那一鍵沒設定或不是 true 時這裡是 true。
+    repairVerificationRequired:
+      type: boolean
+      description: >-
+        需要工務主管驗收。true 時工務單以 fixed、temporary、cannot_fix 完修後轉 done 等主管驗收；
+        false 時工務按完成就轉 closed 並寫入結束時間，不進待驗收，驗收人留空。
+        工務按完成那一刻才讀，所以還沒按完成的工務單都照當下的值走，已經在等驗收的單照常等主管驗收。
+        存在 tenant_config 的 repair_verification_required：那一鍵沒設定或不是 false 時這裡是 true。
+DeskSettingsPatch:
+  type: object
+  description: >-
+    只帶要改的開關，沒帶的維持原值。兩個開關至少要帶一個；帶了的值必須是 JSON 的 true 或 false，
+    null、字串 "true" 與數字都算格式不對。沒列在這裡的欄位不理會，也不算帶了開關。
+  anyOf:
+  - required:
+    - inspectionRequired
+  - required:
+    - repairVerificationRequired
+  properties:
+    inspectionRequired:
+      type: boolean
+      description: 需要房務主管查房。語意見 DeskSettings.inspectionRequired。
+    repairVerificationRequired:
+      type: boolean
+      description: 需要工務主管驗收。語意見 DeskSettings.repairVerificationRequired。

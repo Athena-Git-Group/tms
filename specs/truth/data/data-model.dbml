@@ -23,7 +23,7 @@ Table tenants {
 
 Table tenant_config {
   tenant_id  bigint      [not null, ref: > tenants.id]
-  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（本 plan 新增：免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]）|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）|completion_celebration_enabled（002 新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力。這一鍵只影響呈現，不影響 tasks 的任何欄位，也不影響「今天第幾單」與「完成後的接續去向」兩個衍生值的計算）|self_inspection_allowed（允許主管查自己清的房，值為 boolean，未設定時視為 true。true 時房務主管可以查自己清的房，查房送出與待查房清單都把它當一般的待查房，只有一位房務主管的飯店不必設定也查得到自己清的房；飯店設為 false 時清房者不能查自己清的房：查房送出回 403，自己清的房也不出現在自己的待查房清單與格數。這一鍵只管清房者與查房者是同一人這一條，沒有查房權限的角色不論設定如何都不能送出查房）']
+  key        text        [not null, note: '封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（免查房的打掃種類，值為打掃種類陣列，預設 ["stayover"]；後端不讀這一鍵，免查房看 inspection_waived_enabled）|inspection_waived_enabled（免查房開關，值為 boolean，未設定或不是 true 時視為需要查房。true 時打掃單開工當下把 tasks.inspection_waived 鎖成 true，不分打掃種類；櫃檯設定頁的「需要房務主管查房」是它的反向，由 PATCH /desk/settings 寫入）|repair_verification_required（需要工務主管驗收，值為 boolean，未設定或不是 false 時視為 true，所以沒設定過的飯店照舊要驗收。false 時工務以 fixed、temporary、cannot_fix 完修也直接 closed、寫 ended_at、不進待驗收；工務按完成那一刻才讀，不鎖在任務上。櫃檯設定頁的「需要工務主管驗收」，由 PATCH /desk/settings 寫入；V30 把這一鍵加進 CHECK）|pms.writeback.room_status|pms.provider|unclaimed_reminder_minutes（本輪新增：待認領未接提醒門檻，一般單與急件各自的提醒同仁／通知主管分鐘數，值如 {"cleaning":{"staffReminded":10,"managerNotified":20},"urgent":{"staffReminded":3,"managerNotified":8}}；取代已隨裁決 B 廢除的 sla_minutes_cleaning|sla_minutes_amenity|sla_minutes_other|escalation_step_minutes|escalation_chain_enabled）|notification_retention_days（本輪新增：通知中心保留天數，值為整數，預設 30；排程依此清除 notifications 逾期列，資料層預設，不是行為 truth）|completion_celebration_enabled（002 新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力。這一鍵只影響呈現，不影響 tasks 的任何欄位，也不影響「今天第幾單」與「完成後的接續去向」兩個衍生值的計算）|self_inspection_allowed（允許主管查自己清的房，值為 boolean，未設定時視為 true。true 時房務主管可以查自己清的房，查房送出與待查房清單都把它當一般的待查房，只有一位房務主管的飯店不必設定也查得到自己清的房；飯店設為 false 時清房者不能查自己清的房：查房送出回 403，自己清的房也不出現在自己的待查房清單與格數。這一鍵只管清房者與查房者是同一人這一條，沒有查房權限的角色不論設定如何都不能送出查房）']
   value      jsonb       [not null, note: '結構依 key 而異']
   updated_at timestamptz [not null]
   updated_by uuid        [note: '→ staff_accounts；設定變更要能追']
@@ -177,7 +177,7 @@ Table tasks {
   room_id        uuid        [not null]
   reservation_id uuid        [note: 'guest 來源必填；住客查詢一律以它過濾（不按房號）']
   dept           text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）。不變式：dept=engineering 的任務一律 type=repair，且恰好有一列 repair_tickets（task_id 相同；V29 之前就已結束的歷史任務除外）；會讓任務成為工務部門的只有建單（dept 直接是 engineering）與從待派單派給工務兩個動作，兩者都在同一交易開立工務單。住客的需求不會以 engineering 或 type=repair 建單（命中的部門是工務、或命中的類型是修繕，一律進 triage、type=other）']
-  state          text        [not null, note: 'CHECK 十值: triage|pool|accepted|doing|done|inspected|closed|deferred|interrupted|cancelled。closed（已結案）只有 type=repair 會出現：主管驗收通過，或完修結果為 no_action_needed 時完成當下直接進入；它與 cleaning 的 inspected 對稱，是工務單唯一的完成終點。type=repair 的 done 是「已完修、等主管驗收」，還沒結束']
+  state          text        [not null, note: 'CHECK 十值: triage|pool|accepted|doing|done|inspected|closed|deferred|interrupted|cancelled。closed（已結案）只有 type=repair 會出現：主管驗收通過，或完修結果為 no_action_needed、或飯店的 repair_verification_required 為 false 時完成當下直接進入；它與 cleaning 的 inspected 對稱，是工務單唯一的完成終點。type=repair 的 done 是「已完修、等主管驗收」，還沒結束']
   event_seq      int         [not null, default: 0, note: '事件取號器：守衛 UPDATE 同句 +1 RETURNING']
   assignee_id    uuid        [note: '池中為空']
   title          text        [not null]
@@ -186,11 +186,11 @@ Table tasks {
   est_min        int         [note: '排房帶入；credit 換算屬 Q1 未決']
   started_at     timestamptz [note: '第一次開工時間；查房退回或抽查退回時清空重計']
   done_at        timestamptz [note: '完成時間。實際分鐘不再用 done_at−started_at 推導，改看 worked_sec。工務單是最近一次完修的時間：驗收不通過退回重修時清空，再完修時重寫；驗收通過或以 no_action_needed 結案時保留']
-  ended_at       timestamptz [note: 'nullable。這張單走到終點的時間；還沒結束為 NULL。終點有四種：查房通過或免查結案（state=inspected）、取消（cancelled）、工務單結案（closed）、完成即結束的 done（type 為 amenity 或 other 的完成，以及當場回答）。由進入終點的那一句守衛 UPDATE 同句寫入，值等於那一筆事件的時間；是哪一種終點看 state（當場回答另看 answer）。cleaning 與 repair 的 done 還在等查房或驗收，不寫。抽查退回（inspected→accepted）時清空，其餘終點不會再離開。投影欄位，可由事件重放重建']
+  ended_at       timestamptz [note: 'nullable。這張單走到終點的時間；還沒結束為 NULL。終點有四種：查房通過或免查結案（state=inspected）、取消（cancelled）、工務單結案（closed）、完成即結束的 done（type 為 amenity 或 other 的完成，以及當場回答）。由進入終點的那一句守衛 UPDATE 同句寫入，值等於那一筆事件的時間；是哪一種終點看 state（當場回答另看 answer）。cleaning 與 repair 的 done 還在等查房或驗收，不寫。櫃檯看板的「已結案」欄與住客頁的「已完成」都用同一條規則判斷結束：state 是 inspected、closed、cancelled，或本欄有值（對應 contracts DeskTask.endedAt、GuestRequest.endedAt）。抽查退回（inspected→accepted）時清空，其餘終點不會再離開。投影欄位，可由事件重放重建']
   worked_sec     int         [not null, default: 0, note: '本 plan 新增。已結束的 doing 段落累計秒數，不含中斷期間。實際工時＝worked_sec（完成時）；已做時間＝worked_sec＋（doing 時 now−segment_started_at）。查房與抽查退回時歸零']
   segment_started_at timestamptz [note: '本 plan 新增。目前這段 doing 的開始時間，只在 doing 時有值；中斷時把這段併進 worked_sec 並清空']
   inspection     text        [note: '本 plan 新增。CHECK: passed|waived|failed；只有 cleaning 有值。查房全過為 passed，免查結案為 waived，查房或抽查退回為 failed。合格率只計 passed 與 failed']
-  inspection_waived boolean  [not null, default: false, note: '本 plan 新增。開工當下依 tenant_config.inspection_waived_cleaning_types 鎖定，之後設定變更不影響；退回重做時保留原鎖定值']
+  inspection_waived boolean  [not null, default: false, note: '開工當下依 tenant_config.inspection_waived_enabled 鎖定：開關為 true 且 type=cleaning 時為 true，其他一律 false，不分打掃種類。之後設定變更不影響這一次的完成；查房或抽查退回重做的單回到 accepted，重新開工時照那一刻的開關重寫本欄（TaskEngine.start 每次開工都重算）']
   hold_reason    text        [note: '本 plan 新增。停住原因：本人延後或中斷的原因（1–60 字）、「等工務：<類別>」、「工務已修好：<類別>」；離開 deferred 或 interrupted 時清空']
   deferred_by_self boolean   [not null, default: false, note: '本 plan 新增。state=deferred 時，true＝本人延後（保留 assignee，班末掃描退池）；false＝主管延後（無 assignee，隔日自動回池、可 undefer）']
   linked_repair_task_id uuid [note: '本 plan 新增。以中斷模式開立工務單時，原任務連結到那張工務單（→ tasks.id，type=repair）']
@@ -204,7 +204,7 @@ Table tasks {
   due_at         timestamptz [note: '自動化規則增補。系統準備工單的到期時間顯示（規則可設「建單後 N 分鐘到期」），與未接提醒／裁決 B 廢除的逾時升級鏈無關，純粹是準備工單自己的到期時刻標示']
   rule_hit       text        [note: '自動化規則增補。自動化規則命中的規則名；冪等鍵＝房號｜規則｜當地日期']
   redo_count     int         [not null, default: 0]
-  rating         int         [note: 'CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）']
+  rating         int         [note: 'CHECK 1–5；低分觸發老闆推播；一次性（假設 A5）。只在單已經結束時寫入：ended_at 有值，而且 state 是 done、inspected 或 closed，與住客頁顯示「已完成」同一條規則；等查房或等驗收的 done（ended_at 為 NULL）不收。櫃檯當場回答的單（answer 有值）後端不另外擋，住客頁不顯示評分卡']
   plan_id        uuid        [note: '打掃任務回鏈排房計畫']
   work_date      date        [note: '打掃必填（發佈抄自計畫日）——支撐一房一天約束與班末掃描']
   created_at     timestamptz [not null]
@@ -234,7 +234,9 @@ Table tasks {
   工務單（type=repair）的狀態轉移（由任務引擎守衛，非法回 409）：
     開單：房務報修、工務自開、櫃檯交辦、定期保養一律進 pool，一般件與急件都一樣，沒有主管審核；直開且帶 assigneeId 時直接 accepted（略過待認領）。
     pool→accepted（認領或指派）→doing→done：完修結果為 fixed、temporary、cannot_fix 時停在 done 等主管驗收。
-    doing→closed：完修結果為 no_action_needed 時，完成那一句守衛 UPDATE 直接寫 closed，不經 done（與免查房打掃 doing→inspected 同一種寫法）。
+    doing→closed：完修結果為 no_action_needed，或完成那一刻飯店的 tenant_config.repair_verification_required 為 false 時，完成那一句守衛 UPDATE 直接寫 closed 與 ended_at，
+      不經 done（與免查房打掃 doing→inspected 同一種寫法）。後者（完修結果是 fixed、temporary 或 cannot_fix）repair_tickets.verified_by／verified_at 留 NULL，completed 事件帶 verificationWaived=true；
+      追蹤單、房況與推播報修人照完修結果原樣處理。開關不鎖在任務上：開工時要驗收、完成前被關掉的單照樣直接結案；已經停在 done 的單不受開關影響，照常等驗收。
     done→closed：主管驗收通過，同一交易寫 repair_tickets.verified_by／verified_at，task_events.type=repair_verified。
     done→accepted：主管驗收不通過且原處理人在班，assignee_id 不變。
     done→pool：主管驗收不通過且原處理人已下班或請假，assignee_id 清空、pool_source=verification_return、return_reason 記「驗收不通過 · 原處理人已下班或請假」。
@@ -265,7 +267,7 @@ Table tasks {
       因為抽查退回重做的單在重做完成後可能還留著上一次的 failed。排序鍵＝done_at，即最近一次完成的時間（退回重做後再完成會重寫）。
     待驗收＝type=repair 且 state=done 且 repair_tickets.resolution_type IS DISTINCT FROM 'no_action_needed'。對所有主管是同一份，
       不排除查看者本人完修的單（工務主管可以驗收自己修的單）。含完修結果為 fixed、temporary、cannot_fix 的單與 origin=scheduled 的保養單。
-      no_action_needed 完成時直接落在 closed，本來就不會停在 done；條件仍排除它，防止狀態寫入有落差時誤列。用 IS DISTINCT FROM 而不是 <>，
+      no_action_needed 與飯店不需要工務主管驗收時的完成都直接落在 closed，本來就不會停在 done；條件仍排除它，防止狀態寫入有落差時誤列。用 IS DISTINCT FROM 而不是 <>，
       讓 resolution_type 為 NULL 的舊完修單照樣列入。不看 verified_at：驗收通過即離開 done。維修中（doing）、退回重修中（accepted 或 pool）、
       已結案（closed）都不在內。排序鍵＝done_at，即最近一次完修的時間；退回重修後再完修會重寫，依新的完修時間排位置。
     篩選走既有索引 (tenant_id, dept, state)（待查房 dept=housekeeping、待驗收 dept=engineering），再以 type 與 assignee_id 過濾；
@@ -316,7 +318,7 @@ Table task_events {
   type       text        [not null, note: '25 值: created|triaged|assigned|claimed|started|completed|inspection_passed|inspection_failed|reassigned|returned_to_pool|interrupted|deferred|answered|rated|sop_checked|plan_adjusted|checkout_imported|cancelled|resumed|inspection_waived|repair_photos_appended|urgent_downgraded|repair_verified|repair_verification_failed|triage_undone。triage_undone＝櫃檯在派出後復原（pool→triage），只接在 triaged 之後（唯一例外是 V29 由 system 寫的退回待派單，見 tasks Note）；urgent_downgraded＝主管將工務單急件降級為一般件；repair_verified＝主管驗收通過（done→closed）；repair_verification_failed＝主管驗收不通過（done→accepted 或 pool）；後三者只適用 type=repair。資料庫不對本欄設 CHECK（加值不改表），值集以這裡為準。repair_approved、repair_rejected、repair_resubmitted 已停用，不再寫入，歷史列的讀法見表 Note']
   actor_role text        [not null, note: 'CHECK: guest|frontdesk|housekeeping|engineering|manager|duty_manager|system。記操作者當下的 staff_accounts.role；值班主管在櫃檯畫面派單、復原、當場回答時記 duty_manager，不借用 manager']
   actor_id   uuid        [note: '住客與系統為空']
-  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照，含 task_no）；triaged 帶 dept（派去的部門 housekeeping｜engineering）與 via（button｜drag；沒有這個鍵的舊列視為 button），dept=engineering 時另帶 former_type 與 former_urgent（派單前的 type 與 urgent，復原時還原）；triage_undone 帶 dept（被收回的部門），V29 由 system 寫的那筆另帶 type、task_no 與 reason=guest_not_direct_backfill；answered 帶 answer（回覆全文，即 tasks.answer）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）；repair_verification_failed 帶 reason（不通過原因，即 repair_tickets.last_verify_failed_reason）與 destination（assignee＝回原處理人名下｜pool＝回工務待認領），另帶 assigneeId（原處理人，兩種去處都帶，pool 時是重放還原「推播給誰、退的是誰的單」的唯一來源）；repair_verified 不帶 payload；type=repair 的 completed 必帶 resolutionType（fixed｜temporary｜cannot_fix｜no_action_needed，請求省略時寫 fixed，即 repair_tickets.resolution_type），no_action_needed 時這一筆 completed 就是結案事件（state 直接成為 closed），不另寫 repair_verified，temporary 時另帶 originTicketTaskId（新建追蹤單的 task_id，即 repair_tickets.origin_ticket_task_id 的對方）；打掃類 completed 帶 skipped_items（完成時被自動標為跳過的 SOP 項目標籤）']
+  payload    jsonb       [note: '會改 tasks 欄位的事件必填帶齊（created 帶建立快照，含 task_no）；triaged 帶 dept（派去的部門 housekeeping｜engineering）與 via（button｜drag；沒有這個鍵的舊列視為 button），dept=engineering 時另帶 former_type 與 former_urgent（派單前的 type 與 urgent，復原時還原）；triage_undone 帶 dept（被收回的部門），V29 由 system 寫的那筆另帶 type、task_no 與 reason=guest_not_direct_backfill；answered 帶 answer（回覆全文，即 tasks.answer）；cancelled 帶原因 guest_withdrew|manager_void|plan_superseded|staff_withdrew；deferred 與 interrupted 帶 reason 與 by_self；inspection_failed 帶 spot_check（抽查時為 true）；工務單 created 與 repair_photos_appended 只帶照片張數 photo_count，不含照片本體（NFR-004）；urgent_downgraded 帶 downgradeReason（主管附的降級原因，即 repair_tickets.urgent_downgrade_reason）；repair_verification_failed 帶 reason（不通過原因，即 repair_tickets.last_verify_failed_reason）與 destination（assignee＝回原處理人名下｜pool＝回工務待認領），另帶 assigneeId（原處理人，兩種去處都帶，pool 時是重放還原「推播給誰、退的是誰的單」的唯一來源）；repair_verified 不帶 payload；type=repair 的 completed 必帶 resolutionType（fixed｜temporary｜cannot_fix｜no_action_needed，請求省略時寫 fixed，即 repair_tickets.resolution_type），no_action_needed 時這一筆 completed 就是結案事件（state 直接成為 closed），不另寫 repair_verified；以 fixed、temporary 或 cannot_fix 完修，而完成那一刻飯店不需要工務主管驗收（tenant_config.repair_verification_required 為 false）時另帶 verificationWaived=true（no_action_needed 不帶，它本來就直接結案），這一筆 completed 同樣是結案事件，不另寫 repair_verified，重放時依它把 state 設為 closed，temporary 時另帶 originTicketTaskId（新建追蹤單的 task_id，即 repair_tickets.origin_ticket_task_id 的對方）；打掃類 completed 帶 skipped_items（完成時被自動標為跳過的 SOP 項目標籤）']
   created_at timestamptz [not null]
   Indexes {
     (tenant_id, task_id, seq) [unique]
@@ -642,7 +644,7 @@ Table repair_tickets {
   is_urgent       boolean     [not null, default: false, note: '本輪新增。目前是否仍視為急件；開單當下由系統依飯店設定規則判定寫入，房務不能更改，主管降級時轉為 false。與 tasks.urgent 同步（建單與降級時一併寫入），供待認領排序索引直接用 tasks.urgent 不需 JOIN 本表。對應 contracts RepairTicketSummary.isUrgent']
   urgent_rule     text        [note: '本輪新增，nullable。開單當下系統判定命中的規則說明（如「VIP · 15:00 入住」）；判定為一般件時為 NULL。主管降級後仍保留，供追溯原始判定理由。對應 contracts RepairTicket.urgentJudgement.rule']
   urgent_downgrade_reason text [note: '本輪新增，nullable。主管將急件降級為一般件時附的原因；未降級為 NULL。寫入時同一交易補一筆 task_events.type=urgent_downgraded。對應 contracts RepairTicket.urgentDowngradeReason']
-  verified_by     uuid        [note: 'nullable。驗收通過的主管 staff_accounts.id（房務主管或工務主管皆可，含驗收自己完修的單），與 tasks done→closed 同一交易寫入，寫入後不改。尚未通過、或以 no_action_needed 結案（不經驗收）為 NULL。對應 contracts RepairTicket.verifiedBy（顯示名稱由 JOIN staff_accounts 取得）']
+  verified_by     uuid        [note: 'nullable。驗收通過的主管 staff_accounts.id（房務主管或工務主管皆可，含驗收自己完修的單），與 tasks done→closed 同一交易寫入，寫入後不改。尚未通過、以 no_action_needed 結案，或完成那一刻飯店不需要工務主管驗收而直接結案（都不經驗收）為 NULL。對應 contracts RepairTicket.verifiedBy（顯示名稱由 JOIN staff_accounts 取得）']
   verified_at     timestamptz [note: 'nullable。驗收通過的時間，規則同 verified_by。對應 contracts RepairTicket.verifiedAt']
   last_verify_failed_reason text [note: 'nullable。最近一次驗收不通過的原因，去掉頭尾空白後不得為空（空白由 API 擋下回 422，不進狀態轉移）；從沒被判不通過為 NULL。每次不通過覆寫上一次；重修、再完修、驗收通過都不清空，所以退回重修中、再次待驗收與已結案的詳情都讀得到最近一次的判定。歷次紀錄在 task_events.type=repair_verification_failed。PII 去識別化範圍']
   last_verify_failed_by     uuid [note: 'nullable。最近一次判不通過的主管 staff_accounts.id。與 last_verify_failed_reason、last_verify_failed_at 三欄同一句 UPDATE 寫入，三欄同為 NULL 或同有值。顯示名稱由 JOIN staff_accounts 取得']
@@ -655,7 +657,7 @@ Table repair_tickets {
     (tenant_id, room_id, category) [note: '重複單檢查：同房同類別，再 JOIN tasks 過濾 state NOT IN (done, closed, cancelled)']
   }
   Note: '''
-  工務單（FR-011–021）。狀態與負責人一律看 tasks（轉移全集見 tasks Note）：pool→accepted→doing→done→closed；doing→closed（no_action_needed）；
+  工務單（FR-011–021）。狀態與負責人一律看 tasks（轉移全集見 tasks Note）：pool→accepted→doing→done→closed；doing→closed（no_action_needed，或飯店不需要工務主管驗收）；
   done→accepted 或 pool（驗收不通過）；pool→cancelled（staff_withdrew）。
   送出時與原任務的中斷、照片綁定在同一交易：所有照片 status=uploaded 才能建立，否則整筆不落地，原任務也不變（FR-014）。
   急件改由系統判定（使用者裁決 C）：開單交易同時寫入 is_urgent／urgent_rule 與 tasks.urgent；急件推播的防重複鍵以工務單為單位（repair_urgent:{ticket_no}:{收件人}），櫃檯派給工務、復原、再派開出的新工務單是另一張，判定為急件時照常推播；主管降級（downgradeRepairTicketUrgency）只改 is_urgent 與 urgent_downgrade_reason，urgent_rule 保留原判定理由不變。
@@ -676,6 +678,8 @@ Table repair_tickets {
   清單與詳情直接讀欄位，不逐單翻 task_events 的 JSON），同時 task_events.completed 的 payload 也必帶同一值，欄位是投影、事件是真相，兩者由同一交易寫入。
     fixed（預設，無額外動作）；temporary（暫時處理）：同一交易自動建立一張房號、類別都相同的新 repair_tickets 列（origin_ticket_task_id 指回本單），走一般開單去向；
     cannot_fix（無法修復）：tasks.room_id 對應的 rooms.hk_state 轉 out_of_order；以上三種停在 done 等驗收，每次完修這次請求至少要帶 1 張完修照片。
+      飯店的 tenant_config.repair_verification_required 為 false 時，以上三種改成同一交易直接 closed、寫 ended_at，不進待驗收，verified_by／verified_at 留 NULL，
+      completed 帶 verificationWaived=true；追蹤單、房況與照片的規則不變。
     no_action_needed（不需處理）：不要求完修照片、不建追蹤單、不改房況，同一交易 tasks 直接 closed，不進待驗收。
     四種都照常推播報修人（repair_completed），原任務的停住原因同樣改成工務已處理、可以恢復。
     退回重修後再完修，以這一次的結果為準：temporary 會再建一張追蹤單、cannot_fix 會再把房轉 out_of_order。

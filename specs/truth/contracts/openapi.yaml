@@ -65,6 +65,10 @@ tags:
     櫃檯 Web 專用，路徑都在 /desk 底下，只有 frontdesk、manager、duty_manager 可以呼叫。
     讀取：全館看板（含待派單、樓層、本人今日張數、後端時間）、單筆詳情與歷程、當場回答的常用回覆。
     寫入：把待派單的單派給房務或工務、派出後復原、當場回答並結案；三個寫入都必須帶 Idempotency-Key。
+- name: 櫃檯設定 API
+  description: >-
+    櫃檯 Web 設定頁用，路徑是 /desk/settings。飯店層級的兩個開關：需要房務主管查房、需要工務主管驗收，
+    沒設定過時都是開。只有 manager 與 duty_manager 可以讀寫，frontdesk 回 403。
 - name: 員工事件串流 API
   description: >-
     伺服器推送的長連線，只送「哪一張單有變化」的訊號。櫃檯、主管、值班主管收全館，房務與工務收自己部門與自己名下的單；
@@ -228,6 +232,8 @@ paths:
     $ref: './groups/現場作業/櫃檯看板與派單.yaml#/deskUndoAssign'
   /desk/tasks/{id}/answer:
     $ref: './groups/現場作業/櫃檯看板與派單.yaml#/deskAnswerTask'
+  /desk/settings:
+    $ref: './groups/營運管理/櫃檯設定.yaml#/getDeskSettingsAndpatchDeskSettings'
   /staff/stream:
     $ref: './groups/現場作業/員工事件串流.yaml#/staffStream'
   /inspections/spot-checks:
@@ -520,6 +526,10 @@ components:
       $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskAssignRequest'
     DeskAnswerRequest:
       $ref: './components/schemas/櫃檯看板與派單.yaml#/DeskAnswerRequest'
+    DeskSettings:
+      $ref: './components/schemas/櫃檯設定.yaml#/DeskSettings'
+    DeskSettingsPatch:
+      $ref: './components/schemas/櫃檯設定.yaml#/DeskSettingsPatch'
     StaffStreamInit:
       $ref: './components/schemas/員工事件串流.yaml#/StaffStreamInit'
     StaffStreamResync:
