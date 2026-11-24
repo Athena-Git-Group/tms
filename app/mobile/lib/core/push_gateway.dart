@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
@@ -9,12 +10,51 @@ import '../features/shell/main_shell.dart';
 import '../features/task/task_screen.dart';
 import '../features/ticket/ticket_screen.dart';
 
+const MethodChannel pushChannel = MethodChannel('com.athena.tms/push');
+
+/// 冷啟動時「點了哪則推播把 App 打開」的來源。
+abstract interface class InitialPushSource {
+  Future<Map<String, dynamic>?> takeInitialPush();
+
+  /// 只有 iOS 的 AppDelegate 註冊了 `getInitialPush`。Android 的冷啟動推播
+  /// 由 firebase_messaging 的 `getInitialMessage` 交給 `PushTokenService`，
+  /// 原生側沒有這個 channel，所以不去問。
+  factory InitialPushSource.forPlatform() =>
+      defaultTargetPlatform == TargetPlatform.iOS
+          ? const IosInitialPushChannel()
+          : const NoInitialPushSource();
+}
+
+class IosInitialPushChannel implements InitialPushSource {
+  const IosInitialPushChannel();
+
+  @override
+  Future<Map<String, dynamic>?> takeInitialPush() async {
+    final result = await pushChannel.invokeMethod<Object?>('getInitialPush');
+    return result == null ? null : _asStringKeyedMap(result);
+  }
+}
+
+class NoInitialPushSource implements InitialPushSource {
+  const NoInitialPushSource();
+
+  @override
+  Future<Map<String, dynamic>?> takeInitialPush() async => null;
+}
+
+Map<String, dynamic> _asStringKeyedMap(Object? value) {
+  if (value is Map) {
+    return value.map((key, v) => MapEntry(key.toString(), v));
+  }
+  return <String, dynamic>{};
+}
+
 class PushGateway {
   PushGateway._();
 
   static final PushGateway instance = PushGateway._();
 
-  static const MethodChannel _channel = MethodChannel('com.athena.tms/push');
+  InitialPushSource initialPushSource = InitialPushSource.forPlatform();
 
   static const Duration _duplicateWindow = Duration(seconds: 5);
 
@@ -29,7 +69,7 @@ class PushGateway {
       return;
     }
     _channelHandlerRegistered = true;
-    _channel.setMethodCallHandler((call) async {
+    pushChannel.setMethodCallHandler((call) async {
       if (call.method == 'onPushOpened') {
         await handlePushPayload(_asStringKeyedMap(call.arguments));
       }
@@ -37,16 +77,11 @@ class PushGateway {
   }
 
   Future<void> consumeInitialPush() async {
-    try {
-      final result = await _channel.invokeMethod<Object?>('getInitialPush');
-      if (result == null) {
-        return;
-      }
-      await handlePushPayload(_asStringKeyedMap(result));
-    } on MissingPluginException {
-      // 沒有待開啟的推播，直接略過。原生側沒有註冊這個 channel 時會丟
-      // MissingPluginException，例如在 widget test 裡。
+    final payload = await initialPushSource.takeInitialPush();
+    if (payload == null) {
+      return;
     }
+    await handlePushPayload(payload);
   }
 
   Future<void> handleRemoteMessageData(Map<String, dynamic> data) {
@@ -165,12 +200,5 @@ class PushGateway {
       return;
     }
     await PoolDeptPreference.write(dept!);
-  }
-
-  Map<String, dynamic> _asStringKeyedMap(Object? value) {
-    if (value is Map) {
-      return value.map((key, v) => MapEntry(key.toString(), v));
-    }
-    return <String, dynamic>{};
   }
 }

@@ -2,9 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract final class PoolDeptPreference {
-  /// 這個鍵名不能隨意更改，因為端對端測試會直接讀寫它。shared_preferences
-  /// 在 iOS 上把它存成 `NSUserDefaults` 的 `flutter.pool.dept`，測試用
-  /// `simctl spawn defaults` 讀寫的就是這個名字。
   static const String key = 'pool.dept';
 
   static const String housekeeping = 'housekeeping';

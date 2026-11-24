@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
@@ -73,6 +74,64 @@ void main() {
     expect(find.text('305 · 打掃任務'), findsOneWidget);
 
     handle.dispose();
+  });
+
+  test('只有 iOS 向原生 channel 要冷啟動推播；Android 交給 FCM getInitialMessage', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    expect(InitialPushSource.forPlatform(), isA<IosInitialPushChannel>());
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    expect(InitialPushSource.forPlatform(), isA<NoInitialPushSource>());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  test('iOS channel 的 getInitialPush 回傳值轉成字串鍵的 payload', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(pushChannel, (call) async {
+      expect(call.method, 'getInitialPush');
+      return {'dest': 'task', 'room': '305'};
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(pushChannel, null));
+
+    expect(
+      await const IosInitialPushChannel().takeInitialPush(),
+      {'dest': 'task', 'room': '305'},
+    );
+  });
+
+  testWidgets('冷啟動推播 dest=task room=305 由 consumeInitialPush 導到任務頁', (tester) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    PushGateway.instance.attach(navigatorKey);
+    final original = PushGateway.instance.initialPushSource;
+    PushGateway.instance.initialPushSource =
+        _FakeInitialPushSource({'dest': 'task', 'room': '305'});
+    addTearDown(() => PushGateway.instance.initialPushSource = original);
+
+    ApiClient.instance = _FakeApiClient(
+      pool: [_poolItem(taskId: 'task-305', roomNo: '305', title: '退房清潔')],
+      tasksById: {
+        'task-305': const TaskDetail(
+          id: 'task-305',
+          state: 'doing',
+          roomNo: '305',
+          title: '退房清潔',
+        ),
+      },
+    );
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        navigatorKey: navigatorKey,
+        home: const MyTodayScope(child: HomeScreen()),
+      ),
+    );
+    await tester.pump();
+
+    PushGateway.instance.consumeInitialPush();
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier('task.screen'), findsOneWidget);
   });
 
   testWidgets('push payload dest=ticket taskId 把 App 導到工務單詳情，不是任務頁', (tester) async {
@@ -308,5 +367,18 @@ class _FakeApiClient extends ApiClient {
       throw const ApiException(statusCode: 404, body: '');
     }
     return ticket;
+  }
+}
+
+class _FakeInitialPushSource implements InitialPushSource {
+  _FakeInitialPushSource(this._payload);
+
+  Map<String, dynamic>? _payload;
+
+  @override
+  Future<Map<String, dynamic>?> takeInitialPush() async {
+    final payload = _payload;
+    _payload = null;
+    return payload;
   }
 }

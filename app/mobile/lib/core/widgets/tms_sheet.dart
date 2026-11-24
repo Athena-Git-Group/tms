@@ -3,18 +3,22 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 
 import '../theme.dart';
+import '../tms_semantics.dart';
 import 'tms_glass.dart';
 import 'tms_motion.dart';
 import 'tms_pill_button.dart';
 
 enum TmsSheetLeading {
-  close(CupertinoIcons.xmark, 15, '關閉'),
+  close(CupertinoIcons.xmark, 15, '關閉', 'sheet.close-button'),
 
-  back(CupertinoIcons.chevron_back, 18, '返回');
+  back(CupertinoIcons.chevron_back, 18, '返回', 'sheet.back-button');
 
-  const TmsSheetLeading(this.icon, this.iconSize, this.label);
+  const TmsSheetLeading(this.icon, this.iconSize, this.label, this.semanticsId);
 
   final IconData icon;
+
+  /// 給自動化測試找這顆鈕用的 accessibility identifier。
+  final String semanticsId;
 
   final double iconSize;
 
@@ -223,6 +227,13 @@ class TmsSheet extends StatelessWidget {
   }
 
   Widget _leadingButton(VoidCallback onTap) {
+    return TmsSemantics(
+      id: leading.semanticsId,
+      child: _leadingButtonBody(onTap),
+    );
+  }
+
+  Widget _leadingButtonBody(VoidCallback onTap) {
     return SizedBox(
       width: TmsSize.minTouchTarget,
       height: TmsSize.minTouchTarget,

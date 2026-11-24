@@ -21,8 +21,6 @@ class CelebrateScreen extends StatelessWidget {
     this.onNextStep,
   });
 
-  /// 這張卡是疊在頁面上的覆蓋層，不是路由，所以不會自己關閉，離開時由放上它的
-  /// 那一頁處理。
   final VoidCallback onBackHome;
 
   final bool celebrationEnabled;
