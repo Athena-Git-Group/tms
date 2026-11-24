@@ -16,11 +16,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -50,14 +50,18 @@ public class GuestController {
     }
 
     @PostMapping(value={"/guest/requests"})
-    @ResponseStatus(value=HttpStatus.CREATED)
-    public GuestTaskView createRequest(@RequestBody GuestRequestCreate request) {
-        return this.requestService.create(request);
+    public ResponseEntity<GuestTaskView> createRequest(@RequestBody GuestRequestCreate request) {
+        GuestTaskView created = this.requestService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .headers(GuestRequestQuotaHeaders.of(this.requestService.quota()))
+                .body(created);
     }
 
     @GetMapping(value={"/guest/requests"})
-    public List<GuestTaskView> listRequests() {
-        return this.requestService.list();
+    public ResponseEntity<List<GuestTaskView>> listRequests() {
+        return ResponseEntity.ok()
+                .headers(GuestRequestQuotaHeaders.of(this.requestService.quota()))
+                .body(this.requestService.list());
     }
 
     @PostMapping(value={"/guest/requests/{taskId}/cancel"})

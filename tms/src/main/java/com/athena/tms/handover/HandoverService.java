@@ -1,7 +1,7 @@
 package com.athena.tms.handover;
 
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.common.CurrentActor;
-import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.UuidV7;
 import com.athena.tms.common.error.NotFoundException;
@@ -95,7 +95,7 @@ public class HandoverService {
 
         List<Map<String, Object>> entries = new ArrayList<>();
 
-        for (Map<String, Object> row : jdbcTemplate.queryForList(
+        for (Map<String, Object> row : jdbcTemplate.query(
                 """
                 SELECT h.created_at, item ->> 'authorName' AS author, item ->> 'content' AS content
                   FROM handovers h
@@ -103,11 +103,12 @@ public class HandoverService {
                  WHERE h.tenant_id = ? AND h.dept = ? AND item ->> 'target' = ?
                  ORDER BY h.created_at
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, dept, roomNo)) {
             entries.add(entry("shift_handover", row.get("author"), row.get("created_at"), row.get("content")));
         }
 
-        for (Map<String, Object> row : jdbcTemplate.queryForList(
+        for (Map<String, Object> row : jdbcTemplate.query(
                 """
                 SELECT d.created_at, s.name AS author, d.content
                   FROM desk_notes d
@@ -115,6 +116,7 @@ public class HandoverService {
                  WHERE d.tenant_id = ? AND d.room_id = ?
                  ORDER BY d.created_at
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, roomId)) {
             entries.add(entry("desk_note", row.get("author"), row.get("created_at"), row.get("content")));
         }
@@ -185,7 +187,7 @@ public class HandoverService {
     }
 
     private Map<String, Object> latestEventActor(long tenantId, UUID taskId, String eventType) {
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+        List<Map<String, Object>> rows = jdbcTemplate.query(
                 """
                 SELECT e.created_at, s.name AS author
                   FROM task_events e
@@ -194,6 +196,7 @@ public class HandoverService {
                  ORDER BY e.seq DESC
                  LIMIT 1
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, taskId, eventType);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -202,7 +205,7 @@ public class HandoverService {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("kind", kind);
         entry.put("author", author == null ? null : String.valueOf(author));
-        entry.put("at", SqlTimestamps.toOffsetDateTime(at).toString());
+        entry.put("at", ((OffsetDateTime) at).toString());
         entry.put("content", content == null ? null : String.valueOf(content));
         return entry;
     }

@@ -1,10 +1,10 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.common.codes.TaskState;
 import com.athena.tms.common.codes.TaskType;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.ManagerKind;
-import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.error.NotFoundException;
@@ -244,7 +244,7 @@ public class TaskExecutionService {
     }
 
     private List<Map<String, Object>> openAndDoneRowsOf(long tenantId, CurrentActor actor) {
-        return jdbcTemplate.queryForList(
+        return jdbcTemplate.query(
                 """
                 SELECT t.id, t.type, t.state, t.work_date, t.done_at, t.redo_count, r.room_no
                   FROM tasks t
@@ -253,6 +253,7 @@ public class TaskExecutionService {
                    AND t.state IN ('accepted', 'doing', 'interrupted', 'deferred', """ + TaskState.FINISHED_SQL_LIST + """
                        )
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, actor.staffId());
     }
 
@@ -272,7 +273,7 @@ public class TaskExecutionService {
             if (!UNFINISHED_NEXT_STEP_STATES.contains(state)) {
                 continue;
             }
-            OffsetDateTime doneAt = SqlTimestamps.toOffsetDateTime(row.get("done_at"));
+            OffsetDateTime doneAt = (OffsetDateTime) row.get("done_at");
             boolean doneToday = doneAt != null && !doneAt.isBefore(dayStart) && doneAt.isBefore(dayEnd);
             if (belongsToToday(toLocalDate(row.get("work_date")), state, today, doneToday)) {
                 unfinished.add(row);
@@ -518,14 +519,13 @@ public class TaskExecutionService {
         return result;
     }
 
-    /** 住客的需求一律經櫃檯派單才成為工務單，所以住客來源與櫃檯代開同樣算櫃檯轉來。 */
     private static String repairTicketSource(Object taskSource) {
         return "desk".equals(taskSource) || "guest".equals(taskSource) ? "desk_forward" : "staff_report";
     }
 
     /** SQL 不允許在 ORDER BY 的運算式裡引用同一層 SELECT 的別名，所以排序用的旗標先在內層查詢算好。 */
     private List<Map<String, Object>> poolRows(long tenantId, String dept, UUID staffId) {
-        return jdbcTemplate.queryForList(
+        return jdbcTemplate.query(
                 """
                 SELECT * FROM (
                     SELECT t.id, t.state, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
@@ -552,11 +552,12 @@ public class TaskExecutionService {
                          pool.urgent DESC, pool.priority_notify DESC, pool.same_floor DESC,
                          pool.room_no, pool.created_at
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 staffId, tenantId, dept);
     }
 
     private static int waitedMinutes(Map<String, Object> row, OffsetDateTime now) {
-        OffsetDateTime enteredAt = SqlTimestamps.toOffsetDateTime(row.get("pool_entered_at"));
+        OffsetDateTime enteredAt = (OffsetDateTime) row.get("pool_entered_at");
         if (enteredAt == null) {
             return 0;
         }
@@ -599,7 +600,7 @@ public class TaskExecutionService {
         OffsetDateTime dayStart = today.atStartOfDay(clock.getZone()).toOffsetDateTime();
         OffsetDateTime dayEnd = today.plusDays(1).atStartOfDay(clock.getZone()).toOffsetDateTime();
 
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+        List<Map<String, Object>> rows = jdbcTemplate.query(
                 """
                 SELECT t.id, t.type, t.state, t.title, t.est_min, t.worked_sec, t.segment_started_at,
                        t.work_date, t.done_at, t.redo_count, t.inspection, t.inspection_waived,
@@ -612,6 +613,7 @@ public class TaskExecutionService {
                   LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
                  WHERE t.tenant_id = ? AND t.assignee_id = ?
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, actor.staffId());
 
         int cleaningTotal = 0;
@@ -640,7 +642,7 @@ public class TaskExecutionService {
             if ("passed".equals(row.get("inspection"))) {
                 inspectedCount++;
             }
-            OffsetDateTime doneAt = SqlTimestamps.toOffsetDateTime(row.get("done_at"));
+            OffsetDateTime doneAt = (OffsetDateTime) row.get("done_at");
             boolean doneToday = doneAt != null && !doneAt.isBefore(dayStart) && doneAt.isBefore(dayEnd);
             if (doneLike && doneToday) {
                 completedCount++;
@@ -689,7 +691,7 @@ public class TaskExecutionService {
                         ? "" : String.valueOf(r.get("room_no")))
                 .thenComparing(
                         r -> TaskState.isFinished(String.valueOf(r.get("state")))
-                                ? SqlTimestamps.toOffsetDateTime(r.get("done_at")) : null,
+                                ? (OffsetDateTime) r.get("done_at") : null,
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(r -> String.valueOf(r.get("room_no"))));
         List<Map<String, Object>> todayTasks = new ArrayList<>();
@@ -798,7 +800,7 @@ public class TaskExecutionService {
                 .comparingInt((Map<String, Object> r) -> Boolean.TRUE.equals(r.get("ticket_is_urgent")) ? 0 : 1)
                 .thenComparingInt(r -> TaskState.isFinished(String.valueOf(r.get("state"))) ? 1 : 0)
                 .thenComparing(
-                        r -> SqlTimestamps.toOffsetDateTime(r.get("ticket_created_at")),
+                        r -> (OffsetDateTime) r.get("ticket_created_at"),
                         Comparator.nullsLast(Comparator.naturalOrder())));
         List<Map<String, Object>> tickets = new ArrayList<>(ticketRows.size());
         for (Map<String, Object> row : ticketRows) {
@@ -831,7 +833,7 @@ public class TaskExecutionService {
             return 0;
         }
         long workedSec = row.get("worked_sec") == null ? 0 : ((Number) row.get("worked_sec")).longValue();
-        OffsetDateTime segmentStartedAt = SqlTimestamps.toOffsetDateTime(row.get("segment_started_at"));
+        OffsetDateTime segmentStartedAt = (OffsetDateTime) row.get("segment_started_at");
         if (segmentStartedAt != null && segmentStartedAt.isBefore(now)) {
             workedSec += Duration.between(segmentStartedAt, now).getSeconds();
         }
@@ -879,7 +881,7 @@ public class TaskExecutionService {
         detail.put("accumulatedMinutes", minutes);
         detail.put("accumulatedSeconds",
                 row.get("worked_sec") == null ? 0 : ((Number) row.get("worked_sec")).intValue());
-        detail.put("segmentStartedAt", SqlTimestamps.toOffsetDateTime(row.get("segment_started_at")));
+        detail.put("segmentStartedAt", row.get("segment_started_at"));
         detail.put("checkedSopItems", checkedSopItemIds(row));
         detail.put("skippedSopItems", skippedSopItemIds(row));
         detail.put("handovers", handoverService.handoversOf(row));
@@ -915,11 +917,9 @@ public class TaskExecutionService {
 
     private int elapsedMinutes(Map<String, Object> row) {
         long seconds = row.get("worked_sec") instanceof Number n ? n.longValue() : 0;
-        Object segmentStarted = row.get("segment_started_at");
-        if (segmentStarted instanceof java.sql.Timestamp ts) {
-            seconds += Duration.between(ts.toInstant(), clock.instant()).getSeconds();
-        } else if (segmentStarted instanceof OffsetDateTime odt) {
-            seconds += Duration.between(odt.toInstant(), clock.instant()).getSeconds();
+        OffsetDateTime segmentStarted = (OffsetDateTime) row.get("segment_started_at");
+        if (segmentStarted != null) {
+            seconds += Duration.between(segmentStarted.toInstant(), clock.instant()).getSeconds();
         }
         return (int) (seconds / 60);
     }

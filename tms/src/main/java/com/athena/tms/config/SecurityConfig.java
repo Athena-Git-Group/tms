@@ -59,7 +59,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/guest-sessions/scan").hasAnyRole(RolePermissions.frontdeskWebRoles())
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/public/hotels/*").permitAll()
-                        .requestMatchers("/api/v1/test/clock").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/staff-accounts/change-password")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "owner", "duty_manager")
                         .requestMatchers("/api/v1/me/push-token")

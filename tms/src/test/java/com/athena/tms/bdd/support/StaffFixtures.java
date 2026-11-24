@@ -95,11 +95,6 @@ public class StaffFixtures {
         return new CreatedStaff(tenantId, id, loginId, rawPassword, issued.token());
     }
 
-    /**
-     * 準備住客 session 的測試資料要用的櫃檯 JWT，因為住客 session 只能由櫃檯、主管或值班主管開。
-     * 每個案例只建一位不排班、沒有負責樓層的櫃檯，同一案例重複呼叫沿用同一位，
-     * 不借用案例自己的櫃檯，免得案例要驗證的那位員工多出操作紀錄。
-     */
     public String fixtureFrontdeskJwt() {
         long tenantId = tenantFixtures.testTenantId();
         UUID id = jdbcClient

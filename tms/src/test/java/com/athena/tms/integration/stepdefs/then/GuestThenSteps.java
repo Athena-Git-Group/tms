@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.GuestFixtures;
 import io.cucumber.java.en.Then;
@@ -33,8 +34,8 @@ public class GuestThenSteps {
 
     @Then("^系統未簽發任何 guest session 也未建立任何任務$")
     public void nothingSignedNothingCreated() {
-        long sessionsBefore = ctx.get("sessionsBefore");
-        long tasksBefore = ctx.get("tasksBefore");
+        long sessionsBefore = ctx.get(ScenarioKeys.SESSIONS_BEFORE);
+        long tasksBefore = ctx.get(ScenarioKeys.TASKS_BEFORE);
         assertEquals(sessionsBefore, db.countAll("guest_sessions"), "不簽 session（E-03）");
         assertEquals(tasksBefore, db.countAll("tasks"), "不建單（E-03）");
     }
@@ -94,7 +95,7 @@ public class GuestThenSteps {
 
     @Then("^任務總數不變$")
     public void taskCountUnchanged() {
-        long tasksBeforeHome = ctx.get("tasksBeforeHome");
+        long tasksBeforeHome = ctx.get(ScenarioKeys.TASKS_BEFORE_HOME);
         assertEquals(tasksBeforeHome, db.countAll("tasks"), "資訊頁瀏覽不產生任務（FR-002）");
     }
 
@@ -138,13 +139,13 @@ public class GuestThenSteps {
         JsonNode snapshot = objectMapper.readTree(db.eventPayloadOfType(ctx.taskId(), "created"));
         JsonNode note = objectMapper.readTree(snapshot.get("note").asText());
         assertEquals(ruleId, note.get("rule_id").asText(), "命中留痕可解釋（A10）");
-        assertEquals(ctx.get("freeText"), note.get("text").asText());
+        assertEquals(ctx.get(ScenarioKeys.FREE_TEXT), note.get("text").asText());
         assertEquals("zh-TW", note.get("lang").asText());
     }
 
     @Then("^第 3 筆需求仍為成功建立$")
     public void thirdRequestStillCreated() {
-        ScenarioContext.HttpResult third = ctx.get("thirdResponse");
+        ScenarioContext.HttpResult third = ctx.get(ScenarioKeys.THIRD_RESPONSE);
         assertEquals(201, third.status(), "第 3 筆該在限流線內: " + third.body());
         JsonNode body = objectMapper.readTree(third.body());
         assertNotNull(body.get("id"));
@@ -188,9 +189,9 @@ public class GuestThenSteps {
 
     @Then("^產生含該 IP 的掃碼限流告警，以 WARN 日誌記錄$")
     public void alertLoggedWithIp() {
-        ListAppender<ILoggingEvent> alerts = ctx.get("alertAppender");
+        ListAppender<ILoggingEvent> alerts = ctx.get(ScenarioKeys.ALERT_APPENDER);
         assertNotNull(alerts, "Given 步驟該先掛上日誌監聽");
-        String attackerIp = ctx.get("attackerIp");
+        String attackerIp = ctx.get(ScenarioKeys.ATTACKER_IP);
         assertTrue(alerts.list.stream().anyMatch(event -> "WARN".equals(event.getLevel().toString())
                         && event.getFormattedMessage().contains("[alert][scan-rate-limit]")
                         && event.getFormattedMessage().contains(attackerIp)),

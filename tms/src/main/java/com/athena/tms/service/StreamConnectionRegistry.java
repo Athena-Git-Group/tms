@@ -73,7 +73,7 @@ public class StreamConnectionRegistry {
                 return emitter;
             }
             StreamDegradation.Reason reason = this.degradation.current();
-            if (reason != null && connection.isStaff() && !connection.sendDegraded(reason.code(), this.objectMapper)) {
+            if (reason != null && connection.followsDegradation() && !connection.sendDegraded(reason.code(), this.objectMapper)) {
                 this.drop(connection);
             }
             return emitter;
@@ -89,7 +89,6 @@ public class StreamConnectionRegistry {
         return emitter;
     }
 
-    /** 這家飯店現在有沒有連線要收櫃檯看板上的卡片。沒有就不必為這則事件組卡片。 */
     public boolean hasDeskBoardViewer(long tenantId) {
         for (StreamConnection connection : this.connections) {
             if (connection.seesDeskBoardOf(tenantId)) {
@@ -99,14 +98,17 @@ public class StreamConnectionRegistry {
         return false;
     }
 
-    /**
-     * 送出一則單的變化。{@code board} 只送給櫃檯角色的連線，其他連線只收訊號；是 null 時所有連線都只收訊號。
-     * 看板內容先轉成 JSON 一次，每條連線共用，不隨連線數重複轉換。
-     */
     public void broadcastTask(TaskChange change, DeskBoardChange board) {
-        ObjectNode boardFields = board == null ? null : StreamConnection.boardFields(board, this.objectMapper);
+        ObjectNode boardFields = StreamConnection.boardFields(board, this.objectMapper);
         for (StreamConnection connection : this.connections) {
-            if (!connection.wants(change) || connection.sendTask(change, boardFields, this.objectMapper)) continue;
+            if (!connection.wants(change) || connection.sendTaskWithCard(change, boardFields, this.objectMapper)) continue;
+            this.drop(connection);
+        }
+    }
+
+    public void broadcastCardlessTask(TaskChange change) {
+        for (StreamConnection connection : this.connections) {
+            if (!connection.wants(change) || connection.sendCardlessTask(change, this.objectMapper)) continue;
             this.drop(connection);
         }
     }
@@ -127,7 +129,7 @@ public class StreamConnectionRegistry {
         log.warn("員工事件串流進入降級（原因 {}），向 {} 條 SSE 連線推送 degraded（客戶端轉定時重抓）", (Object)reason.code(), (Object)this.connections.size());
         boolean everyone = reason == StreamDegradation.Reason.CONSUMER_LAG;
         for (StreamConnection connection : this.connections) {
-            if (!everyone && !connection.isStaff()) continue;
+            if (!everyone && !connection.followsDegradation()) continue;
             if (connection.sendDegraded(reason.code(), this.objectMapper)) continue;
             this.drop(connection);
         }
@@ -142,9 +144,9 @@ public class StreamConnectionRegistry {
     }
 
     private void announceRecovered(StreamDegradation.Reason was) {
-        log.info("員工事件串流離開降級（原因原為 {}），向員工連線推送 recovered", (Object)was.code());
+        log.info("事件串流離開降級（原因原為 {}），向員工與住客連線推送 recovered", (Object)was.code());
         for (StreamConnection connection : this.connections) {
-            if (!connection.isStaff() || connection.sendRecovered(this.objectMapper)) continue;
+            if (!connection.followsDegradation() || connection.sendRecovered(this.objectMapper)) continue;
             this.drop(connection);
         }
     }

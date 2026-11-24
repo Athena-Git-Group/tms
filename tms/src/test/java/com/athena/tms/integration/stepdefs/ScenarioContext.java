@@ -34,7 +34,7 @@ public class ScenarioContext {
     private final List<String> rejectionCodes = new ArrayList<>();
     private final List<Integer> rejectionStatuses = new ArrayList<>();
     private TaskSnapshot taskSnapshot;
-    private final Map<String, Object> data = new HashMap<>();
+    private final Map<Key<?>, Object> data = new HashMap<>();
 
     public void reset() {
         taskId = null;
@@ -197,13 +197,16 @@ public class ScenarioContext {
         taskSnapshot = value;
     }
 
-    public void put(String key, Object value) {
+    public <T> void put(Key<T> key, T value) {
         data.put(key, value);
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T get(String key) {
+    public <T> T get(Key<T> key) {
         return (T) data.get(key);
+    }
+
+    public record Key<T>(String name) {
     }
 
     public record HttpResult(int status, String body, String replayedHeader) {

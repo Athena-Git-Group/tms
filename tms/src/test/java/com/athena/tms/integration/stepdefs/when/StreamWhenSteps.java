@@ -4,6 +4,7 @@ import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.entity.Task;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.SseSupport;
 import com.athena.tms.integration.stepdefs.utils.TaskFixtures;
@@ -29,14 +30,14 @@ public class StreamWhenSteps {
 
     @When("^訂單 \"([^\"]+)\" 與訂單 \"([^\"]+)\" 各建立一張任務$")
     public void eachReservationGetsOneTask(String firstReservation, String secondReservation) {
-        ctx.put("sseTask:" + guestLabelOf(firstReservation), newTask("amenity", firstReservation, "housekeeping", "毛巾×2（A 房）"));
-        ctx.put("sseTask:" + guestLabelOf(secondReservation), newTask("repair", secondReservation, "engineering", "冷氣不冷（B 房）"));
+        ctx.put(ScenarioKeys.sseTask(guestLabelOf(firstReservation)), newTask("amenity", firstReservation, "housekeeping", "毛巾×2（A 房）"));
+        ctx.put(ScenarioKeys.sseTask(guestLabelOf(secondReservation)), newTask("repair", secondReservation, "engineering", "冷氣不冷（B 房）"));
     }
 
     private String guestLabelOf(String reservationSymbol) {
         UUID reservationId = ctx.entityId(reservationSymbol);
         for (String label : List.of("A", "B")) {
-            if (reservationId.equals(ctx.get("reservation:" + label))) {
+            if (reservationId.equals(ctx.get(ScenarioKeys.reservation(label)))) {
                 return label;
             }
         }
@@ -47,7 +48,7 @@ public class StreamWhenSteps {
     public void housekeepingTaskCreatedClaimedStarted() {
         Task task = fixtures.newPoolTask("房務池新單");
         fixtures.claimAndStartAsHk1(task.getId());
-        ctx.put("sseTask:hk", task.getId());
+        ctx.put(ScenarioKeys.sseTask("hk"), task.getId());
     }
 
     @When("^工務池建立一張新單$")
@@ -56,7 +57,7 @@ public class StreamWhenSteps {
                 1L, "repair", "desk", TestData.ROOM_301, TestData.RESERVATION_B002, "engineering", "pool",
                 null, "工務池新單", null, null, null, null, TestData.FD1, false,
                 new RepairTicketDraft("other", null, TestData.STAFF_FD1, null, null))));
-        ctx.put("sseTask:eng", task.getId());
+        ctx.put(ScenarioKeys.sseTask("eng"), task.getId());
     }
 
     @When("^訂單 \"([^\"]+)\" 上的一張任務走完 認領、開工、完成 全鏈$")

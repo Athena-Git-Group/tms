@@ -37,12 +37,26 @@ import tools.jackson.databind.node.ObjectNode;
 @Service
 public class RepairService {
 
-    public static final Map<String, String> CATEGORY_LABELS = Map.of(
-            "air_conditioning", "冷氣",
-            "plumbing_electrical", "水電",
-            "furniture_equipment", "家具／設備",
-            "door_lock", "門鎖",
-            "other", "其他");
+    public static final Map<String, String> CATEGORY_LABELS = categoryLabels();
+
+    private static Map<String, String> categoryLabels() {
+        Map<String, String> labels = new LinkedHashMap<>();
+        labels.put("air_conditioning", "冷氣");
+        labels.put("plumbing_electrical", "水電");
+        labels.put("furniture_equipment", "家具／設備");
+        labels.put("door_lock", "門鎖");
+        labels.put("other", "其他");
+        return Collections.unmodifiableMap(labels);
+    }
+
+    public record CategoryOption(String code, String label) {
+    }
+
+    public List<CategoryOption> categories() {
+        return CATEGORY_LABELS.entrySet().stream()
+                .map(entry -> new CategoryOption(entry.getKey(), entry.getValue()))
+                .toList();
+    }
 
     private static final String VERIFY_PASSED = "passed";
     private static final String VERIFY_FAILED = "failed";

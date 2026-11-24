@@ -1,6 +1,5 @@
 package com.athena.tms.service;
 
-import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.dto.desk.DeskGuestText;
 import com.athena.tms.dto.desk.DeskTask;
 import java.time.OffsetDateTime;
@@ -23,7 +22,7 @@ public class DeskTaskMapper {
         String state = (String) row.get("state");
         String type = (String) row.get("type");
         DeskGuestText guestText = this.guestText(row.get("note"));
-        OffsetDateTime createdAt = SqlTimestamps.toOffsetDateTime(row.get("created_at"));
+        OffsetDateTime createdAt = (OffsetDateTime) row.get("created_at");
         boolean interrupted = "interrupted".equals(state);
         boolean deferred = "deferred".equals(state);
         boolean deferredBySelf = Boolean.TRUE.equals(row.get("deferred_by_self"));
@@ -46,14 +45,14 @@ public class DeskTaskMapper {
                 (UUID) row.get("assignee_id"),
                 (String) row.get("assignee_name"),
                 createdAt,
-                waitingSince(state, createdAt, row.get("waiting_event_at")),
-                SqlTimestamps.toOffsetDateTime(row.get("accepted_at")),
+                waitingSince(state, createdAt, (OffsetDateTime) row.get("waiting_event_at")),
+                (OffsetDateTime) row.get("accepted_at"),
                 acceptedVia((String) row.get("accepted_type"), (String) row.get("accepted_actor_role")),
-                SqlTimestamps.toOffsetDateTime(row.get("started_at")),
-                SqlTimestamps.toOffsetDateTime(row.get("done_at")),
-                interrupted ? SqlTimestamps.toOffsetDateTime(row.get("interrupted_at")) : null,
-                SqlTimestamps.toOffsetDateTime(row.get("ended_at")),
-                SqlTimestamps.toOffsetDateTime(row.get("updated_at")),
+                (OffsetDateTime) row.get("started_at"),
+                (OffsetDateTime) row.get("done_at"),
+                interrupted ? (OffsetDateTime) row.get("interrupted_at") : null,
+                (OffsetDateTime) row.get("ended_at"),
+                (OffsetDateTime) row.get("updated_at"),
                 (String) row.get("inspection"),
                 sop(row.get("sop_done"), row.get("sop_total")),
                 interrupted
@@ -70,13 +69,12 @@ public class DeskTaskMapper {
                         : null);
     }
 
-    private static OffsetDateTime waitingSince(String state, OffsetDateTime createdAt, Object waitingEventAt) {
+    private static OffsetDateTime waitingSince(String state, OffsetDateTime createdAt, OffsetDateTime waitingEventAt) {
         if ("triage".equals(state)) {
             return createdAt;
         }
         if ("pool".equals(state)) {
-            OffsetDateTime enteredAt = SqlTimestamps.toOffsetDateTime(waitingEventAt);
-            return enteredAt == null ? createdAt : enteredAt;
+            return waitingEventAt == null ? createdAt : waitingEventAt;
         }
         return null;
     }

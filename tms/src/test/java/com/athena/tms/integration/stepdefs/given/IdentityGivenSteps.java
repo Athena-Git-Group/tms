@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.given;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Given;
@@ -25,7 +26,7 @@ public class IdentityGivenSteps {
     public void deactivateMt1AfterCapturingOldToken() {
         ScenarioContext.HttpResult login = api.loginRaw(1L, ctx.staffLogin("阿強"), "demo1234", null, null);
         Assertions.assertEquals(200, login.status(), "停用前的登入該成功: " + login.body());
-        ctx.put("oldToken", objectMapper.readTree(login.body()).get("token").asText());
+        ctx.put(ScenarioKeys.OLD_TOKEN, objectMapper.readTree(login.body()).get("token").asText());
         db.admin().update("UPDATE staff_accounts SET active = false WHERE tenant_id = 1 AND login_id = ?",
                 ctx.staffLogin("阿強"));
     }

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import io.cucumber.java.en.Then;
@@ -45,16 +46,16 @@ public class StaffDeskThenSteps {
 
     @Then("^state 依序為 \"doing\"、\"done\"$")
     public void statesAreDoingThenDone() {
-        JsonNode doing = json(ctx.get("startedResponse"));
+        JsonNode doing = json(ctx.get(ScenarioKeys.STARTED_RESPONSE));
         assertEquals("doing", doing.get("state").asText());
-        ScenarioContext.HttpResult completed = ctx.get("completedResponse");
+        ScenarioContext.HttpResult completed = ctx.get(ScenarioKeys.COMPLETED_RESPONSE);
         assertEquals(200, completed.status(), "完成該成功: " + completed.body());
         assertEquals("done", json(completed).get("state").asText());
     }
 
     @Then("^started_at 與 done_at 被記錄$")
     public void timestampsRecordedWithoutDerivedColumn() {
-        JsonNode done = json(ctx.get("completedResponse"));
+        JsonNode done = json(ctx.get(ScenarioKeys.COMPLETED_RESPONSE));
         assertFalse(done.has("actualMinutes"), "實際分鐘不落欄、不另外填（FR-012）");
         Map<String, Object> row = db.admin().queryForMap("SELECT started_at, done_at FROM tasks WHERE id = ?", ctx.taskId());
         Timestamp startedAt = (Timestamp) row.get("started_at");
@@ -91,7 +92,7 @@ public class StaffDeskThenSteps {
                 ctx.taskId(), ctx.sopItemKey(skippedLabel));
         assertEquals(Boolean.TRUE, skipped.get("skipped"));
         assertEquals(Boolean.FALSE, skipped.get("checked"));
-        UUID sopActorId = ctx.get("sopActorId");
+        UUID sopActorId = ctx.get(ScenarioKeys.SOP_ACTOR_ID);
         assertEquals(sopActorId.toString(), skipped.get("checked_by").toString(), "誰跳過的要留痕");
         assertNotNull(skipped.get("checked_at"), "幾點動的要留痕");
         assertEquals(skippedLabel, skipped.get("label"), "label 用 sop_items 快照");
@@ -104,7 +105,7 @@ public class StaffDeskThenSteps {
 
     @Then("^清單含「([^」]+)」但不含「([^」]+)」且全是 pool 狀態的房務單$")
     public void hk1PoolFiltered(String expectedTitle, String excludedTitle) {
-        JsonNode items = poolItems(objectMapper.readTree((String) ctx.get("poolBody:小美")));
+        JsonNode items = poolItems(objectMapper.readTree(ctx.get(ScenarioKeys.poolBody("小美"))));
         assertTrue(containsTaskId(items, taskIdByTitle(expectedTitle)), "房務看得到「" + expectedTitle + "」");
         assertFalse(containsTaskId(items, taskIdByTitle(excludedTitle)), "房務看不到工務的單");
         for (JsonNode item : items) {

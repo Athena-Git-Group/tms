@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.common.error.StateConflictException;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.Awaits;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.KafkaProbe;
@@ -153,21 +154,21 @@ public class BackboneThenSteps {
 
     @Then("^relay 不送出 \"([^\"]+)\" 那筆，直到同 aggregate_key 的 \"([^\"]+)\" 那筆成功$")
     public void blockedKeyStaysPut(String tailKey, String headKey) {
-        Long headId = ctx.get("outbox:" + headKey);
-        Long tailId = ctx.get("outbox:" + tailKey);
+        Long headId = ctx.get(ScenarioKeys.outboxId(headKey));
+        Long tailId = ctx.get(ScenarioKeys.outboxId(tailKey));
         assertEquals("pending", db.outboxStatus(headId), "等重試的首筆仍 pending");
         assertEquals("pending", db.outboxStatus(tailId), "同鍵後續列必須跟著等，不得先送");
         assertEquals(0, db.outboxAttempts(tailId), "後續列連試都不該試");
         List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.push", Duration.ofSeconds(3L));
-        ctx.put("pushRecords", records);
+        ctx.put(ScenarioKeys.PUSH_RECORDS, records);
         String blockedKey = aggregateKeyOf(headId);
         assertTrue(records.stream().noneMatch(r -> blockedKey.equals(r.key())), "被封鎖鍵整串不得外流");
     }
 
     @Then("^其他鍵的事件照常轉送、不被擋$")
     public void otherKeysFlow() {
-        List<Long> freeIds = ctx.get("outboxFreeIds");
-        List<ConsumerRecord<String, String>> records = ctx.get("pushRecords");
+        List<Long> freeIds = ctx.get(ScenarioKeys.OUTBOX_FREE_IDS);
+        List<ConsumerRecord<String, String>> records = ctx.get(ScenarioKeys.PUSH_RECORDS);
         assertNotNull(records, "前一個斷言該先讀過 push topic");
         for (Long freeId : freeIds) {
             assertEquals("sent", db.outboxStatus(freeId));
@@ -178,7 +179,7 @@ public class BackboneThenSteps {
 
     @Then("^這筆 pending 事件仍被轉送上 Kafka、不掉單$")
     public void pendingEventEventuallyDelivered() {
-        List<Long> freeIds = ctx.get("outboxFreeIds");
+        List<Long> freeIds = ctx.get(ScenarioKeys.OUTBOX_FREE_IDS);
         Long soloId = freeIds.getFirst();
         assertEquals("sent", db.outboxStatus(soloId));
         String soloKey = aggregateKeyOf(soloId);
@@ -189,14 +190,14 @@ public class BackboneThenSteps {
     @Then("^待送匣 \"([^\"]+)\" 仍是 \"([^\"]+)\"、attempts 仍是 (\\d+)$")
     public void outboxStaysUntouched(String idempotencyKey, String expectedStatus, int expectedAttempts) throws InterruptedException {
         Thread.sleep(3000L);
-        Long outboxId = ctx.get("outbox:" + idempotencyKey);
+        Long outboxId = ctx.get(ScenarioKeys.outboxId(idempotencyKey));
         assertEquals(expectedStatus, db.outboxStatus(outboxId), "租約／退避還沒到期，不該被任何 instance 動到");
         assertEquals(expectedAttempts, db.outboxAttempts(outboxId), "沒搶到就不該累加 attempts");
     }
 
     @Then("^待送匣 \"([^\"]+)\" 最終被標記為 \"([^\"]+)\"、attempts 為 (\\d+)$")
     public void outboxReachesStatusWithAttempts(String idempotencyKey, String expectedStatus, int expectedAttempts) {
-        Long outboxId = ctx.get("outbox:" + idempotencyKey);
+        Long outboxId = ctx.get(ScenarioKeys.outboxId(idempotencyKey));
         Awaits.waitUntil(Duration.ofSeconds(20L), "待送匣 " + idempotencyKey + " 該變成 " + expectedStatus,
                 () -> expectedStatus.equals(db.outboxStatus(outboxId)));
         assertEquals(expectedAttempts, db.outboxAttempts(outboxId), "attempts 該剛好是這一次 claim 累加的結果");
@@ -204,7 +205,7 @@ public class BackboneThenSteps {
 
     @Then("^\"([^\"]+)\" 這個鍵在 Kafka 上有 2 筆內容相同的訊息、重複交由下游去重吸收$")
     public void duplicateIdenticalRecordsOnKafka(String idempotencyKey) {
-        Long outboxId = ctx.get("outbox:" + idempotencyKey);
+        Long outboxId = ctx.get(ScenarioKeys.outboxId(idempotencyKey));
         String key = aggregateKeyOf(outboxId);
         List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3L));
         List<String> values = records.stream().filter(r -> key.equals(r.key())).map(ConsumerRecord::value).toList();
@@ -232,7 +233,7 @@ public class BackboneThenSteps {
     public void fourEventsInSeqOrderWithTaskKey() {
         UUID id = ctx.taskId();
         String key = "task:" + id;
-        List<ConsumerRecord<String, String>> records = ctx.get("records");
+        List<ConsumerRecord<String, String>> records = ctx.get(ScenarioKeys.TASK_EVENT_RECORDS);
         assertNotNull(records, "When 步驟該先讀 topic");
         List<ConsumerRecord<String, String>> mine = records.stream().filter(r -> key.equals(r.key())).toList();
         assertEquals(4, mine.size(), "created/claimed/started/completed 各一");
@@ -243,12 +244,12 @@ public class BackboneThenSteps {
             seqs.add(envelope.get("seq").asInt());
         }
         assertEquals(List.of(1, 2, 3, 4), seqs, "同鍵同分區，消費順序＝seq 順序");
-        ctx.put("myRecords", mine);
+        ctx.put(ScenarioKeys.MY_RECORDS, mine);
     }
 
     @Then("^每筆事件 envelope 都帶 tenant_id$")
     public void everyEnvelopeCarriesTenantId() {
-        List<ConsumerRecord<String, String>> mine = ctx.get("myRecords");
+        List<ConsumerRecord<String, String>> mine = ctx.get(ScenarioKeys.MY_RECORDS);
         assertNotNull(mine, "前一個斷言該先過濾出本任務的事件");
         for (ConsumerRecord<String, String> record : mine) {
             assertEquals(1L, objectMapper.readTree(record.value()).get("tenant_id").asLong(), "事件必帶 tenant_id（GR-003）");
@@ -257,7 +258,7 @@ public class BackboneThenSteps {
 
     @Then("^操作被資料庫權限拒絕$")
     public void mutationsDeniedByDbGrants() {
-        assertEquals("42501", ctx.get("updateState"), "UPDATE 被權限拒絕（42501）");
-        assertEquals("42501", ctx.get("deleteState"), "DELETE 被權限拒絕（42501）");
+        assertEquals("42501", ctx.get(ScenarioKeys.UPDATE_STATE), "UPDATE 被權限拒絕（42501）");
+        assertEquals("42501", ctx.get(ScenarioKeys.DELETE_STATE), "DELETE 被權限拒絕（42501）");
     }
 }

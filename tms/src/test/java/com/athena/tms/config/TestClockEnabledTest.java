@@ -21,9 +21,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "tms.test-clock.enabled=true")
-@ActiveProfiles("test")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles({"test", TestSupportConfig.PROFILE})
 @Testcontainers
 class TestClockEnabledTest {
 
@@ -75,8 +74,20 @@ class TestClockEnabledTest {
         assertThat(response.statusCode()).isEqualTo(422);
     }
 
+    @Test
+    void 測試專用端點不驗身分就能呼叫() throws Exception {
+        assertThat(callPath("DELETE", "/api/v1/test/rate-limits", null).statusCode()).isEqualTo(204);
+        assertThat(callPath("GET", "/api/v1/test/tenants/1/in-house-rooms", null).statusCode()).isEqualTo(200);
+        assertThat(callPath("POST", "/api/v1/test/guest-sessions/revoke", "{\"sessionToken\":\"1.no-such-session\"}")
+                .statusCode()).isEqualTo(404);
+    }
+
     private HttpResponse<String> call(String method, String json) throws Exception {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/v1/test/clock"));
+        return callPath(method, "/api/v1/test/clock", json);
+    }
+
+    private HttpResponse<String> callPath(String method, String path, String json) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path));
         if (json == null) {
             builder.method(method, HttpRequest.BodyPublishers.noBody());
         } else {

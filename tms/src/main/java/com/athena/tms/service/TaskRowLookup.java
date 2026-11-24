@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.common.error.NotFoundException;
 import java.util.List;
 import java.util.Map;
@@ -17,13 +18,14 @@ public class TaskRowLookup {
     }
 
     public Map<String, Object> require(long tenantId, UUID taskId) {
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+        List<Map<String, Object>> rows = jdbcTemplate.query(
                 """
                 SELECT t.*, r.room_no
                   FROM tasks t
                   JOIN rooms r ON r.tenant_id = t.tenant_id AND r.id = t.room_id
                  WHERE t.tenant_id = ? AND t.id = ?
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, taskId);
         if (rows.isEmpty()) {
             throw new NotFoundException("查無任務: " + taskId);

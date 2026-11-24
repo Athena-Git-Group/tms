@@ -1,6 +1,7 @@
 package com.athena.tms.service;
 
 import com.athena.tms.common.CurrentActor;
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.ApiException;
 import com.athena.tms.handover.HandoverService;
@@ -30,6 +31,11 @@ class DeptPoolDeptParamTest {
     void setUp() {
         jdbcTemplate = Mockito.mock(JdbcTemplate.class);
         Mockito.when(jdbcTemplate.queryForList(ArgumentMatchers.anyString(), ArgumentMatchers.<Object[]>any()))
+                .thenReturn(List.of());
+        Mockito.when(jdbcTemplate.query(
+                        ArgumentMatchers.anyString(),
+                        ArgumentMatchers.eq(OffsetDateTimeColumnMapRowMapper.INSTANCE),
+                        ArgumentMatchers.<Object[]>any()))
                 .thenReturn(List.of());
         Mockito.when(jdbcTemplate.queryForObject(
                         ArgumentMatchers.anyString(),
@@ -64,8 +70,9 @@ class DeptPoolDeptParamTest {
         Map<String, Object> pool = service.deptPool(null, null, null, null);
 
         Assertions.assertEquals(3, pool.get("activeStaffCount"), "activeStaffCount 要在回應裡");
-        Mockito.verify(jdbcTemplate).queryForList(
+        Mockito.verify(jdbcTemplate).query(
                 ArgumentMatchers.contains("t.dept = ?"),
+                ArgumentMatchers.eq(OffsetDateTimeColumnMapRowMapper.INSTANCE),
                 ArgumentMatchers.any(UUID.class),
                 ArgumentMatchers.eq(TENANT_ID),
                 ArgumentMatchers.eq("housekeeping"));
@@ -96,8 +103,9 @@ class DeptPoolDeptParamTest {
         Map<String, Object> pool = service.deptPool("engineering", null, null, null);
 
         Assertions.assertEquals(3, pool.get("activeStaffCount"));
-        Mockito.verify(jdbcTemplate).queryForList(
+        Mockito.verify(jdbcTemplate).query(
                 ArgumentMatchers.contains("t.dept = ?"),
+                ArgumentMatchers.eq(OffsetDateTimeColumnMapRowMapper.INSTANCE),
                 ArgumentMatchers.any(UUID.class),
                 ArgumentMatchers.eq(TENANT_ID),
                 ArgumentMatchers.eq("engineering"));

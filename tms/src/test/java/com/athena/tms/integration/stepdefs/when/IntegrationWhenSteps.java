@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.given.IntegrationGivenSteps;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.Awaits;
@@ -39,7 +40,7 @@ public class IntegrationWhenSteps {
 
     @When("^PMS 以該改寫後的金鑰查詢整合事件$")
     public void queryEventsWithTamperedKey() {
-        String tampered = ctx.get("integration:tamperedKey");
+        String tampered = ctx.get(ScenarioKeys.INTEGRATION_TAMPERED_KEY);
         Assertions.assertNotNull(tampered, "改寫金鑰尚未佈景——Given 漏了");
         ctx.lastResponse(api.getWithHeaders("/integration/pms/events", Map.of("X-API-Key", tampered)));
     }
@@ -57,7 +58,7 @@ public class IntegrationWhenSteps {
 
     @When("^PMS 以別名 \"([^\"]+)\" 的金鑰查詢整合事件，參數 after 為第 (\\d+) 筆事件的 event_id$")
     public void queryEventsAfterNthEvent(String alias, int ordinal) {
-        List<String> eventIds = ctx.get("integration:eventIds");
+        List<String> eventIds = ctx.get(ScenarioKeys.INTEGRATION_EVENT_IDS);
         Assertions.assertNotNull(eventIds, "尚無已發生事件——Given 漏了");
         ctx.lastResponse(api.getWithHeaders(
                 "/integration/pms/events?after=" + eventIds.get(ordinal - 1), apiKeyHeader(alias)));
@@ -70,14 +71,14 @@ public class IntegrationWhenSteps {
 
     @When("^員工 \"([^\"]+)\" 以自己的憑證查詢整合事件$")
     public void staffQueriesIntegrationEvents(String alias) {
-        Map<String, String> tokens = ctx.get("integration:staffTokens");
+        Map<String, String> tokens = ctx.get(ScenarioKeys.INTEGRATION_STAFF_TOKENS);
         Assertions.assertNotNull(tokens, "員工 JWT 尚未佈景——Given 漏了");
         ctx.lastResponse(api.get("/integration/pms/events", tokens.get(alias)));
     }
 
     @When("^PMS 以別名 \"([^\"]+)\" 的金鑰帶 cursor 為房 \"(\\d+)\" 事件的 event_id 重新建立整合 SSE 連線$")
     public void reconnectWithCursor(String alias, String roomNo) throws Exception {
-        Map<String, String> byRoom = ctx.get("integration:eventIdByRoom");
+        Map<String, String> byRoom = ctx.get(ScenarioKeys.INTEGRATION_EVENT_ID_BY_ROOM);
         Assertions.assertNotNull(byRoom, "尚無已發生事件——Given 漏了");
         given.openIntegrationStream("/integration/pms/stream?cursor=" + byRoom.get(roomNo), given.apiKey(alias));
     }

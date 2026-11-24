@@ -70,7 +70,18 @@ public class DeskApi {
         ScenarioWorld.ApiResponse response =
                 apiClient.post(assignPath(taskId), staff(staffName), assignBody(dept, via), idempotencyKey);
         deskContext.rememberAssignResponse(response);
+        rememberOpenedRepairTicket(response);
         return response;
+    }
+
+    private void rememberOpenedRepairTicket(ScenarioWorld.ApiResponse response) {
+        if (response.status() < 200 || response.status() > 299 || response.json() == null) {
+            return;
+        }
+        if ("repair".equals(response.json().path("type").asText())) {
+            world.rememberRepairTicket(
+                    response.json().path("displayNo").asText(), response.json().path("id").asText());
+        }
     }
 
     public ScenarioWorld.ApiResponse assignWithoutKey(String staffName, UUID taskId, String dept, String via) {
@@ -152,7 +163,7 @@ public class DeskApi {
         }
 
         if (stayingReservationId == null) {
-            return reservationFixtures.insertGuestSession(roomId, reservationId, now.plusDays(1));
+            return reservationFixtures.insertGuestSessionOnCheckedOutReservation(roomId, reservationId, now.plusDays(1));
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("roomId", roomId.toString());

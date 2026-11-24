@@ -45,13 +45,10 @@ public class DeskBoardController {
         return this.deskQuickReplyService.list();
     }
 
-    // 下面三個寫入端點的 Idempotency-Key 標頭宣告成非必帶，由各自的服務邏輯檢查。
-    // 缺少這個標頭時，API 規格要求回 400 idempotency_key_required。
-    // 若宣告成必帶，Spring 會先擋下並回另一種錯誤碼。
     @PostMapping("/tasks/{id}/assign")
     public DeskTask deskAssignTask(
             @PathVariable UUID id,
-            @RequestHeader(value = IdempotencyFilter.IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey,
+            @RequestHeader(IdempotencyFilter.IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
             @RequestBody DeskAssignRequest request) {
         return this.deskBoardService.assign(id, idempotencyKey, request);
     }
@@ -59,14 +56,14 @@ public class DeskBoardController {
     @PostMapping("/tasks/{id}/assign/undo")
     public DeskTask deskUndoAssign(
             @PathVariable UUID id,
-            @RequestHeader(value = IdempotencyFilter.IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey) {
+            @RequestHeader(IdempotencyFilter.IDEMPOTENCY_KEY_HEADER) String idempotencyKey) {
         return this.deskBoardService.undoAssign(id, idempotencyKey);
     }
 
     @PostMapping("/tasks/{id}/answer")
     public DeskTask deskAnswerTask(
             @PathVariable UUID id,
-            @RequestHeader(value = IdempotencyFilter.IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey,
+            @RequestHeader(IdempotencyFilter.IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
             @RequestBody DeskAnswerRequest request) {
         return this.deskBoardService.answer(id, idempotencyKey, request);
     }

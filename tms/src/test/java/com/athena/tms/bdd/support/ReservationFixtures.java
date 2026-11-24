@@ -88,12 +88,7 @@ public class ReservationFixtures {
                 .single();
     }
 
-    /**
-     * 直接寫一個掛在指定訂房上的住客 session，回它的權杖。
-     * 後端只替還沒退房的訂房開 session，掛在已經退房的訂房上的 session 只能這樣寫進資料庫。
-     * 權杖照後端的「飯店編號.隨機字串」格式，後端才認得出是哪家飯店的 session。
-     */
-    public String insertGuestSession(UUID roomId, UUID reservationId, OffsetDateTime expiresAt) {
+    public String insertGuestSessionOnCheckedOutReservation(UUID roomId, UUID reservationId, OffsetDateTime expiresAt) {
         long tenantId = tenantFixtures.testTenantId();
         String token = GuestSessionTokens.issue(tenantId);
         jdbcClient

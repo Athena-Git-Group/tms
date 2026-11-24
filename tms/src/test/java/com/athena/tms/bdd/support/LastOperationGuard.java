@@ -25,7 +25,7 @@ public class LastOperationGuard {
         int eventCount = dbProbe.eventsOf(taskId).size();
         String aggregateKey = "task:" + taskId;
         int outboxCount = dbProbe.outboxRows("task_event", aggregateKey).size()
-                + dbProbe.outboxRows("push", "push:" + aggregateKey).size();
+                + dbProbe.outboxRows("push", aggregateKey).size();
         Map<String, Object> repairTicketRow = dbProbe
                 .queryOne("SELECT * FROM repair_tickets WHERE task_id = ?", taskId)
                 .orElse(null);

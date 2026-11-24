@@ -98,10 +98,6 @@ public class StaffStreamGivenSteps {
         }
     }
 
-    /**
-     * 備品單走完建立、認領、開始、完成，完成時間撥到昨天那個時刻；結束時間跟著完成時間，這張單才落在看板範圍之外。
-     * 房間另外有一筆昨天入住、明天退房的訂房，單掛在這筆訂房上，之後同房住客才評得了分。
-     */
     @假設("{string} 有一張昨天 {string} 就已送達的備品單 {string}")
     public void deliveredYesterday(String roomNo, String hhmm, String content) {
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
@@ -120,16 +116,12 @@ public class StaffStreamGivenSteps {
                 .state("done")
                 .assignee(anyActiveStaff("housekeeping"))
                 .doneAt(doneAt)
+                .endedAt(doneAt)
                 .workDate(yesterday)
                 .create();
-        jdbcClient.sql("UPDATE tasks SET ended_at = done_at WHERE id = ?").params(taskId).update();
         world.rememberTask(roomNo, taskId.toString());
     }
 
-    /**
-     * 推播經過後端寫推播的同一段程式寫進待送匣，排隊鍵由後端決定；寫入與標成重試用完在同一個交易裡，
-     * 送出的一方在交易提交前看不到這一筆，不會搶先把它送掉。
-     */
     @假設("{string} 有一則推播重試用完，停在送不出去")
     public void pushExhausted(String taskKey) {
         UUID taskId = resolveTaskId(taskKey);
@@ -140,17 +132,21 @@ public class StaffStreamGivenSteps {
         PushOutboxWriter.targetPool(payload, "housekeeping");
         tenantScopedExecutor.runAsTenant(tenantId, () -> {
             pushOutboxWriter.enqueue(tenantId, "task:" + taskId, payload, idempotencyKey);
-            jdbcClient
-                    .sql("UPDATE outbox SET status = 'failed' WHERE kind = 'push' AND idempotency_key = ?")
-                    .params(idempotencyKey)
-                    .update();
+            markPushRetriesExhausted(idempotencyKey);
         });
         Map<String, Object> failed = dbProbe
                 .queryOne("SELECT aggregate_key, status FROM outbox WHERE kind = 'push' AND idempotency_key = ?", idempotencyKey)
                 .orElseThrow(() -> new IllegalStateException("待送匣沒有 " + taskKey + " 的那一則推播"));
-        if (!"failed".equals(failed.get("status")) || ("task:" + taskId).equals(failed.get("aggregate_key"))) {
-            throw new IllegalStateException(taskKey + " 的推播應是 failed、排隊鍵和單的事件不同，實際 " + failed);
+        if (!"failed".equals(failed.get("status"))) {
+            throw new IllegalStateException(taskKey + " 的推播應是 failed，實際 " + failed);
         }
+    }
+
+    private void markPushRetriesExhausted(String idempotencyKey) {
+        jdbcClient
+                .sql("UPDATE outbox SET status = 'failed' WHERE kind = 'push' AND idempotency_key = ?")
+                .params(idempotencyKey)
+                .update();
     }
 
     private UUID anyActiveStaff(String dept) {

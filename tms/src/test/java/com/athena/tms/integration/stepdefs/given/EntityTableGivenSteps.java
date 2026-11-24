@@ -5,6 +5,7 @@ import com.athena.tms.dto.GuestSessionTokens;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.TaskFixtures;
 import com.athena.tms.integration.stepdefs.utils.Tenants;
@@ -146,7 +147,7 @@ public class EntityTableGivenSteps {
                     revokedAt == null ? null : OffsetDateTime.parse(revokedAt));
             ctx.registerEntity(value(row, "id"), id);
             ctx.registerGuestSession(value(row, "session_token"), token);
-            ctx.put("sessionToken", token);
+            ctx.put(ScenarioKeys.SESSION_TOKEN, token);
         }
     }
 
@@ -171,7 +172,7 @@ public class EntityTableGivenSteps {
             touchedInspection |= "inspection".equals(appliesTo);
         }
         if (touchedInspection) {
-            ctx.put("inspectionKeys", db.admin().queryForList(
+            ctx.put(ScenarioKeys.INSPECTION_KEYS, db.admin().queryForList(
                     "SELECT item_key FROM sop_items WHERE tenant_id = 1 AND applies_to = 'inspection' AND active ORDER BY sort_order",
                     String.class));
         }
@@ -247,7 +248,7 @@ public class EntityTableGivenSteps {
                     value(row, "idempotency_key"), value(row, "status"), attempts,
                     nextRetryAt == null ? null : parseRetryTime(nextRetryAt));
             keysById.put(id, aggregateKey);
-            ctx.put("outbox:" + value(row, "idempotency_key"), id);
+            ctx.put(ScenarioKeys.outboxId(value(row, "idempotency_key")), id);
             if (attempts > 0 && nextRetryAt != null) {
                 blockedKeys.add(aggregateKey);
             }
@@ -257,8 +258,8 @@ public class EntityTableGivenSteps {
                 freeIds.add(id);
             }
         });
-        ctx.put("outboxFreeIds", freeIds);
-        ctx.put("outboxBlockedKeys", blockedKeys);
+        ctx.put(ScenarioKeys.OUTBOX_FREE_IDS, freeIds);
+        ctx.put(ScenarioKeys.OUTBOX_BLOCKED_KEYS, blockedKeys);
     }
 
     @Given("^系統中存在以下任務:$")
@@ -270,8 +271,8 @@ public class EntityTableGivenSteps {
             String assigneeSymbol = value(row, "assignee_id");
             if (assigneeSymbol != null) {
                 UUID assignee = ctx.entityId(assigneeSymbol);
-                ctx.put("cleanerId", assignee);
-                ctx.put("cleanerActor", Actor.staff(roleFor(value(row, "dept")), assignee));
+                ctx.put(ScenarioKeys.CLEANER_ID, assignee);
+                ctx.put(ScenarioKeys.CLEANER_ACTOR, Actor.staff(roleFor(value(row, "dept")), assignee));
             }
         }
     }

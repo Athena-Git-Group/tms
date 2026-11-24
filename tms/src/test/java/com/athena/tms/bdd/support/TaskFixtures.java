@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Supplier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 public class TaskFixtures {
@@ -28,55 +27,25 @@ public class TaskFixtures {
     private final TenantFixtures tenantFixtures;
     private final RoomFixtures roomFixtures;
     private final MutableClock clock;
+    private final ScriptedRepairTicketNumbers ticketNumbers;
 
     public TaskFixtures(
             TaskEngine engine,
             JdbcClient jdbcClient,
             TenantFixtures tenantFixtures,
             RoomFixtures roomFixtures,
-            MutableClock clock) {
+            MutableClock clock,
+            ScriptedRepairTicketNumbers ticketNumbers) {
         this.engine = engine;
         this.jdbcClient = jdbcClient;
         this.tenantFixtures = tenantFixtures;
         this.roomFixtures = roomFixtures;
         this.clock = clock;
+        this.ticketNumbers = ticketNumbers;
     }
 
     public Builder builder() {
         return new Builder();
-    }
-
-    /**
-     * 工務單一律由建單時的開單步驟取號，案例要指定單號時先把計數設成前一號，建完再把計數放回原值，
-     * 讓案例鋪的單不影響之後實際開單拿到的號碼。
-     */
-    public UUID withRepairTicketNo(String ticketNo, Supplier<UUID> create) {
-        long tenantId = tenantFixtures.testTenantId();
-        int number = Integer.parseInt(ticketNo.substring(ticketNo.indexOf('-') + 1));
-        List<Integer> before = jdbcClient
-                .sql("SELECT last_no FROM repair_ticket_counters WHERE tenant_id = ?")
-                .param(tenantId)
-                .query(Integer.class)
-                .list();
-        setTicketCounter(tenantId, number - 1);
-        UUID taskId = create.get();
-        if (before.isEmpty()) {
-            jdbcClient.sql("DELETE FROM repair_ticket_counters WHERE tenant_id = ?").param(tenantId).update();
-        } else {
-            setTicketCounter(tenantId, before.get(0));
-        }
-        return taskId;
-    }
-
-    private void setTicketCounter(long tenantId, int lastNo) {
-        jdbcClient
-                .sql(
-                        """
-                        INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, ?)
-                        ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no
-                        """)
-                .params(tenantId, lastNo)
-                .update();
     }
 
     public UUID createPoolTask(String roomNo, String title, String typeCode, String deptCode, Integer estMin) {
@@ -100,6 +69,8 @@ public class TaskFixtures {
         private UUID reservationId;
         private LocalDate workDate;
         private Instant doneAt;
+        private Instant endedAt;
+        private String repairTicketNo;
         private String cancelReason = "manager_void";
         private String poolSource;
         private Boolean priorityNotify;
@@ -192,6 +163,16 @@ public class TaskFixtures {
             return this;
         }
 
+        public Builder endedAt(Instant v) {
+            this.endedAt = v;
+            return this;
+        }
+
+        public Builder repairTicketNo(String v) {
+            this.repairTicketNo = v;
+            return this;
+        }
+
         public Builder workDate(LocalDate v) {
             this.workDate = v;
             return this;
@@ -278,11 +259,18 @@ public class TaskFixtures {
                 effectiveWorkDate = clock.instant().atZone(clock.getZone()).toLocalDate();
             }
 
+            if (repairTicketNo != null && repairTicket == null) {
+                throw new IllegalArgumentException("repairTicketNo 要搭配 repairTicket 一起給");
+            }
             UUID taskId;
             TenantContext.set(tenantId);
+            if (repairTicketNo != null) {
+                ticketNumbers.handOutNext(repairTicketNo);
+            }
             try {
                 taskId = createAtState(tenantId, roomId, effectiveWorkDate).getId();
             } finally {
+                ticketNumbers.forgetUnused();
                 TenantContext.clear();
             }
 
@@ -319,6 +307,12 @@ public class TaskFixtures {
 
             backdateTimeline(tenantId, taskId);
             applyWorkedSeconds(tenantId, taskId);
+            if (endedAt != null) {
+                jdbcClient
+                        .sql("UPDATE tasks SET ended_at = ? WHERE tenant_id = ? AND id = ?")
+                        .params(OffsetDateTime.ofInstant(endedAt, clock.getZone()), tenantId, taskId)
+                        .update();
+            }
             if (reminderStage != null) {
                 stageReminder(tenantId, taskId, reminderStage, assigneeId, dept, roomNo, title);
             }
@@ -598,7 +592,7 @@ public class TaskFixtures {
                             """)
                     .params(
                             tenantId,
-                            "push:task:" + taskId,
+                            "task:" + taskId,
                             payload,
                             "fx-reminder:" + taskId + ":" + stage + ":" + recipient,
                             OffsetDateTime.ofInstant(clock.instant(), clock.getZone()))

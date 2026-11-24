@@ -1,20 +1,24 @@
 package com.athena.tms.service;
 
+import com.athena.tms.config.ClockConfig;
 import com.athena.tms.dto.IntegrationRoomStatusEvent;
 import com.athena.tms.dto.TaskChange;
 import com.athena.tms.dto.desk.DeskBoardChange;
 import com.athena.tms.service.IntegrationRoomStatusWhitelist;
 import com.athena.tms.service.StreamConnectionRegistry;
 import com.athena.tms.service.TenantScopedExecutor;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.convert.DurationStyle;
@@ -44,6 +48,7 @@ public class TaskEventsSseConsumer {
     private final Duration degradedThreshold;
     private final KafkaListenerEndpointRegistry kafkaListenerRegistry;
     private final DeskBoardService deskBoardService;
+    private final Clock wallClock;
     private final Map<UUID, Integer> deliveredSeqByTask = new LinkedHashMap<UUID, Integer>(256, 0.75f, true){
 
         @Override
@@ -52,7 +57,7 @@ public class TaskEventsSseConsumer {
         }
     };
 
-    public TaskEventsSseConsumer(StreamConnectionRegistry registry, TenantScopedExecutor tenantScopedExecutor, JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, @Value(value="${tms.stream.degraded-threshold:10s}") String degradedThreshold, KafkaListenerEndpointRegistry kafkaListenerRegistry, DeskBoardService deskBoardService) {
+    public TaskEventsSseConsumer(StreamConnectionRegistry registry, TenantScopedExecutor tenantScopedExecutor, JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, @Value(value="${tms.stream.degraded-threshold:10s}") String degradedThreshold, KafkaListenerEndpointRegistry kafkaListenerRegistry, DeskBoardService deskBoardService, @Qualifier(ClockConfig.WALL_CLOCK) Clock wallClock) {
         this.registry = registry;
         this.tenantScopedExecutor = tenantScopedExecutor;
         this.jdbcTemplate = jdbcTemplate;
@@ -60,6 +65,7 @@ public class TaskEventsSseConsumer {
         this.degradedThreshold = DurationStyle.detectAndParse((String)degradedThreshold);
         this.kafkaListenerRegistry = kafkaListenerRegistry;
         this.deskBoardService = deskBoardService;
+        this.wallClock = wallClock;
     }
 
     @EventListener(value={ApplicationReadyEvent.class})
@@ -85,8 +91,7 @@ public class TaskEventsSseConsumer {
         if (recordTimestamp <= -1L) {
             return;
         }
-        // 事件的時間戳是送出端的真實時間，所以落後要拿真實時間來比，不能用業務上可調整的時鐘。
-        long lagMillis = System.currentTimeMillis() - recordTimestamp;
+        long lagMillis = this.wallClock.millis() - recordTimestamp;
         if (lagMillis > this.degradedThreshold.toMillis()) {
             this.registry.enterDegraded(StreamDegradation.Reason.CONSUMER_LAG);
         } else {
@@ -134,24 +139,22 @@ public class TaskEventsSseConsumer {
             log.debug("任務 {} 查無投影列，略過此鈴", (Object)task);
             return;
         }
-        this.registry.broadcastTask(change, this.loadBoardChange(tenantId.asLong(), task));
+        this.loadBoardChange(tenantId.asLong(), task).ifPresentOrElse(
+                board -> this.registry.broadcastTask(change, board),
+                () -> this.registry.broadcastCardlessTask(change));
         this.pushIntegration(tenantId.asLong(), task, eventSeq, type.asText());
     }
 
-    /**
-     * 每則事件只組一次卡片，所有櫃檯角色的連線共用：同一家飯店的櫃檯角色看到的卡片完全相同，沒有因人而異的欄位。
-     * 這家飯店沒有櫃檯角色連著就不組。組不出來時回 null，訊號照送、不帶卡片，畫面會改成重抓整份看板，不會卡住。
-     */
-    private DeskBoardChange loadBoardChange(long tenantId, UUID taskId) {
+    private Optional<DeskBoardChange> loadBoardChange(long tenantId, UUID taskId) {
         if (!this.registry.hasDeskBoardViewer(tenantId)) {
-            return null;
+            return Optional.empty();
         }
         try {
-            return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.deskBoardService.boardChange(tenantId, taskId));
+            return Optional.of(this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.deskBoardService.boardChange(tenantId, taskId)));
         }
         catch (Exception e) {
             log.warn("組櫃檯看板卡片失敗，這則訊號不帶卡片（task={}）: {}", (Object)taskId, (Object)e.getMessage());
-            return null;
+            return Optional.empty();
         }
     }
 

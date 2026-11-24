@@ -1,8 +1,8 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.OffsetDateTimeColumnMapRowMapper;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.ManagerKind;
-import com.athena.tms.common.SqlTimestamps;
 import com.athena.tms.common.error.ForbiddenException;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.dto.ManagerQueues;
@@ -46,7 +46,7 @@ public class ManagerQueueService {
 
     private List<InspectionQueueItem> inspectionQueue(long tenantId, UUID callerStaffId, LocalDate today) {
         UUID excludedCleanerId = selfInspectionSetting.allowed(tenantId) ? null : callerStaffId;
-        return jdbcTemplate.queryForList(
+        return jdbcTemplate.query(
                 """
                 SELECT t.id, t.title, t.done_at AS waiting_since, t.redo_count, r.room_no,
                        s.name AS cleaner_name
@@ -57,6 +57,7 @@ public class ManagerQueueService {
                    AND t.assignee_id IS DISTINCT FROM ?::uuid
                  ORDER BY t.done_at, r.room_no, t.id
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, excludedCleanerId).stream()
                 .map(row -> {
                     Base base = base(row, today);
@@ -70,7 +71,7 @@ public class ManagerQueueService {
     }
 
     private List<VerifyQueueItem> verifyQueue(long tenantId, LocalDate today) {
-        return jdbcTemplate.queryForList(
+        return jdbcTemplate.query(
                 """
                 SELECT t.id, t.title, t.source, t.done_at AS waiting_since, r.room_no,
                        rt.ticket_no, rt.category, rt.description, rt.resolution_type,
@@ -86,6 +87,7 @@ public class ManagerQueueService {
                    AND rt.resolution_type IS DISTINCT FROM 'no_action_needed'
                  ORDER BY t.done_at, NULLIF(r.room_no, ?) NULLS LAST, rt.ticket_no
                 """,
+                OffsetDateTimeColumnMapRowMapper.INSTANCE,
                 tenantId, AutomationRuleService.PUBLIC_AREA_ROOM_NO).stream()
                 .map(row -> {
                     Base base = base(row, today);
@@ -116,7 +118,7 @@ public class ManagerQueueService {
 
     private Base base(Map<String, Object> row, LocalDate today) {
         boolean publicArea = AutomationRuleService.isPublicAreaRoomNo(row.get("room_no"));
-        OffsetDateTime raw = SqlTimestamps.toOffsetDateTime(row.get("waiting_since"));
+        OffsetDateTime raw = (OffsetDateTime) row.get("waiting_since");
         OffsetDateTime waitingSince = raw == null ? null : raw.atZoneSameInstant(clock.getZone()).toOffsetDateTime();
         return new Base(
                 (UUID) row.get("id"),

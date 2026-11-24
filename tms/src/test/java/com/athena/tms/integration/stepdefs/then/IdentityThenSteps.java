@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
+import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.TestData;
@@ -53,7 +54,7 @@ public class IdentityThenSteps {
 
     @Then("^staff_devices 對同一裝置去重、僅登記一列，且登入不綁裝置$")
     public void deviceDedupAndLoginNotBoundToDevice() {
-        String fingerprint = ctx.get("fingerprint");
+        String fingerprint = ctx.get(ScenarioKeys.FINGERPRINT);
         int sameDevice = db.admin().queryForObject(
                 "SELECT count(*) FROM staff_devices WHERE tenant_id = 1 AND staff_id = ? AND device_fingerprint = ?",
                 Integer.class, TestData.STAFF_HK1, fingerprint);
@@ -94,7 +95,7 @@ public class IdentityThenSteps {
 
     @Then("^三者請求應該都失敗，回應皆為 401 且錯誤碼一致$")
     public void threeFailuresIndistinguishable() {
-        List<ScenarioContext.HttpResult> attempts = ctx.get("loginAttempts");
+        List<ScenarioContext.HttpResult> attempts = ctx.get(ScenarioKeys.LOGIN_ATTEMPTS);
         String firstCode = null;
         for (ScenarioContext.HttpResult attempt : attempts) {
             assertEquals(401, attempt.status(), "回應 body: " + attempt.body());
@@ -115,15 +116,15 @@ public class IdentityThenSteps {
 
     @Then("^兩者請求應該都失敗，回應皆為 401$")
     public void bothDeactivatedCallsAre401() {
-        ScenarioContext.HttpResult relogin = ctx.get("reloginResult");
-        ScenarioContext.HttpResult oldToken = ctx.get("oldTokenResult");
+        ScenarioContext.HttpResult relogin = ctx.get(ScenarioKeys.RELOGIN_RESULT);
+        ScenarioContext.HttpResult oldToken = ctx.get(ScenarioKeys.OLD_TOKEN_RESULT);
         assertEquals(401, relogin.status(), "「阿強」active=false → 登入 401: " + relogin.body());
         assertEquals(401, oldToken.status(), "停用必須立即生效，不得等 JWT TTL 到期——這就是每請求打 DB 驗 active 的理由");
     }
 
     @Then("^三者請求應該都失敗，回應皆為 401$")
     public void allThreeCredentialAttemptsAre401() {
-        List<ScenarioContext.HttpResult> attempts = ctx.get("credentialAttempts");
+        List<ScenarioContext.HttpResult> attempts = ctx.get(ScenarioKeys.CREDENTIAL_ATTEMPTS);
         for (ScenarioContext.HttpResult attempt : attempts) {
             assertEquals(401, attempt.status(), "回應 body: " + attempt.body());
         }
@@ -134,7 +135,7 @@ public class IdentityThenSteps {
         ScenarioContext.HttpResult last = ctx.lastResponse();
         assertEquals(200, last.status(), "回應 body: " + last.body());
         JsonNode body = objectMapper.readTree(last.body());
-        String sessionToken = ctx.get("sessionToken");
+        String sessionToken = ctx.get(ScenarioKeys.SESSION_TOKEN);
         Map<String, Object> session = db.admin().queryForMap(
                 "SELECT room_id, reservation_id FROM guest_sessions WHERE session_token = ?", sessionToken);
         String roomInDb = db.admin().queryForObject("SELECT room_no FROM rooms WHERE id = ?", String.class, session.get("room_id"));
@@ -146,13 +147,13 @@ public class IdentityThenSteps {
 
     @Then("^以該 session 呼叫住客寫入動作回 (\\d+)$")
     public void sessionGuestWriteStatus(int expected) {
-        ScenarioContext.HttpResult result = api.post("/guest/probe", ctx.get("sessionToken"), null);
+        ScenarioContext.HttpResult result = api.post("/guest/probe", ctx.get(ScenarioKeys.SESSION_TOKEN), null);
         assertEquals(expected, result.status(), "回應 body: " + result.body());
     }
 
     @Then("^以該 session 呼叫員工 API 的請求應該失敗，回應為 (\\d+)$")
     public void sessionStaffCallStatus(int expected) {
-        ScenarioContext.HttpResult result = api.get("/staff/probe", ctx.get("sessionToken"));
+        ScenarioContext.HttpResult result = api.get("/staff/probe", ctx.get(ScenarioKeys.SESSION_TOKEN));
         assertEquals(expected, result.status(), "住客憑證有效也進不了員工門——401/403 分野在「身分假」對「權限不夠」");
     }
 }

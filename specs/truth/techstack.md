@@ -38,7 +38,7 @@
 | 住客掃碼頁後端資料 | `TanStack Query`（與櫃檯共用同一個 query client） | 首頁資料與需求清單的讀取、收到即時訊號後重讀、連線異常時每 4 秒重讀 |
 | 住客 session | 用網址裡的代碼向 `POST /guest/scan` 換來的 session 存 `sessionStorage`，鍵帶代碼；請求以 `X-Guest-Session` 標頭帶出；任何一次呼叫被回 401 就用網址裡的代碼重換一次（只重換一次），換到就重發、換不到就顯示無法使用頁 | 重新整理不用再掃；關掉分頁就清掉，下次從網址的代碼重換；與櫃檯的登入狀態用不同的鍵、不同的 store、不同的標頭，同一支手機上兩邊互不影響 |
 | 住客掃碼頁連後端 | 自己的薄薄一層 API（前綴 `/guest`、住客標頭、401 重換），與櫃檯共用 `ApiError`、`NetworkError`、`newIdempotencyKey`；開發時 Vite 代理 `/guest`（串流用與 `/staff/stream` 相同的斷線切斷設定）；正式環境同源部署 | 每個寫入都帶 `Idempotency-Key`；備品多項依清單順序一張一張送，被限流就停、已建立的保留 |
-| 住客掃碼頁即時更新 | 以 `fetch` 讀取後端的住客事件串流 `GET /guest/stream`（帶 `X-Guest-Session`），解析器與連線狀態機與櫃檯共用；收到 `task` 重讀需求清單、收到 `resync` 另重讀首頁資料；斷線、35 秒沒資料、收到 `degraded` 事件時改成每 4 秒重讀，串流重新連上並收到 `init` 才停止 | 住客的訊號不帶內容，一律重讀；畫面上不顯示連線異常的提示列；後端給住客的串流沒有任何恢復訊號（`recovered` 與心跳的 `degraded` 旗標都只給員工連線），所以 `degraded` 之後會一直重讀到連線被切斷重連為止，最長 30 分鐘（後端的連線逾時） |
+| 住客掃碼頁即時更新 | 以 `fetch` 讀取後端的住客事件串流 `GET /guest/stream`（帶 `X-Guest-Session`），解析器與連線狀態機與櫃檯共用；收到 `task` 重讀需求清單、收到 `resync` 另重讀首頁資料；斷線、35 秒沒資料、收到 `degraded` 事件時改成每 4 秒重讀，串流重新連上並收到 `init` 才停止 | 住客的訊號不帶內容，一律重讀；畫面上不顯示連線異常的提示列；後端給住客的串流和員工串流一樣會送 `degraded`、`recovered`，心跳也帶 `degraded` 旗標；畫面目前還沒用 `recovered`，`degraded` 之後會一直重讀到連線被切斷重連為止，最長 30 分鐘（後端的連線逾時） |
 | 住客掃碼頁多語系 | 同一個 `i18next` 實例，四份語系檔各加 `guest` 子樹；第一次打開依手機瀏覽器語言（`zh*` 一律繁體中文、`ja`、`vi` 各自對應、其餘英文）；選過的語言存 `localStorage`、一支手機一筆，鍵與櫃檯的語言鍵不同 | 繁體中文、英文、日文、越南文；不加韓文；後端給的字（服務項目、需求標題、櫃檯回覆、資訊頁）原樣顯示 |
 | 住客掃碼頁驗收規格 | Gherkin feature files（`# language: zh-TW`），在 `specs/truth/features/guest-web/`，自己的 `dsl.md` | 住客掃碼頁的畫面行為測項；runner 見「測試與驗證」 |
 
