@@ -9,7 +9,7 @@ const TONE: Record<StageTone, string> = {
   done: 'bg-guest-status-success-container text-guest-status-on-success-container',
 };
 
-export function StatusTag({ task }: { task: Pick<GuestTask, 'state'> }) {
+export function StatusTag({ task }: { task: Pick<GuestTask, 'state' | 'endedAt'> }) {
   const { t } = useTranslation();
   const stage = stageOf(task);
   return (
