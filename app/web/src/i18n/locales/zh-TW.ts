@@ -75,6 +75,23 @@ export const zhTW = {
     titles: {
       board: '總覽看板',
       triage: '待派單',
+      settings: '設定',
+    },
+  },
+  settings: {
+    inspectionRequired: {
+      label: '需要房務主管查房',
+      hint: '關閉後，房務按完成就直接結案，不進待查房。',
+      note: '要不要查房在開始打掃時就決定了，改這裡不影響已經開始打掃的房間。',
+    },
+    repairVerificationRequired: {
+      label: '需要工務主管驗收',
+      hint: '關閉後，工務按完成就直接結案，不進待驗收。',
+    },
+    footer: '已經在待查房、待驗收的單不受影響，照常等主管處理。',
+    notSaved: {
+      title: '設定沒有儲存',
+      body: '開關已經恢復原來的樣子。請檢查網路連線後再試一次。',
     },
   },
   board: {

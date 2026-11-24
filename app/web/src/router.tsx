@@ -7,6 +7,7 @@ import { BoardPage } from './pages/board/BoardPage';
 import { ChangePasswordPage } from './pages/change-password/ChangePasswordPage';
 import { LoginPage } from './pages/login/LoginPage';
 import { MissingHotelPage } from './pages/missing-hotel/MissingHotelPage';
+import { SettingsPage } from './pages/settings/SettingsPage';
 import { TriagePage } from './pages/triage/TriagePage';
 import { DeskShell } from './shell/DeskShell';
 import { useSessionStore } from './stores/session';
@@ -68,6 +69,14 @@ export const router = createBrowserRouter([
     children: [
       { path: `${base}${PATHS.board}`, element: <BoardPage /> },
       { path: `${base}${PATHS.triage}`, element: <TriagePage /> },
+      {
+        path: `${base}${PATHS.settings}`,
+        element: (
+          <Gate area="settings">
+            <SettingsPage />
+          </Gate>
+        ),
+      },
     ],
   },
   { path: `${base}/*`, element: <ToBoard /> },

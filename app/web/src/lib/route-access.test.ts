@@ -33,17 +33,17 @@ describe('sessionAtHotel', () => {
 describe('設定頁只給主管與值班主管', () => {
   const session = (role: 'frontdesk' | 'manager' | 'duty_manager') => ({ role, mustChangePassword: false });
 
-  it.each(['manager', 'duty_manager'] as const)('%s 可以打開設定頁，也看得到側欄的設定', (role) => {
+  test.each(['manager', 'duty_manager'] as const)('%s 可以打開設定頁，也看得到側欄的設定', (role) => {
     expect(decideRoute('settings', session(role))).toEqual({ allow: true });
     expect(canChangeSettings(role)).toBe(true);
   });
 
-  it('櫃檯直接打設定頁的網址會被帶回總覽看板，側欄也沒有設定', () => {
+  test('櫃檯直接打設定頁的網址會被帶回總覽看板，側欄也沒有設定', () => {
     expect(decideRoute('settings', session('frontdesk'))).toEqual({ allow: false, redirectTo: PATHS.board });
     expect(canChangeSettings('frontdesk')).toBe(false);
   });
 
-  it('沒有登入時先去登入頁，還在用臨時密碼時先去設定新密碼', () => {
+  test('沒有登入時先去登入頁，還在用臨時密碼時先去設定新密碼', () => {
     expect(decideRoute('settings', null)).toEqual({ allow: false, redirectTo: PATHS.login });
     expect(decideRoute('settings', { role: 'manager', mustChangePassword: true })).toEqual({
       allow: false,

@@ -76,6 +76,23 @@ export const ja: Translation = {
     titles: {
       board: '全体ボード',
       triage: '振り分け待ち',
+      settings: '設定',
+    },
+  },
+  settings: {
+    inspectionRequired: {
+      label: '客室主任の点検が必要',
+      hint: 'オフにすると、客室係が完了を押した時点でそのまま完了し、点検待ちになりません。',
+      note: '点検の要否は清掃開始時に決まるため、ここを変えても清掃中の客室には影響しません。',
+    },
+    repairVerificationRequired: {
+      label: '施設主任の検収が必要',
+      hint: 'オフにすると、施設係が完了を押した時点でそのまま完了し、検収待ちになりません。',
+    },
+    footer: 'すでに点検待ち・検収待ちのものは影響を受けず、これまでどおり主任の対応を待ちます。',
+    notSaved: {
+      title: '設定を保存できませんでした',
+      body: 'スイッチは元の状態に戻りました。ネットワーク接続を確認して、もう一度お試しください。',
     },
   },
   board: {

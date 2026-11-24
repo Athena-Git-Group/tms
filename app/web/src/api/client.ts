@@ -27,6 +27,10 @@ export function apiPost<T>(path: string, body?: unknown, options: RequestOptions
   return send<T>('POST', path, body, {}, options);
 }
 
+export function apiPatch<T>(path: string, body: unknown, options: RequestOptions = {}): Promise<T> {
+  return send<T>('PATCH', path, body, {}, options);
+}
+
 export function apiWrite<T>(path: string, body?: unknown, options: WriteOptions = {}): Promise<T> {
   const key = options.idempotencyKey ?? newIdempotencyKey();
   return send<T>('POST', path, body, { 'Idempotency-Key': key }, options);

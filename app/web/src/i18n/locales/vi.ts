@@ -76,6 +76,23 @@ export const vi: Translation = {
     titles: {
       board: 'Bảng tổng quan',
       triage: 'Chờ điều phối',
+      settings: 'Cài đặt',
+    },
+  },
+  settings: {
+    inspectionRequired: {
+      label: 'Cần quản lý buồng phòng kiểm tra',
+      hint: 'Khi tắt, phòng được đóng ngay khi buồng phòng bấm hoàn tất, không chờ kiểm tra.',
+      note: 'Việc có cần kiểm tra hay không được quyết định khi bắt đầu dọn phòng, nên thay đổi ở đây không ảnh hưởng các phòng đang dọn.',
+    },
+    repairVerificationRequired: {
+      label: 'Cần quản lý kỹ thuật nghiệm thu',
+      hint: 'Khi tắt, phiếu sửa chữa được đóng ngay khi kỹ thuật bấm hoàn tất, không chờ nghiệm thu.',
+    },
+    footer: 'Các phiếu đang chờ kiểm tra hoặc nghiệm thu không bị ảnh hưởng và vẫn chờ quản lý xử lý.',
+    notSaved: {
+      title: 'Chưa lưu được cài đặt',
+      body: 'Công tắc đã trở về như cũ. Hãy kiểm tra kết nối mạng rồi thử lại.',
     },
   },
   board: {
