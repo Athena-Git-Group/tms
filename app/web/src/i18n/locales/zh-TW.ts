@@ -81,7 +81,7 @@ export const zhTW = {
   settings: {
     inspectionRequired: {
       label: '需要房務主管查房',
-      hint: '關閉後，房務按完成就直接結案，不進待查房。',
+      hint: '關閉後，房務按完成就直接結案，不進待查房，也不回寫 PMS 房況。',
       note: '要不要查房在開始打掃時就決定了，改這裡不影響已經開始打掃的房間。',
     },
     repairVerificationRequired: {

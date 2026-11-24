@@ -82,7 +82,7 @@ export const ja: Translation = {
   settings: {
     inspectionRequired: {
       label: '客室主任の点検が必要',
-      hint: 'オフにすると、客室係が完了を押した時点でそのまま完了し、点検待ちになりません。',
+      hint: 'オフにすると、客室係が完了を押した時点でそのまま完了し、点検待ちにならず、PMS の客室ステータスにも反映されません。',
       note: '点検の要否は清掃開始時に決まるため、ここを変えても清掃中の客室には影響しません。',
     },
     repairVerificationRequired: {

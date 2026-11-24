@@ -82,7 +82,7 @@ export const vi: Translation = {
   settings: {
     inspectionRequired: {
       label: 'Cần quản lý buồng phòng kiểm tra',
-      hint: 'Khi tắt, phòng được đóng ngay khi buồng phòng bấm hoàn tất, không chờ kiểm tra.',
+      hint: 'Khi tắt, phòng được đóng ngay khi buồng phòng bấm hoàn tất, không chờ kiểm tra và không cập nhật trạng thái phòng về PMS.',
       note: 'Việc có cần kiểm tra hay không được quyết định khi bắt đầu dọn phòng, nên thay đổi ở đây không ảnh hưởng các phòng đang dọn.',
     },
     repairVerificationRequired: {

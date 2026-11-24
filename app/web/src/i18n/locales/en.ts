@@ -82,7 +82,7 @@ export const en: Translation = {
   settings: {
     inspectionRequired: {
       label: 'Require housekeeping manager inspection',
-      hint: 'When off, a room is closed as soon as housekeeping marks it done, without waiting for inspection.',
+      hint: 'When off, a room is closed as soon as housekeeping marks it done, without waiting for inspection, and its status is not written back to the PMS.',
       note: 'Whether a room needs inspection is decided when cleaning starts, so this does not affect rooms already being cleaned.',
     },
     repairVerificationRequired: {
