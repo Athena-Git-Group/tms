@@ -48,8 +48,8 @@ start_backend() {
   if port_in_use "$BACKEND_PORT"; then
     echo "[manual-env] ${BACKEND_PORT} 被別的行程佔用，不是這套環境起的，停下來" >&2; exit 2
   fi
-  [[ -x "$JAVA_BIN" ]] || { echo "[manual-env] 找不到 JDK 25：${JAVA_BIN}（用 MANUAL_JAVA 指定）" >&2; exit 2; }
-  [[ -f "$SOURCE_JAR" ]] || { echo "[manual-env] 找不到後端 jar：${SOURCE_JAR}，先 ./mvnw -f tms/pom.xml -DskipTests package" >&2; exit 2; }
+  [[ -x "$JAVA_BIN" ]] || { echo "[manual-env] 找不到 JDK 25：${JAVA_BIN}（裝 JDK 25，或用 MANUAL_JAVA 指定 java 執行檔）" >&2; exit 2; }
+  [[ -f "$SOURCE_JAR" ]] || { echo "[manual-env] 找不到後端 jar：${SOURCE_JAR}，先 bash scripts/manual-env/up.sh --build" >&2; exit 2; }
 
   ensure_database
 
@@ -104,7 +104,7 @@ start_web() {
   (
     cd "$REPO_ROOT/app/web"
     # 沿用 vite.config.ts，只在啟動時蓋掉埠與代理目標，不改設定檔。
-    MANUAL_WEB_PORT="$WEB_PORT" MANUAL_BACKEND_ORIGIN="http://localhost:${BACKEND_PORT}" \
+    MANUAL_WEB_PORT="$WEB_PORT" MANUAL_WEB_HOST="$WEB_HOST" MANUAL_BACKEND_ORIGIN="http://localhost:${BACKEND_PORT}" \
     nohup node --input-type=module -e "
 import { createServer } from 'vite';
 const target = process.env.MANUAL_BACKEND_ORIGIN;
@@ -121,6 +121,7 @@ const server = await createServer({
   configFile: 'vite.config.ts',
   server: {
     port: Number(process.env.MANUAL_WEB_PORT),
+    host: process.env.MANUAL_WEB_HOST,
     strictPort: true,
     // vite 會把這裡和 vite.config.ts 的 proxy 合併；設定檔有的路徑沒在這裡蓋掉，就還是打 8080。
     proxy: {
