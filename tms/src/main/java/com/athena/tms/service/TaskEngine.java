@@ -414,7 +414,7 @@ public class TaskEngine {
         if (rating < 1 || rating > 5) {
             throw new UnprocessableEntityException("評分必須是 1–5 的整數，收到: " + rating);
         }
-        int seq = this.guard("評分", "UPDATE tasks\n   SET rating = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('done', 'inspected') AND rating IS NULL\nRETURNING event_seq\n", rating, tenantId, taskId);
+        int seq = this.guard("評分", "UPDATE tasks\n   SET rating = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('done', 'inspected', 'closed') AND ended_at IS NOT NULL AND rating IS NULL\nRETURNING event_seq\n", rating, tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "rated", Actor.guest(), TaskEngine.payload("rating", rating));
     }
 
