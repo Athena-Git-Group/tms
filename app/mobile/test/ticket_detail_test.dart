@@ -126,6 +126,29 @@ void main() {
       ], List.filled(4, TmsTimelineStatus.done));
     });
 
+    testWidgets('飯店免驗收而直接結案的單，不說主管驗收通過，最後一步寫免驗收', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        housekeeping(
+          ticket(state: 'closed', assigneeName: '阿德', resolutionType: 'fixed'),
+        ),
+      );
+
+      final card = tester.widget<TmsStatusSummaryCard>(
+        find.byType(TmsStatusSummaryCard),
+      );
+      expect(card.detail, '工務 阿德 回報完修，飯店設定免主管驗收，已結案。');
+      final timeline = tester.widget<TmsTimeline>(find.byType(TmsTimeline));
+      expect(
+        [for (final step in timeline.steps) step.label],
+        ['待開始', '維修中', '完修', '免驗收'],
+      );
+      expect([
+        for (final step in timeline.steps) step.status,
+      ], List.filled(4, TmsTimelineStatus.done));
+    });
+
     testWidgets('沒有任何主管審核的字樣與補資料再送出', (tester) async {
       await tester.pumpWidget(housekeeping(ticket(state: 'pool')));
 
@@ -460,6 +483,38 @@ void main() {
             .label,
         '已結案 · 王主管驗收',
       );
+
+      handle.dispose();
+    });
+
+    testWidgets('飯店免驗收而直接結案的單，狀態列寫免驗收，步驟條最後一步也是', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        engineering(
+          ticket(state: 'closed', assigneeName: '阿強', resolutionType: 'fixed'),
+          managerView: true,
+        ),
+      );
+
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsIdentifier('ticket.status-summary-card'),
+            )
+            .label,
+        '已結案 · 免驗收',
+      );
+      final track = tester.widget<TmsStepTrack>(find.byType(TmsStepTrack));
+      expect(
+        [for (final step in track.steps) step.label],
+        ['待開始', '維修中', '完修', '免驗收'],
+      );
+      expect([
+        for (final step in track.steps) step.status,
+      ], List.filled(4, TmsStepStatus.done));
 
       handle.dispose();
     });

@@ -214,6 +214,19 @@ void main() {
       expect(find.text('工務單詳情'), findsNothing);
     });
 
+    testWidgets('已結案的工務單不算未結案', (tester) async {
+      await pumpTask(
+        tester,
+        task: _task(state: 'doing'),
+        tickets: <RepairTicketSummary>[
+          _ticket(ticketNo: 'W-0410', state: 'closed'),
+          _ticket(ticketNo: 'W-0411', state: 'cancelled'),
+        ],
+      );
+
+      expect(find.text('2 張・都已結案'), findsOneWidget);
+    });
+
     testWidgets('只有一張時右側寫單號、類別與目前階段', (tester) async {
       await pumpTask(
         tester,
