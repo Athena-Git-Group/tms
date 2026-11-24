@@ -702,7 +702,7 @@ Table repair_tickets {
     已有 repair_tickets 列的任務再走到開單步驟時原樣沿用，不取號、不改欄位。
   櫃檯代開：櫃檯畫面代開的工務品項（冷氣、熱水、燈具、電視）與給工務的其他需求，建單交易內新建任務（source=desk、pool_source=desk_forward、state=pool、
     沒有 assignee，見 tasks Note 的「櫃檯代開」）並開一列本表：ticket_no 取 repair_ticket_counters 下一號、reporter_id 為送出的那一位、
-    description 與 source_task_id 為 NULL、origin=reported、不要求照片；category 依品項：冷氣→air_conditioning、熱水與燈具→plumbing_electrical、
+    description 寫入與標題相同的文字（工務品項為「{品名}有問題」，給工務的其他需求為櫃檯打的文字，工務 App 詳情頂部顯示 description）、source_task_id 為 NULL、origin=reported、不要求照片；category 依品項：冷氣→air_conditioning、熱水與燈具→plumbing_electrical、
     電視→furniture_equipment、其他需求→other。對應的品項鍵記在 tasks.note 的 menu_key，本表不另存。
     來源一律 desk＋desk_forward，不看送出者的部門（工務部門或沒有部門的主管代開也一樣，不會記成 staff）；急件照其他開單路徑相同的規則判定。
   舊資料修補（V29，一次性；舊版本先停，Flyway 在新版啟動時執行）：對象是 dept=engineering、尚未結束（state 不是 done、inspected、closed、cancelled）、沒有本表列的任務。

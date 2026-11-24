@@ -270,8 +270,8 @@ deskCreateRequests:
       四種單長什麼樣（品項的部門、上限、標題與修繕分類見 DeskMenuKey）：
       房務品項：dept=housekeeping、type=amenity、取 T- 單號，標題「{品名} ×{數量}」（冰塊是「冰塊 ×{數量} 桶」）。
       給房務的其他需求：dept=housekeeping、type=other、取 T- 單號，標題是去掉頭尾空白後的文字。
-      工務品項：開成工務單——dept=engineering、type=repair、只有 W- 工務單號（不取 T-），標題「{品名}有問題」，修繕分類依 DeskMenuKey。
-      給工務的其他需求：同工務品項，修繕分類 other，標題是去掉頭尾空白後的文字。
+      工務品項：開成工務單——dept=engineering、type=repair、只有 W- 工務單號（不取 T-），標題「{品名}有問題」，工務單的 description 寫入同一句，修繕分類依 DeskMenuKey。
+      給工務的其他需求：同工務品項，修繕分類 other，標題與工務單的 description 都是去掉頭尾空白後的文字。
       標題一律由後端依品項鍵組成、一律是繁體中文，不隨操作者的介面語言改變；請求不帶標題、部門、類型或修繕分類。
 
 

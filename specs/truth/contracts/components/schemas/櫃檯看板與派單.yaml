@@ -604,7 +604,7 @@ DeskMenuKey:
   description: >-
     代開單的品項鍵：櫃檯代開單面板固定的 12 個常用品項，鍵就是中文品名，與住客選單（tenant_config 的 request_menu）的 key、
     分類規則的 menu_key 是同一套值。這份清單寫在程式裡，不讀飯店設定；畫面照這 12 個鍵寫死，順序就是面板上的順序。
-    每個鍵開出的單：
+    每個鍵開出的單（工務單的 description 與標題寫同一句）：
     毛巾、浴巾、礦泉水、拖鞋、牙刷組：房務（housekeeping、amenity），上限 9，標題「{品名} ×{數量}」。
     嬰兒床、加床：房務（housekeeping、amenity），上限 2，標題「{品名} ×{數量}」。
     冰塊：房務（housekeeping、amenity），上限 2，標題「冰塊 ×{數量} 桶」。
@@ -679,7 +679,7 @@ DeskCreateRequestOther:
       maxLength: 60
       description: >-
         其他需求的文字，原文照存、不翻譯。後端先去掉頭尾空白，之後必須是 1–60 字，否則回 422 validation_failed；
-        去掉空白後的文字就是這張單的標題。
+        去掉空白後的文字就是這張單的標題；開成工務單時也是工務單的 description。
       example: 住客明早 6 點要叫車
     dept:
       type: string

@@ -25,9 +25,9 @@
       當 「林佩君」按「送出 2 張單」，沒有附任何照片
       那麼 開單成功，代開單面板關閉，畫面回到總覽看板
       並且 開出以下兩張工務單，都沒有經過待派單：
-        | 標題       | 房號 | 部門        | 類型   | 狀態 | 來源 | 待認領來源分流 | 修繕分類            | 負責人 | 報修人 | 單號開頭 |
-        | 冷氣有問題 | 207  | engineering | repair | pool | desk | desk_forward   | air_conditioning    | 沒有   | 林佩君 | W-       |
-        | 熱水有問題 | 207  | engineering | repair | pool | desk | desk_forward   | plumbing_electrical | 沒有   | 林佩君 | W-       |
+        | 標題       | 說明       | 房號 | 部門        | 類型   | 狀態 | 來源 | 待認領來源分流 | 修繕分類            | 負責人 | 報修人 | 單號開頭 |
+        | 冷氣有問題 | 冷氣有問題 | 207  | engineering | repair | pool | desk | desk_forward   | air_conditioning    | 沒有   | 林佩君 | W-       |
+        | 熱水有問題 | 熱水有問題 | 207  | engineering | repair | pool | desk | desk_forward   | plumbing_electrical | 沒有   | 林佩君 | W-       |
       並且 總覽看板「待認領」欄有「冷氣有問題」「熱水有問題」兩張高亮的卡片，部門工務、類型修繕、來源圖示「櫃檯開單」
       當 「林佩君」打開「冷氣有問題」
       那麼 詳情面板的「來源」是「櫃檯代開（林佩君）」
@@ -43,9 +43,9 @@
       假設 「林佩君」替 305 代開
       當 「林佩君」只選「燈具」送出，再打開代開單面板、房號 305、只選「電視」送出
       那麼 開出的兩張工務單如下：
-        | 標題       | 修繕分類            |
-        | 燈具有問題 | plumbing_electrical |
-        | 電視有問題 | furniture_equipment |
+        | 標題       | 說明       | 修繕分類            |
+        | 燈具有問題 | 燈具有問題 | plumbing_electrical |
+        | 電視有問題 | 電視有問題 | furniture_equipment |
 
   Rule: 同一次送出可以同時有房務與工務的品項，摘要分成兩段，房務開一般單、工務開工務單
 
