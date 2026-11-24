@@ -14,7 +14,11 @@ import {
   stepView,
 } from './stage';
 
+const ENDED_AT = '2026-11-20T07:00:00Z';
+const ENDED_STATES: readonly RequestState[] = ['done', 'inspected', 'closed', 'cancelled'];
+
 function task(overrides: Partial<GuestTask> = {}): GuestTask {
+  const state = overrides.state ?? 'pool';
   return {
     id: 't1',
     type: 'amenity',
@@ -24,6 +28,7 @@ function task(overrides: Partial<GuestTask> = {}): GuestTask {
     answer: null,
     rating: null,
     createdAt: '2026-11-20T06:05:00Z',
+    endedAt: ENDED_STATES.includes(state) ? ENDED_AT : null,
     ...overrides,
   };
 }
@@ -89,7 +94,7 @@ const EXPECTED: Record<RequestState, Expected> = {
   },
   closed: {
     label: 'guest.stage.completed', tone: 'done', section: 'ended', cancellable: false, locked: false,
-    ratable: false, message: 'completed', looks: ALL_DONE, subs: DONE_SUBS, homeCard: null,
+    ratable: true, message: 'completed', looks: ALL_DONE, subs: DONE_SUBS, homeCard: null,
   },
   cancelled: {
     label: 'guest.stage.cancelled', tone: 'neutral', section: 'ended', cancellable: false, locked: false,
@@ -106,7 +111,7 @@ describe('狀態對照表涵蓋後端每一個狀態', () => {
 
   it.each(ALL_STATES)('%s', (state) => {
     const want = EXPECTED[state];
-    const row = stageOf({ state });
+    const row = stageOf(task({ state }));
     const view = stepView(task({ state }));
     expect(row).toBe(STAGE_TABLE[state]);
     expect({
@@ -125,9 +130,44 @@ describe('狀態對照表涵蓋後端每一個狀態', () => {
 
   it('鎖定說明只出現在進行中而且不能取消的狀態', () => {
     for (const state of ALL_STATES) {
-      const row = stageOf({ state });
+      const row = stageOf(task({ state }));
       expect(row.locked).toBe(row.section === 'active' && !row.cancellable);
     }
+  });
+});
+
+describe('完成了還在等查房或驗收的單（沒有結束時刻）', () => {
+  const awaiting = (dept: 'housekeeping' | 'engineering') => task({ state: 'done', dept, endedAt: null });
+
+  it.each(['housekeeping', 'engineering'] as const)('%s 的單對住客還是處理中，跟做到一半一樣', (dept) => {
+    const want = EXPECTED.doing;
+    const row = stageOf(awaiting(dept));
+    const view = stepView(awaiting(dept));
+    expect({
+      label: row.labelKey,
+      tone: row.tone,
+      section: row.section,
+      cancellable: row.cancellable,
+      locked: row.locked,
+      ratable: canRate(awaiting(dept)),
+      message: messageBox(awaiting(dept))?.kind ?? null,
+      looks: view?.map((step) => step.look) ?? null,
+      subs: view?.map((step) => step.sub?.key ?? null) ?? null,
+      homeCard: homeCardLine(awaiting(dept))?.key ?? null,
+    }).toEqual(want);
+  });
+
+  it('排在進行中那一段，首頁進度卡挑得到它', () => {
+    const waiting = awaiting('housekeeping');
+    expect(splitSections([waiting]).map((group) => group.section)).toEqual(['active']);
+    expect(latestActive([waiting])).toBe(waiting);
+    expect(homeRequestsSection([waiting])).toEqual({ kind: 'card', task: waiting, count: 1 });
+  });
+
+  it('查房或驗收通過、有了結束時刻才算已完成並可以評分', () => {
+    const ended = task({ state: 'done', endedAt: ENDED_AT });
+    expect(stageOf(ended).labelKey).toBe('guest.stage.completed');
+    expect(canRate(ended)).toBe(true);
   });
 });
 
