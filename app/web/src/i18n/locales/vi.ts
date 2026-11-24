@@ -362,7 +362,7 @@ export const vi: Translation = {
     },
     help: 'Chạm vào bộ phận để gửi, có thể hoàn tác trong 5 giây; Trả lời ngay sẽ mở khung trả lời trước',
     footer:
-      'Chỉ những yêu cầu khách tự gõ mà hệ thống không đoán được bộ phận mới đến đây. Yêu cầu chọn từ danh sách và văn bản khớp quy tắc sẽ vào thẳng bộ phận. Bạn cũng có thể kéo thẻ sang Buồng phòng hoặc Kỹ thuật trên bảng tổng quan.',
+      'Yêu cầu khách tự gõ mà hệ thống không đoán được bộ phận, và mọi yêu cầu của khách dành cho Kỹ thuật, đều đến đây. Chỉ yêu cầu chọn từ danh sách và văn bản khớp quy tắc dành cho Buồng phòng mới vào thẳng danh sách chờ nhận của Buồng phòng. Bạn cũng có thể kéo thẻ sang Buồng phòng hoặc Kỹ thuật trên bảng tổng quan.',
     opener: '{{roomNo}} chi tiết',
     actions: '{{roomNo}} phân công',
     assign: {

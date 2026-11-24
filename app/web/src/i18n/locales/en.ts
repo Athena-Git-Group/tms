@@ -362,7 +362,7 @@ export const en: Translation = {
     },
     help: 'Tap a department to send; undo within 5 seconds. Answer Now opens the reply panel first.',
     footer:
-      'Only requests typed by guests whose department the system cannot tell come here. Checklist requests and text matching a rule go straight to the department. You can also drag cards to Housekeeping or Engineering on the board.',
+      'Guest-typed requests whose department the system cannot tell, and any guest request meant for Engineering, come here. Only checklist requests and text matching a Housekeeping rule go straight to the Housekeeping pool. You can also drag cards to Housekeeping or Engineering on the board.',
     opener: '{{roomNo}} details',
     actions: '{{roomNo}} dispatch',
     assign: {
