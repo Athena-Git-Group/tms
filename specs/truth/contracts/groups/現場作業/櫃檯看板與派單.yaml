@@ -277,7 +277,7 @@ deskCreateRequests:
 
       代開的工務單走工務單的開單步驟（與 createRepairTicket 共用），但規則依這條開單路徑決定，不看開單人的部門：
       不要求照片（開單時沒有照片列）；來源一律 desk＋desk_forward；報修人是送出的那一位（frontdesk、manager 或 duty_manager 都可以）；
-      說明（description）與原任務（sourceTaskId）為空；origin=reported；急件照飯店的急件規則判定，判定為急件時同交易送出急件推播
+      說明（description）與標題同句、原任務（sourceTaskId）為空；origin=reported；急件照飯店的急件規則判定，判定為急件時同交易送出急件推播
       （櫃檯畫面照舊不顯示急件）。之後的認領、完修、主管驗收、結案都照工務單既有的規則。
       createRepairTicket 的行為（照片 1–3 張、依部門決定來源、角色放行）不因這條路徑而改變。
 

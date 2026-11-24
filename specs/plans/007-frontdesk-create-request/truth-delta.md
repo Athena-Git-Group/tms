@@ -78,3 +78,51 @@
 | NOOP | `specs/truth/data/data-model.dbml` -> `tasks` 各 CHECK 值域、`task_events.type`／`payload`、`repair_tickets.category`、`task_counters`、`repair_ticket_counters`、索引 | 已檢查：不新增狀態、部門、類型、來源、來源分流、事件型別、修繕分類或索引；`created` 快照已含 `source`、`state`、`dept`、`title`、`note`（`TaskEngine.java:508-510`），足以組出代開歷程與重放 `menu_key`；不需要 migration（仍停在 V29）。 | spec「對既有行為的影響」：值域不動；research 決策 4 選 note JSON 不加欄位。 |
 
 ## /dsl-refine
+
+| 動作 | Truth 規格 | 改動摘要 | 原因 |
+| --- | --- | --- | --- |
+| ADD | `specs/truth/features/frontdesk-web/代開單/dsl.md` | 新模組 DSL：面板外觀、12 品項表、摘要組法；Given 房間與住客、打開面板（空白／帶房號／帶品項／其他需求）、剛代開、房號被移除、帳號改角色、登入逾時、後端開單出錯、內容不合規定、網路中斷與回應遺失三種送出失敗；When 房號欄（依序打、輸入、刪一碼、點建議）、點品項、按品項底下的鈕、其他需求（打字、空白、超量貼上、清空、改部門）、點遮罩、按送出鈕、連按；Then 面板與遮罩、房號欄、品項樣子、無障礙名稱、建議房號、住客卡、空房提示、其他需求、類似單提醒、摘要、送出後畫面（換頁、高亮 2.6 秒、卡片、無浮條）、後端開出的單、內容保留、回登入頁、只有工具列有代開單、介面語言、兩種尺寸與 44 pt。 | 使用者故事 1 至 5、FR-001 至 FR-040；ui-plan 畫面 1 至 5。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/入口與空白面板.feature` | 工具列兩頁都能打開、唯一實心主按鈕、空白面板內容與順序、只有工具列有入口、詳情面板開著時預填房號、三種角色面板相同。 | FR-001 至 FR-003、FR-028、FR-033、FR-034；決策：iPadOS 26 ✕ 圓鈕（無障礙名稱「取消」）。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/關閉不確認也不保留.feature` | ✕ 與遮罩直接關、不確認、不開單；再打開是空白；不關底下的詳情面板；預填只在那一次。 | FR-014、FR-028。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/房號欄與住客卡.feature` | 只收半形數字、最多 4 碼；空白與打開頭時最多 6 筆住客房建議；點建議出住客卡；VIP 標；刪成無效時住客卡消失；空房提示可送出；不存在的房號什麼都不顯示、不能送、沒有紅字。 | FR-004、FR-005、FR-025 至 FR-029。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/常用品項與送出鈕.feature` | 徽章與步進器、一品項一張、減到 0、上限 2 與 9、冰塊摘要不帶單位、工務品項「移除」與只開一張、摘要一段與兩段、房號無效或沒選時的送出鈕、無障礙名稱。 | FR-006 至 FR-010、FR-015、FR-024。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/其他需求.feature` | 標籤與提示字、有字才出現「這段要給」且預設房務、給房務開 `other` 一般單、改給工務的摘要與工務單（`other`、說明同標題）、排在所選部門段最後、空白不算、60 字上限無計數、去前後空白、英文介面照原文。 | FR-019 至 FR-021、FR-024；決策：工務單 description 同標題。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/類似單提醒.feature` | 同房未結束且對應品項相同（櫃檯代開、住客勾選、住客打字已對應）時提醒；不擋送出；負責人與「剛剛建立」、新到舊；其他需求有字時列住客打字單；已完成、中斷、延後中、別間房不提醒；房號品項其他需求一改立刻重算。 | FR-030 至 FR-032。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/送出成功回到看板.feature` | 面板關、換到總覽看板、清篩選與搜尋、關詳情；新卡片在待認領欄高亮 2.6 秒；沒有浮條與復原；卡片來源「櫃檯開單」；後端房務單 `pool`、`desk`、`T-`；冰塊「桶」；工務單 `W-`、修繕分類、說明同標題、報修人、`desk_forward`；主管與值班主管結果相同；詳情「櫃檯代開（{姓名}）」「等同仁認領」與歷程第一句。 | FR-011 至 FR-013、FR-016 至 FR-018、FR-034、FR-039；決策：工務品項開 W-、三角色可代開。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/送出失敗與重送.feature` | 四種「沒有送出」提示文字、按「好」後內容全留且可再按、網路恢復後再送不重複、回應遺失後再送拿同一次結果、送出中不能再按、登入逾時回登入頁、任一張開不成全不留。 | FR-035、FR-036、FR-040；決策：全有全無、失敗保留內容與四種錯誤文字。 |
+| ADD | `specs/truth/features/frontdesk-web/代開單/兩種尺寸與四種語言.feature` | 1280 × 720 與 1180 × 820 下面板內捲動、送出鈕看得到；可點的東西 44 pt；沒有只靠游標的東西；滑鼠與觸控都能送出；日文介面文字；標題一律繁體中文。 | NFR-001、NFR-002、SC-009、SC-012、SC-013。 |
+| MODIFY | `specs/truth/features/frontdesk-web/共用外框/尚未開放的入口.feature` -> Rule「「通知板」與「遺失物」照原型畫出來，點了沒有反應，也不會改到任何資料」 | Rule 名拿掉「代開單」，`例子` 刪掉「代開單」一列；「通知板」「遺失物」兩列與其他 Rule 不變。 | FR-001、FR-038：代開單開放（使用者已定案）。 |
+| MODIFY | `specs/truth/features/frontdesk-web/共用外框/dsl.md` -> 模組說明 | 說明尚未開放的入口只剩側欄「通知板」「遺失物」，代開單見 `代開單/`。句型不變。 | 同上。 |
+| MODIFY | `specs/truth/features/frontdesk-web/dsl.md` -> `Given: 全館有以下的單：` | DataTable 加選填欄 `對應品項`（寫進 `tasks.note.menu_key`）；其他欄與預設值不變。 | 類似單提醒要能準備帶品項鍵的單（FR-030）；只增不改。 |
+| MODIFY | `specs/truth/features/frontdesk-web/dsl.md` -> `Given: 接下來的送出會因為網路中斷而失敗` | 斷線的請求加上代開單（`deskCreateRequests`）；派單、復原、當場回答照舊。 | FR-040 網路中斷的提示。 |
+| MODIFY | `specs/truth/features/frontdesk-web/單筆詳情/dsl.md` → `specs/truth/features/frontdesk-web/dsl.md` -> `Then: 詳情面板「內容」的 "{列名}" 是 "{內容}"` | 權威位置搬移，語意不變。 | 代開單模組也要驗詳情的「來源」「負責人」。 |
+| MODIFY | `specs/truth/features/frontdesk-web/單筆詳情/dsl.md` → `specs/truth/features/frontdesk-web/dsl.md` -> `Then: 詳情面板的歷程最新一筆是 "{句子}"，操作者是 "{操作者}"` | 權威位置搬移，語意不變。 | 代開單模組也要驗歷程第一句。 |
+| MODIFY | `specs/truth/features/frontdesk-web/帳號與登入/dsl.md` → `specs/truth/features/frontdesk-web/dsl.md` -> `Given: "{員工}" 已登入櫃檯畫面，介面語言是 "{語言}"，停在 "{頁}"` | 權威位置搬移，語意不變。 | 代開單模組的英文、日文介面案例。 |
+| MODIFY | `specs/truth/features/frontdesk-web/共用外框/dsl.md` → `specs/truth/features/frontdesk-web/dsl.md` -> `Then: 這個畫面上每一項內容與每一顆可以按的東西，不用游標移上去就看得到、按得到` | 權威位置搬移，語意不變。 | 代開單面板的觸控驗收。 |
+| ADD | `specs/truth/features/frontdesk-web/即時更新/現場變化即時跟上.feature` -> Rule「另一台櫃檯代開的單，這一台的看板不用重新整理就多出那幾張待認領的卡片」 | 新增一條 Rule；既有 Rule 與例子不變。 | NFR-003。 |
+| ADD | `specs/truth/features/frontdesk-web/即時更新/dsl.md` -> `When: "{同事}" 在另一台櫃檯代開 "{房號}" 的以下單：` | 以同事身分在後端呼叫 `deskCreateRequests`。 | 同上。 |
+| NOOP | `specs/truth/features/frontdesk-web/共用外框/側欄與工具列.feature`、`總覽看板/卡片內容.feature`、`單筆詳情/詳情面板內容.feature`、`單筆詳情/歷程.feature` | 已檢查：工具列已有「代開單」；「櫃檯開單」「櫃檯代開（{姓名}）」「櫃檯代開「{標題}」，進{部門}待認領」已定案，不需修改。 | FR-001、FR-013。 |
+| ADD | `specs/truth/features/backend/dsl.md` -> `When: "{櫃檯}" 代開 "{房號}" 的以下單：`、`Given: "{櫃檯}" 已代開 "{房號}" 的以下單：`、`Given: 飯店的客房有 {房號清單}` | 代開單的命令與「已代開」狀態（品項列、其他需求列；權威落地含 `pool`、`desk`＋`desk_forward`、T-／W- 規則、`created` 單筆、工務單欄位、`processed_ops` 同交易、全有全無、錯誤依序 403／422／404）；客房準備。放介面根是因為櫃檯看板與派單、工務單、員工事件串流三個模組都用。 | 介面 7、9；FR-011、FR-016、FR-017、FR-022、FR-023、FR-034 至 FR-039。 |
+| MODIFY | `specs/truth/features/backend/推播/dsl.md` → `specs/truth/features/backend/dsl.md` -> `Given: 住客 10 分鐘內已在 "{房號}" 送出 {筆數} 筆需求`、`When: 住客在 "{房號}" 掃碼要 "{品項}"`、`Then: 這次請求被擋下，提示住客洽櫃檯` | 權威位置搬移，語意不變。 | 櫃檯看板與派單模組的住客額度案例也用同一契約。 |
+| MODIFY | `specs/truth/features/backend/dsl.md` -> `Then: 這次操作被拒絕，錯誤碼為 "{錯誤碼}"` | 參數說明的例子補上代開單的 `idempotency_key_required`、`validation_failed`、`not_found`；驗證語意不變。 | 介面 7 的錯誤對照。 |
+| MODIFY | `specs/truth/features/backend/櫃檯看板與派單/dsl.md` -> 模組說明、用語對照、`Given: 以下房間現在有住客：` | 端點由六個變八個（`listDeskRooms`、`deskCreateRequests`）；用語補代開單的類型與「對應品項」；入住日、退房日多收昨天／今天／明天／後天，原本的 `M/D` 照舊。 | 介面 7、8；房間清單案例不依賴固定日期。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/dsl.md` -> 代開單相關句型 | Given：後端出錯一張沒開、開某標題會出錯、住客已勾選／已打字、帶品項的分類規則、公共區域佔位房、不算在住的訂房。When：其他需求字串／字數、什麼都沒選、不帶鍵、同鍵同內容再送、同鍵同時送兩次、讀房間清單。Then：依序開出、回應卡片與看板相同、歷程只有建立、失敗不留且不跳號、回放、並發只開一次、60 字標題、住客開單成功、原有單不變、房間清單、卡片對應品項。 | 介面 7、8、10；research 決策 3、4、5。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/櫃檯代開單.feature` | 每品項一張與標題、冰塊「桶」、工務品項 W-、混合送出、其他需求給房務／工務、其他需求排最後、去前後空白、歷程只有建立、回應卡片、三角色可代開、房務工務老闆 403、不改既有單。 | FR-011、FR-016、FR-019 至 FR-023、FR-034、FR-038、FR-039。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/代開單的檢查與拒絕.feature` | 房號 999 與公共區域 404；品項不在清單、超上限、0 份、重複、部門不對、空白、61 字 422（60 字可以）；什麼都沒選 422；沒帶鍵 400。 | 契約 `deskCreateRequests` 檢查與錯誤；FR-040。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/代開單全有全無與重送.feature` | 工務單出錯時毛巾也不留、流水號不跳；同鍵再送回放；同鍵並發只開一次；後端出錯後同鍵再送照常開單。 | FR-035、FR-036、SC-007；research 決策 3。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/代開的單不算住客額度.feature` | 住客額度滿時代開成功；代開三張後住客仍能送第 3 筆；住客自己第 4 筆照舊被擋。 | FR-037、SC-011；決策：代開不算住客額度。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/代開單的房間清單.feature` | 列出全部客房含空房與在住住客（姓名、VIP、入住退房日）；排除公共區域佔位房；已退房／未入住／已取代不算在住；主管與值班主管可讀；房務工務老闆 403。 | 介面 8；FR-005、FR-025 至 FR-027。 |
+| ADD | `specs/truth/features/backend/櫃檯看板與派單/看板卡片的對應品項.feature` | 代開品項單（含工務）帶品項鍵、其他需求沒有；住客勾選帶選單鍵；住客打字命中帶品項的規則帶鍵（派給工務後照樣帶）；沒命中沒有。 | FR-030；research 決策 4；決策：品項鍵＝中文品名。 |
+| MODIFY | `specs/truth/features/backend/工務單/dsl.md` -> 模組說明 | 補「櫃檯代開」段：依路徑決定規則（三角色、免照片、`desk`＋`desk_forward`、報修人、標題與說明、修繕分類對照）；`createRepairTicket` 的照片、依部門決定來源與角色放行不變。 | 介面 9；plan 風險 1。 |
+| ADD | `specs/truth/features/backend/工務單/dsl.md` -> `Then: 代開的工務單如下：` | 驗工務單列（報修人、說明、分類、`origin`、無照片）、任務（`pool`、`task_no` NULL、`desk`＋`desk_forward`、只有 `created`）、`readRepairTicket` 與 `listDeptPool`。 | 同上。 |
+| ADD | `specs/truth/features/backend/工務單/櫃檯代開的工務單.feature` | 四個工務品項的分類與標題說明、其他需求給工務是「其他」、不用照片、直接進工務待認領且來源櫃檯、主管（掛工務部門）與值班主管代開來源仍是櫃檯、之後完修與主管驗收照舊結案。 | FR-016 至 FR-018、FR-034、FR-039；決策：工務品項開 W-、description 同標題、三角色可代開。 |
+| NOOP | `specs/truth/features/backend/工務單/開立工務單與急件.feature`、`照片完整性與冪等送出.feature`、`櫃檯轉來的工務單.feature` | 已檢查：工務單開單端點與櫃檯轉單的既有例子不動。 | research 決策 2：不放寬 `createRepairTicket`。 |
+| MODIFY | `specs/truth/features/backend/員工事件串流/dsl.md` -> 用語對照「訊號」 | 加「建立」＝`created`。既有訊號不變。 | NFR-003。 |
+| ADD | `specs/truth/features/backend/員工事件串流/收得到哪些單的訊號.feature` -> Rule「櫃檯代開的單，其他櫃檯與那張單所在部門的同仁都收得到建立的訊號」 | 新增一條 Rule；既有 Rule 與例子不變。 | NFR-003；手機待認領不用重新整理就出現。 |
+| NOOP | `specs/truth/features/backend/推播/員工推播事件.feature` | 已檢查：住客第 4 筆被擋的 Rule 不變（三個句型只搬到介面根）。 | FR-037 只改「代開不算」，住客自己的額度規則不變。 |
+| NOOP | `specs/truth/features/ios-app/**` | 已檢查：工務待認領的「櫃檯」來源標示與分流磚已有 truth；工務單詳情頂部用 `description`，代開時後端寫入同標題的文字，App 不改。 | plan 前提「手機 App 的畫面不改」；`/api-plan` 已處理段。 |
+| MODIFY | `specs/truth/features/guest-web/dsl.md` -> `Given: 櫃檯在 "{時刻}" 替 "{房號}" 房代開了一張單` → `Given: "{房號}" 房的另一支手機在 "{時刻}" 送出了一張單` | 刪除舊句型，改成同一間房另一支手機送出的單：以住客身分用同一枚代碼在後端送出（來源住客、同一筆訂房、算進額度），建立時間是該時刻，不經這支手機的頁面；這支手機的畫面已開著、不重新整理，這一張引發的串流訊號被扣住，清單與估算都不知道它。 | FR-037：代開不算住客額度，舊前提不成立；保留「估算通過、後端拒絕」的覆蓋。 |
+| MODIFY | `specs/truth/features/guest-web/設備報修/報修的限流.feature` -> Rule「估算通過但後端拒絕時，顯示同一個提示，不出現成功頁」的例子 | 前提由「櫃檯剛替這間房代開了 1 張」改為「同一間房的另一支手機剛又送了 1 張」，句子移到停在設備報修頁之後；When 與 Then 不變。 | 同上。 |
+| MODIFY | `specs/truth/features/guest-web/備品補充/後端在送到一半拒絕.feature` -> 三個例子（第二張被擋、衣架建立礦泉水被擋、這間房已經滿了） | 前提由櫃檯代開改為同一間房的另一支手機在 14:03 送出了一張單，句子移到停在備品補充頁之後；When 與 Then 不變。 | 同上。 |
+
+已處理（原待決）：`specs/truth/features/guest-web/` 以「櫃檯替這間房代開了一張單」製造「住客估算通過、後端拒絕」的 4 個例子與 `dsl.md` 句型，在 FR-037 定案後前提不成立；裁決保留測試意圖，前提改為「同一間房的另一支手機在那個時間送出了一張單」（來源住客、同一筆訂房，算進額度；這支手機的頁面沒重新整理，不知道這筆），改動見上方三列 MODIFY。

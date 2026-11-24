@@ -688,7 +688,7 @@ DeskCreateRequestOther:
       - engineering
       description: >-
         這段要給哪個部門。housekeeping 開一般單（type=other、T- 單號）；engineering 開工務單（type=repair、W- 單號、修繕分類 other）。
-        給工務時文字只存在標題，工務單的說明（description）為空。
+        給工務時文字同時寫進標題與工務單的說明（description）。
 DeskCreateRequestsResult:
   type: object
   description: 代開單成功（或回放）的回應。

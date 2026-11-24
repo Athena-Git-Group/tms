@@ -10,7 +10,7 @@
 
 | 用語 | 權威值 |
 | --- | --- |
-| 訊號：認領、開始、派單、復原派單、評分、班末退回 | `task` 事件的 `type`：`claimed`、`started`、`triaged`、`triage_undone`、`rated`、`returned_to_pool` |
+| 訊號：建立、認領、開始、派單、復原派單、評分、班末退回 | `task` 事件的 `type`：`created`、`claimed`、`started`、`triaged`、`triage_undone`、`rated`、`returned_to_pool` |
 | 訊號帶的卡片、不在看板上 | `task` 的 `board`：`upsert`（並帶 `card`）、`remove` |
 | 第幾步（訊號）、第幾步（卡片） | `task` 的 `seq`、`card_seq`（等於 `card.seq`） |
 | 連線起始、重抓通知、心跳、降級訊號、恢復訊號 | 事件名稱 `init`、`resync`、`heartbeat`、`degraded`、`recovered` |
