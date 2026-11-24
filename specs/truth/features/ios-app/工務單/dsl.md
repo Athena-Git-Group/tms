@@ -81,6 +81,7 @@
 | `工務單詳情沒有通過或不通過的動作` | 無 | 不支援 | 無 | `必查`：員工（報修人或處理人）的工務單詳情上沒有 `managerTicket.pass-button`、`managerTicket.fail-button`，也沒有任何「通過」「不通過」字樣的按鈕；後端以該員工身分呼叫 `verifyRepairTicket` 會回 403。 |
 | `工務首頁顯示手上 {張數} 張、今天已完修 {已完修張數} 張、急件 {急件數} 張` | `張數`：整數。<br>`已完修張數`：整數。<br>`急件數`：整數。 | 不支援 | 無 | `必查`：以 `engHome.progress.in-hand-count`、`engHome.progress.repaired-count`、`engHome.progress.urgent-count` 定位，各數字與後端工務視角今日進度一致。 |
 | `工務待認領分類標籤顯示如下：` | 無 | 支援：`來源`（必填，字串；全部、急件、房務報修、櫃檯——「住客」是過時敘述，不建 truth，見本模組說明）、`筆數`（必填，整數） | 無 | `必查`：以 `engPool.category.{source}.chip` 定位，逐列顯示來源與筆數，與後端回應一致。 |
+| `工務待認領中 "{單號}" 的類別標示為 "{類別}"` | `單號`：字串。<br>`類別`：字串；冷氣、水電、設備、門鎖、其他（家具／設備在單卡上的短字是「設備」）。 | 不支援 | 無 | `必查`：以 `engPool.item.{單號}.category-label` 定位的單卡房號方塊類別文字等於該值，與後端 `PoolItem.repairCategory` 對照一致（air_conditioning＝冷氣、plumbing_electrical＝水電、furniture_equipment＝設備、door_lock＝門鎖、other＝其他）；單卡上任何文字都不是 `repair` 這類英文代碼。 |
 | `工務待認領中 "{單號}" 的來源標示為 "{來源}"` | `單號`：字串。<br>`來源`：字串；房務報修、櫃檯。 | 不支援 | 無 | `必查`：以 `engPool.item.{單號}.source-label` 定位的單卡來源標示文字等於該值，與後端 `PoolItem.source` 對照一致（staff＝房務報修、desk＝櫃檯）。 |
 | `工務待認領依序為 {單號清單}` | `單號清單`：字串；以 `、` 分隔。 | 不支援 | 無 | `必查`：列表中的單卡順序剛好等於清單，與後端回應一致。 |
 | `工務待認領中 "{單號}" 標示驗收退回，原因 "{原因}"` | `單號`：字串。<br>`原因`：字串。 | 不支援 | 無 | `必查`：以 `engPool.item.{單號}.verification-return-label` 定位的琥珀標籤顯示「驗收退回」，副文等於原因，與後端 `PoolItem.verificationReturnReason` 一致。 |

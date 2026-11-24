@@ -42,6 +42,8 @@ const withoutHotelCode: RouteObject[] = [
 
 export const router = createBrowserRouter([
   ...withoutHotelCode,
+  // 住客走到 `/g/…` 才下載住客的程式，櫃檯那包（含拖曳套件）不會進住客的手機。
+  { path: '/g/:qrToken/*', lazy: () => import('./guest/routes') },
   {
     path: `${base}${PATHS.login}`,
     element: (

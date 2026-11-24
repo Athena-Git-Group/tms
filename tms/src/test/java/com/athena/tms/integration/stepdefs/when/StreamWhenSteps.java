@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.dto.TaskCreateCommand;
+import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.entity.Task;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
@@ -53,7 +54,8 @@ public class StreamWhenSteps {
     public void engineeringTaskCreated() {
         Task task = Tenants.asTenant(1L, () -> fixtures.engine().create(new TaskCreateCommand(
                 1L, "repair", "desk", TestData.ROOM_301, TestData.RESERVATION_B002, "engineering", "pool",
-                null, "工務池新單", null, null, null, null, TestData.FD1)));
+                null, "工務池新單", null, null, null, null, TestData.FD1, false,
+                new RepairTicketDraft("other", null, TestData.STAFF_FD1, null, null))));
         ctx.put("sseTask:eng", task.getId());
     }
 
@@ -89,7 +91,8 @@ public class StreamWhenSteps {
         UUID reservationId = ctx.entityId(reservationSymbol);
         UUID roomId = db.admin().queryForObject("SELECT room_id FROM reservations_cache WHERE id = ?", UUID.class, reservationId);
         return Tenants.asTenant(1L, () -> fixtures.engine().create(new TaskCreateCommand(
-                1L, type, "desk", roomId, reservationId, dept, "pool", null, title, null, null, null, null, TestData.FD1)))
+                1L, type, "desk", roomId, reservationId, dept, "pool", null, title, null, null, null, null, TestData.FD1,
+                false, "engineering".equals(dept) ? new RepairTicketDraft("other", null, TestData.STAFF_FD1, null, null) : null)))
                 .getId();
     }
 }

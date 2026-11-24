@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・Java 後端</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="setup.html">第一天</a>
+  <a href="test.html">本機手測</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html" aria-current="page">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">Java 後端</span></p>
+
+<header>
+  <p class="eyebrow">交接 · Java 後端</p>
+  <h1>Java 後端：版本、模組與幾條硬規矩</h1>
+  <p class="stand">Spring Boot 4.1.1 的模組化單體，JDK 25，Postgres 16 加 Kafka。設定只有一份預設檔加一份測試檔，正式環境全靠環境變數覆寫。程式在 <code>tms/</code>。</p>
+  <p class="readtime">約 16 分鐘</p>
+</header>
+
+<section id="versions">
+  <h2>用什麼版本、相依哪些套件？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>Java 25、Spring Boot 4.1.1、Postgres 16、Kafka。後端有自己的 Maven wrapper <code>./tms/mvnw</code>。完整相依表收在下方，平常不用看。</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>項目</th><th>值</th><th>出處／備註</th></tr></thead>
+    <tbody>
+      <tr><td>Java</td><td>25</td><td><code>tms/pom.xml:17</code>；其他三個專案 <code>maven.compiler.release=25</code></td></tr>
+      <tr><td>Maven</td><td>3.9.11</td><td><code>tms/mvnw</code>＋<code>tms/.mvn/wrapper</code>；根目錄沒有 wrapper</td></tr>
+      <tr><td>Spring Boot</td><td>4.1.1</td><td>parent <code>spring-boot-starter-parent</code>（<code>tms/pom.xml:5-10</code>）</td></tr>
+      <tr><td>連帶版本</td><td>Spring Framework 7.0.9、Spring Security 7.1.1、Hibernate 7.4.5.Final、Tomcat 11.0.24</td><td>由 Boot 管理</td></tr>
+      <tr><td>Postgres</td><td>16（<code>postgres:16-alpine</code>）</td><td>開發堆疊與 Testcontainers 相同</td></tr>
+      <tr><td>Kafka broker</td><td>開發堆疊 3.9.1；Testcontainers 4.0.0</td><td>兩邊版本不同；client 是 kafka-clients 4.2.1</td></tr>
+    </tbody>
+  </table></div>
+  <p>值得記住的兩件事：<code>spring-boot-starter-quartz</code> <b>引入了但沒有用</b>（原始碼沒有任何 <code>org.quartz</code>，排程實際用 Spring <code>@Scheduled</code>）；Boot 4 的 Flyway 自動設定是獨立模組，少了 <code>spring-boot-flyway</code> 就不會自動跑（<code>tms/pom.xml:71</code>）。</p>
+
+  <details>
+    <summary>後端完整相依表 <span class="hint">— 19 列，含版本與用途</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>套件</th><th>版本</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>spring-boot-starter-web</code></td><td>Boot 管理</td><td>REST 與 SSE（伺服器推送事件，<code>SseEmitter</code>）</td></tr>
+        <tr><td><code>spring-boot-starter-data-jpa</code></td><td>Boot 管理</td><td>JPA／Hibernate；<code>ddl-auto=validate</code>（只驗證，不自動改表）</td></tr>
+        <tr><td><code>spring-boot-starter-security</code></td><td>Boot 管理</td><td>認證授權，自製的 Bearer filter</td></tr>
+        <tr><td><code>spring-boot-starter-actuator</code></td><td>Boot 管理</td><td><code>/actuator/health</code> 等</td></tr>
+        <tr><td><code>spring-boot-starter-quartz</code></td><td>Boot 管理（quartz 2.5.2）</td><td>引入了但沒有用</td></tr>
+        <tr><td><code>spring-boot-kafka</code>＋<code>spring-kafka</code></td><td>4.1.1（kafka-clients 4.2.1）</td><td>outbox relay 寫 Kafka；SSE 與推播消費者</td></tr>
+        <tr><td><code>springdoc-openapi-starter-webmvc-ui</code></td><td>2.8.6（寫死）</td><td>OpenAPI 與 Swagger UI</td></tr>
+        <tr><td><code>micrometer-tracing-bridge-otel</code>、<code>opentelemetry-exporter-otlp</code>、<code>micrometer-registry-prometheus</code></td><td>Boot 管理（micrometer 1.17.1）</td><td>追蹤與 Prometheus 指標</td></tr>
+        <tr><td><code>spring-boot-flyway</code>＋<code>flyway-core</code>＋<code>flyway-database-postgresql</code></td><td>4.1.1／12.4.0</td><td>資料庫版本遷移</td></tr>
+        <tr><td><code>postgresql</code>（runtime）</td><td>42.7.13</td><td>JDBC driver</td></tr>
+        <tr><td><code>nimbus-jose-jwt</code></td><td>9.37.3（寫死）</td><td>JWT 簽發與驗證（<code>JwtService</code>）</td></tr>
+        <tr><td><code>firebase-admin</code></td><td>9.9.0</td><td>FCM 推播（<code>FcmPushSender</code>，有設憑證路徑才啟用）</td></tr>
+        <tr><td><code>lombok</code></td><td>1.18.46（optional）</td><td>打包時排除（<code>tms/pom.xml:180-191</code>）</td></tr>
+        <tr><td>測試：<code>spring-boot-starter-test</code></td><td>Boot 管理</td><td>JUnit Jupiter 6.0.3、Mockito 5.23.0、AssertJ 3.27.7</td></tr>
+        <tr><td>測試：<code>spring-security-test</code>、<code>spring-kafka-test</code>、<code>spring-boot-testcontainers</code></td><td>Boot 管理</td><td>—</td></tr>
+        <tr><td>測試：Testcontainers <code>junit-jupiter</code>／<code>postgresql</code>／<code>kafka</code></td><td>1.21.3</td><td>真 Postgres、真 Kafka</td></tr>
+        <tr><td>測試：<code>cucumber-java</code>／<code>cucumber-spring</code>／<code>cucumber-junit-platform-engine</code></td><td>7.22.1</td><td>行為規格測試</td></tr>
+        <tr><td>測試：<code>junit-platform-suite</code></td><td>Boot 管理</td><td><code>@Suite</code> 入口</td></tr>
+      </tbody>
+    </table></div>
+    <p>classpath 上同時有 Jackson 2（<code>com.fasterxml.jackson.core:jackson-databind:2.21.5</code>）與 Jackson 3（<code>tools.jackson.core:jackson-databind:3.1.5</code>，Boot 4 的預設）。surefire 只設了 <code>excludeJUnit5Engines=cucumber</code>（<code>tms/pom.xml:192-202</code>），沒有 failsafe、沒有其他系統屬性——<code>api.version</code> 是每次從命令列傳的。</p>
+    </div>
+  </details>
+  <details>
+    <summary>三個測試專案的相依 <span class="hint">— app/bdd、app/web-bdd、app/bdd-support 的版本對照</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>項目</th><th><code>app/bdd</code></th><th><code>app/web-bdd</code></th><th><code>app/bdd-support</code></th></tr></thead>
+      <tbody>
+        <tr><td>Cucumber</td><td>7.22.1（java、picocontainer、junit-platform-engine）</td><td>同左</td><td>無</td></tr>
+        <tr><td>JUnit</td><td>junit-bom 6.0.3</td><td>junit-bom 6.0.3</td><td>無</td></tr>
+        <tr><td>驅動</td><td>Appium java-client 9.5.0；selenium-bom <b>釘在 4.33.0</b>（9.5.0 與 Selenium 4.34 以上不相容，<code>app/bdd/pom.xml:24-26</code>）</td><td>Playwright 1.65.0；exec-maven-plugin 3.6.3（裝瀏覽器）</td><td>—</td></tr>
+        <tr><td>其他</td><td>surefire 3.5.2、compiler 3.14.0</td><td>surefire 3.5.2；<code>PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1</code></td><td>postgresql 42.7.13、jackson-databind 2.19.4、spring-security-crypto 6.5.10（BCrypt）、spring-jcl 6.2.18、slf4j-simple 2.0.17</td></tr>
+      </tbody>
+    </table></div>
+    <p>bdd-support 的 Spring Security（6.5.10）與 Jackson（2.19.4）版本和後端不同；它只用到 BCrypt 與 JSON，目前沒有問題。</p>
+    </div>
+  </details>
+</section>
+
+<section id="modules">
+  <h2>程式碼怎麼分套件？一個狀態變化怎麼變成推播與即時更新？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>業務邏輯集中在 <code>service/</code>。任務狀態一變，事件和資料在同一個交易寫進資料庫，再經 Kafka 與 SSE 提醒網頁「這張單變了」。</p>
+    <p>這條路只負責提醒；畫面上的真相永遠從資料庫重讀，所以掉一兩則訊息、後端重啟或 Kafka 暫停，畫面都會在重連或重讀後對回來。</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>套件</th><th>職責</th></tr></thead>
+    <tbody>
+      <tr><td><code>controller/</code>（22）</td><td>REST 與 SSE 端點：登入、住客、櫃檯看板、查房、主管佇列、請假、PMS 對接、員工帳號等</td></tr>
+      <tr><td><code>service/</code>（53）</td><td>業務邏輯與背景工作：任務狀態機 <code>TaskEngine</code>、待送匣、即時串流、排程</td></tr>
+      <tr><td><code>repair/</code>、<code>push/</code>（12）</td><td>工務單；推播</td></tr>
+      <tr><td><code>handover/</code>、<code>kb/</code></td><td>交接班；「查一下」知識庫問答（關鍵字比對）</td></tr>
+      <tr><td><code>filter/</code>（3）、<code>config/</code>（9）</td><td>認證與冪等過濾器；安全、多飯店資料來源、可撥時鐘等設定</td></tr>
+      <tr><td><code>dao/</code>、<code>entity/</code>、<code>dto/</code>、<code>common/</code></td><td>資料存取、JPA 實體、請求回應物件、共用物件</td></tr>
+    </tbody>
+  </table></div>
+  <details>
+    <summary>各套件的代表類別 <span class="hint">— 每個套件裡先看哪幾個檔</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>套件</th><th>代表類別</th></tr></thead>
+      <tbody>
+        <tr><td><code>service/</code></td><td><code>TaskEngine</code>、<code>TaskExecutionService</code>、<code>DeskBoardService</code>、<code>GuestRequestService</code>、<code>InspectionService</code>、<code>AuthService</code>、<code>JwtService</code>；待送匣一族（<code>OutboxWriter</code>、<code>OutboxRelay</code>…）；即時串流一族（<code>TaskEventsSseConsumer</code>、<code>StreamHeartbeat</code>…）；排程（<code>ScheduleRuleScanJob</code>、<code>ShiftEndScanJob</code>、<code>UnclaimedReminderScanJob</code>…）；<code>TenantScopedExecutor</code></td></tr>
+        <tr><td><code>repair/</code></td><td><code>RepairController</code>、<code>RepairService</code>、<code>RepairResolution</code> 等</td></tr>
+        <tr><td><code>push/</code></td><td><code>PushDeliveryConsumer</code>、<code>FcmPushSender</code>／<code>LoggingPushSender</code>、<code>PushSenderConfig</code>（依憑證決定用哪個）、<code>PushDeliveryRecorder</code></td></tr>
+        <tr><td><code>filter/</code></td><td><code>BearerTokenAuthFilter</code>、<code>IntegrationApiKeyAuthFilter</code>、<code>IdempotencyFilter</code></td></tr>
+        <tr><td><code>config/</code></td><td><code>SecurityConfig</code>、<code>GuestScanSecurityConfig</code>、<code>TenantAwareDataSource</code>、<code>AdjustableClock</code>／<code>ClockConfig</code>（可撥時鐘）、<code>KafkaTopicsProperties</code> 等</td></tr>
+        <tr><td><code>dao/</code>（17）、<code>entity/</code>（17）、<code>dto/</code>（36＋<code>desk/</code> 11）</td><td>Spring Data Repository；JPA 實體；請求與回應物件</td></tr>
+        <tr><td><code>common/</code></td><td><code>TenantContext</code>、<code>CurrentActor</code>、<code>HotelCode</code>、<code>UuidV7</code>、錯誤回應等</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+
+  <h3 id="realtime">任務狀態一變，網頁畫面怎麼跟著動？</h3>
+  <p>最直覺的做法是網頁每幾秒問一次後端。櫃檯好幾台電腦一起開著看板時，大部分時間都在空問，而且畫面還是慢幾秒。</p>
+  <p>另一個極端是把後端推來的訊息直接當資料改畫面。只要掉一則或順序亂了，畫面就一直錯下去，沒有人會發現。</p>
+  <p>現在的做法夾在中間：後端一有變動就推一則<b>訊號</b>給網頁，給櫃檯的訊號順手附上那張卡片的最新樣子；網頁一發現對不上，就向後端重讀整份看板。代價是前後端都要多寫「什麼時候不信訊號」的判斷，換來的是訊息掉了只會慢、不會錯。</p>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 940 600" role="img" aria-label="任務狀態改變時，TaskEngine 在同一個交易把 task_events 與 outbox 寫進 Postgres；OutboxRelay 在交易提交後被喚醒，或每 2 秒巡一次，把待送事件依序送上 Kafka 的 tms.task-events，key 是 task 加單號。Kafka 分三條：後端 A 與後端 B 的 SSE 消費者各用隨機組名，所以每台都收到全部；推播消費者讀 tms.push，全體共用 tms-push-sender 組名，一則只有一台送 FCM。A、B 各自查自己的 /staff/stream 連線註冊表，依飯店、角色、部門過濾後推給掛在自己身上的網頁。網頁收到 resync 或 degraded 時，改從資料庫整份重讀。">
+      <defs>
+        <marker id="rt-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+        <marker id="rt-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-acc"/></marker>
+        <marker id="rt-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-warn"/></marker>
+      </defs>
+
+      <!-- 第一列：寫入與投遞 -->
+      <rect class="sk-shape sk-fill" x="20" y="34" width="180" height="76" rx="14"/>
+      <text class="sk-t sk-t-b" x="110" y="64" text-anchor="middle">任務狀態改變</text>
+      <text class="sk-t-s" x="110" y="88" text-anchor="middle">TaskEngine（一個交易）</text>
+
+      <path class="sk-edge" d="M 200 72 Q 234 68 266 72" marker-end="url(#rt-a)"/>
+      <text class="sk-t-lb" x="234" y="60" text-anchor="middle">同一交易</text>
+
+      <path class="sk-shape sk-fill" d="M 270 34 L 270 108 A 100 14 0 0 0 470 108 L 470 34"/>
+      <ellipse class="sk-shape sk-fill" cx="370" cy="34" rx="100" ry="14"/>
+      <text class="sk-t sk-t-b" x="370" y="70" text-anchor="middle">Postgres</text>
+      <text class="sk-t-s" x="370" y="92" text-anchor="middle">tasks · task_events</text>
+      <text class="sk-t-s" x="370" y="110" text-anchor="middle">outbox（待送匣）</text>
+
+      <path class="sk-edge" d="M 470 72 Q 500 68 528 72" marker-end="url(#rt-a)"/>
+      <text class="sk-t-lb" x="499" y="60" text-anchor="middle">撈待送</text>
+
+      <rect class="sk-shape sk-fill" x="530" y="30" width="170" height="88" rx="14"/>
+      <text class="sk-t sk-t-b" x="615" y="58" text-anchor="middle">OutboxRelay</text>
+      <text class="sk-t-s" x="615" y="82" text-anchor="middle">交易提交就喚醒</text>
+      <text class="sk-t-s" x="615" y="102" text-anchor="middle">沒喚醒每 2 秒巡一次</text>
+
+      <path class="sk-edge" d="M 700 72 Q 724 68 746 72" marker-end="url(#rt-a)"/>
+      <text class="sk-t-lb" x="723" y="60" text-anchor="middle">依序送</text>
+
+      <rect class="sk-shape sk-soft sk-acc" x="750" y="22" width="170" height="112" rx="16"/>
+      <text class="sk-t sk-t-b" x="835" y="50" text-anchor="middle">Kafka</text>
+      <text class="sk-t-lb" x="835" y="74" text-anchor="middle">tms.task-events</text>
+      <text class="sk-t-lb" x="835" y="94" text-anchor="middle">tms.push</text>
+      <text class="sk-t-s" x="835" y="120" text-anchor="middle">key＝task:&lt;單號&gt;</text>
+
+      <!-- Kafka 分三條 -->
+      <path class="sk-edge-acc" d="M 790 134 C 690 186, 330 150, 240 208" marker-end="url(#rt-c)"/>
+      <path class="sk-edge-acc" d="M 812 134 C 770 176, 580 170, 530 208" marker-end="url(#rt-c)"/>
+      <text class="sk-t-acc" x="470" y="160" text-anchor="middle">每台都收到全部</text>
+      <path class="sk-edge" d="M 868 134 Q 874 170 812 208" marker-end="url(#rt-a)"/>
+      <text class="sk-t-lb" x="884" y="180" text-anchor="start">一則</text>
+      <text class="sk-t-lb" x="884" y="196" text-anchor="start">一台</text>
+
+      <!-- 第二列：消費者 -->
+      <rect class="sk-shape sk-fill" x="120" y="210" width="240" height="78" rx="14"/>
+      <text class="sk-t sk-t-b" x="240" y="238" text-anchor="middle">後端 A · SSE 消費者</text>
+      <text class="sk-t-s" x="240" y="260" text-anchor="middle">組名 sse-&lt;隨機&gt;</text>
+      <text class="sk-t-s" x="240" y="278" text-anchor="middle">去重、查資料庫補部門與負責人</text>
+
+      <rect class="sk-shape sk-fill" x="400" y="210" width="240" height="78" rx="14"/>
+      <text class="sk-t sk-t-b" x="520" y="238" text-anchor="middle">後端 B · SSE 消費者</text>
+      <text class="sk-t-s" x="520" y="260" text-anchor="middle">組名 sse-&lt;另一個隨機&gt;</text>
+      <text class="sk-t-s" x="520" y="278" text-anchor="middle">去重、查資料庫補部門與負責人</text>
+
+      <rect class="sk-shape sk-fill" x="680" y="210" width="240" height="78" rx="14"/>
+      <text class="sk-t sk-t-b" x="800" y="238" text-anchor="middle">推播消費者（讀 tms.push）</text>
+      <text class="sk-t-s" x="800" y="260" text-anchor="middle">組名 tms-push-sender</text>
+      <text class="sk-t-s" x="800" y="278" text-anchor="middle">全部後端共用一組</text>
+
+      <!-- 第三列：註冊表與 FCM -->
+      <path class="sk-edge" d="M 240 288 Q 244 310 240 330" marker-end="url(#rt-a)"/>
+      <path class="sk-edge" d="M 520 288 Q 524 310 520 330" marker-end="url(#rt-a)"/>
+      <path class="sk-edge" d="M 800 288 Q 804 310 800 330" marker-end="url(#rt-a)"/>
+
+      <rect class="sk-shape sk-fill" x="120" y="332" width="240" height="70" rx="14"/>
+      <text class="sk-t sk-t-b" x="240" y="360" text-anchor="middle">A 的連線註冊表</text>
+      <text class="sk-t-s" x="240" y="384" text-anchor="middle">依飯店／角色／部門過濾</text>
+
+      <rect class="sk-shape sk-fill" x="400" y="332" width="240" height="70" rx="14"/>
+      <text class="sk-t sk-t-b" x="520" y="360" text-anchor="middle">B 的連線註冊表</text>
+      <text class="sk-t-s" x="520" y="384" text-anchor="middle">依飯店／角色／部門過濾</text>
+
+      <rect class="sk-shape sk-fill" x="680" y="332" width="240" height="70" rx="14"/>
+      <text class="sk-t sk-t-b" x="800" y="360" text-anchor="middle">FCM</text>
+      <text class="sk-t-s" x="800" y="384" text-anchor="middle">送到員工手機的推播</text>
+
+      <!-- 第四列：網頁 -->
+      <path class="sk-edge" d="M 240 402 Q 244 426 240 448" marker-end="url(#rt-a)"/>
+      <text class="sk-t-lb" x="252" y="430" text-anchor="start">task 訊號（SSE）</text>
+      <path class="sk-edge" d="M 520 402 Q 524 426 520 448" marker-end="url(#rt-a)"/>
+      <text class="sk-t-lb" x="532" y="430" text-anchor="start">task 訊號（SSE）</text>
+
+      <rect class="sk-shape sk-fill" x="120" y="450" width="240" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="240" y="478" text-anchor="middle">連在 A 的網頁</text>
+      <text class="sk-t-s" x="240" y="500" text-anchor="middle">GET /staff/stream 一直開著</text>
+
+      <rect class="sk-shape sk-fill" x="400" y="450" width="240" height="64" rx="14"/>
+      <text class="sk-t sk-t-b" x="520" y="478" text-anchor="middle">連在 B 的網頁</text>
+      <text class="sk-t-s" x="520" y="500" text-anchor="middle">GET /staff/stream 一直開著</text>
+
+      <!-- 重讀：回到資料庫 -->
+      <path class="sk-edge-warn sk-dash" d="M 520 514 Q 522 556 480 558 L 76 558 Q 52 558 52 534 L 52 170 Q 52 148 80 148 L 300 148 Q 322 146 324 124" marker-end="url(#rt-w)"/>
+      <path class="sk-edge-warn sk-dash" d="M 240 514 Q 242 556 210 558"/>
+      <text class="sk-t-warn" x="300" y="584" text-anchor="middle">resync／degraded／跳號 → 從資料庫整份重讀</text>
+      <text class="sk-t-warn" x="188" y="142" text-anchor="middle">整份重讀</text>
+    </svg>
+    </div>
+    <figcaption>實線是「提醒」：從資料庫經 Kafka 一路推到網頁，只說「這張單變了」。虛線是「對帳」：網頁不信訊號時，直接向後端要一份從資料庫讀出來的完整看板。</figcaption>
+  </figure>
+
+  <h3 id="realtime-outbox">事件怎麼從資料庫送進 Kafka？</h3>
+  <p><b>待送匣（outbox）</b>是資料庫裡的一張表，作用像寄信前先放進的待寄籃：要送出去的事件先寫在這裡，再由專人投遞。</p>
+  <p><code>TaskEngine</code> 的每個狀態方法都包在一個交易裡，寫 <code>task_events</code> 的同時也寫一筆 outbox。兩者一起成功或一起失敗，所以不會「資料改了，事件沒記」，也不會「事件送了，資料卻回復原狀」。</p>
+  <p>投遞的是 <code>OutboxRelay</code>，一條背景執行緒。交易一提交它就被叫醒；沒人叫的話最多等 2 秒自己巡一次。每一輪逐家飯店撈出待送的紀錄，按單號分組依序送：<b>同一張單前一筆沒送成功，後面的先不送</b>，所以同一張單的事件不會亂序。</p>
+  <p>送上 Kafka 時，訊息的 key 就是 <code>task:&lt;單號&gt;</code>。Kafka 的一個主題會切成幾條平行的隊伍，叫<b>分區</b>；同一個 key 一定進同一條分區，所以讀的那端看到的也是原本的順序。</p>
+  <p>送失敗會等一下再試，間隔每次加倍（1 秒、2 秒、4 秒…）。8 次都失敗、再等完最後一次間隔（128 秒）就標為 <code>failed</code>，而且<b>這張單之後的事件全部停送，要人工處理</b>。推播用另一把 key（<code>push:task:&lt;單號&gt;</code>），推播卡住不會連帶擋住看板訊號。</p>
+  <p>多台後端都會跑 relay。每台送之前先在那筆紀錄上搶 60 秒的租約，租約內別台不碰，所以同一筆不會被兩台同時送。</p>
+
+  <h3 id="realtime-broadcast">為什麼每台後端都要收到全部訊息？</h3>
+  <p>網頁和後端之間靠 <b>SSE（伺服器推送事件）</b>：網頁對後端開一條不關的 HTTP 連線，後端有事就往裡面寫一段，網頁不必來問。這條連線只會掛在某<b>一台</b>後端上。</p>
+  <p>於是問題來了：房務員的開工請求打到後端 A，櫃檯的看板卻連在後端 B。B 也必須知道這件事，才推得出去。</p>
+  <p>Kafka 用<b>消費者群組（consumer group）</b>分工：同一組的成員分著讀，一則訊息只交給組裡其中一個；不同組則各自讀到完整的一份。</p>
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>所有後端用同一個組名</h4>
+    <p>每則事件只到其中一台。連在其他台上的網頁永遠收不到，而且收不收得到看運氣。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>每台啟動時取一個隨機組名</h4>
+    <p><code>TaskEventsSseConsumer</code> 的組名是 <code>sse-&lt;隨機 UUID&gt;</code>，每台自成一組，所以每台都收到全部，再各自挑出自己身上的連線推。啟動時 log 會印出實際組名。</p>
+    <p><b class="lbl">權衡</b>每多一台後端，每則事件就多一次查資料庫；目前規模可以接受。</p>
+  </div>
+  <p>推播剛好相反。<code>PushDeliveryConsumer</code> 讀 <code>tms.push</code>，組名固定是 <code>tms-push-sender</code>，全部後端共用一組，所以一則推播只會有一台送，手機不會響兩次。</p>
+  <p>隨機組名還有一個後果。群組在每條分區上讀到第幾則，記在一個叫 <b>offset</b> 的書籤裡；新組沒有書籤，設定又是「從最新位置開始讀」（<code>auto-offset-reset=latest</code>）。所以<b>後端停機期間的事件，重啟後不會補讀</b>，要靠下面說的 resync 補回來。</p>
+
+  <h3 id="realtime-route">後端收到事件後做了什麼、怎麼決定推給誰？</h3>
+  <p>每台後端的 SSE 消費者對每則事件依序做這幾件事：</p>
+  <ol class="flow">
+    <li><b>量落後</b>：事件的時間比現在晚超過 10 秒，就進入降級狀態；跟上了就離開。</li>
+    <li><b>檢查欄位</b>：少了飯店、單號、步數或事件種類就略過。</li>
+    <li><b>去重</b>：記住每張單已推過的最大步數（最多記 1 萬張單），重複或更舊的丟掉。</li>
+    <li><b>查資料庫補路由資料</b>：這張單現在的部門、負責人、訂房；撤回待派單時，另記原本的部門。</li>
+    <li><b>組看板卡片</b>：這家飯店有櫃檯連線時才組，所有櫃檯連線共用同一張。</li>
+    <li><b>逐條連線問「要不要」</b>，要的就送；另外送一則房態給 PMS 對接用的整合串流。</li>
+  </ol>
+  <p>任何一步出錯只記 log、不重試。掉這一則可以接受，因為網頁之後總會重讀。</p>
+  <p>每台後端有一份<b>連線註冊表</b>，記著目前掛在這台身上的所有 <code>/staff/stream</code> 連線。決定送不送的規則只有三條：</p>
+  <ul class="plain">
+    <li>不同飯店一律不送。</li>
+    <li>櫃檯畫面的角色（<code>frontdesk</code>、<code>manager</code>、<code>duty_manager</code>）收整家飯店，而且只有他們拿得到看板卡片，因為卡片上有住客姓名與 VIP 標記。</li>
+    <li>其他角色只收自己部門的單或指派給自己的單；單被撤回待派單時，原部門也會收到。</li>
+  </ul>
+  <p>連線本身是 <code>GET /staff/stream</code>，只認 <code>Authorization: Bearer</code> 標頭裡的登入憑證，允許 <code>housekeeping</code>、<code>engineering</code>、<code>manager</code>、<code>frontdesk</code>、<code>duty_manager</code>。後端最多讓一條連線開 30 分鐘就收掉，網頁會自己重連；連線斷掉、逾時或送不出去，都會立刻從註冊表移除。</p>
+
+  <h3 id="realtime-web">網頁收到後怎麼更新看板？</h3>
+  <p>網頁沒有用瀏覽器內建的 <code>EventSource</code>，因為它不能帶 <code>Authorization</code> 標頭。改用 <code>fetch</code> 帶著標頭連上去，自己一段段解析串流；登入憑證一換就重連。</p>
+  <p>每次連上，後端都先送 <code>init</code>，接著送 <code>resync</code> 叫網頁整份重讀一次。所以<b>每次重連都等於重新對帳一次</b>，斷線期間漏掉什麼都會補上。之後收到的每則 <code>task</code> 訊號：</p>
+  <ul class="plain">
+    <li>帶著卡片、步數也接得上：只換掉這一張卡，開著的詳情重抓。</li>
+    <li>沒帶卡片、步數跳號、或營業日不同：整份看板重讀。</li>
+    <li>同一時間來了好幾個重讀要求：合併成一次。</li>
+  </ul>
+  <p>後端每 15 秒送一次心跳。網頁 35 秒什麼都沒收到，就自己斷開重連；重連第一次等 1 秒，之後每 5 秒試一次。</p>
+  <p>收到 <code>degraded</code>（降級，意思是後端自己知道訊號可能不準），或心跳裡寫著 <code>degraded: true</code>，網頁就不再信訊號：顯示連線警示，每 4 秒自己重抓整份看板。等到 <code>recovered</code>，再整份重讀一次並回到只靠訊號。</p>
+  <details>
+    <summary>串流裡有哪幾種事件 <span class="hint">— 何時送、帶什麼</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>事件</th><th>何時送</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td><code>init</code></td><td>一連上就送</td><td><code>stream_pos</code>（這條連線的流水號）</td></tr>
+        <tr><td><code>resync</code></td><td>緊接在 <code>init</code> 之後</td><td><code>reason: "connected"</code>；<code>refetch</code> 告訴網頁要重讀哪裡：櫃檯是 <code>/api/v1/desk/board</code>，其他角色是 <code>/api/v1/pool</code></td></tr>
+        <tr><td><code>task</code></td><td>有單變動、而且這條連線該收</td><td><code>stream_pos</code>、<code>task_id</code>、<code>seq</code>（這張單的步數）、<code>type</code>、<code>occurred_at</code>；櫃檯另帶 <code>board</code>、<code>card</code>、<code>card_seq</code>、<code>business_date</code></td></tr>
+        <tr><td><code>heartbeat</code></td><td>每 15 秒</td><td><code>stream_pos</code>、<code>degraded</code>（是否正在降級）</td></tr>
+        <tr><td><code>degraded</code></td><td>進入降級時；連上時若正在降級也會補送</td><td>原因：<code>kafka_consumer_lag</code>（落後超過 10 秒）或 <code>kafka_unavailable</code>（讀 Kafka 的元件停了或沒回應）</td></tr>
+        <tr><td><code>recovered</code></td><td>離開降級時</td><td>無</td></tr>
+      </tbody>
+    </table></div>
+    <p>員工串流不送 SSE 的 <code>id:</code> 欄位，也不讀瀏覽器重連時帶的 <code>Last-Event-ID</code>，所以沒有「從斷點續傳」，一律靠 <code>resync</code> 重讀。只有 PMS 整合串流會讀 <code>Last-Event-ID</code>。</p>
+    </div>
+  </details>
+  <details>
+    <summary>網頁對每種情況的反應 <span class="hint">— 什麼時候局部換卡、什麼時候整份重讀</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>網頁收到或遇到</th><th>反應</th></tr></thead>
+      <tbody>
+        <tr><td><code>resync</code>、<code>recovered</code></td><td>整份重讀</td></tr>
+        <tr><td><code>task</code>，帶卡片且步數接得上</td><td>只換這一張卡；開著的詳情標為過期重抓</td></tr>
+        <tr><td><code>task</code>，沒帶卡片</td><td>整份重讀</td></tr>
+        <tr><td><code>task</code>，步數比已知的多跳了一步以上</td><td>先換卡，再整份重讀補中間漏的</td></tr>
+        <tr><td><code>task</code>，營業日和畫面上的不同</td><td>整份重讀</td></tr>
+        <tr><td><code>task</code>，步數不比已知的新</td><td>丟掉</td></tr>
+        <tr><td><code>degraded</code>，或心跳 <code>degraded: true</code></td><td>顯示連線警示，每 4 秒整份重抓，直到恢復</td></tr>
+        <tr><td>35 秒沒有任何資料</td><td>主動斷開重連（第一次等 1 秒，之後 5 秒）</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+
+  <h3 id="realtime-failure">Kafka 掛掉或後端重啟時會怎樣？</h3>
+  <p>原則跟前面一樣：訊息掉了只會慢、不會錯，因為網頁最後都會從資料庫重讀。差別在於「多久之後」以及「要不要有人出手」。</p>
+  <p><b>Kafka 掛掉</b>時，寫入照常，事件都還在 outbox 裡等。relay 會間隔加倍地重試，Kafka 回來後依序補送。斷線約 5 分鐘內恢復不會出事，最多晚兩分鐘補送。但依程式碼推算，停超過約 5 到 6 分鐘，斷線當下正在排隊的每張單，最前面那一筆會重試用完、被標 <code>failed</code>，這張單之後就停送等人工；斷線期間才新增的單，要自己撐滿約 5 到 6 分鐘才會被標。</p>
+  <p>網頁這端，讀 Kafka 的元件若發出「停止」或「沒回應」的通知，後端會進入降級，網頁改成定時重讀，恢復時再整份重讀。不過 Kafka 掛掉時框架是否一定發出這些通知，屬於框架行為，程式碼無法保證；沒發的話，網頁只是暫時收不到訊號，畫面停在舊的狀態。</p>
+  <p><b>後端重啟</b>時，掛在那台上的網頁會斷線，1 秒後重連。連上後必定收到 <code>resync</code> 並整份重讀，停機期間漏掉的變動就這樣補回來。消費者本身不補讀那段期間的事件。</p>
+  <details>
+    <summary>失敗情境一覽 <span class="hint">— 寫入、畫面、恢復方式、要不要人工</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>情境</th><th>寫入</th><th>網頁看到</th><th>怎麼恢復</th><th>人工</th></tr></thead>
+      <tbody>
+        <tr><td>Kafka 短暫斷線</td><td>照常</td><td>訊號延遲；若後端進入降級，顯示警示並每 4 秒重讀</td><td>relay 重試後依序補送；<code>recovered</code> 時整份重讀</td><td>不用</td></tr>
+        <tr><td>Kafka 停超過約 5 到 6 分鐘，某筆重試 8 次用完</td><td>照常</td><td>那張單之後不再有訊號，只能靠重讀看到</td><td>無法自動恢復</td><td>要：查 <code>outbox</code> 裡 <code>status = 'failed'</code> 的紀錄</td></tr>
+        <tr><td>後端某台重啟</td><td>其他台照常</td><td>斷線約 1 秒後重連</td><td>重連必送 <code>resync</code>，整份重讀</td><td>不用</td></tr>
+        <tr><td>消費者落後超過 10 秒</td><td>照常</td><td>警示加每 4 秒重讀</td><td>跟上後送 <code>recovered</code></td><td>不用</td></tr>
+        <tr><td>某則事件處理出錯</td><td>照常</td><td>這一則沒推到</td><td>下次重讀或重連時對回來</td><td>不用</td></tr>
+        <tr><td>relay 已送上 Kafka、標記 sent 卻失敗</td><td>照常</td><td>可能收到重複訊號</td><td>租約到期重送；消費端依步數去重</td><td>不用</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+  <details>
+    <summary>程式碼位置對照 <span class="hint">— 要改這條路時從哪裡下手</span></summary>
+    <div class="in">
+    <p>後端路徑前綴 <code>tms/src/main/java/com/athena/tms/</code>，網頁路徑前綴 <code>app/web/src/</code>。</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>環節</th><th>位置</th></tr></thead>
+      <tbody>
+        <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:493-505</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
+        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :74-77、巡查 :114、撈待送 :164、送出 :175-207）</td></tr>
+        <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:23-32</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
+        <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :73、降級 :84-109、去重 :183-193）</td></tr>
+        <tr><td>連線端點與權限</td><td><code>controller/StaffStreamController.java:17-21</code>、<code>config/SecurityConfig.java:50-51</code>、<code>filter/BearerTokenAuthFilter.java:49-53</code></td></tr>
+        <tr><td>連線註冊表與過濾規則</td><td><code>service/StreamConnectionRegistry.java</code>、<code>service/StreamSubscriber.java:22-49</code>、<code>service/StreamConnection.java</code></td></tr>
+        <tr><td>心跳與降級原因</td><td><code>service/StreamHeartbeat.java</code>、<code>service/StreamDegradation.java</code></td></tr>
+        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:40-64</code>、<code>push/PushDeliveryKafkaConfig.java:43-57</code></td></tr>
+        <tr><td>網頁連線與重連</td><td><code>features/realtime/use-live-updates.ts</code>、<code>stream-client.ts</code>、<code>live-connection.ts</code></td></tr>
+        <tr><td>網頁換卡與重讀</td><td><code>features/realtime/follow-board.ts</code>、<code>stream-task.ts</code>、<code>refetch-on-signal.ts</code>、<code>lib/board-sync.ts</code>、<code>shell/DeskShell.tsx</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>Spring Kafka 的確認模式與並行數，SSE 消費者在程式碼裡沒有設定，用框架預設；推播消費者則明確設為逐筆確認，重試用完轉進 <code>tms.push.DLT</code>。</p>
+    </div>
+  </details>
+</section>
+
+<section id="config">
+  <h2>設定檔在哪裡、正式環境要設哪些環境變數？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>只有 <code>tms/src/main/resources/application.properties</code> 與 <code>application-test.properties</code>，沒有 yml、沒有 dev／prod profile。啟動後端永遠帶 <code>TMS_DB_URL</code>；上正式前一定要換掉 JWT 密鑰。</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>設定（行號）</th><th>預設值</th><th>環境變數</th></tr></thead>
+    <tbody>
+      <tr><td>應用連線（<code>:3-5</code>）</td><td><code>jdbc:postgresql://localhost:5433/tms</code>，帳號 <code>tms_app</code>／<code>tms_app</code></td><td><code>TMS_DB_URL</code>、<code>TMS_DB_USER</code>、<code>TMS_DB_PASSWORD</code></td></tr>
+      <tr><td>Flyway 連線（<code>:11-14</code>）</td><td><code>jdbc:postgresql://localhost:<b>5432</b>/tms</code>，帳號 <code>tms</code>／<code>tms</code></td><td>同樣讀 <code>TMS_DB_URL</code>；<code>TMS_DB_ADMIN_USER</code>、<code>TMS_DB_ADMIN_PASSWORD</code></td></tr>
+      <tr><td>Kafka（<code>:16-19</code>）</td><td><code>localhost:9092</code>；topic <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code></td><td><code>TMS_KAFKA_BOOTSTRAP</code></td></tr>
+      <tr><td>JWT（<code>:37-38</code>）</td><td>開發用的不安全密鑰；效期 12 小時</td><td><code>TMS_JWT_SECRET</code></td></tr>
+      <tr><td>FCM 憑證（<code>:41-43</code>）</td><td>空字串＝不打 FCM，只寫 log 與 <code>push_deliveries</code></td><td><code>TMS_PUSH_FCM_CREDENTIALS_PATH</code>（Spring 寬鬆綁定）或 <code>--tms.push.fcm.credentials-path=</code></td></tr>
+      <tr><td>測試時鐘（<code>:47</code>）</td><td><code>false</code>；開了才有可撥時間的 <code>/api/v1/test/clock</code></td><td><code>TMS_TEST_CLOCK_ENABLED</code></td></tr>
+      <tr><td>HTTP port</td><td>未設定，Spring 預設 8080</td><td><code>SERVER_PORT</code></td></tr>
+    </tbody>
+  </table></div>
+  <details>
+    <summary>Kafka producer 與 relay 的數值 <span class="hint">— 改其中任何一個前先看這裡</span></summary>
+    <div class="in">
+    <ul class="plain">
+      <li>Kafka producer（<code>:23-27</code>）：<code>acks=all</code>、冪等開啟、<code>max.block.ms=5000</code>、<code>delivery.timeout.ms=10000</code>。</li>
+      <li>outbox relay（<code>:29-33</code>）：輪詢 2s、送出逾時 10s、認領租約 60s；程式內最多重試 8 次。</li>
+    </ul>
+    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於 <code>max.block.ms</code> 加送出逾時；違反就直接拋錯不啟動（<code>OutboxRelay.java:66, 70</code>）。測試設定檔把 relay 輪詢縮成 200ms、推播重試縮成 50ms，資料庫與 Kafka 位址由 Testcontainers 注入。</p>
+    </div>
+  </details>
+</section>
+
+<section id="tenancy">
+  <h2>多家飯店的資料是怎麼隔開的？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>一家飯店在系統裡叫一個「租戶」。隔離做在資料庫層：每條連線綁一個租戶，資料表規則讓它只看得到自己那家的列，就算程式忘了加條件也查不到別家。<b>新表若沒有 GRANT 給 <code>tms_app</code>，應用會寫不進去。</b></p>
+  </div>
+  <p>用的是 Postgres 的 <b>RLS</b>（Row Level Security，列層級安全）：在資料表上設一條規則，讓每條連線只看得到 <code>tenant_id</code> 等於某個連線變數的列。</p>
+  <ol class="flow">
+    <li><b>資料表規則</b>：<code>V1__schema.sql:414-437</code> 對 16 張表開啟 RLS，條件是 <code>tenant_id = current_setting('app.tenant_id', true)::bigint</code>；跨表外鍵用 <code>(tenant_id, id)</code> 複合鍵。</li>
+    <li><b>每條連線綁租戶</b>：<code>config/TenantAwareDataSource.java:23-66</code> 取得連線時 <code>SET app.tenant_id</code>，沒有租戶就設 <code>'0'</code>（什麼都看不到），歸還前再重設成 <code>'0'</code>。</li>
+    <li><b>租戶從哪來</b>：<code>common/TenantContext.java</code>（每個執行緒一份）。<code>filter/BearerTokenAuthFilter.java:56-110</code> 驗完 JWT 後設定它，請求結束清掉。</li>
+    <li><b>背景工作</b>（沒有請求）：<code>TenantScopedExecutor.callAsTenant(tenantId, work)</code> 開交易並設定租戶，排程、relay、消費者都逐租戶執行。</li>
+    <li><b>對外用飯店代碼</b> <code>tenants.code</code>（例如 <code>demo-hotel</code>），內部流水號不外露。櫃檯網址是 <code>/{飯店代碼}/login</code>，登入請求帶 <code>hotelCode</code>；登入前可用 <code>GET /api/v1/public/hotels/{hotelCode}</code> 查飯店名稱。</li>
+  </ol>
+  <p>資料庫有兩個帳號：Flyway 用管理帳號 <code>tms</code> 建表；應用執行時用最小權限的 <code>tms_app</code>，由 <code>V1__schema.sql:383-391</code> 自己建立並授權。</p>
+</section>
+
+<section id="auth">
+  <h2>員工、住客、PMS 各自怎麼登入、怎麼授權？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>員工換 12 小時的 JWT，住客掃房內 QR 換 session，PMS（飯店的訂房管理系統）用 API key。要特別注意：員工 App 登入不帶飯店代碼，後端會跨飯店找帳號。</p>
+  </div>
+  <ul class="plain">
+    <li><b>員工登入怎麼決定飯店</b>（<code>service/StaffAccountLoginService.java:58-80</code>）：有 <code>hotelCode</code> 就只在那家驗證；沒帶時先找出所有有這個員工編號的飯店，只有一家就用那家，多家就取第一家密碼相符的。所以不同飯店員工編號與密碼都相同時，會登進別家——bdd-support 的預設帳號因此刻意不重複編號（<code>BackendChannel.java:70</code>）。</li>
+    <li><b>員工 token</b>：<code>POST /api/v1/staff-accounts/login</code> 換 HS256 JWT，內含租戶、員工、角色、部門與密碼指紋（<code>JwtService.java:49-56</code>）。filter 每次請求還會確認帳號存在、啟用、密碼指紋仍相符（改密碼後舊 token 立刻失效）、是否必須先改密碼（<code>BearerTokenAuthFilter.java:77-100</code>）。登入失敗多次會鎖定。</li>
+    <li><b>住客</b>：掃房內 QR → <code>POST /guest/scan</code>（公開、有 IP 限流）換住客 session token，之後帶 <code>Authorization: Bearer</code> 或 <code>X-Guest-Session</code>。主管換新 QR 時一併撤銷舊 session。</li>
+    <li><b>PMS 對接</b>：<code>/integration/**</code> 用 API key（<code>IntegrationApiKeyAuthFilter</code>），角色 <code>INTEGRATION</code>。</li>
+    <li><b>授權規則</b>：<code>SecurityConfig.java:44-80</code> 以「路徑＋角色」對應，角色有 <code>guest</code>、<code>housekeeping</code>、<code>engineering</code>、<code>manager</code>、<code>frontdesk</code>、<code>owner</code>、<code>INTEGRATION</code>。無 session、CSRF 關閉。</li>
+    <li><b>冪等</b>：寫入端點帶 <code>Idempotency-Key</code>，<code>IdempotencyFilter</code> 搭配 <code>processed_ops</code> 表回放上次結果，保留 7 天。</li>
+  </ul>
+</section>
+
+<section id="flyway">
+  <h2>資料庫遷移（Flyway）有什麼規矩？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p><b>既有的遷移檔一個字都不能改，連註解都不行</b>——Flyway 會比對每個已套用檔案的 checksum（內容指紋），改了就啟動失敗。要修正只能新增更高版號的檔案。</p>
+  </div>
+  <p>遷移檔在 <code>tms/src/main/resources/db/migration/</code>，命名 <code>V&lt;n&gt;__說明.sql</code>，目前是 V1 到 V28、連號無缺。後端啟動時 Flyway 會自動套用新版號。</p>
+  <ul class="rules">
+    <li>新表要記得 GRANT 給 <code>tms_app</code>（V18 就是為了補 notifications 的授權）。</li>
+    <li><code>V24__tenant_code.sql:14-30</code> 回填 <code>tenants.code</code> 時只認得「示範飯店、示範二店、測試飯店」三家；資料庫裡有其他飯店時這個遷移會失敗，要先補對照。</li>
+  </ul>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="mobile.html"><small>上一頁</small>← Flutter App</a>
+  <a class="next" href="pitfalls.html"><small>下一頁</small>坑與待查 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

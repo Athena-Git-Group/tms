@@ -76,6 +76,32 @@ public final class Network {
     /** 登入。 */
     public static final Api LOGIN = new Api("POST", "/api/v1/staff-accounts/login");
 
+    // 住客的介面直接掛在後端根路徑下，不在 /api/v1 底下。
+
+    /** 住客掃碼換工作階段。 */
+    public static final Api GUEST_SCAN = new Api("POST", "/guest/scan");
+
+    /** 住客首頁資料：服務項目與資訊頁。 */
+    public static final Api GUEST_HOME = new Api("GET", "/guest/home");
+
+    /** 這次住宿的需求清單。 */
+    public static final Api GUEST_REQUESTS = new Api("GET", "/guest/requests");
+
+    /** 住客送出一筆需求。 */
+    public static final Api GUEST_CREATE = new Api("POST", "/guest/requests");
+
+    /** 住客取消自己的需求。 */
+    public static final Api GUEST_CANCEL = new Api("POST", "/guest/requests/*/cancel");
+
+    /** 住客替完成的需求評分。 */
+    public static final Api GUEST_RATE = new Api("POST", "/guest/requests/*/rating");
+
+    /** 住客的即時訊號事件串流。 */
+    public static final Api GUEST_STREAM = new Api("GET", "/guest/stream");
+
+    /** 會被測試轉手的事件串流：櫃檯的與住客的。 */
+    private static final List<Api> LIVE_STREAMS = List.of(STAFF_STREAM, GUEST_STREAM);
+
     /**
      * 分頁送出過的一個請求。
      *
@@ -113,6 +139,8 @@ public final class Network {
     private final Map<Page, Response> lastDeskBoard = new HashMap<>();
 
     private final Map<Page, Integer> deskBoardsReceived = new HashMap<>();
+
+    private final Map<Page, Interception> backendCutOff = new HashMap<>();
 
     Network(Supplier<Page> currentPage) {
         this.currentPage = currentPage;
@@ -217,6 +245,32 @@ public final class Network {
 
     public void passThrough(Api api) {
         passThrough(currentPage.get(), api);
+    }
+
+    /**
+     * 這個分頁之後對後端的每一個請求（{@code /api/}、{@code /guest/}、{@code /staff/} 底下，任何方法）都在送出時斷線，
+     * 直到 {@link #restoreBackend(Page)}。開發伺服器給的頁面與程式不受影響，已經連上的事件串流也不切斷，
+     * 所以已經開著的畫面維持原樣。之後再對某支端點設的攔截（例如 {@link #respondWithError}）蓋過這裡。
+     */
+    public void cutOffBackend(Page page) {
+        restoreBackend(page);
+        Predicate<String> url = Network::isBackendUrl;
+        Consumer<Route> handler = route -> route.abort("connectionfailed");
+        page.route(url, handler);
+        backendCutOff.put(page, new Interception(url, handler, List.of()));
+    }
+
+    /** 拿掉 {@link #cutOffBackend(Page)}，之後的請求照常打後端；沒有切斷過就什麼都不做。 */
+    public void restoreBackend(Page page) {
+        Interception cut = backendCutOff.remove(page);
+        if (cut != null && !page.isClosed()) {
+            page.unroute(cut.url(), cut.handler());
+        }
+    }
+
+    private static boolean isBackendUrl(String url) {
+        String path = pathOf(url);
+        return path.startsWith("/api/") || path.startsWith("/guest/") || path.startsWith("/staff/");
     }
 
     /**
@@ -414,7 +468,7 @@ public final class Network {
                 } catch (e) {
                   return response;
                 }
-                if (path !== '%s' || !response.body) return response;
+                if (!%s.includes(path) || !response.body) return response;
                 if (cutCount !== cutsBefore) {
                   response.body.cancel().catch(() => {});
                   throw new TypeError('network error');
@@ -474,7 +528,7 @@ public final class Network {
                 });
               };
             })();
-            """.formatted(STAFF_STREAM.path());
+            """.formatted(toJson(LIVE_STREAMS.stream().map(Api::path).toList()));
 
     /** 新開的 context 接上請求紀錄，並讓它之後載入的每個頁面都能被切斷事件串流。 */
     void watch(BrowserContext context) {

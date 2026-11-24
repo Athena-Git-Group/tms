@@ -5,6 +5,7 @@ import io.cucumber.plugin.event.EventPublisher;
 import io.cucumber.plugin.event.PickleStepTestStep;
 import io.cucumber.plugin.event.TestCaseStarted;
 import io.cucumber.plugin.event.TestStepStarted;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -78,6 +79,8 @@ public final class StepPhaseListener implements ConcurrentEventListener {
             STEP_PATTERNS.set(event.getTestCase().getTestSteps().stream()
                     .filter(PickleStepTestStep.class::isInstance)
                     .map(step -> ((PickleStepTestStep) step).getPattern())
+                    // 還沒有步驟定義的句子沒有 pattern；不濾掉的話整個場景在開始前就丟例外，看不到哪幾句沒有定義。
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toUnmodifiableSet()));
         });
         publisher.registerHandlerFor(TestStepStarted.class, this::onStepStarted);

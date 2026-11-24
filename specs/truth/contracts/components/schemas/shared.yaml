@@ -767,7 +767,8 @@ RepairTicketSummary:
       - closed
       - cancelled
       description: >-
-        待認領、已接單（待開始）、維修中、已完修（等主管驗收）、已結案、已撤回（cancelled 且原因為 staff_withdrew）。
+        待認領、已接單（待開始）、維修中、已完修（等主管驗收）、已結案、已撤回（cancelled；原因為 staff_withdrew 報修人撤回，
+        或 guest_withdrew：櫃檯從待派單轉來的住客需求，住客在工務認領前自己收回）。
         開單一律直接進 pool，直接指定處理人時為 accepted。done 不是終點：完修結果為已修好、暫時處理、無法修復時停在 done
         等主管驗收，驗收通過轉 closed；驗收不通過退回 accepted（原處理人名下）或 pool（工務待認領）重修。
         完修結果為不需處理（no_action_needed）時完成當下直接 closed，不經 done。closed 只有工務單會出現。

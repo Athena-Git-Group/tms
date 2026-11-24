@@ -4,6 +4,7 @@ import com.athena.bddsupport.BackendChannel.CreatedStaff;
 import com.athena.bddsupport.TaskSituation;
 import com.athena.web.bdd.steps.common.TaskTableRows;
 import com.athena.web.bdd.support.Clocks;
+import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.ScenarioTasks.Entry;
 import com.athena.web.bdd.support.WebWorld;
@@ -59,13 +60,28 @@ public class RealtimeWhenSteps {
 
     private final LiveUpdateTiming timing;
 
+    private final GuestScenario guestScenario;
+
+    private final com.athena.web.bdd.steps.guest.realtime.RealtimeGivenSteps guestGiven;
+
+    private final com.athena.web.bdd.steps.guest.realtime.RealtimeWhenSteps guestWhen;
+
+    /**
+     * 住客掃碼頁的規格有兩句和這裡一字不差（「即時連線中斷」「超過 … 秒沒有收到後端的任何訊號」），
+     * 同一個 glue 只能有一個定義，所以在住客場景交給住客的即時更新步驟。
+     */
     public RealtimeWhenSteps(WebWorld world, LiveConnection live, RealtimeScenario scenario,
-            BoardResponses boardResponses, LiveUpdateTiming timing) {
+            BoardResponses boardResponses, LiveUpdateTiming timing, GuestScenario guestScenario,
+            com.athena.web.bdd.steps.guest.realtime.RealtimeGivenSteps guestGiven,
+            com.athena.web.bdd.steps.guest.realtime.RealtimeWhenSteps guestWhen) {
         this.world = world;
         this.live = live;
         this.scenario = scenario;
         this.boardResponses = boardResponses;
         this.timing = timing;
+        this.guestScenario = guestScenario;
+        this.guestGiven = guestGiven;
+        this.guestWhen = guestWhen;
     }
 
     /** 給部門代碼、回代替後端送的卡片上要掛的負責人。 */
@@ -223,6 +239,10 @@ public class RealtimeWhenSteps {
 
     @當("即時連線中斷")
     public void connectionLost() {
+        if (guestScenario.active()) {
+            guestWhen.connectionLost();
+            return;
+        }
         live.cutAndBlockReconnect();
     }
 
@@ -250,6 +270,10 @@ public class RealtimeWhenSteps {
      */
     @當("超過 {int} 秒沒有收到後端的任何訊號")
     public void noSignalFor(int seconds) {
+        if (guestScenario.active()) {
+            guestGiven.noSignalFor(seconds);
+            return;
+        }
         live.waitUntilConnected();
         Page page = world.page();
         world.network().holdLiveSignals(page);

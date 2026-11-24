@@ -12,6 +12,7 @@ import com.athena.tms.bdd.support.StaffFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import com.athena.tms.common.UuidV7;
+import com.athena.tms.service.GuestTenantConfigReader;
 import com.athena.tms.service.TaskEngine;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
@@ -61,6 +62,7 @@ public class DeskGivenSteps {
     private final StaffFixtures staffFixtures;
     private final MutableClock clock;
     private final ObjectMapper objectMapper;
+    private final GuestTenantConfigReader guestConfigReader;
 
     public DeskGivenSteps(
             ScenarioWorld world,
@@ -74,7 +76,8 @@ public class DeskGivenSteps {
             ReservationFixtures reservationFixtures,
             StaffFixtures staffFixtures,
             MutableClock clock,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            GuestTenantConfigReader guestConfigReader) {
         this.world = world;
         this.deskApi = deskApi;
         this.deskContext = deskContext;
@@ -86,6 +89,7 @@ public class DeskGivenSteps {
         this.staffFixtures = staffFixtures;
         this.clock = clock;
         this.objectMapper = objectMapper;
+        this.guestConfigReader = guestConfigReader;
         this.boardFixtures = new DeskBoardFixtures(
                 taskEngine, jdbcClient, tenantFixtures, roomFixtures, deskApi, objectMapper, clock);
     }
@@ -205,6 +209,46 @@ public class DeskGivenSteps {
                         """)
                 .params(tenantFixtures.testTenantId(), objectMapper.writeValueAsString(List.of(rule)), now())
                 .update();
+    }
+
+    @假設("飯店的服務項目 {string} 設定交給 {string}")
+    public void requestMenuItemGoesTo(String label, String deptChinese) {
+        String dept = Terms.dept(deptChinese);
+        if (!"housekeeping".equals(dept) && !"engineering".equals(dept)) {
+            throw new IllegalArgumentException("服務項目只能交給房務或工務，收到「" + deptChinese + "」");
+        }
+        long tenantId = tenantFixtures.testTenantId();
+        List<Map<String, Object>> menu = new ArrayList<>();
+        for (GuestTenantConfigReader.MenuItem item : guestConfigReader.requestMenu(tenantId)) {
+            if (!label.equals(item.label())) {
+                menu.add(menuItem(item.key(), item.label(), item.dept(), item.type()));
+            }
+        }
+        // 類型刻意不給 repair：用到這句的案例要證明單靠部門是工務就會留在待派單
+        menu.add(menuItem(label, label, dept, "amenity"));
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO tenant_config (tenant_id, key, value, updated_at)
+                        VALUES (?, 'request_menu', ?::jsonb, ?)
+                        ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+                        """)
+                .params(tenantId, objectMapper.writeValueAsString(menu), now())
+                .update();
+        boolean listed = guestConfigReader.requestMenu(tenantId).stream()
+                .anyMatch(item -> label.equals(item.label()) && dept.equals(item.dept()));
+        if (!listed) {
+            throw new IllegalStateException("住客頁的勾選清單沒有交給「" + deptChinese + "」的「" + label + "」");
+        }
+    }
+
+    private static Map<String, Object> menuItem(String key, String label, String dept, String type) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("key", key);
+        item.put("label", label);
+        item.put("dept", dept);
+        item.put("type", type);
+        return item;
     }
 
     @假設("{string} 已復原 {string} 的派單")

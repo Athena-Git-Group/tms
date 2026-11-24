@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FIRST_RETRY_MS, LATER_RETRY_MS, SILENCE_LIMIT_MS, type LiveLink, type LiveState } from './live-connection';
-import { openStaffStream, takeStreamEvents, type StreamEvent } from './stream-client';
+import { openStream, takeStreamEvents, type StreamEvent } from './stream-client';
 
 function streamResponse(text: string): Response {
   const body = new ReadableStream<Uint8Array>({
@@ -12,7 +12,7 @@ function streamResponse(text: string): Response {
   return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
-describe('openStaffStream', () => {
+describe('openStream', () => {
   const fetchMock = vi.fn<typeof fetch>();
   let connections: LiveLink[];
   let states: LiveState[];
@@ -33,7 +33,9 @@ describe('openStaffStream', () => {
   });
 
   const open = () =>
-    openStaffStream({
+    openStream({
+      url: '/staff/stream',
+      headers: { Authorization: 'Bearer staff-token' },
       onEvent: (event) => events.push(event),
       onState: (state) => {
         states.push(state);
@@ -87,13 +89,17 @@ describe('openStaffStream', () => {
     close();
   });
 
-  it('帶登入憑證與串流的 Accept 去連', async () => {
+  it('帶進來的網址與標頭就是 fetch 收到的，另外加上串流的 Accept', async () => {
     fetchMock.mockRejectedValue(new TypeError('failed to fetch'));
-    const close = open();
+    const close = openStream({
+      url: '/guest/stream',
+      headers: { 'X-Guest-Session': 'gs_1' },
+      onEvent: () => {},
+    });
     await vi.advanceTimersByTimeAsync(0);
     const [url, init] = fetchMock.mock.calls[0] ?? [];
-    expect(String(url)).toMatch(/\/staff\/stream$/);
-    expect((init?.headers as Record<string, string>).Accept).toBe('text/event-stream');
+    expect(url).toBe('/guest/stream');
+    expect(init?.headers).toEqual({ 'X-Guest-Session': 'gs_1', Accept: 'text/event-stream' });
     close();
   });
 

@@ -13,7 +13,9 @@ import com.athena.web.bdd.pages.LoginPage.Submission;
 import com.athena.web.bdd.pages.ShellFrame;
 import com.athena.web.bdd.pages.UiWords;
 import com.athena.web.bdd.pages.UiWords.Language;
+import com.athena.web.bdd.steps.guest.common.GuestCommonThenSteps;
 import com.athena.web.bdd.support.AccountScenario;
+import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.Network;
 import com.athena.web.bdd.support.ScenarioTasks.Entry;
 import com.athena.web.bdd.support.SessionInjector;
@@ -106,10 +108,18 @@ public class AccountThenSteps {
 
     private final List<String> urlAfterStep = new ArrayList<>();
 
-    public AccountThenSteps(WebWorld world, LoginAttempts attempts, AccountScenario scenario) {
+    /** 住客掃碼頁也有「畫面是 "{頁}"」這一句，頁的種類不同；住客場景由住客那邊判斷。 */
+    private final GuestScenario guestScenario;
+
+    private final GuestCommonThenSteps guestThen;
+
+    public AccountThenSteps(WebWorld world, LoginAttempts attempts, AccountScenario scenario,
+            GuestScenario guestScenario, GuestCommonThenSteps guestThen) {
         this.world = world;
         this.attempts = attempts;
         this.scenario = scenario;
+        this.guestScenario = guestScenario;
+        this.guestThen = guestThen;
         this.login = new LoginPage(world);
         this.changePassword = new ChangePasswordPage(world);
         this.account = new AccountPanel(world);
@@ -212,6 +222,10 @@ public class AccountThenSteps {
 
     @那麼("畫面是 {string}")
     public void screenIs(String pageName) {
+        if (guestScenario.active()) {
+            guestThen.screenIs(pageName);
+            return;
+        }
         assertOnPage(pageName);
     }
 

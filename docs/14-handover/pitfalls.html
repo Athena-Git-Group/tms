@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・坑與待查</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="setup.html">第一天</a>
+  <a href="test.html">本機手測</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html" aria-current="page">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">坑與待查</span></p>
+
+<header>
+  <p class="eyebrow">交接 · 坑與待查</p>
+  <h1>會咬人的地方，與還沒確認的事</h1>
+  <p class="stand">前五節是已知的坑，每一條都真的發生過，或是讀程式碼時確認過的事實。最後一節是還沒確認的事，請不要當成已知事實。</p>
+  <p class="readtime">約 7 分鐘</p>
+</header>
+
+<section id="setup-traps">
+  <h2>裝環境時會卡在哪？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>最常見的兩個：JDK 不是 25，以及後端測試忘了帶 <code>-DargLine="-Dapi.version=1.44"</code>。啟動後端時永遠帶 <code>TMS_DB_URL</code>。</p>
+  </div>
+  <ul class="rules">
+    <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:25</code> 把 JDK 路徑寫死成原機器的使用者目錄，換機器要設 <code>MANUAL_JAVA</code>。</li>
+    <li><b>OrbStack＋Testcontainers</b>：OrbStack 的 Docker 29 拒絕 API 1.40 以下，而 docker-java 沒指定時退回 1.32，會看到「client version 1.32 is too old」。試過 <code>DOCKER_HOST</code>、<code>DOCKER_API_VERSION</code>、升級 Testcontainers 都沒用，<b>唯一解法是 <code>-DargLine="-Dapi.version=1.44"</code></b>，把值傳進 surefire 分出來的 JVM（<code>specs/plans/003-manager-sign-off-queues/implement-notes.md:109-114</code>）。沒有寫進任何設定檔，每次都要帶。</li>
+    <li><b>Flyway 預設埠與應用預設埠不同</b>：<code>application.properties:12</code> 的 Flyway 預設連 5432、<code>:3</code> 的應用預設連 5433。沒設 <code>TMS_DB_URL</code> 時 Flyway 會連到 5432——在原機器上那是別的 Postgres。</li>
+    <li><b>電腦睡眠會殺掉長時間執行</b>：App 全量驗收要 60–90 分鐘，開跑前掛 <code>caffeinate -dimsu -t 28800</code>。</li>
+    <li><b>macOS 內建 bash 3.2</b> 會把變數名後面緊接的全形標點吃進變數名，腳本訊息一律寫成 <code>${var}</code>。新寫腳本時照做。</li>
+  </ul>
+</section>
+
+<section id="test-traps">
+  <h2>跑測試時會卡在哪？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>分三類：誰跟誰不能同時跑、漏一個參數就整輪紅、simulator 的怪癖。各條線的詳細坑在 <a href="bdd.html#lines">BDD 測試</a>。</p>
+  </div>
+  <p class="group-t">誰跟誰不能同時跑</p>
+  <ul class="rules">
+    <li><b>Appium 4723 與 simulator 全機唯一</b>：兩個 App 驗收同時跑會搶同一個 session，整輪作廢（發生過，0 個測試跑完）。開跑前先 <code>lsof -i:4723</code> 與 <code>ps aux | grep RunModuleFeatureTest</code>。</li>
+    <li><b>App 驗收與 Web 驗收不能同時連 8080／5433</b>：兩邊每個場景都清空同一個資料庫。</li>
+    <li><b>多個工作目錄同時 install bdd-support 會互相覆蓋</b> <code>~/.m2</code> 裡同一份 SNAPSHOT；解法見 <a href="bdd.html#bdd-support">BDD 測試</a>。</li>
+  </ul>
+  <p class="group-t">漏一個參數就整輪紅</p>
+  <ul class="rules">
+    <li><b>bdd-support 改了要重新 install</b>；直接下 <code>mvn</code> 時更要記得。</li>
+    <li><b><code>-Dcucumber.features</code> 會讓場景跑兩遍</b>：有這個屬性時 Cucumber 引擎忽略入口寫死的目錄，surefire 又會再發現同一批 feature 一次。三個專案都已設 <code>excludeJUnit5Engines=cucumber</code>，<code>run-module.sh</code> 也會另外帶。</li>
+    <li><b>App 一定要用 <code>TEST_BACKDOOR=true</code> 編譯</b>，否則每個場景都「等測試後門就緒逾時」。</li>
+    <li><b>後端要開測試時鐘</b>（<code>TMS_TEST_CLOCK_ENABLED=true</code>）；Web 驗收沿用的 8080 後端沒開時鐘會報錯，先 <code>run-feature.sh --stop</code>。</li>
+  </ul>
+  <p class="group-t">simulator 的怪癖</p>
+  <ul class="rules">
+    <li><b>剛開機時 <code>simctl install</code> 會靜默失敗</b>，<code>env.sh</code> 已加重裝驗證。另外要接硬體鍵盤，否則螢幕鍵盤會蓋住密碼欄。</li>
+    <li><b>headless 下 <code>simctl privacy grant notifications</code> 會失敗</b>，系統權限彈窗靠 Appium 的 <code>setAutoAcceptAlerts(true)</code> 自動按掉。</li>
+  </ul>
+</section>
+
+<section id="data-traps">
+  <h2>哪些操作會不小心毀掉別人的資料？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>測試會清資料庫。手動操作一律用 8083／<code>tms_manual</code>，測試永遠不要指到它。</p>
+  </div>
+  <ul class="rules">
+    <li><b>測試會清資料庫</b>：<code>backend.db.url</code> 千萬不要指到 <code>tms_manual</code>。</li>
+    <li><b>Web 驗收的後端只能是 8080</b>（vite 代理寫死）；5300 是手動環境、5199 是驗收，不要混用。</li>
+    <li><b>推播 consumer group 寫死</b>：8083 與 8080 互相起停會讓對方推播停頓幾秒。</li>
+  </ul>
+</section>
+
+<section id="backend-traps">
+  <h2>改後端程式碼與遷移時要小心什麼？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p><code>src/main</code> 是反編譯還原的，原本的註解都沒了；既有 Flyway 遷移檔連註解都不能動；測試時鐘端點不設權限，部署時務必關閉。</p>
+  </div>
+  <ul class="rules">
+    <li><b><code>src/main</code> 是從編譯產物反編譯還原的</b>（<code>tms/pom.xml:15</code> 的 description 寫著 "reconstructed from compiled artifacts"）：原本的 Javadoc 與註解都沒了，風格也像反編譯產物（大量 <code>this.</code>、多餘的型別強轉）。<code>src/test</code> 是重寫過的。</li>
+    <li><b>既有 Flyway 遷移檔不能動</b>，包含註解。整理反編譯程式碼的註解時，遷移檔要排除在外。</li>
+    <li><b>測試時鐘端點 <code>/api/v1/test/clock</code> 是 <code>permitAll</code></b>（<code>SecurityConfig.java:62</code>），只靠 <code>tms.test-clock.enabled</code> 保護。部署時務必保持關閉。</li>
+    <li><b>JWT 密鑰與 <code>tms_app</code> 密碼的預設值都是開發用</b>：正式環境要設 <code>TMS_JWT_SECRET</code>，並 <code>ALTER ROLE tms_app</code> 改密碼（<code>V1__schema.sql:387</code> 的註解）。</li>
+    <li><b>舊整合測試還在保護舊行為</b>：<code>tms/src/test/resources/features/*.feature</code> 不是 truth，但在全套裡跑。改行為時要一起看。</li>
+    <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單只要有一筆重試用完被標 <code>failed</code>，這張單之後的事件全部停送，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
+    <li><b>註解規範</b>：改任何註解前先讀 <code>.athena/skills/tms-build/references/code-comments.md</code>；有一批禁用詞（守衛、空窗、投影）。</li>
+  </ul>
+</section>
+
+<section id="app-gaps">
+  <h2>員工 App 有哪些還沒補的洞？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>上線前最優先：Android 正式版缺網路權限。其次是 Android 整條路沒驗證過，App 驗收目前只支援 iOS。</p>
+  </div>
+  <ul class="rules">
+    <li><b>Android 正式版缺網路權限</b>：<code>android/app/src/main/AndroidManifest.xml</code> 只宣告了 <code>POST_NOTIFICATIONS</code>；<code>INTERNET</code> 只在 <code>src/debug</code> 與 <code>src/profile</code> 裡，release APK 會連不上網。Android 也沒有允許 http 明碼的設定。（只讀檔確認，尚未實際建置驗證。）</li>
+    <li><b>Android 整條路都沒驗證過</b>：沒有 <code>google-services.json</code>，App 驗收的 <code>AppiumWorld.start()</code> 遇到 Android 直接丟 <code>UnsupportedOperationException</code>。</li>
+    <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:90</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器的 <code>simctl list</code> 裡找不到，一律用 <code>UDID=</code> 指定（例如 <code>iPhone 18 Pro</code>＝<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）。</li>
+    <li><b>App 連哪個後端是編譯期決定的</b>，不帶 <code>API_BASE_URL</code> 就連 8080（資料會被測試清掉）。</li>
+    <li><b>token 只在記憶體、沒有逾時、沒有統一 401 處理</b>：token 過期後的行為要自己留意。</li>
+    <li><b>iOS 沒有 App Transport Security 例外</b>：實機連 http 區網 IP 會被擋。</li>
+    <li><b>程式裡找不到 TODO</b>：註解已清理過，待辦要看各輪的 <code>specs/plans/*/tasks.md</code> 與 <code>implement-notes.md</code>。</li>
+  </ul>
+</section>
+
+<section id="todo">
+  <h2>接手後還有哪些事要先查？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>18 件盤點時沒能從程式碼確認、或要實際執行才知道的事，分四組。先處理第一組：目前分支的未提交修改怎麼收尾、測試現在綠不綠。</p>
+  </div>
+
+  <details open>
+    <summary>分支與測試現況 <span class="hint">— 5 件，最先處理</span></summary>
+    <div class="in"><div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
+      <tbody>
+        <tr><td class="id">U1</td><td>目前分支未提交的修改要不要、怎麼收尾</td><td>工作樹有一批工務池開單相關的修改與新檔（例如 <code>repair/RepairTicketOpener.java</code>、<code>RepairTicketDraft.java</code>、<code>integration/V29EngineeringTaskBackfillTest.java</code>、<code>scripts/manual-env/up.sh</code>）。規劃中的 <code>V29__engineering_tasks_get_repair_tickets.sql</code> <b>還不存在</b>，但對應的測試檔已經有了</td><td><code>git status</code>；對照 <code>specs/plans/006-engineering-pool-repair-ticket/tasks.md</code> 與 <code>implement-notes.md</code></td></tr>
+        <tr><td class="id">U2</td><td>測試目前綠不綠</td><td>盤點時沒有實跑任何測試。只能引用 006 implement-notes 的基準：後端行為規格 14 筆紅、Web 即時更新時序逾時數筆、住客 1 筆、App 工務單 11 筆</td><td>照<a href="setup.html#verify">三步確認</a>實跑一次，與 implement-notes 的清單比對</td></tr>
+        <tr><td class="id">U13</td><td>App 是否曾在 Appium 上完整跑過一輪</td><td>紀錄上有一項「員工 App 連 Appium 實跑」曾待補跑，目前狀態不明</td><td><code>app/bdd/run-all.sh</code> 跑一次</td></tr>
+        <tr><td class="id">U4</td><td><code>TESTCONTAINERS_RYUK_DISABLED=true</code> 為什麼要帶</td><td>所有指令都這樣下，但 repo 裡沒寫理由</td><td>拿掉跑一次看看會不會失敗</td></tr>
+        <tr><td class="id">U5</td><td>後端 dry-run 會不會仍起容器；後端能不能用 <code>xxx.feature:行號</code> 只跑一個場景</td><td>Web 的 dry-run 已知仍會起後端與 vite；後端兩件事都沒實測（Cucumber 標準語法理論上可行）</td><td>實跑一次</td></tr>
+      </tbody>
+    </table></div></div>
+  </details>
+
+  <details>
+    <summary>環境與 CI <span class="hint">— 2 件：隔離堆疊沒有腳本、有沒有 CI</span></summary>
+    <div class="in"><div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
+      <tbody>
+        <tr><td class="id">U3</td><td>App 驗收隔離堆疊（8081／5434／9094）怎麼起</td><td>repo 裡沒有腳本；原本的啟動腳本放在暫存目錄、已遺失。只知道容器名是 <code>tms-bdd-postgres</code>、<code>tms-bdd-kafka</code>，後端是用 <code>spring-boot:run</code> 從 <code>tms/target/classes</code> 起並開測試時鐘</td><td><code>docker ps -a</code> 看容器是否還在；需要的話寫一支腳本補進 repo</td></tr>
+        <tr><td class="id">U6</td><td>CI</td><td><code>.github/</code> 只有 <code>modernize</code> 目錄，沒有 workflow；別處有沒有 CI 不確定</td><td>問團隊或查 Git 平台設定</td></tr>
+      </tbody>
+    </table></div></div>
+  </details>
+
+  <details>
+    <summary>員工 App <span class="hint">— 6 件：推播憑證、離線偵測、未登入收推播、打包上架、稱謂、自刻的理由</span></summary>
+    <div class="in"><div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
+      <tbody>
+        <tr><td class="id">U8</td><td>推播憑證實際狀態</td><td>APNs 金鑰是否已上傳 Firebase、FCM 是否曾經實際送達，都沒有證據；Firebase 設定檔不在 repo</td><td>向 Firebase 專案負責人確認並取得設定檔</td></tr>
+        <tr><td class="id">U9</td><td>正式環境的離線偵測</td><td>離線與不穩旗標只有測試後門會設，正式環境沒有偵測程式；不知道是刻意先不做還是漏掉</td><td>對照 <code>specs/truth/features/ios-app/</code> 的可執行規格有沒有要求正式環境自動偵測</td></tr>
+        <tr><td class="id">U10</td><td>未登入時收到推播的行為</td><td><code>handlePushPayload</code> 不檢查登入狀態，<code>ticket</code> 會用可能為空的 session</td><td>在 simulator 登出後 <code>simctl push</code> 一則工務單推播</td></tr>
+        <tr><td class="id">U11</td><td>App 打包、簽章、上架流程</td><td>repo 裡沒有腳本與文件；Android 的 minSdk 實際數值也沒查（跟 Flutter 預設）</td><td>問原團隊；Apple Developer 與 Google Play 帳號誰持有</td></tr>
+        <tr><td class="id">U12</td><td>稱謂「您」在 App 文案裡是否一致</td><td>抽查多為無人稱句，沒有逐檔核對</td><td>grep <code>lib/</code> 的文案</td></tr>
+        <tr><td class="id">U7</td><td>App 狀態管理與路由為什麼選擇自刻</td><td>repo 裡沒有寫下理由</td><td>問原團隊；沒有理由也可以維持現狀</td></tr>
+      </tbody>
+    </table></div></div>
+  </details>
+
+  <details>
+    <summary>Java 後端 <span class="hint">— 5 件：springdoc 相容性、Jackson 2 與 3、反編譯來源、FCM 憑證部署、還沒讀過的程式</span></summary>
+    <div class="in"><div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
+      <tbody>
+        <tr><td class="id">U14</td><td>springdoc 2.8.6 在 Boot 4.1.1 下能不能用</td><td>2.8.x 是 Boot 3 世代，相容性沒實測，Swagger UI 路徑能不能開也沒確認</td><td>起後端後開 <code>/swagger-ui.html</code></td></tr>
+        <tr><td class="id">U15</td><td>Jackson 2 與 3 並存，程式實際用哪一個</td><td><code>OutboxRelay</code>、<code>TaskEventsSseConsumer</code> 有注入 <code>ObjectMapper</code>，沒逐檔確認是哪個套件的</td><td>grep <code>import com.fasterxml</code> 與 <code>import tools.jackson</code></td></tr>
+        <tr><td class="id">U17</td><td>反編譯的來源細節</td><td>「後端 <code>src/main</code> 由某個 commit 用 CFR 反編譯還原」只有口頭紀錄；repo 裡能佐證的只有 <code>tms/pom.xml:15</code> 的 description</td><td><code>git log --follow</code> 看 <code>tms/src/main</code> 的最早 commit</td></tr>
+        <tr><td class="id">U18</td><td>Firebase 設定檔與 FCM 憑證路徑在正式環境放哪</td><td>後端讀 <code>tms.push.fcm.credentials-path</code>，空值就只記 log；部署方式沒有文件</td><td>與部署負責人確認</td></tr>
+        <tr><td class="id">U16</td><td>還沒讀過的程式</td><td><code>RolePermissions.frontdeskWebRoles()</code>（櫃檯網頁角色定義）、<code>scripts/seed-demo.sh</code>、<code>scripts/manual-env/seed.sh</code>、<code>lib/core/repair_photo_capture.dart</code> 的內容；後端套件表是依目錄抽樣，不是逐檔閱讀</td><td>需要時再讀</td></tr>
+      </tbody>
+    </table></div></div>
+  </details>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="backend.html"><small>上一頁</small>← Java 後端</a>
+  <a class="next" href="index.html"><small>回到</small>總覽 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

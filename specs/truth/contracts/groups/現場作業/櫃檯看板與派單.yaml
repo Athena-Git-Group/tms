@@ -88,6 +88,13 @@ deskAssignTask:
       把待派單（state 為 triage）的單派給房務或工務：triage→pool，部門改成指定的部門，歷程記一筆 triaged
       （帶部門與 via），操作者記實際登入的那一位（值班主管記 duty_manager）。該部門的同仁立刻在待認領看得到。
       按鈕派與拖曳派是同一個動作，只差 via。
+      派給工務時，同一個交易讓這張單成為一張工務單：任務 type 改為 repair，triaged 的 payload 另記 former_type 與 former_urgent
+      （派單前的 type 與急件標記，供復原還原），並開一列 repair_tickets——單號取本飯店工務單流水號的下一號、類別 other、
+      報修人是這次操作者、說明與原任務為空、不要求照片，急件依飯店的急件規則判定（與 createRepairTicket 相同，
+      判定為急件時同交易送出急件推播；推播的防重複鍵以工務單號為單位，復原後再派開出的新工務單照樣推播）。不另建新的任務：住客、櫃檯、工務看的是同一張單，taskId 不變。
+      之後這張單照工務單的規則走：完修後等主管驗收（verifyRepairTicket），驗收通過才結案；
+      工務待認領與工務首頁把它的來源標為 desk_forward「櫃檯」。派給房務時不開工務單。
+      同一把 Idempotency-Key 重送拿第一次的回應，不會再開第二張工務單、也不會多用一個單號。
       兩台櫃檯同時處理同一張單時先送到的生效；後到的回 409 task_not_in_triage，context 說明這張單被誰、怎麼處理掉
       （見 Error 的 task_not_in_triage），畫面據此顯示「這單已經被派走了」等提示並重抓看板。
       dept 不是 housekeeping 或 engineering、via 不是 button 或 drag 時回 422。
@@ -131,7 +138,11 @@ deskUndoAssign:
     summary: 櫃檯派出後復原
     description: >-
       把剛派出的單收回待派單：pool→triage，部門回到 frontdesk，未接提醒階段與進池來源清空，歷程記一筆 triage_undone；
-      給人看的歷程把這一筆與被收回的那筆派單一起略過，今天的派單張數也減回去。復原是獨立的動作，不是另一種派單；
+      給人看的歷程把這一筆與被收回的那筆派單一起略過，今天的派單張數也減回去。
+      被收回的那筆派單是派給工務時，同一個交易撤掉那次派單開出的工務單（刪掉 repair_tickets 那一列），
+      任務 type 與急件標記回到 triaged payload 記下的 former_type 與 former_urgent；撤掉的工務單號不再使用，流水號因此跳號；
+      派單時已送出的急件推播不收回。
+      復原是獨立的動作，不是另一種派單；
       當場回答沒有復原。
       後端把關兩件事，缺一就不復原。
       第一，時間：使用者能復原的時間是 5 秒，畫面上的「復原」按鈕派出後只出現 5 秒，之後就按不到。

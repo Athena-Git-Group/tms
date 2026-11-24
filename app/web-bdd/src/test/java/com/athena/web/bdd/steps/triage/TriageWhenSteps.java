@@ -29,9 +29,9 @@ public class TriageWhenSteps {
     private static final String MENU_ITEM_LABEL = "浴巾";
 
     /** 規則的關鍵字；案例裡其他住客原話都不含這兩個字，不會被這條規則接走。 */
-    private static final String RULE_KEYWORD = "冷氣";
+    private static final String RULE_KEYWORD = "毛巾";
 
-    private static final String RULE_HIT_TEXT = "冷氣一直滴水";
+    private static final String RULE_HIT_TEXT = "想多一條毛巾";
 
     /** 送出之後最久等這麼久讓兩張卡片放上看板；即時更新的規格承諾別人動了單，畫面 5 秒內跟上。 */
     private static final double CARDS_ARRIVE_TIMEOUT_MS = 5_000;
@@ -57,13 +57,14 @@ public class TriageWhenSteps {
     }
 
     /**
-     * 以住客身分在後端送出兩張需求：一張從需求選單勾選，一張打字且命中分類規則，兩張都直接進部門的待認領。
-     * 送完等頁首的房務、工務待接張數各多一張，代表畫面收到即時訊號、兩張卡片都放上看板了。
+     * 以住客身分在後端送出兩張需求：一張從需求選單勾選，一張打字且命中房務的分類規則，兩張都直接進房務的待認領。
+     * 規則分給房務而不是工務：住客的需求命中工務規則時會停在待派單，只有房務會直接進待認領。
+     * 送完等頁首的房務待接張數多兩張，代表畫面收到即時訊號、兩張卡片都放上看板了。
      * 等的是畫面上的張數而不是看板讀取：訊號帶著卡片時畫面直接換上，不會重讀整份看板。
      *
      * <p>需求選單與分類規則是這個場景自己寫進飯店設定的；每個場景開始時業務資料會清空，不會留給別的場景。
      */
-    @當("一張住客勾選的需求與一張命中規則的打字需求進來")
+    @當("一張住客勾選的需求與一張命中房務規則的打字需求進來")
     public void menuItemAndRuleHitArrive() {
         BackendChannel backend = world.backend();
         long tenantId = backend.ensureTenant();
@@ -72,15 +73,13 @@ public class TriageWhenSteps {
 
         TriagePage triage = new TriagePage(world);
         int housekeeping = triage.deptLoadCount("房務");
-        int engineering = triage.deptLoadCount("工務");
         UUID menuTask = backend.guestSubmitMenuItem(MENU_ITEM_ROOM, MENU_ITEM_KEY, 1);
         UUID ruleTask = backend.guestSubmitRequest(RULE_HIT_ROOM, RULE_HIT_TEXT, null);
         requireInPool(menuTask, "勾選的「" + MENU_ITEM_LABEL + "」");
         requireInPool(ruleTask, "命中規則的「" + RULE_HIT_TEXT + "」");
         world.tasks().add(new ScenarioTasks.Entry(MENU_ITEM_ROOM, MENU_ITEM_LABEL, menuTask, "待認領"));
         world.tasks().add(new ScenarioTasks.Entry(RULE_HIT_ROOM, RULE_HIT_TEXT, ruleTask, "待認領"));
-        awaitDeptLoad(triage, "房務", housekeeping + 1);
-        awaitDeptLoad(triage, "工務", engineering + 1);
+        awaitDeptLoad(triage, "房務", housekeeping + 2);
         new ShellFrame(world).settleAfter(() -> { });
     }
 
@@ -107,16 +106,16 @@ public class TriageWhenSteps {
         Map<String, Object> rule = new LinkedHashMap<>();
         rule.put("rule_id", "fx-rule-" + UUID.randomUUID());
         rule.put("keywords", List.of(RULE_KEYWORD));
-        rule.put("dept", "engineering");
-        rule.put("type", "repair");
+        rule.put("dept", "housekeeping");
+        rule.put("type", "amenity");
         return rule;
     }
 
-    /** 這張單要真的直接進了部門的待認領，否則案例要驗的「不會出現在待派單頁」沒有意義。 */
+    /** 這張單要真的直接進了房務的待認領，否則案例要驗的「不會出現在待派單頁」沒有意義。 */
     private void requireInPool(UUID taskId, String label) {
         Map<String, Object> row = world.backend().taskRow(taskId);
-        if (!"pool".equals(row.get("state")) || "frontdesk".equals(row.get("dept"))) {
-            throw new IllegalStateException(label + "沒有直接進部門待認領：state=" + row.get("state")
+        if (!"pool".equals(row.get("state")) || !"housekeeping".equals(row.get("dept"))) {
+            throw new IllegalStateException(label + "沒有直接進房務待認領：state=" + row.get("state")
                     + "、dept=" + row.get("dept"));
         }
     }

@@ -29,24 +29,27 @@
 <g filter="url(#rough)"><rect x="425.0" y="300" width="190" height="33" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="1.6"/><rect x="427.0" y="298.5" width="187" height="35" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
 <text x="520" y="322" font-size="13" fill="#1971c2" text-anchor="middle" font-weight="normal">讀 /api/v1/desk/board</text>
 <path d="M170 380 L512 380" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
-<text x="345.0" y="371" font-size="13" fill="#0c8599" text-anchor="middle" font-weight="normal">③ task 訊號 {task_id, seq, type}</text>
-<text x="345.0" y="399" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">只說「哪張單變了」，不帶單的內容</text>
-<path d="M520 445 L178 445" fill="none" stroke="#1971c2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m1971c2)" filter="url(#rough)"/>
-<text x="345.0" y="436" font-size="13" fill="#1971c2" text-anchor="middle" font-weight="normal">④ 重抓看板 GET /api/v1/desk/board</text>
-<path d="M170 505 L512 505" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m0c8599)" filter="url(#rough)"/>
-<text x="345.0" y="496" font-size="13" fill="#0c8599" text-anchor="middle" font-weight="normal">⑤ 每 15 秒一次 heartbeat</text>
+<text x="345.0" y="371" font-size="13" fill="#0c8599" text-anchor="middle" font-weight="normal">③ task 訊號 {task_id, seq, card, business_date}</text>
+<text x="345.0" y="399" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">帶著這張單在看板上現在的樣子（或「已不在看板上」）</text>
+<g filter="url(#rough)"><rect x="370.0" y="410" width="300" height="33" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="1.6"/><rect x="372.0" y="408.5" width="297" height="35" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".5"/></g>
+<text x="520" y="432" font-size="13" fill="#1971c2" text-anchor="middle" font-weight="normal">④ 直接換上那一張卡片，不用重抓</text>
+<path d="M520 480 L178 480" fill="none" stroke="#1971c2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m1971c2)" filter="url(#rough)"/>
+<text x="345.0" y="471" font-size="12" fill="#1971c2" text-anchor="middle" font-weight="normal">⑤ 跳號、營業日不同、看不懂、到了換日 → 才整份重讀</text>
+<text x="345.0" y="497" font-size="12" fill="#495057" text-anchor="middle" font-weight="normal">GET /api/v1/desk/board，同一時間最多一次在路上</text>
+<path d="M170 534 L512 534" fill="none" stroke="#0c8599" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<text x="345.0" y="525" font-size="13" fill="#0c8599" text-anchor="middle" font-weight="normal">⑥ 每 15 秒一次 heartbeat</text>
 <text x="30" y="548" font-size="14" fill="#e03131" text-anchor="start" font-weight="bold">— 出狀況時 —</text>
 <path d="M170 590 L512 590" fill="none" stroke="#e03131" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#me03131)" filter="url(#rough)"/>
-<text x="345.0" y="581" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">⑥ degraded：Kafka 落後超過 10 秒</text>
+<text x="345.0" y="581" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">⑦ degraded：Kafka 落後超過 10 秒</text>
 <g filter="url(#rough)"><rect x="370.0" y="605" width="300" height="52" rx="14" fill="#fff5f5" stroke="#e03131" stroke-width="1.6"/><rect x="372.0" y="603.5" width="297" height="54" rx="15" fill="none" stroke="#e03131" stroke-width="1" opacity=".5"/></g>
 <text x="520" y="627" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">顯示「連線異常」提醒列</text>
-<text x="520" y="646" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">改成每 5 秒自己重讀看板</text>
+<text x="520" y="646" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">改成每 4 秒自己重讀看板</text>
 <path d="M170 695 L512 695" fill="none" stroke="#2f9e44" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m2f9e44)" filter="url(#rough)"/>
-<text x="345.0" y="686" font-size="13" fill="#2f9e44" text-anchor="middle" font-weight="normal">⑦ recovered：恢復了</text>
+<text x="345.0" y="686" font-size="13" fill="#2f9e44" text-anchor="middle" font-weight="normal">⑧ recovered：恢復了</text>
 <g filter="url(#rough)"><rect x="370.0" y="710" width="300" height="33" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.6"/><rect x="372.0" y="708.5" width="297" height="35" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".5"/></g>
-<text x="520" y="732" font-size="13" fill="#2f9e44" text-anchor="middle" font-weight="normal">重讀一次，回到等訊號</text>
+<text x="520" y="732" font-size="13" fill="#2f9e44" text-anchor="middle" font-weight="normal">整份重讀一次，回到等卡片</text>
 <g filter="url(#rough)"><rect x="370.0" y="775" width="300" height="71" rx="14" fill="#fff5f5" stroke="#e03131" stroke-width="1.6"/><rect x="372.0" y="773.5" width="297" height="73" rx="15" fill="none" stroke="#e03131" stroke-width="1" opacity=".5"/></g>
-<text x="520" y="797" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">⑧ 35 秒什麼都沒收到 → 當作斷線</text>
+<text x="520" y="797" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">⑨ 35 秒什麼都沒收到 → 當作斷線</text>
 <text x="520" y="816" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">1 秒後重連，之後每 5 秒試一次</text>
 <text x="520" y="835" font-size="13" fill="#e03131" text-anchor="middle" font-weight="normal">連上後從 ② 重來（整份重讀，不逐筆補）</text>
 <g filter="url(#rough)"><rect x="45.0" y="862" width="250" height="71" rx="14" fill="#fff4e6" stroke="#e8590c" stroke-width="1.6"/><rect x="47.0" y="860.5" width="247" height="73" rx="15" fill="none" stroke="#e8590c" stroke-width="1" opacity=".5"/></g>

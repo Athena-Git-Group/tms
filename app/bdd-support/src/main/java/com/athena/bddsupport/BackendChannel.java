@@ -91,6 +91,25 @@ public class BackendChannel {
             infoPage("gym", "健身房", "健身房在 B1，06:00–22:00 開放。"),
             infoPage("taxi", "叫車", "需要叫車請告訴櫃檯時間與目的地，我們幫您安排。"));
 
+    /** 住客掃碼頁驗收的資訊頁。標題與內文照規格的字面，「Wi‑Fi」中間是不換行的連字號。 */
+    private static final List<Map<String, String>> GUEST_INFO_PAGES = List.of(
+            infoPage("breakfast", "早餐", "一樓餐廳 06:30–10:00"),
+            infoPage("wifi", "Wi‑Fi", "Wi‑Fi 名稱 Athena-Guest，密碼是房號加姓氏拼音。"),
+            infoPage("checkout", "退房時間", "中午 12:00 前"));
+
+    /** 住客掃碼頁驗收裡「沒有宣告時有人住」的那間房。 */
+    private static final String GUEST_STAYING_ROOM_NO = "311";
+
+    private static final String GUEST_STAYING_NAME = "測試住客";
+
+    /** 換 QR 只放行主管；延後、作廢、查房與驗收也是主管的動作。 */
+    private static final String MANAGER_NAME = "張主管";
+
+    /** 當場回答住客與代開單的櫃檯。 */
+    private static final String DESK_CLERK_NAME = "林佩君";
+
+    private static final String DESK_TASK_TITLE = "櫃檯代開的備品";
+
     private static Map<String, String> infoPage(String key, String title, String body) {
         Map<String, String> page = new LinkedHashMap<>();
         page.put("key", key);
@@ -339,6 +358,29 @@ public class BackendChannel {
 
         return new FrontdeskDefaults(tenantId, FRONTDESK_TENANT_CODE,
                 java.util.Collections.unmodifiableMap(staffByName));
+    }
+
+    /**
+     * 在櫃檯 Web 的預設資料之上，準備住客掃碼頁場景的預設訂房與資訊頁。
+     *
+     * <p>311 房有一筆今天入住、後天中午退房的訂房。入住時刻放在今天零點，場景把時間撥到今天任何一刻，
+     * 掃碼都換得到住客工作階段；放在一般的下午入住時刻的話，預設的 14:10 就換不到。
+     * 308 房是空房：場景開頭清空了所有訂房，這裡不替它建。
+     * 需求選單與分類規則也因為清空而沒有設定，後端就用出廠的五項選單，打字的需求一律進待派單。
+     *
+     * <p>要先呼叫過 {@link #ensureFrontdeskDefaults()}，訂房才會建在「雅典娜酒店」。
+     */
+    public synchronized void ensureGuestDefaults() {
+        long tenantId = ensureFrontdeskTenant();
+        if (!Long.valueOf(tenantId).equals(cachedTenantId)) {
+            throw new IllegalStateException("住客掃碼頁的預設資料要建在「" + FRONTDESK_TENANT_NAME
+                    + "」，先呼叫 ensureFrontdeskDefaults()");
+        }
+        OffsetDateTime now = backendNow();
+        OffsetDateTime startOfToday = now.toLocalDate().atStartOfDay().atOffset(now.getOffset());
+        createReservation(GUEST_STAYING_ROOM_NO, GUEST_STAYING_NAME, false,
+                startOfToday, startOfToday.plusDays(2).withHour(12));
+        setTenantConfig(tenantId, "guest_info_pages", GUEST_INFO_PAGES);
     }
 
     private long ensureFrontdeskTenant() {
@@ -928,6 +970,14 @@ public class BackendChannel {
         return taskId;
     }
 
+    // 與後端開工務單時的標題同一套中文（RepairService.CATEGORY_LABELS），畫面上不該出現類別代碼。
+    private static final Map<String, String> REPAIR_CATEGORY_LABELS = Map.of(
+            "air_conditioning", "冷氣",
+            "plumbing_electrical", "水電",
+            "furniture_equipment", "家具／設備",
+            "door_lock", "門鎖",
+            "other", "其他");
+
     public UUID createRepairTicket(
             String ticketNo, String roomNo, String categoryCode, String stateCode,
             CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent) {
@@ -935,7 +985,8 @@ public class BackendChannel {
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
 
         String taskState = "done".equals(stateCode) ? "doing" : stateCode;
-        UUID taskId = createTask(roomNo, categoryCode + " 工務單", "repair", "engineering", null,
+        UUID taskId = createTask(roomNo, REPAIR_CATEGORY_LABELS.getOrDefault(categoryCode, categoryCode) + " 工務單",
+                "repair", "engineering", null,
                 taskState, assignee, null, null);
         execute("UPDATE tasks SET source = 'staff' WHERE tenant_id = ? AND id = ?", tenantId, taskId);
 
@@ -1662,7 +1713,8 @@ public class BackendChannel {
             UUID roomId = ensureRoom(spec.roomNo, floorFromRoomNo(spec.roomNo));
             String taskNo = repair ? null : takeDisplayNo("task_counters", "T-", TASK_NO_FORMAT, spec.displayNo);
             String title = spec.title != null ? spec.title : titleFromGuestText();
-            String note = repair ? null : taskNote();
+            // 工務單的說明記在工務單上；住客打字後被櫃檯派給工務的單，原文仍留在任務上。
+            String note = repair && spec.guestText == null ? null : taskNote();
             LocalDate workDate = cleaning ? times[TIME_CREATED].toLocalDate() : null;
             boolean planAssigned = "accepted".equals(initialState);
             if (spec.urgent && !repair) {
@@ -2347,6 +2399,266 @@ public class BackendChannel {
         return parseJson(response.body());
     }
 
+    /** 換 QR 前後的 QR 權杖。 */
+    public record RotatedQr(String oldToken, String newToken) {}
+
+    /** 掃碼換到的住客工作階段，與後端這時候給住客看的服務項目；項目的鍵照後端給的，不另外翻成別的值。 */
+    public record GuestScan(String sessionToken, List<GuestMenuItem> menu) {}
+
+    public record GuestMenuItem(String key, String label) {}
+
+    /** 後端不肯用這枚 QR 權杖換住客工作階段。{@code code} 是錯誤回應裡的代碼，例如 {@code room_vacant}。 */
+    public static final class GuestScanRejected extends IllegalStateException {
+
+        private final int status;
+        private final String code;
+
+        GuestScanRejected(int status, String code, String body) {
+            super("後端不肯用 QR 權杖換住客工作階段：POST /guest/scan -> HTTP " + status + "，body=" + body);
+            this.status = status;
+            this.code = code;
+        }
+
+        public int status() {
+            return status;
+        }
+
+        public String code() {
+            return code;
+        }
+    }
+
+    /** 以主管的身分讀這間房目前的 QR 權杖。這間房還沒有有效的權杖時，後端在讀的當下發一枚。 */
+    public String roomQrToken(String roomNo) {
+        String path = "/admin/rooms/" + roomNo + "/qr";
+        HttpResponse<String> response = send(requestOutsideApi(path, jwt(defaultStaff(MANAGER_NAME))).GET());
+        requireSuccess(response, "讀房間 QR 權杖：GET " + path);
+        return parseJson(response.body()).path("token").asText();
+    }
+
+    /**
+     * 以主管的身分換掉這間房的 QR Code，回換之前與換之後的 QR 權杖。
+     *
+     * <p>走後端的換 QR 端點而不直接改資料表：後端換 QR 時會一併撤銷這間房所有的住客工作階段，
+     * 場景要驗的正是這個連帶的結果。
+     */
+    public RotatedQr rotateRoomQr(String roomNo) {
+        String oldToken = roomQrToken(roomNo);
+        String path = "/admin/rooms/" + roomNo + "/qr/rotate";
+        HttpResponse<String> response = send(requestOutsideApi(path, jwt(defaultStaff(MANAGER_NAME)))
+                .POST(HttpRequest.BodyPublishers.noBody()));
+        requireSuccess(response, "換房間 QR：POST " + path);
+        return new RotatedQr(oldToken, parseJson(response.body()).path("token").asText());
+    }
+
+    /**
+     * 用 QR 權杖換一個新的住客工作階段，就像另一支手機掃了同一張 QR Code。
+     * 每呼叫一次都是新的工作階段，與畫面上那支手機的互不相干。
+     *
+     * @throws GuestScanRejected 後端不給換時，例如權杖已經被換掉，或這間房現在沒有人住
+     */
+    public GuestScan guestScan(String qrToken) {
+        HttpResponse<String> response = send(requestOutsideApi("/guest/scan", null)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(Map.of("token", qrToken)), StandardCharsets.UTF_8)));
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new GuestScanRejected(response.statusCode(), errorCode(response.body()), response.body());
+        }
+        JsonNode body = parseJson(response.body());
+        List<GuestMenuItem> menu = new ArrayList<>();
+        for (JsonNode item : body.path("menu")) {
+            menu.add(new GuestMenuItem(item.path("key").asText(), item.path("label").asText()));
+        }
+        return new GuestScan(body.path("sessionToken").asText(), List.copyOf(menu));
+    }
+
+    /** 錯誤回應不一定有內容，例如被安全設定擋下的請求，這時沒有代碼。 */
+    private String errorCode(String body) {
+        try {
+            return objectMapper.readTree(body).path("code").asText(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 以這個住客工作階段替一張需求評分，就像住客在進度頁按了送出評分。 */
+    public void guestRateRequest(String sessionToken, UUID taskId, int rating) {
+        String path = "/guest/requests/" + taskId + "/rating";
+        HttpResponse<String> response = send(requestOutsideApi(path, null)
+                .header(GUEST_SESSION_HEADER, sessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(Map.of("rating", rating)), StandardCharsets.UTF_8)));
+        requireSuccess(response, "住客評分：POST " + path);
+    }
+
+    /**
+     * 讓這個住客工作階段失效，後端之後收到它就回 401。
+     *
+     * <p>直接寫撤銷時刻而不換 QR：換 QR 會連房間的 QR 權杖一起換掉，
+     * 場景要的是這支手機手上的工作階段失效、但掃同一張 QR Code 仍換得到新的。
+     */
+    public void revokeGuestSession(String sessionToken) {
+        queryScalar("UPDATE guest_sessions SET revoked_at = ? WHERE tenant_id = ? AND session_token = ? RETURNING id",
+                backendNow(), ensureTenant(), sessionToken)
+                .orElseThrow(() -> new IllegalStateException("找不到這個住客工作階段，撤銷不了：" + sessionToken));
+    }
+
+    /**
+     * 替這間房目前的訂房建一張住客需求，停在指定的狀況，回這張需求的 id。
+     *
+     * <p>不經過住客送出需求的端點。那個端點每間房 10 分鐘只收 3 筆、以系統時鐘計，
+     * 場景開頭備的舊需求若經過它，會吃掉畫面上真的送出要用的額度，送出時間也只能是現在。
+     * 所以這裡用 {@link #createTaskInSituation} 直接寫，住客讀清單時看到的與真的送出過的一樣。
+     *
+     * <p>還在櫃檯手上的需求是住客打字送出的，原文就是標題。
+     * 延後、作廢、查房與驗收由張主管做，當場回答由林佩君做。
+     * 住客的需求不會直接進工務，工務的狀況改走 {@link #seedEngineeringGuestRequest}。
+     */
+    public UUID seedGuestRequest(String roomNo, GuestSeed seed) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        UUID reservationId = stayingReservationId(tenantId, roomId, backendNow())
+                .orElseThrow(() -> new IllegalStateException(roomNo + " 房現在沒有人住，住客需求要掛在在住的訂房上"));
+        if (seed.situation().dispatchedToEngineering()) {
+            return seedEngineeringGuestRequest(roomNo, reservationId, seed);
+        }
+        String dept = seed.dept();
+        TaskSituation situation = seed.situation().taskSituation();
+        TaskSituationSpec spec = TaskSituationSpec.of(roomNo, seed.type(), "guest")
+                .reservationId(reservationId)
+                .title(seed.title())
+                .dept(dept)
+                .createdAt(seed.createdAt())
+                .acceptedAt(seed.acceptedAt())
+                .startedAt(seed.startedAt())
+                .assignee(seed.assignee())
+                .answer(seed.answer())
+                .actedBy(guestSeedActor(situation));
+        if ("frontdesk".equals(dept)) {
+            spec.guestText(seed.title(), "zh-TW", null);
+        }
+        return createTaskInSituation(situation, spec);
+    }
+
+    /**
+     * 住客打字送出、停在待派單，再由林佩君派給工務，讓後端自己把它變成工務單；
+     * 之後依狀況由負責人認領、開始、完修，張主管驗收。
+     *
+     * <p>每一步先把後端時鐘撥到那一刻再呼叫後端，事件時間才會是表格要的送出、到手與開始時刻；
+     * 做完撥回原本的現在。派單與送出同一刻，完修與驗收在現在，和其他狀況的預設相同。
+     */
+    private UUID seedEngineeringGuestRequest(String roomNo, UUID reservationId, GuestSeed seed) {
+        if (!"repair".equals(seed.type())) {
+            throw new IllegalArgumentException("「" + seed.situation().term() + "」是櫃檯派給工務的需求，後端派單時一律改成修繕，"
+                    + "類型不能是 " + seed.type());
+        }
+        UUID taskId = createTaskInSituation(TaskSituation.TRIAGE,
+                TaskSituationSpec.of(roomNo, "other", "guest")
+                        .reservationId(reservationId)
+                        .title(seed.title())
+                        .guestText(seed.title(), "zh-TW", null)
+                        .createdAt(seed.createdAt()));
+        OffsetDateTime now = backendNow();
+        try {
+            setBackendClock(seed.createdAt());
+            deskAssign(taskId, defaultStaff(DESK_CLERK_NAME), "engineering", "button");
+            if (seed.acceptedAt() != null) {
+                setBackendClock(seed.acceptedAt());
+                postTaskAction(taskId, "claim", seed.assignee());
+            }
+            if (seed.startedAt() != null) {
+                setBackendClock(seed.startedAt());
+                postTaskAction(taskId, "start", seed.assignee());
+            }
+            if (seed.situation() == GuestSeed.Situation.CLOSED) {
+                setBackendClock(now);
+                completeRepairTask(taskId, seed.assignee());
+                verifyRepairTicket(taskId, defaultStaff(MANAGER_NAME), "passed", null);
+            }
+        } finally {
+            setBackendClock(now);
+        }
+        return taskId;
+    }
+
+    private CreatedStaff guestSeedActor(TaskSituation situation) {
+        return switch (situation) {
+            case DEFERRED_BY_MANAGER, CANCELLED_BY_MANAGER, INSPECTION_PASSED, CLOSED_VERIFIED ->
+                    defaultStaff(MANAGER_NAME);
+            case ANSWERED -> defaultStaff(DESK_CLERK_NAME);
+            default -> null;
+        };
+    }
+
+    /**
+     * 把一張需求記成住客已經評過分，連同後端評分時留下的那筆事件。
+     * 條件和後端相同：只有已完成或查房通過、還沒評過分的需求能評，不符時直接停下。
+     */
+    public void setTaskRating(UUID taskId, int rating) {
+        long tenantId = ensureTenant();
+        OffsetDateTime now = backendNow();
+        inTransaction(() -> {
+            queryScalar("""
+                    UPDATE tasks SET rating = ?, updated_at = ?
+                     WHERE tenant_id = ? AND id = ? AND state IN ('done', 'inspected') AND rating IS NULL
+                    RETURNING id
+                    """, rating, now, tenantId, taskId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "只有已完成或查房通過、還沒評過分的需求能評分：" + taskId));
+            appendTaskEvent(taskId, "rated", "guest", null, Map.of("rating", rating), now);
+            return null;
+        });
+    }
+
+    /**
+     * 櫃檯替這間房代開一張不綁訂房的備品單，停在房務待認領，回這張單的 id。
+     * 住客的清單只列自己訂房名下的需求，所以看不到它。
+     */
+    public UUID seedDeskTask(String roomNo, OffsetDateTime createdAt) {
+        return createTaskInSituation(TaskSituation.POOL,
+                TaskSituationSpec.of(roomNo, "amenity", "desk")
+                        .title(DESK_TASK_TITLE)
+                        .dept("housekeeping")
+                        .createdBy(defaultStaff(DESK_CLERK_NAME))
+                        .createdAt(createdAt));
+    }
+
+    /**
+     * 把預設飯店的分類規則設成只有這一條：住客打字的需求含這個關鍵字時，分到這個部門與類型。
+     * 分到房務的直接進房務待認領；分到工務的留在待派單，等櫃檯派給工務才成為工務單。
+     * {@code dept} 與 {@code type} 給後端的值，例如 {@code engineering}、{@code repair}。
+     */
+    public void setClassificationRule(String keyword, String dept, String type) {
+        Map<String, Object> rule = new LinkedHashMap<>();
+        rule.put("rule_id", "bdd-" + keyword);
+        rule.put("keywords", List.of(keyword));
+        rule.put("dept", dept);
+        rule.put("type", type);
+        setTenantConfig(ensureTenant(), "classification_rules", List.of(rule));
+    }
+
+    /** 以姓名找櫃檯 Web 的預設帳號，帳號由 {@link #ensureFrontdeskDefaults()} 建好。 */
+    private CreatedStaff defaultStaff(String name) {
+        DefaultStaff staff = FRONTDESK_STAFF.stream()
+                .filter(candidate -> candidate.name().equals(name))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("「" + name + "」不是櫃檯 Web 的預設帳號"));
+        UUID id = (UUID) queryScalar("SELECT id FROM staff_accounts WHERE tenant_id = ? AND login_id = ?",
+                ensureTenant(), staff.loginId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "預設帳號 " + staff.loginId() + " 還沒建，先呼叫 ensureFrontdeskDefaults()"));
+        return new CreatedStaff(id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD, staff.role(), staff.dept());
+    }
+
+    private Optional<UUID> stayingReservationId(long tenantId, UUID roomId, OffsetDateTime at) {
+        return queryScalar("""
+                SELECT id FROM reservations_cache
+                 WHERE tenant_id = ? AND room_id = ? AND superseded_at IS NULL
+                   AND checkin_at <= ? AND checkout_at > ?
+                """, tenantId, roomId, at, at)
+                .map(UUID.class::cast);
+    }
+
     /**
      * 把房號換成這間房住客的連線憑證，住客端點靠它認人。
      *
@@ -2359,12 +2671,7 @@ public class BackendChannel {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
         OffsetDateTime now = backendNow();
-        Optional<UUID> stayingReservation = queryScalar("""
-                SELECT id FROM reservations_cache
-                 WHERE tenant_id = ? AND room_id = ? AND superseded_at IS NULL
-                   AND checkin_at <= ? AND checkout_at > ?
-                """, tenantId, roomId, now, now)
-                .map(UUID.class::cast);
+        Optional<UUID> stayingReservation = stayingReservationId(tenantId, roomId, now);
         UUID reservationId = stayingReservation.orElseGet(() -> {
             OffsetDateTime longAgo = now.minusDays(VACANT_ROOM_STAY_DAYS_AGO);
             return createReservation(roomNo, null, false, longAgo, longAgo.plusDays(1));
@@ -2664,8 +2971,13 @@ public class BackendChannel {
     }
 
     private HttpRequest.Builder request(String method, String path, String jwt) {
+        return requestOutsideApi(BASE_PATH + path, jwt);
+    }
+
+    /** 住客端點與房間 QR 的管理端點掛在根路徑，不在 {@code /api/v1} 底下。 */
+    private HttpRequest.Builder requestOutsideApi(String path, String jwt) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + BASE_PATH + path))
+                .uri(URI.create(baseUrl + path))
                 .timeout(Duration.ofSeconds(10));
         if (jwt != null) {
             builder.header("Authorization", "Bearer " + jwt);

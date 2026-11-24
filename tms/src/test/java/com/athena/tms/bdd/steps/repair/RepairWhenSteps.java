@@ -245,9 +245,9 @@ public class RepairWhenSteps {
 
     @當("{string} 只看 {string} 的工務待認領")
     public void staffViewsEngineeringPoolByTriage(String staffName, String triageChinese) {
-        apiClient.get(
+        world.setLastEngineeringPoolResponse(apiClient.get(
                 "/pool?category=repair" + triageQueryString(triageChinese),
-                BddApiClient.Auth.staff(world.jwt(staffName)));
+                BddApiClient.Auth.staff(world.jwt(staffName))));
     }
 
     private static String triageQueryString(String triageChinese) {

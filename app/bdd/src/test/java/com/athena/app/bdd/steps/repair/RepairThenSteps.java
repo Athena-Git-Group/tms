@@ -378,6 +378,59 @@ public class RepairThenSteps {
         }
     }
 
+    @那麼("工務待認領中 {string} 的類別標示為 {string}")
+    public void engPoolItemCategoryLabelIs(String ticketNo, String categoryLabel) {
+        String expectedCode = CATEGORY_CODE_BY_SHORT_LABEL.get(categoryLabel);
+        if (expectedCode == null) {
+            throw new IllegalArgumentException("認不得的類別標示「" + categoryLabel + "」（合法值："
+                    + CATEGORY_CODE_BY_SHORT_LABEL.keySet() + "）");
+        }
+
+        String labelId = "engPool.item." + ticketNo + ".category-label";
+        world.waitForTestId(labelId, SCREEN_TIMEOUT);
+        String onScreen = world.labelOf(labelId);
+        // Semantics 帶 label 又包著同字的 Text 時，XCUITest 會把兩份用換行接成一個 label，所以逐行比。
+        if (onScreen == null || onScreen.isBlank() || !onScreen.lines().allMatch(categoryLabel::equals)) {
+            throw new AssertionError("「" + ticketNo + "」單卡房號方塊的類別應為「" + categoryLabel
+                    + "」，畫面上是「" + onScreen + "」");
+        }
+
+        WebElement card = world.waitForTestId("engPool.item." + ticketNo + ".card", SCREEN_TIMEOUT);
+        org.openqa.selenium.Rectangle cardRect = card.getRect();
+        List<String> codesOnCard = new ArrayList<>();
+        for (WebElement element : world.driver().findElements(AppiumBy.iOSNsPredicateString(
+                "label MATCHES " + nsQuote(ENGLISH_CODE_PATTERN)))) {
+            org.openqa.selenium.Rectangle rect = element.getRect();
+            boolean insideCard = rect.getHeight() > 0
+                    && rect.getX() >= cardRect.getX() && rect.getY() >= cardRect.getY()
+                    && rect.getX() + rect.getWidth() <= cardRect.getX() + cardRect.getWidth()
+                    && rect.getY() + rect.getHeight() <= cardRect.getY() + cardRect.getHeight();
+            if (insideCard) {
+                codesOnCard.add(element.getAttribute("label"));
+            }
+        }
+        if (!codesOnCard.isEmpty()) {
+            throw new AssertionError("「" + ticketNo + "」單卡上不該出現英文代碼，畫面上有：" + codesOnCard);
+        }
+
+        Map<String, Object> row = singleTicketRow("rt.ticket_no = ?", "單號 " + ticketNo + " 的工務單", ticketNo);
+        String taskId = String.valueOf(row.get("task_id"));
+        JsonNode match = null;
+        for (JsonNode item : world.backend().getJson("/pool?dept=engineering", world.loggedInStaff()).path("items")) {
+            if (taskId.equalsIgnoreCase(item.path("taskId").asText())) {
+                match = item;
+            }
+        }
+        if (match == null) {
+            throw new AssertionError("後端工務待認領查不到「" + ticketNo + "」（taskId " + taskId + "）");
+        }
+        String apiCategory = match.path("repairCategory").asText(null);
+        if (!expectedCode.equals(apiCategory)) {
+            throw new AssertionError("「" + ticketNo + "」的 PoolItem.repairCategory 應為 " + expectedCode
+                    + "（" + categoryLabel + "），實際 " + apiCategory);
+        }
+    }
+
     @那麼("^工務待認領依序為 (.+)$")
     public void engPoolOrderIs(String ticketListText) {
         List<String> expected = List.of(ticketListText.split("、"));
@@ -1104,6 +1157,17 @@ public class RepairThenSteps {
             "家具／設備", "furniture_equipment",
             "門鎖", "door_lock",
             "其他", "other");
+
+    // 單卡房號方塊放不下「家具／設備」，只寫「設備」。
+    private static final Map<String, String> CATEGORY_CODE_BY_SHORT_LABEL = Map.of(
+            "冷氣", "air_conditioning",
+            "水電", "plumbing_electrical",
+            "設備", "furniture_equipment",
+            "門鎖", "door_lock",
+            "其他", "other");
+
+    private static final String ENGLISH_CODE_PATTERN =
+            "(?s).*\\b(cleaning|amenity|repair|other|air_conditioning|plumbing_electrical|furniture_equipment|door_lock)\\b.*";
 
     private JsonNode readTicket(Map<String, Object> row) {
         return world.backend().getJson("/repair-tickets/" + row.get("task_id"), world.loggedInStaff());

@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
  * 不驗任何產品行為，也不屬於任何 Feature。
  *
  * <p>平常的 {@code mvn test} 不會跑到它（pom 的 surefire 把它排除了），因為它需要開發伺服器與 8080 後端
- * 都已經開著。要跑時指名：{@code mvn -q test -Dtest=SmokeTest -Dweb.profile=desktop|ipad}。
+ * 都已經開著。要跑時指名：{@code mvn -q test -Dtest=SmokeTest -Dweb.profile=desktop|ipad|phone}。
  */
 class SmokeTest {
 

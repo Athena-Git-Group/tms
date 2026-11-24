@@ -3,6 +3,7 @@ package com.athena.tms.bdd.support;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
+import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.service.TaskEngine;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -77,7 +78,7 @@ public class DeskBoardFixtures {
 
         String ticketNo = null;
         if ("repair".equals(spec.type())) {
-            ticketNo = insertRepairTicket(tenantId, taskId, roomId, spec);
+            ticketNo = settleRepairTicket(tenantId, taskId, spec);
         } else {
             assignTaskNo(tenantId, taskId, spec.taskNo());
         }
@@ -186,14 +187,16 @@ public class DeskBoardFixtures {
         String note = objectMapper.writeValueAsString(Map.of("text", spec.content()));
         return engine.create(new TaskCreateCommand(
                         tenantId, spec.type(), "guest", roomId, reservationId, dept, initialState, null,
-                        spec.content(), note, null, null, workDate, Actor.guest()))
+                        spec.content(), note, null, null, workDate, Actor.guest(), false,
+                        repairTicketDraft(tenantId, dept)))
                 .getId();
     }
 
     private UUID createInPool(long tenantId, UUID roomId, LocalDate workDate, Spec spec, String dept) {
         return engine.create(new TaskCreateCommand(
                         tenantId, spec.type(), "repair".equals(spec.type()) ? "staff" : "desk", roomId, null, dept,
-                        "pool", null, spec.content(), null, null, null, workDate, Actor.system()))
+                        "pool", null, spec.content(), null, null, null, workDate, Actor.system(), false,
+                        repairTicketDraft(tenantId, dept)))
                 .getId();
     }
 
@@ -205,7 +208,8 @@ public class DeskBoardFixtures {
             case "班前排房" -> {
                 return engine.create(new TaskCreateCommand(
                                 tenantId, spec.type(), "system", roomId, null, dept, "accepted", assigneeId,
-                                spec.content(), null, null, null, workDate, Actor.system()))
+                                spec.content(), null, null, null, workDate, Actor.system(), false,
+                                repairTicketDraft(tenantId, dept)))
                         .getId();
             }
             case "自己認領" -> {
@@ -292,34 +296,31 @@ public class DeskBoardFixtures {
         insertEvent(tenantId, taskId, seq, "answered", "frontdesk", frontdeskId, Map.of("answer", DEFAULT_ANSWER));
     }
 
-    private String insertRepairTicket(long tenantId, UUID taskId, UUID roomId, Spec spec) {
-        int n = jdbcClient
-                .sql(
-                        """
-                        INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
-                        ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
-                        RETURNING last_no
-                        """)
-                .param(tenantId)
-                .query(Integer.class)
-                .single();
-        String ticketNo = String.format("W-%04d", n);
+    private RepairTicketDraft repairTicketDraft(long tenantId, String dept) {
+        return "engineering".equals(dept)
+                ? new RepairTicketDraft("other", null, firstFieldStaff(tenantId, "engineering"), null, null)
+                : null;
+    }
+
+    private String settleRepairTicket(long tenantId, UUID taskId, Spec spec) {
         Map<String, Object> task = taskRow(tenantId, taskId);
         Object assignee = task.get("assignee_id");
         UUID reporterId = assignee != null ? (UUID) assignee : firstFieldStaff(tenantId, "engineering");
         String state = String.valueOf(task.get("state"));
         String resolutionType = "done".equals(state) || "closed".equals(state) ? "fixed" : null;
-        jdbcClient
+        jdbcClient.sql("UPDATE tasks SET urgent = false WHERE tenant_id = ? AND id = ?").params(tenantId, taskId).update();
+        return jdbcClient
                 .sql(
                         """
-                        INSERT INTO repair_tickets
-                            (task_id, tenant_id, ticket_no, room_id, category, reporter_id, created_at, is_urgent,
-                             resolution_type)
-                        VALUES (?, ?, ?, ?, 'other', ?, ?, false, ?)
+                        UPDATE repair_tickets
+                           SET reporter_id = ?, created_at = ?, is_urgent = false, urgent_rule = NULL,
+                               resolution_type = ?
+                         WHERE tenant_id = ? AND task_id = ?
+                        RETURNING ticket_no
                         """)
-                .params(taskId, tenantId, ticketNo, roomId, reporterId, offset(spec.at()), resolutionType)
-                .update();
-        return ticketNo;
+                .params(reporterId, offset(spec.at()), resolutionType, tenantId, taskId)
+                .query(String.class)
+                .single();
     }
 
     private void assignTaskNo(long tenantId, UUID taskId, String requested) {

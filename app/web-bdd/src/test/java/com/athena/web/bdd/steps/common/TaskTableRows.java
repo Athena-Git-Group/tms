@@ -127,7 +127,11 @@ public final class TaskTableRows {
         String situationTerm = required(row, "狀況");
         TaskSituation situation = TaskSituation.ofTerm(situationTerm);
         String guestText = cell(row, "住客原話");
-        String typeTerm = orDefault(cell(row, "類型"), guestText != null ? "其他" : "備品");
+        boolean engineering = "工務".equals(cell(row, "部門"));
+        String typeTerm = orDefault(cell(row, "類型"), engineering ? "修繕" : guestText != null ? "其他" : "備品");
+        if (engineering && !"修繕".equals(typeTerm)) {
+            throw new IllegalArgumentException("部門是工務的單一律是工務單，類型只能是修繕，" + roomNo + " 寫的是「" + typeTerm + "」");
+        }
         String sourceTerm = orDefault(cell(row, "來源"), defaultSource(typeTerm, guestText));
         String source = lookup(SOURCE, sourceTerm, "來源");
         String title = cell(row, "標題");
@@ -244,7 +248,12 @@ public final class TaskTableRows {
         }
         if (triaged) {
             String via = cell(row, "派單方式") == null ? null : lookup(TRIAGE_VIA, cell(row, "派單方式"), "派單方式");
-            spec.triagedBy(staff(!handlerUsed && handler != null ? handler : DEFAULT_DESK), via);
+            CreatedStaff triager = staff(!handlerUsed && handler != null ? handler : DEFAULT_DESK);
+            spec.triagedBy(triager, via);
+            if ("修繕".equals(typeTerm) && createdBy == null) {
+                // 櫃檯派給工務時後端以派單的櫃檯當報修人開出工務單。
+                createdBy = triager;
+            }
         }
         if (createdBy == null && byStaff) {
             createdBy = staff("desk".equals(source) ? DEFAULT_DESK : DEFAULT_REPORTER);

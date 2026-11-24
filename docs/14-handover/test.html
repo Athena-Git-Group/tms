@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・本機手測</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="setup.html">第一天</a>
+  <a href="test.html" aria-current="page">本機手測</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">本機手測</span></p>
+
+<header>
+  <p class="eyebrow">交接 · 本機手測</p>
+  <h1>本機手測：一個人在自己的 Mac 上把整條流程走一遍</h1>
+  <p class="stand">住客掃房間 QR 提出需求，櫃檯在網頁上派單，員工在 App 上做完，主管驗收工務單，最後住客看到「已完成」並評分。這頁教你起環境、用哪些帳號、每一步該看到什麼，以及卡住時怎麼辦。</p>
+  <p class="readtime">約 7 分鐘</p>
+</header>
+
+<section id="why">
+  <h2>手動環境是什麼，為什麼不直接用驗收測試的環境？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>手動環境是一套專門給人點的後端與網頁：後端 8083、網頁 5300、資料庫 <code>tms_manual</code>。它跟自動驗收測試完全分開，所以你測到一半的資料不會突然消失。</p>
+  </div>
+  <p>問題出在驗收測試的習慣：每個測試場景開始前，它都會把自己連的資料庫整個清空。你如果拿 App 連驗收用的 8080 後端手動點，同時有人在跑測試，剛建的需求下一秒就不見，而且畫面上沒有任何錯誤。</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>手動操作也連驗收測試的 8080／<code>tms</code></h4>
+    <p>資料會被測試清掉；驗收後端還開著可以撥動的測試時鐘，你看到的「現在」可能是測試撥過的時間。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>同一台 Postgres 與 Kafka，另開一套邏輯上獨立的環境</h4>
+    <p>手動環境用自己的 database <code>tms_manual</code>、自己的埠號，Kafka 的 topic 全部加上 <code>manual.</code> 前綴，後端用真實時鐘。所有指令都在 <code>scripts/manual-env/</code>，執行檔、pid、log 與 QR 圖都放在 <code>~/.tms-manual-env/</code>，不放進專案。</p>
+    <p><b class="lbl">權衡</b>兩套環境共用同一台 Postgres 與 Kafka，手動環境起停時，驗收後端的推播會停頓幾秒。完整的環境比較與原因見<a href="setup.html#environments">第一天・三套環境</a>。</p>
+  </div>
+
+  <details>
+    <summary>手動環境與驗收測試的對照 <span class="hint">— 6 項</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>項目</th><th>手動環境</th><th>驗收測試（手動時不要碰）</th></tr></thead>
+      <tbody>
+        <tr><td>後端</td><td><code>http://localhost:8083</code>，真實時鐘</td><td>8080，測試時鐘</td></tr>
+        <tr><td>櫃檯與住客網頁</td><td><code>http://localhost:5300</code></td><td>5199</td></tr>
+        <tr><td>資料庫</td><td>Postgres 5433 的 database <code>tms_manual</code></td><td>5433 的 <code>tms</code></td></tr>
+        <tr><td>Kafka</td><td>9092，topic 前綴 <code>manual.</code></td><td>9092，topic <code>tms.*</code></td></tr>
+        <tr><td>員工 App</td><td>編譯成連 8083 的版本</td><td>連 8080／8081 的版本</td></tr>
+        <tr><td>pid、log、jar、QR 圖</td><td><code>~/.tms-manual-env/</code></td><td><code>app/web-bdd/target/run-feature/</code></td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+</section>
+
+<section id="up">
+  <h2>怎麼一行把環境起起來？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>在專案根目錄跑 <code>bash scripts/manual-env/up.sh --build --phone --app</code>。它會打包後端、起後端與網頁、灌示範資料，最後把員工 App 裝到 iOS 模擬器並打開。</p>
+  </div>
+  <p>開始前先確認這幾樣工具都在。怎麼安裝見<a href="setup.html#install">第一天・要裝哪些東西</a>。</p>
+  <ul class="check">
+    <li><label><input type="checkbox"><span><b>Docker</b>（OrbStack 或 Docker Desktop）：跑 Postgres 與 Kafka。沒起的話 <code>up.sh</code> 會自己 <code>docker compose up -d</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>JDK 25</b>：<code>/usr/libexec/java_home -v 25</code> 要找得到；裝在別處時用 <code>MANUAL_JAVA=/路徑/bin/java</code> 指定。</span></label></li>
+    <li><label><input type="checkbox"><span><b>psql</b>（<code>brew install postgresql@15</code>）：灌資料與查房間用。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Node.js</b>（20.19 以上或 22.12 以上），並且先在 <code>app/web</code> 跑過一次 <code>npm install</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Flutter 與 Xcode</b>：<code>flutter doctor</code> 的 iOS 那項要過，Xcode 裡要下載好 iOS 平台。</span></label></li>
+    <li><label><input type="checkbox"><span><b>qrencode</b>（<code>brew install qrencode</code>）：產生房間 QR 圖用。</span></label></li>
+  </ul>
+
+  <p>第一次用，或程式碼有更新時，跑第一行。環境已經起過、只想重起又不想丟資料，跑第二行。</p>
+  <div class="cmd"><pre class="api"><span class="c"># 第一次或程式碼更新後：打包後端 → 起後端與網頁 → 灌資料 → 裝 App</span>
+bash scripts/manual-env/up.sh --build --phone --app
+
+<span class="c"># 已經起過：重起但保留測到一半的資料與房間 QR</span>
+bash scripts/manual-env/up.sh --keep-data --phone --app</pre></div>
+  <p>跑完它會印出櫃檯網址、住客 QR 的指令，以及新走一遍該用哪些帳號。文中的「模擬器」指 iOS simulator，也就是 Xcode 附的、在 Mac 上跑的虛擬 iPhone；員工 App 就裝在它上面。</p>
+
+  <div class="callout warn">
+    <p><b>不加 <code>--keep-data</code> 就等於重置。</b>不帶參數的 <code>up.sh</code> 會重灌示範資料：你建過的需求全部清掉，每間房的 QR 代碼也換新，之前印出來的 QR 全部失效。</p>
+  </div>
+
+  <p>想知道環境現在好不好，跑 <code>status.sh</code>。它只讀不改，會列出後端與網頁有沒有在跑、聽哪個位址，資料庫連不連得上、現在有哪些在住房，以及模擬器上的員工 App 是不是連 8083。</p>
+  <div class="cmd"><pre class="api">bash scripts/manual-env/status.sh</pre></div>
+
+  <details>
+    <summary><code>up.sh</code> 的四個參數 <span class="hint">— 可以自由組合</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>參數</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>--build</code></td><td>先用目前的程式碼重新打包後端（跳過測試）；配 <code>--app</code> 時 App 也重新編譯</td></tr>
+        <tr><td><code>--keep-data</code></td><td>不重灌資料，保留測到一半的資料與房間 QR</td></tr>
+        <tr><td><code>--phone</code></td><td>網頁聽所有網卡（<code>0.0.0.0</code>），同一個區網的手機才連得進來</td></tr>
+        <tr><td><code>--app</code></td><td>最後把員工 App 裝到模擬器並打開；沒加 <code>--build</code>、而且上次編好的就是連 8083 的版本時，不重編</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>其他單獨的指令 <span class="hint">— 只重裝 App、重灌資料、單獨起停</span></summary>
+    <div class="in">
+    <div class="cmd"><pre class="api">bash scripts/manual-env/app.sh               <span class="c"># 重新編譯員工 App → 裝到模擬器 → 打開</span>
+bash scripts/manual-env/app.sh --no-build    <span class="c"># 沿用上次編好的 App，只重裝並打開（幾秒鐘）</span>
+bash scripts/manual-env/app.sh --run         <span class="c"># flutter run 前景執行，改 App 程式時可以 hot reload</span>
+bash scripts/manual-env/app.sh --device "iPhone Air"   <span class="c"># 指定模擬器（名稱或 UDID）</span>
+bash scripts/manual-env/seed.sh              <span class="c"># 重灌示範資料（＝重置，QR 會換新）</span>
+bash scripts/manual-env/start.sh             <span class="c"># 起後端＋網頁；已經在跑的會沿用</span>
+bash scripts/manual-env/stop.sh              <span class="c"># 全停；資料保留</span></pre></div>
+    <p><code>start.sh</code> 與 <code>stop.sh</code> 都可以只帶 <code>backend</code> 或 <code>web</code>，只動一半。<code>app.sh</code> 會自己挑模擬器：有開機中的 iPhone 就用它，沒有就挑最新 iOS 版本的第一台 iPhone 開機。</p>
+    </div>
+  </details>
+</section>
+
+<section id="accounts">
+  <h2>要用哪些帳號？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>密碼都是 <code>demo1234</code>。新走一遍用 <code>fd1</code> 派單、<code>hk2</code> 做房務、<code>mt2</code> 做工務、<code>mg1</code> 驗收工務單。先不要用 <code>hk1</code>、<code>mt1</code>。</p>
+  </div>
+  <p>櫃檯網頁的網址裡帶著飯店代碼 <code>demo-hotel</code>，登入頁是 <code>http://localhost:5300/demo-hotel/login</code>。員工 App 登入只填員工編號與密碼，沒有飯店代碼欄位。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>帳號</th><th>角色</th><th>在哪裡用</th><th>新走一遍時</th></tr></thead>
+    <tbody>
+      <tr><td><code>fd1</code></td><td>櫃檯</td><td>櫃檯網頁</td><td>用它派單</td></tr>
+      <tr><td><code>hk2</code></td><td>房務</td><td>員工 App</td><td>用它做房務</td></tr>
+      <tr><td><code>mt2</code></td><td>工務</td><td>員工 App</td><td>用它做工務單</td></tr>
+      <tr><td><code>mg1</code>、<code>mg2</code></td><td>主管</td><td>櫃檯網頁、員工 App</td><td>用來驗收工務單</td></tr>
+      <tr><td><code>dm1</code></td><td>值班主管</td><td>櫃檯網頁</td><td>這條流程用不到</td></tr>
+      <tr><td><code>hk1</code>、<code>mt1</code></td><td>房務、工務</td><td>員工 App</td><td>先不要用</td></tr>
+    </tbody>
+  </table></div>
+  <p>為什麼避開 <code>hk1</code> 與 <code>mt1</code>：示範資料裡他們身上已經各有一件進行中的工作（<code>hk1</code> 在打掃 302、<code>mt1</code> 在修 502），而一個人同時只能做一件，用他們會在「開始」那一步被擋下來。<code>mg1</code> 身上也有一件，但主管驗收不受這個限制，照樣可以驗收。</p>
+</section>
+
+<section id="walkthrough">
+  <h2>完整流程怎麼走一遍？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>住客送出兩筆需求：一筆設備報修、一筆備品。報修要櫃檯派給工務，工務做完還要主管驗收；備品直接進房務。兩筆都做完，住客頁不用重新整理就會顯示「已完成」。</p>
+  </div>
+  <figure>
+    <div class="figwrap">
+    <svg class="sm" viewBox="0 0 800 268" role="img" aria-label="流程：住客頁送出需求到櫃檯網頁；櫃檯派給員工 App 的房務或工務；工務單完成後由主管驗收；備品不經櫃檯直接進房務待認領；狀態即時回到住客頁，最後住客評分">
+      <defs>
+        <marker id="ts-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+        <marker id="ts-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-acc"/></marker>
+      </defs>
+
+      <path class="sk-edge sk-dash" d="M 110 68 Q 300 0 492 68" marker-end="url(#ts-a)"/>
+      <text class="sk-t-lb" x="300" y="22" text-anchor="middle">備品選單：不經櫃檯，直接進房務待認領</text>
+
+      <rect class="sk-shape sk-soft sk-acc" x="20" y="70" width="160" height="96" rx="16"/>
+      <text class="sk-t sk-t-b" x="100" y="102" text-anchor="middle">住客頁</text>
+      <text class="sk-t-s" x="100" y="126" text-anchor="middle">掃 QR 或開網址</text>
+      <text class="sk-t-s" x="100" y="148" text-anchor="middle">報修、要備品</text>
+
+      <path class="sk-edge" d="M 182 118 L 216 118" marker-end="url(#ts-a)"/>
+
+      <rect class="sk-shape sk-fill" x="220" y="70" width="160" height="96" rx="14"/>
+      <text class="sk-t sk-t-b" x="300" y="102" text-anchor="middle">櫃檯網頁</text>
+      <text class="sk-t-s" x="300" y="126" text-anchor="middle">fd1 · 待派單</text>
+      <text class="sk-t-s" x="300" y="148" text-anchor="middle">派給房務或工務</text>
+
+      <path class="sk-edge" d="M 382 118 L 416 118" marker-end="url(#ts-a)"/>
+
+      <rect class="sk-shape sk-fill" x="420" y="70" width="160" height="96" rx="14"/>
+      <text class="sk-t sk-t-b" x="500" y="102" text-anchor="middle">員工 App</text>
+      <text class="sk-t-s" x="500" y="126" text-anchor="middle">hk2 房務 · mt2 工務</text>
+      <text class="sk-t-s" x="500" y="148" text-anchor="middle">認領 → 開始 → 完成</text>
+
+      <path class="sk-edge" d="M 582 118 L 616 118" marker-end="url(#ts-a)"/>
+
+      <rect class="sk-shape sk-fill" x="620" y="70" width="160" height="96" rx="14"/>
+      <text class="sk-t sk-t-b" x="700" y="102" text-anchor="middle">主管驗收</text>
+      <text class="sk-t-s" x="700" y="126" text-anchor="middle">mg1 · 員工 App</text>
+      <text class="sk-t-s" x="700" y="148" text-anchor="middle">工務單驗收後結案</text>
+
+      <path class="sk-edge-acc" d="M 700 168 C 700 250, 100 250, 100 172" marker-end="url(#ts-acc)"/>
+      <text class="sk-t-acc" x="400" y="256" text-anchor="middle">住客頁不用重新整理：已送出 → 已受理 → 處理中 → 已完成，再給評分</text>
+    </svg>
+    </div>
+    <figcaption>實線是報修那筆的路：住客、櫃檯、工務、主管，再回到住客。虛線是備品那筆的捷徑。</figcaption>
+  </figure>
+
+  <p>先確認環境起好了（上一節的 <code>up.sh</code>），再照下面的順序走。幾個名詞先講清楚：「待派單」是櫃檯還沒決定交給誰的需求；「待認領」是已經分到房務或工務、等員工自己接的單；「工務單」是工務維修的單據，要一路追蹤到主管驗收才結案。</p>
+  <ol class="flow">
+    <li><b>住客送出兩筆需求（住客頁）。</b>跑 <code>bash scripts/manual-env/qr.sh 407 --phone</code> 用手機掃，或跑 <code>bash scripts/manual-env/qr.sh 407</code> 把印出的網址貼到電腦瀏覽器。首頁有「設備報修」與「備品補充」兩張卡片。報修打一句話送出，例如「冷氣不冷」；備品選加毛巾或礦泉水送出。<br>該看到的：兩筆需求都出現在住客頁，報修那筆顯示「已送出」。</li>
+    <li><b>櫃檯派單（櫃檯網頁，<code>fd1</code>）。</b>電腦開 <code>http://localhost:5300/demo-hotel/login</code>，用 <code>fd1</code> 登入，看「總覽看板」。報修的文字需求會在「待派單」，就算文字對中「冷氣」這類工務關鍵字也一樣，要櫃檯確認後再派。把它拖到工務。<br>該看到的：系統開出一張工務單，卡片上的單號從 <code>T-</code> 開頭變成 <code>W-</code> 開頭，住客頁那筆變成「已受理」。備品那筆不在待派單，已經直接在房務的「待認領」。</li>
+    <li><b>工務做完（員工 App，<code>mt2</code>）。</b>模擬器上的員工 App 用 <code>mt2</code> 登入，在「待認領」找到這張 <code>W-</code> 單。示範資料裡還有其他房間的單，認房號 407 和你打的那句話。依序按認領、開始，最後做完修回報，結果選「已修好」並附照片，模擬器上可以從相簿挑一張。不要選「不需處理」：那個選項會直接結案、不經主管驗收，下一步就沒單可驗。<br>該看到的：按下開始後，住客頁即時變成「處理中」；完修回報後這張單等主管驗收，還沒結案。</li>
+    <li><b>主管驗收（員工 App，<code>mg1</code>）。</b>App 登出，改用 <code>mg1</code> 登入，打開「待驗收」，點這張單，按通過。<br>該看到的：驗收完這張工務單才算結案。</li>
+    <li><b>房務做完（員工 App，<code>hk2</code>）。</b>App 改用 <code>hk2</code> 登入，在「待認領」認領備品那筆（同樣認房號 407 和品項），依序按開始、完成。</li>
+    <li><b>住客看結果並評分（住客頁）。</b>回到住客頁，不用重新整理。<br>該看到的：兩筆都顯示「已完成」。房務那筆可以給星等；工務單驗收結案後不提供評分，這是規格的設計，不是壞掉。櫃檯看板上也看得到兩張單結案。</li>
+  </ol>
+  <p>想重來一次，跑 <code>bash scripts/manual-env/seed.sh</code>（或不加 <code>--keep-data</code> 的 <code>up.sh</code>）把資料重置，再重跑 <code>qr.sh</code> 拿新的 QR。</p>
+</section>
+
+<section id="phone">
+  <h2>手機要怎麼掃得到？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>手機與 Mac 連同一個 Wi-Fi，網頁要用 <code>--phone</code> 起（聽所有網卡），再用 <code>qr.sh &lt;房號&gt; --phone</code> 產生 QR 圖。示範資料的在住房是 205、306、405、407、508。</p>
+  </div>
+  <p>網頁預設只聽這台 Mac 自己，手機連不進來。用 <code>up.sh --phone</code> 起的網頁會聽 <code>0.0.0.0</code>，也就是所有網卡；已經用一般模式起了，就再跑一次 <code>up.sh --keep-data --phone</code>，資料不會丟。</p>
+  <div class="cmd"><pre class="api">bash scripts/manual-env/qr.sh 407 --phone      <span class="c"># 407 房的 QR 圖，存檔並打開，給手機掃</span>
+bash scripts/manual-env/qr.sh --all --phone    <span class="c"># 每間在住房各一張，加一份可列印的總表</span></pre></div>
+  <p><code>qr.sh 407 --phone</code> 會抓這台 Mac 的區網 IP（先看 en0，再看 en1），把住客網址 <code>http://&lt;區網 IP&gt;:5300/g/&lt;代碼&gt;</code> 存成 <code>~/.tms-manual-env/qr-407.png</code> 並打開。網址最後的代碼是那間房專屬的通行碼，住客頁靠它知道你是哪一房。<code>--all --phone</code> 另外產生總表 <code>~/.tms-manual-env/qr-sheet.html</code>，每間房有房號、QR 與網址，可以直接印出來貼。</p>
+  <p>只有「現在在住」的房間掃得進去：房間要有一筆沒被取代的訂單，而且入住時間已到、退房時間還沒到。每次重灌資料，所有房間的 QR 代碼都會換新，舊的 QR 圖與總表就失效。</p>
+  <ul class="plain">
+    <li><b>macOS 跳出「是否允許 node 接受連入連線」</b>：第一次用 <code>0.0.0.0</code> 起網頁時會問，要按允許。</li>
+    <li><b>公司或咖啡店的 Wi-Fi</b>有時會擋裝置之間互連，這時改用手機熱點，讓 Mac 與手機都連上去。</li>
+    <li><b>不加 <code>--phone</code> 產生的總表</b>是 localhost 網址，只能在這台 Mac 的瀏覽器點，手機掃了打不開。</li>
+    <li><b>員工 App 只在模擬器上測過</b>：模擬器和 Mac 共用網路，App 裡的 localhost 就是這台 Mac。裝到實體手機要把 App 的後端位址換成 Mac 的區網 IP，這條沒有實測過。</li>
+  </ul>
+</section>
+
+<section id="trouble">
+  <h2>遇到問題怎麼辦？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>先跑 <code>bash scripts/manual-env/status.sh</code>，大部分問題它那幾行就看得出來。後端與網頁的 log 在 <code>~/.tms-manual-env/backend.log</code> 與 <code>~/.tms-manual-env/web.log</code>。</p>
+  </div>
+  <p>下面每一條都是實際走流程時碰過、或腳本裡已經處理過的情況。點開看原因與解法。</p>
+
+  <details>
+    <summary>員工 App 帳號密碼都對，卻登不進去</summary>
+    <div class="in">
+      <p>App 連哪個後端是編譯時決定的（編譯參數 <code>--dart-define=API_BASE_URL</code>），不是登入時。沒指定時預設連 8080。跑過員工 App 的驗收測試（<code>app/bdd</code>）後，模擬器上的 App 會被換成連 8080 或 8081 的版本，它問的是驗收測試的後端，當然找不到手動環境的帳號。</p>
+      <p>跑 <code>status.sh</code> 看「員工 App」那行；說不是連 8083，就跑 <code>bash scripts/manual-env/app.sh</code> 重新編譯並重裝。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>模擬器開機了，卻看不到視窗</summary>
+    <div class="in">
+      <p>有些 Xcode 版本沒有獨立的 Simulator.app，<code>open -a Simulator</code> 會失敗。這時從 Xcode 選單 Open Developer Tool → Simulator 打開視窗。<code>xcrun simctl list devices available</code> 可以看有哪些機型。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary><code>flutter run</code> 不知道要填哪個裝置</summary>
+    <div class="in">
+      <p>改用 <code>bash scripts/manual-env/app.sh --run</code>。它會挑好模擬器，並帶上連 8083 的參數。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>住客頁顯示「請洽櫃檯」</summary>
+    <div class="in">
+      <p>最常見的原因是重灌過資料：每次 <code>seed.sh</code>（或不加 <code>--keep-data</code> 的 <code>up.sh</code>）都會換掉所有房間的 QR 代碼，舊網址與印出來的總表全部失效，重跑 <code>qr.sh</code> 拿新的。另一個原因是那間房現在沒有在住的訂單，<code>status.sh</code> 會列出目前的在住房。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>手機掃了 QR 卻打不開</summary>
+    <div class="in">
+      <p>先跑 <code>status.sh</code>，網頁那行要聽 <code>*:5300</code>；不是的話跑 <code>bash scripts/manual-env/up.sh --keep-data --phone</code>。再確認 macOS 有允許 node 的連入連線，以及手機與 Mac 在同一個 Wi-Fi；Wi-Fi 擋裝置互連時改用手機熱點。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>按了「開始」卻被擋下來</summary>
+    <div class="in">
+      <p>一個人同時只能有一件進行中的工作。<code>hk1</code>、<code>mt1</code>、<code>mg1</code> 在示範資料裡已經各有一件，做房務與工務請換 <code>hk2</code>、<code>mt2</code>。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>後端起不來，或打包失敗</summary>
+    <div class="in">
+      <p>看 <code>~/.tms-manual-env/backend.log</code> 的最後幾十行。打包要 JDK 25，<code>up.sh --build</code> 用 <code>/usr/libexec/java_home -v 25</code> 找。8083 被別的程式佔用時 <code>start.sh</code> 會停下來，不會去殺它。網頁的問題看 <code>~/.tms-manual-env/web.log</code>。</p>
+    </div>
+  </details>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="setup.html"><small>上一頁</small>← 第一天</a>
+  <a class="next" href="bdd.html"><small>下一頁</small>BDD 測試 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

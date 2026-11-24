@@ -35,6 +35,8 @@ public class DbSupport {
         adminJdbc.update("DELETE FROM handover_reads");
         deleteOutboxRetryingOnDeadlock();
         adminJdbc.update("DELETE FROM processed_ops");
+        adminJdbc.update("DELETE FROM repair_tickets");
+        adminJdbc.update("DELETE FROM repair_ticket_counters");
         adminJdbc.update("DELETE FROM tasks");
         adminJdbc.update("DELETE FROM guest_sessions");
         adminJdbc.update("DELETE FROM room_qr_tokens");

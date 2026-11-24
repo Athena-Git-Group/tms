@@ -17,7 +17,7 @@ public class LastOperationGuard {
     }
 
     public record Snapshot(UUID taskId, Map<String, Object> taskRow, int eventCount, int outboxCount,
-            Map<String, Object> repairTicketRow, long inspectionCount) {
+            Map<String, Object> repairTicketRow, long inspectionCount, long outboxMaxId) {
     }
 
     public Snapshot captureFor(UUID taskId) {
@@ -30,7 +30,8 @@ public class LastOperationGuard {
                 .queryOne("SELECT * FROM repair_tickets WHERE task_id = ?", taskId)
                 .orElse(null);
         long inspectionCount = dbProbe.count("SELECT count(*) FROM inspections WHERE task_id = ?", taskId);
-        snapshot = new Snapshot(taskId, row, eventCount, outboxCount, repairTicketRow, inspectionCount);
+        long outboxMaxId = dbProbe.count("SELECT COALESCE(MAX(id), 0) FROM outbox");
+        snapshot = new Snapshot(taskId, row, eventCount, outboxCount, repairTicketRow, inspectionCount, outboxMaxId);
         eventsBefore = dbProbe.eventsOf(taskId);
         tenantTaskCountBefore = row == null
                 ? -1

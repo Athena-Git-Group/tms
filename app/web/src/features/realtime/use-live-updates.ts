@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { authHeaders, backendUrl } from '../../api/client';
 import { useSessionStore } from '../../stores/session';
 import { INITIAL_LIVE_STATE, type LiveState } from './live-connection';
 import { followBoard } from './follow-board';
-import { openStaffStream } from './stream-client';
+import { openStream } from './stream-client';
 
 export function useLiveUpdates(): LiveState {
   const queryClient = useQueryClient();
@@ -13,7 +14,9 @@ export function useLiveUpdates(): LiveState {
   useEffect(() => {
     if (!token) return undefined;
     const follower = followBoard(queryClient);
-    const close = openStaffStream({
+    const close = openStream({
+      url: backendUrl('/staff/stream'),
+      headers: authHeaders(),
       onEvent: follower.onStreamEvent,
       onState: (state) =>
         setLive((previous) => (previous.token === token && previous.state === state ? previous : { token, state })),

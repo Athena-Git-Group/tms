@@ -2,6 +2,7 @@ package com.athena.tms.bdd.steps.repair;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.ReservationFixtures;
 import com.athena.tms.bdd.support.RoomFixtures;
@@ -12,6 +13,7 @@ import com.athena.tms.bdd.support.VerifyFixtures;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.UuidV7;
 import com.athena.tms.dto.Actor;
+import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.service.TaskEngine;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
@@ -41,6 +43,7 @@ public class RepairGivenSteps {
     private final TaskEngine taskEngine;
     private final VerifyFixtures verifyFixtures;
     private final ObjectMapper objectMapper;
+    private final DbProbe dbProbe;
 
     private String lastFailedPhotoId;
 
@@ -55,7 +58,8 @@ public class RepairGivenSteps {
             JdbcClient jdbcClient,
             TaskEngine taskEngine,
             VerifyFixtures verifyFixtures,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            DbProbe dbProbe) {
         this.world = world;
         this.apiClient = apiClient;
         this.tenantFixtures = tenantFixtures;
@@ -67,6 +71,7 @@ public class RepairGivenSteps {
         this.taskEngine = taskEngine;
         this.verifyFixtures = verifyFixtures;
         this.objectMapper = objectMapper;
+        this.dbProbe = dbProbe;
     }
 
     @假設("本飯店下一張工務單號為 {string}")
@@ -193,9 +198,11 @@ public class RepairGivenSteps {
             List<UUID> parked = completed && assigneeId != null
                     ? parkDoingTasks(tenantId, assigneeId)
                     : List.of();
+            UUID sourceTaskId = linkedRoom != null ? UUID.fromString(world.taskId(linkedRoom)) : null;
+            builder.repairTicket(new RepairTicketDraft(category, description, reporterId, sourceTaskId, null));
             UUID taskId;
             try {
-                taskId = builder.create();
+                taskId = taskFixtures.withRepairTicketNo(ticketNo, builder::create);
             } finally {
                 restoreDoingTasks(tenantId, parked);
             }
@@ -205,7 +212,6 @@ public class RepairGivenSteps {
                     .params(urgent, tenantId, taskId)
                     .update();
 
-            UUID sourceTaskId = linkedRoom != null ? UUID.fromString(world.taskId(linkedRoom)) : null;
             OffsetDateTime verifiedAt = verifierId != null ? OffsetDateTime.now(clock) : null;
             OffsetDateTime failedAt = null;
             if (failedReason != null) {
@@ -217,17 +223,15 @@ public class RepairGivenSteps {
             jdbcClient
                     .sql(
                             """
-                            INSERT INTO repair_tickets
-                                (task_id, tenant_id, ticket_no, room_id, category, description,
-                                 reporter_id, source_task_id, created_at, is_urgent,
-                                 verified_by, verified_at, resolution_type, resolution_note,
-                                 last_verify_failed_reason, last_verify_failed_by, last_verify_failed_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            UPDATE repair_tickets
+                               SET created_at = ?, is_urgent = ?, urgent_rule = NULL,
+                                   verified_by = ?, verified_at = ?, resolution_type = ?, resolution_note = ?,
+                                   last_verify_failed_reason = ?, last_verify_failed_by = ?, last_verify_failed_at = ?
+                             WHERE tenant_id = ? AND task_id = ?
                             """)
                     .params(
-                            taskId, tenantId, ticketNo, roomId, category, description, reporterId, sourceTaskId,
                             OffsetDateTime.now(clock), urgent, verifierId, verifiedAt,
-                            resolutionType, resolutionNote, failedReason, failedById, failedAt)
+                            resolutionType, resolutionNote, failedReason, failedById, failedAt, tenantId, taskId)
                     .update();
 
             if (failedReason != null) {
@@ -430,6 +434,27 @@ public class RepairGivenSteps {
         lastFailedPhotoId = null;
     }
 
+    @假設("{string} 已認領並開始處理 {string}")
+    public void engineerClaimedAndStarted(String staffName, String ticketNo) {
+        UUID ticketTaskId = RepairTicketRefs.taskId(world, dbProbe, tenantFixtures.testTenantId(), ticketNo);
+        BddApiClient.Auth auth = BddApiClient.Auth.staff(world.jwt(staffName));
+        requireArranged(apiClient.post("/tasks/" + ticketTaskId + "/claim", auth, null), staffName + " 認領 " + ticketNo);
+        requireArranged(apiClient.post("/tasks/" + ticketTaskId + "/start", auth, null), staffName + " 開始處理 " + ticketNo);
+
+        Map<String, Object> row = dbProbe.taskRow(ticketTaskId)
+                .orElseThrow(() -> new IllegalStateException("tasks 查無工務單 " + ticketNo));
+        String staffId = world.staffId(staffName);
+        if (!"doing".equals(row.get("state")) || !staffId.equalsIgnoreCase(String.valueOf(row.get("assignee_id")))) {
+            throw new IllegalStateException("前提「" + staffName + " 已認領並開始處理 " + ticketNo + "」沒鋪起來：state="
+                    + row.get("state") + "、assignee_id=" + row.get("assignee_id"));
+        }
+        List<Object> types = dbProbe.eventsOf(ticketTaskId).stream().map(e -> e.get("type")).toList();
+        if (types.stream().filter("claimed"::equals).count() != 1 || types.stream().filter("started"::equals).count() != 1) {
+            throw new IllegalStateException("前提「" + staffName + " 已認領並開始處理 " + ticketNo
+                    + "」預期 claimed 與 started 各一筆，實際事件 " + types);
+        }
+    }
+
     @假設("{string} 已由 {string} 完修")
     public void ticketAlreadyCompletedByEngineer(String ticketNo, String staffName) {
         UUID ticketTaskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -547,8 +572,7 @@ public class RepairGivenSteps {
     }
 
     private void createEngineeringTicketFor(long tenantId, UUID assigneeId, String state, boolean urgent) {
-        int n = allocateNextTicketNo(tenantId);
-        String ticketNo = String.format("W-%04d", n);
+        String ticketNo = String.format("W-%04d", nextTicketNumber(tenantId));
         String roomNo = "ENG-" + ticketNo;
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
         UUID roomId = roomFixtures.roomId(roomNo);
@@ -562,34 +586,22 @@ public class RepairGivenSteps {
                 .source("staff")
                 .state(state)
                 .assignee(assigneeId)
+                .repairTicket(new RepairTicketDraft(Terms.repairCategory("其他"), null, assigneeId, null, null))
                 .create();
 
         jdbcClient
                 .sql("UPDATE tasks SET urgent = ? WHERE tenant_id = ? AND id = ?")
                 .params(urgent, tenantId, taskId)
                 .update();
-
         jdbcClient
-                .sql(
-                        """
-                        INSERT INTO repair_tickets
-                            (task_id, tenant_id, ticket_no, room_id, category, reporter_id, created_at, is_urgent)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """)
-                .params(
-                        taskId, tenantId, ticketNo, roomId, Terms.repairCategory("其他"), assigneeId,
-                        OffsetDateTime.now(clock), urgent)
+                .sql("UPDATE repair_tickets SET is_urgent = ? WHERE tenant_id = ? AND task_id = ?")
+                .params(urgent, tenantId, taskId)
                 .update();
     }
 
-    private int allocateNextTicketNo(long tenantId) {
+    private int nextTicketNumber(long tenantId) {
         return jdbcClient
-                .sql(
-                        """
-                        INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
-                        ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
-                        RETURNING last_no
-                        """)
+                .sql("SELECT COALESCE(MAX(last_no), 0) + 1 FROM repair_ticket_counters WHERE tenant_id = ?")
                 .param(tenantId)
                 .query(Integer.class)
                 .single();

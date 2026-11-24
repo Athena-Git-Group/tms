@@ -150,7 +150,8 @@ public class CommonThenSteps {
 
     /**
      * 是停用的樣子；略過 Playwright 的可按檢查硬按一下，之後這個分頁沒有送出請求，畫面上的文字也和按之前相同。
-     * 看板資料與即時訊號是畫面自己定時或收到訊號時打的，和這一下無關，不算在內。
+     * 看板資料與即時訊號是畫面自己定時或收到訊號時打的，和這一下無關，不算在內；住客頁的首頁資料、需求清單與
+     * 即時訊號同理。
      */
     @那麼("按鈕 {string} 不能按")
     public void buttonNotPressable(String name) {
@@ -174,6 +175,8 @@ public class CommonThenSteps {
         List<String> sent = world.network().sentRequestsSince(requestsBefore).stream()
                 .filter(request -> request.page() == page)
                 .filter(request -> !request.is(Network.DESK_BOARD) && !request.is(Network.STAFF_STREAM))
+                .filter(request -> !request.is(Network.GUEST_HOME) && !request.is(Network.GUEST_REQUESTS)
+                        && !request.is(Network.GUEST_STREAM))
                 .map(request -> request.method() + " " + request.path())
                 .toList();
         assertThat(sent.isEmpty(), "硬按停用的「" + name + "」之後送出了請求：" + sent);

@@ -3,6 +3,7 @@ package com.athena.tms.integration.stepdefs.given;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.GuestSessionTokens;
 import com.athena.tms.dto.TaskCreateCommand;
+import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
 import com.athena.tms.integration.stepdefs.utils.TaskFixtures;
@@ -305,7 +306,11 @@ public class EntityTableGivenSteps {
                 tenantId, value(row, "type"), source, roomId, reservationId, dept, initialState,
                 beyondPool ? assigneeId : null, value(row, "title"), null,
                 estMin == null ? null : Integer.parseInt(estMin), null,
-                workDate == null ? null : LocalDate.parse(workDate), creator);
+                workDate == null ? null : LocalDate.parse(workDate), creator, false,
+                "engineering".equals(dept)
+                        ? new RepairTicketDraft("other", null,
+                                creator.id() != null ? creator.id() : anyStaffOfDept(tenantId, "frontdesk"), null, null)
+                        : null);
         UUID taskId = Tenants.asTenant(tenantId, () -> fixtures.engine().create(command)).getId();
         if (beyondPool) {
             Actor worker = Actor.staff(roleFor(dept), assigneeId);

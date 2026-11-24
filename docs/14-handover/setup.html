@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・第一天</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="setup.html" aria-current="page">第一天</a>
+  <a href="test.html">本機手測</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">第一天</span></p>
+
+<header>
+  <p class="eyebrow">交接 · 第一天</p>
+  <h1>第一天：裝機、認路、分清楚環境</h1>
+  <p class="stand">照順序做：先裝工具、跑三步確認環境通了，再看 repo 地圖與三套環境。port 總表放在最後，之後隨時回來查。</p>
+  <p class="readtime">約 8 分鐘</p>
+</header>
+
+<section id="install">
+  <h2>第一天要裝哪些東西？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>Java 側四樣、App 側三樣、網頁側兩樣。最容易出錯的是 JDK：所有 Java 專案都編成 Java 25，而原機器 shell 預設是 17。</p>
+  </div>
+  <p>下面的版本是原本那台開發機上實際用的值。裝一樣勾一樣；每項怎麼確認寫在最後的收合表裡。</p>
+
+  <p class="group-t">Java 側（後端與三個測試專案）</p>
+  <ul class="check">
+    <li><label><input type="checkbox"><span><b>JDK 25</b>（openjdk 25.0.2）：<code>/usr/libexec/java_home -v 25</code> 要找得到。每條指令前都要切到 25，否則會看到 class file version 69 的錯。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Maven 3.9.11</b>：後端用自己的 wrapper <code>./tms/mvnw</code>（根目錄沒有 <code>./mvnw</code>）；<code>app/*</code> 三個專案用系統 <code>mvn</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Docker（OrbStack，內建 Docker 29）</b>：<code>docker context ls</code> 應指向 <code>orbstack</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>psql</b>：手動環境用它建 <code>tms_manual</code> 資料庫。</span></label></li>
+  </ul>
+  <p class="group-t">App 側（員工 App 與 App 驗收）</p>
+  <ul class="check">
+    <li><label><input type="checkbox"><span><b>Flutter 3.47.9 stable（Dart 3.13.7）</b>：<code>app/mobile/pubspec.yaml:22</code> 要求 <code>sdk: ^3.13.7</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Xcode＋iOS simulator</b>：App 驗收只跑 iOS simulator，用 <code>xcrun simctl list devices</code> 查自己的 UDID。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Appium server 3.9.0＋XCUITest driver</b>：<b>不要裝 appium-flutter-driver</b>，專案刻意不用它。</span></label></li>
+  </ul>
+  <p class="group-t">網頁側（櫃檯／住客網頁與 Web 驗收）</p>
+  <ul class="check">
+    <li><label><input type="checkbox"><span><b>Node.js＋npm</b>：跑 vite 開發伺服器；<code>app/web/node_modules</code> 不存在時 Web 驗收腳本會自己 <code>npm ci</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Playwright 瀏覽器</b>（對應 Playwright for Java 1.65.0）：只需裝一次，指令在下方收合表。</span></label></li>
+  </ul>
+
+  <details>
+    <summary>完整工具表 <span class="hint">— 版本、用在哪、怎麼確認（9 項）</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>工具</th><th>版本</th><th>用在哪</th><th>怎麼確認、要注意什麼</th></tr></thead>
+      <tbody>
+        <tr><td><b>JDK 25</b></td><td>openjdk 25.0.2</td><td>後端與三個 Java 測試專案</td><td><code>/usr/libexec/java_home -v 25</code>；原機器預設 <code>JAVA_HOME</code> 是 17</td></tr>
+        <tr><td>Maven</td><td>3.9.11</td><td>所有 Java 專案</td><td>後端用 <code>./tms/mvnw</code>；<code>app/*</code> 沒有 wrapper</td></tr>
+        <tr><td>Docker（OrbStack）</td><td>OrbStack 內建 Docker 29</td><td>開發用 Postgres＋Kafka；後端測試的 Testcontainers</td><td><code>docker context ls</code>；Testcontainers 要多帶 <code>-DargLine="-Dapi.version=1.44"</code>（<a href="pitfalls.html#setup-traps">原因</a>）</td></tr>
+        <tr><td>Flutter</td><td>3.47.9 stable（Dart 3.13.7）</td><td>員工 App 與 App 驗收</td><td><code>flutter --version</code></td></tr>
+        <tr><td>Xcode＋iOS simulator</td><td>—</td><td>App 驗收</td><td><code>xcrun simctl list devices</code>。原機器可用的是 <code>iPhone 18 Pro</code>（<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）；腳本寫死的預設 UDID 已不存在，要用 <code>UDID=</code> 指定</td></tr>
+        <tr><td>Appium server</td><td>3.9.0＋XCUITest driver</td><td>App 驗收</td><td><code>appium --version</code>、<code>appium driver list --installed</code></td></tr>
+        <tr><td>Node.js＋npm</td><td>—</td><td>vite 開發伺服器</td><td>腳本會自己 <code>npm ci</code></td></tr>
+        <tr><td>Playwright 瀏覽器</td><td>Playwright for Java 1.65.0 對應版本</td><td>Web 驗收</td><td><code>mvn -q -f app/web-bdd/pom.xml exec:java -Dexec.args="install chromium webkit"</code></td></tr>
+        <tr><td>psql</td><td>—</td><td>手動環境建資料庫</td><td><code>scripts/manual-env/start.sh</code> 用它</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+</section>
+
+<section id="verify">
+  <h2>裝完之後，怎麼確認環境通了？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>依序跑三步。第一步只需要 Docker，是最快能證明環境 OK 的一條；三步都過，三條測試線的基本盤就都在了。</p>
+  </div>
+  <div class="cmd"><pre class="api"><span class="c"># 1) 後端全套測試（自帶容器，不需先起任何服務）</span>
+JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
+  ./tms/mvnw -f tms/pom.xml test -DargLine="-Dapi.version=1.44"
+
+<span class="c"># 2) 起開發堆疊（Postgres 5433、Kafka 9092）</span>
+docker compose up -d
+
+<span class="c"># 3) 跑一份櫃檯網頁驗收（腳本會自己起 8080 後端與 5199 vite）</span>
+bash app/web-bdd/run-feature.sh frontdesk-web/待派單/待派單清單.feature desktop</pre></div>
+
+  <div class="callout warn">
+    <p><b>先看現況再動手。</b>目前分支 <code>bugfix/main_engineering_pool_repair_ticket</code> 有一批尚未提交的修改（工務池開單相關），已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。第一次跑出紅燈時，先對照那份清單。</p>
+  </div>
+</section>
+
+<section id="repo-map">
+  <h2>repo 裡有哪些東西、彼此怎麼依賴？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>沒有總 pom，四個 Java 專案各自獨立。規格只有一份，放在 <code>specs/truth/features/</code>，三條測試線直接讀它。三個測試專案不掛在後端底下，這是第一次看 repo 最容易迷路的地方。</p>
+  </div>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>路徑</th><th>是什麼</th><th>技術</th></tr></thead>
+    <tbody>
+      <tr><td><code>tms/</code></td><td>Java 後端，模組化單體（一個部署單位，裡面按業務切套件）；也包含後端行為規格測試</td><td>Spring Boot 4.1.1、JDK 25</td></tr>
+      <tr><td><code>app/mobile/</code></td><td>員工 App（房務、工務、主管）</td><td>Flutter 3.47.9</td></tr>
+      <tr><td><code>app/web/</code></td><td>櫃檯網頁與住客掃碼網頁</td><td>React 19.3.1、Vite 8.3.8</td></tr>
+      <tr><td><code>app/bdd/</code></td><td>員工 App 驗收</td><td>Cucumber-JVM＋Appium</td></tr>
+      <tr><td><code>app/web-bdd/</code></td><td>櫃檯／住客網頁驗收</td><td>Cucumber-JVM＋Playwright</td></tr>
+      <tr><td><code>app/bdd-support/</code></td><td>上面兩者共用的「種資料、清資料」工具庫</td><td>純 Java 函式庫</td></tr>
+      <tr><td><code>specs/</code></td><td><code>truth/</code> 是現行規格；<code>plans/NNN-*/</code> 是每一輪需求的工作包</td><td>中文 Gherkin、Markdown</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Java 專案之間只有一條依賴：App 驗收與 Web 驗收都在 test 範圍引用 <code>app-bdd-support</code>。它透過本機 <code>~/.m2</code> 倉庫被找到，所以<b>改過 bdd-support 一定要重新 install</b>；兩支執行腳本會自動做，直接下 <code>mvn</code> 時要自己做。</p>
+  <pre class="api">app/bdd ───────────► app/bdd-support ◄─────────── app/web-bdd
+ (test 範圍)          (先 mvn install)             (test 範圍)
+
+tms/   獨立；自己的行為規格測試在 tms/src/test，不用 bdd-support
+       App 與網頁在執行期透過 HTTP 連它，不是編譯期依賴</pre>
+
+  <details>
+    <summary>完整 repo 地圖 <span class="hint">— 11 個路徑，含版本與其他目錄</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>路徑</th><th>是什麼</th><th>技術</th></tr></thead>
+      <tbody>
+        <tr><td><code>tms/</code></td><td>Java 後端；也包含後端行為規格測試（測試線 1）</td><td>Spring Boot 4.1.1、JDK 25、Maven（<code>com.athena:tms:0.0.1-SNAPSHOT</code>）</td></tr>
+        <tr><td><code>app/mobile/</code></td><td>員工 App</td><td>Flutter 3.47.9，套件名 <code>tms_staff_app</code></td></tr>
+        <tr><td><code>app/web/</code></td><td>櫃檯網頁與住客掃碼網頁</td><td>React 19.3.1、Vite 8.3.8、Vitest 5.1.0、Tailwind 4、<code>@tanstack/react-query</code>、<code>@dnd-kit</code></td></tr>
+        <tr><td><code>app/bdd/</code></td><td>員工 App 驗收（測試線 2）</td><td>Cucumber-JVM＋Appium java-client，獨立 Maven 專案</td></tr>
+        <tr><td><code>app/web-bdd/</code></td><td>櫃檯／住客網頁驗收（測試線 3）</td><td>Cucumber-JVM＋Playwright for Java，獨立 Maven 專案</td></tr>
+        <tr><td><code>app/bdd-support/</code></td><td>線 2 與線 3 共用的種資料、清資料工具庫，不含任何測試步驟</td><td>純 Java 函式庫，要先 <code>mvn install</code></td></tr>
+        <tr><td><code>specs/truth/</code></td><td>現行規格：可執行的 feature 檔、API 契約、資料模型、<code>techstack.md</code></td><td>中文 Gherkin、dbml、Markdown</td></tr>
+        <tr><td><code>specs/plans/NNN-*/</code></td><td>每一輪需求的工作包：<code>spec.md</code>、<code>plan.md</code>、<code>tasks.md</code>、<code>implement-notes.md</code> 等</td><td>Markdown</td></tr>
+        <tr><td><code>scripts/manual-env/</code></td><td>給人手動操作的獨立環境（不是測試）</td><td>bash</td></tr>
+        <tr><td><code>docker-compose.yml</code></td><td>開發堆疊：Postgres 16 與 Kafka</td><td>Docker Compose</td></tr>
+        <tr><td><code>docs/</code></td><td>設計文件</td><td>HTML</td></tr>
+      </tbody>
+    </table></div>
+    </div>
+  </details>
+</section>
+
+<section id="environments">
+  <h2>測試、手動、開發三套環境為什麼要隔開？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>因為 App 與網頁驗收每個場景都會把資料庫清空。誰跟測試共用資料庫，誰的資料就會無聲消失。所以同一台 Postgres 與 Kafka 拆成互不相干的幾套邏輯環境。</p>
+  </div>
+  <p>問題很具體：驗收在每個場景開頭都 <code>TRUNCATE</code>（清空整張表）它連到的資料庫，只留 <code>tenants</code> 與 <code>flyway_schema_history</code>。你開著 App 連 8080 手動點，同時有人在跑驗收，剛建的單下一秒就不見，而且沒有任何錯誤訊息。</p>
+
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>大家都連 8080／<code>tms</code></h4>
+    <p>手動與自動測試互相清掉對方的資料；測試又開著可撥的時鐘，手動操作時看到的「現在」可能是測試撥過的時間。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>同一台 Postgres 與 Kafka，拆成互不相干的邏輯環境</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>環境</th><th>後端</th><th>資料庫</th><th>Kafka</th><th>時鐘</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><b>開發堆疊／驗收</b></td><td>8080</td><td>5433 / <code>tms</code></td><td>9092，topic <code>tms.*</code></td><td>可撥</td><td>Web 驗收、App 驗收預設</td></tr>
+        <tr><td><b>App 驗收隔離堆疊</b></td><td>8081</td><td>5434（<code>tms-bdd-postgres</code>）/ <code>tms</code></td><td>9094（<code>tms-bdd-kafka</code>）</td><td>可撥</td><td>讓 App 與 Web 驗收同時跑</td></tr>
+        <tr><td><b>手動環境</b></td><td>8083，網頁 5300</td><td>5433 / <code>tms_manual</code></td><td>9092，topic 前綴 <code>manual.</code></td><td>真實時鐘</td><td>人手動操作 App 與網頁</td></tr>
+        <tr><td><b>後端行為規格</b></td><td>隨機埠</td><td>Testcontainers</td><td>Testcontainers</td><td><code>MutableClock</code></td><td>測試線 1，與上面都無關</td></tr>
+      </tbody>
+    </table></div>
+    <p>手動環境選「另開一個 database」而不是「另開一個 schema」，因為 <code>V1__schema.sql:396</code> 把授權寫死在 <code>public</code> schema 上（<code>GRANT USAGE ON SCHEMA public TO tms_app</code>）。</p>
+    <p><b class="lbl">權衡</b>推播消費者的 consumer group 名稱 <code>tms-push-sender</code> 寫死在程式裡，8083 與 8080 會落在同一個 group（各自訂閱不同 topic），任一邊起停時另一邊的推播會停頓幾秒。兩邊的 JWT 預設密鑰也相同，token 可以互通。</p>
+  </div>
+  <p>App 驗收隔離堆疊目前 repo 裡沒有啟動腳本，見<a href="pitfalls.html#todo">接手待查</a>。</p>
+</section>
+
+<section id="manual-env">
+  <h2>想自己點點看，手動環境怎麼用？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>一行 <code>bash scripts/manual-env/up.sh --build --phone --app</code> 就會打包後端、起後端 8083 與網頁 5300、灌示範資料，並把連 8083 的員工 App 裝到 simulator。密碼都是 <code>demo1234</code>。</p>
+  </div>
+  <p>共用設定在 <code>scripts/manual-env/env.sh</code>。執行檔、pid 與 log 都放在 <code>~/.tms-manual-env/</code>；啟動時會把 <code>tms/target/tms-0.0.1-SNAPSHOT.jar</code> 複製成 <code>~/.tms-manual-env/tms-manual.jar</code> 再跑，所以之後重建後端不影響正在跑的手動環境。</p>
+  <div class="cmd"><pre class="api"><span class="c"># 第一次或程式碼更新後：打包後端 → 起後端與網頁 → 灌資料 → 裝 App</span>
+bash scripts/manual-env/up.sh --build --phone --app
+bash scripts/manual-env/up.sh --keep-data   <span class="c"># 只重起，保留測到一半的資料（不加參數會重灌＝重置）</span></pre></div>
+  <p>四個參數可以自由組合：<code>--build</code> 先用目前程式碼重新打包後端（配 <code>--app</code> 時 App 也重編）、<code>--keep-data</code> 不重灌資料、<code>--phone</code> 讓網頁聽所有網卡（同區網手機才連得進來）、<code>--app</code> 最後把員工 App 裝到 simulator 並打開。</p>
+  <div class="cmd"><pre class="api">bash scripts/manual-env/status.sh            <span class="c"># 後端、網頁、資料庫、App 各自的狀態與連到哪裡</span>
+bash scripts/manual-env/app.sh --no-build    <span class="c"># 沿用上次編好的 App，只重裝並打開</span>
+bash scripts/manual-env/app.sh --run         <span class="c"># flutter run 前景執行，改 App 時可 hot reload</span>
+bash scripts/manual-env/qr.sh 407 --phone    <span class="c"># 407 房的住客 QR 圖，給手機掃</span>
+bash scripts/manual-env/qr.sh --all --phone  <span class="c"># 所有在住房的 QR，加一張可列印總表</span></pre></div>
+  <p>App 連哪個後端是編譯時決定的。跑過 App 驗收測試後，simulator 上會換成連 8080／8081 的版本，這時帳密都對也登不進手動環境，重跑 <code>app.sh</code> 就好。產生 QR 圖需要 <code>brew install qrencode</code>；房間要有「現在在住」的訂單，住客頁才進得去。</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>在哪登入</th><th>帳號</th><th>密碼</th></tr></thead>
+    <tbody>
+      <tr><td>櫃檯網頁 <code>http://localhost:5300</code>（飯店代碼 <code>demo-hotel</code>）</td><td><code>fd1</code> 櫃檯、<code>mg1</code>／<code>mg2</code> 主管、<code>dm1</code> 值班主管</td><td><code>demo1234</code></td></tr>
+      <tr><td>員工 App</td><td><code>hk1</code>／<code>hk2</code> 房務、<code>mt1</code>／<code>mt2</code> 工務、<code>mg1</code>／<code>mg2</code> 主管</td><td><code>demo1234</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>手動操作請另開一台 simulator，不要跟 App 驗收搶同一台。手動環境的 App 不需要測試後門旗標 <code>TEST_BACKDOOR</code>。</p>
+
+  <details>
+    <summary>手動環境的其他指令 <span class="hint">— 保留資料、單獨起停、重灌示範資料</span></summary>
+    <div class="in">
+    <div class="cmd"><pre class="api">bash scripts/manual-env/up.sh --keep-data   <span class="c"># 不重灌示範資料</span>
+bash scripts/manual-env/start.sh [all|backend|web]
+bash scripts/manual-env/stop.sh  [backend|web]
+bash scripts/manual-env/seed.sh             <span class="c"># 清掉並重灌示範飯店</span></pre></div>
+    </div>
+  </details>
+</section>
+
+<section id="ports">
+  <h2>各服務佔用哪些 port？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>port 是本機最常見的衝突來源。記住三個就夠：8080 驗收後端、5433 開發 Postgres、8083 手動環境。其餘查這張表。</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Port</th><th>是什麼</th><th>誰在用</th></tr></thead>
+    <tbody>
+      <tr><td class="id">5433</td><td>開發 Postgres（database <code>tms</code>；手動環境另用 <code>tms_manual</code>）。本機 5432 被別的 Postgres 佔用，所以對外改 5433</td><td>App 驗收、Web 驗收、手動環境</td></tr>
+      <tr><td class="id">9092</td><td>開發 Kafka</td><td>同上</td></tr>
+      <tr><td class="id">8080</td><td>後端（開測試時鐘）</td><td>Web 驗收（寫死，不能改）；App 驗收預設</td></tr>
+      <tr><td class="id">5199</td><td>Web 驗收用的 vite 開發伺服器（可用 <code>WEB_PORT</code> 改）</td><td><code>app/web-bdd/run-feature.sh</code></td></tr>
+      <tr><td class="id">5173</td><td>vite 預設埠；Web 驗收直接下 mvn 又沒給 <code>-Dweb.baseUrl</code> 時的預設網址</td><td>手動下 mvn 時才會碰到</td></tr>
+      <tr><td class="id">8081／5434／9094</td><td>App 驗收的隔離堆疊：後端／<code>tms-bdd-postgres</code>／<code>tms-bdd-kafka</code></td><td>讓 App 與 Web 驗收能同時跑</td></tr>
+      <tr><td class="id">8083／5300</td><td>手動環境的後端／網頁</td><td>人手動操作</td></tr>
+      <tr><td class="id">4723</td><td>Appium server，<b>全機只能有一個</b></td><td>App 驗收</td></tr>
+      <tr><td class="id">9099</td><td>App 內建的測試後門（只在測試版 App 裡，跑在 simulator 的 127.0.0.1）</td><td>App 驗收</td></tr>
+      <tr><td class="id">隨機</td><td>後端行為規格測試的 Spring 與 Testcontainers 容器</td><td>測試線 1，不與上面任何一個衝突</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="index.html"><small>上一頁</small>← 總覽</a>
+  <a class="next" href="test.html"><small>下一頁</small>本機手測 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

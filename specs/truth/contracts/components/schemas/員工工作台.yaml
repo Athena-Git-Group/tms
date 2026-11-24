@@ -251,9 +251,8 @@ EngineeringTicket:
       pattern: ^W-\d{4}$
       example: W-0412
       description: >-
-        工務單號。為 null 的情況：type=repair 的任務不保證有對應的 repair_tickets 列
-        （排程規則可以建出沒有工務單的 repair 任務），而 tickets 的筆數必須與
-        openCount＋今天完修數一致，所以這種邊角任務仍然收進清單、單號留空。
+        工務單號。部門為工務的任務一律有工務單（開單或從待派單派給工務的同一交易就開立，見 deskAssignTask），
+        所以本清單的單號實際上都有值；欄位保留 nullable 只為相容舊版 App。
         App 遇到 null 時以房號或標題指認該列，不要據此把它從清單裡濾掉。
     taskId:
       type: string
@@ -290,7 +289,11 @@ EngineeringTicket:
       type: boolean
       description: 目前是否仍視為急件；主管降級後為 false，口徑與 RepairTicketSummary.isUrgent 相同。
     source:
-      $ref: '#/PoolSource'
+      allOf:
+      - $ref: '#/PoolSource'
+      description: >-
+        依開單路徑換算，只會是 desk_forward「櫃檯」（櫃檯代開，或櫃檯從待派單轉來的住客需求）
+        或 staff_report「房務報修」（房務報修、工務自開、追蹤單），口徑與 listDeptPool 的工務池相同。
     verificationReturnReason:
       type: string
       nullable: true
@@ -375,6 +378,13 @@ PoolItem:
       type: string
     category:
       $ref: '#/PoolCategory'
+    repairCategory:
+      allOf:
+      - $ref: './工務單.yaml#/RepairCategory'
+      nullable: true
+      description: >-
+        工務單的類別（冷氣、水電、家具／設備、門鎖、其他）。只有工務池的單有值，而且工務池每一張都有值；
+        房務池為 null。category 在工務池一律是 repair，App 單卡的類別文字讀這個欄位，不讀 category。
     source:
       $ref: '#/PoolSource'
     urgent:

@@ -1,4 +1,3 @@
-import { authHeaders, backendUrl } from '../../api/client';
 import {
   INITIAL_LIVE_STATE,
   SILENCE_LIMIT_MS,
@@ -54,27 +53,33 @@ function parseBlock(block: string): StreamEvent | null {
   return hasField ? { event, data: data.join('\n') } : null;
 }
 
-export interface StaffStreamHandlers {
+export interface StreamOptions {
+  url: string;
+  headers: Record<string, string>;
   onEvent: (event: StreamEvent) => void;
   onState?: (state: LiveState) => void;
+  /** 連線狀態怎麼隨事件轉移；不給時用櫃檯的 `transition`。 */
+  transition?: (state: LiveState, event: LiveEvent) => LiveState;
 }
 
 /**
- * 串流改用 fetch 讀取並自行解析，不用瀏覽器內建的 `EventSource`，因為它無法帶 `Authorization` 標頭。
+ * 串流改用 fetch 讀取並自行解析，不用瀏覽器內建的 `EventSource`，因為它無法帶櫃檯的 `Authorization`
+ * 與住客的 `X-Guest-Session` 標頭。網址與標頭由呼叫的一方給，櫃檯與住客共用同一套解析與重連。
  */
-export function openStaffStream(handlers: StaffStreamHandlers): () => void {
+export function openStream(options: StreamOptions): () => void {
   let stopped = false;
   let controller: AbortController | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let state = INITIAL_LIVE_STATE;
+  const step = options.transition ?? transition;
 
   const feed = (event: LiveEvent) => {
     if (stopped) return;
-    const next = transition(state, event);
+    const next = step(state, event);
     if (next === state) return;
     const enteredDisconnected = state.link !== 'disconnected' && next.link === 'disconnected';
     state = next;
-    handlers.onState?.(state);
+    options.onState?.(state);
     if (enteredDisconnected) {
       retryTimer = setTimeout(() => {
         feed({ type: 'retryDue' });
@@ -99,8 +104,8 @@ export function openStaffStream(handlers: StaffStreamHandlers): () => void {
     };
     restartSilenceTimer();
     try {
-      const response = await fetch(backendUrl('/staff/stream'), {
-        headers: { ...authHeaders(), Accept: 'text/event-stream' },
+      const response = await fetch(options.url, {
+        headers: { ...options.headers, Accept: 'text/event-stream' },
         cache: 'no-store',
         signal: current.signal,
       });
@@ -116,7 +121,7 @@ export function openStaffStream(handlers: StaffStreamHandlers): () => void {
           buffer = rest;
           for (const event of events) {
             if (stopped) break;
-            handlers.onEvent(event);
+            options.onEvent(event);
             feedIfCurrent({ type: 'signal', signal: event });
           }
         }
@@ -127,7 +132,7 @@ export function openStaffStream(handlers: StaffStreamHandlers): () => void {
     feedIfCurrent({ type: 'disconnected' });
   };
 
-  handlers.onState?.(state);
+  options.onState?.(state);
   void connect();
 
   return () => {

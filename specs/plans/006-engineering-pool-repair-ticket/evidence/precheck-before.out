@@ -1,0 +1,24 @@
+== query 1: kind unknown (must be 0 rows)
+BEGIN
+ id | task_no | source | state | triaged_dept | triaged_by 
+----+---------+--------+-------+--------------+------------
+(0 rows)
+
+ROLLBACK
+== query 5: totals
+BEGIN
+ total | desk_forwarded | guest_direct 
+-------+----------------+--------------
+     2 |              2 |            0
+(1 row)
+
+ROLLBACK
+== detail
+BEGIN
+ task_no |               room_id                | source | state |      kind      |              triaged_by              
+---------+--------------------------------------+--------+-------+----------------+--------------------------------------
+ T-0020  | 00000000-0000-7000-8000-000000000306 | guest  | pool  | desk_forwarded | 00000000-0000-7000-8000-00000000a004
+ T-0024  | 00000000-0000-7000-8000-000000000407 | guest  | pool  | desk_forwarded | 00000000-0000-7000-8000-00000000a004
+(2 rows)
+
+ROLLBACK

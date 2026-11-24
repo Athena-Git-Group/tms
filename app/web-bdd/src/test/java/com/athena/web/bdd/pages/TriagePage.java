@@ -48,16 +48,15 @@ public class TriagePage extends PageObject {
 
     /**
      * 清單各列的房號，由上到下。房號取自每一列動作群組的名稱「{房號} 派單」，
-     * 名稱是輔助科技讀到的那一個，從群組的無障礙樹摘要裡拿，不從版面去猜。
+     * 名稱是輔助科技讀到的那一個，從無障礙樹摘要裡拿，不從版面去猜。
+     *
+     * <p>整頁的摘要一次讀完再找出每一組。先數列數再逐列讀的話，即時更新在兩次讀取之間拿掉一列，
+     * 讀最後一列的那一步就會等一個已經不存在的元素直到逾時。
      */
     public java.util.List<String> roomsInOrder() {
         java.util.List<String> rooms = new java.util.ArrayList<>();
-        Locator groups = allRowActions();
-        for (int i = 0; i < groups.count(); i++) {
-            java.util.regex.Matcher name = ROW_ACTIONS_IN_SNAPSHOT.matcher(groups.nth(i).ariaSnapshot());
-            if (!name.find()) {
-                throw new IllegalStateException("讀不出這一列動作群組的名稱：" + groups.nth(i).ariaSnapshot());
-            }
+        Matcher name = ROW_ACTIONS_IN_SNAPSHOT.matcher(page().locator("body").ariaSnapshot());
+        while (name.find()) {
             rooms.add(name.group(1));
         }
         return rooms;
@@ -106,7 +105,7 @@ public class TriagePage extends PageObject {
     public static final Pattern DEPT_LOAD = Pattern.compile("(房務|工務) (\\d+) 單待接");
 
     /** 頁尾說明開頭的幾個字，照待派單頁的畫面文字。 */
-    public static final String FOOTER_LEAD = "只有住客打字";
+    public static final String FOOTER_LEAD = "住客打字、系統又猜不準部門的需求";
 
     /** 該房那一整列：同時包住列左側開詳情的那一塊與右側動作群組的最內層元素。 */
     public Locator row(String roomNo) {
@@ -140,7 +139,7 @@ public class TriagePage extends PageObject {
         throw new IllegalStateException("待派單頁頁首沒有「" + deptName + " N 單待接」");
     }
 
-    /** 頁尾說明：以「只有住客打字」開頭的那一段字。 */
+    /** 頁尾說明：以 FOOTER_LEAD 開頭的那一段字。 */
     public Locator footer() {
         return page().getByText(Pattern.compile("^" + BrowserRegex.literal(FOOTER_LEAD))).first();
     }

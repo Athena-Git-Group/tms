@@ -1370,6 +1370,7 @@ class PoolItem {
     required this.sameFloor,
     required this.createdAt,
     this.ticketNo,
+    this.repairCategory,
     this.reminderStage,
     this.returnReason,
     this.handoverNote,
@@ -1380,6 +1381,8 @@ class PoolItem {
   final String taskId;
 
   final String? ticketNo;
+
+  final String? repairCategory;
   final String roomNo;
   final int floor;
   final String title;
@@ -1408,6 +1411,7 @@ class PoolItem {
     return PoolItem(
       taskId: json['taskId'] as String,
       ticketNo: json['ticketNo'] as String?,
+      repairCategory: json['repairCategory'] as String?,
       roomNo: json['roomNo'] as String,
       floor: json['floor'] as int,
       title: json['title'] as String,

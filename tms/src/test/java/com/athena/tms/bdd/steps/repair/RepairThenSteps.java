@@ -3,6 +3,7 @@ package com.athena.tms.bdd.steps.repair;
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
+import com.athena.tms.bdd.support.DeskApi;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.OutboxAwait;
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 public class RepairThenSteps {
 
@@ -41,6 +43,8 @@ public class RepairThenSteps {
     private final MutableClock clock;
     private final LastOperationGuard lastOperationGuard;
     private final StaffFixtures staffFixtures;
+    private final DeskApi deskApi;
+    private final ObjectMapper objectMapper;
 
     public RepairThenSteps(
             ScenarioWorld world,
@@ -53,7 +57,9 @@ public class RepairThenSteps {
             JwtService jwtService,
             MutableClock clock,
             LastOperationGuard lastOperationGuard,
-            StaffFixtures staffFixtures) {
+            StaffFixtures staffFixtures,
+            DeskApi deskApi,
+            ObjectMapper objectMapper) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -65,6 +71,8 @@ public class RepairThenSteps {
         this.clock = clock;
         this.lastOperationGuard = lastOperationGuard;
         this.staffFixtures = staffFixtures;
+        this.deskApi = deskApi;
+        this.objectMapper = objectMapper;
     }
 
     @那麼("系統建立工務單 {string}，房號 {string}、報修人 {string}")
@@ -176,44 +184,36 @@ public class RepairThenSteps {
 
     @那麼("{string} 的來源為 {string}")
     public void ticketSourceIs(String ticketNo, String sourceChinese) {
-        String expectedTaskSource = repairTicketSource(sourceChinese);
+        List<String> expectedTaskSources = repairTicketSources(sourceChinese);
         String expectedPoolSource = repairTicketPoolSource(sourceChinese);
 
-        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        UUID taskId = ticketTaskId(ticketNo);
         Map<String, Object> row = dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此工務單"));
-        check("tasks.source", expectedTaskSource, row.get("source"));
+        if (!expectedTaskSources.contains(String.valueOf(row.get("source")))) {
+            throw new AssertionError("tasks.source 預期是 " + expectedTaskSources + " 之一，實際 " + row.get("source")
+                    + "（單號 " + ticketNo + "）");
+        }
 
-        ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
-        String actualPoolSource = null;
-        if (resp.json() != null) {
-            for (JsonNode item : resp.json().path("items")) {
-                if (ticketNo.equals(item.path("ticketNo").asText(null))) {
-                    actualPoolSource = item.path("source").asText(null);
-                    break;
-                }
-            }
-        }
-        if (actualPoolSource != null && !expectedPoolSource.equals(actualPoolSource)) {
-            throw new AssertionError(
-                    "預期 PoolItem.source=" + expectedPoolSource + "，實際 " + actualPoolSource + "（status="
-                            + resp.status() + "）");
-        }
+        JsonNode item = requirePoolItem(engineeringPoolListing(), ticketNo);
+        check("PoolItem.source", expectedPoolSource, item.path("source").asText(null));
     }
 
     @那麼("工務待認領包含 {string}")
     public void poolContainsTicket(String ticketNo) {
-        ScenarioWorld.ApiResponse resp = apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
-        if (!containsTicketNo(resp, ticketNo)) {
-            throw new AssertionError(
-                    "預期工務待認領包含 " + ticketNo + "，實際 status=" + resp.status() + "，body=" + resp.body());
-        }
+        requirePoolItem(engineeringPoolListing(), ticketNo);
 
-        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        UUID taskId = ticketTaskId(ticketNo);
         Map<String, Object> row = dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無此工務單"));
         check("tasks.state", "pool", row.get("state"));
 
-        if (countEvents(taskId, "triaged") > 0) {
-            throw new AssertionError("工務單 " + ticketNo + " 不應該有 triaged 事件");
+        List<Map<String, Object>> triaged = dbProbe.eventsOf(taskId).stream()
+                .filter(e -> "triaged".equals(e.get("type")))
+                .toList();
+        boolean forwardedByDesk = triaged.size() == 1
+                && "engineering".equals(payloadOf(triaged.getFirst()).path("dept").asText(null));
+        if (!triaged.isEmpty() && !forwardedByDesk) {
+            throw new AssertionError("工務單 " + ticketNo + " 不是櫃檯從待派單轉來的單（正好一筆 dept=engineering 的 triaged）"
+                    + "就不應該有 triaged 事件，實際 triaged=" + triaged);
         }
     }
 
@@ -227,6 +227,45 @@ public class RepairThenSteps {
         if (containsTicketNo(resp, ticketNo)) {
             throw new AssertionError("預期工務待認領不包含 " + ticketNo + "，但找到了（body=" + resp.body() + "）");
         }
+    }
+
+    @那麼("工務待認領中 {string} 的類別為 {string}")
+    public void poolItemRepairCategoryIs(String ticketNo, String categoryChinese) {
+        String expected = Terms.repairCategory(categoryChinese);
+
+        UUID taskId = ticketTaskId(ticketNo);
+        Map<String, Object> ticketRow = dbProbe
+                .queryOne("SELECT category FROM repair_tickets WHERE task_id = ?", taskId)
+                .orElseThrow(() -> new AssertionError("repair_tickets 查無此工務單 task_id=" + taskId));
+        check("repair_tickets.category", expected, ticketRow.get("category"));
+
+        JsonNode item = requirePoolItem(engineeringPoolListing(), ticketNo);
+        check("PoolItem.repairCategory", expected, item.path("repairCategory").asText(null));
+        check("PoolItem.category", "repair", item.path("category").asText(null));
+    }
+
+    @那麼("{string} 的住客讀到這張需求的狀態為 {string}")
+    public void guestReadsRequestState(String roomNo, String stateChinese) {
+        String expectedState = repairStatus(stateChinese);
+        UUID requestTaskId = UUID.fromString(world.taskId(roomNo));
+        if (dbProbe.count("SELECT count(*) FROM repair_tickets WHERE task_id = ?", requestTaskId) != 1) {
+            throw new AssertionError(roomNo + " 住客的需求 " + requestTaskId + " 預期就是工務單的任務，但 repair_tickets 沒有這張任務");
+        }
+
+        ScenarioWorld.ApiResponse resp = deskApi.listGuestRequests(roomNo);
+        if (resp.status() != 200 || resp.json() == null || !resp.json().isArray()) {
+            throw new AssertionError("listGuestRequests 預期 200 與陣列，實際 status=" + resp.status() + "，body=" + resp.body());
+        }
+        JsonNode found = null;
+        for (JsonNode request : resp.json()) {
+            if (requestTaskId.toString().equalsIgnoreCase(request.path("id").asText(null))) {
+                found = request;
+            }
+        }
+        if (found == null) {
+            throw new AssertionError(roomNo + " 的住客讀不到 id=" + requestTaskId + " 的需求，body=" + resp.body());
+        }
+        check(roomNo + " 的住客讀到的 GuestRequest.state", expectedState, found.path("state").asText(null));
     }
 
     // 清單在 Gherkin 裡不加引號，{string} 參數比對不到，所以整句寫成以 ^ 開頭、$ 結尾，
@@ -253,16 +292,35 @@ public class RepairThenSteps {
 
     @那麼("以下員工都收到 {string} 的急件推播：")
     public void staffAllReceivedUrgentPush(String ticketNo, DataTable table) {
-        UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
+        UUID taskId = ticketTaskId(ticketNo);
+        long tenantId = tenantFixtures.testTenantId();
+        long outboxMaxIdBeforeTrigger = lastOperationGuard.current().outboxMaxId();
         for (Map<String, String> row : table.asMaps(String.class, String.class)) {
             String name = requireCell(row, "員工");
             UUID staffId = UUID.fromString(world.staffId(name));
-            outboxAwait.waitForPush(
-                    v -> staffId.equals(v.recipientStaffId())
-                            && "repair_urgent".equals(v.event())
-                            && v.target() != null
-                            && taskId.equals(v.target().highlightTaskId()),
-                    name + " 收到 " + ticketNo + " 的急件推播（event=repair_urgent, highlightTaskId=" + taskId + "）");
+            String idempotencyKey = "repair_urgent:" + ticketNo + ":" + staffId;
+            Map<String, Object> outbox = outboxAwait.waitForOutboxRow(
+                    "push",
+                    r -> ((Number) r.get("id")).longValue() > outboxMaxIdBeforeTrigger
+                            && Objects.equals(((Number) r.get("tenant_id")).longValue(), tenantId)
+                            && idempotencyKey.equals(r.get("idempotency_key")),
+                    name + " 在觸發動作之後收到 " + ticketNo + " 的急件推播（idempotency_key=" + idempotencyKey + "）");
+
+            PushPayloadView push = parsePush(outbox);
+            check(name + " 的急件推播 recipientStaffId", staffId, push.recipientStaffId());
+            check(name + " 的急件推播 event", "repair_urgent", push.event());
+            check(name + " 的急件推播 target.highlightTaskId", taskId,
+                    push.target() == null ? null : push.target().highlightTaskId());
+            String text = push.title() + " " + push.body();
+            if (!text.contains(ticketNo)) {
+                throw new AssertionError(name + " 的急件推播文字預期含 " + ticketNo + "，實際 title=" + push.title()
+                        + "、body=" + push.body());
+            }
+
+            outboxAwait.waitForRow(
+                    "推播消費者為 " + name + " 寫入 " + ticketNo + " 急件推播的送達紀錄",
+                    "SELECT * FROM push_deliveries WHERE tenant_id = ? AND idempotency_key = ? AND recipient_staff_id = ?",
+                    tenantId, idempotencyKey, staffId);
         }
     }
 
@@ -907,6 +965,36 @@ public class RepairThenSteps {
         return false;
     }
 
+    private UUID ticketTaskId(String ticketNo) {
+        return RepairTicketRefs.taskId(world, dbProbe, tenantFixtures.testTenantId(), ticketNo);
+    }
+
+    // 「只看…的工務待認領」讀過的清單優先，篩選條件才真的被斷言到；沒有就以工務員工身分讀全部。
+    private ScenarioWorld.ApiResponse engineeringPoolListing() {
+        return world.lastEngineeringPoolResponse()
+                .orElseGet(() -> apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt())));
+    }
+
+    private static JsonNode requirePoolItem(ScenarioWorld.ApiResponse resp, String ticketNo) {
+        if (resp.status() == 200 && resp.json() != null) {
+            for (JsonNode item : resp.json().path("items")) {
+                if (ticketNo.equals(item.path("ticketNo").asText(null))) {
+                    return item;
+                }
+            }
+        }
+        throw new AssertionError("預期工務待認領包含 " + ticketNo + "，實際 status=" + resp.status() + "，body=" + resp.body());
+    }
+
+    private JsonNode payloadOf(Map<String, Object> event) {
+        Object payload = event.get("payload");
+        return payload == null ? objectMapper.missingNode() : objectMapper.readTree(String.valueOf(payload));
+    }
+
+    private PushPayloadView parsePush(Map<String, Object> outboxRow) {
+        return objectMapper.readValue(String.valueOf(outboxRow.get("payload")), PushPayloadView.class);
+    }
+
     private String engineeringStaffJwt() {
         long tenantId = tenantFixtures.testTenantId();
         UUID staffId = dbProbe
@@ -955,10 +1043,10 @@ public class RepairThenSteps {
                 .token();
     }
 
-    private static String repairTicketSource(String chinese) {
+    private static List<String> repairTicketSources(String chinese) {
         return switch (chinese) {
-            case "房務報修" -> "staff";
-            case "櫃檯" -> "desk";
+            case "房務報修" -> List.of("staff");
+            case "櫃檯" -> List.of("desk", "guest");
             default -> throw new IllegalArgumentException("工務單來源查無對照：" + chinese);
         };
     }
