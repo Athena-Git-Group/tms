@@ -79,6 +79,10 @@ public class BddApiClient {
         return exchange(HttpMethod.PATCH, path, auth, body, idempotencyKey);
     }
 
+    public ScenarioWorld.ApiResponse getUnversioned(String path, Auth auth) {
+        return exchange(HttpMethod.GET, "", path, auth, null, null);
+    }
+
     public ScenarioWorld.ApiResponse postUnversioned(String path, Auth auth, Object body) {
         return exchange(HttpMethod.POST, "", path, auth, body, UUID.randomUUID().toString());
     }
