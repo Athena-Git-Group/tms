@@ -238,20 +238,21 @@ class TicketDetailEngineering extends StatelessWidget {
 
   Widget _buildStepTrack(RepairTicketDetail detail, {required bool onDark}) {
     final currentIndex = repairCurrentStepIndex(detail);
+    final labels = repairStepLabels(detail);
     return TmsSemantics(
       id: 'ticket.step-track',
       explicitChildNodes: true,
       child: TmsStepTrack(
         onDark: onDark,
         steps: [
-          for (var i = 0; i < repairStepLabels.length; i++)
-            _trackStep(i, currentIndex),
+          for (var i = 0; i < labels.length; i++)
+            _trackStep(i, labels[i], currentIndex),
         ],
       ),
     );
   }
 
-  TmsStepTrackStep _trackStep(int index, int currentIndex) {
+  TmsStepTrackStep _trackStep(int index, String label, int currentIndex) {
     final TmsStepStatus status;
     if (index < currentIndex) {
       status = TmsStepStatus.done;
@@ -261,12 +262,12 @@ class TicketDetailEngineering extends StatelessWidget {
       status = TmsStepStatus.pending;
     }
     return TmsStepTrackStep(
-      label: repairStepLabels[index],
+      label: label,
       status: status,
       wrap: (node) {
         final Widget step = TmsSemantics(
           id: 'ticket.stepper.${index + 1}',
-          label: repairStepLabels[index],
+          label: label,
           child: node,
         );
         return switch (status) {

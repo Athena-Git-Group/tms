@@ -948,7 +948,7 @@ class _TaskScreenState extends State<TaskScreen> {
   }
 
   static bool _isOpenTicket(RepairTicketSummary ticket) =>
-      ticket.state != 'done' && ticket.state != 'cancelled';
+      !const {'done', 'closed', 'cancelled'}.contains(ticket.state);
 
   void _openTicket(String taskId) {
     Navigator.of(context).push(

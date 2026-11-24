@@ -216,6 +216,16 @@ class TicketDetailHousekeeping extends StatelessWidget {
           background: TmsColors.systemGreen,
           detailColor: TmsColors.secondaryLabel,
         );
+      case RepairCompletionStage.closedWithoutVerification:
+        return (
+          title: title,
+          detail: who == null
+              ? '工務回報完修，飯店設定免主管驗收，已結案。'
+              : '工務 $who 回報完修，飯店設定免主管驗收，已結案。',
+          glyph: TmsStatusSummaryGlyph.checkmark,
+          background: TmsColors.systemGreen,
+          detailColor: TmsColors.secondaryLabel,
+        );
       case RepairCompletionStage.closedNoAction:
         return (
           title: title,
@@ -337,22 +347,28 @@ class TicketDetailHousekeeping extends StatelessWidget {
         ),
       ];
     }
+    final labels = repairStepLabels(detail);
     return [
-      for (var i = 0; i < repairStepLabels.length; i++)
+      for (var i = 0; i < labels.length; i++)
         TmsTimelineStep(
-          label: repairStepLabels[i],
+          label: labels[i],
           status: statusOf(i),
           note: notes[i],
           time: i == 0 ? sentTime : null,
-          wrap: (node) => _stepWrap(node, i, statusOf(i)),
+          wrap: (node) => _stepWrap(node, i, labels[i], statusOf(i)),
         ),
     ];
   }
 
-  Widget _stepWrap(Widget node, int index, TmsTimelineStatus status) {
+  Widget _stepWrap(
+    Widget node,
+    int index,
+    String label,
+    TmsTimelineStatus status,
+  ) {
     final Widget step = TmsSemantics(
       id: 'ticket.stepper.${index + 1}',
-      label: repairStepLabels[index],
+      label: label,
       child: node,
     );
     return switch (status) {
