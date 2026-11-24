@@ -4,6 +4,7 @@ import com.athena.tms.common.TenantContext;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
+import com.athena.tms.repair.RepairTicketDraft;
 import com.athena.tms.service.TaskEngine;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 public class TaskFixtures {
@@ -42,6 +44,39 @@ public class TaskFixtures {
 
     public Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * 工務單一律由建單時的開單步驟取號，案例要指定單號時先把計數設成前一號，建完再把計數放回原值，
+     * 讓案例鋪的單不影響之後實際開單拿到的號碼。
+     */
+    public UUID withRepairTicketNo(String ticketNo, Supplier<UUID> create) {
+        long tenantId = tenantFixtures.testTenantId();
+        int number = Integer.parseInt(ticketNo.substring(ticketNo.indexOf('-') + 1));
+        List<Integer> before = jdbcClient
+                .sql("SELECT last_no FROM repair_ticket_counters WHERE tenant_id = ?")
+                .param(tenantId)
+                .query(Integer.class)
+                .list();
+        setTicketCounter(tenantId, number - 1);
+        UUID taskId = create.get();
+        if (before.isEmpty()) {
+            jdbcClient.sql("DELETE FROM repair_ticket_counters WHERE tenant_id = ?").param(tenantId).update();
+        } else {
+            setTicketCounter(tenantId, before.get(0));
+        }
+        return taskId;
+    }
+
+    private void setTicketCounter(long tenantId, int lastNo) {
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, ?)
+                        ON CONFLICT (tenant_id) DO UPDATE SET last_no = EXCLUDED.last_no
+                        """)
+                .params(tenantId, lastNo)
+                .update();
     }
 
     public UUID createPoolTask(String roomNo, String title, String typeCode, String deptCode, Integer estMin) {
@@ -75,6 +110,7 @@ public class TaskFixtures {
         private Boolean deferredBySelf;
         private String reminderStage;
         private Actor creator;
+        private RepairTicketDraft repairTicket;
 
         public Builder roomNo(String v) {
             this.roomNo = v;
@@ -168,6 +204,11 @@ public class TaskFixtures {
 
         public Builder poolSource(String v) {
             this.poolSource = v;
+            return this;
+        }
+
+        public Builder repairTicket(RepairTicketDraft v) {
+            this.repairTicket = v;
             return this;
         }
 
@@ -409,7 +450,9 @@ public class TaskFixtures {
                             estMin,
                             null,
                             workDate,
-                            actor));
+                            actor,
+                            false,
+                            repairTicket));
         }
 
         private Actor requireAssignee() {

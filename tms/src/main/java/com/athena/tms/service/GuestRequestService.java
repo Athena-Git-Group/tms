@@ -117,7 +117,7 @@ public class GuestRequestService {
         }
         int effectiveQuantity = quantity != null && quantity > 0 ? quantity : 1;
         String title = effectiveQuantity > 1 ? item.label() + " ×" + effectiveQuantity : item.label();
-        return new TaskCreateCommand(tenantId, item.type(), "guest", actor.roomId(), actor.reservationId(), item.dept(), "pool", null, title, this.noteJson(Map.of("menu_key", item.key(), "quantity", effectiveQuantity)), null, null, this.workDateFor(item.type()), Actor.guest());
+        return this.guestCommand(tenantId, actor, item.type(), item.dept(), "pool", title, this.noteJson(Map.of("menu_key", item.key(), "quantity", effectiveQuantity)));
     }
 
     private TaskCreateCommand freeTextCommand(long tenantId, CurrentActor actor, String text, String lang) {
@@ -140,7 +140,15 @@ public class GuestRequestService {
             }
         });
         String title = text.length() <= TITLE_MAX_LENGTH ? text : text.substring(0, TITLE_MAX_LENGTH) + "…";
-        return new TaskCreateCommand(tenantId, routing.type(), "guest", actor.roomId(), actor.reservationId(), routing.dept(), routing.initialState(), null, title, this.noteJson(noteFields), null, null, this.workDateFor(routing.type()), Actor.guest());
+        return this.guestCommand(tenantId, actor, routing.type(), routing.dept(), routing.initialState(), title, this.noteJson(noteFields));
+    }
+
+    // 住客不直通工務：工務單要有報修人，給工務或修繕的需求一律先到待派單，由櫃檯派給工務時開單。
+    private TaskCreateCommand guestCommand(long tenantId, CurrentActor actor, String type, String dept, String initialState, String title, String note) {
+        if ("engineering".equals(dept) || "repair".equals(type)) {
+            return this.guestCommand(tenantId, actor, "other", "frontdesk", "triage", title, note);
+        }
+        return new TaskCreateCommand(tenantId, type, "guest", actor.roomId(), actor.reservationId(), dept, initialState, null, title, note, null, null, this.workDateFor(type), Actor.guest());
     }
 
     private LocalDate workDateFor(String type) {

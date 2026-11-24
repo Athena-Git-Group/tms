@@ -8,6 +8,7 @@ import com.athena.tms.bdd.support.DeskContext;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
+import com.athena.tms.service.GuestTenantConfigReader;
 import io.cucumber.java.zh_tw.當;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +32,7 @@ public class DeskWhenSteps {
     private final DbProbe dbProbe;
     private final BddApiClient apiClient;
     private final TenantFixtures tenantFixtures;
+    private final GuestTenantConfigReader guestConfigReader;
 
     public DeskWhenSteps(
             ScenarioWorld world,
@@ -39,7 +41,8 @@ public class DeskWhenSteps {
             LastOperationGuard lastOperationGuard,
             DbProbe dbProbe,
             BddApiClient apiClient,
-            TenantFixtures tenantFixtures) {
+            TenantFixtures tenantFixtures,
+            GuestTenantConfigReader guestConfigReader) {
         this.world = world;
         this.deskApi = deskApi;
         this.deskContext = deskContext;
@@ -47,6 +50,7 @@ public class DeskWhenSteps {
         this.dbProbe = dbProbe;
         this.apiClient = apiClient;
         this.tenantFixtures = tenantFixtures;
+        this.guestConfigReader = guestConfigReader;
     }
 
     @當("{string} 以拖曳把 {string} 派給 {string}")
@@ -139,6 +143,22 @@ public class DeskWhenSteps {
                     "「" + roomNo + "」的住客送出需求失敗，狀態碼=" + response.status() + "，body=" + response.body());
         }
         world.rememberTask(roomNo, response.json().get("id").asText());
+    }
+
+    @當("{string} 的住客勾選服務項目 {string} 送出")
+    public void guestSubmitsMenuItem(String roomNo, String label) {
+        String itemId = guestConfigReader.requestMenu(tenantFixtures.testTenantId()).stream()
+                .filter(item -> label.equals(item.label()))
+                .map(GuestTenantConfigReader.MenuItem::key)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("住客頁的勾選清單沒有「" + label + "」"));
+        ScenarioWorld.ApiResponse response = deskApi.createGuestMenuRequest(roomNo, itemId);
+        if (response.status() < 200 || response.status() > 299 || response.json() == null
+                || !response.json().hasNonNull("id")) {
+            throw new AssertionError(
+                    "「" + roomNo + "」的住客勾選「" + label + "」送出失敗，狀態碼=" + response.status() + "，body=" + response.body());
+        }
+        world.rememberTask(roomNo, response.json().get("id").asString());
     }
 
     @當("{string} 讀取 {string} 的櫃檯詳情")

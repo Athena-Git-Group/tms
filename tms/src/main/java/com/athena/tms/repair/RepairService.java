@@ -21,9 +21,7 @@ import com.athena.tms.service.StaffAvailability;
 import com.athena.tms.service.TaskEngine;
 import com.athena.tms.service.TaskRowLookup;
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -48,7 +46,6 @@ public class RepairService {
 
     private static final String VERIFY_PASSED = "passed";
     private static final String VERIFY_FAILED = "failed";
-    private static final DateTimeFormatter CHECKIN_TIME = DateTimeFormatter.ofPattern("HH:mm");
 
     private final JdbcTemplate jdbcTemplate;
     private final TaskEngine taskEngine;
@@ -56,6 +53,7 @@ public class RepairService {
     private final TaskRowLookup taskRowLookup;
     private final ObjectMapper objectMapper;
     private final StaffAvailability staffAvailability;
+    private final RepairTicketOpener repairTicketOpener;
     private final Clock clock;
 
     public RepairService(
@@ -65,6 +63,7 @@ public class RepairService {
             TaskRowLookup taskRowLookup,
             ObjectMapper objectMapper,
             StaffAvailability staffAvailability,
+            RepairTicketOpener repairTicketOpener,
             Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.taskEngine = taskEngine;
@@ -72,6 +71,7 @@ public class RepairService {
         this.taskRowLookup = taskRowLookup;
         this.objectMapper = objectMapper;
         this.staffAvailability = staffAvailability;
+        this.repairTicketOpener = repairTicketOpener;
         this.clock = clock;
     }
 
@@ -157,37 +157,8 @@ public class RepairService {
         UUID roomId = UUID.fromString(String.valueOf(sourceTask.get("room_id")));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("duplicate", duplicate);
-        body.put("urgentJudgement", judgeUrgent(tenantId, roomId));
+        body.put("urgentJudgement", repairTicketOpener.judgeUrgent(tenantId, roomId));
         return body;
-    }
-
-    private Map<String, Object> judgeUrgent(long tenantId, UUID roomId) {
-        Map<String, Object> judgement = new LinkedHashMap<>();
-        judgement.put("suggested", false);
-        judgement.put("rule", null);
-
-        LocalDate today = OffsetDateTime.now(clock).toLocalDate();
-        List<Map<String, Object>> reservations = jdbcTemplate.queryForList(
-                """
-                SELECT checkin_at, (attrs ->> 'vip') = 'true' AS vip
-                  FROM reservations_cache
-                 WHERE tenant_id = ? AND room_id = ? AND superseded_at IS NULL
-                   AND (checkin_at AT TIME ZONE ?)::date = ?
-                 ORDER BY checkin_at
-                 LIMIT 1
-                """,
-                tenantId, roomId, clock.getZone().getId(), today);
-        if (!reservations.isEmpty()) {
-            Map<String, Object> reservation = reservations.get(0);
-            boolean vip = Boolean.TRUE.equals(reservation.get("vip"));
-            String checkinTime = toOffsetDateTime(reservation.get("checkin_at"))
-                    .atZoneSameInstant(clock.getZone())
-                    .format(CHECKIN_TIME);
-            String rule = (vip ? "VIP · " : "") + checkinTime + " 入住";
-            judgement.put("suggested", true);
-            judgement.put("rule", rule);
-        }
-        return judgement;
     }
 
     public Map<String, Object> read(UUID ticketTaskId) {
@@ -353,22 +324,11 @@ public class RepairService {
         String category = String.valueOf(originTicket.get("category"));
         String categoryLabel = CATEGORY_LABELS.getOrDefault(category, category);
 
-        String ticketNo = nextTicketNo(tenantId);
-        Task followUpTask = taskEngine.create(new TaskCreateCommand(
+        UUID reporterId = UUID.fromString(String.valueOf(originTicket.get("reporter_id")));
+        taskEngine.create(new TaskCreateCommand(
                 tenantId, "repair", "system", roomId, null, "engineering", "pool", null,
-                categoryLabel + " 工務單（追蹤）", null, null, null, null, systemActor));
-        UUID followUpTaskId = followUpTask.getId();
-
-        OffsetDateTime now = OffsetDateTime.now(clock);
-        jdbcTemplate.update(
-                """
-                INSERT INTO repair_tickets
-                    (task_id, tenant_id, ticket_no, room_id, category, reporter_id,
-                     created_at, is_urgent, origin_ticket_task_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, false, ?)
-                """,
-                followUpTaskId, tenantId, ticketNo, roomId, category, originTicket.get("reporter_id"),
-                now, originTicketTaskId);
+                categoryLabel + " 工務單（追蹤）", null, null, null, null, systemActor, false,
+                new RepairTicketDraft(category, null, reporterId, null, originTicketTaskId)));
     }
 
     private Map<String, Object> requireTicket(long tenantId, UUID ticketTaskId) {
@@ -545,34 +505,27 @@ public class RepairService {
 
         String categoryLabel = CATEGORY_LABELS.getOrDefault(category, category);
 
-        Map<String, Object> urgentJudgement = judgeUrgent(tenantId, effectiveRoomId);
-        boolean isUrgent = Boolean.TRUE.equals(urgentJudgement.get("suggested"));
-        String urgentRule = (String) urgentJudgement.get("rule");
-
         String initialState = assigneeId != null ? TaskState.ACCEPTED : TaskState.POOL;
 
-        String ticketNo = nextTicketNo(tenantId);
         Task ticketTask = taskEngine.create(new TaskCreateCommand(
                 tenantId, "repair", taskSource, effectiveRoomId, null, "engineering", initialState, assigneeId,
-                categoryLabel + " 工務單", null, null, null, null, staffActor, isUrgent));
+                categoryLabel + " 工務單", null, null, null, null, staffActor, false,
+                new RepairTicketDraft(category, description, actor.staffId(), sourceTaskId, null)));
         UUID ticketTaskId = ticketTask.getId();
+        Map<String, Object> opened = jdbcTemplate.queryForMap(
+                "SELECT ticket_no, is_urgent, urgent_rule FROM repair_tickets WHERE tenant_id = ? AND task_id = ?",
+                tenantId, ticketTaskId);
+        String ticketNo = String.valueOf(opened.get("ticket_no"));
+        boolean isUrgent = Boolean.TRUE.equals(opened.get("is_urgent"));
+        Map<String, Object> urgentJudgement = new LinkedHashMap<>();
+        urgentJudgement.put("suggested", isUrgent);
+        urgentJudgement.put("rule", opened.get("urgent_rule"));
 
         if (poolSource != null && TaskState.POOL.equals(initialState)) {
             jdbcTemplate.update(
                     "UPDATE tasks SET pool_source = ? WHERE tenant_id = ? AND id = ?",
                     poolSource, tenantId, ticketTaskId);
         }
-
-        OffsetDateTime now = OffsetDateTime.now(clock);
-        jdbcTemplate.update(
-                """
-                INSERT INTO repair_tickets
-                    (task_id, tenant_id, ticket_no, room_id, category, description,
-                     reporter_id, source_task_id, created_at, is_urgent, urgent_rule)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                ticketTaskId, tenantId, ticketNo, effectiveRoomId, category, description,
-                actor.staffId(), sourceTaskId, now, isUrgent, urgentRule);
 
         bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
 
@@ -583,10 +536,6 @@ public class RepairService {
                     ticketTaskId, tenantId, sourceTaskId);
         }
 
-        if (isUrgent) {
-            notifyUrgent(tenantId, ticketTaskId, ticketNo, roomNo, categoryLabel);
-        }
-
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("taskId", ticketTaskId.toString());
         body.put("ticketNo", ticketNo);
@@ -595,7 +544,7 @@ public class RepairService {
         body.put("isUrgent", isUrgent);
         body.put("state", initialState);
         body.put("reporterName", staffName(tenantId, actor.staffId()));
-        body.put("createdAt", now.toString());
+        body.put("createdAt", OffsetDateTime.now(clock).toString());
         body.put("photoCount", photoIds.size());
         body.put("photos", reportPhotos(tenantId, ticketTaskId));
         body.put("sourceTaskId", sourceTaskId == null ? null : sourceTaskId.toString());
@@ -724,34 +673,6 @@ public class RepairService {
                 Integer.class, params.toArray());
         if (uploaded == null || uploaded != photoIds.size()) {
             throw new UnprocessableEntityException("photo_not_uploaded", "有照片還沒上傳成功");
-        }
-    }
-
-    private String nextTicketNo(long tenantId) {
-        Integer lastNo = jdbcTemplate.queryForObject(
-                """
-                INSERT INTO repair_ticket_counters (tenant_id, last_no) VALUES (?, 1)
-                ON CONFLICT (tenant_id) DO UPDATE SET last_no = repair_ticket_counters.last_no + 1
-                RETURNING last_no
-                """,
-                Integer.class, tenantId);
-        return String.format("W-%04d", lastNo);
-    }
-
-    private void notifyUrgent(long tenantId, UUID ticketTaskId, String ticketNo, String roomNo, String categoryLabel) {
-        List<UUID> recipients = jdbcTemplate.queryForList(
-                """
-                SELECT id FROM staff_accounts
-                 WHERE tenant_id = ? AND active = true AND (dept = 'engineering' OR role = 'manager')
-                """,
-                UUID.class, tenantId);
-        for (UUID recipient : recipients) {
-            ObjectNode payload = PushOutboxWriter.payload(
-                    objectMapper, recipient, "repair_urgent",
-                    roomNo + " 急件報修（" + categoryLabel + " " + ticketNo + "）");
-            PushOutboxWriter.targetPool(payload, "engineering", ticketTaskId);
-            pushOutboxWriter.enqueue(tenantId, "task:" + ticketTaskId, payload,
-                    "repair_urgent:" + ticketTaskId + ":" + recipient);
         }
     }
 

@@ -60,6 +60,10 @@ public class DeskThenSteps {
             "主管指派", "manager_assigned",
             "被轉派", "reassigned");
 
+    private static final Map<String, String> REPAIR_POOL_SOURCE = Map.of(
+            "櫃檯", "desk_forward",
+            "房務報修", "staff_report");
+
     private static final Map<String, String> ASSIGN_VIA = Map.of("按鈕", "button", "拖曳", "drag");
 
     private static final Map<String, String> CANCEL_REASON = Map.of(
@@ -854,6 +858,168 @@ public class DeskThenSteps {
         }
     }
 
+    @那麼("{string} 成為工務單 {string}，內容如下：")
+    public void becameRepairTicket(String taskKey, String ticketNo, DataTable table) {
+        List<Map<String, String>> rows = table.asMaps(String.class, String.class);
+        if (rows.size() != 1) {
+            throw new IllegalArgumentException("「成為工務單」的 Data Table 只能有一列，實際 " + rows.size() + " 列");
+        }
+        Map<String, String> expected = rows.get(0);
+        String category = Terms.repairCategory(requiredCell(expected, "類別"));
+        String title = requiredCell(expected, "標題");
+        String reporter = requiredCell(expected, "報修人");
+        String poolSource = lookup(REPAIR_POOL_SOURCE, requiredCell(expected, "來源"), "工務單來源");
+        int photoCount = Integer.parseInt(requiredCell(expected, "照片張數"));
+        boolean urgent = yes(requiredCell(expected, "急件"));
+
+        UUID taskId = taskIdOf(taskKey);
+        LastOperationGuard.Snapshot before = snapshotOf(taskId);
+        Map<String, Object> row = taskRow(taskId);
+        check("tasks.type", "repair", row.get("type"));
+        check("tasks.dept", ENGINEERING, row.get("dept"));
+        check("tasks.state", "pool", row.get("state"));
+        check("tasks.assignee_id", null, row.get("assignee_id"));
+        check("tasks.urgent", urgent, row.get("urgent"));
+        check("tasks.title", title, row.get("title"));
+        check("全館 tasks 的筆數（派單前後）", lastOperationGuard.tenantTaskCountBefore(),
+                dbProbe.count("SELECT count(*) FROM tasks WHERE tenant_id = ?", tenantId()));
+
+        List<Map<String, Object>> tickets = repairTicketRowsOf(taskId);
+        check("repair_tickets 中 task_id 是「" + taskKey + "」的列數", 1, tickets.size());
+        Map<String, Object> ticket = tickets.get(0);
+        check("repair_tickets.ticket_no", ticketNo, ticket.get("ticket_no"));
+        check("repair_tickets.category", category, ticket.get("category"));
+        checkSameId("repair_tickets.reporter_id", staffId(reporter), ticket.get("reporter_id"));
+        check("repair_tickets.description", null, ticket.get("description"));
+        check("repair_tickets.source_task_id", null, ticket.get("source_task_id"));
+        check("repair_tickets.is_urgent", urgent, ticket.get("is_urgent"));
+        check("綁在 " + ticketNo + " 上的 repair_photos 張數", (long) photoCount,
+                dbProbe.count("SELECT count(*) FROM repair_photos WHERE ticket_task_id = ?", taskId));
+        JsonNode triagedPayload = payloadOf(latestEventOfType(taskId, "triaged")
+                .orElseThrow(() -> new AssertionError("「" + taskKey + "」沒有任何 triaged 事件")));
+        check("最新一筆 triaged payload 的 former_type（派單前的類型）", before.taskRow().get("type"),
+                textOrNull(triagedPayload, "former_type"));
+        world.rememberRepairTicket(ticketNo, taskId.toString());
+
+        String engineerJwt = fieldStaffJwt(ENGINEERING);
+        ScenarioWorld.ApiResponse detail =
+                sideRead(() -> apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(engineerJwt)));
+        requireOk("readRepairTicket", detail);
+        check("readRepairTicket.ticketNo", ticketNo, textOrNull(detail.json(), "ticketNo"));
+        check("readRepairTicket.category", category, textOrNull(detail.json(), "category"));
+        check("readRepairTicket.reporterName", reporter, textOrNull(detail.json(), "reporterName"));
+        check("readRepairTicket.state", "pool", textOrNull(detail.json(), "state"));
+
+        JsonNode item = poolItemSeenBy(ENGINEERING, taskId)
+                .orElseThrow(() -> new AssertionError("工務的同仁在待認領看不到「" + taskKey + "」"));
+        check("PoolItem.ticketNo", ticketNo, textOrNull(item, "ticketNo"));
+        check("PoolItem.repairCategory", category, textOrNull(item, "repairCategory"));
+        check("PoolItem.source", poolSource, textOrNull(item, "source"));
+        check("PoolItem.title", title, textOrNull(item, "title"));
+
+        check("readDeskTask.displayNo", ticketNo, textOrNull(detailReadBy(deskReader(), taskId), "displayNo"));
+    }
+
+    @那麼("{string} 只有一張工務單 {string}，本飯店下一張工務單號為 {string}")
+    public void onlyOneRepairTicket(String taskKey, String ticketNo, String nextNo) {
+        UUID taskId = taskIdOf(taskKey);
+        List<Map<String, Object>> tickets = repairTicketRowsOf(taskId);
+        check("repair_tickets 中 task_id 是「" + taskKey + "」的列數", 1, tickets.size());
+        check("repair_tickets.ticket_no", ticketNo, tickets.get(0).get("ticket_no"));
+        int next = ticketNumber(nextNo);
+        check("repair_ticket_counters.last_no", next - 1, repairCounterLastNo());
+        List<Map<String, Object>> later = dbProbe.queryMaps(
+                """
+                SELECT ticket_no FROM repair_tickets
+                 WHERE tenant_id = ? AND CAST(substring(ticket_no FROM 3) AS int) >= ?
+                """,
+                tenantId(), next);
+        if (!later.isEmpty()) {
+            throw new AssertionError("全館不應有單號大於等於 " + nextNo + " 的工務單，實際有 " + later);
+        }
+    }
+
+    @那麼("{string} 不是工務單，本飯店下一張工務單號仍為 {string}")
+    public void notRepairTicket(String taskKey, String nextNo) {
+        UUID taskId = taskIdOf(taskKey);
+        check("repair_tickets 中 task_id 是「" + taskKey + "」的列數", 0, repairTicketRowsOf(taskId).size());
+        Object type = taskRow(taskId).get("type");
+        if ("repair".equals(type)) {
+            throw new AssertionError("「" + taskKey + "」的 tasks.type 不應是 repair");
+        }
+        check("repair_ticket_counters.last_no（沒有取號）", ticketNumber(nextNo) - 1, repairCounterLastNo());
+    }
+
+    @那麼("{string} 不再是工務單，類別回到 {string}，工務待認領沒有 {string}")
+    public void noLongerRepairTicket(String taskKey, String categoryTerm, String ticketNo) {
+        UUID taskId = taskIdOf(taskKey);
+        check("repair_tickets 中 task_id 是「" + taskKey + "」的列數", 0, repairTicketRowsOf(taskId).size());
+        check("repair_tickets 中 ticket_no 是 " + ticketNo + " 的列數", 0L, dbProbe.count(
+                "SELECT count(*) FROM repair_tickets WHERE tenant_id = ? AND ticket_no = ?", tenantId(), ticketNo));
+        Map<String, Object> row = taskRow(taskId);
+        check("tasks.type", Terms.poolCategory(categoryTerm), row.get("type"));
+        check("被復原那筆 triaged payload 的 former_type（應等於 tasks.type）", row.get("type"),
+                textOrNull(undoneTriagedPayload(taskKey, taskId), "former_type"));
+
+        for (JsonNode item : poolItemsSeenBy(ENGINEERING)) {
+            if (taskId.toString().equalsIgnoreCase(item.path("taskId").asString())
+                    || ticketNo.equals(textOrNull(item, "ticketNo"))) {
+                throw new AssertionError("工務的同仁在待認領仍看得到「" + taskKey + "」或 " + ticketNo + "：" + item);
+            }
+        }
+        String displayNo = textOrNull(detailReadBy(deskReader(), taskId), "displayNo");
+        check("readDeskTask.displayNo（原本的 T- 單號）", row.get("task_no"), displayNo);
+        if (displayNo == null || !displayNo.startsWith("T-")) {
+            throw new AssertionError("readDeskTask.displayNo 應是原本的 T- 單號，實際 " + displayNo);
+        }
+    }
+
+    @那麼("{string} 的急件標記回到 {string}")
+    public void urgentFlagRestored(String taskKey, String urgentTerm) {
+        UUID taskId = taskIdOf(taskKey);
+        Object urgent = taskRow(taskId).get("urgent");
+        check("tasks.urgent", yes(urgentTerm), urgent);
+        JsonNode formerUrgent = undoneTriagedPayload(taskKey, taskId).path("former_urgent");
+        if (!formerUrgent.isBoolean()) {
+            throw new AssertionError("被復原那筆 triaged payload 沒有布林值的 former_urgent：" + formerUrgent);
+        }
+        check("tasks.urgent 與被復原那筆 triaged payload 的 former_urgent", formerUrgent.asBoolean(), urgent);
+        check("repair_tickets 中 task_id 是「" + taskKey + "」的列數", 0, repairTicketRowsOf(taskId).size());
+    }
+
+    private JsonNode undoneTriagedPayload(String taskKey, UUID taskId) {
+        Map<String, Object> triaged = latestEventOfType(taskId, "triaged")
+                .orElseThrow(() -> new AssertionError("「" + taskKey + "」沒有任何 triaged 事件"));
+        if (!undoneRightAfter(triaged)) {
+            throw new AssertionError("「" + taskKey + "」最新一筆 triaged 之後沒有緊接著 triage_undone");
+        }
+        return payloadOf(triaged);
+    }
+
+    private List<Map<String, Object>> repairTicketRowsOf(UUID taskId) {
+        return dbProbe.queryMaps("SELECT * FROM repair_tickets WHERE task_id = ?", taskId);
+    }
+
+    private int repairCounterLastNo() {
+        return (int) dbProbe.count(
+                "SELECT COALESCE((SELECT last_no FROM repair_ticket_counters WHERE tenant_id = ?), 0)", tenantId());
+    }
+
+    private static int ticketNumber(String ticketNo) {
+        if (!ticketNo.matches("W-\\d{4}")) {
+            throw new IllegalArgumentException("工務單號應是 W- 加 4 位數字，實際「" + ticketNo + "」");
+        }
+        return Integer.parseInt(ticketNo.substring(2));
+    }
+
+    private static String requiredCell(Map<String, String> row, String column) {
+        String value = blankToNull(row.get(column));
+        if (value == null) {
+            throw new IllegalArgumentException("Data Table 缺少必填欄位「" + column + "」：" + row);
+        }
+        return value.trim();
+    }
+
     private void checkDetailItem(String name, String value, JsonNode detail, UUID taskId, Map<String, Object> row) {
         JsonNode guest = detail.path("guest");
         JsonNode accepted = detail.path("accepted");
@@ -1069,14 +1235,7 @@ public class DeskThenSteps {
     }
 
     private List<JsonNode> poolItemsSeenBy(String dept) {
-        Map<String, Object> staff = dbProbe
-                .queryMaps(
-                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active = true ORDER BY name",
-                        tenantId(), dept)
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("本場景沒有在職的「" + dept + "」同仁，無法以他的身分看待認領"));
-        String jwt = mintJwtFor(uuid(staff.get("id")));
+        String jwt = fieldStaffJwt(dept);
         ScenarioWorld.ApiResponse response = sideRead(() -> apiClient.get("/pool", BddApiClient.Auth.staff(jwt)));
         requireOk("listDeptPool（" + dept + "）", response);
         List<JsonNode> items = new ArrayList<>();
@@ -1084,6 +1243,17 @@ public class DeskThenSteps {
             items.add(item);
         }
         return items;
+    }
+
+    private String fieldStaffJwt(String dept) {
+        Map<String, Object> staff = dbProbe
+                .queryMaps(
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = ? AND active = true ORDER BY name",
+                        tenantId(), dept)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("本場景沒有在職的「" + dept + "」同仁，無法以他的身分讀取"));
+        return mintJwtFor(uuid(staff.get("id")));
     }
 
     private JsonNode myTodayOf(UUID staffId) {

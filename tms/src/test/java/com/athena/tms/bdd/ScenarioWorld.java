@@ -13,6 +13,7 @@ public class ScenarioWorld {
 
     private ApiResponse lastResponse;
     private ApiResponse lastManagerQueuesResponse;
+    private ApiResponse lastEngineeringPoolResponse;
     private ApiResponse lastInspectionResponse;
     private java.util.List<Map<String, Object>> lastInspectionItems;
     private ApiResponse lastVerifyResponse;
@@ -131,6 +132,14 @@ public class ScenarioWorld {
             throw new IllegalStateException("本 scenario 尚未查看主管待辦");
         }
         return lastManagerQueuesResponse;
+    }
+
+    public void setLastEngineeringPoolResponse(ApiResponse response) {
+        this.lastEngineeringPoolResponse = response;
+    }
+
+    public java.util.Optional<ApiResponse> lastEngineeringPoolResponse() {
+        return java.util.Optional.ofNullable(lastEngineeringPoolResponse);
     }
 
     public void setLastInspectionResponse(ApiResponse response) {

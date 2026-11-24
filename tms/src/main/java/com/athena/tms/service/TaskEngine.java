@@ -10,6 +10,8 @@ import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
 import com.athena.tms.entity.TaskEvent;
+import com.athena.tms.repair.RepairTicketDraft;
+import com.athena.tms.repair.RepairTicketOpener;
 import com.athena.tms.service.OutboxWriter;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -36,14 +38,16 @@ public class TaskEngine {
     private final OutboxWriter outboxWriter;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final RepairTicketOpener repairTicketOpener;
 
-    public TaskEngine(JdbcTemplate jdbcTemplate, TaskRepository taskRepository, TaskEventRepository taskEventRepository, OutboxWriter outboxWriter, ObjectMapper objectMapper, Clock clock) {
+    public TaskEngine(JdbcTemplate jdbcTemplate, TaskRepository taskRepository, TaskEventRepository taskEventRepository, OutboxWriter outboxWriter, ObjectMapper objectMapper, Clock clock, RepairTicketOpener repairTicketOpener) {
         this.jdbcTemplate = jdbcTemplate;
         this.taskRepository = taskRepository;
         this.taskEventRepository = taskEventRepository;
         this.outboxWriter = outboxWriter;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.repairTicketOpener = repairTicketOpener;
     }
 
     @Transactional
@@ -57,6 +61,10 @@ public class TaskEngine {
         }
         if ("cleaning".equals(command.type()) && command.workDate() == null) {
             throw new UnprocessableEntityException("打掃任務必填 work_date（E-09 一房一天約束的依據）");
+        }
+        boolean engineering = "engineering".equals(command.dept());
+        if (engineering != (command.repairTicket() != null)) {
+            throw new IllegalArgumentException("部門是工務的任務必須帶工務單草稿，其他部門不得帶");
         }
         assigned = command.assigneeId() != null;
         if (assigned != "accepted".equals(command.initialState())) {
@@ -89,6 +97,9 @@ public class TaskEngine {
         if (assigned) {
             this.recordEvent(command.tenantId(), task.getId(), 2, "assigned", command.actor(), TaskEngine.payload("assignee_id", command.assigneeId()));
         }
+        if (engineering) {
+            this.repairTicketOpener.open(command.tenantId(), task.getId(), command.repairTicket());
+        }
         return task;
     }
 
@@ -110,26 +121,47 @@ public class TaskEngine {
 
     @Transactional
     public int assignFromTriage(long tenantId, UUID taskId, String dept, String via, Actor actor) {
-        int seq = this.guard("指派部門", "UPDATE tasks\n   SET state = 'pool', dept = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state = 'triage'\nRETURNING event_seq\n", dept, tenantId, taskId);
-        return this.recordEvent(tenantId, taskId, seq, "triaged", actor, TaskEngine.payload("dept", dept, "via", via));
+        boolean toEngineering = "engineering".equals(dept);
+        // 自己 JOIN 自己只為了在 RETURNING 拿到改之前的類型與急件，記進派單事件給復原用。
+        Map<String, Object> row = this.guardRow("指派部門", """
+                UPDATE tasks t
+                   SET state = 'pool', dept = ?, type = CASE WHEN ? THEN 'repair' ELSE t.type END,
+                       event_seq = t.event_seq + 1, updated_at = now()
+                  FROM tasks former
+                 WHERE former.tenant_id = t.tenant_id AND former.id = t.id
+                   AND t.tenant_id = ? AND t.id = ? AND t.state = 'triage'
+                RETURNING t.event_seq, former.type AS former_type, former.urgent AS former_urgent
+                """, dept, toEngineering, tenantId, taskId);
+        int seq = ((Number)row.get("event_seq")).intValue();
+        Map<String, Object> payload = toEngineering
+                ? TaskEngine.payload("dept", dept, "via", via, "former_type", row.get("former_type"), "former_urgent", row.get("former_urgent"))
+                : TaskEngine.payload("dept", dept, "via", via);
+        this.recordEvent(tenantId, taskId, seq, "triaged", actor, payload);
+        if (toEngineering) {
+            this.repairTicketOpener.open(tenantId, taskId, new RepairTicketDraft("other", null, actor.id(), null, null));
+        }
+        return seq;
     }
 
     @Transactional
     public int undoTriage(long tenantId, UUID taskId, OffsetDateTime triagedAfter, Actor actor) {
-        int seq = this.guard("復原派單", """
+        Map<String, Object> row = this.guardRow("復原派單", """
                 UPDATE tasks t
                    SET state = 'triage', dept = 'frontdesk', reminder_stage = NULL, pool_source = NULL,
+                       type = COALESCE(e.payload ->> 'former_type', t.type),
+                       urgent = COALESCE((e.payload ->> 'former_urgent')::boolean, t.urgent),
                        event_seq = t.event_seq + 1, updated_at = now()
-                 WHERE t.tenant_id = ? AND t.id = ? AND t.state = 'pool' AND t.assignee_id IS NULL
-                   AND t.event_seq = (SELECT max(e.seq) FROM task_events e
-                                       WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.type = 'triaged')
-                   AND (SELECT e.created_at FROM task_events e
-                         WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.seq = t.event_seq) >= ?
-                RETURNING t.event_seq
+                  FROM task_events e
+                 WHERE e.tenant_id = t.tenant_id AND e.task_id = t.id AND e.seq = t.event_seq AND e.type = 'triaged'
+                   AND t.tenant_id = ? AND t.id = ? AND t.state = 'pool' AND t.assignee_id IS NULL
+                   AND e.created_at >= ?
+                RETURNING t.event_seq, e.payload ->> 'dept' AS former_dept
                 """, tenantId, taskId, triagedAfter);
-        String formerDept = this.jdbcTemplate.queryForObject(
-                "SELECT payload ->> 'dept' FROM task_events WHERE tenant_id = ? AND task_id = ? AND seq = ?",
-                String.class, tenantId, taskId, seq - 1);
+        int seq = ((Number)row.get("event_seq")).intValue();
+        String formerDept = (String)row.get("former_dept");
+        if ("engineering".equals(formerDept)) {
+            this.repairTicketOpener.discard(tenantId, taskId);
+        }
         return this.recordEvent(tenantId, taskId, seq, "triage_undone", actor, TaskEngine.payload("dept", formerDept));
     }
 
@@ -444,6 +476,14 @@ public class TaskEngine {
         catch (EmptyResultDataAccessException zeroRows) {
             throw new StateConflictException("任務目前狀態不允許「" + operation + "」");
         }
+    }
+
+    private Map<String, Object> guardRow(String operation, String sql, Object ... params) {
+        List<Map<String, Object>> rows = this.jdbcTemplate.queryForList(sql, params);
+        if (rows.isEmpty()) {
+            throw new StateConflictException("任務目前狀態不允許「" + operation + "」");
+        }
+        return rows.get(0);
     }
 
     private int recordEvent(long tenantId, UUID taskId, int seq, String type, Actor actor, Map<String, Object> payload) {

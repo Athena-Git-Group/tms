@@ -459,7 +459,7 @@ public class TaskExecutionService {
             String category = String.valueOf(row.get("type"));
             boolean urgent = Boolean.TRUE.equals(row.get("urgent"));
             String poolItemSource = "repair".equals(category)
-                    ? ("desk".equals(row.get("source")) ? "desk_forward" : "staff_report")
+                    ? repairTicketSource(row.get("source"))
                     : (row.get("pool_source") != null ? String.valueOf(row.get("pool_source")) : "desk_forward");
             byCategory.merge(category, 1, Integer::sum);
             if (urgent) {
@@ -485,6 +485,7 @@ public class TaskExecutionService {
             item.put("floor", row.get("floor"));
             item.put("title", row.get("title"));
             item.put("category", category);
+            item.put("repairCategory", row.get("repair_category"));
             item.put("source", poolItemSource);
             item.put("urgent", row.get("urgent"));
             item.put("ticketNo", row.get("ticket_no"));
@@ -517,6 +518,11 @@ public class TaskExecutionService {
         return result;
     }
 
+    /** 住客的需求一律經櫃檯派單才成為工務單，所以住客來源與櫃檯代開同樣算櫃檯轉來。 */
+    private static String repairTicketSource(Object taskSource) {
+        return "desk".equals(taskSource) || "guest".equals(taskSource) ? "desk_forward" : "staff_report";
+    }
+
     /** SQL 不允許在 ORDER BY 的運算式裡引用同一層 SELECT 的別名，所以排序用的旗標先在內層查詢算好。 */
     private List<Map<String, Object>> poolRows(long tenantId, String dept, UUID staffId) {
         return jdbcTemplate.queryForList(
@@ -525,7 +531,7 @@ public class TaskExecutionService {
                     SELECT t.id, t.state, t.title, t.type, t.urgent, t.priority_notify, t.pool_source, t.source,
                            t.return_reason, t.requeue_note, t.created_at, t.reminder_stage,
                            r.room_no, r.floor,
-                           rt.ticket_no, rt.last_verify_failed_reason,
+                           rt.ticket_no, rt.category AS repair_category, rt.last_verify_failed_reason,
                            (t.reminder_stage IS NOT NULL) AS unclaimed_overdue,
                            COALESCE((SELECT MAX(te.created_at) FROM task_events te
                                       WHERE te.tenant_id = t.tenant_id AND te.task_id = t.id
@@ -805,7 +811,7 @@ public class TaskExecutionService {
             ticket.put("title", row.get("title"));
             ticket.put("state", row.get("state"));
             ticket.put("isUrgent", Boolean.TRUE.equals(row.get("ticket_is_urgent")));
-            ticket.put("source", "desk".equals(row.get("source")) ? "desk_forward" : "staff_report");
+            ticket.put("source", repairTicketSource(row.get("source")));
             ticket.put("workedMinutes", elapsedMinutes(row));
             ticket.put("verificationReturnReason", verificationReturnReason(row));
             tickets.add(ticket);

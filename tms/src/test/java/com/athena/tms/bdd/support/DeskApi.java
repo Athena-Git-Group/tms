@@ -110,6 +110,12 @@ public class DeskApi {
         return apiClient.post("/guest-requests", guest(roomNo), body);
     }
 
+    public ScenarioWorld.ApiResponse createGuestMenuRequest(String roomNo, String itemId) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("itemId", itemId);
+        return apiClient.post("/guest-requests", guest(roomNo), body);
+    }
+
     public ScenarioWorld.ApiResponse cancelGuestRequest(String roomNo, UUID requestId) {
         return apiClient.post("/guest-requests/" + requestId + "/cancel", guest(roomNo), null);
     }

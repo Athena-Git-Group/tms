@@ -6,6 +6,7 @@ import com.athena.tms.common.TenantContext;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
+import com.athena.tms.repair.RepairTicketDraft;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
@@ -34,7 +35,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class TaskEngineRowWriteTest {
 
     private static final long TENANT_ID = 1L;
-    private static final UUID ROOM_301 = UUID.fromString("00000000-0000-7000-8000-000000000301");
+    // 502 今天沒有入住，開工務單時不會被判成急件，急件旗標只來自建單指令。
+    private static final UUID ROOM_502 = UUID.fromString("00000000-0000-7000-8000-000000000502");
+    private static final UUID STAFF_FD1 = UUID.fromString("00000000-0000-7000-8000-00000000a004");
     private static final Instant FIXED_NOW = Instant.parse("2026-10-19T04:00:00Z");
 
     @Container
@@ -115,8 +118,9 @@ class TaskEngineRowWriteTest {
 
     private static TaskCreateCommand command(String initialState, boolean urgent) {
         return new TaskCreateCommand(
-                TENANT_ID, "repair", "desk", ROOM_301, null, "engineering", initialState, null,
-                "水龍頭漏水", null, null, null, null, Actor.system(), urgent);
+                TENANT_ID, "repair", "desk", ROOM_502, null, "engineering", initialState, null,
+                "水龍頭漏水", null, null, null, null, Actor.system(), urgent,
+                new RepairTicketDraft("other", null, STAFF_FD1, null, null));
     }
 
     private Map<String, Object> taskRow(UUID taskId) {

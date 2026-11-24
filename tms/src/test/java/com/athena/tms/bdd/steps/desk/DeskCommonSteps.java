@@ -7,16 +7,21 @@ import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.ReservationFixtures;
 import com.athena.tms.bdd.support.RoomFixtures;
+import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.bdd.support.Terms;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.假設;
 import io.cucumber.java.zh_tw.當;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
@@ -24,6 +29,8 @@ import tools.jackson.databind.JsonNode;
 public class DeskCommonSteps {
 
     private static final String VIA_BUTTON = "button";
+
+    private static final String ENGINEERING = "engineering";
 
     private final ScenarioWorld world;
     private final DeskApi deskApi;
@@ -33,6 +40,7 @@ public class DeskCommonSteps {
     private final RoomFixtures roomFixtures;
     private final ReservationFixtures reservationFixtures;
     private final LastOperationGuard lastOperationGuard;
+    private final TenantFixtures tenantFixtures;
 
     public DeskCommonSteps(
             ScenarioWorld world,
@@ -42,7 +50,8 @@ public class DeskCommonSteps {
             MutableClock clock,
             RoomFixtures roomFixtures,
             ReservationFixtures reservationFixtures,
-            LastOperationGuard lastOperationGuard) {
+            LastOperationGuard lastOperationGuard,
+            TenantFixtures tenantFixtures) {
         this.world = world;
         this.deskApi = deskApi;
         this.dbProbe = dbProbe;
@@ -51,6 +60,7 @@ public class DeskCommonSteps {
         this.roomFixtures = roomFixtures;
         this.reservationFixtures = reservationFixtures;
         this.lastOperationGuard = lastOperationGuard;
+        this.tenantFixtures = tenantFixtures;
     }
 
     @假設("待派單有以下住客打字的需求：")
@@ -81,16 +91,23 @@ public class DeskCommonSteps {
     public void deskHasAssigned(String staffName, String roomNo, String deptTerm) {
         UUID taskId = taskIdOf(roomNo);
         String dept = Terms.dept(deptTerm);
+        String ticketNoBefore = repairTicketNoOf(taskId);
+        int lastNoBefore = repairCounterLastNo();
         ScenarioWorld.ApiResponse response = deskApi.assign(staffName, taskId, dept, VIA_BUTTON);
         if (response.status() < 200 || response.status() > 299) {
-            throw new IllegalStateException("「" + staffName + "」把「" + roomNo + "」派給「" + deptTerm
+            throw new AssertionError("「" + staffName + "」把「" + roomNo + "」派給「" + deptTerm
                     + "」沒有成功，狀態碼=" + response.status() + "，body=" + response.body());
         }
         Map<String, Object> row = dbProbe.taskRow(taskId)
-                .orElseThrow(() -> new IllegalStateException("派單後 tasks 查無「" + roomNo + "」"));
+                .orElseThrow(() -> new AssertionError("派單後 tasks 查無「" + roomNo + "」"));
         if (!"pool".equals(row.get("state")) || !dept.equals(row.get("dept"))) {
-            throw new IllegalStateException("「" + roomNo + "」派給「" + deptTerm + "」後應在該部門待認領，實際 state="
+            throw new AssertionError("「" + roomNo + "」派給「" + deptTerm + "」後應在該部門待認領，實際 state="
                     + row.get("state") + "、dept=" + row.get("dept"));
+        }
+        assertLatestTriagedNow(roomNo, taskId);
+        if (ENGINEERING.equals(dept)) {
+            String expectedTicketNo = ticketNoBefore != null ? ticketNoBefore : ticketNo(lastNoBefore + 1);
+            assertBecameRepairTicket(roomNo, taskId, row, expectedTicketNo);
         }
     }
 
@@ -104,7 +121,13 @@ public class DeskCommonSteps {
     public void deskAssigns(String staffName, String roomNo, String deptTerm) {
         UUID taskId = taskIdOf(roomNo);
         lastOperationGuard.captureFor(taskId);
-        deskApi.assign(staffName, taskId, Terms.dept(deptTerm), VIA_BUTTON);
+        ScenarioWorld.ApiResponse response = deskApi.assign(staffName, taskId, Terms.dept(deptTerm), VIA_BUTTON);
+        if (response.status() >= 200 && response.status() <= 299) {
+            String ticketNo = repairTicketNoOf(taskId);
+            if (ticketNo != null) {
+                world.rememberRepairTicket(ticketNo, taskId.toString());
+            }
+        }
     }
 
     @當("{string} 復原 {string} 的派單")
@@ -112,6 +135,80 @@ public class DeskCommonSteps {
         UUID taskId = taskIdOf(roomNo);
         lastOperationGuard.captureFor(taskId);
         deskApi.undoAssign(staffName, taskId);
+    }
+
+    private void assertLatestTriagedNow(String roomNo, UUID taskId) {
+        List<Map<String, Object>> events = dbProbe.eventsOf(taskId);
+        Map<String, Object> latest = events.isEmpty() ? Map.of() : events.get(events.size() - 1);
+        Instant at = instantOf(latest.get("created_at"));
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        if (!"triaged".equals(latest.get("type")) || !now.equals(at)) {
+            throw new AssertionError("「" + roomNo + "」派單後最新一筆事件應是時間為 " + now + " 的 triaged，實際 type="
+                    + latest.get("type") + "、created_at=" + at);
+        }
+    }
+
+    private void assertBecameRepairTicket(String roomNo, UUID taskId, Map<String, Object> row, String expectedTicketNo) {
+        if (!"repair".equals(row.get("type"))) {
+            throw new AssertionError("「" + roomNo + "」派給工務後 tasks.type 應是 repair，實際 " + row.get("type"));
+        }
+        Map<String, Object> triaged = dbProbe
+                .queryOne(
+                        """
+                        SELECT jsonb_exists(payload, 'former_type') AS has_former_type,
+                               jsonb_exists(payload, 'former_urgent') AS has_former_urgent
+                          FROM task_events
+                         WHERE task_id = ? AND type = 'triaged'
+                         ORDER BY seq DESC
+                         LIMIT 1
+                        """,
+                        taskId)
+                .orElseThrow(() -> new AssertionError("「" + roomNo + "」派給工務後沒有 triaged 事件"));
+        if (!Boolean.TRUE.equals(triaged.get("has_former_type")) || !Boolean.TRUE.equals(triaged.get("has_former_urgent"))) {
+            throw new AssertionError("「" + roomNo + "」派給工務的 triaged payload 應帶 former_type 與 former_urgent");
+        }
+        List<Map<String, Object>> tickets =
+                dbProbe.queryMaps("SELECT ticket_no, is_urgent FROM repair_tickets WHERE task_id = ?", taskId);
+        if (tickets.size() != 1) {
+            throw new AssertionError("「" + roomNo + "」派給工務後 repair_tickets 應恰好一列，實際 " + tickets.size() + " 列");
+        }
+        Map<String, Object> ticket = tickets.get(0);
+        if (!expectedTicketNo.equals(ticket.get("ticket_no"))) {
+            throw new AssertionError("「" + roomNo + "」的工務單號應是本飯店下一號 " + expectedTicketNo + "，實際 "
+                    + ticket.get("ticket_no"));
+        }
+        if (!Objects.equals(row.get("urgent"), ticket.get("is_urgent"))) {
+            throw new AssertionError("「" + roomNo + "」的 tasks.urgent=" + row.get("urgent")
+                    + " 與 repair_tickets.is_urgent=" + ticket.get("is_urgent") + " 不同");
+        }
+        world.rememberRepairTicket(expectedTicketNo, taskId.toString());
+    }
+
+    private String repairTicketNoOf(UUID taskId) {
+        return dbProbe
+                .queryOne("SELECT ticket_no FROM repair_tickets WHERE task_id = ?", taskId)
+                .map(ticket -> String.valueOf(ticket.get("ticket_no")))
+                .orElse(null);
+    }
+
+    private int repairCounterLastNo() {
+        return (int) dbProbe.count(
+                "SELECT COALESCE((SELECT last_no FROM repair_ticket_counters WHERE tenant_id = ?), 0)",
+                tenantFixtures.testTenantId());
+    }
+
+    private static Instant instantOf(Object value) {
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        if (value instanceof OffsetDateTime offsetDateTime) {
+            return offsetDateTime.toInstant();
+        }
+        return null;
+    }
+
+    private static String ticketNo(int number) {
+        return String.format("W-%04d", number);
     }
 
     private ScenarioWorld.ApiResponse createAt(String arrivedAt, String roomNo, String text, String lang) {
