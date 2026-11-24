@@ -5,7 +5,7 @@
 雲端多租戶 SaaS 託管，PMS 用 adapter 模式介接（自家 PMS 是第一個 adapter）。
 
 技術形態：**Spring Boot 模組化單體 + PostgreSQL（RLS 多租戶）+ Kafka（Transactional Outbox）**，
-不做微服務。程式碼分三塊：`tms/` 後端、`app/mobile/` 員工 App（Flutter）、`app/web/` 櫃檯 Web（React）；住客 Web 目前只有後端 API，前端尚未做。
+不做微服務。程式碼分三塊：`tms/` 後端、`app/mobile/` 員工 App（Flutter）、`app/web/` 櫃檯 Web 與住客 Web（React，同一個專案）。
 
 ## 架構圖：三種使用者怎麼串在一起？
 
@@ -17,7 +17,7 @@
 |---|---|---|
 | 房務／工務人員 App（Flutter） | REST API：認領、開工、完成 | 手機推播（Firebase） |
 | 櫃檯人員 Web（React，瀏覽器／iPad） | REST API：派單、代開單 | 看板開著時維持一條 SSE 長連線（`/staff/stream`），即時更新 |
-| 住客 Web（手機掃房內 QR Code，前端尚未做） | REST API：掃碼、提需求、取消、評分（後端已備） | 後端已備好 `/guest/stream`，等住客前端接上 |
+| 住客 Web（React，手機掃房內 QR Code） | REST API：掃碼、提需求、取消、評分 | 開著時維持一條 SSE 長連線（`/guest/stream`），自己的需求狀態即時更新 |
 
 把三者串起來的是「事件」：
 
@@ -31,7 +31,7 @@
    - PMS 對接串流 `/integration/pms/stream` 也由看板事件消費者從 `tms.task-events` 轉推；
      另有 `tms.pms-status`（房態回寫事件）會寫出，但目前沒有消費者。
 
-所以住客一提需求（住客前端接上後），櫃檯看板會立刻跳出來、負責人的手機也會收到推播；
+所以住客一提需求，櫃檯看板會立刻跳出來、負責人的手機也會收到推播；
 員工在 App 按完成，櫃檯看板同樣即時更新。業務程式不直接發 Kafka，一律經 Transactional Outbox。
 
 ## 通知是怎麼送出去的？Kafka、SSE 與推播
@@ -52,13 +52,18 @@ Kafka 在中間扮演兩個角色——**廣播站**（`tms.task-events`）只�
 
 ## 文件導覽
 
-這是文件先行的專案，完整文件索引（含線上 Artifact 連結）見 [INDEX.md](INDEX.md)。重點三份：
+接手請讀工程交接手冊 `docs/14-handover/`（瀏覽器開 `index.html`；線上版：[TMS 交接手冊](https://claude.ai/artifact/7qcJ1Z1e97ZMfGR58jgpN3)），
+它是對照程式碼寫的。不用從頭讀到尾：入口頁有依任務分流的閱讀路線，挑最像你手上那件事的路線讀即可。
 
-| 文件 | 內容 | 給誰看 |
-|------|------|--------|
-| `docs/11-requirements-architecture.html` | 需求規格與高階架構：五角色使用者故事、核心實體與 API、七個情境的高階設計、八題深入探討 | RD / PM |
-| `docs/12-data-model.html` | 資料模型：17 張表逐欄位規格（型別、值域、鍵與索引、誰寫誰讀） | RD |
-| `docs/13-poc/`（開 `index.html`） | 互動 POC「一房五幕」：住客／櫃檯／房務工務／主管／老闆五視角可操作原型 | Demo / PM / 老闆 |
+| 頁面 | 內容 |
+|------|------|
+| `index.html` 總覽 | 全景圖、依任務分流的閱讀路線、交接前最要緊的幾件事 |
+| `setup.html` 第一天 | 裝機清單、repo 地圖、三套環境與 port 總表 |
+| `test.html` 本機手測 | 起手動環境、掃房間 QR，從住客、櫃檯、員工 App、主管一路點回住客 |
+| `bdd.html` BDD 測試 | 規格怎麼變成三條可執行的驗收測試，每條怎麼跑、怎麼加場景 |
+| `mobile.html` Flutter App | 員工 App 的分層、狀態與路由、網路層、推播、測試約定 |
+| `backend.html` Java 後端 | 版本與相依、模組、多飯店隔離、登入授權、資料庫遷移 |
+| `pitfalls.html` 坑與待查 | 依類別分組的已知坑，以及接手後要先查清楚的事 |
 
-本機 HTML 直接用瀏覽器開即可；13-poc 的跨分頁同步在 `file://` 下不可靠，
-建議 `python3 -m http.server` 起本機伺服器再開。
+`docs/` 底下其他編號文件（11 需求與架構、12 資料模型、13 互動 POC 等）是開發前的設計稿，之後沒有跟著程式碼更新，
+與現況有出入時以程式碼為準。
