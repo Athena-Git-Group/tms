@@ -24,7 +24,7 @@
 <header>
   <p class="eyebrow">TMS 任務交辦系統 · 工程交接</p>
   <h1>TMS 交接手冊</h1>
-  <p class="stand">這一頁 3 分鐘讀完：系統長什麼樣、你該先讀哪一頁、交接前最要緊的幾件事。細節都在後面五頁，照你手上的任務挑著讀就好。</p>
+  <p class="stand">這一頁 3 分鐘讀完：系統長什麼樣、你該先讀哪一頁、交接前最要緊的幾件事。細節都在後面六頁，照你手上的任務挑著讀就好。</p>
 </header>
 
 <section id="who">
@@ -32,7 +32,7 @@
   <div class="key"><b class="lbl">重點</b>
     <p>給接手這個 repo 的工程師。讀完能在自己的 Mac 上把三條驗收測試跑起來、知道新增一個測試場景要改哪幾個檔，並看懂員工 App 與 Java 後端怎麼組起來、哪裡會咬人。</p>
   </div>
-  <p>這裡只講「程式怎麼跑、測試怎麼跑、會在哪裡卡住」。需求與系統設計的來龍去脈請看 <a href="../11-requirements-architecture.html">11-requirements-architecture.html</a>，逐欄位的資料模型看 <a href="../12-data-model.html">12-data-model.html</a>。</p>
+  <p>這裡只講「程式怎麼跑、測試怎麼跑、會在哪裡卡住」。需求以 <code>specs/truth/features/</code> 的可執行規格為準，資料表以 <code>tms/src/main/resources/db/migration/</code> 的 Flyway 遷移檔為準；<code>docs/</code> 底下 11、12、13 等開發前的設計稿沒有跟著程式碼更新，不要拿來當依據。</p>
 </section>
 
 <section id="overview">
@@ -172,7 +172,7 @@
   </div>
   <ol class="top">
     <li><b>每條 Java 指令都要切到 JDK 25，後端測試還要帶 <code>-DargLine="-Dapi.version=1.44"</code>。</b>原機器 shell 預設是 17；那個參數是 OrbStack 上跑 Testcontainers 的唯一解法，沒寫進任何設定檔。<a href="setup.html#verify">怎麼確認環境通了</a></li>
-    <li><b>目前分支 <code>bugfix/main_engineering_pool_repair_ticket</code> 還沒合進 main，已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。</b>第一次跑出紅燈，先對照它再懷疑環境。</li>
+    <li><b>已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。</b>第一次跑出紅燈，先對照它再懷疑環境。</li>
     <li><b>App 與網頁驗收每個場景都會清空資料庫。</b>兩條線預設共用 8080／5433，不能同時跑；手動操作一律用 8083／<code>tms_manual</code>。<a href="setup.html#environments">三套環境</a></li>
     <li><b>既有的 Flyway 遷移檔一個字都不能改，連註解都不行。</b>改了後端就啟動失敗，要修只能新增更高版號的檔。<a href="backend.html#flyway">遷移規矩</a></li>
     <li><b>Android 正式版缺網路權限。</b><code>INTERNET</code> 只宣告在 debug 與 profile，release APK 會連不上網，是上線前最優先要修的一條。<a href="pitfalls.html#app-gaps">App 還沒補的洞</a></li>

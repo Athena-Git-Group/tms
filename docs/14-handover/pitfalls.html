@@ -114,15 +114,14 @@
 <section id="todo">
   <h2>接手後還有哪些事要先查？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>18 件盤點時沒能從程式碼確認、或要實際執行才知道的事，分四組。先處理第一組：目前分支的未提交修改怎麼收尾、測試現在綠不綠。</p>
+    <p>17 件盤點時沒能從程式碼確認、或要實際執行才知道的事，分四組。先處理第一組：測試現在綠不綠。</p>
   </div>
 
   <details open>
-    <summary>分支與測試現況 <span class="hint">— 5 件，最先處理</span></summary>
+    <summary>測試現況 <span class="hint">— 4 件，最先處理</span></summary>
     <div class="in"><div class="tablewrap"><table>
       <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
       <tbody>
-        <tr><td class="id">U1</td><td>目前分支未提交的修改要不要、怎麼收尾</td><td>工作樹有一批工務池開單相關的修改與新檔（例如 <code>repair/RepairTicketOpener.java</code>、<code>RepairTicketDraft.java</code>、<code>integration/V29EngineeringTaskBackfillTest.java</code>、<code>scripts/manual-env/up.sh</code>）。規劃中的 <code>V29__engineering_tasks_get_repair_tickets.sql</code> <b>還不存在</b>，但對應的測試檔已經有了</td><td><code>git status</code>；對照 <code>specs/plans/006-engineering-pool-repair-ticket/tasks.md</code> 與 <code>implement-notes.md</code></td></tr>
         <tr><td class="id">U2</td><td>測試目前綠不綠</td><td>盤點時沒有實跑任何測試。只能引用 006 implement-notes 的基準：後端行為規格 14 筆紅、Web 即時更新時序逾時數筆、住客 1 筆、App 工務單 11 筆</td><td>照<a href="setup.html#verify">三步確認</a>實跑一次，與 implement-notes 的清單比對</td></tr>
         <tr><td class="id">U13</td><td>App 是否曾在 Appium 上完整跑過一輪</td><td>紀錄上有一項「員工 App 連 Appium 實跑」曾待補跑，目前狀態不明</td><td><code>app/bdd/run-all.sh</code> 跑一次</td></tr>
         <tr><td class="id">U4</td><td><code>TESTCONTAINERS_RYUK_DISABLED=true</code> 為什麼要帶</td><td>所有指令都這樣下，但 repo 裡沒寫理由</td><td>拿掉跑一次看看會不會失敗</td></tr>

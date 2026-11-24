@@ -9,7 +9,7 @@
 </defs>
 <rect width="1200" height="800" fill="#fffdf8"/>
 <text x="30" y="44" font-size="26" fill="#1e1e1e" text-anchor="start" font-weight="bold">TMS：三種使用者怎麼串在一起</text>
-<text x="30" y="70" font-size="14" fill="#495057" text-anchor="start" font-weight="normal">寫入都走 REST API 進同一個資料庫；資料一改，事件經 Kafka 分頭送到櫃檯看板（SSE）與員工手機（推播）</text>
+<text x="30" y="70" font-size="14" fill="#495057" text-anchor="start" font-weight="normal">寫入都走 REST API 進同一個資料庫；資料一改，事件經 Kafka 分頭送到櫃檯看板、住客頁（SSE）與員工手機（推播）</text>
 <g filter="url(#rough)"><rect x="270" y="108" width="700" height="652" rx="14" fill="none" stroke="#f08c00" stroke-width="2.2" stroke-dasharray="8 6"/><rect x="272" y="106.5" width="697" height="654" rx="15" fill="none" stroke="#f08c00" stroke-width="1" opacity=".55" stroke-dasharray="8 6"/></g>
 <text x="620.0" y="136" font-size="17" fill="#1e1e1e" text-anchor="middle" font-weight="bold"></text>
 <text x="290" y="136" font-size="15" fill="#e67700" text-anchor="start" font-weight="bold">TMS 後端（Spring Boot 單體）＋ 資料層</text>
@@ -32,6 +32,8 @@
 <text x="636" y="670" font-size="13" fill="#2f9e44" text-anchor="middle" font-weight="normal">⑧ 交給連線中的串流</text>
 <path d="M300 690 L222 690" fill="none" stroke="#0c8599" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
 <text x="232" y="682" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑨</text>
+<path d="M300 728 L25 728 L25 480 L38 480" fill="none" stroke="#0c8599" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m0c8599)" filter="url(#rough)"/>
+<text x="232" y="746" font-size="13" fill="#0c8599" text-anchor="start" font-weight="normal">⑨</text>
 <path d="M880 470 L880 352" fill="none" stroke="#e8590c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7" marker-end="url(#me8590c)" filter="url(#rough)"/>
 <text x="892" y="415" font-size="13" fill="#e8590c" text-anchor="start" font-weight="normal">⑦</text>
 <path d="M960 310 L1008 310" fill="none" stroke="#495057" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#m495057)" filter="url(#rough)"/>
@@ -42,11 +44,12 @@
 <text x="130.0" y="202" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">Flutter（iOS／Android）</text>
 <text x="130.0" y="221" font-size="13" fill="#1971c2" text-anchor="middle" font-weight="normal">① 認領／開工／完成</text>
 <text x="130.0" y="240" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">⑨ 收推播通知</text>
-<g filter="url(#rough)"><rect x="40" y="360" width="180" height="120" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="42" y="358.5" width="177" height="122" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".55"/></g>
+<g filter="url(#rough)"><rect x="40" y="360" width="180" height="130" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="42" y="358.5" width="177" height="132" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".55"/></g>
 <text x="130.0" y="388" font-size="17" fill="#1e1e1e" text-anchor="middle" font-weight="bold">住客 Web</text>
 <text x="130.0" y="412" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">手機掃房內 QR Code</text>
-<text x="130.0" y="431" font-size="13" fill="#adb5bd" text-anchor="middle" font-weight="normal">前端尚未做，API 已備</text>
+<text x="130.0" y="431" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">React，與櫃檯同一個專案</text>
 <text x="130.0" y="450" font-size="13" fill="#1971c2" text-anchor="middle" font-weight="normal">② 提需求／取消／評分</text>
+<text x="130.0" y="469" font-size="13" fill="#0c8599" text-anchor="middle" font-weight="normal">⑨ 需求進度即時更新</text>
 <g filter="url(#rough)"><rect x="40" y="580" width="180" height="130" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2.2"/><rect x="42" y="578.5" width="177" height="132" rx="15" fill="none" stroke="#1971c2" stroke-width="1" opacity=".55"/></g>
 <text x="130.0" y="608" font-size="17" fill="#1e1e1e" text-anchor="middle" font-weight="bold">櫃檯 Web</text>
 <text x="130.0" y="632" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">React（瀏覽器／iPad）</text>
@@ -69,9 +72,9 @@
 <text x="385.0" y="450" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">帶冪等鍵，重送不重做</text>
 <g filter="url(#rough)"><rect x="300" y="630" width="170" height="110" rx="14" fill="#ebfbee" stroke="#2f9e44" stroke-width="2.2"/><rect x="302" y="628.5" width="167" height="112" rx="15" fill="none" stroke="#2f9e44" stroke-width="1" opacity=".55"/></g>
 <text x="385.0" y="658" font-size="17" fill="#1e1e1e" text-anchor="middle" font-weight="bold">SSE 串流端點</text>
-<text x="385.0" y="682" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">/staff/stream</text>
-<text x="385.0" y="701" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">櫃檯看板長連線</text>
-<text x="385.0" y="720" font-size="13" fill="#adb5bd" text-anchor="middle" font-weight="normal">/guest/stream 已備未接</text>
+<text x="385.0" y="682" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">/staff/stream 櫃檯看板</text>
+<text x="385.0" y="701" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">/guest/stream 住客頁</text>
+<text x="385.0" y="720" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">頁面開著時的長連線</text>
 <g filter="url(#rough)"><path d="M550 240 L550 390 A90.0 14 0 0 0 730 390 L730 240" fill="#f3f0ff" stroke="#7048e8" stroke-width="2.2"/><ellipse cx="640.0" cy="240" rx="90.0" ry="14" fill="#f3f0ff" stroke="#7048e8" stroke-width="2.2"/></g>
 <text x="640.0" y="280" font-size="17" fill="#1e1e1e" text-anchor="middle" font-weight="bold">PostgreSQL</text>
 <text x="640.0" y="304" font-size="13" fill="#495057" text-anchor="middle" font-weight="normal">工單、房間、員工、需求</text>
