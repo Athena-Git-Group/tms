@@ -19,29 +19,6 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 把「全館有以下的單：」表格的每一列，換成後端裡一張處在那個狀況的單。
- *
- * <h2>要保證什麼</h2>
- * 表格寫了的照寫，沒寫的照規格的預設補上；規格也沒說的，每次都補同一個值，
- * 同一份表格每次建出來的單都一樣。建好的單登記在 {@link ScenarioTasks}，之後的句子用房號找得到。
- *
- * <h2>怎麼做到</h2>
- * 每一列先把中文說法換成後端的值、把相對時間換成場景時鐘上的時刻，
- * 有住客的單先建訂房，再交給 {@link BackendChannel#createTaskInSituation} 一次建出整張單與它的歷程。
- *
- * <h2>規格沒說、這裡自己定的預設</h2>
- * <ul>
- *   <li>要有人做動作、表格又沒寫「經手人」時：主管指派、轉派、延後、取消、查房、驗收是張主管；
- *       當場回答與櫃檯派出是林佩君；櫃檯開單是林佩君；同仁報修與同仁撤回的報修人是小美。</li>
- *   <li>要有負責人、表格又沒寫時：房務照小美、小林、小陳、阿美的順序，工務是阿強。
- *       同一位同仁同時只能有一張進行中，所以進行中的單跳過手上已經有進行中的人。</li>
- *   <li>沒有標題也沒有住客原話時，依類型取一個常見的標題。</li>
- *   <li>類型是其他、又沒寫部門時：還在櫃檯手上的單（待派單、已回答、在待派單就被收回或取消）不分部門，其餘歸房務。</li>
- *   <li>已回答沒寫回覆時，回的是常用回覆的第一頁「早餐時間」。</li>
- *   <li>預設的住客昨天 15:00 入住、明天 11:00 退房；只寫了入住日或退房日時，時刻也用這兩個。</li>
- * </ul>
- */
 public final class TaskTableRows {
 
     private static final Set<String> COLUMNS = Set.of(
@@ -72,17 +49,14 @@ public final class TaskTableRows {
     private static final String DEFAULT_REPORTER = "小美";
     private static final String DEFAULT_ANSWER = "早餐 07:00–10:00，在 2 樓自助餐廳，憑房卡入場。";
 
-    /** 住客姓名由測試自編，挑不會和預設帳號或規格裡寫明的住客撞名的名字。 */
     private static final List<String> INVENTED_GUESTS = List.of(
             "黃志明", "李淑芬", "吳建宏", "鄭雅文", "謝宗翰", "郭美玲", "曾俊傑", "蕭佩玲");
 
     private static final LocalTime DEFAULT_CHECKIN = LocalTime.of(15, 0);
     private static final LocalTime DEFAULT_CHECKOUT = LocalTime.of(11, 0);
 
-    /** 空房的住客單要掛的那筆訂房放在這麼多天以前，和後端資料準備替空房建住客連線的做法相同，兩邊才會是同一筆。 */
     private static final int VACANT_ROOM_STAY_DAYS_AGO = 30;
 
-    /** 這些狀況的單沒有負責人，或負責人可有可無；其餘狀況一定要有。 */
     private static final Set<TaskSituation> NO_ASSIGNEE_NEEDED = EnumSet.of(
             TaskSituation.TRIAGE, TaskSituation.POOL, TaskSituation.ANSWERED, TaskSituation.CANCELLED_BY_GUEST,
             TaskSituation.CANCELLED_BY_REPORTER, TaskSituation.DEFERRED_BY_MANAGER,
@@ -96,7 +70,6 @@ public final class TaskTableRows {
 
     private final WebWorld world;
 
-    /** 手上已經有一張進行中的同仁，替沒寫負責人的進行中單挑人時要跳過。 */
     private final Set<String> busyDoing = new HashSet<>();
 
     public TaskTableRows(WebWorld world) {
@@ -192,11 +165,6 @@ public final class TaskTableRows {
         };
     }
 
-    /**
-     * 「時間」是這個狀況的計時起點，其餘三個時刻是歷程上更早的點。
-     * 只寫了建立、沒寫時間的待派單與待認領，等待就從建立起算；
-     * 不這樣補的話計時起點會是現在，晚於建立，待認領的單會被當成退回過的單。
-     */
     private void applyTimes(Map<String, String> row, TaskSituation situation, TaskSituationSpec spec) {
         OffsetDateTime createdAt = moment(cell(row, "建立"));
         OffsetDateTime at = moment(cell(row, "時間"));
@@ -208,10 +176,6 @@ public final class TaskTableRows {
                 .acceptedAt(moment(cell(row, "到手時間")));
     }
 
-    /**
-     * 「經手人」依狀況放到對的位置：派單的櫃檯、指派或轉派的主管、做了這個狀況那個動作的人，或開單的人。
-     * 狀況本身沒有需要經手人的動作時，寫了經手人就看來源：櫃檯開單與同仁報修是開單的人，其餘是派出這張單的櫃檯。
-     */
     private void applyPeople(Map<String, String> row, TaskSituation situation, String source, String typeTerm,
             String dept, TaskSituationSpec spec) {
         String handler = cell(row, "經手人");
@@ -230,7 +194,6 @@ public final class TaskTableRows {
                 }
             }
             case CANCELLED_BY_REPORTER -> {
-                // 撤回的就是報修人，規格有的寫在經手人、有的寫在負責人，兩種都收；這個狀況本身沒有負責人。
                 createdBy = staff(orDefault(handler, orDefault(assignee, DEFAULT_REPORTER)));
                 assignee = null;
             }
@@ -251,7 +214,6 @@ public final class TaskTableRows {
             CreatedStaff triager = staff(!handlerUsed && handler != null ? handler : DEFAULT_DESK);
             spec.triagedBy(triager, via);
             if ("修繕".equals(typeTerm) && createdBy == null) {
-                // 櫃檯派給工務時後端以派單的櫃檯當報修人開出工務單。
                 createdBy = triager;
             }
         }
@@ -331,11 +293,6 @@ public final class TaskTableRows {
         }
     }
 
-    /**
-     * 這張單要連結的訂房。看板上的住客姓名與 VIP 都從訂房讀，所以有住客的單一律先建訂房再建單。
-     * 同一間房在同一個場景只建一筆在住訂房，之後的單沿用。
-     * 空房只有住客自己送的單需要訂房（後端要求住客的單一定連結訂房），掛一筆住期早已結束、沒有姓名的訂房。
-     */
     private UUID reservation(Map<String, String> row, String roomNo, String source) {
         String guest = cell(row, "住客");
         OffsetDateTime now = world.clocks().now();
@@ -362,7 +319,6 @@ public final class TaskTableRows {
         return reservationId;
     }
 
-    /** 規格寫的時刻都相對於場景目前的「現在」：今天的 HH:mm、昨天、前天、N 天前，或 N 分鐘前。 */
     private OffsetDateTime moment(String text) {
         if (text == null) {
             return null;
@@ -421,7 +377,6 @@ public final class TaskTableRows {
         return world.staff(name);
     }
 
-    /** 和後端建單時一樣，住客原文太長時標題只取前 120 字。 */
     private static String titleFromGuestText(String guestText) {
         return guestText.length() <= 120 ? guestText : guestText.substring(0, 120) + "…";
     }
@@ -434,7 +389,6 @@ public final class TaskTableRows {
         return value;
     }
 
-    /** 空白的格子當成沒寫。 */
     static String cell(Map<String, String> row, String column) {
         String value = row.get(column);
         return value == null || value.isBlank() ? null : value.strip();

@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * 「住宿指南」模組的 Then 句型。畫面跟上要一點時間，檢查一律重讀到成立為止，最多 5 秒。
- */
 public class GuideThenSteps {
 
     private final GuestScenario scenario;
@@ -39,7 +36,6 @@ public class GuideThenSteps {
         this.infoPages = new InfoPages(world);
     }
 
-    /** 每一列看得到的字只有標題一行，右端有箭頭：箭頭是裝飾圖示，不算字。 */
     @那麼("首頁的住宿指南由上到下是 {string}")
     public void guideListIs(String titleList) {
         List<String> expected = Arrays.stream(titleList.split("、")).map(String::strip).toList();
@@ -84,7 +80,6 @@ public class GuideThenSteps {
         });
     }
 
-    /** 網址是後端設定裡這個標題那一頁的鍵，標題列的頁標題是它，畫面上沒有首頁的兩張主視覺卡與住宿指南。 */
     @那麼("畫面是 {string} 的資訊頁")
     public void screenIsInfoPage(String title) {
         Optional<Map<String, String>> page = infoPages.titled(title);

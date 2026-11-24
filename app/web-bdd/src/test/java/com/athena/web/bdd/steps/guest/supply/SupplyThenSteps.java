@@ -22,10 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** 「備品補充」模組的 Then 句型（{@code specs/truth/features/guest-web/備品補充/dsl.md}）。 */
 public class SupplyThenSteps {
 
-    /** 硬按停用的按鈕之後，等這麼久再看數字有沒有變。 */
     private static final double AFTER_FORCED_TAP_MS = 300;
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -55,7 +53,6 @@ public class SupplyThenSteps {
         this.supplyPage = new SupplyPage(world);
     }
 
-    /** 清單各列的名稱與順序剛好是這幾項，也剛好是後端 {@code menu} 的 {@code label} 與順序。 */
     @那麼("備品清單由上到下是 {string}")
     public void itemsInOrder(String itemList) {
         List<String> expected = split(itemList);
@@ -78,7 +75,6 @@ public class SupplyThenSteps {
         assertThat(backendMenu.equals(expected), "後端給的服務項目是 " + backendMenu + "，應該是 " + expected);
     }
 
-    /** 每一列都有「最多 5」、數字都是 0、減號都停用。 */
     @那麼("每一列的提示都是 {string}、數量都是 0")
     public void everyRowZero(String hint) {
         frame.eventually(() -> {
@@ -129,11 +125,6 @@ public class SupplyThenSteps {
         });
     }
 
-    /**
-     * 這次 When 建立的需求依後端建立時間排，標題的順序剛好是這幾張；而且每一張的建立請求都在前一張回覆之後才送出。
-     *
-     * <p>後端的時鐘在場景裡是固定的，同一次送出建立的幾張建立時間會一樣，這時以建立它們的請求送出先後排。
-     */
     @那麼("後端送出的順序是 {string}")
     public void backendOrder(String titleList) {
         List<String> expected = split(titleList);
@@ -174,7 +165,6 @@ public class SupplyThenSteps {
         }
     }
 
-    /** 那顆按鈕是停用的；硬按一下，數字也不變。 */
     private void assertDisabledAndInert(String item, Locator button, String which) {
         frame.eventually(() -> button.isVisible() && button.isDisabled() ? null : "「" + item + "」的" + which + "不是停用的");
         int before = supplyPage.quantity(item);

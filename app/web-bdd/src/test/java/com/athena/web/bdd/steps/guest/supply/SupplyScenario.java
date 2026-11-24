@@ -16,16 +16,8 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-/**
- * 「備品補充」的句子之間要傳的東西，以及只有這個模組用的網路手段：第一張建立之後斷線，
- * 和從 When 開始每一次建立需求請求的送出與結束先後。一個場景一份。回應慢 3 秒由 {@code GuestRequestLimitStub} 做。
- *
- * <p>建立需求的請求都要先經過 {@code GuestRequestLimitStub}（它記下送出的冪等鍵，「後端多了以下需求」靠這份記錄比對），
- * 所以這裡的攔截要放行時一律交給下一個攔截（{@code fallback}），不直接送往後端。
- */
 public final class SupplyScenario {
 
-    /** 建立需求請求的一次送出或結束。 */
     public record CreateEvent(boolean started, Request request) {
     }
 
@@ -60,15 +52,10 @@ public final class SupplyScenario {
         }
     }
 
-    /** 從 When 開始建立需求請求的送出（{@code started}）與結束（回覆或失敗），依瀏覽器發生的先後。 */
     public List<CreateEvent> createEvents() {
         return List.copyOf(createEvents);
     }
 
-    /**
-     * 這個分頁的第一次建立需求請求照常送到後端，從它之後這個分頁對後端的每一個請求都在送出時斷線，
-     * 直到 {@link #reconnect()}。
-     */
     public void disconnectAfterFirstCreate(Page page) {
         boolean[] firstCreateSent = {false};
         cutPage = page;
@@ -88,7 +75,6 @@ public final class SupplyScenario {
         page.route(cutUrl, cutHandler);
     }
 
-    /** 拿掉 {@link #disconnectAfterFirstCreate(Page)} 的斷線。 */
     public void reconnect() {
         if (cutPage != null && !cutPage.isClosed()) {
             cutPage.unroute(cutUrl, cutHandler);
@@ -100,7 +86,6 @@ public final class SupplyScenario {
         disabledAtSecondPress = disabled;
     }
 
-    /** 「連按兩下」的第二下按下時，按鈕是不是停用的；沒有連按過時是空的。 */
     public java.util.Optional<Boolean> disabledAtSecondPress() {
         return java.util.Optional.ofNullable(disabledAtSecondPress);
     }

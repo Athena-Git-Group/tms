@@ -68,24 +68,27 @@ if [[ $all == 0 ]]; then
   exit 0
 fi
 
-# 跟後端判斷「現在在住」同一條規則：訂單沒被取代，且入住時間 <= 現在 < 退房時間。
-rooms="$(psql_manual -Atc "
-  SELECT DISTINCT r.room_no
-    FROM rooms r
-    JOIN reservations_cache rc ON rc.tenant_id = r.tenant_id AND rc.room_id = r.id
-   WHERE r.tenant_id = 1 AND rc.superseded_at IS NULL
-     AND rc.checkin_at <= now() AND rc.checkout_at > now()
-   ORDER BY r.room_no")" || die "查不到在住房：資料庫 ${DB_HOST}:${DB_PORT}/${DB_NAME} 連不上"
-[[ -n "$rooms" ]] || die "現在沒有任何在住房；重灌示範資料：bash scripts/manual-env/seed.sh"
+# 「現在在住」的判斷交給後端（test-support profile 的測試端點），跟住客掃碼開工作階段用同一條規則。
+# 每行一間房：「房號 QR代碼」；同一間房有兩筆在住訂單時只留一行。
+in_house="$(curl -sf "$backend/api/v1/test/tenants/1/in-house-rooms" \
+  | python3 -c '
+import sys, json
+seen = set()
+for room in json.load(sys.stdin):
+    if room["roomNo"] not in seen:
+        seen.add(room["roomNo"])
+        print(room["roomNo"], room["qrToken"])
+')" || die "查不到在住房：${backend}/api/v1/test/tenants/1/in-house-rooms 沒回應（後端要帶 test-support profile，重起：bash scripts/manual-env/up.sh --keep-data）"
+[[ -n "$in_house" ]] || die "現在沒有任何在住房；重灌示範資料：bash scripts/manual-env/seed.sh"
 
 sheet="$STATE_DIR/qr-sheet.html"
 cards=""
-for r in $rooms; do
-  url="$(guest_url "$r")"
+while read -r r token; do
+  url="http://${host}:${WEB_PORT}/g/${token}"
   qrencode -o "$STATE_DIR/qr-${r}.png" -s 10 "$url"
   echo "${r}  ${url}"
   cards+="<figure><h2>${r}</h2><img src=\"qr-${r}.png\" alt=\"${r} 房 QR\"><figcaption><a href=\"${url}\">${url}</a></figcaption></figure>"
-done
+done <<<"$in_house"
 
 note="用手機相機掃碼即可開啟住客頁。"
 [[ $phone == 1 ]] || note="這份是 localhost 網址，只能在這台 Mac 的瀏覽器點開；手機要掃請改跑 qr.sh --all --phone。"

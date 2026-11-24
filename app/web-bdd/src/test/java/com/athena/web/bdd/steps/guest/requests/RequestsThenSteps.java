@@ -21,13 +21,8 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 「我的需求」模組的 Then 句型（{@code specs/truth/features/guest-web/我的需求/dsl.md}）。
- * 畫面會晚一點才跟上，每一句都重讀到成立為止，最多 5 秒。
- */
 public class RequestsThenSteps {
 
-    /** 清單的兩個段落，由上到下。 */
     private static final List<String> SECTIONS = List.of("進行中", "已結束");
 
     private static final Pattern CLOCK_TIME = Pattern.compile("(?<![0-9])[0-9]{1,2}:[0-9]{2}(?![0-9])");
@@ -57,7 +52,6 @@ public class RequestsThenSteps {
         this.request = new RequestPage(world);
     }
 
-    /** 清單剛好是這幾列、照表格由上到下（跨段落時照段落順序），每一列的標題、第二行與狀態標籤相符。 */
     @那麼("清單各列如下：")
     public void rowsAre(DataTable table) {
         List<Map<String, String>> expected = table.asMaps();
@@ -84,7 +78,6 @@ public class RequestsThenSteps {
         });
     }
 
-    /** 每一列的狀態標籤相符、位在該段落底下；後端這張需求的狀態依狀況對照也屬於該標籤與段落。 */
     @那麼("清單各列的標籤與段落如下：")
     public void tagsAndSectionsAre(DataTable table) {
         List<Map<String, String>> expected = table.asMaps();
@@ -115,7 +108,6 @@ public class RequestsThenSteps {
         }
     }
 
-    /** 每一列左邊的圖示對到後端這張需求的 {@code type}（{@link RequestIcons}）。 */
     @那麼("每列左邊有依需求類型的圖示")
     public void rowsHaveTypeIcons() {
         Map<String, String> typeByTitle = new HashMap<>();
@@ -142,7 +134,6 @@ public class RequestsThenSteps {
         });
     }
 
-    /** 畫面上每一顆該文字的標籤是該色調；「已送出」與「已取消」的色調相同。 */
     @那麼("各狀態標籤的顏色如下：")
     public void tagColorsAre(DataTable table) {
         frame.eventually(() -> {
@@ -171,7 +162,6 @@ public class RequestsThenSteps {
         });
     }
 
-    /** 進度頁最上面那張卡有依類型的圖示、狀態標籤、標題、第二行，字照字面相符，標題完整顯示。 */
     @那麼("進度頁的第一張卡是標籤 {string}、標題 {string} 與 {string}")
     public void firstCardIs(String tag, String title, String secondLine) {
         frame.eventually(() -> {
@@ -202,7 +192,6 @@ public class RequestsThenSteps {
         });
     }
 
-    /** 進度頁上沒有任何狀態訊息框，也看不到四種訊息框的標題。 */
     @那麼("進度頁沒有狀態訊息框")
     public void noMessageBox() {
         frame.eventually(() -> {
@@ -220,7 +209,6 @@ public class RequestsThenSteps {
         });
     }
 
-    /** 進度頁全部看得到的字裡，「時:分」只有一處，而且就在這段字裡。 */
     @那麼("進度頁上唯一的時間是 {string}")
     public void onlyTimeIs(String expected) {
         frame.eventually(() -> {
@@ -255,10 +243,6 @@ public class RequestsThenSteps {
         return ShellFrame.linesOf(world.page().locator("body").innerText());
     }
 
-    /**
-     * 規格的四種色調：中性是灰底深灰字；已受理色是品牌青綠的淺底；處理中色是品牌青綠實心底、白字；
-     * 已完成色是成功綠。以色相與明暗判斷，不綁定產品用的確切色碼。
-     */
     static String toneOf(TagColor color) {
         double[] bg = hsl(color.background());
         double[] fg = hsl(color.text());
@@ -285,7 +269,6 @@ public class RequestsThenSteps {
         return hsl[0] >= 170 && hsl[0] <= 205 && hsl[1] >= 0.15;
     }
 
-    /** {@code rgb(…)} 或 {@code rgba(…)} 換成色相（度）、飽和度、明度；完全透明時明度當成 1（看到的是白底）。 */
     private static double[] hsl(String css) {
         Matcher m = RGB.matcher(css);
         if (!m.find()) {

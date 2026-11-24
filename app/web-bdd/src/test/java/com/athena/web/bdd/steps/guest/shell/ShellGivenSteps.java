@@ -8,7 +8,6 @@ import com.athena.web.bdd.support.WebWorld;
 import com.microsoft.playwright.Page;
 import io.cucumber.java.zh_tw.假設;
 
-/** 「共用外框」模組的 Given 句型。 */
 public class ShellGivenSteps {
 
     private final WebWorld world;
@@ -26,10 +25,6 @@ public class ShellGivenSteps {
         this.when = when;
     }
 
-    /**
-     * 瀏覽器的主語言要在開 context 時就給，之後改不了，所以這支手機換成一個以該語言開的全新瀏覽器環境；
-     * 新環境的儲存空間是空的，也就沒有住客選過的語言。
-     */
     @假設("這支手機的瀏覽器語言是 {string}，還沒有選過介面語言")
     public void browserLanguage(String locale) {
         world.openContext(options -> options.setLocale(locale.strip()));
@@ -41,7 +36,6 @@ public class ShellGivenSteps {
         when.tapLanguageCapsule();
     }
 
-    /** 語言要在開首頁之前就記在另一支手機上，畫面第一次畫出來就是那個語言。之後目前的分頁換回「住客」那一支。 */
     @假設("{string} 房的另一支手機也打開了首頁，它的介面語言是 {string}")
     public void secondPhoneWithLanguage(String roomNo, String language) {
         Page first = world.page();

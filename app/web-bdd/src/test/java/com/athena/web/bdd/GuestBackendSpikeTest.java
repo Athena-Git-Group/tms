@@ -43,16 +43,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
-/**
- * 對 8080 的真後端實跑住客頁要靠的四件事：掃碼與換 QR、住客的即時串流、住客寫入的冪等鍵回放、手機設定下走到住客首頁。
- * 順便實跑住客場景要用的測試資料方法。不驗產品畫面行為，不屬於任何 Feature。
- *
- * <p>會清空業務資料，和 {@link SmokeTest} 一樣被 pom 排除在平常的 {@code mvn test} 之外，要後端與開發伺服器都開著才跑得過。
- * 後端限制同一間房 10 分鐘內最多 3 筆住客需求、計數在記憶體裡清不掉，這裡每跑一次真的送出 1 筆，
- * 所以 10 分鐘內最多連跑 3 次。
- * 跑法：{@code mvn -q test -Dtest=GuestBackendSpikeTest -Dweb.profile=phone -Dweb.baseUrl=http://localhost:5199
- * -Dbackend.base.url=http://127.0.0.1:8080 -Dbackend.db.url=jdbc:postgresql://localhost:5433/tms}。
- */
 class GuestBackendSpikeTest {
 
     private static final String ROOM = "311";
@@ -129,7 +119,6 @@ class GuestBackendSpikeTest {
             assertNotNull(row, "GET /guest/requests 列得到種好的 " + id);
             assertEquals("pool", row.path("state").asText(), "種好的需求在待認領");
             assertEquals("housekeeping", row.path("dept").asText(), "種好的需求在房務");
-            // 住客清單的回應沒有 source 欄位，只能到資料表看後端記下的來源。
             assertEquals("guest", taskSource(id), "種好的需求來源是 guest");
         }
         System.out.printf("[spike] ① 種 %d 張房務待認領，GET /guest/requests 列出 %d 張，欄位 %s，資料表 source 都是 guest%n",
@@ -137,7 +126,6 @@ class GuestBackendSpikeTest {
     }
 
     private void streamAndClaim(String sessionToken, List<UUID> seeded, CreatedStaff amei) throws Exception {
-        // 第一次取員工的通行憑證要登入、算密碼雜湊，先取好，量到的才只有認領本身到住客收到的時間。
         channel.jwt(amei);
         BlockingQueue<SseEvent> events = new LinkedBlockingQueue<>();
         long connectedNanos = System.nanoTime();
@@ -190,7 +178,6 @@ class GuestBackendSpikeTest {
                         (heartbeat.receivedNanos() - connectedNanos) / 1_000_000, heartbeat.data());
                 assertFalse(heartbeat.data().has("degraded"), "住客的 heartbeat 沒有 degraded 欄位");
             }
-            // 心跳是全部連線共用一個 15 秒的計時，不從這條連線連上時起算，16 秒內可能碰到兩則。
             assertFalse(heartbeats.isEmpty(), "連上 16 秒內收到 heartbeat");
         } finally {
             response.body().close();
@@ -239,7 +226,6 @@ class GuestBackendSpikeTest {
                 }
             });
         } catch (RuntimeException closed) {
-            // 測試結束時關掉串流，讀到一半被中斷是預期的。
         }
     }
 
@@ -289,7 +275,6 @@ class GuestBackendSpikeTest {
             });
             long started = System.nanoTime();
             page.navigate(WebApp.baseUrl() + "/g/" + qrToken);
-            // 首頁現在只有一個空的 main，沒有大小，所以等它掛上而不是等它看得見。
             page.getByRole(AriaRole.MAIN).waitFor(new Locator.WaitForOptions()
                     .setState(WaitForSelectorState.ATTACHED).setTimeout(PAGE_LIMIT_MS * 2));
             page.getByRole(AriaRole.STATUS).waitFor(new Locator.WaitForOptions()

@@ -14,18 +14,10 @@ import com.microsoft.playwright.Response;
 import io.cucumber.java.en.When;
 import java.util.List;
 
-/**
- * 「帳號與登入」模組的 When 句型。
- *
- * <p>兩個分頁的場景照開啟的先後找分頁：同一個瀏覽器環境裡先開的是先登入的那個，後開的是新分頁。
- * 這樣不管前置句怎麼開這兩個分頁，這裡都找得到。
- */
 public class AccountWhenSteps {
 
-    /** 「輸入 N 個字」用的英數字，依序循環取用。 */
     private static final String ALPHANUMERIC = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-    /** 重新整理後等看板資料最久這麼久。 */
     private static final double RELOAD_TIMEOUT_MS = 10_000;
 
     private final WebWorld world;
@@ -72,11 +64,6 @@ public class AccountWhenSteps {
         login.typeInto(fieldName, alphanumeric(count));
     }
 
-    /**
-     * 句子說的是在登入頁上輸入，所以分頁還沒開過任何網頁時先打開登入頁。
-     * 例如「換到另一台還沒有人選過語言的裝置」的前置只準備了一個全新的瀏覽器，還沒有開任何網頁。
-     * 已經開在別頁時不替它補開，產品該把人送回登入頁卻沒送時，這一步會照實失敗。
-     */
     @When("{string} 在登入頁輸入員工編號 {string} 與密碼 {string} 後按「登入」")
     public void logsInOnLoginPage(String staffName, String loginId, String password) {
         if ("about:blank".equals(world.page().url())) {
@@ -101,7 +88,6 @@ public class AccountWhenSteps {
         login.chooseLanguage(option);
     }
 
-    /** 在同一個分頁直接前往那一頁的網址；navigate 等到網頁載入完成就是換頁結束。 */
     @When("{string} 直接打開 {string} 的網址")
     public void opensPageUrlDirectly(String staffName, String pageName) {
         world.open(ShellFrame.pathOf(pageName));
@@ -117,10 +103,6 @@ public class AccountWhenSteps {
         changePassword.submit(newPassword);
     }
 
-    /**
-     * 重新載入這個分頁。停在總覽看板或待派單頁時，等看板資料回來、頁標題出現才算載入完成；
-     * 其他畫面（登入頁、設定新密碼畫面）沒有要等的資料，網頁載入完成即可。
-     */
     @When("{string} 重新整理網頁")
     public void reloadsPage(String staffName) {
         Page page = world.page();
@@ -161,11 +143,6 @@ public class AccountWhenSteps {
         account.logoutButton().waitFor();
     }
 
-    /**
-     * 「關掉這個分頁」只關目前的分頁；「關掉整個瀏覽器」把這個瀏覽器環境的分頁全部關掉。
-     * 兩種都留著這個瀏覽器環境本身，所以這台裝置的語言紀錄（{@code localStorage}）還在，
-     * 而登入憑證放在分頁自己的儲存空間，跟著分頁一起沒了。之後開新的分頁前往櫃檯畫面的網址。
-     */
     @When("^\"([^\"]*)\" 沒有登出就(.+)，之後有人再打開櫃檯畫面$")
     public void closesWithoutLogoutThenReopens(String staffName, String action) {
         Page current = world.page();

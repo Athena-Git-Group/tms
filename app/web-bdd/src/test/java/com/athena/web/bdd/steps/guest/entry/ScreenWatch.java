@@ -17,17 +17,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * 從 When 開始，住客的畫面出現過什麼、分頁向後端送過哪些請求。給「過程中沒有…」「沒有輸入或按過任何東西」
- * 「請求沒有帶員工的登入憑證」這三句結果句用：它們問的是整段過程，不只是最後的畫面。
- *
- * <p>畫面每變一次（DOM 有變動），頁面裡的程式就把網址路徑、看得到的全部字與看得到的輸入欄數量交回測試記下來；
- * 整頁重新載入、關掉分頁再開新分頁都照樣記，因為程式是掛在整個瀏覽器環境上的。
- * 只在「進入層」的場景掛上，其他模組的場景不多花這個成本。
- */
 public final class ScreenWatch {
 
-    /** 畫面上的一個樣子。 */
     public record Seen(Page page, String path, List<String> lines, int inputs) {
     }
 
@@ -88,25 +79,21 @@ public final class ScreenWatch {
         }
     }
 
-    /** 從 When 開始畫面出現過的每一個樣子，依先後；第一筆可能就是 When 開始那一刻的畫面（{@link #linesAtStart()}）。 */
     public List<Seen> seen() {
         requireStarted();
         return List.copyOf(seen);
     }
 
-    /** When 開始那一刻目前的分頁停在哪個路徑；還沒開過分頁時是空字串。 */
     public String pathAtStart() {
         requireStarted();
         return pathAtStart;
     }
 
-    /** When 開始那一刻畫面上看得到的每一行字；還沒開過分頁時是空的。 */
     public List<String> linesAtStart() {
         requireStarted();
         return linesAtStart;
     }
 
-    /** 從 When 開始，這個分頁對後端（{@code /guest/}、{@code /api/}、{@code /staff/}）送出的請求，依先後。 */
     public List<Request> backendRequests(Page page) {
         requireStarted();
         return backendRequests.stream().filter(request -> pageOf(request) == page).toList();
@@ -140,7 +127,6 @@ public final class ScreenWatch {
         try {
             page.evaluate(OBSERVER);
         } catch (PlaywrightException notReady) {
-            // 正在換頁的分頁由上面的 addInitScript 在新頁面掛上。
         }
     }
 

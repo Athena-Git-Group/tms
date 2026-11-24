@@ -16,9 +16,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-		<!-- 與 tms/pom.xml 對齊的版本 -->
 		<cucumber.version>7.22.1</cucumber.version>
-		<!-- 與 tms/pom.xml 透過 spring-boot-starter-parent 4.1.1 鎖定的 junit-jupiter.version 對齊 -->
 		<junit-bom.version>6.0.3</junit-bom.version>
 		<appium-java-client.version>9.5.0</appium-java-client.version>
 		<!-- java-client 9.5.0 與 Selenium >=4.34.0 不相容（org.openqa.selenium.html5.* 被移除），
@@ -46,8 +44,6 @@
 	</dependencyManagement>
 
 	<dependencies>
-		<!-- Appium client：driver 走 vanilla XCUITest（iOS）＋ UiAutomator2（Android），
-			不用 appium-flutter-driver（研究決策 5、6） -->
 		<dependency>
 			<groupId>io.appium</groupId>
 			<artifactId>java-client</artifactId>
@@ -55,16 +51,12 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Cucumber-JVM：與 tms/ 共用同一套中文 Gherkin 生態 -->
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-java</artifactId>
 			<version>${cucumber.version}</version>
 			<scope>test</scope>
 		</dependency>
-		<!-- 本模組沒有 Spring，DI 容器改用 PicoContainer（cucumber-java 預設不綁定任何
-			ObjectFactory，需要明確引入一個才能讓 step 類別之間用建構子注入共用
-			AppiumWorld） -->
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-picocontainer</artifactId>
@@ -94,10 +86,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- 後端資料準備（BackendChannel）：與櫃檯 Web 測試線共用，住在獨立模組 app/bdd-support/。
-			資料庫驅動、JSON、bcrypt、spring-jcl、slf4j-simple 都由它帶進來，這裡不再各自宣告。
-			本 repo 沒有上層 pom：要先 `mvn -q -f app/bdd-support/pom.xml install` 才解析得到，
-			run-*.sh 會經 lib/env.sh 自動做這一步，直接下 mvn 的人要自己先跑一次。 -->
 		<dependency>
 			<groupId>com.athena</groupId>
 			<artifactId>app-bdd-support</artifactId>

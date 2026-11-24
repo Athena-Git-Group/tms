@@ -597,7 +597,6 @@ public class TaskExecutionThenSteps {
         }
     }
 
-
     private static final int OFFLINE_QUEUE_SETTLE_SECONDS = 5;
 
     @那麼("這次操作沒有留在手機上等補送")

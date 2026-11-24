@@ -70,7 +70,6 @@ public class PushGivenSteps {
         }
     }
 
-    /** dsl 怎麼做：去處是工務待認領時建立該工務單；房號取標題開頭的數字，報修人由阿美代表。 */
     private String ensurePoolRepairTicket(String ticketNo, String title) {
         List<Map<String, Object>> existing = world.backend().queryRows(
                 "SELECT task_id FROM repair_tickets WHERE tenant_id = ? AND ticket_no = ?",

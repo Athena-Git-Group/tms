@@ -6,7 +6,7 @@ import com.athena.web.bdd.pages.guest.GuestHomePage;
 import com.athena.web.bdd.pages.guest.RequestPage;
 import com.athena.web.bdd.pages.guest.RequestPage.Step;
 import com.athena.web.bdd.pages.guest.RequestsPage;
-import com.athena.web.bdd.support.GuestRequestLimitStub;
+import com.athena.web.bdd.support.GuestCreateRecorder;
 import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.GuestScreen;
 import com.athena.web.bdd.support.GuestStay;
@@ -28,21 +28,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/**
- * 住客掃碼頁跨模組共用的 Then 句型（{@code specs/truth/features/guest-web/dsl.md}）。
- *
- * <p>每一句都先看畫面，寫「後端」的再以 {@link GuestStay} 讀後端的權威狀態，兩邊都要成立；
- * 畫面會晚一點才跟上，所以檢查一律重讀到成立為止，最多 5 秒。
- *
- * <p>下面七句和櫃檯 Web 的句子一字不差，同一個 glue 只能有一個定義，由 {@code steps.common.CommonThenSteps}
- * 與 {@code steps.account.AccountThenSteps} 的定義擔任：
- * 「畫面上看得到以下文字：」「畫面上沒有以下文字：」「畫面上看得到 "{文字}"」「畫面上沒有 "{文字}"」
- * 「按鈕 "{按鈕}" 可以按」「按鈕 "{按鈕}" 不能按」語意兩邊相同，直接共用；
- * 「畫面是 "{頁}"」兩邊的頁不同，櫃檯的定義在住客場景交給這裡的 {@link #screenIs(String)}。
- */
 public class GuestCommonThenSteps {
 
-    /** 提示浮層 2.6 秒後自己消失；提示框過了這麼久還在，才算「不會自己消失」。 */
     private static final long OUTLIVES_TOAST_MS = 3_000;
 
     private static final String PROGRESS_PAGE_TITLE = "需求進度";
@@ -61,7 +48,7 @@ public class GuestCommonThenSteps {
 
     private final GuestStay stay;
 
-    private final GuestRequestLimitStub limitStub;
+    private final GuestCreateRecorder createRecorder;
 
     private final GuestFrame frame;
 
@@ -72,22 +59,17 @@ public class GuestCommonThenSteps {
     private final RequestPage request;
 
     public GuestCommonThenSteps(WebWorld world, GuestScenario scenario, GuestStay stay,
-            GuestRequestLimitStub limitStub) {
+            GuestCreateRecorder createRecorder) {
         this.world = world;
         this.scenario = scenario;
         this.stay = stay;
-        this.limitStub = limitStub;
+        this.createRecorder = createRecorder;
         this.frame = new GuestFrame(world);
         this.home = new GuestHomePage(world);
         this.requests = new RequestsPage(world);
         this.request = new RequestPage(world);
     }
 
-    /**
-     * 「畫面是 "{頁}"」的住客語意：網址與畫面都是該頁，沒有載入中的轉圈。首頁有房號膠囊與兩張主視覺卡；
-     * 子頁的標題列是該頁的標題；送出成功頁有「查看進度」；無法使用頁有「請洽櫃檯」；重試狀態有
-     * 「連線失敗，請再試一次」與「重試」。送出成功頁的綠色勾是不給報讀軟體的裝飾圖示，以網址與「查看進度」認。
-     */
     public void screenIs(String pageName) {
         GuestScreen screen = GuestScreen.ofTerm(pageName);
         frame.eventually(() -> screenProblem(screen));
@@ -290,10 +272,6 @@ public class GuestCommonThenSteps {
                         + "，不是「" + title + "」");
     }
 
-    /**
-     * 比 When 之前恰好多了表格這幾張（標題與狀況都相符，沒有多也沒有少），每一張都是這個場景放行到後端的送出
-     * 帶著冪等鍵建立的。
-     */
     @那麼("後端這次住宿多了以下需求：")
     public void backendAdded(DataTable table) {
         List<String> expected = table.asMaps().stream()
@@ -308,7 +286,7 @@ public class GuestCommonThenSteps {
                     .toList();
             return added.equals(expected) ? null : "後端這次住宿多了 " + added + "，應該剛好是 " + expected;
         });
-        List<String> keys = limitStub.sentKeys();
+        List<String> keys = createRecorder.sentKeys();
         for (Request added : stay.addedSinceWhen(room)) {
             assertThat(stay.createdWithOneOf(added.id(), keys),
                     "後端的「" + added.title() + "」不是帶著住客送出的冪等鍵建立的；這個場景送出的鍵是 " + keys);
@@ -321,7 +299,6 @@ public class GuestCommonThenSteps {
         assertThat(changed.isEmpty(), "後端這次住宿的需求和 When 之前不同：" + changed.orElse(""));
     }
 
-    /** 一個不會自己消失的提示框（不是提示浮層），在頁面內容裡，不擋住任何按鈕。 */
     @那麼("畫面出現提示框 {string}，內文 {string}")
     public void noticeShown(String title, String body) {
         List<String> expected = List.of(title.strip(), body.strip());

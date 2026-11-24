@@ -129,6 +129,7 @@ public class CommonGivenSteps {
         world.goOffline();
     }
 
+    /** 與 App 的 PoolDeptPreference.key 同名；app/mobile/test/pool_dept_preference_key_test.dart 釘住這個值。 */
     public static final String POOL_DEPT_PREFERENCE_KEY = "pool.dept";
 
     @假設("{string} 上次在待認領停在 {string}")

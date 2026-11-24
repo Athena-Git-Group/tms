@@ -3,10 +3,6 @@ package com.athena.web.bdd.pages.guest;
 import java.util.List;
 import java.util.stream.IntStream;
 
-/**
- * 評分卡上一顆星畫成哪一種圖形。每顆星是一個 {@code svg}，裡面一條 {@code path}，{@code d} 照原型
- * {@code ui/guest.js} 圖示表的 {@code star_fill}（實心）與 {@code star}（空心）。產品在 Phase 4 照這兩個圖形畫。
- */
 public enum StarShape {
     FILLED("實心"),
     HOLLOW("空心"),
@@ -22,7 +18,6 @@ public enum StarShape {
         this.label = label;
     }
 
-    /** 一顆星裡所有 {@code path} 的 {@code d}；剛好一條且是兩種圖形之一才認得出。 */
     public static StarShape of(List<?> paths) {
         if (paths.size() != 1) {
             return UNRECOGNISED;
@@ -34,7 +29,6 @@ public enum StarShape {
         return d.equals(HOLLOW_PATH) ? HOLLOW : UNRECOGNISED;
     }
 
-    /** 前 {@code filled} 顆實心、其餘空心，共五顆。 */
     public static List<StarShape> pattern(int filled) {
         return IntStream.rangeClosed(1, 5).mapToObj(n -> n <= filled ? FILLED : HOLLOW).toList();
     }

@@ -5,29 +5,15 @@ import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Clock;
 import com.microsoft.playwright.Page;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
-/**
- * 場景裡的「現在」：後端的時鐘與瀏覽器的時鐘一起撥，兩邊永遠指向同一個時刻。
- *
- * <p>畫面上的「已等 N 分」是瀏覽器用自己的時間算的，單的時間是後端寫的；只撥其中一邊，
- * 畫面算出來的分鐘數就會和案例寫的對不上。所以步驟一律經過這裡撥時間，不各自去動其中一邊。
- *
- * <p>兩邊走法不同，這是刻意的：
- * <ul>
- *   <li>後端被固定在指定的時刻，不會自己前進，資料準備寫出來的時間才會每次都一樣。</li>
- *   <li>瀏覽器從同一個時刻起照真實速度往前走。瀏覽器的時鐘一旦停住，計時器就不會到期，
- *       拖曳派單會起不了拖、放不下去，所以這裡不提供把瀏覽器時鐘停住的做法。</li>
- * </ul>
- * 場景跑了幾秒，瀏覽器就比後端快幾秒；{@link #moveTo(OffsetDateTime)} 每次都會把兩邊重新對齊。
- *
- * <p>每個場景開始時是 2026 年 10 月 26 日週一 14:10，時區跟著執行測試的機器，後端也在同一台機器上。
- */
 public final class Clocks {
 
     public static final LocalDate DEFAULT_DATE = LocalDate.of(2026, 10, 26);
@@ -40,16 +26,16 @@ public final class Clocks {
 
     private OffsetDateTime now = at(DEFAULT_DATE, DEFAULT_TIME);
 
+    private Page pausedPage;
+
     Clocks(BackendChannel backend) {
         this.backend = backend;
     }
 
-    /** 把某一天的某個時刻換成帶時差的時刻，時區用執行測試的機器的。 */
     public static OffsetDateTime at(LocalDate date, LocalTime time) {
         return date.atTime(time).atZone(ZoneId.systemDefault()).toOffsetDateTime();
     }
 
-    /** 場景目前的「現在」，也就是後端被固定的那個時刻。 */
     public OffsetDateTime now() {
         return now;
     }
@@ -58,12 +44,6 @@ public final class Clocks {
         return now.toLocalDate();
     }
 
-    /**
-     * 把兩邊的時鐘撥到指定的時刻，往前往後都可以。
-     *
-     * <p>已經開著的畫面：往前撥時，到期的計時器會補跑一次，畫面上的分鐘數馬上重算；
-     * 往回撥時瀏覽器不會補跑計時器，畫面要等自己下一次計時才更新。還沒開的畫面在開啟時直接從這個時刻起算。
-     */
     public void moveTo(OffsetDateTime target) {
         backend.setBackendClock(target);
         long targetMillis = target.toInstant().toEpochMilli();
@@ -78,13 +58,6 @@ public final class Clocks {
         now = target;
     }
 
-    /**
-     * 同 {@link #moveTo(OffsetDateTime)}，但瀏覽器的時鐘分很多步往後推，每推一步就執行一次 {@code afterEachStep}。
-     * 給一次推太多會誤觸畫面計時器的情況用，例如畫面太久沒收到訊號就出現提醒列：每一步之後呼叫端可以補送該有的訊號。
-     *
-     * <p>後端先一次撥到目標。畫面在途中到期的計時器若去讀後端，讀到的必須是目標那一刻的資料。
-     * 瀏覽器已經比目標快時，和 {@link #moveTo(OffsetDateTime)} 一樣直接撥回目標，不分步。
-     */
     public void moveToInSteps(OffsetDateTime target, Duration step, Runnable afterEachStep) {
         backend.setBackendClock(target);
         long targetMillis = target.toInstant().toEpochMilli();
@@ -102,28 +75,84 @@ public final class Clocks {
         now = target;
     }
 
-    /** 今天的某個時刻。 */
+    /**
+     * 推進這個分頁的瀏覽器時鐘，讓畫面自己的計時器照時間到期；分段推是因為一次推完時，週期性的計時器只會觸發一次。
+     * 推完把後端撥到瀏覽器推到的那一刻：瀏覽器時鐘從裝上起照真實速度在走，比後端快了場景跑過的秒數，
+     * 若改用 {@link #moveTo(OffsetDateTime)} 以後端時刻為準，瀏覽器實際推進的會比要求的少。
+     */
+    public void elapse(Page page, Duration total, Duration step) {
+        for (long left = total.toMillis(); left > 0; left -= step.toMillis()) {
+            page.clock().fastForward(Math.min(left, step.toMillis()));
+        }
+        OffsetDateTime reached = toDateTime(browserMillis(page));
+        if (reached.isAfter(now)) {
+            backend.setBackendClock(reached);
+            now = reached;
+        }
+    }
+
+    public void elapse(Page page, Duration total) {
+        elapse(page, total, total);
+    }
+
+    /**
+     * 把這個分頁的瀏覽器時鐘停在稍後一點的時刻，計時器不再到期，畫面的自動再試不會在兩個步驟之間自己發生；
+     * 後端撥到同一刻，之後「過了 N 秒」從兩邊相同的時刻往後推。
+     * 停住的時鐘只能經由 {@link #releaseAfter(Runnable)} 或 {@link #releaseIfTriggered(BooleanSupplier)} 放開，
+     * 都沒放開時場景結束時放開：畫面框架讀到資料後排在 {@code setTimeout(0)} 才更新畫面，時鐘一直停著畫面就不會換。
+     */
+    public void pauseBrowser(Page page, Duration margin) {
+        releasePaused();
+        long at = browserMillis(page) + margin.toMillis();
+        page.clock().pauseAt(at);
+        pausedPage = page;
+        moveTo(toDateTime(at));
+    }
+
+    public boolean browserPaused() {
+        return pausedPage != null && !pausedPage.isClosed();
+    }
+
+    public void releaseAfter(Runnable trigger) {
+        try {
+            trigger.run();
+        } finally {
+            releasePaused();
+        }
+    }
+
+    /** 觸發沒有成功時不放開，讓時鐘停到場景結束：放開的話畫面自己的自動再試會補上，分不出是不是這一步引發的。 */
+    public void releaseIfTriggered(BooleanSupplier trigger) {
+        if (trigger.getAsBoolean()) {
+            releasePaused();
+        }
+    }
+
+    void releasePaused() {
+        Page paused = pausedPage;
+        pausedPage = null;
+        if (paused != null && !paused.isClosed()) {
+            paused.clock().resume();
+        }
+    }
+
     public void moveTo(LocalTime time) {
         moveTo(at(today(), time));
     }
 
-    /** 換一天，時刻不變。 */
     public void moveTo(LocalDate date) {
         moveTo(at(date, now.toLocalTime()));
     }
 
-    /** 從場景目前的「現在」再往後撥一段時間。 */
     public void advance(Duration duration) {
         moveTo(now.plus(duration));
     }
 
-    /** 場景開始：後端固定在預設時刻。這時還沒有任何畫面。 */
     void startAtDefault() {
         now = at(DEFAULT_DATE, DEFAULT_TIME);
         backend.setBackendClock(now);
     }
 
-    /** 新開的 context 要在載入任何頁面之前接上假時鐘，頁面一開始看到的就是場景的「現在」。 */
     void install(BrowserContext context) {
         context.clock().install(new Clock.InstallOptions().setTime(now.toInstant().toEpochMilli()));
         contexts.add(context);
@@ -133,17 +162,24 @@ public final class Clocks {
         contexts.remove(context);
     }
 
-    /** 場景結束：後端回到系統時間，免得同一個後端接著給人手動操作時還停在場景的時刻。 */
     void reset() {
+        pausedPage = null;
         contexts.clear();
         backend.resetBackendClock();
     }
 
-    /** 瀏覽器此刻認定的時間。context 裡沒有分頁時問不到，退回場景的「現在」。 */
+    private static OffsetDateTime toDateTime(long epochMillis) {
+        return OffsetDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), ZoneId.systemDefault());
+    }
+
+    private static long browserMillis(Page page) {
+        return JsResult.number(page.evaluate("Date.now()")).longValue();
+    }
+
     private long browserMillis(BrowserContext context) {
         for (Page page : context.pages()) {
             if (!page.isClosed()) {
-                return ((Number) page.evaluate("Date.now()")).longValue();
+                return browserMillis(page);
             }
         }
         return now.toInstant().toEpochMilli();

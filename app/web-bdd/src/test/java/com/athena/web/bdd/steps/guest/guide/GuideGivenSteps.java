@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** 「住宿指南」模組的 Given 句型：改後端的資訊頁設定，畫面已經開著時重新載入讓它生效。 */
 public class GuideGivenSteps {
 
     private final WebWorld world;
@@ -28,7 +27,6 @@ public class GuideGivenSteps {
         this.infoPages = new InfoPages(world);
     }
 
-    /** 每一頁的鍵照表格順序編成 {@code info-1}、{@code info-2}…；表格的空格（Cucumber 給 {@code null}）設成空字串。 */
     @假設("飯店設定了以下資訊頁：")
     public void infoPagesAre(DataTable table) {
         List<Map<String, String>> pages = new ArrayList<>();

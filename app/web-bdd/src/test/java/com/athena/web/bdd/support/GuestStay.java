@@ -8,20 +8,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * 後端眼中「這次住宿」的需求：某間房目前那筆訂房名下的任務，以及它們依「需求的狀況對照」
- * （{@code specs/truth/features/guest-web/dsl.md}）該算哪一種狀況、住客頁該顯示哪個標籤。
- *
- * <p>凡是寫「後端」的結果句都從這裡讀權威狀態。另外在前置走完的那一刻記下所有訂房名下任務的內容摘要，
- * 給「後端這次住宿多了以下需求」「沒有多任何一張需求」和 When 之前比。
- */
 public final class GuestStay {
 
-    /** 後端一張住客需求裡，判斷狀況與排序要用到的欄位。 */
     public record Request(UUID id, String title, String state, String dept, String answer, String inspection,
             String cancelReason, Integer rating, OffsetDateTime createdAt) {
 
-        /** 這張需求在「需求的狀況對照」裡的說法，例如「房務待認領」。 */
         public String situation() {
             return switch (state) {
                 case "triage" -> "待派單";
@@ -38,7 +29,6 @@ public final class GuestStay {
             };
         }
 
-        /** 住客頁上的狀態標籤（繁體中文）。 */
         public String tag() {
             return switch (state) {
                 case "triage" -> "已送出";
@@ -50,7 +40,6 @@ public final class GuestStay {
             };
         }
 
-        /** 還在進行中（清單的「進行中」段落），不是已結束。 */
         public boolean active() {
             return !List.of("done", "inspected", "closed", "cancelled").contains(state);
         }
@@ -90,7 +79,6 @@ public final class GuestStay {
         });
     }
 
-    /** 這間房現在那筆有效訂房的 id；沒有人住時是空的。 */
     public Optional<UUID> reservationId(String roomNo) {
         return world.backend().queryRows("""
                 SELECT r.id FROM reservations_cache r JOIN rooms m ON m.id = r.room_id
@@ -102,7 +90,6 @@ public final class GuestStay {
                 .map(row -> (UUID) row.get("id"));
     }
 
-    /** 這間房這次住宿名下的需求，依送出時間由舊到新。 */
     public List<Request> requests(String roomNo) {
         UUID reservation = reservationId(roomNo)
                 .orElseThrow(() -> new AssertionError(roomNo + " 房現在沒有人住，沒有「這次住宿」"));
@@ -114,7 +101,6 @@ public final class GuestStay {
                 .toList();
     }
 
-    /** 某一張需求現在的樣子。 */
     public Request request(UUID taskId) {
         return world.backend().queryRows("SELECT " + REQUEST_COLUMNS + " FROM tasks WHERE tenant_id = ? AND id = ?",
                         world.defaults().tenantId(), taskId)
@@ -124,7 +110,6 @@ public final class GuestStay {
                 .orElseThrow(() -> new AssertionError("後端沒有這張需求：" + taskId));
     }
 
-    /** 這次住宿裡標題是這個、送出時間最新的那一張，給經畫面真的送出之後找回剛建立的需求用。 */
     public Request newest(String roomNo, String title) {
         return requests(roomNo).stream()
                 .filter(request -> request.title().equals(title.strip()))
@@ -133,13 +118,11 @@ public final class GuestStay {
                         + requests(roomNo).stream().map(Request::title).toList()));
     }
 
-    /** 這間房這次住宿裡，前置走完之後才出現的需求。 */
     public List<Request> addedSinceWhen(String roomNo) {
         Map<UUID, String> before = beforeWhen();
         return requests(roomNo).stream().filter(request -> !before.containsKey(request.id())).toList();
     }
 
-    /** 這間房這次住宿的需求，張數與每一張的內容是不是都和前置走完時一樣；不一樣時回差異的說明。 */
     public Optional<String> changedSinceWhen(String roomNo) {
         Map<UUID, String> before = beforeWhen();
         UUID reservation = reservationId(roomNo).orElseThrow();
@@ -162,11 +145,6 @@ public final class GuestStay {
                 + requests(roomNo).stream().map(r -> r.title() + "（" + r.situation() + "）").toList());
     }
 
-    /**
-     * 這張需求是不是帶著住客送出的冪等鍵建立的：後端記住了其中一把鍵的回應，回應裡就是這張需求。
-     *
-     * @param sentKeys 這個場景放行到後端的 {@code Idempotency-Key}
-     */
     public boolean createdWithOneOf(UUID taskId, List<String> sentKeys) {
         if (sentKeys.isEmpty()) {
             return false;
@@ -192,7 +170,6 @@ public final class GuestStay {
         return digestsBeforeWhen;
     }
 
-    /** 所有掛在訂房上的任務：id → 「訂房 id|整列內容的摘要」。 */
     private Map<UUID, String> digestsNow() {
         Map<UUID, String> digests = new LinkedHashMap<>();
         for (Map<String, Object> row : world.backend().queryRows("""

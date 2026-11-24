@@ -15,30 +15,23 @@ import com.microsoft.playwright.options.BoundingBox;
 import io.cucumber.java.After;
 import io.cucumber.java.zh_tw.當;
 import java.net.URI;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-/**
- * 「總覽看板」模組的 When 句型。
- *
- * <p>每一句做完都等到規格寫的「等待條件」成立，但最多等 {@value #SETTLE_TIMEOUT_MS} 毫秒；
- * 等不到時照樣往下走，讓接著的 Then 以斷言說出畫面哪裡不對，而不是在這裡以逾時收場。
- */
 public class BoardWhenSteps {
 
     private static final double SETTLE_TIMEOUT_MS = 5_000;
 
-    /** 試著拖一張拖不動的卡片時，給畫面多久時間錯誤地把它拖起來；拖得動的卡片在這段時間內一定已經起拖。 */
     private static final double TRY_DRAG_WATCH_MS = 1_000;
 
     private static final Pattern ASSIGN_PATH = Pattern.compile(".*/api/v1/desk/tasks/[^/]+/assign");
 
     private final WebWorld world;
 
-    /** 「按住開始拖」「滑到拖放區上還沒放開」之後還按著的那一次拖曳；場景結束時在原位放開。 */
     private CardDrag held;
 
     private double heldStartX;
@@ -77,7 +70,6 @@ public class BoardWhenSteps {
         BoardPage board = board();
         Locator box = board.roomSearch();
         box.pressSequentially(content);
-        // 看板依輸入重畫完成時，篩選膠囊會顯示框裡現在的房號。
         settle(() -> {
             String value = box.inputValue();
             return value.isEmpty() || board.filterPillText().contains("房號 " + value);
@@ -156,7 +148,6 @@ public class BoardWhenSteps {
         BoardPage board = board();
         holdFrom(roomNo);
         CardDrag drag = board.startDrag(roomNo);
-        // 拖回按下的位置：那裡是「待派單」欄裡卡片自己的位置，離拖放區最遠，也一定在看板上。
         drag.moveTo(heldStartX, heldStartY);
         shell().settleAfter(drag::release);
         settle(() -> board.anyDropZone().count() == 0);
@@ -190,24 +181,16 @@ public class BoardWhenSteps {
         page.onRequestFinished(ended);
         page.onRequestFailed(ended);
         try {
-            // 只撥瀏覽器的時鐘：自動再試是畫面自己的計時，後端不必跟著前進。
-            // 前置若把時鐘停住了，等這一次看板讀取結束就放開：畫面框架讀到資料後排在 setTimeout(0) 才更新，
-            // 時鐘停著畫面不會換。讀取結束才放開，自動再試就只會是快轉觸發的這一次，不會在快轉之前自己先發生。
-            shell().settleAfter(() -> {
-                try {
-                    page.clock().fastForward(seconds * 1_000L);
-                    settle(boardRead::get);
-                } finally {
-                    world.resumePausedClock();
-                }
-            });
+            shell().settleAfter(() -> world.clocks().releaseAfter(() -> {
+                world.clocks().elapse(page, Duration.ofSeconds(seconds));
+                settle(boardRead::get);
+            }));
         } finally {
             page.offRequestFinished(ended);
             page.offRequestFailed(ended);
         }
     }
 
-    /** 場景結束時還按著的拖曳在原位放開，不讓按著的指標留到截圖或關分頁時。 */
     @After(order = 100)
     public void releaseHeldDrag() {
         if (held == null || !world.hasPage()) {
@@ -217,13 +200,11 @@ public class BoardWhenSteps {
             held.moveTo(heldStartX, heldStartY);
             held.release();
         } catch (RuntimeException alreadyGone) {
-            // 分頁已經壞掉或換頁，沒有東西可以放開；場景的結果以它自己的步驟為準。
         } finally {
             held = null;
         }
     }
 
-    /** 記下卡片在畫面上的中心，之後在原位放開用。先捲進視窗，量到的位置才和起拖時相同。 */
     private void holdFrom(String roomNo) {
         Locator card = board().card(roomNo);
         card.scrollIntoViewIfNeeded();
@@ -264,7 +245,6 @@ public class BoardWhenSteps {
         try {
             world.page().waitForCondition(condition, new Page.WaitForConditionOptions().setTimeout(timeoutMs));
         } catch (TimeoutError notYet) {
-            // 等不到就往下走，理由見類別說明。
         }
     }
 

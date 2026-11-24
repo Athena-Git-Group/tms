@@ -27,26 +27,14 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 「待派單」模組的 Then 句型：待派單頁的版面、每一列的內容與動作、空狀態與載入中，
- * 以及派單之後後端的權威狀態。
- *
- * <p>畫面的句子取使用者看得到的文字與可及性名稱，找元素的方式都在 {@link TriagePage}。
- * 畫面更新要時間，所以畫面的句子都在 5 秒內反覆檢查，最後一次還不成立才算失敗。
- * 寫「後端」的句子直接讀後端資料庫，不經過畫面。
- */
 public class TriageThenSteps {
 
-    /** 畫面斷言最多等這麼久，是共通實作約定的輪詢上限。 */
     private static final double ASSERT_TIMEOUT_MS = 5_000;
 
-    /** 瀏覽器的版面座標有小數，比上下位置時容許這麼多誤差。 */
     private static final double TOLERANCE_PX = 1;
 
-    /** 每一列右側的三顆動作，照待派單頁的畫面文字。這三顆以外，列上只剩左側開詳情的那一塊可以按。 */
     private static final List<String> ROW_ACTION_NAMES = List.of("派給房務", "派給工務", "當場回答…");
 
-    /** 頁首提到在班人數時會出現的說法：「在班」，或「N 人」「N 位」。 */
     private static final Pattern HEADCOUNT = Pattern.compile("在班|\\d+\\s*(人|位)");
 
     private static final Pattern FLOOR = Pattern.compile("^\\d+ 樓$");
@@ -76,7 +64,6 @@ public class TriageThenSteps {
         this.whenStart = whenStart;
     }
 
-    /** 頁首的下緣不低於第一列的上緣，最後一列的下緣不低於頁尾說明的上緣。 */
     @那麼("待派單頁由上到下依序是頁首、需求清單與頁尾說明")
     public void headerListFooterInOrder() {
         eventually("待派單頁由上到下應該是頁首、需求清單與頁尾說明", () -> {
@@ -108,7 +95,6 @@ public class TriageThenSteps {
         });
     }
 
-    /** 頁首扣掉兩段待接張數之後，只剩操作說明，沒有「在班」也沒有人數。 */
     @那麼("待派單頁的頁首沒有在班人數")
     public void headerHasNoHeadcount() {
         eventually("待派單頁的頁首應該只有兩段待接張數與一句操作說明", () -> {
@@ -135,7 +121,6 @@ public class TriageThenSteps {
         });
     }
 
-    /** 整頁照字面數這句話出現幾次，再確認它在頁首、不在任何一列上。 */
     @那麼("{string} 在整頁只出現一次，位置在頁首")
     public void onlyOnceInHeader(String text) {
         String wanted = ShellFrame.normalizeSpaces(text);
@@ -157,12 +142,6 @@ public class TriageThenSteps {
         });
     }
 
-    /**
-     * 每一個項目到那一列上它該在的位置去找：房號與樓層在列左側開詳情的那一塊，
-     * 住客原話是「」包起來的那一段，原文列是寫著「原文：」的那一段，來源是前後各有一個「·」的那一段，
-     * 等待時間是以「已等」開頭的那一段，住客名是文字剛好相同的那一段。
-     * 內容留空代表那一項不出現：那個位置的樣式在這一列上一個都找不到。
-     */
     @那麼("待派單頁 {string} 這一列的內容如下：")
     public void rowContent(String roomNo, DataTable table) {
         List<Map<String, String>> items = table.asMaps();
@@ -238,7 +217,6 @@ public class TriageThenSteps {
         });
     }
 
-    /** 每一列的動作群組裡剛好三顆按鈕、名稱與順序相符，而且群組在列左側開詳情那一塊的右邊。 */
     @那麼("待派單頁每一列右側的動作都只有 {string}、{string}、{string}")
     public void rowActionsExactly(String one, String two, String three) {
         List<Control> expected = List.of(button(one), button(two), button(three));
@@ -267,10 +245,6 @@ public class TriageThenSteps {
         });
     }
 
-    /**
-     * 每一列上能操作的東西，只能是列左側開詳情的那一塊與右側那三顆動作；
-     * 「派給」開頭的動作也就只會是派給房務與派給工務。拆單、代開這張單之類的入口一出現就是多出來的那一個。
-     */
     @那麼("待派單頁沒有拆單、代開這張單或派給其他部門的動作")
     public void noOtherRowActions() {
         eventually("待派單頁的列上不應該有拆單、代開這張單或派給其他部門的動作", () -> {
@@ -294,7 +268,6 @@ public class TriageThenSteps {
         });
     }
 
-    /** 每一列的三顆按鈕外框與底色都一樣，而且都有外框；整列上沒有那個小標的字。 */
     @那麼("待派單頁的三顆動作都沒有 {string} 小標")
     public void rowActionsWithoutTag(String text) {
         String unwanted = ShellFrame.normalizeSpaces(text);
@@ -324,17 +297,11 @@ public class TriageThenSteps {
         });
     }
 
-    /** 外框粗細、樣式、顏色，底色與字色。依序用「|」接起來，外框粗細放第一個。 */
     private static final String BUTTON_LOOK = """
             b => { const s = getComputedStyle(b);
                    return [s.borderTopWidth, s.borderTopStyle, s.borderTopColor, s.backgroundColor, s.color].join('|'); }
             """;
 
-    /**
-     * 清單的位置是空狀態：沒有任何一列，標題與說明照字面相符。
-     * 說明裡寫的兩個張數要等於後端看板給這位登入者的今天派單與當場回答張數；
-     * 說明沒寫張數時，後端的兩個張數都應該是 0。
-     */
     @那麼("待派單頁的空狀態是 {string}，說明是 {string}")
     public void emptyState(String title, String description) {
         String wantedTitle = ShellFrame.normalizeSpaces(title);
@@ -372,7 +339,6 @@ public class TriageThenSteps {
         }
     }
 
-    /** 骨架在、真的內容一樣都不在、頁副標空著。 */
     @那麼("清單的位置是灰色的骨架列，頁副標是空的")
     public void skeletonRowsAndBlankSubtitle() {
         eventually("清單的位置應該是骨架列，頁副標是空的", () -> {
@@ -399,11 +365,6 @@ public class TriageThenSteps {
         });
     }
 
-    /**
-     * 後端現在的單，和 When 之前的單是同一批。
-     * When 之前有哪些單取兩個來源的聯集：這個場景登記過的單，以及那一刻已經有事件的單；
-     * 只看其中一個的話，沒登記的或還沒有事件的單會被誤當成這次多出來的。
-     */
     @那麼("後端沒有因為這次派單多出任何一張單")
     public void noNewTask() {
         Set<UUID> before = new HashSet<>(whenStart.snapshot().lastSeqByTask().keySet());
@@ -472,7 +433,6 @@ public class TriageThenSteps {
         };
     }
 
-    /** 房號與住客名沒有固定的樣式可認，只能找文字剛好相同的那一段，所以這兩項不能留空。 */
     private String exactItemProblem(Locator scope, String item, String expected) {
         if (expected.isEmpty()) {
             throw new IllegalArgumentException("「" + item + "」每一列都有，內容不能留空");
@@ -497,7 +457,6 @@ public class TriageThenSteps {
                 """, world.defaults().tenantId(), taskId, type);
     }
 
-    /** 這個分頁現在登入的是誰：從分頁裡的登入回應取姓名，再對到預設帳號。 */
     private CreatedStaff loggedInStaff() {
         JsonNode session = shell.storedLoginResponse();
         if (session == null || session.path("name").asText("").isEmpty()) {
@@ -534,7 +493,6 @@ public class TriageThenSteps {
         return box.y + box.height;
     }
 
-    /** 在 5 秒內反覆檢查，檢查回傳 null 代表成立；時間到還不成立時以最後一次的原因失敗。 */
     private void eventually(String what, Supplier<String> problem) {
         String[] last = {null};
         try {

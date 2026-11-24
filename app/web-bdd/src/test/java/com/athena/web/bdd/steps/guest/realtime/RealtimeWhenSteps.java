@@ -15,22 +15,10 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-/**
- * 「即時更新」模組的 When 句型。
- *
- * <p>同仁與櫃檯的動作一律經過後端的入口做，不直接寫資料庫：直接寫的單不會發即時訊號，住客的畫面就沒有東西可以跟上。
- * 住客的畫面靠即時訊號或定期重讀自己更新，這裡不重新整理。
- *
- * <p>「"{員工}" 在手機上{動作} "{標題}"」與「即時連線中斷」和櫃檯 Web 的 When 一字不差，同一個 glue 只能有一個定義，
- * 由櫃檯的 {@code steps.common.CommonWhenSteps}、{@code steps.realtime.RealtimeWhenSteps} 在住客場景交給這裡的
- * {@link #staffActs(String, String, String)}、{@link #connectionLost()}。
- */
 public class RealtimeWhenSteps {
 
-    /** 櫃檯當場回答用的帳號。 */
     private static final String FRONTDESK = "林佩君";
 
-    /** 「櫃檯取消」在後端是主管作廢，櫃檯帳號沒有這個權限。 */
     private static final String MANAGER = "張主管";
 
     private static final String CONFIRM_CANCEL = "取消需求";
@@ -53,11 +41,6 @@ public class RealtimeWhenSteps {
         this.frame = new GuestFrame(world);
     }
 
-    /**
-     * 以房務或工務同仁的身分在後端認領、開始或完成這張需求，等後端回應成功。
-     * 「完成」一張還沒有人接手或還沒開始的需求時，後端只接受依序推進，所以先替同一位同仁認領、開始，再完成；
-     * 住客看到的結果和同仁一路做完相同。
-     */
     public void staffActs(String staffName, String action, String title) {
         CreatedStaff staff = world.staff(staffName);
         UUID taskId = scenario.request(title);
@@ -128,7 +111,6 @@ public class RealtimeWhenSteps {
         live.sendSignal("resync", "{\"stream_pos\":0,\"reason\":\"server\",\"refetch\":\"/guest/home\"}");
     }
 
-    /** 在另一支手機上做完這件事，再把目前的分頁換回「住客」那一支；這件事拿到的是「住客」那一支的分頁。 */
     private void onSecondPhone(Consumer<Page> action) {
         Page guestPage = world.page();
         world.switchTo(scenario.secondPhone());

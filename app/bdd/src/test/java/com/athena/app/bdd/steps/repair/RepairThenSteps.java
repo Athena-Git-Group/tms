@@ -895,11 +895,13 @@ public class RepairThenSteps {
                 }
                 case "類別" -> {
                     world.waitForLabelContaining(value, SCREEN_TIMEOUT);
-                    String code = CATEGORY_CODE_BY_LABEL.get(value);
-                    if (code == null) {
-                        throw new IllegalArgumentException("認不得的類別「" + value + "」（合法值："
-                                + CATEGORY_CODE_BY_LABEL.keySet() + "）");
-                    }
+                    Map<String, String> labels = world.backend().repairCategoryLabels(world.loggedInStaff());
+                    String code = labels.entrySet().stream()
+                            .filter(category -> category.getValue().equals(value))
+                            .map(Map.Entry::getKey)
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalArgumentException("認不得的類別「" + value
+                                    + "」（後端 GET /repair-categories 的類別：" + labels.values() + "）"));
                     String api = ticket.path("category").asText(null);
                     if (!code.equals(api)) {
                         throw new AssertionError("readRepairTicket.category 應為 " + code + "（" + value + "），實際 " + api);
@@ -1151,14 +1153,6 @@ public class RepairThenSteps {
         }
     }
 
-    private static final Map<String, String> CATEGORY_CODE_BY_LABEL = Map.of(
-            "冷氣", "air_conditioning",
-            "水電", "plumbing_electrical",
-            "家具／設備", "furniture_equipment",
-            "門鎖", "door_lock",
-            "其他", "other");
-
-    // 單卡房號方塊放不下「家具／設備」，只寫「設備」。
     private static final Map<String, String> CATEGORY_CODE_BY_SHORT_LABEL = Map.of(
             "冷氣", "air_conditioning",
             "水電", "plumbing_electrical",

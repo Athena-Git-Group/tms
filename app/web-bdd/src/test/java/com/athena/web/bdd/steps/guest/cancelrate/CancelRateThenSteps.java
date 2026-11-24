@@ -24,20 +24,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * 「取消與評分」模組的 Then 句型（{@code specs/truth/features/guest-web/取消與評分/dsl.md}）。
- * 畫面會晚一點才跟上，每一句都重讀到成立為止，最多 5 秒；寫「後端」的另以資料庫與住客介面讀權威狀態。
- */
 public class CancelRateThenSteps {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final String RATE_PROMPT = "點星星評分";
 
-    /** 這幾種狀況還沒有人接手。 */
     private static final Set<String> UNCLAIMED = Set.of("待派單", "房務待認領", "工務待認領");
 
-    /** 這幾種狀況由該部門的同仁接著。 */
     private static final Map<String, String> CLAIMED_DEPT = Map.of("房務已接", "housekeeping", "工務已接", "engineering");
 
     private static final String GUEST_WITHDREW = "已取消（住客收回）";
@@ -67,7 +61,6 @@ public class CancelRateThenSteps {
         this.request = new RequestPage(world);
     }
 
-    /** 最上層是一個對話框，標題與內文相符、恰好兩顆按鈕且名稱照順序相符；後面有遮罩，焦點在第一顆。 */
     @那麼("畫面出現確認框，標題 {string}、內文 {string}、按鈕 {string} 與 {string}")
     public void confirmDialogShown(String title, String body, String first, String second) {
         frame.eventually(() -> {
@@ -103,10 +96,6 @@ public class CancelRateThenSteps {
         });
     }
 
-    /**
-     * 5 秒內畫面頂端浮出這段字的提示浮層，它出現時底下的返回鈕仍按得到；之後 5 秒內它自己消失，
-     * 這段期間測試不按任何東西。
-     */
     @那麼("畫面頂端浮出提示 {string}，幾秒後自己消失")
     public void toastCameAndWent(String text) {
         String wanted = text.strip();
@@ -127,11 +116,6 @@ public class CancelRateThenSteps {
                 : "提示浮層沒有自己消失：" + frame.toasts().allInnerTexts());
     }
 
-    /**
-     * 後端這張需求的狀態、部門、負責人與取消原因合乎這種狀況。住客收回時另查部門的待認領清單沒有它、部門收到住客收回的推播
-     * （櫃檯沒有待認領清單，從待派單收回的單只查推播）；
-     * 仍沒有人接手或已接時另查這次 When 沒有在後端留下任何事件。
-     */
     @那麼("後端 {string} 的需求是 {string}")
     public void backendSituationIs(String title, String situation) {
         UUID taskId = scenario.request(title);
@@ -166,7 +150,6 @@ public class CancelRateThenSteps {
         }
     }
 
-    /** 後端這張需求的星等是這個值，住客介面讀回來的這一張也是。 */
     @那麼("後端 {string} 的星等是 {int}")
     public void backendRatingIs(String title, int stars) {
         UUID taskId = scenario.request(title);
@@ -200,7 +183,6 @@ public class CancelRateThenSteps {
         });
     }
 
-    /** 單選群組裡選中的是第 N 顆；前 N 顆畫成實心、其餘畫成空心。 */
     @那麼("只有前 {int} 顆星是實心的")
     public void firstStarsFilled(int stars) {
         frame.eventually(() -> {
@@ -226,7 +208,6 @@ public class CancelRateThenSteps {
         });
     }
 
-    /** 四步進度與底部之間有評分卡：問句、五顆星、「送出評分」；後端這張是完成或查房通過、沒有星等、沒有櫃檯回覆。 */
     @那麼("進度頁有評分卡")
     public void ratingCardShown() {
         frame.eventually(() -> {
@@ -257,7 +238,6 @@ public class CancelRateThenSteps {
                         + backend.answer() + "，不該有評分卡");
     }
 
-    /** 進度頁網址上的這張需求。 */
     private UUID onScreenRequest() {
         String path = frame.path();
         return UUID.fromString(path.substring(path.lastIndexOf('/') + 1));
@@ -288,7 +268,6 @@ public class CancelRateThenSteps {
         return ((Number) seq).intValue();
     }
 
-    /** 以主管的身分看這個部門的待認領清單，看有沒有這張單。 */
     private boolean inDeptPool(String dept, UUID taskId) {
         JsonNode pool = world.backend().getJson("/pool?dept=" + dept, world.staff(WhenStart.BACKEND_READER));
         for (JsonNode item : pool.path("items")) {
@@ -299,7 +278,6 @@ public class CancelRateThenSteps {
         return false;
     }
 
-    /** 後端替這張單排了「住客收回」的推播，收件人裡有這個部門的同仁。 */
     private boolean withdrewPushedTo(String dept, UUID taskId) {
         return !world.backend().queryRows("""
                 SELECT 1 FROM outbox o
@@ -309,7 +287,6 @@ public class CancelRateThenSteps {
                 """, world.defaults().tenantId(), "guest_withdrew:" + taskId + ":%", dept).isEmpty();
     }
 
-    /** 以這支手機的住客工作階段讀 {@code GET /guest/requests} 裡的這一張；手機還沒換到工作階段時另掃一次換一個。 */
     private JsonNode guestView(UUID taskId) {
         String session = scenario.session(world.page()).orElseGet(() ->
                 world.backend().guestScan(phone.qrToken(scenario.phoneRoom())).sessionToken());

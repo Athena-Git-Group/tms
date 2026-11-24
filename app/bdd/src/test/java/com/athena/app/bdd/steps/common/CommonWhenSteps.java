@@ -35,7 +35,6 @@ public class CommonWhenSteps {
         }
     }
 
-    /** 停在待認領分頁時，往回點找不到首頁，要點底部分頁列的「首頁」切回去。 */
     private void leavePoolTab() {
         if (world.driver().findElements(world.byTestId("pool.screen")).isEmpty()) {
             return;

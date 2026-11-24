@@ -4,14 +4,6 @@ import com.athena.bddsupport.BackendChannel.CreatedStaff;
 
 import java.time.OffsetDateTime;
 
-/**
- * 住客這次住宿裡一張事先備好的需求，交給 {@link BackendChannel#seedGuestRequest} 建立。
- *
- * <p>和 {@link TaskSituationSpec} 一樣只收後端認得的值與已經算好的時刻，例如 {@code type} 給 {@code amenity}；
- * 沒寫的欄位要補成什麼是句型自己的規則，這裡不替呼叫端補。
- * {@code assignee}、{@code acceptedAt}、{@code startedAt} 只有已經有人接手的狀況要給，
- * {@code answer} 只有已回答要給。
- */
 public record GuestSeed(
         Situation situation, String title, String type, OffsetDateTime createdAt,
         CreatedStaff assignee, OffsetDateTime acceptedAt, OffsetDateTime startedAt, String answer) {
@@ -25,12 +17,6 @@ public record GuestSeed(
         }
     }
 
-    /**
-     * 這張需求所在的部門。
-     *
-     * <p>狀況本身決定部門的照狀況；否則跟著負責人；沒有負責人的已取消需求照類型，
-     * 打字送出的其他類需求在待派單時就被取消，所以還在櫃檯。
-     */
     String dept() {
         if (situation.dept != null) {
             return situation.dept;
@@ -45,10 +31,6 @@ public record GuestSeed(
         };
     }
 
-    /**
-     * 住客頁驗收規格「需求的狀況對照」的一列。每一種都對到後端既有的狀況 {@link TaskSituation}，
-     * 再加上那一列寫死的部門；沒有寫死部門的，部門由 {@link #dept()} 決定。
-     */
     public enum Situation {
 
         TRIAGE("待派單", TaskSituation.TRIAGE, "frontdesk"),
@@ -77,7 +59,6 @@ public record GuestSeed(
 
         CANCELLED_BY_DESK("已取消（櫃檯取消）", TaskSituation.CANCELLED_BY_MANAGER, null),
 
-        /** 櫃檯當場回答，回答當下就結束；後端的樣子是 {@code done} 帶 {@code answer}、部門是櫃檯。 */
         ANSWERED("已回答", TaskSituation.ANSWERED, "frontdesk");
 
         private final String term;
@@ -90,7 +71,6 @@ public record GuestSeed(
             this.dept = dept;
         }
 
-        /** 驗收規格裡這個狀況的說法。 */
         public String term() {
             return term;
         }
@@ -99,7 +79,6 @@ public record GuestSeed(
             return taskSituation;
         }
 
-        /** 住客的需求只會經櫃檯派單進工務，所以這幾種狀況的需求先停在待派單、再派給工務。 */
         public boolean dispatchedToEngineering() {
             return "engineering".equals(dept);
         }

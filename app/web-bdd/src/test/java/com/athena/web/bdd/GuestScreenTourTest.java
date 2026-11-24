@@ -29,17 +29,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
-/**
- * Phase 4-G 的 ui quality gate 用的截圖巡覽：住客頁每一種狀態各拍一張產品畫面與一張雛形畫面，並排比對用。
- *
- * <p>不是驗收測試、沒有斷言；會清空 8080 的業務資料，被 pom 排除在平常的 {@code mvn test} 之外。
- * 每一張圖旁邊另存一份 {@code .json}，是畫面上每個有字、有底色或圓角的元素的計算後樣式，給比對腳本量值用。
- * 產品頁另把畫面上的字掃一次內部值、錯誤碼、飯店內部用語、姓名與日期，命中的寫進 {@code jargon.txt}。
- *
- * <p>真的經後端送出的住客需求每次只有 1 筆（備品送到一半被限流那張），不會碰到後端每間房 10 分鐘 3 筆的限流。
- * 跑法：{@code mvn -q -f app/web-bdd/pom.xml test -Dtest=GuestScreenTourTest -Dsurefire.failIfNoSpecifiedTests=false}；
- * 開發伺服器預設 {@code http://localhost:5199}，截圖目錄用 {@code -Dtour.out=…} 改。
- */
 class GuestScreenTourTest {
 
     private static final String ROOM = "311";
@@ -48,10 +37,8 @@ class GuestScreenTourTest {
     private static final String PROTO = Path.of(System.getProperty("user.dir")).resolve(
             System.getProperty("user.dir").endsWith("web-bdd") ? "../../specs/plans/005-guest-web-main-flow/ui" : "specs/plans/005-guest-web-main-flow/ui")
             .normalize().toUri().toString();
-    private static final String RATE_LIMITED = "{\"code\":\"rate_limited\",\"message\":\"同一房 10 分鐘內最多 3 筆需求，請洽櫃檯協助\"}";
     private static final String STATE_CONFLICT = "{\"code\":\"state_conflict\",\"message\":\"already claimed\"}";
 
-    /** 畫面上每個有字、有底或有圓角的元素：字、位置大小與排版相關的計算後樣式。 */
     private static final String DUMP_JS = """
             () => {
               const out = [];
@@ -118,12 +105,12 @@ class GuestScreenTourTest {
             phaseQuota();
             protoContext.close();
         } finally {
+            channel.resetBackendClock();
             Files.writeString(OUT.resolve("jargon.txt"), jargon.toString(), StandardCharsets.UTF_8);
             Files.writeString(OUT.resolve("skipped.txt"), String.join("\n", skipped), StandardCharsets.UTF_8);
         }
     }
 
-    /** 十個狀態值各一張加櫃檯回覆與長標題、進入層、清單兩段、確認框、三種提示浮層、評分卡、資訊頁、送出成功。 */
     private void phaseAll() throws IOException {
         FrontdeskDefaults defaults = freshStay();
         CreatedStaff amei = defaults.staff("阿美");
@@ -285,7 +272,6 @@ class GuestScreenTourTest {
         }
     }
 
-    /** 全部已結束的首頁、評過分的已完成、只有已結束的清單。 */
     private void phaseEnded() throws IOException {
         FrontdeskDefaults defaults = freshStay();
         UUID towel = seed(Situation.DONE, "毛巾", "amenity", "09:30", defaults.staff("阿美"), null);
@@ -306,7 +292,6 @@ class GuestScreenTourTest {
         }
     }
 
-    /** 沒有需求的首頁與清單、備品補充、設備報修、沒有資訊頁的首頁。 */
     private void phaseNew() throws IOException {
         FrontdeskDefaults defaults = freshStay();
         String token = channel.roomQrToken(ROOM);
@@ -357,25 +342,17 @@ class GuestScreenTourTest {
             protoAlert();
             shotProtoNow("supply-net-red");
 
-            // 第一張真的送到後端、第二張回 429：整個巡覽只有這一張經後端送出，不會碰到每間房 10 分鐘 3 筆的真限流。
+            // 櫃檯剛替這間房代開了兩張：住客的估算看不到它們，第一張送得出去，第二張被後端真的限流擋下。
+            OffsetDateTime deskNow = channel.backendNow();
+            channel.seedDeskTask(ROOM, deskNow.minusMinutes(2));
+            channel.seedDeskTask(ROOM, deskNow.minusMinutes(1));
             go(page, token, "supply");
             inc(page, "毛巾", 1);
             inc(page, "礦泉水", 2);
-            int[] posts = {0};
-            page.route("**/guest/requests", route -> {
-                if (!"POST".equals(route.request().method())) {
-                    route.resume();
-                } else if (posts[0]++ == 0) {
-                    route.resume();
-                } else {
-                    route.fulfill(new Route.FulfillOptions().setStatus(429).setContentType("application/json").setBody(RATE_LIMITED));
-                }
-            });
             submit(page, "送出 2 項");
             page.getByRole(AriaRole.ALERT).waitFor();
             settle(page);
             shotApp(page, "supply-midway-warm");
-            page.unroute("**/guest/requests");
             proto.navigate(PROTO + "supply.html?reset=1&seed=new&fail=midway");
             protoSettle();
             inc(proto, "毛巾", 1);
@@ -429,7 +406,6 @@ class GuestScreenTourTest {
         }
     }
 
-    /** 額度估算擋下：還能送 1 項、一項都不能送。舊需求直接寫進資料庫，不經後端的限流器。 */
     private void phaseQuota() throws IOException {
         freshStay();
         seed(Situation.HOUSEKEEPING_POOL, "毛巾", "amenity", "14:24", null, null);
@@ -497,13 +473,15 @@ class GuestScreenTourTest {
         channel.resetBusinessData();
         FrontdeskDefaults defaults = channel.ensureFrontdeskDefaults();
         channel.ensureGuestDefaults();
+        channel.resetBackendClock();
         OffsetDateTime now = channel.backendNow();
         OffsetDateTime demo = now.withHour(14).withMinute(30).withSecond(0).withNano(0);
         base = demo.isAfter(now.minusMinutes(1)) ? now.minusMinutes(1).withSecond(0).withNano(0) : demo;
+        // 後端的送單名額以後端時鐘數 10 分鐘內的單，跟瀏覽器一起定在 base，seed 的送出時間才落在同一個窗裡。
+        channel.setBackendClock(base);
         return defaults;
     }
 
-    /** 送出時間照雛形寫在 14:30 示範時鐘上；示範時鐘比現在晚時整組往前平移。 */
     private UUID seed(Situation situation, String title, String type, String hhmm, CreatedStaff assignee, String answer) {
         long minutesBefore = (LocalTime.of(14, 30).toSecondOfDay() - LocalTime.parse(hhmm).toSecondOfDay()) / 60;
         OffsetDateTime createdAt = base.minusMinutes(minutesBefore);
@@ -514,11 +492,10 @@ class GuestScreenTourTest {
         return channel.seedGuestRequest(ROOM, new GuestSeed(situation, title, type, createdAt, assignee, acceptedAt, startedAt, answer));
     }
 
-    /** 手機設定照 {@link WebProfile#PHONE}，像素密度降成 2 讓圖小一點；每個分頁一個自己的來源位址，掃碼失敗次數不會累積。 */
     private BrowserContext newContext() {
         BrowserContext context = browser.newContext(WebProfile.PHONE.contextOptions().setDeviceScaleFactor(2));
-        String address = "10." + random.nextInt(256) + "." + random.nextInt(256) + "." + random.nextInt(1, 255);
-        context.setExtraHTTPHeaders(Map.of("X-Forwarded-For", address));
+        // 每個畫面從乾淨的掃碼限流器開始，前一個畫面的掃碼不會把這個畫面擋下；送單名額跟著 freshStay 清掉的業務資料歸零。
+        channel.resetRateLimits();
         if (base != null) {
             context.clock().setFixedTime(base.toInstant().toEpochMilli());
         }
@@ -611,14 +588,12 @@ class GuestScreenTourTest {
         shotProtoNow(state);
     }
 
-    /** 雛形圖接在同名的產品圖後面，用同一個序號，兩張檔名只差結尾。 */
     private void shotProtoNow(String state) throws IOException {
         String prefix = lastPrefix != null && lastPrefix.endsWith("-" + state) ? lastPrefix : String.format("%02d-%s", ++seq, state);
         proto.screenshot(new Page.ScreenshotOptions().setPath(OUT.resolve(prefix + "-proto.png")).setFullPage(true));
         Files.writeString(OUT.resolve(prefix + "-proto.json"), (String) proto.evaluate(DUMP_JS), StandardCharsets.UTF_8);
     }
 
-    /** 產品圖已經拍過、序號不在手邊時，照檔名找回同一個序號。 */
     private void shotProtoNamed(String state) throws IOException {
         try (var files = Files.list(OUT)) {
             lastPrefix = files.map(p -> p.getFileName().toString())

@@ -7,7 +7,6 @@ import com.athena.web.bdd.support.WebWorld;
 import io.cucumber.java.zh_tw.當;
 import java.util.List;
 
-/** 「取消與評分」模組的 When 句型（{@code specs/truth/features/guest-web/取消與評分/dsl.md}）。 */
 public class CancelRateWhenSteps {
 
     private final WebWorld world;
@@ -25,7 +24,6 @@ public class CancelRateWhenSteps {
         this.request = new RequestPage(world);
     }
 
-    /** 點評分卡上名稱「{N} 顆星」的那一顆；等選中的星與字樣跟上，最多 5 秒，等不到也往下走。 */
     @當("住客點第 {int} 顆星")
     public void guestPicksStar(int stars) {
         pickStar(world, frame, request, stars);

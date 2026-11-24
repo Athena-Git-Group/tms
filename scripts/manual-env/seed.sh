@@ -18,8 +18,6 @@ DEMO_DB_HOST="$DB_HOST" DEMO_DB_PORT="$DB_PORT" DEMO_DB_NAME="$DB_NAME" \
 DEMO_DB_USER="$DB_ADMIN_USER" DEMO_DB_PASSWORD="$DB_ADMIN_PASSWORD" \
   bash "$REPO_ROOT/scripts/seed-demo.sh"
 
-# seed-demo.sh 沒有分流規則，住客打「冷氣壞了」就不會被認成工務。
-# 規則直接從開發種子遷移讀出來，不在這裡另抄一份。
 dev_seed="$REPO_ROOT/tms/src/main/resources/db/migration/V2__seed_dev.sql"
 rules="$(sed -nE "s/^[[:space:]]*\(1, 'classification_rules',[[:space:]]*'([^']*)'.*/\1/p" "$dev_seed")"
 [[ -n "$rules" ]] || die "在 ${dev_seed} 找不到 tenant 1 的 classification_rules，分流規則沒補上"

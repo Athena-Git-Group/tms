@@ -3,6 +3,7 @@ package com.athena.web.bdd.steps.shell;
 import com.athena.web.bdd.pages.BoardPage;
 import com.athena.web.bdd.pages.DetailPanel;
 import com.athena.web.bdd.pages.ShellFrame;
+import com.athena.web.bdd.support.JsResult;
 import com.athena.web.bdd.support.SessionInjector;
 import com.athena.web.bdd.support.WebWorld;
 import com.athena.web.bdd.support.WhenStart;
@@ -27,54 +28,33 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 「共用外框」模組的 Then 句型：側欄與工具列的內容、尚未開放的入口點了沒有反應，
- * 以及兩種視窗尺寸與兩種輸入方式下的版面。
- *
- * <p>版面的句子以 Playwright 量到的位置與大小判斷，量的是使用者看得到的元素（欄頭、側欄、工具列），
- * 不比對色碼或 CSS 類別。畫面更新要時間，所以每一句都在 5 秒內反覆檢查，最後一次還不成立才算失敗。
- */
 public class ShellThenSteps {
 
-    /** 畫面斷言最多等這麼久，是共通實作約定的輪詢上限。 */
     private static final double ASSERT_TIMEOUT_MS = 5_000;
 
-    /** 瀏覽器的版面座標有小數，捨入後可能差到 1px，量位置時容許這麼多誤差。 */
     private static final double TOLERANCE_PX = 1;
 
-    /** 外框的最小寬度（`ui/ui-plan.md`）；視窗比它窄時外框停在這個寬度，多出來的靠整頁捲軸。 */
     private static final double SHELL_MIN_WIDTH_PX = 1180;
 
-    /** 側欄的寬度；側欄收起時，看板多出來的寬度就是這麼多。 */
     private static final double SIDEBAR_WIDTH_PX = 300;
 
-    /** 看板第一欄與最後一欄離內容區左右邊界的固定邊距。 */
     private static final double BOARD_SIDE_MARGIN_PX = 16;
 
-    /** 手指要按得準，可以按的東西最矮只能到這個高度。 */
     private static final double MIN_PRESSABLE_HEIGHT_PX = 44;
 
-    /** 只有這兩種角色的側欄上有「設定」。 */
     private static final Set<String> ROLES_WITH_SETTINGS = Set.of("manager", "duty_manager");
 
-    /** 這一版畫出來但點了沒有反應的入口。 */
     private static final List<String> NOT_YET_OPEN_ENTRIES = List.of("通知板", "遺失物", "設定", "代開單");
 
-    /** 班次的說法。側欄副標只寫飯店名稱，出現這些字就代表帶了班次。 */
     private static final Pattern SHIFT_NAME = Pattern.compile("(早|中|晚|夜|大夜)班");
 
     private static final Pattern MORE_STATES = Pattern.compile("^還有 (\\d+) 個狀態$");
 
-    /**
-     * 畫面上算「可以按的東西」的元素：原生的按鈕、連結、輸入框，自己宣告成按鈕、分頁標籤、
-     * 選單項目等角色的元素，以及可以用鍵盤移到的元素。
-     */
     private static final String PRESSABLE_SELECTOR = String.join(", ",
             "button", "a[href]", "input:not([type=hidden])", "select", "textarea", "summary",
             "[role=button]", "[role=link]", "[role=tab]", "[role=menuitem]", "[role=option]",
             "[role=checkbox]", "[role=radio]", "[role=switch]", "[tabindex]:not([tabindex='-1'])");
 
-    /** 頁面裡共用的兩個判斷：元素看不看得到、可以按的東西叫什麼名字。 */
     private static final String PAGE_HELPERS = """
             const shown = el => {
               const r = el.getBoundingClientRect();
@@ -104,10 +84,6 @@ public class ShellThenSteps {
         this.whenStart = whenStart;
     }
 
-    /**
-     * 側欄各項的文字與上下順序都要相符，副標就是登入回應的飯店名稱、後面不帶班次名。
-     * 上下順序用每一項在畫面上的垂直中心比，後一項一定要在前一項的下面。
-     */
     @那麼("側欄由上到下是標題 {string}、副標 {string}、功能 {string}、{string}、{string}、{string} 與帳號卡")
     public void sidebarTopToBottom(String title, String subtitle, String one, String two, String three, String four) {
         String hotelName = loginField("hotelName");
@@ -143,7 +119,6 @@ public class ShellThenSteps {
         });
     }
 
-    /** 側欄那一項右側沒有徽章，連 0 也不顯示；後端此時也真的沒有待派單的單。 */
     @那麼("側欄 {string} 沒有徽章")
     public void sidebarItemHasNoBadge(String feature) {
         Locator item = shell.sidebarItem(feature);
@@ -162,10 +137,6 @@ public class ShellThenSteps {
         }
     }
 
-    /**
-     * 「有」時側欄看得到那一項，「沒有」時側欄整個找不到。
-     * 「設定」另外要與登入回應的角色一致：只有主管與值班主管有。
-     */
     @那麼("^側欄上(有|沒有) \"([^\"]*)\"$")
     public void sidebarHasOrNot(String hasOrNot, String item) {
         boolean expected = "有".equals(hasOrNot);
@@ -191,10 +162,6 @@ public class ShellThenSteps {
         });
     }
 
-    /**
-     * 點過之後那一項底下沒有多出子項目：它沒有標成展開，它和帳號卡之間也沒有任何可以按的東西。
-     * 帳號卡在側欄最下面，展開的子項目一定會出現在這一段。
-     */
     @那麼("側欄的 {string} 底下沒有展開任何項目")
     public void sidebarItemNotExpanded(String item) {
         Locator found = shell.sidebarItem(item);
@@ -224,10 +191,6 @@ public class ShellThenSteps {
         });
     }
 
-    /**
-     * 網址是該頁、工具列的頁標題相符；而且是在同一個外框裡換頁，從 When 開始到現在分頁沒有整頁重新載入過。
-     * 整頁重新載入時側欄與工具列會重畫一次，使用者會看到整個畫面閃一下。
-     */
     @那麼("畫面是 {string}，頁標題是 {string}")
     public void screenIsPageWithTitle(String pageName, String title) {
         waitForPathAndTitle(pageName, title);
@@ -260,10 +223,6 @@ public class ShellThenSteps {
         });
     }
 
-    /**
-     * 網址與頁標題不變；沒有新的分頁、面板、對話框或提示；尚未開放的入口也沒有變成選中、展開或按下的樣子。
-     * 步驟這裡不知道被點的是哪一個入口，所以把這幾個入口都檢查一遍。
-     */
     @那麼("畫面仍是 {string}，沒有開任何頁面、面板或對話框")
     public void stillOnPageWithNothingOpened(String pageName) {
         waitForPathAndTitle(pageName, ShellFrame.titleOf(pageName));
@@ -298,11 +257,6 @@ public class ShellThenSteps {
         }
     }
 
-    /**
-     * 看板本體現在的寬度要比側欄打開時多 300px。
-     * 前面按「收合側欄」的是共用的按鈕句，沒有記下收合前的寬度，所以這裡先量現在的寬度，
-     * 再打開側欄量一次、收回去。收回去是為了讓後面的步驟看到的仍是他自己收起的側欄。
-     */
     @那麼("看板的可用寬度比側欄打開時多出側欄的寬度")
     public void boardGainedSidebarWidth() {
         shell.waitForLayoutSettled();
@@ -319,10 +273,6 @@ public class ShellThenSteps {
         }
     }
 
-    /**
-     * 整份文件不超過視窗、沒有整頁捲軸；這個畫面（面板就是面板本身）四邊都在視窗內；
-     * 頁面沒有縮放；畫面上每一顆可以按的東西至少 44px 高。
-     */
     @那麼("這個畫面完整顯示在視窗內，沒有整頁的捲軸，也不需要縮放")
     public void screenFitsViewport() {
         shell.waitForLayoutSettled();
@@ -344,19 +294,17 @@ public class ShellThenSteps {
             if (!inside(box, 0, 0, viewport.width, viewport.height)) {
                 return "這個畫面有一邊超出視窗：" + describe(box);
             }
-            @SuppressWarnings("unchecked")
-            List<String> tooShort = (List<String>) screen.evaluate("root => {" + PAGE_HELPERS + """
+            List<String> tooShort = JsResult.strings(screen.evaluate("root => {" + PAGE_HELPERS + """
                       return [...root.querySelectorAll(SELECTOR)].filter(shown)
                         .filter(el => el.getBoundingClientRect().height < MIN_HEIGHT - 0.5)
                         .map(el => nameOf(el) + '（高 ' + Math.round(el.getBoundingClientRect().height) + 'px）');
                     }
                     """.replace("SELECTOR", jsString(PRESSABLE_SELECTOR))
-                    .replace("MIN_HEIGHT", String.valueOf(MIN_PRESSABLE_HEIGHT_PX)));
+                    .replace("MIN_HEIGHT", String.valueOf(MIN_PRESSABLE_HEIGHT_PX))));
             return tooShort.isEmpty() ? null : "這些可以按的東西不到 44px 高：" + tooShort;
         });
     }
 
-    /** 看板右緣有那顆按鈕，上面的數字等於現在在看板右邊看不到的欄數。 */
     @那麼("看板右緣有按鈕 {string}")
     public void boardRightEdgeHasButton(String buttonName) {
         Matcher matcher = MORE_STATES.matcher(buttonName.strip());
@@ -383,12 +331,6 @@ public class ShellThenSteps {
                 visible.count() == 0 ? null : "看得到按鈕「" + visible.first().innerText().strip() + "」");
     }
 
-    /**
-     * 看板本體的橫向捲動位置比按之前多一欄的寬度，右緣按鈕的文字相符。
-     * 一欄的寬度是相鄰兩個欄頭左緣的距離，含欄距。
-     * 前面按按鈕的是共用的按鈕句，沒有記下按之前的捲動位置；這一句接在剛打開的看板後面，
-     * 按之前捲動位置在最左邊，所以多一欄就是捲動位置剛好等於一欄的寬度。
-     */
     @那麼("看板往右捲了一欄，看板右緣有按鈕 {string}")
     public void boardScrolledOneColumn(String buttonName) {
         ElementHandle body = board.boardBody();
@@ -405,13 +347,11 @@ public class ShellThenSteps {
         });
     }
 
-    /** 那一欄的欄頭完整落在視窗內，也沒有被看板本體的捲動範圍切掉。 */
     @那麼("看得到 {string} 欄")
     public void columnVisible(String column) {
         eventually("應該看得到「" + column + "」欄", () -> fullyVisibleProblem(column, visibleBoardArea()));
     }
 
-    /** 該數量的欄頭都完整落在視窗內，每一欄的寬度都大於視窗調整前記下的寬度。 */
     @那麼("{int} 個欄都看得到，每一欄都比視窗調整前寬")
     public void allColumnsVisibleAndWider(int count) {
         Map<String, Double> before = layoutBeforeResize.snapshot().columnWidths();
@@ -439,7 +379,6 @@ public class ShellThenSteps {
         });
     }
 
-    /** 第一欄的左緣、最後一欄的右緣，離內容區的左右邊界都剛好是 16px 的邊距。 */
     @那麼("看板貼齊內容區的左右兩側，沒有置中留白")
     public void boardSpansContentArea() {
         eventually("看板應該貼齊內容區的左右兩側", () -> {
@@ -461,10 +400,6 @@ public class ShellThenSteps {
         });
     }
 
-    /**
-     * 視窗比支援的尺寸還小時，使用者要靠整頁捲動才看得到被切掉的區塊，這一句確認那些區塊捲得到。
-     * 捲完不捲回來，因為後面比對排法的句子用文件座標比，捲動位置不影響它。
-     */
     @那麼("畫面出現整頁的捲軸，捲動後看得到其餘的內容")
     public void pageScrollsToRevealRest() {
         Page page = world.page();
@@ -497,17 +432,11 @@ public class ShellThenSteps {
         }
     }
 
-    /**
-     * 側欄、工具列、數量卡與看板沒有換成另一套版面：看得到的區塊相同，兩兩之間左右、上下的先後不變，
-     * 上緣位置與高度和調整前相同。寬度只會跟著視窗縮窄，不比調整前寬，而且外框不窄於最小寬度 1180。
-     * 調整前記的是沒有捲動時的視窗座標，也就是文件座標，所以現在的視窗座標要加上整頁的捲動位置再比。
-     */
     @那麼("側欄、工具列、數量卡與看板的排法與視窗調整前相同")
     public void layoutSameAsBeforeResize() {
         Map<String, BoundingBox> before = layoutBeforeResize.snapshot().blocks();
         Map<String, BoundingBox> now = blocksOnViewport();
-        @SuppressWarnings("unchecked")
-        List<Number> scroll = (List<Number>) world.page().evaluate("() => [scrollX, scrollY]");
+        List<Number> scroll = JsResult.numbers(world.page().evaluate("() => [scrollX, scrollY]"));
         if (!before.keySet().equals(now.keySet())) {
             throw new AssertionError("看得到的區塊變了：調整前是 " + before.keySet() + "，現在是 " + now.keySet());
         }
@@ -558,7 +487,6 @@ public class ShellThenSteps {
         }
     }
 
-    /** 第一塊在第二塊的左邊或右邊、上面或下面；兩個方向都重疊時記成「重疊」。容許 1px。 */
     private static String relativeOrder(BoundingBox first, BoundingBox second) {
         String horizontal = first.x + first.width <= second.x + TOLERANCE_PX ? "左邊"
                 : second.x + second.width <= first.x + TOLERANCE_PX ? "右邊" : "左右重疊";
@@ -567,14 +495,6 @@ public class ShellThenSteps {
         return horizontal + "、" + vertical;
     }
 
-    /**
-     * 只在游標停留時才出現的文字或按鈕，用手指的人永遠看不到；這一句要保證畫面上沒有這種東西。
-     * 先在沒有游標停留時記下整份文件看得到的文字與可以按的東西，再把游標逐一停到這個畫面的每一個元素上，
-     * 和沒有游標時記下的比，多出來的就是只靠游標才看得到的內容。
-     *
-     * <p>每次記之前把有終點的轉場與動畫直接跑完，否則延遲淡入的提示會被當成沒有出現。
-     * 提示可能被放在畫面的最外層、不在面板裡面，所以記的範圍是整份文件，游標停的範圍才是這個畫面。
-     */
     @那麼("這個畫面上每一項內容與每一顆可以按的東西，不用游標移上去就看得到、按得到")
     public void nothingOnlyOnHover() {
         Page page = world.page();
@@ -610,7 +530,6 @@ public class ShellThenSteps {
                     try {
                         element.hover(new ElementHandle.HoverOptions().setForce(true).setTimeout(2_000));
                     } catch (PlaywrightException gone) {
-                        // 畫面重畫時舊元素會被換掉；換上來的新元素也在清單裡，不必再停一次。
                         replaced = true;
                         break;
                     }
@@ -641,7 +560,6 @@ public class ShellThenSteps {
         }
     }
 
-    /** 等到網址是這一頁、工具列的頁標題相符；換頁與停在原頁的兩句都靠它確認畫面停在哪一頁。 */
     private void waitForPathAndTitle(String pageName, String title) {
         String path = ShellFrame.pathOf(pageName);
         Locator heading = shell.toolbar().getByRole(AriaRole.HEADING,
@@ -655,7 +573,6 @@ public class ShellThenSteps {
         });
     }
 
-    /** 那顆按鈕看得到，而且在看板本體的右半邊、右緣沒有超出看板；不是的話回傳原因。 */
     private String buttonAtRightEdge(Locator button, String buttonName) {
         if (button.count() != 1 || !button.isVisible()) {
             return "看不到按鈕「" + buttonName + "」";
@@ -670,7 +587,6 @@ public class ShellThenSteps {
         return null;
     }
 
-    /** 欄頭沒有完整落在看板右側看得到的範圍內的欄數，只露出一部分的也算看不到。 */
     private int columnsHiddenOnTheRight() {
         double right = visibleBoardArea()[2];
         int hidden = 0;
@@ -683,19 +599,14 @@ public class ShellThenSteps {
         return hidden;
     }
 
-    /**
-     * 看板裡看得到的範圍，以左、上、右、下四個視窗座標回傳。
-     * 它是看板本體扣掉捲軸後的內側再和視窗取交集，因為欄頭在這兩者任一個之外都會被切掉。
-     */
     private double[] visibleBoardArea() {
-        @SuppressWarnings("unchecked")
-        List<Number> inner = (List<Number>) board.boardBody().evaluate("""
+        List<Number> inner = JsResult.numbers(board.boardBody().evaluate("""
                 body => {
                   const r = body.getBoundingClientRect();
                   return [r.left + body.clientLeft, r.top + body.clientTop,
                           r.left + body.clientLeft + body.clientWidth, r.top + body.clientTop + body.clientHeight];
                 }
-                """);
+                """));
         ViewportSize viewport = world.page().viewportSize();
         return new double[] {
                 Math.max(0, inner.get(0).doubleValue()),
@@ -704,7 +615,6 @@ public class ShellThenSteps {
                 Math.min(viewport.height, inner.get(3).doubleValue())};
     }
 
-    /** 這一欄的欄頭完整落在看得到的範圍內時回傳 null，否則回傳原因。 */
     private String fullyVisibleProblem(String column, double[] area) {
         Locator header = board.columnHeader(column);
         if (header.count() == 0) {
@@ -715,7 +625,6 @@ public class ShellThenSteps {
                 ? null : "「" + column + "」欄的欄頭沒有完整落在視窗內：" + describe(box);
     }
 
-    /** 側欄、工具列、數量卡、看板現在的視窗座標，名稱與 {@link LayoutBeforeResize} 的相同；看不到的區塊不列。 */
     private Map<String, BoundingBox> blocksOnViewport() {
         Map<String, BoundingBox> blocks = new LinkedHashMap<>();
         putIfVisible(blocks, LayoutBeforeResize.SIDEBAR, shell.sidebar());
@@ -733,9 +642,8 @@ public class ShellThenSteps {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, Number> documentSize() {
-        return (Map<String, Number>) world.page().evaluate("""
+        return JsResult.numberFields(world.page().evaluate("""
                 () => ({
                   scrollWidth: document.documentElement.scrollWidth,
                   scrollHeight: document.documentElement.scrollHeight,
@@ -745,13 +653,11 @@ public class ShellThenSteps {
                   innerHeight: innerHeight,
                   scale: window.visualViewport ? visualViewport.scale : 1,
                 })
-                """);
+                """));
     }
 
-    /** 整份文件裡看得到的文字與可以按的東西的名稱。記之前先把有終點的轉場與動畫跑完。 */
-    @SuppressWarnings("unchecked")
     private List<String> visibleContent(Page page) {
-        return (List<String>) page.evaluate("() => {" + PAGE_HELPERS + """
+        return JsResult.strings(page.evaluate("() => {" + PAGE_HELPERS + """
                   for (const animation of document.getAnimations()) {
                     const end = animation.effect?.getComputedTiming().endTime;
                     if (Number.isFinite(end)) {
@@ -769,10 +675,9 @@ public class ShellThenSteps {
                   }
                   return [...found];
                 }
-                """.replace("SELECTOR", jsString(PRESSABLE_SELECTOR)));
+                """.replace("SELECTOR", jsString(PRESSABLE_SELECTOR))));
     }
 
-    /** 視窗與每一個捲動過的區塊目前捲到哪裡，用來判斷停游標時畫面有沒有被捲動。 */
     private static String scrollPositions(Page page) {
         return (String) page.evaluate("""
                 () => {
@@ -785,12 +690,10 @@ public class ShellThenSteps {
                 """);
     }
 
-    /** 游標停在視窗外時，畫面上沒有任何元素處在游標停留的樣子。 */
     private static void moveMouseAway(Page page) {
         page.mouse().move(-1, -1);
     }
 
-    /** 這個分頁登入回應裡的某個欄位。登入狀態存的是登入回應的 JSON 原樣。 */
     private String loginField(String field) {
         Object value = world.page().evaluate(
                 "([key, field]) => { const raw = sessionStorage.getItem(key); return raw ? JSON.parse(raw)[field] ?? null : null; }",
@@ -801,7 +704,6 @@ public class ShellThenSteps {
         return value.toString();
     }
 
-    /** 在 5 秒內反覆檢查，檢查回傳 null 代表成立；時間到還不成立時以最後一次的原因失敗。 */
     private void eventually(String what, Supplier<String> problem) {
         String[] last = {null};
         try {
