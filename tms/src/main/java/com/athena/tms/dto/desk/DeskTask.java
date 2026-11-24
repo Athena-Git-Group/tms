@@ -19,6 +19,7 @@ public record DeskTask(
         String title,
         boolean guestTyped,
         DeskGuestText guestText,
+        String menuKey,
         UUID assigneeId,
         String assigneeName,
         OffsetDateTime createdAt,

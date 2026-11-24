@@ -45,6 +45,10 @@ public final class Network {
 
     public static final Api DESK_ANSWER = new Api("POST", "/api/v1/desk/tasks/*/answer");
 
+    public static final Api DESK_CREATE_REQUESTS = new Api("POST", "/api/v1/desk/requests");
+
+    public static final Api DESK_ROOMS = new Api("GET", "/api/v1/desk/rooms");
+
     public static final Api DESK_SETTINGS_UPDATE = new Api("PATCH", "/api/v1/desk/settings");
 
     public static final List<Api> DESK_WRITES = List.of(DESK_ASSIGN, DESK_UNDO_ASSIGN, DESK_ANSWER, DESK_SETTINGS_UPDATE);
@@ -100,6 +104,8 @@ public final class Network {
 
     private final Map<Page, Interception> backendCutOff = new HashMap<>();
 
+    private final Map<Key, String> lostResponseKeys = new HashMap<>();
+
     Network(Supplier<Page> currentPage) {
         this.currentPage = currentPage;
     }
@@ -141,6 +147,32 @@ public final class Network {
 
     public void handle(Page page, Api api, Consumer<Route> handler) {
         intercept(page, api, (route, held) -> handler.accept(route));
+    }
+
+    public void deliverThenLoseResponse(Page page, Api api) {
+        Key key = new Key(page, api);
+        lostResponseKeys.remove(key);
+        intercept(page, api, (route, held) -> {
+            if (lostResponseKeys.containsKey(key)) {
+                route.resume();
+                return;
+            }
+            lostResponseKeys.put(key, route.request().headers().getOrDefault("idempotency-key", ""));
+            route.fetch();
+            route.abort("failed");
+        });
+    }
+
+    public void deliverThenLoseResponse(Api api) {
+        deliverThenLoseResponse(currentPage.get(), api);
+    }
+
+    public Optional<String> lostResponseKey(Page page, Api api) {
+        return Optional.ofNullable(lostResponseKeys.get(new Key(page, api)));
+    }
+
+    public Optional<String> lostResponseKey(Api api) {
+        return lostResponseKey(currentPage.get(), api);
     }
 
     public int heldCount(Page page, Api api) {

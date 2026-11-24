@@ -14,9 +14,7 @@ import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,30 +119,22 @@ public class GuestRequestService {
         }
         int effectiveQuantity = quantity != null && quantity > 0 ? quantity : 1;
         String title = effectiveQuantity > 1 ? item.label() + " ×" + effectiveQuantity : item.label();
-        return this.guestCommand(tenantId, actor, item.type(), item.dept(), "pool", title, this.noteJson(Map.of("menu_key", item.key(), "quantity", effectiveQuantity)));
+        return this.guestCommand(tenantId, actor, item.type(), item.dept(), "pool", title, TaskNote.menuItem(item.key(), effectiveQuantity).toJson(this.objectMapper));
     }
 
     private TaskCreateCommand freeTextCommand(long tenantId, CurrentActor actor, String text, String lang) {
         ClassificationRuleEngine.Routing routing = this.ruleEngine.route(this.configReader.classificationRules(tenantId), text);
-        LinkedHashMap<String, Object> noteFields = new LinkedHashMap<String, Object>();
-        noteFields.put("text", text);
-        if (lang != null && !lang.isBlank()) {
-            noteFields.put("lang", lang.trim());
-        }
-        if (routing.ruleId() != null) {
-            noteFields.put("rule_id", routing.ruleId());
-        }
+        TaskNote note = TaskNote.guestText(text)
+                .with("lang", lang != null && !lang.isBlank() ? lang.trim() : null)
+                .with("rule_id", routing.ruleId())
+                .menuKey(routing.menuKey());
         this.textAdvisor.advise(tenantId, text, lang).ifPresent(advice -> {
             log.info("[llm-advice] tenant={} 建議部門={} 翻譯={}（僅記錄，不改歸屬）", new Object[]{tenantId, advice.suggestedDept(), advice.translatedText()});
-            if (advice.translatedText() != null) {
-                noteFields.put("llm_translated", advice.translatedText());
-            }
-            if (advice.suggestedDept() != null) {
-                noteFields.put("llm_suggested_dept", advice.suggestedDept());
-            }
+            note.with("llm_translated", advice.translatedText())
+                    .with("llm_suggested_dept", advice.suggestedDept());
         });
         String title = text.length() <= TITLE_MAX_LENGTH ? text : text.substring(0, TITLE_MAX_LENGTH) + "…";
-        return this.guestCommand(tenantId, actor, routing.type(), routing.dept(), routing.initialState(), title, this.noteJson(noteFields));
+        return this.guestCommand(tenantId, actor, routing.type(), routing.dept(), routing.initialState(), title, note.toJson(this.objectMapper));
     }
 
     private TaskCreateCommand guestCommand(long tenantId, CurrentActor actor, String type, String dept, String initialState, String title, String note) {
@@ -168,9 +158,5 @@ public class GuestRequestService {
             return;
         }
         throw new NotFoundException("需求不存在");
-    }
-
-    private String noteJson(Map<String, Object> fields) {
-        return this.objectMapper.writeValueAsString(fields);
     }
 }

@@ -109,6 +109,7 @@
 						<exclude>**/SmokeTest.java</exclude>
 						<exclude>**/GuestBackendSpikeTest.java</exclude>
 						<exclude>**/GuestScreenTourTest.java</exclude>
+						<exclude>**/spike/**</exclude>
 					</excludes>
 					<!-- Playwright 預設會在第一次啟動時把三種瀏覽器全部下載一遍；本模組只用 Chromium 與 WebKit，
 						改成只靠下面那條安裝指令，跑測試時不自動下載 -->

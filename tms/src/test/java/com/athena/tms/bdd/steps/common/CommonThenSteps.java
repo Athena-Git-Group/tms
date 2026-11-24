@@ -117,6 +117,8 @@ public class CommonThenSteps {
             Map.entry("account_locked", 429),
             Map.entry("idempotency_key_required", 400),
             Map.entry("answer_invalid", 422),
+            Map.entry("validation_failed", 422),
+            Map.entry("not_found", 404),
             Map.entry("task_not_in_triage", 409),
             Map.entry("undo_claimed", 409),
             Map.entry("undo_guest_withdrew", 409),
@@ -316,6 +318,10 @@ public class CommonThenSteps {
     }
 
     private void assertAuthoritativeStateUnchanged() {
+        if (lastOperationGuard.createRequestIsLatest()) {
+            assertCreateRequestLeftNothing();
+            return;
+        }
         LastOperationGuard.Snapshot before = lastOperationGuard.current();
         Map<String, Object> afterRow = dbProbe.taskRow(before.taskId()).orElse(null);
         if (!Objects.equals(before.taskRow(), afterRow)) {
@@ -345,6 +351,18 @@ public class CommonThenSteps {
             throw new AssertionError("操作被拒絕後仍新增了 inspections：操作前 " + before.inspectionCount()
                     + " 筆，操作後 " + afterInspections + " 筆");
         }
+    }
+
+    private void assertCreateRequestLeftNothing() {
+        LastOperationGuard.CreateRequestSnapshot before = lastOperationGuard.currentCreateRequest();
+        LastOperationGuard.CreateRequestSnapshot after = lastOperationGuard.createRequestCounts(before.tenantId());
+        check("被拒絕後 tasks 張數", before.tasks(), after.tasks());
+        check("被拒絕後 task_events 筆數", before.taskEvents(), after.taskEvents());
+        check("被拒絕後 repair_tickets 張數", before.repairTickets(), after.repairTickets());
+        check("被拒絕後 task_counters.last_no", before.lastTaskNo(), after.lastTaskNo());
+        check("被拒絕後 repair_ticket_counters.last_no", before.lastTicketNo(), after.lastTicketNo());
+        check("被拒絕後 outbox 筆數", before.outbox(), after.outbox());
+        check("被拒絕後 outbox 最大 id", before.outboxMaxId(), after.outboxMaxId());
     }
 
     private void withAssigneeReadTasks(

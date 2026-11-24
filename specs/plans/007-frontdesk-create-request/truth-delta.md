@@ -113,6 +113,7 @@
 | ADD | `specs/truth/features/backend/櫃檯看板與派單/代開的單不算住客額度.feature` | 住客額度滿時代開成功；代開三張後住客仍能送第 3 筆；住客自己第 4 筆照舊被擋。 | FR-037、SC-011；決策：代開不算住客額度。 |
 | ADD | `specs/truth/features/backend/櫃檯看板與派單/代開單的房間清單.feature` | 列出全部客房含空房與在住住客（姓名、VIP、入住退房日）；排除公共區域佔位房；已退房／未入住／已取代不算在住；主管與值班主管可讀；房務工務老闆 403。 | 介面 8；FR-005、FR-025 至 FR-027。 |
 | ADD | `specs/truth/features/backend/櫃檯看板與派單/看板卡片的對應品項.feature` | 代開品項單（含工務）帶品項鍵、其他需求沒有；住客勾選帶選單鍵；住客打字命中帶品項的規則帶鍵（派給工務後照樣帶）；沒命中沒有。 | FR-030；research 決策 4；決策：品項鍵＝中文品名。 |
+| MODIFY | `specs/truth/features/backend/櫃檯看板與派單/看板卡片的對應品項.feature` -> Rule「住客在掃碼頁勾選的單，對應品項是那個選單項目」的例子 | 305 的住客勾選毛巾，看板標題是「毛巾」，不帶「×1」；對應品項仍是「毛巾」。 | 與 `guest-web/備品補充/送出鈕與成功頁.feature`「只送一項時標題不帶「×1」」一致，後端住客勾選數量 1 的標題就是品名。 |
 | MODIFY | `specs/truth/features/backend/工務單/dsl.md` -> 模組說明 | 補「櫃檯代開」段：依路徑決定規則（三角色、免照片、`desk`＋`desk_forward`、報修人、標題與說明、修繕分類對照）；`createRepairTicket` 的照片、依部門決定來源與角色放行不變。 | 介面 9；plan 風險 1。 |
 | ADD | `specs/truth/features/backend/工務單/dsl.md` -> `Then: 代開的工務單如下：` | 驗工務單列（報修人、說明、分類、`origin`、無照片）、任務（`pool`、`task_no` NULL、`desk`＋`desk_forward`、只有 `created`）、`readRepairTicket` 與 `listDeptPool`。 | 同上。 |
 | ADD | `specs/truth/features/backend/工務單/櫃檯代開的工務單.feature` | 四個工務品項的分類與標題說明、其他需求給工務是「其他」、不用照片、直接進工務待認領且來源櫃檯、主管（掛工務部門）與值班主管代開來源仍是櫃檯、之後完修與主管驗收照舊結案。 | FR-016 至 FR-018、FR-034、FR-039；決策：工務品項開 W-、description 同標題、三角色可代開。 |

@@ -51,7 +51,7 @@
 
 **Goal**: 本輪沒有新套件，但有三個新的技術做法：業務交易內以 `pg_advisory_xact_lock` 鎖冪等鍵並在同一交易寫 `processed_ops`、測試在資料庫裝暫時觸發器讓交易中途失敗、Playwright `route.fetch()` 之後再中斷模擬回應遺失。先用三個 spike 把 `research.md` 的推測換成實跑結論，最後用 smoke-test 確認兩條測試線都還起得來。不寫 DSL 語意，不寫產品行為。
 
-- [ ] T001 spike：同一把冪等鍵兩個交易同時進來，只做一次、第二個拿到回放
+- [X] T001 spike：同一把冪等鍵兩個交易同時進來，只做一次、第二個拿到回放
   - Read:
     - `specs/truth/techstack.md` -> 技術堆疊總覽 / 資料與媒體處理 / 冪等
     - `research.md` -> 決策 3、「建立功能前要先做的 spike」第 1 點
@@ -60,7 +60,7 @@
   - 結論（鍵的換算方式、`IdempotencyFilter` 提交後再寫時 `ON CONFLICT DO NOTHING` 不會覆寫）記到 `implement-notes.md`。spike 測試留在 `spike/` 套件、不被產品碼引用；Phase 4-B03 綠了之後刪掉。
   - 不做：新端點、改 `IdempotencyFilter` 或任何產品碼。
 
-- [ ] T002 spike：資料庫暫時觸發器讓開單交易中途失敗，整個交易回滾；測試帳號有權限裝拆
+- [X] T002 spike：資料庫暫時觸發器讓開單交易中途失敗，整個交易回滾；測試帳號有權限裝拆
   - Read:
     - `specs/truth/techstack.md` -> 技術堆疊總覽 / 測試與驗證 / 櫃檯 Web 送出失敗的模擬
     - `research.md` -> 決策 8、「建立功能前要先做的 spike」第 2 點
@@ -71,7 +71,7 @@
   - 結論（觸發器寫在哪張表、怎麼只對一個飯店或一個標題生效、清理掛在哪個 hook）記到 `implement-notes.md`。
   - 不做：在產品碼加任何「讓第 N 張失敗」的開關；寫代開單的 stepdef。
 
-- [ ] T003 spike：WebKit 設定下 `route.fetch()` 之後中斷，前端收到網路錯誤、後端已提交
+- [X] T003 spike：WebKit 設定下 `route.fetch()` 之後中斷，前端收到網路錯誤、後端已提交
   - Read:
     - `specs/truth/techstack.md` -> 技術堆疊總覽 / 測試與驗證 / 櫃檯 Web 送出失敗的模擬
     - `research.md` -> 決策 8、「建立功能前要先做的 spike」第 3 點
@@ -80,7 +80,7 @@
   - 結論（兩種瀏覽器各收到什麼錯誤、要不要先 `route.fetch()` 再 `route.abort("failed")`）記到 `implement-notes.md`。
   - 不做：寫代開單畫面或 stepdef；改 `Network` 的既有方法。
 
-- [ ] T004 smoke-test：兩條測試線都還起得來
+- [X] T004 smoke-test：兩條測試線都還起得來
   - Read:
     - `specs/truth/techstack.md` -> 測試與驗證
   - 依序確認並停手：①後端 `test-compile` 通過，T001、T002 兩支 spike 測試綠；②`bash app/web-bdd/run-feature.sh 待派單/待派單清單.feature desktop` 與同一份 `ipad` 各跑一次，結果與 T005 的基準相同（T005 可以先做）；③櫃檯 Web 的 dry-run（「跑測試的方式」第四條）對 `frontdesk-web/代開單` 跑得起來（只會報 undefined，不會編譯失敗）。
@@ -90,7 +90,7 @@
 
 **Goal**: 量好改動前的基準，建好後端兩支新端點、櫃檯 Web 代開單面板、測試共用 helper 與 stepdef 檔的落點，讓 Phase 3 的 subagent 各寫各的檔、不各自發明連線與資料準備方式。語意對齊不放這裡。
 
-- [ ] T005 量改動前的基準
+- [X] T005 量改動前的基準（本次縮小範圍：後端與櫃檯 Web 在調整前已量全套；住客頁只量 `設備報修/`、`備品補充/`；全套回歸留到 Phase 5；結果見 `implement-notes.md`）
   - Read:
     - `specs/truth/techstack.md` -> 測試與驗證
   - 只做：在任何產品碼或測試碼改動之前，跑下面五組，把每一組的失敗清單（feature 檔與行號，或測試類別與方法）與失敗數記到 `implement-notes.md`：
@@ -102,7 +102,7 @@
     分支上已經有程式改動時，改在 HEAD 的乾淨 worktree 量。後面每一題說「全綠」都是指「除了這份基準裡既有的失敗之外全綠」；Phase 5 用同一組指令比對同一份基準。
   - 不做：修任何既有失敗；改任何程式。
 
-- [ ] T006 後端兩支新端點與回應形狀的落點
+- [X] T006 後端兩支新端點與回應形狀的落點
   - Read:
     - `truth-delta.md` -> `/api-plan` 的 `POST /desk/requests`、`GET /desk/rooms`、`DeskMenuKey`、`DeskCreateRequests*`、`DeskRoom`、`DeskTask.menuKey` 各列
     - `specs/truth/contracts/groups/現場作業/櫃檯看板與派單.yaml` -> `deskCreateRequests`、`listDeskRooms`
@@ -111,7 +111,7 @@
   - 只做：在 `dto/desk/` 新增上面幾個 schema 的 record 與 `DeskMenuKey`（12 個中文鍵，依契約順序，帶部門、類型、上限、標題組法、工務品項的修繕分類）；`DeskTask` 多一個可為 null 的 `menuKey`，`DeskTaskMapper` 先一律給 null，既有呼叫點補上；新增 `service/DeskCreateRequestService`（`createRequests`、`listRooms` 先丟 `UnsupportedOperationException`）；`DeskBoardController` 掛 `POST /requests` 與 `GET /rooms` 兩個方法接到它。編譯通過、後端全套結果與 T005 相同（新增欄位為 null 時 JSON 照契約輸出 `menuKey: null`）。
   - 不做：任何開單、檢查、冪等、房間清單的行為；不動 `SecurityConfig`（`/api/v1/desk/**` 已放行三種櫃檯角色）；不動 `RepairService`、`TaskEngine`、`GuestRequestService`。
 
-- [ ] T007 後端測試共用 helper：代開單呼叫、暫時觸發器、代開的情境記憶
+- [X] T007 後端測試共用 helper：代開單呼叫、暫時觸發器、代開的情境記憶
   - Read:
     - `truth-delta.md` -> `/dsl-refine` 後端介面根與 `櫃檯看板與派單/dsl.md` 的代開單列
     - `specs/truth/features/backend/dsl.md` -> 共通實作約定、`"{櫃檯}" 代開 "{房號}" 的以下單：` 的 Data Table 參數
@@ -120,13 +120,13 @@
   - 只做：`DeskApi` 加 `createRequests(staff, roomNo, items, other, idempotencyKey)`（鍵可為 null 表示不帶）與 `listRooms(staff)`，回傳原始回應；新增 `support/DeskCreateFaults.java`：照 T002 結論裝「開某標題就丟例外」的暫時觸發器，場景結束的 hook 一定拆掉；`DeskContext` 記這一次代開用的鍵、請求內容與回應，給「同一把鍵再送一次」與 Then 句讀；`LastOperationGuard` 能對代開單快照 `tasks`、`repair_tickets`、兩個流水號列與 outbox 的張數。
   - 不做：寫任何 stepdef；寫各句的斷言語意。
 
-- [ ] T008 後端代開單 stepdef 檔的落點
+- [X] T008 後端代開單 stepdef 檔的落點
   - Read:
     - `tms/src/test/java/com/athena/tms/bdd/steps/desk/`（既有 `DeskCommonSteps`、`DeskGivenSteps`、`DeskWhenSteps`、`DeskThenSteps` 的建構子注入寫法）
   - 只做：在 `steps/desk/` 新增 `DeskCreateRequestCommonSteps.java`（放介面根三句）、`DeskCreateRequestGivenSteps.java`、`DeskCreateRequestWhenSteps.java`、`DeskCreateRequestThenSteps.java` 四個空類別，注入 T007 的 helper；`mvn -q -o test-compile` 通過。
   - 不做：寫任何 `@假設`／`@當`／`@那麼`；改既有四個 Desk 步驟檔。
 
-- [ ] T009 `BackendChannel` 加代開單相關的資料準備與後端呼叫
+- [X] T009 `BackendChannel` 加代開單相關的資料準備與後端呼叫
   - Read:
     - `truth-delta.md` -> `/dsl-refine` 櫃檯 Web `代開單/dsl.md`、`即時更新/dsl.md` 的代開單列
     - `specs/truth/features/frontdesk-web/代開單/dsl.md` -> Given 句型各列的 `使用 fixture`、`Arrange 來源`
@@ -135,7 +135,7 @@
   - 只做：`deskCreateRequests(actor, roomNo, items, other, idempotencyKey)`、`listDeskRooms(actor)`；「把這間房從房間主檔移除」（有單掛著時照 T002 的清理方式處理外鍵）；「把帳號角色改成房務」；「讓某員工的登入憑證失效」；照 T002 結論裝拆「寫入標題等於某文字的任務時丟例外」的暫時觸發器，並登記到場景結束的清理。每一個方法都要有一行說明它對到哪一句的 `Arrange 來源`。
   - 不做：寫 stepdef；改既有方法的行為（`seedDeskTask` 的去留在 T134 決定）。
 
-- [ ] T010 櫃檯 Web 測試線的網路攔截、page object 與 stepdef 檔的落點
+- [X] T010 櫃檯 Web 測試線的網路攔截、page object 與 stepdef 檔的落點
   - Read:
     - `specs/truth/features/frontdesk-web/dsl.md` -> 共通實作約定（找畫面元素、畫面斷言、單的識別）
     - `ui/ui-plan.md` -> 畫面與流程 1 至 5（區塊名稱、按鈕與欄位的可及性名稱）
@@ -144,7 +144,7 @@
   - 只做：`Network` 加 `DESK_CREATE_REQUESTS`（`POST /api/v1/desk/requests`）與 `DESK_ROOMS`（`GET /api/v1/desk/rooms`）兩個 `Api`，並照 T003 結論加「送到後端、拿到回應後中斷」的攔截方法（記下這次請求的 `Idempotency-Key`）；新增 `pages/CreateRequestPanel.java`（面板、遮罩、房號欄、建議房號、住客卡、空房提示、12 格品項與其加減移除鈕、其他需求框與部門選項、類似單提醒、摘要、送出鈕的定位，一律用角色與看得到的文字）；新增 `steps/createrequest/` 的 `CreateRequestGivenSteps.java`、`CreateRequestWhenSteps.java`、`CreateRequestThenSteps.java` 空類別與 `CreateRequestScenario.java`（這次面板的內容快照、送出用的鍵、後端這次開出的單 id）。`mvn -q -o test-compile` 通過。
   - 不做：寫任何 stepdef；改 `DESK_WRITES` 的內容（T048 決定）。
 
-- [ ] T011 櫃檯 Web 代開單面板的落點
+- [X] T011 櫃檯 Web 代開單面板的落點
   - Read:
     - `ui/ui-plan.md` -> 前端實作切分建議
     - `specs/truth/contracts/components/schemas/櫃檯看板與派單.yaml` -> `DeskMenuKey`、`DeskCreateRequests*`、`DeskRoom`、`DeskTask.menuKey`
@@ -201,182 +201,182 @@
 
 ### 後端：既有句的對齊
 
-- [ ] T012 [P] [BDD-ALIGN] `Then: 這次操作被拒絕，錯誤碼為 "{錯誤碼}"`（`backend/dsl.md`）
+- [X] T012 [P] [BDD-ALIGN] `Then: 這次操作被拒絕，錯誤碼為 "{錯誤碼}"`（`backend/dsl.md`）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/common/CommonThenSteps.java:78-126`
   - 錯誤碼與狀態碼對照補 `validation_failed`→422、`not_found`→404（`idempotency_key_required`→400 已有）；`assertAuthoritativeStateUnchanged` 對代開單也要涵蓋 `tasks`、`repair_tickets`、兩個流水號與 outbox（用 T007 的 `LastOperationGuard`）。
-- [ ] T013 [P] [BDD-ALIGN] `Given: 住客 10 分鐘內已在 "{房號}" 送出 {筆數} 筆需求`（權威位置由 `backend/推播/dsl.md` 搬到 `backend/dsl.md`，語意不變）
+- [X] T013 [P] [BDD-ALIGN] `Given: 住客 10 分鐘內已在 "{房號}" 送出 {筆數} 筆需求`（權威位置由 `backend/推播/dsl.md` 搬到 `backend/dsl.md`，語意不變）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/push/PushGuestSteps.java:52-58`
   - 只確認 stepdef 與新權威列一致、`櫃檯看板與派單/代開的單不算住客額度.feature` 跑得到它。
-- [ ] T014 [P] [BDD-ALIGN] `When: 住客在 "{房號}" 掃碼要 "{品項}"`（權威位置搬到 `backend/dsl.md`，語意不變）
+- [X] T014 [P] [BDD-ALIGN] `When: 住客在 "{房號}" 掃碼要 "{品項}"`（權威位置搬到 `backend/dsl.md`，語意不變）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/push/PushGuestSteps.java:60-69`
-- [ ] T015 [P] [BDD-ALIGN] `Then: 這次請求被擋下，提示住客洽櫃檯`（權威位置搬到 `backend/dsl.md`，語意不變）
+- [X] T015 [P] [BDD-ALIGN] `Then: 這次請求被擋下，提示住客洽櫃檯`（權威位置搬到 `backend/dsl.md`，語意不變）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/push/PushGuestSteps.java:81-96`
-- [ ] T016 [P] [BDD-ALIGN] `Given: 以下房間現在有住客：`（`backend/櫃檯看板與派單/dsl.md`）
+- [X] T016 [P] [BDD-ALIGN] `Given: 以下房間現在有住客：`（`backend/櫃檯看板與派單/dsl.md`）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/desk/DeskGivenSteps.java:131-155`（`monthDay` 的解析）
   - 入住日、退房日除了 `M/D` 之外多收「昨天／今天／明天／後天」（以目前 `Clock` 的營業日換算）；`M/D` 與預設值照舊。
-- [ ] T017 [P] [BDD-ALIGN] `Then: "{員工}" 的串流收到 "{任務}" 的 "{訊號}" 訊號`（`backend/員工事件串流/dsl.md` 用語對照「訊號」加「建立」）
+- [X] T017 [P] [BDD-ALIGN] `Then: "{員工}" 的串流收到 "{任務}" 的 "{訊號}" 訊號`（`backend/員工事件串流/dsl.md` 用語對照「訊號」加「建立」）
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/staffstream/StaffStreamThenSteps.java:24-30`、`:234`
   - `SIGNAL_TYPE` 加「建立」＝`created`；其他訊號不變。
 
 ### 後端：介面根 `specs/truth/features/backend/dsl.md` 的新句
 
-- [ ] T018 [P] [BDD-RED] `Given: 飯店的客房有 {房號清單}`
+- [X] T018 [P] [BDD-RED] `Given: 飯店的客房有 {房號清單}`
   - 房號清單以「、」分隔、一間到多間都要對到同一個 stepdef（用正規表示式，不寫三個 Cucumber Expression）。
-- [ ] T019 [P] [BDD-RED] `Given: "{櫃檯}" 已代開 "{房號}" 的以下單：`
-- [ ] T020 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}" 的以下單：`
+- [X] T019 [P] [BDD-RED] `Given: "{櫃檯}" 已代開 "{房號}" 的以下單：`
+- [X] T020 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}" 的以下單：`
 
 ### 後端：`specs/truth/features/backend/櫃檯看板與派單/dsl.md` 的新句
 
-- [ ] T021 [P] [BDD-RED] `Given: "{櫃檯}" 剛才代開 "{房號}" 的以下單時後端出錯，一張都沒開出：`
-- [ ] T022 [P] [BDD-RED] `Given: 開 "{標題}" 這張單時後端會出錯`
-- [ ] T023 [P] [BDD-RED] `Given: "{房號}" 的住客已勾選服務項目 "{項目}" 送出`
-- [ ] T024 [P] [BDD-RED] `Given: "{房號}" 的住客已打字送出 "{內容}"`
-- [ ] T025 [P] [BDD-RED] `Given: 飯店的分類規則把含 "{關鍵字}" 的文字分給 "{部門}"，對應品項 "{品項}"`
-- [ ] T026 [P] [BDD-RED] `Given: 飯店有代表公共區域的佔位房`
-- [ ] T027 [P] [BDD-RED] `Given: 以下房間的訂房現在不算在住：`
-- [ ] T028 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}"，其他需求是 "{內容}"，給 "{部門}"`
-- [ ] T029 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}"，其他需求是 {字數} 個字，給 "{部門}"`
-- [ ] T030 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}"，沒有選任何品項也沒有其他需求`
-- [ ] T031 [P] [BDD-RED] `When: "{櫃檯}" 不帶防重複鍵代開 "{房號}" 的以下單：`
-- [ ] T032 [P] [BDD-RED] `When: "{櫃檯}" 用同一把鍵、同樣的內容再送一次剛才那次代開`
-- [ ] T033 [P] [BDD-RED] `When: "{櫃檯}" 用同一把鍵同時送出兩次代開 "{房號}" 的以下單：`
+- [X] T021 [P] [BDD-RED] `Given: "{櫃檯}" 剛才代開 "{房號}" 的以下單時後端出錯，一張都沒開出：`
+- [X] T022 [P] [BDD-RED] `Given: 開 "{標題}" 這張單時後端會出錯`
+- [X] T023 [P] [BDD-RED] `Given: "{房號}" 的住客已勾選服務項目 "{項目}" 送出`
+- [X] T024 [P] [BDD-RED] `Given: "{房號}" 的住客已打字送出 "{內容}"`
+- [X] T025 [P] [BDD-RED] `Given: 飯店的分類規則把含 "{關鍵字}" 的文字分給 "{部門}"，對應品項 "{品項}"`
+- [X] T026 [P] [BDD-RED] `Given: 飯店有代表公共區域的佔位房`
+- [X] T027 [P] [BDD-RED] `Given: 以下房間的訂房現在不算在住：`
+- [X] T028 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}"，其他需求是 "{內容}"，給 "{部門}"`
+- [X] T029 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}"，其他需求是 {字數} 個字，給 "{部門}"`
+- [X] T030 [P] [BDD-RED] `When: "{櫃檯}" 代開 "{房號}"，沒有選任何品項也沒有其他需求`
+- [X] T031 [P] [BDD-RED] `When: "{櫃檯}" 不帶防重複鍵代開 "{房號}" 的以下單：`
+- [X] T032 [P] [BDD-RED] `When: "{櫃檯}" 用同一把鍵、同樣的內容再送一次剛才那次代開`
+- [X] T033 [P] [BDD-RED] `When: "{櫃檯}" 用同一把鍵同時送出兩次代開 "{房號}" 的以下單：`
   - 兩個請求要真的同時在後端跑（照 T001 的做法用兩條執行緒、同一把鍵），不是先後送。
-- [ ] T034 [P] [BDD-RED] `When: "{員工}" 讀取代開單的房間清單`
-- [ ] T035 [P] [BDD-RED] `Then: 這次代開依序開出以下單：`
-- [ ] T036 [P] [BDD-RED] `Then: 這次代開開出一張單，標題就是送出的那 {字數} 個字`
-- [ ] T037 [P] [BDD-RED] `Then: 這次代開回應的卡片和櫃檯看板上的那幾張一模一樣，帶著後端現在的時間`
-- [ ] T038 [P] [BDD-RED] `Then: 這次代開的每一張單，歷程都只有一筆 "{櫃檯}" 的建立，沒有派單`
-- [ ] T039 [P] [BDD-RED] `Then: 這次代開失敗，一張單都沒有留下，流水號也沒有被用掉`
-- [ ] T040 [P] [BDD-RED] `Then: 這次拿到的是第一次的結果，標示為回放，"{房號}" 仍只有第一次開出的 {張數} 張單`
-- [ ] T041 [P] [BDD-RED] `Then: 兩次送出拿到同一批單，"{房號}" 只開出 {張數} 張單`
-- [ ] T042 [P] [BDD-RED] `Then: 住客這次送出的需求開單成功`
-- [ ] T043 [P] [BDD-RED] `Then: 本案例原有的單都沒有任何改動`
-- [ ] T044 [P] [BDD-RED] `Then: 代開單的房間清單剛好如下：`
-- [ ] T045 [P] [BDD-RED] `Then: 櫃檯看板上各單的對應品項如下：`
+- [X] T034 [P] [BDD-RED] `When: "{員工}" 讀取代開單的房間清單`
+- [X] T035 [P] [BDD-RED] `Then: 這次代開依序開出以下單：`
+- [X] T036 [P] [BDD-RED] `Then: 這次代開開出一張單，標題就是送出的那 {字數} 個字`
+- [X] T037 [P] [BDD-RED] `Then: 這次代開回應的卡片和櫃檯看板上的那幾張一模一樣，帶著後端現在的時間`
+- [X] T038 [P] [BDD-RED] `Then: 這次代開的每一張單，歷程都只有一筆 "{櫃檯}" 的建立，沒有派單`
+- [X] T039 [P] [BDD-RED] `Then: 這次代開失敗，一張單都沒有留下，流水號也沒有被用掉`
+- [X] T040 [P] [BDD-RED] `Then: 這次拿到的是第一次的結果，標示為回放，"{房號}" 仍只有第一次開出的 {張數} 張單`
+- [X] T041 [P] [BDD-RED] `Then: 兩次送出拿到同一批單，"{房號}" 只開出 {張數} 張單`
+- [X] T042 [P] [BDD-RED] `Then: 住客這次送出的需求開單成功`
+- [X] T043 [P] [BDD-RED] `Then: 本案例原有的單都沒有任何改動`
+- [X] T044 [P] [BDD-RED] `Then: 代開單的房間清單剛好如下：`
+- [X] T045 [P] [BDD-RED] `Then: 櫃檯看板上各單的對應品項如下：`
 
 ### 後端：`specs/truth/features/backend/工務單/dsl.md` 的新句
 
-- [ ] T046 [P] [BDD-RED] `Then: 代開的工務單如下：`
+- [X] T046 [P] [BDD-RED] `Then: 代開的工務單如下：`
   - Read: `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairThenSteps.java`（同檔既有查 `repair_tickets` 與 `readRepairTicket`、`listDeptPool` 的寫法）
 
 ### 櫃檯 Web：介面根 `specs/truth/features/frontdesk-web/dsl.md` 既有句的對齊
 
-- [ ] T047 [P] [BDD-ALIGN] `Given: 全館有以下的單：`
+- [X] T047 [P] [BDD-ALIGN] `Given: 全館有以下的單：`
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/common/CommonGivenSteps.java:69`、`steps/common/TaskTableRows.java:49`（`COLUMNS`）與建單處
   - 加選填欄 `對應品項`：有填就寫進那張單 `tasks.note` 的 `menu_key`（住客勾選單沿用 `{menu_key, quantity}` 形狀，住客打字單與 `rule_id` 並存）；沒填的列行為不變。跑 `bash app/web-bdd/run-feature.sh 單筆詳情/歷程.feature`，失敗只能是 T005 基準裡既有的。
-- [ ] T048 [P] [BDD-ALIGN] `Given: 接下來的送出會因為網路中斷而失敗`
+- [X] T048 [P] [BDD-ALIGN] `Given: 接下來的送出會因為網路中斷而失敗`
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/common/CommonGivenSteps.java:167-174`、`support/Network.java:71`
   - 斷線的請求加上 `Network.DESK_CREATE_REQUESTS`；派單、復原、當場回答照舊。`DESK_WRITES` 是否一起加，看它的其他使用者（不得讓「讀取照常」的既有句被波及）。
-- [ ] T049 [P] [BDD-ALIGN] `Then: 詳情面板「內容」的 "{列名}" 是 "{內容}"`（權威位置由 `單筆詳情/dsl.md` 搬到介面根，語意不變）
+- [X] T049 [P] [BDD-ALIGN] `Then: 詳情面板「內容」的 "{列名}" 是 "{內容}"`（權威位置由 `單筆詳情/dsl.md` 搬到介面根，語意不變）
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/detail/DetailThenSteps.java:232`
-- [ ] T050 [P] [BDD-ALIGN] `Then: 詳情面板的歷程最新一筆是 "{句子}"，操作者是 "{操作者}"`（權威位置搬到介面根，語意不變）
+- [X] T050 [P] [BDD-ALIGN] `Then: 詳情面板的歷程最新一筆是 "{句子}"，操作者是 "{操作者}"`（權威位置搬到介面根，語意不變）
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/detail/DetailThenSteps.java:483`
-- [ ] T051 [P] [BDD-ALIGN] `Given: "{員工}" 已登入櫃檯畫面，介面語言是 "{語言}"，停在 "{頁}"`（權威位置由 `帳號與登入/dsl.md` 搬到介面根，語意不變）
+- [X] T051 [P] [BDD-ALIGN] `Given: "{員工}" 已登入櫃檯畫面，介面語言是 "{語言}"，停在 "{頁}"`（權威位置由 `帳號與登入/dsl.md` 搬到介面根，語意不變）
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/account/AccountGivenSteps.java:221`
-- [ ] T052 [P] [BDD-ALIGN] `Then: 這個畫面上每一項內容與每一顆可以按的東西，不用游標移上去就看得到、按得到`（權威位置由 `共用外框/dsl.md` 搬到介面根，語意不變）
+- [X] T052 [P] [BDD-ALIGN] `Then: 這個畫面上每一項內容與每一顆可以按的東西，不用游標移上去就看得到、按得到`（權威位置由 `共用外框/dsl.md` 搬到介面根，語意不變）
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/shell/ShellThenSteps.java:578`
   - 確認代開單面板打開時，斷言涵蓋的範圍包含面板上的元素。
 
 ### 櫃檯 Web：`specs/truth/features/frontdesk-web/即時更新/dsl.md` 的新句
 
-- [ ] T053 [P] [BDD-RED] `When: "{同事}" 在另一台櫃檯代開 "{房號}" 的以下單：`
+- [X] T053 [P] [BDD-RED] `When: "{同事}" 在另一台櫃檯代開 "{房號}" 的以下單：`
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/realtime/RealtimeWhenSteps.java`（同檔「另一台櫃檯派單」的寫法）
 
 ### 櫃檯 Web：`specs/truth/features/frontdesk-web/代開單/dsl.md` 的新句
 
-- [ ] T054 [P] [BDD-RED] `Given: 飯店的客房與現在的住客如下：`
-- [ ] T055 [P] [BDD-RED] `Given: 飯店沒有 "{房號}" 這間房`
-- [ ] T056 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板`
-- [ ] T057 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板，房號是 "{房號}"`
-- [ ] T058 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板，房號是 "{房號}"，選了以下品項：`
-- [ ] T059 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板，還沒打房號，選了以下品項：`
-- [ ] T060 [P] [BDD-RED] `Given: 代開單面板的其他需求是 "{內容}"，要給 "{部門}"`
-- [ ] T061 [P] [BDD-RED] `Given: "{員工}" 已按 "{按鈕}"`
-- [ ] T062 [P] [BDD-RED] `Given: "{員工}" 已點代開單面板外面的暗色區域`
-- [ ] T063 [P] [BDD-RED] `Given: "{員工}" 剛代開了 "{房號}" 的以下單：`
-- [ ] T064 [P] [BDD-RED] `Given: "{房號}" 這個房號在面板打開之後被從飯店的房間清單移除`
-- [ ] T065 [P] [BDD-RED] `Given: "{員工}" 的帳號在面板打開之後被改成不能代開單的角色`
-- [ ] T066 [P] [BDD-RED] `Given: "{員工}" 的登入在面板打開之後逾時`
-- [ ] T067 [P] [BDD-RED] `Given: 開 "{標題}" 這張單時後端會出錯`
-- [ ] T068 [P] [BDD-RED] `Given: 接下來的代開單送出會被後端判定內容不符合規定`
-- [ ] T069 [P] [BDD-RED] `Given: "{員工}" 剛才按送出時網路中斷，「沒有送出」的提示開著`
-- [ ] T070 [P] [BDD-RED] `Given: "{員工}" 剛才按送出時網路中斷，已按「好」關掉提示，網路已經恢復`
-- [ ] T071 [P] [BDD-RED] `Given: "{員工}" 剛才按送出時沒有收到回應，但這次的單其實已經開好，已按「好」關掉提示`
+- [X] T054 [P] [BDD-RED] `Given: 飯店的客房與現在的住客如下：`
+- [X] T055 [P] [BDD-RED] `Given: 飯店沒有 "{房號}" 這間房`
+- [X] T056 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板`
+- [X] T057 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板，房號是 "{房號}"`
+- [X] T058 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板，房號是 "{房號}"，選了以下品項：`
+- [X] T059 [P] [BDD-RED] `Given: "{員工}" 已打開代開單面板，還沒打房號，選了以下品項：`
+- [X] T060 [P] [BDD-RED] `Given: 代開單面板的其他需求是 "{內容}"，要給 "{部門}"`
+- [X] T061 [P] [BDD-RED] `Given: "{員工}" 已按 "{按鈕}"`
+- [X] T062 [P] [BDD-RED] `Given: "{員工}" 已點代開單面板外面的暗色區域`
+- [X] T063 [P] [BDD-RED] `Given: "{員工}" 剛代開了 "{房號}" 的以下單：`
+- [X] T064 [P] [BDD-RED] `Given: "{房號}" 這個房號在面板打開之後被從飯店的房間清單移除`
+- [X] T065 [P] [BDD-RED] `Given: "{員工}" 的帳號在面板打開之後被改成不能代開單的角色`
+- [X] T066 [P] [BDD-RED] `Given: "{員工}" 的登入在面板打開之後逾時`
+- [X] T067 [P] [BDD-RED] `Given: 開 "{標題}" 這張單時後端會出錯`
+- [X] T068 [P] [BDD-RED] `Given: 接下來的代開單送出會被後端判定內容不符合規定`
+- [X] T069 [P] [BDD-RED] `Given: "{員工}" 剛才按送出時網路中斷，「沒有送出」的提示開著`
+- [X] T070 [P] [BDD-RED] `Given: "{員工}" 剛才按送出時網路中斷，已按「好」關掉提示，網路已經恢復`
+- [X] T071 [P] [BDD-RED] `Given: "{員工}" 剛才按送出時沒有收到回應，但這次的單其實已經開好，已按「好」關掉提示`
   - 照 T003 的結論用 T010 的「送到後端、拿到回應後中斷」攔截。
-- [ ] T072 [P] [BDD-RED] `When: "{員工}" 在房號欄依序打 "{字元}"`
-- [ ] T073 [P] [BDD-RED] `When: "{員工}" 在房號欄輸入 "{房號}"`
-- [ ] T074 [P] [BDD-RED] `When: "{員工}" 刪掉房號欄的最後一碼`
-- [ ] T075 [P] [BDD-RED] `When: "{員工}" 點建議房號 "{房號}"`
-- [ ] T076 [P] [BDD-RED] `When: "{員工}" 依序點以下品項：`
-- [ ] T077 [P] [BDD-RED] `When: "{員工}" 按品項 "{品項}" 底下的 "{鈕}" {次數} 次`
-- [ ] T078 [P] [BDD-RED] `When: "{員工}" 在其他需求打 "{內容}"`
-- [ ] T079 [P] [BDD-RED] `When: "{員工}" 在其他需求只打了幾個空白`
-- [ ] T080 [P] [BDD-RED] `When: "{員工}" 在其他需求連續打 {字數} 個字，再貼上 {貼上字數} 個字`
-- [ ] T081 [P] [BDD-RED] `When: "{員工}" 清空其他需求`
-- [ ] T082 [P] [BDD-RED] `When: "{員工}" 把其他需求改給 "{部門}"`
-- [ ] T083 [P] [BDD-RED] `When: "{員工}" 按代開單面板的送出鈕`
-- [ ] T084 [P] [BDD-RED] `When: "{員工}" 點代開單面板外面的暗色區域`
-- [ ] T085 [P] [BDD-RED] `When: "{員工}" 按 "{按鈕}"，在還沒有結果之前又連按 {次數} 次`
-- [ ] T086 [P] [BDD-RED] `Then: 畫面中間打開代開單面板，面板外面是暗色遮罩`
-- [ ] T087 [P] [BDD-RED] `Then: 代開單面板左上的關閉鈕名稱是 "{名稱}"`
-- [ ] T088 [P] [BDD-RED] `Then: 代開單面板由上到下是房號欄、建議房號、"{品項區}"、"{其他需求區}"，送出鈕固定在底部`
-- [ ] T089 [P] [BDD-RED] `Then: 房號欄是空的，提示字是 "{提示字}"`
-- [ ] T090 [P] [BDD-RED] `Then: 房號欄是空的`
-- [ ] T091 [P] [BDD-RED] `Then: 房號欄是 "{房號}"`
-- [ ] T092 [P] [BDD-RED] `Then: 常用品項依序如下，每一格都沒有徽章：`
-- [ ] T093 [P] [BDD-RED] `Then: 12 個品項都是 0`
-- [ ] T094 [P] [BDD-RED] `Then: 其他需求是空的`
-- [ ] T095 [P] [BDD-RED] `Then: 代開單面板沒有送出摘要`
-- [ ] T096 [P] [BDD-RED] `Then: 送出摘要是 "{摘要}"`
-- [ ] T097 [P] [BDD-RED] `Then: 各品項的樣子如下：`
-- [ ] T098 [P] [BDD-RED] `Then: 各項的無障礙名稱如下：`
-- [ ] T099 [P] [BDD-RED] `Then: 建議房號依序如下：`
-- [ ] T100 [P] [BDD-RED] `Then: 建議房號有 {筆數} 筆，依房號由小到大，全部是有住客的房`
-- [ ] T101 [P] [BDD-RED] `Then: 沒有建議房號`
-- [ ] T102 [P] [BDD-RED] `Then: 住客卡是頭像 "{頭像}"、"{姓名}"、"{第二行}"，{有沒有} VIP 標`
+- [X] T072 [P] [BDD-RED] `When: "{員工}" 在房號欄依序打 "{字元}"`
+- [X] T073 [P] [BDD-RED] `When: "{員工}" 在房號欄輸入 "{房號}"`
+- [X] T074 [P] [BDD-RED] `When: "{員工}" 刪掉房號欄的最後一碼`
+- [X] T075 [P] [BDD-RED] `When: "{員工}" 點建議房號 "{房號}"`
+- [X] T076 [P] [BDD-RED] `When: "{員工}" 依序點以下品項：`
+- [X] T077 [P] [BDD-RED] `When: "{員工}" 按品項 "{品項}" 底下的 "{鈕}" {次數} 次`
+- [X] T078 [P] [BDD-RED] `When: "{員工}" 在其他需求打 "{內容}"`
+- [X] T079 [P] [BDD-RED] `When: "{員工}" 在其他需求只打了幾個空白`
+- [X] T080 [P] [BDD-RED] `When: "{員工}" 在其他需求連續打 {字數} 個字，再貼上 {貼上字數} 個字`
+- [X] T081 [P] [BDD-RED] `When: "{員工}" 清空其他需求`
+- [X] T082 [P] [BDD-RED] `When: "{員工}" 把其他需求改給 "{部門}"`
+- [X] T083 [P] [BDD-RED] `When: "{員工}" 按代開單面板的送出鈕`
+- [X] T084 [P] [BDD-RED] `When: "{員工}" 點代開單面板外面的暗色區域`
+- [X] T085 [P] [BDD-RED] `When: "{員工}" 按 "{按鈕}"，在還沒有結果之前又連按 {次數} 次`
+- [X] T086 [P] [BDD-RED] `Then: 畫面中間打開代開單面板，面板外面是暗色遮罩`
+- [X] T087 [P] [BDD-RED] `Then: 代開單面板左上的關閉鈕名稱是 "{名稱}"`
+- [X] T088 [P] [BDD-RED] `Then: 代開單面板由上到下是房號欄、建議房號、"{品項區}"、"{其他需求區}"，送出鈕固定在底部`
+- [X] T089 [P] [BDD-RED] `Then: 房號欄是空的，提示字是 "{提示字}"`
+- [X] T090 [P] [BDD-RED] `Then: 房號欄是空的`
+- [X] T091 [P] [BDD-RED] `Then: 房號欄是 "{房號}"`
+- [X] T092 [P] [BDD-RED] `Then: 常用品項依序如下，每一格都沒有徽章：`
+- [X] T093 [P] [BDD-RED] `Then: 12 個品項都是 0`
+- [X] T094 [P] [BDD-RED] `Then: 其他需求是空的`
+- [X] T095 [P] [BDD-RED] `Then: 代開單面板沒有送出摘要`
+- [X] T096 [P] [BDD-RED] `Then: 送出摘要是 "{摘要}"`
+- [X] T097 [P] [BDD-RED] `Then: 各品項的樣子如下：`
+- [X] T098 [P] [BDD-RED] `Then: 各項的無障礙名稱如下：`
+- [X] T099 [P] [BDD-RED] `Then: 建議房號依序如下：`
+- [X] T100 [P] [BDD-RED] `Then: 建議房號有 {筆數} 筆，依房號由小到大，全部是有住客的房`
+- [X] T101 [P] [BDD-RED] `Then: 沒有建議房號`
+- [X] T102 [P] [BDD-RED] `Then: 住客卡是頭像 "{頭像}"、"{姓名}"、"{第二行}"，{有沒有} VIP 標`
   - 「有」「沒有」兩種寫法對到同一個 stepdef（正規表示式），不寫兩個。
-- [ ] T103 [P] [BDD-RED] `Then: 沒有住客卡`
-- [ ] T104 [P] [BDD-RED] `Then: 空房提示是 "{文字}"`
-- [ ] T105 [P] [BDD-RED] `Then: 沒有空房提示`
-- [ ] T106 [P] [BDD-RED] `Then: 代開單面板上沒有任何紅字的錯誤提示`
-- [ ] T107 [P] [BDD-RED] `Then: 畫面上只有工具列有「代開單」鈕`
-- [ ] T108 [P] [BDD-RED] `Then: 工具列上的「代開單」是唯一的實心主按鈕`
-- [ ] T109 [P] [BDD-RED] `Then: 代開單面板是關的`
-- [ ] T110 [P] [BDD-RED] `Then: 其他需求框的標籤是 "{標籤}"，提示字是 "{提示字}"`
-- [ ] T111 [P] [BDD-RED] `Then: 其他需求框底下沒有「這段要給」`
-- [ ] T112 [P] [BDD-RED] `Then: 其他需求框底下是「這段要給」與「房務」「工務」，選中的是 "{部門}"`
-- [ ] T113 [P] [BDD-RED] `Then: 這組部門選項的無障礙名稱是 "{名稱}"`
-- [ ] T114 [P] [BDD-RED] `Then: 其他需求框裡只有前 {字數} 個字`
-- [ ] T115 [P] [BDD-RED] `Then: 其他需求沒有字數計數`
-- [ ] T116 [P] [BDD-RED] `Then: 類似單提醒如下：`
-- [ ] T117 [P] [BDD-RED] `Then: 類似單提醒有以下各行：`
-- [ ] T118 [P] [BDD-RED] `Then: 類似單提醒有一行以 "{開頭}" 開頭`
-- [ ] T119 [P] [BDD-RED] `Then: 沒有類似單提醒`
-- [ ] T120 [P] [BDD-RED] `Then: 代開單面板的介面文字都是 "{語言}"`
-- [ ] T121 [P] [BDD-RED] `Then: 代開單面板上的內容與按送出之前一樣`
-- [ ] T122 [P] [BDD-RED] `Then: 畫面換到總覽看板，數量卡篩選與搜尋房號是空的，沒有開著任何詳情面板`
-- [ ] T123 [P] [BDD-RED] `Then: "{欄}" 欄多了以下這次開出的卡片，外框高亮 {秒數} 秒後恢復：`
-- [ ] T124 [P] [BDD-RED] `Then: 這次開出的卡片如下：`
-- [ ] T125 [P] [BDD-RED] `Then: 畫面上沒有任何浮條，也沒有「復原」可以按`
-- [ ] T126 [P] [BDD-RED] `Then: 後端這次開出的單如下：`
-- [ ] T127 [P] [BDD-RED] `Then: 後端這次一張單都沒有開出`
-- [ ] T128 [P] [BDD-RED] `Then: 後端 "{房號}" 只有這次開出的 {張數} 張單，沒有重複`
-- [ ] T129 [P] [BDD-RED] `Then: 後端 "{房號}" 現在有 {張數} 張 "{品項}" 的單`
-- [ ] T130 [P] [BDD-RED] `Then: 送出還沒有結果之前，送出鈕不能按，最後只送出一次`
-- [ ] T131 [P] [BDD-RED] `Then: 畫面回到登入頁，沒有跳任何提示`
-- [ ] T132 [P] [BDD-RED] `Then: 代開單面板完整顯示在視窗內，內容在面板裡捲動，送出鈕一直看得到`
-- [ ] T133 [P] [BDD-RED] `Then: 代開單面板上的品項格子、加減鈕、移除鈕、建議房號、部門選項與送出鈕都至少 44 × 44`
+- [X] T103 [P] [BDD-RED] `Then: 沒有住客卡`
+- [X] T104 [P] [BDD-RED] `Then: 空房提示是 "{文字}"`
+- [X] T105 [P] [BDD-RED] `Then: 沒有空房提示`
+- [X] T106 [P] [BDD-RED] `Then: 代開單面板上沒有任何紅字的錯誤提示`
+- [X] T107 [P] [BDD-RED] `Then: 畫面上只有工具列有「代開單」鈕`
+- [X] T108 [P] [BDD-RED] `Then: 工具列上的「代開單」是唯一的實心主按鈕`
+- [X] T109 [P] [BDD-RED] `Then: 代開單面板是關的`
+- [X] T110 [P] [BDD-RED] `Then: 其他需求框的標籤是 "{標籤}"，提示字是 "{提示字}"`
+- [X] T111 [P] [BDD-RED] `Then: 其他需求框底下沒有「這段要給」`
+- [X] T112 [P] [BDD-RED] `Then: 其他需求框底下是「這段要給」與「房務」「工務」，選中的是 "{部門}"`
+- [X] T113 [P] [BDD-RED] `Then: 這組部門選項的無障礙名稱是 "{名稱}"`
+- [X] T114 [P] [BDD-RED] `Then: 其他需求框裡只有前 {字數} 個字`
+- [X] T115 [P] [BDD-RED] `Then: 其他需求沒有字數計數`
+- [X] T116 [P] [BDD-RED] `Then: 類似單提醒如下：`
+- [X] T117 [P] [BDD-RED] `Then: 類似單提醒有以下各行：`
+- [X] T118 [P] [BDD-RED] `Then: 類似單提醒有一行以 "{開頭}" 開頭`
+- [X] T119 [P] [BDD-RED] `Then: 沒有類似單提醒`
+- [X] T120 [P] [BDD-RED] `Then: 代開單面板的介面文字都是 "{語言}"`
+- [X] T121 [P] [BDD-RED] `Then: 代開單面板上的內容與按送出之前一樣`
+- [X] T122 [P] [BDD-RED] `Then: 畫面換到總覽看板，數量卡篩選與搜尋房號是空的，沒有開著任何詳情面板`
+- [X] T123 [P] [BDD-RED] `Then: "{欄}" 欄多了以下這次開出的卡片，外框高亮 {秒數} 秒後恢復：`
+- [X] T124 [P] [BDD-RED] `Then: 這次開出的卡片如下：`
+- [X] T125 [P] [BDD-RED] `Then: 畫面上沒有任何浮條，也沒有「復原」可以按`
+- [X] T126 [P] [BDD-RED] `Then: 後端這次開出的單如下：`
+- [X] T127 [P] [BDD-RED] `Then: 後端這次一張單都沒有開出`
+- [X] T128 [P] [BDD-RED] `Then: 後端 "{房號}" 只有這次開出的 {張數} 張單，沒有重複`
+- [X] T129 [P] [BDD-RED] `Then: 後端 "{房號}" 現在有 {張數} 張 "{品項}" 的單`
+- [X] T130 [P] [BDD-RED] `Then: 送出還沒有結果之前，送出鈕不能按，最後只送出一次`
+- [X] T131 [P] [BDD-RED] `Then: 畫面回到登入頁，沒有跳任何提示`
+- [X] T132 [P] [BDD-RED] `Then: 代開單面板完整顯示在視窗內，內容在面板裡捲動，送出鈕一直看得到`
+- [X] T133 [P] [BDD-RED] `Then: 代開單面板上的品項格子、加減鈕、移除鈕、建議房號、部門選項與送出鈕都至少 44 × 44`
 
 ### 住客頁：介面根 `specs/truth/features/guest-web/dsl.md`
 
-- [ ] T134 [P] [BDD-REMOVE] `Given: 櫃檯在 "{時刻}" 替 "{房號}" 房代開了一張單`
+- [X] T134 [P] [BDD-REMOVE] `Given: 櫃檯在 "{時刻}" 替 "{房號}" 房代開了一張單`
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/guest/common/GuestCommonGivenSteps.java:208-215`、`app/bdd-support/src/main/java/com/athena/bddsupport/BackendChannel.java:2617`（`seedDeskTask`）
   - 刪掉這個 stepdef 與它的 Javadoc；`grep -rn "seedDeskTask" app tms` 確認沒有其他使用者後一併刪掉 `BackendChannel.seedDeskTask`。不得留下「櫃檯代開的單算住客額度」的任何測試或 helper。
-- [ ] T135 [P] [BDD-RED] `Given: "{房號}" 房的另一支手機在 "{時刻}" 送出了一張單`
+- [X] T135 [P] [BDD-RED] `Given: "{房號}" 房的另一支手機在 "{時刻}" 送出了一張單`
   - Read: `app/web-bdd/src/test/java/com/athena/web/bdd/steps/guest/cancelrate/CancelRateGivenSteps.java:79-85`（先 `holdLiveSignals` 再以另一個住客工作階段在後端操作的寫法）、`BackendChannel.guestScan`、`guestSubmitMenuItem`（:2370）
   - 依 dsl 列：先扣住這個分頁的串流訊號，再以住客身分、同一枚代碼取得另一個工作階段，在後端送出備品補充「吹風機 ×1」（來源住客、綁同一筆訂房、進房務待認領），建立時間是今日該時刻；不經這支手機的頁面、不重新整理。跑 `bash app/web-bdd/run-feature.sh guest-web/設備報修/報修的限流.feature phone` 與 `guest-web/備品補充/後端在送到一半拒絕.feature`，失敗只能是產品行為（預期這兩份直接綠，見 Phase 4-G01、4-G02）。
 
-- [ ] T136 subagent review (phase quality gate)
+- [X] T136 subagent review (phase quality gate)
   - 後端以 dry-run 跑 `backend/櫃檯看板與派單`、`backend/工務單/櫃檯代開的工務單.feature`、`backend/員工事件串流/收得到哪些單的訊號.feature`、`backend/推播/員工推播事件.feature`；網頁以 dry-run 跑 `frontdesk-web/代開單`、`frontdesk-web/即時更新/現場變化即時跟上.feature`、`frontdesk-web/共用外框/尚未開放的入口.feature`、`guest-web/設備報修/報修的限流.feature`、`guest-web/備品補充/後端在送到一半拒絕.feature`：undefined step 為 0、ambiguous 為 0；每個 stepdef 的斷言對得上權威列 `必查` 的全部項目（不只看回應或畫面），Given 的資料落地對得上 `權威狀態落地`；`seedDeskTask` 與舊句已不存在。
 
 ## Phase 4-B01: ADD Feature File - backend/櫃檯看板與派單/櫃檯代開單.feature
@@ -403,8 +403,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/櫃檯看板與派單/櫃檯代開單.feature`
 
-- [ ] T137 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T138 [BDD-REFACTOR] 在綠燈下把「品項鍵 → 部門、類型、上限、標題、修繕分類」收成 `DeskMenuKey` 一處，服務方法裡不再有品項名稱的字面值
+- [X] T137 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T138 [BDD-REFACTOR] 在綠燈下把「品項鍵 → 部門、類型、上限、標題、修繕分類」收成 `DeskMenuKey` 一處，服務方法裡不再有品項名稱的字面值
 
 ## Phase 4-B02: ADD Feature File - backend/櫃檯看板與派單/代開單的檢查與拒絕.feature
 
@@ -428,8 +428,8 @@
 - `specs/truth/features/backend/櫃檯看板與派單/代開單的檢查與拒絕.feature`
 - `specs/truth/features/backend/櫃檯看板與派單/櫃檯代開單.feature`
 
-- [ ] T139 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T140 [BDD-REFACTOR] 在綠燈下把檢查整理成一個回傳全部 `details` 的驗證步驟，與開單步驟分開
+- [X] T139 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T140 [BDD-REFACTOR] 在綠燈下把檢查整理成一個回傳全部 `details` 的驗證步驟，與開單步驟分開
 
 ## Phase 4-B03: ADD Feature File - backend/櫃檯看板與派單/代開單全有全無與重送.feature
 
@@ -454,8 +454,8 @@
 - `specs/truth/features/backend/櫃檯看板與派單/代開單全有全無與重送.feature`
 - `specs/truth/features/backend/櫃檯看板與派單/`（整個模組，確認派單、復原、當場回答的冪等沒被改到）
 
-- [ ] T141 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T142 [BDD-REFACTOR] 在綠燈下把「交易內鎖鍵、查、記」收成一個只給代開單用的小元件，服務方法只呼叫它一次
+- [X] T141 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T142 [BDD-REFACTOR] 在綠燈下把「交易內鎖鍵、查、記」收成一個只給代開單用的小元件，服務方法只呼叫它一次
 
 ## Phase 4-B04: ADD Feature File - backend/櫃檯看板與派單/代開的單不算住客額度.feature
 
@@ -477,8 +477,8 @@
 - `specs/truth/features/backend/櫃檯看板與派單/代開的單不算住客額度.feature`
 - `specs/truth/features/backend/推播/員工推播事件.feature`（三個句型搬了權威位置，住客第 4 筆被擋的 Rule 必須照舊）
 
-- [ ] T143 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T144 [BDD-REFACTOR] 在綠燈下確認代開服務與住客限流之間沒有任何呼叫或共用計數，額度的說明只留在 `GuestRequestService` 一處
+- [X] T143 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T144 [BDD-REFACTOR] 在綠燈下確認代開服務與住客限流之間沒有任何呼叫或共用計數，額度的說明只留在 `GuestRequestService` 一處
 
 ## Phase 4-B05: ADD Feature File - backend/櫃檯看板與派單/代開單的房間清單.feature
 
@@ -501,8 +501,8 @@
 - `specs/truth/features/backend/櫃檯看板與派單/代開單的房間清單.feature`
 - `specs/truth/features/backend/櫃檯看板與派單/櫃檯看板讀取.feature`（共用在住認定）
 
-- [ ] T145 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T146 [BDD-REFACTOR] 在綠燈下把在住認定收成房間清單與看板卡片共用的一處
+- [X] T145 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T146 [BDD-REFACTOR] 在綠燈下把在住認定收成房間清單與看板卡片共用的一處
 
 ## Phase 4-B06: ADD Feature File - backend/櫃檯看板與派單/看板卡片的對應品項.feature
 
@@ -528,8 +528,8 @@
 - `specs/truth/features/backend/櫃檯看板與派單/`（整個模組）
 - `specs/truth/features/backend/員工事件串流/`（卡片多一欄，訊號卡片與看板一致的斷言要照舊綠）
 
-- [ ] T147 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T148 [BDD-REFACTOR] 在綠燈下把住客勾選、住客打字、櫃檯代開三處寫 `menu_key` 的地方收成同一個 note 組法
+- [X] T147 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T148 [BDD-REFACTOR] 在綠燈下把住客勾選、住客打字、櫃檯代開三處寫 `menu_key` 的地方收成同一個 note 組法
 
 ## Phase 4-B07: ADD Feature File - backend/工務單/櫃檯代開的工務單.feature
 
@@ -556,8 +556,8 @@
 - `specs/truth/features/backend/工務單/`（整個模組；`開立工務單與急件.feature`、`照片完整性與冪等送出.feature`、`櫃檯轉來的工務單.feature` 是 NOOP，必須照舊綠）
 - `specs/truth/features/backend/待認領/`（工務待認領的來源標示）
 
-- [ ] T149 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T150 [BDD-REFACTOR] 在綠燈下確認開工務單的三條路徑（工務單端點、櫃檯轉單、櫃檯代開）共用取號、急件判定與推播，各自的規則只在自己的呼叫端決定；`INSERT INTO repair_tickets` 在 `tms/src/main` 仍只有 `RepairTicketOpener` 一處
+- [X] T149 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T150 [BDD-REFACTOR] 在綠燈下確認開工務單的三條路徑（工務單端點、櫃檯轉單、櫃檯代開）共用取號、急件判定與推播，各自的規則只在自己的呼叫端決定；`INSERT INTO repair_tickets` 在 `tms/src/main` 仍只有 `RepairTicketOpener` 一處
 
 ## Phase 4-B08: MODIFY Feature File - backend/員工事件串流/收得到哪些單的訊號.feature
 
@@ -576,8 +576,8 @@
 **Test Scope**:
 - `specs/truth/features/backend/員工事件串流/收得到哪些單的訊號.feature`
 
-- [ ] T151 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T152 [BDD-REFACTOR] 在綠燈下確認代開的每一張單都只寫一筆 `created` 與一則 task outbox，沒有因為同一次送出而合併或重複
+- [X] T151 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T152 [BDD-REFACTOR] 在綠燈下確認代開的每一張單都只寫一筆 `created` 與一則 task outbox，沒有因為同一次送出而合併或重複
 
 ## Phase 4-W01: MODIFY Feature File - frontdesk-web/共用外框/尚未開放的入口.feature
 
@@ -598,8 +598,8 @@
 - `specs/truth/features/frontdesk-web/共用外框/尚未開放的入口.feature`
 - `specs/truth/features/frontdesk-web/共用外框/側欄與工具列.feature`（NOOP，必須照舊綠）
 
-- [ ] T153 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T154 [BDD-REFACTOR] 在綠燈下確認 `unopened-entries.ts` 不再有任何代開單的鍵或文字
+- [X] T153 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T154 [BDD-REFACTOR] 在綠燈下確認 `unopened-entries.ts` 不再有任何代開單的鍵或文字
 
 ## Phase 4-W02: ADD Feature File - frontdesk-web/代開單/入口與空白面板.feature
 
@@ -624,8 +624,8 @@
 **Test Scope**:
 - `specs/truth/features/frontdesk-web/代開單/入口與空白面板.feature`
 
-- [ ] T155 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T156 [BDD-REFACTOR] 在綠燈下把預填房號的取法（從 `detailTaskId` 對到房號）收在 `desk-panels` 一處
+- [X] T155 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T156 [BDD-REFACTOR] 在綠燈下把預填房號的取法（從 `detailTaskId` 對到房號）收在 `desk-panels` 一處
 
 ## Phase 4-W03: ADD Feature File - frontdesk-web/代開單/關閉不確認也不保留.feature
 
@@ -645,8 +645,8 @@
 **Test Scope**:
 - `specs/truth/features/frontdesk-web/代開單/關閉不確認也不保留.feature`
 
-- [ ] T157 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T158 [BDD-REFACTOR] 在綠燈下確認面板卸載就清空狀態，沒有任何殘留在 store 或模組層變數
+- [X] T157 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T158 [BDD-REFACTOR] 在綠燈下確認面板卸載就清空狀態，沒有任何殘留在 store 或模組層變數
 
 ## Phase 4-W04: ADD Feature File - frontdesk-web/代開單/房號欄與住客卡.feature
 
@@ -671,8 +671,8 @@
 - `specs/truth/features/frontdesk-web/代開單/房號欄與住客卡.feature`
 - `cd app/web && npx vitest run src/features/create-request`
 
-- [ ] T159 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T160 [BDD-REFACTOR] 在綠燈下整理房號區的純函式與元件邊界，元件裡不留判斷邏輯
+- [X] T159 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T160 [BDD-REFACTOR] 在綠燈下整理房號區的純函式與元件邊界，元件裡不留判斷邏輯
 
 ## Phase 4-W05: ADD Feature File - frontdesk-web/代開單/常用品項與送出鈕.feature
 
@@ -696,8 +696,8 @@
 - `specs/truth/features/frontdesk-web/代開單/常用品項與送出鈕.feature`
 - `cd app/web && npx vitest run src/features/create-request`
 
-- [ ] T161 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T162 [BDD-REFACTOR] 在綠燈下把 12 品項的前端定義收成一份常數，格子、摘要、上限都讀它
+- [X] T161 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T162 [BDD-REFACTOR] 在綠燈下把 12 品項的前端定義收成一份常數，格子、摘要、上限都讀它
 
 ## Phase 4-W06: ADD Feature File - frontdesk-web/代開單/其他需求.feature
 
@@ -721,8 +721,8 @@
 - `specs/truth/features/frontdesk-web/代開單/其他需求.feature`
 - `cd app/web && npx vitest run src/features/create-request`
 
-- [ ] T163 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T164 [BDD-REFACTOR] 在綠燈下確認摘要與送出請求對其他需求的「有字才算」用同一個判斷
+- [X] T163 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T164 [BDD-REFACTOR] 在綠燈下確認摘要與送出請求對其他需求的「有字才算」用同一個判斷
 
 ## Phase 4-W07: ADD Feature File - frontdesk-web/代開單/類似單提醒.feature
 
@@ -746,8 +746,8 @@
 - `specs/truth/features/frontdesk-web/代開單/類似單提醒.feature`
 - `cd app/web && npx vitest run src/features/create-request`
 
-- [ ] T165 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T166 [BDD-REFACTOR] 在綠燈下確認提醒元件只依看板快取與面板內容重算，沒有自己的計時器或額外請求
+- [X] T165 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T166 [BDD-REFACTOR] 在綠燈下確認提醒元件只依看板快取與面板內容重算，沒有自己的計時器或額外請求
 
 ## Phase 4-W08: ADD Feature File - frontdesk-web/代開單/送出成功回到看板.feature
 
@@ -772,8 +772,8 @@
 - `specs/truth/features/frontdesk-web/代開單/送出成功回到看板.feature`
 - `specs/truth/features/frontdesk-web/總覽看板/卡片內容.feature`、`單筆詳情/詳情面板內容.feature`、`單筆詳情/歷程.feature`（NOOP，必須照舊綠）
 
-- [ ] T167 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T168 [BDD-REFACTOR] 在綠燈下把高亮的到期清除與 004 卡片閃框收成同一套樣式，只差時長與觸發來源
+- [X] T167 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T168 [BDD-REFACTOR] 在綠燈下把高亮的到期清除與 004 卡片閃框收成同一套樣式，只差時長與觸發來源
 
 ## Phase 4-W09: ADD Feature File - frontdesk-web/代開單/送出失敗與重送.feature
 
@@ -800,8 +800,8 @@
 - `specs/truth/features/frontdesk-web/當場回答/撞單與送出失敗.feature`、`待派單/撞單與送出失敗.feature`（共用 `接下來的送出會因為網路中斷而失敗` 與 `AlertDialog`，必須照舊綠）
 - `cd app/web && npx vitest run src/features/create-request`
 
-- [ ] T169 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T170 [BDD-REFACTOR] 在綠燈下把冪等鍵的保留與丟棄收在 `use-create-request.ts` 一處，元件只看「送出中／失敗種類」
+- [X] T169 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T170 [BDD-REFACTOR] 在綠燈下把冪等鍵的保留與丟棄收在 `use-create-request.ts` 一處，元件只看「送出中／失敗種類」
 
 ## Phase 4-W10: ADD Feature File - frontdesk-web/代開單/兩種尺寸與四種語言.feature
 
@@ -823,8 +823,8 @@
 - `specs/truth/features/frontdesk-web/代開單/兩種尺寸與四種語言.feature`（`desktop` 與 `ipad` 各一次）
 - `cd app/web && npx vitest run src/i18n/locales/locales.test.ts`
 
-- [ ] T171 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T172 [BDD-REFACTOR] 在綠燈下確認面板的尺寸只用 `@theme` token 與既有斷點，沒有寫死像素的特例
+- [X] T171 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T172 [BDD-REFACTOR] 在綠燈下確認面板的尺寸只用 `@theme` token 與既有斷點，沒有寫死像素的特例
 
 ## Phase 4-W11: MODIFY Feature File - frontdesk-web/即時更新/現場變化即時跟上.feature
 
@@ -844,8 +844,8 @@
 **Test Scope**:
 - `specs/truth/features/frontdesk-web/即時更新/現場變化即時跟上.feature`
 
-- [ ] T173 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T174 [BDD-REFACTOR] 在綠燈下確認即時插入的卡片與送出回應放進快取的卡片走同一個合併函式
+- [X] T173 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T174 [BDD-REFACTOR] 在綠燈下確認即時插入的卡片與送出回應放進快取的卡片走同一個合併函式
 
 ## Phase 4-WG: ui quality gate
 
@@ -862,7 +862,7 @@
 - 雛形沒有做出來的狀態（`ui/ui-plan.md`「靜態雛形輸出規劃」最後一段）以 `ui/ui-plan.md` 的文字為準；雛形示範資料與 truth 不同之處以 truth 為準。
 - 畫面上不得出現內部值、錯誤碼、急件標示。
 
-- [ ] T175 subagent review (ui quality gate)
+- [X] T175 subagent review (ui quality gate)
 
 ## Phase 4-G01: MODIFY Feature File - guest-web/設備報修/報修的限流.feature
 
@@ -880,8 +880,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/設備報修/報修的限流.feature`（`phone`）
 
-- [ ] T176 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T177 [BDD-REFACTOR] 在綠燈下確認住客頁測試線已沒有任何「櫃檯代開算進住客額度」的前提或註解
+- [X] T176 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T177 [BDD-REFACTOR] 在綠燈下確認住客頁測試線已沒有任何「櫃檯代開算進住客額度」的前提或註解
 
 ## Phase 4-G02: MODIFY Feature File - guest-web/備品補充/後端在送到一半拒絕.feature
 
@@ -899,8 +899,8 @@
 **Test Scope**:
 - `specs/truth/features/guest-web/備品補充/後端在送到一半拒絕.feature`（`phone`）
 
-- [ ] T178 [BDD-GREEN] 讓 Test Scope 全綠
-- [ ] T179 [BDD-REFACTOR] 在綠燈下確認「另一支手機送出」與「另一支手機已在備品補充送出」兩句共用同一個第二工作階段的取得方式
+- [X] T178 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T179 [BDD-REFACTOR] 在綠燈下確認「另一支手機送出」與「另一支手機已在備品補充送出」兩句共用同一個第二工作階段的取得方式
 
 ## Phase 5: 回歸
 
@@ -910,7 +910,7 @@
 - 只跑、只修回歸；不加 feature、不改 truth。紅了回到對應 phase 修，修完重跑整輪。
 - 真機 iPad 的觸控手感（44 pt、面板捲動與送出鈕）不在自動化範圍，人工看一次，結果記在 `implement-notes.md`。
 
-- [ ] T180 [REGRESSION] 後端全套（不加 `-Dtest`，含舊整合測試與單元測試）；失敗清單必須是 T005 基準的子集，新增的失敗為 0
-- [ ] T181 [REGRESSION] `bash app/web-bdd/run-feature.sh --keep frontdesk-web/ desktop` 與 `cd app/web && npx vitest run && npm run build`；失敗清單必須是 T005 基準的子集
-- [ ] T182 [REGRESSION] `bash app/web-bdd/run-feature.sh --keep frontdesk-web/ ipad`；失敗清單必須是 T005 基準的子集
-- [ ] T183 [REGRESSION] `bash app/web-bdd/run-feature.sh --keep guest-web/ phone`，跑完 `--stop`；失敗清單必須是 T005 基準的子集
+- [X] T180 [REGRESSION] 後端全套（不加 `-Dtest`，含舊整合測試與單元測試）；失敗清單必須是 T005 基準的子集，新增的失敗為 0
+- [X] T181 [REGRESSION] `bash app/web-bdd/run-feature.sh --keep frontdesk-web/ desktop` 與 `cd app/web && npx vitest run && npm run build`；失敗清單必須是 T005 基準的子集
+- [X] T182 [REGRESSION] `bash app/web-bdd/run-feature.sh --keep frontdesk-web/ ipad`；失敗清單必須是 T005 基準的子集
+- [X] T183 [REGRESSION] `bash app/web-bdd/run-feature.sh --keep guest-web/ phone`，跑完 `--stop`；失敗清單必須是 T005 基準的子集

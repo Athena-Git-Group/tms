@@ -30,7 +30,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/** 每間房 10 分鐘 3 筆的名額從 tasks 現數：櫃檯代開與已取消的都算，時間以營業時鐘為準。 */
+/** 每間房 10 分鐘 3 筆的名額從 tasks 現數：只數住客送的，已取消的也算，櫃檯代開的不算，時間以營業時鐘為準。 */
 @SpringBootTest
 @ActiveProfiles("test")
 @Testcontainers
@@ -100,7 +100,7 @@ class RoomRequestRateLimiterTest {
     }
 
     @Test
-    void 櫃檯替這間房代開的單也佔名額_但住客這次住宿的名額不扣它() {
+    void 櫃檯替這間房代開的單不佔住客的名額() {
         clock.setTodayAt("09:00");
         guest("毛巾");
         clock.setTodayAt("09:02");
@@ -109,10 +109,11 @@ class RoomRequestRateLimiterTest {
         deskOpened();
         clock.setTodayAt("09:05");
 
-        assertThat(limiter.roomQuota(TENANT_ID, ROOM_305).remaining()).isZero();
+        assertThat(limiter.roomQuota(TENANT_ID, ROOM_305).remaining()).isEqualTo(1);
         assertThat(limiter.stayQuota(TENANT_ID, RESERVATION_B001).remaining()).isEqualTo(1);
-        assertThatThrownBy(() -> guest("牙刷組")).isInstanceOf(TooManyRequestsException.class);
-        assertThat(guestTasksAt("09:05")).isZero();
+        guest("牙刷組");
+        assertThat(guestTasksAt("09:05")).isEqualTo(1);
+        assertThat(limiter.roomQuota(TENANT_ID, ROOM_305).remaining()).isZero();
     }
 
     @Test

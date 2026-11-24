@@ -342,13 +342,13 @@ class GuestScreenTourTest {
             protoAlert();
             shotProtoNow("supply-net-red");
 
-            // 櫃檯剛替這間房代開了兩張：住客的估算看不到它們，第一張送得出去，第二張被後端真的限流擋下。
-            OffsetDateTime deskNow = channel.backendNow();
-            channel.seedDeskTask(ROOM, deskNow.minusMinutes(2));
-            channel.seedDeskTask(ROOM, deskNow.minusMinutes(1));
             go(page, token, "supply");
             inc(page, "毛巾", 1);
             inc(page, "礦泉水", 2);
+            BackendChannel.GuestScan otherPhone = channel.guestScan(token);
+            String otherPhoneItem = otherPhone.menu().get(0).key();
+            channel.guestSessionSubmitMenuItem(otherPhone.sessionToken(), otherPhoneItem, 1);
+            channel.guestSessionSubmitMenuItem(otherPhone.sessionToken(), otherPhoneItem, 1);
             submit(page, "送出 2 項");
             page.getByRole(AriaRole.ALERT).waitFor();
             settle(page);

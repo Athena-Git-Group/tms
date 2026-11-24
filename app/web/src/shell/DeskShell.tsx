@@ -6,6 +6,7 @@ import { deskBoardQuery } from '../api/desk';
 import { queryClient, retryAfterFailure } from '../api/query-client';
 import { AccountPanel } from '../features/account';
 import { AnswerPanel } from '../features/answer';
+import { CreateRequestPanel } from '../features/create-request';
 import { DetailPanel } from '../features/detail';
 import { AssignToastBar, DispatchNoticeDialog } from '../features/dispatch';
 import { boardPollMs, showsConnectionAlert, useLiveUpdates } from '../features/realtime';
@@ -119,6 +120,11 @@ export function DeskShell() {
   const answerTaskId = useDeskPanelsStore((state) => state.answerTaskId);
   const closeDetail = useDeskPanelsStore((state) => state.closeDetail);
   const hotelCode = useHotelCode();
+  const createRequestOpen = useDeskPanelsStore((state) => state.createRequestOpen);
+  const createRequestRoomNo = useDeskPanelsStore((state) => state.createRequestRoomNo);
+  const openCreateRequest = useDeskPanelsStore((state) => state.openCreateRequest);
+  const closeCreateRequest = useDeskPanelsStore((state) => state.closeCreateRequest);
+  const createRequestButton = useRef<HTMLButtonElement>(null);
 
   const shownPage = useRef(page);
   useLayoutEffect(() => {
@@ -233,16 +239,15 @@ export function DeskShell() {
             {page === 'triage' && <TriageSubtitle />}
           </div>
           {page === 'board' && <RoomSearch />}
-          {visibleUnopenedEntries('toolbar', session?.role).map((entry) => (
-            <button
-              key={entry.labelKey}
-              type="button"
-              className="flex min-h-touch items-center gap-1.5 rounded-full border-none bg-brand px-5 text-base font-bold text-white"
-            >
-              <Icon name={entry.icon} className="size-4 stroke-[2.4]" />
-              {t(entry.labelKey)}
-            </button>
-          ))}
+          <button
+            ref={createRequestButton}
+            type="button"
+            onClick={openCreateRequest}
+            className="flex min-h-touch items-center gap-1.5 rounded-full border-none bg-brand px-5 text-base font-bold text-white"
+          >
+            <Icon name="plus" className="size-4 stroke-[2.4]" />
+            {t('shell.createRequest')}
+          </button>
         </header>
         {showConnectionAlert && <ConnectionAlertBar />}
         <Outlet />
@@ -254,6 +259,15 @@ export function DeskShell() {
         <AccountPanel session={session} onClose={() => setAccountPanelOpen(false)} onLogOut={() => logOut(queryClient)} />
       )}
       <DispatchNoticeDialog />
+      {createRequestOpen && (
+        <CreateRequestPanel
+          initialRoomNo={createRequestRoomNo ?? ''}
+          onCancel={() => {
+            closeCreateRequest();
+            createRequestButton.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

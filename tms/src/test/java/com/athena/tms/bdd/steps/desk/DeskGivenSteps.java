@@ -146,6 +146,9 @@ public class DeskGivenSteps {
                     roomNo, vip ? List.of("vip") : List.of(), checkin, LocalTime.of(15, 0), checkout, guestName);
             stays.add(new Stay(roomNo, reservationId));
         }
+        if (usesRelativeDay(table)) {
+            moveClockLaterTodayIntoAllStays(stays);
+        }
         stays.stream().filter(s -> !inHouseNow(s)).findFirst().ifPresent(this::moveClockIntoStay);
         List<String> notInHouse = stays.stream().filter(s -> !inHouseNow(s)).map(Stay::roomNo).toList();
         if (!notInHouse.isEmpty()) {
@@ -490,13 +493,50 @@ public class DeskGivenSteps {
         return LocalTime.parse(trimmed.length() == 4 ? "0" + trimmed : trimmed);
     }
 
+    private static final Map<String, Integer> RELATIVE_DAY = Map.of("昨天", -1, "今天", 0, "明天", 1, "後天", 2);
+
+    private static boolean usesRelativeDay(DataTable table) {
+        return table.asMaps(String.class, String.class).stream()
+                .anyMatch(row -> RELATIVE_DAY.containsKey(Objects.toString(row.get("入住日"), "").trim())
+                        || RELATIVE_DAY.containsKey(Objects.toString(row.get("退房日"), "").trim()));
+    }
+
+    private void moveClockLaterTodayIntoAllStays(List<Stay> stays) {
+        if (stays.stream().allMatch(this::inHouseNow)) {
+            return;
+        }
+        LocalDate today = today();
+        Instant latestCheckin = stays.stream()
+                .map(stay -> jdbcClient
+                        .sql("SELECT checkin_at FROM reservations_cache WHERE id = ?")
+                        .params(stay.reservationId())
+                        .query(OffsetDateTime.class)
+                        .single()
+                        .toInstant())
+                .max(Comparator.naturalOrder())
+                .orElseThrow();
+        if (!latestCheckin.isAfter(clock.instant())
+                || !latestCheckin.atZone(clock.getZone()).toLocalDate().equals(today)) {
+            return;
+        }
+        Instant before = clock.instant();
+        clock.setInstant(latestCheckin);
+        if (!stays.stream().allMatch(this::inHouseNow)) {
+            clock.setInstant(before);
+        }
+    }
+
     private LocalDate monthDay(String cell, LocalDate fallback) {
         if (cell == null) {
             return fallback;
         }
+        Integer offset = RELATIVE_DAY.get(cell.trim());
+        if (offset != null) {
+            return today().plusDays(offset);
+        }
         Matcher m = MONTH_DAY.matcher(cell.trim());
         if (!m.matches()) {
-            throw new IllegalArgumentException("日期格式須為 `M/D`，收到「" + cell + "」");
+            throw new IllegalArgumentException("日期格式須為 `M/D`，或昨天、今天、明天、後天，收到「" + cell + "」");
         }
         return LocalDate.of(today().getYear(), Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)));
     }

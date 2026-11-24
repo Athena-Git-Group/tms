@@ -26,6 +26,8 @@ public final class TaskSituationSpec {
     String guestText;
     String guestLang;
     String translatedText;
+    String menuKey;
+    Integer menuQuantity;
     Integer estMin;
     boolean urgent;
 
@@ -93,6 +95,12 @@ public final class TaskSituationSpec {
         this.guestText = text;
         this.guestLang = lang;
         this.translatedText = translated;
+        return this;
+    }
+
+    public TaskSituationSpec menuKey(String menuKey, int quantity) {
+        this.menuKey = menuKey;
+        this.menuQuantity = quantity;
         return this;
     }
 

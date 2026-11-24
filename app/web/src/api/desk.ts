@@ -6,7 +6,10 @@ import type {
   DeskAnswerRequest,
   DeskAssignRequest,
   DeskBoard,
+  DeskCreateRequestsRequest,
+  DeskCreateRequestsResult,
   DeskQuickReply,
+  DeskRoom,
   DeskTask,
   DeskTaskDetail,
 } from './types';
@@ -71,6 +74,22 @@ export function receiveCardPush(queryClient: QueryClient, push: CardPush): { nee
   return { needsFullRead: applied.needsFullRead };
 }
 
+export function receiveCreatedCards(queryClient: QueryClient, tasks: readonly DeskTask[]): void {
+  let needsFullRead = false;
+  for (const task of tasks) {
+    const board = queryClient.getQueryData(deskBoardQuery.queryKey);
+    const push: CardPush = {
+      taskId: task.id,
+      seq: task.seq,
+      cardSeq: task.seq,
+      businessDate: board?.businessDate ?? '',
+      change: { kind: 'upsert', card: task },
+    };
+    if (receiveCardPush(queryClient, push).needsFullRead) needsFullRead = true;
+  }
+  if (needsFullRead) void queryClient.invalidateQueries({ queryKey: deskBoardQuery.queryKey });
+}
+
 export function readDeskTask(taskId: string, signal?: AbortSignal): Promise<DeskTaskDetail> {
   return apiGet<DeskTaskDetail>(`/desk/tasks/${encodeURIComponent(taskId)}`, { signal }).then(syncServerClock);
 }
@@ -89,4 +108,16 @@ export function assignDeskTask(taskId: string, request: DeskAssignRequest): Prom
 
 export function undoDeskAssign(taskId: string): Promise<DeskTask> {
   return apiWrite<DeskTask>(`/desk/tasks/${encodeURIComponent(taskId)}/assign/undo`);
+}
+
+export function listDeskRooms(signal?: AbortSignal): Promise<DeskRoom[]> {
+  return apiGet<DeskRoom[]>('/desk/rooms', { signal });
+}
+
+export function createDeskRequests(
+  request: DeskCreateRequestsRequest,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<DeskCreateRequestsResult> {
+  return apiWrite<DeskCreateRequestsResult>('/desk/requests', request, { idempotencyKey, signal });
 }

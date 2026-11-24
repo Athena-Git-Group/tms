@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { deskBoardQuery } from '../../api/desk';
 import type { DeskTask, Dept, TaskSource } from '../../api/types';
@@ -21,6 +21,7 @@ import { displayString } from '../../lib/display-text';
 import { correctedNow, dateAtUtcOffset } from '../../lib/server-clock';
 import { waitPill, type WaitPillTone } from '../../lib/wait-pill';
 import { useBoardViewStore, type CardFilter, type Lane } from '../../stores/board-view';
+import { useCreatedHighlightsStore } from '../../stores/created-highlights';
 import { useDeskPanelsStore } from '../../stores/desk-panels';
 import { useCorrectedNow, useServerClockStore } from '../../stores/server-clock';
 import { boardColumnWidth, boardContentWidth } from '../../lib/board-layout';
@@ -39,6 +40,16 @@ export function BoardPage() {
   const headingIdOf = (column: BoardColumn) => `${headingIdPrefix}-${column}`;
   const load = loadStateOf({ data, isError, errorUpdatedAt });
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const createdFocusPending = useCreatedHighlightsStore((state) => state.focusPending);
+  const consumeCreatedFocus = useCreatedHighlightsStore((state) => state.consumeFocus);
+
+  useEffect(() => {
+    if (!createdFocusPending || load !== 'ready') return;
+    consumeCreatedFocus();
+    const scroller = scrollerRef.current;
+    scroller?.scrollTo({ top: 0, left: 0 });
+    scroller?.querySelector<HTMLElement>('[data-highlight="created"]')?.focus({ preventScroll: true });
+  }, [createdFocusPending, load, consumeCreatedFocus]);
 
   let body: ReactNode;
   if (load === 'failed') {
@@ -616,6 +627,7 @@ function TaskCard({
   const { t } = useTranslation();
   const openDetail = useDeskPanelsStore((state) => state.openDetail);
   const opened = useDeskPanelsStore((state) => state.detailTaskId === task.id);
+  const created = useCreatedHighlightsStore((state) => state.taskIds.has(task.id));
   const serverUtcOffsetMinutes = useServerClockStore((state) => state.serverUtcOffsetMinutes);
   const title = cardTitle(task, t);
   const subtitle = cardSubtitle(task, t);
@@ -629,8 +641,9 @@ function TaskCard({
       type="button"
       aria-label={pill ? t('board.card.name', { roomNo: task.roomNo, title, wait: pillText }) : `${task.roomNo} ${title}`}
       aria-expanded={opened}
+      data-highlight={created ? 'created' : undefined}
       onClick={() => openDetail(task.id)}
-      className={`flex w-full flex-col gap-[7px] rounded-card border-none bg-surface p-3 text-left aria-expanded:outline-2 aria-expanded:-outline-offset-2 aria-expanded:outline-brand ${drag ? DRAGGABLE_CARD_CLASS : 'shadow-[0_1px_2px_rgba(0,0,0,0.06)]'} ${drag?.source ? 'opacity-40' : ''}`}
+      className={`flex w-full flex-col gap-[7px] rounded-card border-none bg-surface p-3 text-left aria-expanded:outline-2 aria-expanded:-outline-offset-2 aria-expanded:outline-brand data-[highlight=created]:outline-2 data-[highlight=created]:-outline-offset-2 data-[highlight=created]:outline-brand motion-safe:data-[highlight=created]:animate-created-card ${drag ? DRAGGABLE_CARD_CLASS : 'shadow-[0_1px_2px_rgba(0,0,0,0.06)]'} ${drag?.source ? 'opacity-40' : ''}`}
     >
       <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <span className="text-[22px] font-extrabold tracking-[-0.3px]">{task.roomNo}</span>

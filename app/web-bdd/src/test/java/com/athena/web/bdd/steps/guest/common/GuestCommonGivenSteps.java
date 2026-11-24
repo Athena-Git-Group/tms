@@ -1,5 +1,6 @@
 package com.athena.web.bdd.steps.guest.common;
 
+import com.athena.bddsupport.BackendChannel;
 import com.athena.bddsupport.BackendChannel.CreatedStaff;
 import com.athena.bddsupport.GuestSeed;
 import com.athena.bddsupport.GuestSeed.Situation;
@@ -26,6 +27,8 @@ import java.util.UUID;
 public class GuestCommonGivenSteps {
 
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("H:mm");
+
+    private static final String OTHER_PHONE_ITEM = "吹風機";
 
     private static final Set<String> SEED_COLUMNS =
             Set.of("標題", "狀況", "送出時間", "類型", "負責人", "回覆", "星等", "到手時間", "開始時間");
@@ -175,15 +178,30 @@ public class GuestCommonGivenSteps {
         world.network().cutOffBackend(world.page());
     }
 
-    @假設("櫃檯在 {string} 替 {string} 房代開了一張單")
-    public void deskOpenedTask(String time, String roomNo) {
-        // 照 dsl：後端時鐘撥到代開的時刻開單，再撥回情境現在的時間；瀏覽器的時鐘不動。
-        world.backend().setBackendClock(timeOr(time, null));
+    @假設("{string} 房的另一支手機在 {string} 送出了一張單")
+    public void otherPhoneSubmitted(String roomNo, String time) {
+        world.network().holdLiveSignals(world.page());
+        BackendChannel.GuestScan otherPhone = world.backend().guestScan(phone.qrToken(roomNo.strip()));
+        String hairdryer = otherPhone.menu().stream()
+                .filter(item -> OTHER_PHONE_ITEM.equals(item.label()))
+                .map(BackendChannel.GuestMenuItem::key)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("後端給住客的服務項目沒有「" + OTHER_PHONE_ITEM + "」：" + otherPhone.menu()));
+        OffsetDateTime now = world.clocks().now();
+        world.backend().setBackendClock(timeOr(time, now));
+        UUID taskId;
         try {
-            world.backend().seedDeskTask(roomNo, world.backend().backendNow());
+            taskId = world.backend().guestSessionSubmitMenuItem(otherPhone.sessionToken(), hairdryer, 1);
         } finally {
-            world.backend().setBackendClock(world.clocks().now());
+            world.backend().setBackendClock(now);
         }
+        Map<String, Object> task = world.backend().taskRow(taskId);
+        if (!"guest".equals(task.get("source")) || !"pool".equals(task.get("state"))
+                || !"housekeeping".equals(task.get("dept"))) {
+            throw new IllegalStateException("另一支手機送出的單應該是住客來源、房務待認領，後端是 "
+                    + task.get("source") + "／" + task.get("state") + "／" + task.get("dept"));
+        }
+        scenario.rememberRequest(String.valueOf(task.get("title")), taskId);
     }
 
     private void seed(String roomNo, Map<String, String> row, OffsetDateTime createdAt, OffsetDateTime now) {

@@ -11,6 +11,9 @@ public class LastOperationGuard {
     private RoomSnapshot roomSnapshot;
     private List<Map<String, Object>> eventsBefore;
     private long tenantTaskCountBefore;
+    private CreateRequestSnapshot createRequestSnapshot;
+    private ExistingRows existingRowsBeforeCreate;
+    private boolean createRequestIsLatest;
 
     public LastOperationGuard(DbProbe dbProbe) {
         this.dbProbe = dbProbe;
@@ -32,6 +35,7 @@ public class LastOperationGuard {
         long inspectionCount = dbProbe.count("SELECT count(*) FROM inspections WHERE task_id = ?", taskId);
         long outboxMaxId = dbProbe.count("SELECT COALESCE(MAX(id), 0) FROM outbox");
         snapshot = new Snapshot(taskId, row, eventCount, outboxCount, repairTicketRow, inspectionCount, outboxMaxId);
+        createRequestIsLatest = false;
         eventsBefore = dbProbe.eventsOf(taskId);
         tenantTaskCountBefore = row == null
                 ? -1
@@ -79,5 +83,56 @@ public class LastOperationGuard {
                     "沒有可比對的操作前快照：前一個 When 步驟需要先呼叫 LastOperationGuard.captureFor()");
         }
         return snapshot;
+    }
+
+    public record CreateRequestSnapshot(long tenantId, long tasks, long taskEvents, long repairTickets,
+            long lastTaskNo, long lastTicketNo, long outbox, long outboxMaxId) {
+    }
+
+    public CreateRequestSnapshot captureCreateRequest(long tenantId) {
+        createRequestSnapshot = createRequestCounts(tenantId);
+        existingRowsBeforeCreate = existingRows(tenantId);
+        createRequestIsLatest = true;
+        return createRequestSnapshot;
+    }
+
+    public boolean createRequestIsLatest() {
+        return createRequestIsLatest && createRequestSnapshot != null;
+    }
+
+    public record ExistingRows(List<Map<String, Object>> tasks, List<Map<String, Object>> taskEvents,
+            List<Map<String, Object>> repairTickets) {
+    }
+
+    public ExistingRows existingRows(long tenantId) {
+        return new ExistingRows(
+                dbProbe.queryMaps("SELECT * FROM tasks WHERE tenant_id = ? ORDER BY id", tenantId),
+                dbProbe.queryMaps("SELECT * FROM task_events WHERE tenant_id = ? ORDER BY id", tenantId),
+                dbProbe.queryMaps("SELECT * FROM repair_tickets WHERE tenant_id = ? ORDER BY task_id", tenantId));
+    }
+
+    public ExistingRows existingRowsBeforeCreate() {
+        currentCreateRequest();
+        return existingRowsBeforeCreate;
+    }
+
+    public CreateRequestSnapshot createRequestCounts(long tenantId) {
+        return new CreateRequestSnapshot(
+                tenantId,
+                dbProbe.count("SELECT count(*) FROM tasks WHERE tenant_id = ?", tenantId),
+                dbProbe.count("SELECT count(*) FROM task_events WHERE tenant_id = ?", tenantId),
+                dbProbe.count("SELECT count(*) FROM repair_tickets WHERE tenant_id = ?", tenantId),
+                dbProbe.count("SELECT COALESCE(MAX(last_no), 0) FROM task_counters WHERE tenant_id = ?", tenantId),
+                dbProbe.count("SELECT COALESCE(MAX(last_no), 0) FROM repair_ticket_counters WHERE tenant_id = ?", tenantId),
+                dbProbe.count("SELECT count(*) FROM outbox WHERE tenant_id = ?", tenantId),
+                dbProbe.count("SELECT COALESCE(MAX(id), 0) FROM outbox"));
+    }
+
+    public CreateRequestSnapshot currentCreateRequest() {
+        if (createRequestSnapshot == null) {
+            throw new IllegalStateException(
+                    "沒有可比對的代開前快照：前一個 When 步驟需要先呼叫 LastOperationGuard.captureCreateRequest()");
+        }
+        return createRequestSnapshot;
     }
 }

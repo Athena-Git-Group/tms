@@ -58,12 +58,11 @@ public class DeskBoardService {
               LEFT JOIN repair_tickets rt ON rt.tenant_id = t.tenant_id AND rt.task_id = t.id
               LEFT JOIN staff_accounts assignee ON assignee.tenant_id = t.tenant_id AND assignee.id = t.assignee_id
               LEFT JOIN LATERAL (
-                    SELECT rc.guest_name, (rc.attrs ->> 'vip') = 'true' AS vip, rc.checkin_at, rc.checkout_at
+                    SELECT %s
                       FROM reservations_cache rc
                      WHERE rc.tenant_id = t.tenant_id
                        AND CASE WHEN t.reservation_id IS NOT NULL THEN rc.id = t.reservation_id
-                                ELSE rc.room_id = t.room_id AND rc.superseded_at IS NULL
-                                     AND rc.checkin_at <= ? AND rc.checkout_at > ?
+                                ELSE rc.room_id = t.room_id AND %s
                            END
                      LIMIT 1) guest ON true
               LEFT JOIN LATERAL (
@@ -99,7 +98,7 @@ public class DeskBoardService {
                            (SELECT count(*) FROM sop_items s
                              WHERE s.tenant_id = t.tenant_id AND s.applies_to = 'cleaning' AND s.active) AS total
                      WHERE t.type = 'cleaning' AND t.state IN ('accepted', 'doing', 'interrupted')) sop ON true
-            """;
+            """.formatted(InHouseGuest.COLUMNS, InHouseGuest.STAYING_AT);
 
     private final JdbcTemplate jdbcTemplate;
     private final TaskEngine taskEngine;
@@ -258,10 +257,14 @@ public class DeskBoardService {
         return this.deskTaskMapper.toDeskTask(this.requireTaskRow(tenantId, taskId));
     }
 
-    private static void requireIdempotencyKey(String idempotencyKey) {
+    static void requireIdempotencyKey(String idempotencyKey) {
         if (idempotencyKey.isBlank()) {
             throw new IdempotencyKeyRequired();
         }
+    }
+
+    DeskTask card(long tenantId, UUID taskId) {
+        return this.deskTaskMapper.toDeskTask(this.requireTaskRow(tenantId, taskId));
     }
 
     private Map<String, Object> requireTaskRow(long tenantId, UUID taskId) {

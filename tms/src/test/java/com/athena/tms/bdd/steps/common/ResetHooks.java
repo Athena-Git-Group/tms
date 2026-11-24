@@ -1,5 +1,6 @@
 package com.athena.tms.bdd.steps.common;
 
+import com.athena.tms.bdd.support.DeskCreateFaults;
 import com.athena.tms.bdd.support.KafkaGroupAwait;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.RecordingPushSender;
@@ -45,6 +46,7 @@ public class ResetHooks {
 
     @Before(order = 1)
     public void resetDatabase() {
+        DeskCreateFaults.removeLeftovers(jdbc);
         List<String> tables = jdbc.sql("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE'

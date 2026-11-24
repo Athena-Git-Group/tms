@@ -3,6 +3,7 @@ package com.athena.web.bdd.steps.realtime;
 import com.athena.bddsupport.BackendChannel.CreatedStaff;
 import com.athena.bddsupport.TaskSituation;
 import com.athena.web.bdd.steps.common.TaskTableRows;
+import com.athena.web.bdd.steps.createrequest.CreateRequestTable;
 import com.athena.web.bdd.support.Clocks;
 import com.athena.web.bdd.support.GuestScenario;
 import com.athena.web.bdd.support.Network;
@@ -13,6 +14,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.microsoft.playwright.Page;
+import io.cucumber.datatable.DataTable;
 import io.cucumber.java.zh_tw.當;
 import java.time.Duration;
 import java.time.Instant;
@@ -189,6 +191,13 @@ public class RealtimeWhenSteps {
         UUID taskId = world.tasks().idOf(roomNo);
         scenario.markSignalSent(Instant.now());
         world.backend().deskAssign(taskId, world.staff(colleague), deptCode, null);
+    }
+
+    @當("{string} 在另一台櫃檯代開 {string} 的以下單：")
+    public void colleagueCreatesRequests(String colleague, String roomNo, DataTable table) {
+        CreatedStaff actor = world.staff(colleague);
+        scenario.markSignalSent(Instant.now());
+        CreateRequestTable.submit(world, actor, roomNo, table.asMaps());
     }
 
     @當("{string} 的住客自己收回需求")

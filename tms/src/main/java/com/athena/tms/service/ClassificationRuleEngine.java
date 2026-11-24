@@ -23,11 +23,11 @@ public class ClassificationRuleEngine {
         }
         if (depts.size() == 1) {
             GuestTenantConfigReader.ClassificationRule first = (GuestTenantConfigReader.ClassificationRule)hits.getFirst();
-            return new Routing("pool", first.dept(), first.type() != null ? first.type() : "other", first.ruleId());
+            return new Routing("pool", first.dept(), first.type() != null ? first.type() : "other", first.ruleId(), first.menuKey());
         }
-        return new Routing("triage", "frontdesk", "other", null);
+        return new Routing("triage", "frontdesk", "other", null, null);
     }
 
-    public record Routing(String initialState, String dept, String type, String ruleId) {
+    public record Routing(String initialState, String dept, String type, String ruleId, String menuKey) {
     }
 }

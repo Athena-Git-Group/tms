@@ -22,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 public class StaffStreamThenSteps {
 
     private static final Map<String, String> SIGNAL_TYPE = Map.of(
+            "建立", "created",
             "認領", "claimed",
             "開始", "started",
             "派單", "triaged",
