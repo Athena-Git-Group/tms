@@ -1,6 +1,6 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
-import { assignDeskTask, deskBoardQuery, undoDeskAssign } from '../../api/desk';
+import { assignDeskTask, cancelBoardReadForDispatch, deskBoardQuery, undoDeskAssign } from '../../api/desk';
 import type { DeskTask } from '../../api/types';
 import {
   assignFailureNotice,
@@ -25,7 +25,7 @@ function refreshBoard(queryClient: QueryClient) {
 const pendingAssigns = new Map<string, Promise<boolean>>();
 
 export async function assignTaskFlow(queryClient: QueryClient, task: DeskTask, dept: AssignDept, via: AssignVia) {
-  await queryClient.cancelQueries({ queryKey: deskBoardQuery.queryKey });
+  await cancelBoardReadForDispatch(queryClient);
   replaceInBoard(queryClient, assumedAssigned(task, dept));
   useDispatchStore.getState().showToast({ taskId: task.id, roomNo: task.roomNo, dept });
   const sent = assignDeskTask(task.id, assignRequest(dept, via)).then(

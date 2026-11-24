@@ -12,7 +12,6 @@ import { HeroCards } from './home/HeroCards';
 import { Services } from './home/Services';
 import { TopBar } from './home/TopBar';
 
-/** 首頁的區塊由上到下；需求清單也回來才畫，免得「我的需求」晚一步跳出來把下面的卡片往下推。 */
 export function HomePage() {
   const { t } = useTranslation();
   const session = useReadySession();

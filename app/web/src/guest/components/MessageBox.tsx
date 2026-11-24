@@ -27,7 +27,6 @@ const LOOK: Record<MessageKind, { box: string; icon: IconName; iconColor: string
   },
 };
 
-/** 進度頁第一張卡下方的狀態訊息框：第一行標題、第二行內文，色調與圖示由種類決定。 */
 export function MessageBox({ task }: { task: GuestTask }) {
   const { t } = useTranslation();
   const view = messageBox(task);

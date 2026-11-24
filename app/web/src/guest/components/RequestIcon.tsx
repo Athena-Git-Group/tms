@@ -19,7 +19,6 @@ const TONE = {
   neutral: 'bg-guest-status-neutral-container text-guest-status-on-neutral-container',
 } as const;
 
-/** 依需求類型的圖示方塊；清單「已結束」段用中性灰底，其餘品牌淺底。 */
 export function RequestIcon({
   type,
   size,

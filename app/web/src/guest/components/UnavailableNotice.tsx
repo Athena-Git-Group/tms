@@ -3,7 +3,6 @@ import { CenteredNotice } from './CenteredNotice';
 import { useDocumentTitle } from '../use-document-title';
 import { Icon } from './Icon';
 
-/** 空房、代碼作廢、代碼不存在都是這一頁，看不出原因；聯絡櫃檯那張卡只是說明，不是電話連結。 */
 export function UnavailableNotice() {
   const { t } = useTranslation();
   const title = t('guest.unavailable.title');

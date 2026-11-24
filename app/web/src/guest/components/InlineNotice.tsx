@@ -16,7 +16,6 @@ const LOOK = {
   },
 } as const satisfies Record<FormNotice['tone'], { box: string; icon: IconName; iconColor: string }>;
 
-/** 表單下方不會自己消失的提示框：送出被擋下或沒送成時用。 */
 export function InlineNotice({ notice }: { notice: FormNotice }) {
   const { t } = useTranslation();
   const look = LOOK[notice.tone];

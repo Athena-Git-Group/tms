@@ -43,11 +43,11 @@ function board(tasks: DeskTask[], businessDate = TODAY): DeskBoard {
 }
 
 function upsert(next: DeskTask, seq = next.seq, businessDate = TODAY): CardPush {
-  return { taskId: next.id, seq, cardSeq: next.seq, businessDate, card: next };
+  return { taskId: next.id, seq, cardSeq: next.seq, businessDate, change: { kind: 'upsert', card: next } };
 }
 
 function remove(taskId: string, seq: number, businessDate = TODAY): CardPush {
-  return { taskId, seq, cardSeq: seq, businessDate, card: null };
+  return { taskId, seq, cardSeq: seq, businessDate, change: { kind: 'removedForBusinessDay' } };
 }
 
 const none: ReceivedPushes = new Map();

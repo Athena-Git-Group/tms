@@ -98,10 +98,6 @@ function releasePointOf(event: Event | undefined): Point | undefined {
   return event instanceof PointerEvent ? { x: event.clientX, y: event.clientY } : undefined;
 }
 
-/**
- * 判斷拖放套件記錄的指標位置是不是就是放開那一點，誤差不到 1 像素就算同一點。
- * 兩者不同時，代表套件的落點還停在上一次移動，原因見 `dropDeptOf` 的說明。
- */
 function samePoint(release: Point, position: Point): boolean {
   return Math.abs(release.x - position.x) < 1 && Math.abs(release.y - position.y) < 1;
 }

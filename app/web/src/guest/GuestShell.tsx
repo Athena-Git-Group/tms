@@ -4,10 +4,6 @@ import { useGuestLanguage } from './use-guest-language';
 
 export const GUEST_OVERLAY_ID = 'guest-overlays';
 
-/**
- * 住客的外框：手機直向為基準、單欄、內容最寬 480 置中、整頁上下捲。高度用 `dvh`，手機瀏覽器的工具列收放時不會多出捲動；
- * 左右留安全區域。底部的安全區域由各頁自己留，頁底操作列才能把它包在自己的內距裡。固定淺色，表單元件與捲軸也跟著淺色。提示浮層與對話框畫進最後那一層。
- */
 export function GuestShell({ children }: { children: ReactNode }) {
   useGuestLanguage();
   return (

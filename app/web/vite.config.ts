@@ -3,8 +3,7 @@ import react from '@vitejs/plugin-react';
 import type { ProxyOptions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
-/** 開發時後端在本機的位址；瀏覽器只連開發伺服器，由它把下列路徑轉給後端。 */
-const BACKEND_ORIGIN = 'http://localhost:8080';
+const BACKEND_ORIGIN = process.env.TMS_BACKEND_ORIGIN ?? 'http://localhost:8080';
 
 /**
  * 事件串流是一條不關的連線。後端行程中途消失時，代理預設不會把瀏覽器這一頭的回應關掉，畫面會以為串流還連著。
@@ -34,7 +33,6 @@ export default defineConfig({
     },
   },
   test: {
-    // 單元測試只測沒有畫面的純計算，不需要瀏覽器環境。
     environment: 'node',
     include: ['src/**/*.test.ts'],
     passWithNoTests: true,

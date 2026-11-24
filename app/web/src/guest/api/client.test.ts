@@ -7,7 +7,7 @@ import {
   rateRequest,
   readHome,
   scan,
-  setUnauthorizedHandler,
+  setSessionRenewal,
 } from './client';
 
 interface Captured {
@@ -36,7 +36,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  setUnauthorizedHandler(null);
+  setSessionRenewal(null);
 });
 
 describe('住客呼叫後端', () => {
@@ -80,11 +80,14 @@ describe('住客呼叫後端', () => {
     const statuses = [401, 200];
     respond = () => new Response('[]', { status: statuses.shift() ?? 200 });
     const rejected: string[] = [];
-    setUnauthorizedHandler(async (session) => {
-      rejected.push(session);
-      return 'gs_new';
+    setSessionRenewal({
+      renew: async (session) => {
+        rejected.push(session);
+        return 'gs_new';
+      },
+      renewedSessionRejected: () => {},
     });
-    await expect(listRequests('gs_old')).resolves.toEqual([]);
+    await expect(listRequests('gs_old')).resolves.toEqual({ requests: [], quota: null });
     expect(rejected).toEqual(['gs_old']);
     expect(calls.map((call) => call.headers['X-Guest-Session'])).toEqual(['gs_old', 'gs_new']);
   });
@@ -92,7 +95,7 @@ describe('住客呼叫後端', () => {
   it('換不到 session 時丟出換 session 的錯誤，不重發', async () => {
     respond = () => new Response(JSON.stringify({ code: 'unauthorized', message: 'x' }), { status: 401 });
     const vacant = new ApiError(409, { code: 'room_vacant', message: 'x' });
-    setUnauthorizedHandler(() => Promise.reject(vacant));
+    setSessionRenewal({ renew: () => Promise.reject(vacant), renewedSessionRejected: () => {} });
     await expect(listRequests('gs_old')).rejects.toBe(vacant);
     expect(calls).toHaveLength(1);
   });
@@ -100,21 +103,41 @@ describe('住客呼叫後端', () => {
   it('重發之後又是 401 就丟出，不再重發第三次', async () => {
     respond = () => new Response(JSON.stringify({ code: 'unauthorized', message: 'x' }), { status: 401 });
     const rejected: string[] = [];
-    setUnauthorizedHandler(async (session) => {
-      rejected.push(session);
-      return 'gs_new';
+    const givenUp: unknown[] = [];
+    setSessionRenewal({
+      renew: async (session) => {
+        rejected.push(session);
+        return 'gs_new';
+      },
+      renewedSessionRejected: (error) => givenUp.push(error),
     });
     await expect(listRequests('gs_old')).rejects.toMatchObject({ status: 401 });
-    expect(rejected).toEqual(['gs_old', 'gs_new']);
+    expect(rejected).toEqual(['gs_old']);
+    expect(givenUp).toHaveLength(1);
     expect(calls).toHaveLength(2);
+  });
+
+  it('需求清單帶回這間房的送單名額標頭', async () => {
+    respond = () =>
+      new Response('[]', {
+        status: 200,
+        headers: { 'RateLimit-Limit': '3', 'RateLimit-Remaining': '1', 'RateLimit-Reset': '412' },
+      });
+    await expect(listRequests('gs_1')).resolves.toEqual({
+      requests: [],
+      quota: { limit: 3, remaining: 1, resetSeconds: 412 },
+    });
   });
 
   it('其他錯誤不換 session', async () => {
     respond = () => new Response(JSON.stringify({ code: 'rate_limited', message: 'x' }), { status: 429 });
     const rejected: string[] = [];
-    setUnauthorizedHandler(async (session) => {
-      rejected.push(session);
-      return 'gs_new';
+    setSessionRenewal({
+      renew: async (session) => {
+        rejected.push(session);
+        return 'gs_new';
+      },
+      renewedSessionRejected: () => {},
     });
     await expect(createRequest('gs_1', { text: '冷氣不冷', lang: 'zh-TW' }, 'k')).rejects.toMatchObject({
       status: 429,

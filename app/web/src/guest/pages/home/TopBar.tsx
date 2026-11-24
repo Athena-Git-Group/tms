@@ -1,6 +1,5 @@
 import { LanguageMenu } from '../../components/LanguageMenu';
 
-/** 頂列：左邊留白；右邊房號膠囊（只顯示）與語言膠囊。 */
 export function TopBar({ roomNo }: { roomNo: string }) {
   return (
     <div className="flex min-h-guest-touch items-center justify-between gap-2">

@@ -1,33 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { estimateQuota, limitNotice, quotaNotice, remainingQuota } from './quota';
+import { estimateQuota, limitNotice, quotaFromHeaders, quotaNotice, quotaRefreshMs } from './quota';
 
-const sentAt = (hhmm: string) => ({ createdAt: `2026-11-20T${hhmm}:00+08:00` });
-const at = (hhmm: string) => new Date(`2026-11-20T${hhmm}:00+08:00`);
+const quota = (remaining: number, resetSeconds = 0) => ({ limit: 3, remaining, resetSeconds });
+const headers = (values: Record<string, string>) => new Headers(values);
 
-describe('remainingQuota', () => {
-  it('這次住宿還沒送過任何需求時剩 3', () => {
-    expect(remainingQuota([], at('14:05'))).toBe(3);
+describe('quotaFromHeaders', () => {
+  it('讀後端給的名額標頭', () => {
+    expect(
+      quotaFromHeaders(headers({ 'RateLimit-Limit': '3', 'RateLimit-Remaining': '0', 'RateLimit-Reset': '75' })),
+    ).toEqual({ limit: 3, remaining: 0, resetSeconds: 75 });
   });
 
-  it('10 分鐘內送了兩張時剩 1', () => {
-    expect(remainingQuota([sentAt('14:00'), sentAt('14:02')], at('14:05'))).toBe(1);
+  it('缺任一個或不是整數就當不知道', () => {
+    expect(quotaFromHeaders(headers({ 'RateLimit-Limit': '3', 'RateLimit-Remaining': '2' }))).toBeNull();
+    expect(quotaFromHeaders(headers({ 'RateLimit-Limit': '3', 'RateLimit-Remaining': '-1', 'RateLimit-Reset': '0' }))).toBeNull();
+    expect(quotaFromHeaders(headers({}))).toBeNull();
+  });
+});
+
+describe('quotaRefreshMs', () => {
+  it('有名額被占用時，等最早那筆釋出再重讀一次', () => {
+    expect(quotaRefreshMs(quota(1, 412))).toBe(412_000);
   });
 
-  it('已取消的也算，清單上有幾張就扣幾張，不看狀態', () => {
-    expect(remainingQuota([sentAt('14:00'), sentAt('14:02'), sentAt('14:03')], at('14:08'))).toBe(0);
-  });
-
-  it('最早那筆超過 10 分鐘就不算', () => {
-    expect(remainingQuota([sentAt('14:00'), sentAt('14:02'), sentAt('14:03')], at('14:11'))).toBe(1);
-  });
-
-  it('剛好 10 分鐘前送出的仍算，和後端只丟掉早於界線的一致', () => {
-    expect(remainingQuota([sentAt('14:00')], at('14:10'))).toBe(2);
-    expect(remainingQuota([sentAt('14:00')], new Date(at('14:10').getTime() + 1))).toBe(3);
-  });
-
-  it('超過 3 張也不會變成負數', () => {
-    expect(remainingQuota(['14:00', '14:01', '14:02', '14:03'].map(sentAt), at('14:05'))).toBe(0);
+  it('名額全空或不知道時不排重讀', () => {
+    expect(quotaRefreshMs(quota(3, 0))).toBe(false);
+    expect(quotaRefreshMs(null)).toBe(false);
   });
 });
 
@@ -51,19 +49,23 @@ describe('quotaNotice', () => {
 
 describe('estimateQuota', () => {
   it('額度夠時不擋', () => {
-    expect(estimateQuota(1, [sentAt('14:00'), sentAt('14:02')], at('14:05'))).toBeNull();
+    expect(estimateQuota(1, quota(1))).toBeNull();
   });
 
   it('剛好用完額度也不擋', () => {
-    expect(estimateQuota(3, [], at('14:05'))).toBeNull();
+    expect(estimateQuota(3, quota(3))).toBeNull();
   });
 
   it('選的項目數超過剩餘額度時擋下，內文說還能送幾項', () => {
-    expect(estimateQuota(3, [sentAt('14:00'), sentAt('14:02')], at('14:05'))).toEqual(limitNotice(quotaNotice({ left: 1, over: 2 })));
+    expect(estimateQuota(3, quota(1, 60))).toEqual(limitNotice(quotaNotice({ left: 1, over: 2 })));
   });
 
   it('一項都不能送時擋下，內文是請稍後再送出', () => {
-    expect(estimateQuota(1, [sentAt('14:00'), sentAt('14:02'), sentAt('14:03')], at('14:08'))?.body.key).toBe('guest.limit.none');
+    expect(estimateQuota(1, quota(0, 60))?.body.key).toBe('guest.limit.none');
+  });
+
+  it('還不知道名額時不擋，交給後端判斷', () => {
+    expect(estimateQuota(5, null)).toBeNull();
   });
 });
 

@@ -5,6 +5,7 @@ import {
   transition,
   type LiveEvent,
   type LiveState,
+  type LiveTransition,
 } from './live-connection';
 
 export interface StreamEvent {
@@ -58,8 +59,7 @@ export interface StreamOptions {
   headers: Record<string, string>;
   onEvent: (event: StreamEvent) => void;
   onState?: (state: LiveState) => void;
-  /** 連線狀態怎麼隨事件轉移；不給時用櫃檯的 `transition`。 */
-  transition?: (state: LiveState, event: LiveEvent) => LiveState;
+  transition?: LiveTransition;
 }
 
 /**

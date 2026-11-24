@@ -8,7 +8,6 @@ import {
   homeRequestsSection,
   latestActive,
   messageBox,
-  newestFirst,
   showsProgress,
   splitSections,
   stageOf,
@@ -48,7 +47,6 @@ const PROCESSING_SUBS = [null, 'guest.step.deptReceived', 'guest.step.deptProces
 const DONE_SUBS = [null, 'guest.step.deptReceived', null, null];
 const ALL_DONE = ['done', 'done', 'done', 'done'];
 
-/** ui-plan「狀態對照表怎麼落到三個畫面」的大表，十個後端狀態各一列，沒有櫃檯回覆、還沒評分。 */
 const EXPECTED: Record<RequestState, Expected> = {
   triage: {
     label: 'guest.stage.submitted', tone: 'neutral', section: 'active', cancellable: true, locked: false,
@@ -197,17 +195,26 @@ describe('副文與進度卡說明帶的參數', () => {
 describe('排序', () => {
   const at = (minute: number) => `2026-11-20T06:${String(minute).padStart(2, '0')}:00Z`;
 
-  it('分成進行中與已結束，各自新到舊', () => {
+  it('分成進行中與已結束，各自照後端給的順序', () => {
     const tasks = [
-      task({ id: 'a', state: 'doing', createdAt: at(0) }),
-      task({ id: 'b', state: 'cancelled', createdAt: at(1) }),
-      task({ id: 'c', state: 'triage', createdAt: at(2) }),
       task({ id: 'd', state: 'closed', createdAt: at(3) }),
+      task({ id: 'c', state: 'triage', createdAt: at(2) }),
+      task({ id: 'b', state: 'cancelled', createdAt: at(1) }),
+      task({ id: 'a', state: 'doing', createdAt: at(0) }),
     ];
     expect(splitSections(tasks).map((group) => [group.section, group.tasks.map((t) => t.id)])).toEqual([
       ['active', ['c', 'a']],
       ['ended', ['d', 'b']],
     ]);
+  });
+
+  it('不自己重排：同一刻送出的照後端給的先後', () => {
+    const tasks = [
+      task({ id: 'water', createdAt: at(5) }),
+      task({ id: 'towel', createdAt: at(5) }),
+      task({ id: 'older', createdAt: at(1) }),
+    ];
+    expect(splitSections(tasks)[0]!.tasks.map((t) => t.id)).toEqual(['water', 'towel', 'older']);
   });
 
   it('沒有內容的段落不在結果裡，一張都沒有時是空的', () => {
@@ -216,36 +223,11 @@ describe('排序', () => {
     expect(splitSections([])).toEqual([]);
   });
 
-  it('同一刻送出的照這支手機記下的先後，後送出的在上', () => {
-    const tasks = [
-      task({ id: 'towel', createdAt: at(5) }),
-      task({ id: 'water', createdAt: at(5) }),
-      task({ id: 'older', createdAt: at(1) }),
-    ];
-    expect(newestFirst(tasks, ['towel', 'water']).map((t) => t.id)).toEqual(['water', 'towel', 'older']);
-    expect(newestFirst([...tasks].reverse(), ['towel', 'water']).map((t) => t.id)).toEqual([
-      'water',
-      'towel',
-      'older',
-    ]);
-  });
-
-  it('同一刻裡不是這支手機送的排在後面，維持後端給的順序', () => {
-    const tasks = [
-      task({ id: 'other-1', createdAt: at(5) }),
-      task({ id: 'mine', createdAt: at(5) }),
-      task({ id: 'other-2', createdAt: at(5) }),
-    ];
-    expect(newestFirst(tasks, ['mine']).map((t) => t.id)).toEqual(['mine', 'other-1', 'other-2']);
-  });
-
-  it('首頁進度卡挑進行中裡最新的一張，同一刻時挑後送出的', () => {
-    const older = task({ id: 'older', state: 'pool', createdAt: at(0) });
-    const newer = task({ id: 'newer', state: 'triage', createdAt: at(3) });
+  it('首頁進度卡挑清單裡第一張進行中的', () => {
     const endedNewest = task({ id: 'ended', state: 'done', createdAt: at(9) });
-    expect(latestActive([older, endedNewest, newer])?.id).toBe('newer');
-    const twin = task({ id: 'twin', state: 'pool', createdAt: at(3) });
-    expect(latestActive([newer, twin], ['newer', 'twin'])?.id).toBe('twin');
+    const newer = task({ id: 'newer', state: 'triage', createdAt: at(3) });
+    const older = task({ id: 'older', state: 'pool', createdAt: at(0) });
+    expect(latestActive([endedNewest, newer, older])?.id).toBe('newer');
   });
 
   it('沒有進行中的回 null', () => {
@@ -264,7 +246,7 @@ describe('homeRequestsSection', () => {
     const towel = task({ id: 'towel', state: 'pool', createdAt: at(0) });
     const water = task({ id: 'water', state: 'pool', createdAt: at(5) });
     const slippers = task({ id: 'slippers', state: 'done', createdAt: at(9) });
-    expect(homeRequestsSection([towel, slippers, water])).toEqual({ kind: 'card', task: water, count: 3 });
+    expect(homeRequestsSection([slippers, water, towel])).toEqual({ kind: 'card', task: water, count: 3 });
   });
 
   it('全部結束時是「目前沒有進行中的需求」，件數含已取消的', () => {

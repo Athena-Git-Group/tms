@@ -7,7 +7,6 @@ import { hhmm } from '../lib/time';
 import { Icon } from './Icon';
 import { RequestIcon } from './RequestIcon';
 
-/** 首頁的進度卡，整張是進那一筆進度頁的連結：四格進度條與四個步名亮到目前那一步（含）。 */
 export function ProgressCard({ task, link }: { task: GuestTask; link: RequestLink }) {
   const { t } = useTranslation();
   const current = stageOf(task).step ?? 0;

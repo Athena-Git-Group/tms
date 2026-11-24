@@ -9,13 +9,11 @@ import { SentPage } from './pages/SentPage';
 import { SupplyPage } from './pages/SupplyPage';
 import { GUEST_PATHS, guestPath } from './paths';
 
-/** 整棵 `/g/:qrToken/*`，由櫃檯的路由表延遲載入；底下的子路徑都相對於 `/g/{代碼}`。 */
 export function Component() {
   const qrToken = useParams().qrToken ?? '';
   const homePath = guestPath(qrToken);
   return (
     <GuestEntry key={qrToken} qrToken={qrToken}>
-      {/* 首頁以網址記捲動位置，回首頁時回到原處；子頁每次進入都是新的一筆，從最上面開始。 */}
       <ScrollRestoration getKey={(location) => (location.pathname === homePath ? location.pathname : location.key)} />
       <Routes>
         <Route index element={<HomePage />} />

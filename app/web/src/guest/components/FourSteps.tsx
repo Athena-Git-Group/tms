@@ -15,10 +15,6 @@ const TITLE: Record<StepLook, string> = {
   todo: 'text-guest-text-secondary',
 };
 
-/**
- * 四步進度：打勾是品牌色圓加白勾、實心是品牌色圓點外圍一圈白、空心是灰圈；走過的步之間的連線是品牌色。
- * 已取消與櫃檯已回覆的不畫。
- */
 export function FourSteps({ task }: { task: GuestTask }) {
   const { t } = useTranslation();
   const steps = stepView(task);

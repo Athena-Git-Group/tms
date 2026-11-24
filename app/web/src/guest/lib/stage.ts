@@ -1,11 +1,5 @@
 import type { Dept, GuestTask, RequestState } from '../api/types';
 
-/**
- * 後端十個狀態值對到住客看得懂的階段。首頁進度卡、我的需求清單、需求進度頁都從這張表與下面的函式拿結果，
- * 不各自判斷狀態值；三個畫面各寫一套的話，改一個狀態的顯示就要改三處，漏一處畫面就互相矛盾。
- * 文字一律回語系鍵與參數，畫面再翻成目前的語言。
- */
-
 export type StageTone = 'neutral' | 'accepted' | 'doing' | 'done';
 export type StageStep = 0 | 1 | 2 | 3;
 export type StageSection = 'active' | 'ended';
@@ -34,24 +28,18 @@ export type HomeCardKey =
   | 'guest.homeCard.taken'
   | 'guest.homeCard.processing';
 
-/** 不看回覆、只看狀態就決定的訊息框；櫃檯回覆蓋過已取消以外的這幾種。 */
 type StateMessage = 'triage' | 'completed' | 'cancelled';
 
 export interface StageRow {
   labelKey: StageLabelKey;
   tone: StageTone;
-  /** 進度走到第幾步；已取消不顯示進度，是 `null`。 */
   step: StageStep | null;
   section: StageSection;
   cancellable: boolean;
-  /** 同仁已經接手，住客不能自己取消，底部改成請打電話找櫃檯的說明。 */
   locked: boolean;
-  /** 這個狀態可以評分；還要沒評過、沒有櫃檯回覆，見 `canRate`。 */
   ratable: boolean;
   message: StateMessage | null;
-  /** 四步各自的副文，第 0 步永遠沒有。 */
   stepSubs: readonly [null, StepSubKey | null, StepSubKey | null, StepSubKey | null];
-  /** 首頁進度卡的一行說明；不上進度卡的是 `null`。 */
   homeCard: HomeCardKey | null;
 }
 
@@ -110,7 +98,6 @@ const COMPLETED: StageRow = {
   stepSubs: [null, 'guest.step.deptReceived', null, null],
   homeCard: null,
 };
-/** 修繕結案由主管驗收，不請住客評分。 */
 const CLOSED: StageRow = { ...COMPLETED, ratable: false };
 const CANCELLED: StageRow = {
   labelKey: LABEL.cancelled,
@@ -146,11 +133,9 @@ const DEPT_LABEL = {
 
 export type DeptLabelKey = (typeof DEPT_LABEL)[Dept];
 
-/** 一段要翻譯的文字：語系鍵，加上畫面要代入的部門與送出時間（用不到的參數翻譯時忽略）。 */
 export interface TextRef<K extends string = string> {
   key: K;
   deptKey: DeptLabelKey;
-  /** 送出時間的原始值，畫面自己格式化成「時:分」。 */
   createdAt: string;
 }
 
@@ -158,12 +143,10 @@ export function stageOf(task: Pick<GuestTask, 'state'>): StageRow {
   return STAGE_TABLE[task.state];
 }
 
-/** 待派單時後端還沒定部門，住客看到的一律是櫃檯。 */
 export function deptLabelKey(dept: Dept | null | undefined): DeptLabelKey {
   return DEPT_LABEL[dept ?? 'frontdesk'];
 }
 
-/** 櫃檯當場回答的單也是 `done`，但住客已經拿到答覆，不再請他評分。 */
 export function canRate(task: Pick<GuestTask, 'state' | 'rating' | 'answer'>): boolean {
   return stageOf(task).ratable && task.rating == null && task.answer == null;
 }
@@ -174,7 +157,6 @@ export function showsProgress(task: Pick<GuestTask, 'state' | 'answer'>): boolea
 
 export type MessageKind = StateMessage | 'answer';
 
-/** 訊息框的內文：飯店設定的字用語系鍵，櫃檯回覆照原文。 */
 export type MessageBody = { key: `guest.message.${StateMessage}.body` } | { text: string };
 
 export interface MessageBoxView {
@@ -183,7 +165,6 @@ export interface MessageBoxView {
   body: MessageBody;
 }
 
-/** 依序取第一條符合的：已取消、櫃檯回覆、待派單、已完成；都不符合就沒有訊息框。 */
 export function messageBox(task: Pick<GuestTask, 'state' | 'answer'>): MessageBoxView | null {
   const message = stageOf(task).message;
   if (message !== 'cancelled' && task.answer != null) {
@@ -203,7 +184,6 @@ export interface StepView {
 
 export const STEP_TITLES = [LABEL.submitted, LABEL.accepted, LABEL.processing, LABEL.completed] as const;
 
-/** 四步各自的樣子與副文；不顯示進度的（已取消、櫃檯已回覆）回 `null`。 */
 export function stepView(task: Pick<GuestTask, 'state' | 'answer' | 'dept' | 'createdAt'>): StepView[] | null {
   const row = stageOf(task);
   if (row.step === null || !showsProgress(task)) return null;
@@ -220,43 +200,21 @@ export function stepView(task: Pick<GuestTask, 'state' | 'answer' | 'dept' | 'cr
   });
 }
 
-/** 首頁進度卡的一行說明；只有進行中的需求上進度卡，其餘回 `null`。 */
 export function homeCardLine(task: Pick<GuestTask, 'state' | 'dept' | 'createdAt'>): TextRef<HomeCardKey> | null {
   const key = stageOf(task).homeCard;
   return key ? { key, deptKey: deptLabelKey(task.dept), createdAt: task.createdAt } : null;
 }
 
-/**
- * 新到舊。後端時鐘固定時同一次送出的幾張送出時間相同，這時照這支手機記下的送出先後，後送出的在上；
- * 不是這支手機送的（另一支手機、櫃檯代開）排在同一刻的最後，彼此維持後端給的順序。
- */
-export function newestFirst<T extends Pick<GuestTask, 'id' | 'createdAt'>>(
-  tasks: readonly T[],
-  sentOrder: readonly string[] = [],
-): T[] {
-  const rank = (task: T) => sentOrder.indexOf(task.id);
-  return [...tasks].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || rank(b) - rank(a));
-}
-
-/** 首頁進度卡要顯示的那一張：進行中裡送出時間最新的。 */
-export function latestActive<T extends Pick<GuestTask, 'id' | 'state' | 'createdAt'>>(
-  tasks: readonly T[],
-  sentOrder: readonly string[] = [],
-): T | null {
-  return newestFirst(tasks, sentOrder).find((task) => stageOf(task).section === 'active') ?? null;
+export function latestActive<T extends Pick<GuestTask, 'state'>>(tasks: readonly T[]): T | null {
+  return tasks.find((task) => stageOf(task).section === 'active') ?? null;
 }
 
 const SECTION_ORDER: readonly StageSection[] = ['active', 'ended'];
 
 export type RequestSection<T> = { section: StageSection; tasks: T[] };
 
-/** 清單的段落：先「進行中」再「已結束」，各自新到舊；沒有內容的段落不在結果裡，一張都沒有時是空陣列。 */
-export function splitSections<T extends Pick<GuestTask, 'id' | 'state' | 'createdAt'>>(
-  tasks: readonly T[],
-  sentOrder: readonly string[] = [],
-): RequestSection<T>[] {
-  const sorted = newestFirst(tasks, sentOrder);
-  return SECTION_ORDER.map((section) => ({ section, tasks: sorted.filter((task) => stageOf(task).section === section) })).filter(
+export function splitSections<T extends Pick<GuestTask, 'state'>>(tasks: readonly T[]): RequestSection<T>[] {
+  return SECTION_ORDER.map((section) => ({ section, tasks: tasks.filter((task) => stageOf(task).section === section) })).filter(
     (group) => group.tasks.length > 0,
   );
 }
@@ -266,12 +224,8 @@ export type HomeRequestsSection<T> =
   | { kind: 'card'; task: T; count: number }
   | { kind: 'idle'; count: number };
 
-/** 首頁「我的需求」：一張都沒有時整塊不出現；有進行中的顯示最新那張的進度卡；全部結束時是「目前沒有進行中的需求」。 */
-export function homeRequestsSection<T extends Pick<GuestTask, 'id' | 'state' | 'createdAt'>>(
-  tasks: readonly T[],
-  sentOrder: readonly string[] = [],
-): HomeRequestsSection<T> {
+export function homeRequestsSection<T extends Pick<GuestTask, 'state'>>(tasks: readonly T[]): HomeRequestsSection<T> {
   if (tasks.length === 0) return { kind: 'none' };
-  const task = latestActive(tasks, sentOrder);
+  const task = latestActive(tasks);
   return task ? { kind: 'card', task, count: tasks.length } : { kind: 'idle', count: tasks.length };
 }

@@ -61,10 +61,6 @@ function msOf(moment: string | null | undefined): number {
   return moment ? Date.parse(moment) : 0;
 }
 
-/**
- * 後端給看板時的順序：建立時間新的在上，同一刻建立的再比 id，大的在上。
- * 拿它當每一欄最後的比較，時刻相同的單才不會因為即時更新把新卡片併進陣列的位置不同，跟重新整理後排得不一樣。
- */
 function byServerOrder(a: DeskTask, b: DeskTask): number {
   return msOf(b.createdAt) - msOf(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 }

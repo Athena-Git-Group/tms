@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 
-/** 還沒開放的入口旁那個中性灰標籤。 */
 export function ComingSoonTag() {
   const { t } = useTranslation();
   return (

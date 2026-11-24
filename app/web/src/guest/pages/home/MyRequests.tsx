@@ -6,12 +6,10 @@ import { ProgressCard } from '../../components/ProgressCard';
 import { requestLink } from '../../lib/back-target';
 import { homeRequestsSection } from '../../lib/stage';
 import { GUEST_PATHS, guestPath } from '../../paths';
-import { readSentOrder } from '../../sent-order';
 
-/** 首頁「我的需求」：這次住宿一張都沒送過時整塊不出現。 */
 export function MyRequests({ qrToken, tasks }: { qrToken: string; tasks: GuestTask[] }) {
   const { t } = useTranslation();
-  const section = homeRequestsSection(tasks, readSentOrder(qrToken));
+  const section = homeRequestsSection(tasks);
   if (section.kind === 'none') return null;
   const listPath = guestPath(qrToken, GUEST_PATHS.requests);
   return (

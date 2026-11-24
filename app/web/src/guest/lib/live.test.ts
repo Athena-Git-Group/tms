@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_LIVE_STATE, type LiveEvent, type LiveState } from '../../features/realtime/live-connection';
-import { guestRereadMs, guestTransition } from './live';
+import {
+  GUEST_LIVE_POLICY,
+  INITIAL_LIVE_STATE,
+  transitionFor,
+  type LiveEvent,
+  type LiveState,
+} from '../../features/realtime/live-connection';
+import { guestRereadMs } from './live';
+
+const guestTransition = transitionFor(GUEST_LIVE_POLICY);
 
 const signal = (event: string, data = '{}'): LiveEvent => ({ type: 'signal', signal: { event, data } });
 
@@ -25,8 +33,17 @@ describe('guest live connection', () => {
     expect(guestRereadMs(run(...CONNECTED, signal('degraded')))).toBe(4_000);
   });
 
-  it('stays on periodic re-reads while degraded, since the guest stream never sends recovered', () => {
-    expect(guestRereadMs(run(...CONNECTED, signal('degraded'), signal('heartbeat', '{"stream_pos":3}')))).toBe(4_000);
+  it('stays on periodic re-reads while heartbeats still say degraded', () => {
+    expect(guestRereadMs(run(...CONNECTED, signal('degraded'), signal('heartbeat', '{"stream_pos":3,"degraded":true}')))).toBe(4_000);
+  });
+
+  it('goes back to live on recovered or a heartbeat that is no longer degraded', () => {
+    expect(guestRereadMs(run(...CONNECTED, signal('degraded'), signal('recovered')))).toBe(false);
+    expect(guestRereadMs(run(...CONNECTED, signal('degraded'), signal('heartbeat', '{"stream_pos":3,"degraded":false}')))).toBe(false);
+  });
+
+  it('stays on periodic re-reads when the backend announces degraded right after connecting', () => {
+    expect(guestRereadMs(run(...CONNECTED, signal('degraded', '{"reason":"kafka_unavailable"}')))).toBe(4_000);
   });
 
   it('goes back to live only after reconnecting and receiving init: degraded, drop, reconnect, init', () => {

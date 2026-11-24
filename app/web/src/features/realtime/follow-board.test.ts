@@ -30,7 +30,6 @@ function board(tasks: DeskTask[], businessDate = '2026-11-18', serverTime = '202
   return { serverTime, businessDate, floors: [4], tasks, myToday: { assignedCount: 0, answeredCount: 0 } };
 }
 
-/** 假後端：每次 `GET /desk/board` 都掛著，等測試給它要回的看板。 */
 function fakeBackend() {
   const reads: Array<(body: DeskBoard) => void> = [];
   vi.stubGlobal(
@@ -46,7 +45,6 @@ function fakeBackend() {
   return reads;
 }
 
-/** 看板已經讀過一次、外框正看著它，串流的訊號交給 `followBoard`。 */
 function shellWith(initial: DeskBoard) {
   const queryClient = new QueryClient();
   queryClient.setQueryData(deskBoardQuery.queryKey, initial);
@@ -164,7 +162,6 @@ describe('followBoard：換日', () => {
   it('到了隔天 00:00 自己整份重讀；讀回來還是舊營業日就一分鐘後再讀', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     vi.setSystemTime(new Date('2026-11-18T23:58:00+08:00'));
-    // 櫃檯電腦的時鐘慢了 30 秒，等的是後端的 00:00。
     useServerClockStore.getState().syncWith('2026-11-18T23:58:30+08:00', new Date());
     const reads = fakeBackend();
     const { tasks, follower } = shellWith(

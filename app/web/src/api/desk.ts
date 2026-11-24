@@ -20,37 +20,53 @@ export function readDeskBoard(signal?: AbortSignal): Promise<DeskBoard> {
   return apiGet<DeskBoard>('/desk/board', { signal }).then(syncServerClock);
 }
 
-/**
- * 每份快取各自記著即時訊號換上過的卡片（規則見 `lib/board-sync.ts`）。
- * 記在快取旁邊而不是連線裡，因為整份重讀不管是誰發的（訊號、外框定時重讀、派單之後），讀回來時都要用它比新舊。
- */
-const receivedPushes = new WeakMap<QueryClient, ReceivedPushes>();
+interface PushLog {
+  pushes: ReceivedPushes;
+  lastOrder: number;
+}
 
-/** 收到卡片與開始整份重讀共用的先後順序，只拿來判斷卡片是不是在某次讀取開始之後才收到。 */
-let receiveOrder = 0;
+const pushLogs = new WeakMap<QueryClient, PushLog>();
+
+function pushLogOf(client: QueryClient): PushLog {
+  let log = pushLogs.get(client);
+  if (!log) {
+    log = { pushes: new Map(), lastOrder: 0 };
+    pushLogs.set(client, log);
+  }
+  return log;
+}
 
 export const deskBoardQuery = queryOptions({
   queryKey: ['desk-board'],
   queryFn: async ({ signal, client }) => {
-    const startedOrder = receiveOrder;
+    const startedOrder = pushLogOf(client).lastOrder;
     const fresh = await readDeskBoard(signal);
-    const merged = mergeFullRead(fresh, receivedPushes.get(client) ?? new Map(), startedOrder);
-    receivedPushes.set(client, merged.pushes);
+    const log = pushLogOf(client);
+    const merged = mergeFullRead(fresh, log.pushes, startedOrder);
+    log.pushes = merged.pushes;
     return merged.board;
   },
   retry: false,
 });
 
-/**
- * 把即時訊號帶來的卡片照 `applyCardPush` 的規則換進看板快取，回傳要不要另外整份重讀。
- * 還沒有讀到過看板時無從比起，一律要整份重讀。
- */
+const boardReadCancels = new WeakMap<QueryClient, number>();
+
+export function boardReadCancelCount(queryClient: QueryClient): number {
+  return boardReadCancels.get(queryClient) ?? 0;
+}
+
+export async function cancelBoardReadForDispatch(queryClient: QueryClient): Promise<void> {
+  boardReadCancels.set(queryClient, boardReadCancelCount(queryClient) + 1);
+  await queryClient.cancelQueries({ queryKey: deskBoardQuery.queryKey });
+}
+
 export function receiveCardPush(queryClient: QueryClient, push: CardPush): { needsFullRead: boolean } {
   const board = queryClient.getQueryData(deskBoardQuery.queryKey);
   if (!board) return { needsFullRead: true };
-  receiveOrder += 1;
-  const applied = applyCardPush(board, receivedPushes.get(queryClient) ?? new Map(), push, receiveOrder);
-  receivedPushes.set(queryClient, applied.pushes);
+  const log = pushLogOf(queryClient);
+  log.lastOrder += 1;
+  const applied = applyCardPush(board, log.pushes, push, log.lastOrder);
+  log.pushes = applied.pushes;
   if (applied.board !== board) queryClient.setQueryData(deskBoardQuery.queryKey, applied.board);
   return { needsFullRead: applied.needsFullRead };
 }

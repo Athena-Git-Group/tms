@@ -6,7 +6,6 @@ import { buttonClass } from './button-class';
 
 const NOTE = 'm-0 px-4 text-center text-guest-footnote tracking-[-.08px] text-guest-text-secondary';
 
-/** 進度頁底部：可以取消時是取消鈕與說明，同仁接手後是鎖定說明，已結束什麼都沒有。 */
 export const RequestBottom = forwardRef<
   HTMLButtonElement,
   { task: GuestTask; cancelling: boolean; onCancel: () => void }

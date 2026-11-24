@@ -7,7 +7,6 @@ import { GUEST_PATHS, guestPath } from '../paths';
 import { useReadySession } from '../session';
 import { useDocumentTitle } from '../use-document-title';
 
-/** 送出成功：沒有標題列。一項時「查看進度」進那一筆，多項時進清單。 */
 export function SentPage() {
   const { t } = useTranslation();
   const session = useReadySession();

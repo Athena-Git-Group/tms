@@ -15,7 +15,7 @@ import {
   quantityOf,
   submitLabel,
 } from '../lib/supply-quantities';
-import { useGuestHome, useGuestRequests } from '../queries';
+import { useGuestHome, useGuestQuota, useGuestRequests } from '../queries';
 import { useReadySession } from '../session';
 import { useGuestSubmit } from '../use-guest-submit';
 import { useQuotaGuard } from '../use-quota-guard';
@@ -26,7 +26,7 @@ export function SupplyPage() {
   const home = useGuestHome(session.qrToken);
   const requests = useGuestRequests(session.qrToken);
   const [quantities, dispatchQuantity] = useReducer(quantitiesReducer, NO_QUANTITIES);
-  const guard = useQuotaGuard(requests.data ?? []);
+  const guard = useQuotaGuard(useGuestQuota(session.qrToken));
   const { sending, submit } = useGuestSubmit();
 
   const title = t('guest.supply.title');

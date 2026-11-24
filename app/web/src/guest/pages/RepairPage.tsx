@@ -15,7 +15,7 @@ import {
   noteLength,
   type RepairCategory,
 } from '../lib/repair-text';
-import { useGuestRequests } from '../queries';
+import { useGuestQuota } from '../queries';
 import { useReadySession } from '../session';
 import { useGuestSubmit } from '../use-guest-submit';
 import { useQuotaGuard } from '../use-quota-guard';
@@ -26,8 +26,7 @@ export function RepairPage() {
   const [category, setCategory] = useState<RepairCategory | null>(null);
   const [note, setNote] = useState('');
   const { sending, submit } = useGuestSubmit();
-  // 清單還沒讀到時估算照樣放行，交給後端的限流擋；估算本來就只是住客這一頭看得到的部分。
-  const guard = useQuotaGuard(useGuestRequests(session.qrToken).data ?? []);
+  const guard = useQuotaGuard(useGuestQuota(session.qrToken));
 
   const noteRequired = category?.id === 'other';
 

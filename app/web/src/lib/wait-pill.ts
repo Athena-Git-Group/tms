@@ -42,44 +42,41 @@ export function waitPill(task: DeskTask, now: Date, serverUtcOffsetMinutes: numb
       const minutes = waitingMinutes(task, now) ?? 0;
       const tone = waitTone(minutes);
       if (minutes < 1) {
-        return { text: { key: 'board.pill.justNow' }, tone };
+        return { text: (t) => t('board.pill.justNow'), tone };
       }
       if (column === 'pool' && minutes >= POOL_OVERDUE_MINUTES) {
-        return { text: { key: 'board.pill.overdue', values: { minutes: minutes - POOL_OVERDUE_MINUTES } }, tone };
+        return { text: (t) => t('board.pill.overdue', { minutes: minutes - POOL_OVERDUE_MINUTES }), tone };
       }
-      return { text: { key: 'board.pill.waiting', values: { minutes } }, tone };
+      return { text: (t) => t('board.pill.waiting', { minutes }), tone };
     }
     case 'accepted':
       if (task.acceptedVia === 'plan_assigned') {
-        return { text: { key: 'board.pill.planned' }, tone: 'gray' };
+        return { text: (t) => t('board.pill.planned'), tone: 'gray' };
       }
       return {
-        text: { key: 'board.pill.accepted', values: { minutes: minutesSince(task.acceptedAt ?? task.updatedAt, now) } },
+        text: (t) => t('board.pill.accepted', { minutes: minutesSince(task.acceptedAt ?? task.updatedAt, now) }),
         tone: 'gray',
       };
     case 'doing':
       return {
-        text: { key: 'board.pill.doing', values: { minutes: minutesSince(task.startedAt ?? task.updatedAt, now) } },
+        text: (t) => t('board.pill.doing', { minutes: minutesSince(task.startedAt ?? task.updatedAt, now) }),
         tone: 'gray',
       };
     case 'interrupted':
       return {
-        text: {
-          key: 'board.pill.stopped',
-          values: { minutes: minutesSince(task.interruptedAt ?? task.updatedAt, now) },
-        },
+        text: (t) => t('board.pill.stopped', { minutes: minutesSince(task.interruptedAt ?? task.updatedAt, now) }),
         tone: 'red',
       };
     case 'deferred':
-      return { text: { key: 'board.pill.deferred' }, tone: 'gray' };
+      return { text: (t) => t('board.pill.deferred'), tone: 'gray' };
     case 'done':
       return {
-        text: { key: 'board.pill.at', values: { time: clockTime(task.doneAt ?? task.updatedAt, serverUtcOffsetMinutes) } },
+        text: (t) => t('board.pill.at', { time: clockTime(task.doneAt ?? task.updatedAt, serverUtcOffsetMinutes) }),
         tone: 'green',
       };
     case 'closed':
       return {
-        text: { key: 'board.pill.at', values: { time: clockTime(task.endedAt ?? task.updatedAt, serverUtcOffsetMinutes) } },
+        text: (t) => t('board.pill.at', { time: clockTime(task.endedAt ?? task.updatedAt, serverUtcOffsetMinutes) }),
         tone: 'gray',
       };
   }

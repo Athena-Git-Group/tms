@@ -33,10 +33,26 @@ export const INITIAL_LIVE_STATE: LiveState = {
 };
 
 /**
- * 事件在這個狀態下沒有作用時（例如還沒連上就收到訊號、已經斷了又報一次斷線），原樣交回同一個物件。
- * 外框把狀態放在 React 的 state 裡，同一個物件不會觸發重畫，所以每 15 秒一次的心跳不會讓整個外框重畫。
+ * 兩條串流都在連上時、resync 之後補送一則 degraded，所以 init 本身就足以判斷這條新連線可不可信。
+ * 櫃檯仍等 recovered 或 degraded 為 false 的心跳才收起提醒；住客畫面不顯示提醒，收到 init 就停止定期重讀。
  */
-export function transition(state: LiveState, event: LiveEvent): LiveState {
+export interface LivePolicy {
+  initRestoresTrust: boolean;
+}
+
+export const DESK_LIVE_POLICY: LivePolicy = { initRestoresTrust: false };
+
+export const GUEST_LIVE_POLICY: LivePolicy = { initRestoresTrust: true };
+
+export type LiveTransition = (state: LiveState, event: LiveEvent) => LiveState;
+
+export function transitionFor(policy: LivePolicy): LiveTransition {
+  return (state, event) => step(state, event, policy);
+}
+
+export const transition: LiveTransition = transitionFor(DESK_LIVE_POLICY);
+
+function step(state: LiveState, event: LiveEvent, policy: LivePolicy): LiveState {
   switch (event.type) {
     case 'connected':
       return isAttempting(state.link) ? { ...state, link: 'connected' } : state;
@@ -52,7 +68,7 @@ export function transition(state: LiveState, event: LiveEvent): LiveState {
     case 'retryDue':
       return state.link === 'disconnected' ? { ...state, link: 'reconnecting', receivedSignal: false } : state;
     case 'signal':
-      return state.link === 'connected' ? afterSignal(state, event.signal) : state;
+      return state.link === 'connected' ? afterSignal(state, event.signal, policy) : state;
   }
 }
 
@@ -64,13 +80,14 @@ function attemptFailed(state: LiveState): boolean {
   return isAttempting(state.link) || !state.receivedSignal;
 }
 
-function afterSignal(state: LiveState, signal: StreamEvent): LiveState {
-  const trusted = trustedAfter(state.trusted, signal);
+function afterSignal(state: LiveState, signal: StreamEvent, policy: LivePolicy): LiveState {
+  const trusted = trustedAfter(state.trusted, signal, policy);
   if (trusted === state.trusted && state.receivedSignal) return state;
   return { ...state, trusted, receivedSignal: true };
 }
 
-function trustedAfter(trusted: boolean, { event, data }: StreamEvent): boolean {
+function trustedAfter(trusted: boolean, { event, data }: StreamEvent, policy: LivePolicy): boolean {
+  if (event === 'init' && policy.initRestoresTrust) return true;
   if (event === 'degraded') return false;
   if (event === 'recovered') return true;
   if (event === 'heartbeat') {

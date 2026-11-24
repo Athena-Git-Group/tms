@@ -16,7 +16,6 @@ import { useGuestRequests } from '../queries';
 import { useReadySession } from '../session';
 import { useGuestMutation } from '../use-guest-mutation';
 
-/** 需求進度：網址上那一張；不在這次住宿的清單裡時換成清單。 */
 export function RequestPage() {
   const { t } = useTranslation();
   const session = useReadySession();

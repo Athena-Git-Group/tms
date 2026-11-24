@@ -1,5 +1,5 @@
 import { useEffect, useReducer, type ReactNode } from 'react';
-import { scan, setUnauthorizedHandler } from './api/client';
+import { scan, setSessionRenewal } from './api/client';
 import type { ScanResponse } from './api/types';
 import { PageLoading } from './components/PageLoading';
 import { RetryNotice } from './components/RetryNotice';
@@ -29,11 +29,6 @@ function initialState(qrToken: string): EntryState {
   return useGuestSessionStore.getState().session?.qrToken === qrToken ? { kind: 'ready' } : ENTRY_LOADING;
 }
 
-/**
- * `/g/{代碼}` 這一層：這個分頁有這枚代碼的 session 就往下畫，沒有就用代碼換一個；
- * 正在用時後端不再承認手上的 session，也在這裡用同一枚代碼靜靜重換，畫面不動。
- * 換一枚代碼時由呼叫的一方以代碼當 `key` 重新掛上，狀態從頭算。
- */
 export function GuestEntry({ qrToken, children }: { qrToken: string; children: ReactNode }) {
   const setSession = useGuestSessionStore((state) => state.setSession);
   const [state, dispatch] = useReducer(entryReducer, qrToken, initialState);
@@ -66,7 +61,7 @@ export function GuestEntry({ qrToken, children }: { qrToken: string; children: R
   const rereadMs = useGuestLiveUpdates(qrToken, ready);
   useEffect(() => {
     if (!ready) return undefined;
-    setUnauthorizedHandler(
+    setSessionRenewal(
       createRenewal({
         currentSession: () => {
           const session = useGuestSessionStore.getState().session;
@@ -80,7 +75,7 @@ export function GuestEntry({ qrToken, children }: { qrToken: string; children: R
         failed: (error) => dispatch(scanErrorEvent(error)),
       }),
     );
-    return () => setUnauthorizedHandler(null);
+    return () => setSessionRenewal(null);
   }, [qrToken, ready, setSession]);
 
   const retry = () => dispatch({ type: 'retry-pressed' });
@@ -105,7 +100,6 @@ function entryView(state: EntryState, children: ReactNode, retry: () => void): R
   }
 }
 
-/** 還不知道房號時分頁上不放字，不讓櫃檯 Web 的網頁標題露出來。 */
 function EntryLoading() {
   useDocumentTitle('');
   return <PageLoading />;

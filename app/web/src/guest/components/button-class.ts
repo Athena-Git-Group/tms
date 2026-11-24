@@ -8,10 +8,7 @@ const VARIANTS = {
   grayDanger: 'bg-guest-fill-button text-guest-danger',
 } as const;
 
-/**
- * 住客頁的膠囊按鈕：實心、文字、灰底、灰底紅字四種，大的高 54 點；`tight` 給並排平分寬度的按鈕（確認框）。
- * 高度與左右內距各只給一個類別：同一屬性給兩個類別時，誰生效看產生的 CSS 先後，不看這裡寫的先後。
- */
+/** 高度與左右內距各只給一個類別：同一屬性給兩個類別時，誰生效看產生的 CSS 先後，不看這裡寫的先後。 */
 export function buttonClass(
   variant: keyof typeof VARIANTS,
   { large = false, block = false, tight = false } = {},

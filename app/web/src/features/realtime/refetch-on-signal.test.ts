@@ -1,6 +1,6 @@
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deskBoardQuery } from '../../api/desk';
+import { cancelBoardReadForDispatch, deskBoardQuery } from '../../api/desk';
 import type { DeskBoard } from '../../api/types';
 import { createBoardRereader } from './refetch-on-signal';
 
@@ -9,7 +9,6 @@ interface BoardRead {
   respond: () => void;
 }
 
-/** 假後端：每次 `GET /desk/board` 都掛著，等測試呼叫 `respond` 才回；被取消時照瀏覽器的行為丟 `AbortError`。 */
 function fakeBackend() {
   const reads: BoardRead[] = [];
   const log: string[] = [];
@@ -31,7 +30,6 @@ function fakeBackend() {
   return { reads, log };
 }
 
-/** 看板已讀過一次、外框正看著它；`state` 是上一次讀取的結果。 */
 function shellWithBoard(state: 'success' | 'error') {
   const queryClient = new QueryClient();
   if (state === 'success') queryClient.setQueryData(deskBoardQuery.queryKey, { tasks: [] } as unknown as DeskBoard);
@@ -116,7 +114,7 @@ describe('createBoardRereader', () => {
     reread('stale');
     reread('stale');
     await settle();
-    await queryClient.cancelQueries({ queryKey: deskBoardQuery.queryKey });
+    await cancelBoardReadForDispatch(queryClient);
     await settle();
     await settle();
     expect(reads).toHaveLength(1);
@@ -133,7 +131,7 @@ describe('createBoardRereader', () => {
     reread('stale');
     await settle();
     queryClient.setQueryData(deskBoardQuery.queryKey, { tasks: [{ id: 'pushed' }] } as unknown as DeskBoard);
-    await queryClient.cancelQueries({ queryKey: deskBoardQuery.queryKey });
+    await cancelBoardReadForDispatch(queryClient);
     queryClient.setQueryData(deskBoardQuery.queryKey, { tasks: [{ id: 'assumed-assigned' }] } as unknown as DeskBoard);
     await settle();
     await settle();
