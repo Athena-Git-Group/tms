@@ -970,6 +970,14 @@ public class BackendChannel {
         return taskId;
     }
 
+    // 與後端開工務單時的標題同一套中文（RepairService.CATEGORY_LABELS），畫面上不該出現類別代碼。
+    private static final Map<String, String> REPAIR_CATEGORY_LABELS = Map.of(
+            "air_conditioning", "冷氣",
+            "plumbing_electrical", "水電",
+            "furniture_equipment", "家具／設備",
+            "door_lock", "門鎖",
+            "other", "其他");
+
     public UUID createRepairTicket(
             String ticketNo, String roomNo, String categoryCode, String stateCode,
             CreatedStaff reporter, CreatedStaff assignee, String description, boolean urgent) {
@@ -977,7 +985,8 @@ public class BackendChannel {
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
 
         String taskState = "done".equals(stateCode) ? "doing" : stateCode;
-        UUID taskId = createTask(roomNo, categoryCode + " 工務單", "repair", "engineering", null,
+        UUID taskId = createTask(roomNo, REPAIR_CATEGORY_LABELS.getOrDefault(categoryCode, categoryCode) + " 工務單",
+                "repair", "engineering", null,
                 taskState, assignee, null, null);
         execute("UPDATE tasks SET source = 'staff' WHERE tenant_id = ? AND id = ?", tenantId, taskId);
 
@@ -1704,7 +1713,8 @@ public class BackendChannel {
             UUID roomId = ensureRoom(spec.roomNo, floorFromRoomNo(spec.roomNo));
             String taskNo = repair ? null : takeDisplayNo("task_counters", "T-", TASK_NO_FORMAT, spec.displayNo);
             String title = spec.title != null ? spec.title : titleFromGuestText();
-            String note = repair ? null : taskNote();
+            // 工務單的說明記在工務單上；住客打字後被櫃檯派給工務的單，原文仍留在任務上。
+            String note = repair && spec.guestText == null ? null : taskNote();
             LocalDate workDate = cleaning ? times[TIME_CREATED].toLocalDate() : null;
             boolean planAssigned = "accepted".equals(initialState);
             if (spec.urgent && !repair) {
@@ -2502,12 +2512,16 @@ public class BackendChannel {
      *
      * <p>還在櫃檯手上的需求是住客打字送出的，原文就是標題。
      * 延後、作廢、查房與驗收由張主管做，當場回答由林佩君做。
+     * 住客的需求不會直接進工務，工務的狀況改走 {@link #seedEngineeringGuestRequest}。
      */
     public UUID seedGuestRequest(String roomNo, GuestSeed seed) {
         long tenantId = ensureTenant();
         UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
         UUID reservationId = stayingReservationId(tenantId, roomId, backendNow())
                 .orElseThrow(() -> new IllegalStateException(roomNo + " 房現在沒有人住，住客需求要掛在在住的訂房上"));
+        if (seed.situation().dispatchedToEngineering()) {
+            return seedEngineeringGuestRequest(roomNo, reservationId, seed);
+        }
         String dept = seed.dept();
         TaskSituation situation = seed.situation().taskSituation();
         TaskSituationSpec spec = TaskSituationSpec.of(roomNo, seed.type(), "guest")
@@ -2524,6 +2538,47 @@ public class BackendChannel {
             spec.guestText(seed.title(), "zh-TW", null);
         }
         return createTaskInSituation(situation, spec);
+    }
+
+    /**
+     * 住客打字送出、停在待派單，再由林佩君派給工務，讓後端自己把它變成工務單；
+     * 之後依狀況由負責人認領、開始、完修，張主管驗收。
+     *
+     * <p>每一步先把後端時鐘撥到那一刻再呼叫後端，事件時間才會是表格要的送出、到手與開始時刻；
+     * 做完撥回原本的現在。派單與送出同一刻，完修與驗收在現在，和其他狀況的預設相同。
+     */
+    private UUID seedEngineeringGuestRequest(String roomNo, UUID reservationId, GuestSeed seed) {
+        if (!"repair".equals(seed.type())) {
+            throw new IllegalArgumentException("「" + seed.situation().term() + "」是櫃檯派給工務的需求，後端派單時一律改成修繕，"
+                    + "類型不能是 " + seed.type());
+        }
+        UUID taskId = createTaskInSituation(TaskSituation.TRIAGE,
+                TaskSituationSpec.of(roomNo, "other", "guest")
+                        .reservationId(reservationId)
+                        .title(seed.title())
+                        .guestText(seed.title(), "zh-TW", null)
+                        .createdAt(seed.createdAt()));
+        OffsetDateTime now = backendNow();
+        try {
+            setBackendClock(seed.createdAt());
+            deskAssign(taskId, defaultStaff(DESK_CLERK_NAME), "engineering", "button");
+            if (seed.acceptedAt() != null) {
+                setBackendClock(seed.acceptedAt());
+                postTaskAction(taskId, "claim", seed.assignee());
+            }
+            if (seed.startedAt() != null) {
+                setBackendClock(seed.startedAt());
+                postTaskAction(taskId, "start", seed.assignee());
+            }
+            if (seed.situation() == GuestSeed.Situation.CLOSED) {
+                setBackendClock(now);
+                completeRepairTask(taskId, seed.assignee());
+                verifyRepairTicket(taskId, defaultStaff(MANAGER_NAME), "passed", null);
+            }
+        } finally {
+            setBackendClock(now);
+        }
+        return taskId;
     }
 
     private CreatedStaff guestSeedActor(TaskSituation situation) {
@@ -2569,7 +2624,8 @@ public class BackendChannel {
     }
 
     /**
-     * 把預設飯店的分類規則設成只有這一條：住客打字的需求含這個關鍵字時，直接進這個部門的待認領。
+     * 把預設飯店的分類規則設成只有這一條：住客打字的需求含這個關鍵字時，分到這個部門與類型。
+     * 分到房務的直接進房務待認領；分到工務的留在待派單，等櫃檯派給工務才成為工務單。
      * {@code dept} 與 {@code type} 給後端的值，例如 {@code engineering}、{@code repair}。
      */
     public void setClassificationRule(String keyword, String dept, String type) {

@@ -81,6 +81,7 @@ public class GuestCommonGivenSteps {
      *
      * <p>不經住客送出需求的端點（測試策略：真的限流器每間房 10 分鐘只收 3 筆、看系統時鐘），
      * 改用 {@code BackendChannel#seedGuestRequest} 直接寫，住客讀清單時看到的和真的送出過的一樣。
+     * 工務待認領、工務已接、已結案是例外：先停在待派單，再由林佩君呼叫後端派給工務，工務單由後端自己開。
      * 表格以外沒有其他需求，靠的是每個場景開頭清空業務資料；同一個場景再寫一次是追加。
      */
     @假設("{string} 房的住客這次住宿有以下需求：")
@@ -236,12 +237,12 @@ public class GuestCommonGivenSteps {
         }
     }
 
-    /** 規格的預設：待派單與已回答是其他，查房通過是打掃，已結案是修繕，其餘是備品。 */
+    /** 規格的預設：待派單與已回答是其他，查房通過是打掃，已結案、工務待認領、工務已接是修繕，其餘是備品。 */
     private static String defaultType(Situation situation) {
         return switch (situation) {
             case TRIAGE, ANSWERED -> "other";
             case INSPECTION_PASSED -> "cleaning";
-            case CLOSED -> "repair";
+            case CLOSED, ENGINEERING_POOL, ENGINEERING_ACCEPTED -> "repair";
             default -> "amenity";
         };
     }

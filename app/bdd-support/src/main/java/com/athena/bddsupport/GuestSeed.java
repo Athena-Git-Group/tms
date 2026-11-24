@@ -99,6 +99,11 @@ public record GuestSeed(
             return taskSituation;
         }
 
+        /** 住客的需求只會經櫃檯派單進工務，所以這幾種狀況的需求先停在待派單、再派給工務。 */
+        public boolean dispatchedToEngineering() {
+            return "engineering".equals(dept);
+        }
+
         public static Situation ofTerm(String term) {
             for (Situation situation : values()) {
                 if (situation.term.equals(term)) {
