@@ -49,6 +49,10 @@ public record GuestSeed(
 
         INTERRUPTED("中斷", TaskSituation.INTERRUPTED_BY_LEAVE, null),
 
+        DONE_AWAITING_INSPECTION("完成等查房", TaskSituation.DONE_AWAITING_INSPECTION, "housekeeping"),
+
+        DONE_AWAITING_VERIFICATION("已完修等驗收", TaskSituation.DONE_AWAITING_VERIFICATION, "engineering"),
+
         DONE("已完成", TaskSituation.DONE, null),
 
         INSPECTION_PASSED("查房通過", TaskSituation.INSPECTION_PASSED, "housekeeping"),

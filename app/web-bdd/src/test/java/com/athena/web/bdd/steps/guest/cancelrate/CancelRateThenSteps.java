@@ -232,8 +232,7 @@ public class CancelRateThenSteps {
             return null;
         });
         Request backend = stay.request(onScreenRequest());
-        assertThat(Set.of("done", "inspected").contains(backend.state()) && backend.rating() == null
-                        && backend.answer() == null,
+        assertThat(backend.ratable(),
                 "後端「" + backend.title() + "」是 " + backend.state() + "、星等 " + backend.rating() + "、回覆 "
                         + backend.answer() + "，不該有評分卡");
     }

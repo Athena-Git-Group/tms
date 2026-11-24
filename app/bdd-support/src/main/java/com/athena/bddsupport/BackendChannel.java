@@ -2392,9 +2392,12 @@ public class BackendChannel {
                 setBackendClock(seed.startedAt());
                 postTaskAction(taskId, "start", seed.assignee());
             }
-            if (seed.situation() == GuestSeed.Situation.CLOSED) {
+            if (seed.situation() == GuestSeed.Situation.CLOSED
+                    || seed.situation() == GuestSeed.Situation.DONE_AWAITING_VERIFICATION) {
                 setBackendClock(now);
                 completeRepairTask(taskId, seed.assignee());
+            }
+            if (seed.situation() == GuestSeed.Situation.CLOSED) {
                 verifyRepairTicket(taskId, defaultStaff(MANAGER_NAME), "passed", null);
             }
         } finally {

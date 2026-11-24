@@ -10,8 +10,8 @@ import java.util.UUID;
 
 public final class GuestStay {
 
-    public record Request(UUID id, String title, String state, String dept, String answer, String inspection,
-            String cancelReason, Integer rating, OffsetDateTime createdAt) {
+    public record Request(UUID id, String title, String type, String state, String dept, String answer,
+            String inspection, String cancelReason, Integer rating, OffsetDateTime createdAt, boolean ended) {
 
         public String situation() {
             return switch (state) {
@@ -21,7 +21,9 @@ public final class GuestStay {
                 case "deferred" -> "延後中";
                 case "doing" -> "進行中";
                 case "interrupted" -> "中斷";
-                case "done" -> answer != null ? "已回答" : "已完成";
+                case "done" -> answer != null ? "已回答"
+                        : ended ? "已完成"
+                        : "repair".equals(type) ? "已完修等驗收" : "完成等查房";
                 case "inspected" -> "查房通過";
                 case "closed" -> "已結案";
                 case "cancelled" -> "guest_withdrew".equals(cancelReason) ? "已取消（住客收回）" : "已取消（櫃檯取消）";
@@ -34,19 +36,24 @@ public final class GuestStay {
                 case "triage" -> "已送出";
                 case "pool", "accepted", "deferred" -> "已受理";
                 case "doing", "interrupted" -> "處理中";
-                case "done", "inspected", "closed" -> "已完成";
+                case "done" -> ended ? "已完成" : "處理中";
+                case "inspected", "closed" -> "已完成";
                 case "cancelled" -> "已取消";
                 default -> throw new IllegalStateException("「需求的狀況對照」沒有後端狀態 " + state);
             };
         }
 
         public boolean active() {
-            return !List.of("done", "inspected", "closed", "cancelled").contains(state);
+            return !ended;
+        }
+
+        public boolean ratable() {
+            return ended && List.of("done", "inspected", "closed").contains(state) && rating == null && answer == null;
         }
     }
 
     private static final String REQUEST_COLUMNS = """
-            id, title, state, dept, answer, inspection, cancel_reason, rating, created_at
+            id, title, type, state, dept, answer, inspection, cancel_reason, rating, created_at, ended_at
             """;
 
     private final WebWorld world;
@@ -186,8 +193,9 @@ public final class GuestStay {
         OffsetDateTime createdAt = created instanceof OffsetDateTime odt ? odt
                 : ((java.sql.Timestamp) created).toInstant().atOffset(OffsetDateTime.now().getOffset());
         Object rating = row.get("rating");
-        return new Request((UUID) row.get("id"), (String) row.get("title"), (String) row.get("state"),
-                (String) row.get("dept"), (String) row.get("answer"), (String) row.get("inspection"),
-                (String) row.get("cancel_reason"), rating == null ? null : ((Number) rating).intValue(), createdAt);
+        return new Request((UUID) row.get("id"), (String) row.get("title"), (String) row.get("type"),
+                (String) row.get("state"), (String) row.get("dept"), (String) row.get("answer"),
+                (String) row.get("inspection"), (String) row.get("cancel_reason"),
+                rating == null ? null : ((Number) rating).intValue(), createdAt, row.get("ended_at") != null);
     }
 }

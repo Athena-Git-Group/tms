@@ -52,11 +52,15 @@ public class RealtimeWhenSteps {
                 case "accepted" -> List.of("start", "complete");
                 default -> List.of("complete");
             };
-            default -> throw new IllegalArgumentException("住客規格裡同仁在手機上的動作只有認領、開始、完成，收到「" + action + "」");
+            case "查房通過", "驗收通過" -> List.of();
+            default -> throw new IllegalArgumentException(
+                    "住客規格裡同仁在手機上的動作只有認領、開始、完成、查房通過、驗收通過，收到「" + action + "」");
         };
         live.markWhen();
-        for (String step : steps) {
-            world.backend().postTaskAction(taskId, step, staff);
+        switch (action) {
+            case "查房通過" -> world.backend().passInspectionAs(taskId, staff);
+            case "驗收通過" -> world.backend().verifyRepairTicket(taskId, staff, "passed", null);
+            default -> steps.forEach(step -> world.backend().postTaskAction(taskId, step, staff));
         }
     }
 
