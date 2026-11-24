@@ -107,7 +107,7 @@ public class AccountWhenSteps {
     public void reloadsPage(String staffName) {
         Page page = world.page();
         String path = page.url().split("[?#]")[0];
-        String pageName = path.endsWith(WebApp.BOARD) ? "總覽看板" : path.endsWith(WebApp.TRIAGE) ? "待派單頁" : null;
+        String pageName = ShellFrame.pageNameAt(path);
         if (pageName == null) {
             page.reload();
             return;

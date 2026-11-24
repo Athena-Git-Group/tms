@@ -2639,6 +2639,14 @@ public class BackendChannel {
         return parseJson(response.body());
     }
 
+    public JsonNode patchDeskSettings(CreatedStaff manager, Map<String, Object> patch) {
+        HttpResponse<String> response = send(request("PATCH", "/desk/settings", jwt(manager))
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(toJson(patch), StandardCharsets.UTF_8)));
+        requireSuccess(response, "改櫃檯設定 " + patch);
+        return parseJson(response.body());
+    }
+
     public JsonNode getJson(String path, CreatedStaff viewer) {
         HttpResponse<String> response = send(request("GET", path, jwt(viewer)).GET());
         if (response.statusCode() != 200) {
