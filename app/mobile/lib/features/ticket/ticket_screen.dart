@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 
 import '../../core/api_client.dart';
@@ -270,13 +272,16 @@ class _TicketScreenState extends State<TicketScreen> {
     if (ticket == null) {
       return;
     }
-    await TmsSheetRoute.show<void>(
-      context,
-      (_) => TicketVerifyFailSheet(
+    final sheet = TmsSheetRoute<void>(
+      builder: (_) => TicketVerifyFailSheet(
         ticketNo: ticket.ticketNo,
         onSubmit: (reason) => _sendVerify('failed', reason: reason),
       ),
     );
+    unawaited(Navigator.of(context, rootNavigator: true).push(sheet));
+    // push 的 future 在 pop() 當下就完成，面板還在播收起動畫；要等 completed
+    // （面板從畫面樹移除）才能換掉底下的畫面，否則會觸發 _dependents.isEmpty 斷言。
+    await sheet.completed;
     if (!mounted) {
       return;
     }
