@@ -1,0 +1,27 @@
+searchProducts:
+  post:
+    summary: 查詢商品清單
+    description: 依關鍵字、分類與分頁條件查詢目前可販售商品。
+    operationId: searchProducts
+    tags:
+      - catalog
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/catalog.yaml#/ProductSearchRequest
+    responses:
+      '200':
+        description: 成功回傳符合條件的商品清單與分頁資訊。
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/catalog.yaml#/ProductSearchResponse
+      '400':
+        description: 查詢條件格式不合法。
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/shared.yaml#/ErrorResponse
+    x-realtime-note: 此操作不需要即時通道同步。
