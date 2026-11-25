@@ -39,7 +39,7 @@ done
 if [[ $BUILD == 1 ]]; then
   log "重新打包後端（跳過測試）"
   java_home="$(/usr/libexec/java_home -v 25 2>/dev/null)" || die "找不到 JDK 25（/usr/libexec/java_home -v 25 沒結果）"
-  (cd "$REPO_ROOT" && JAVA_HOME="$java_home" ./tms/mvnw -q -f tms/pom.xml -DskipTests package)
+  (cd "$REPO_ROOT" && JAVA_HOME="$java_home" ./tms/mvnw -q -f tms/pom.xml -DskipTests clean package)
 fi
 
 bash "$MANUAL_ENV_DIR/stop.sh"
