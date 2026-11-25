@@ -77,11 +77,6 @@ public class GuestWhenSteps {
         }
     }
 
-    @When("^再以 session \"([^\"]+)\" 送出第 4 筆需求$")
-    public void createFourthRequest(String sessionSymbol) {
-        ctx.lastResponse(guest.createRequest(ctx.guestSession(sessionSymbol), Map.of("itemId", "towel")));
-    }
-
     @When("^住客以 session \"([^\"]+)\" 對任務 \"([^\"]+)\" 呼叫收回$")
     public void cancelTask(String sessionSymbol, String taskSymbol) {
         UUID taskId = ctx.entityId(taskSymbol);

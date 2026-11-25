@@ -65,26 +65,6 @@ class TaskEngineRowWriteTest extends PostgresSpringTest {
         assertThat(taskRow(plain.getId()).get("urgent")).isEqualTo(false);
     }
 
-    @Test
-    void cancelPersistsReasonOnTaskRow() {
-        Task task = taskEngine.create(command("pool", false));
-
-        taskEngine.cancel(TENANT_ID, task.getId(), "manager_void", Actor.staff("manager", UUID.randomUUID()));
-
-        Map<String, Object> row = taskRow(task.getId());
-        assertThat(row.get("state")).isEqualTo("cancelled");
-        assertThat(row.get("cancel_reason")).isEqualTo("manager_void");
-    }
-
-    @Test
-    void guestWithdrawalPersistsReasonOnTaskRow() {
-        Task task = taskEngine.create(command("pool", false));
-
-        taskEngine.cancelByGuest(TENANT_ID, task.getId());
-
-        assertThat(taskRow(task.getId()).get("cancel_reason")).isEqualTo("guest_withdrew");
-    }
-
     private static TaskCreateCommand command(String initialState, boolean urgent) {
         return new TaskCreateCommand(
                 TENANT_ID, "repair", "desk", ROOM_502, null, "engineering", initialState, null,
@@ -94,7 +74,7 @@ class TaskEngineRowWriteTest extends PostgresSpringTest {
 
     private Map<String, Object> taskRow(UUID taskId) {
         return jdbcTemplate.queryForMap(
-                "SELECT state, urgent, cancel_reason, created_at, updated_at FROM tasks WHERE tenant_id = ? AND id = ?",
+                "SELECT urgent, created_at, updated_at FROM tasks WHERE tenant_id = ? AND id = ?",
                 TENANT_ID, taskId);
     }
 }

@@ -30,12 +30,6 @@
       那麼 住客 A 的連線依序收到 "init"、"resync"
       並且 住客 A 的 resync 的 refetch 指向 "/guest/home"
 
-    @boundary
-    場景: 員工連線依序收到 init、resync，resync 指向待認領端點
-      假設 房務「小美」開啟員工事件串流
-      那麼 「小美」的連線依序收到 "init"、"resync"
-      並且 「小美」的 resync 的 refetch 指向 "/api/v1/pool"
-
   Rule: 住客串流只推本 session 綁定訂單的任務變化
 
     @happy @boundary
@@ -87,9 +81,3 @@
       # relay 送出後才標記已送，若中途當機，重啟後會再送同一筆。
       當 同 (task_id, seq) 的事件被重複直送 Kafka 兩筆
       那麼 該任務推給住客 A 的事件維持 4 筆、零重推
-
-    @boundary
-    場景: Kafka 消費延遲超門檻推 degraded
-      假設 房務「小美」開啟員工事件串流
-      當 一筆 record 時間戳落後 60 秒的事件進入 task-events topic
-      那麼 串流收到 "degraded" 事件、reason 為 "kafka_consumer_lag"

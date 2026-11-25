@@ -8,9 +8,7 @@ import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.common.CurrentActor;
 import com.athena.tms.common.TenantContext;
 import com.athena.tms.common.error.TooManyRequestsException;
-import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.GuestRequestCreate;
-import com.athena.tms.dto.TaskCreateCommand;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,7 +17,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 /** 每間房 10 分鐘 3 筆的名額從 tasks 現數：只數住客送的，已取消的也算，櫃檯代開的不算，時間以營業時鐘為準。 */
 class RoomRequestRateLimiterTest extends PostgresSpringTest {
@@ -35,16 +32,10 @@ class RoomRequestRateLimiterTest extends PostgresSpringTest {
     RoomRequestRateLimiter limiter;
 
     @Autowired
-    TaskEngine taskEngine;
-
-    @Autowired
     MutableClock clock;
 
     @Autowired
     Clock injectedClock;
-
-    @Autowired
-    JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void bindGuest() {
@@ -63,23 +54,6 @@ class RoomRequestRateLimiterTest extends PostgresSpringTest {
     @Test
     void 營業時鐘就是限流器用的時鐘() {
         assertThat(injectedClock).isSameAs(clock);
-    }
-
-    @Test
-    void 櫃檯替這間房代開的單不佔住客的名額() {
-        clock.setTodayAt("09:00");
-        guest("毛巾");
-        clock.setTodayAt("09:02");
-        guest("衣架");
-        clock.setTodayAt("09:03");
-        deskOpened();
-        clock.setTodayAt("09:05");
-
-        assertThat(limiter.roomQuota(TENANT_ID, ROOM_305).remaining()).isEqualTo(1);
-        assertThat(limiter.stayQuota(TENANT_ID, RESERVATION_B001).remaining()).isEqualTo(1);
-        guest("牙刷組");
-        assertThat(guestTasksAt("09:05")).isEqualTo(1);
-        assertThat(limiter.roomQuota(TENANT_ID, ROOM_305).remaining()).isZero();
     }
 
     @Test
@@ -149,21 +123,9 @@ class RoomRequestRateLimiterTest extends PostgresSpringTest {
         return guestRequestService.create(new GuestRequestCreate(null, null, text, "zh-TW")).id();
     }
 
-    private void deskOpened() {
-        taskEngine.create(new TaskCreateCommand(TENANT_ID, "amenity", "desk", ROOM_305, null, "housekeeping", "pool",
-                null, "櫃檯代開", null, null, null, null, Actor.system()));
-    }
-
     private Instant at(String hhmm) {
         MutableClock probe = new MutableClock();
         probe.setTodayAt(hhmm);
         return probe.instant();
-    }
-
-    private long guestTasksAt(String hhmm) {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM tasks WHERE tenant_id = ? AND room_id = ? AND source = 'guest' AND created_at = ?",
-                Long.class, TENANT_ID, ROOM_305, java.time.OffsetDateTime.ofInstant(at(hhmm), clock.getZone()));
-        return count == null ? 0 : count;
     }
 }

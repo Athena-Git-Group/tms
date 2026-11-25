@@ -34,16 +34,6 @@ public class GuestGivenSteps {
         Assertions.assertEquals(0, current, "空房掃碼的前提：房 502 不該有當前訂單");
     }
 
-    @Given("^住客已以 session \"([^\"]+)\" 在 10 分鐘內成功建立 3 筆需求$")
-    public void threeRequestsAlreadyCreated(String sessionSymbol) {
-        String session = ctx.guestSession(sessionSymbol);
-        Assertions.assertEquals(201, guest.createRequest(session, Map.of("itemId", "towel")).status());
-        Assertions.assertEquals(201, guest.createRequest(session, Map.of("itemId", "water")).status());
-        ScenarioContext.HttpResult third = guest.createRequest(session, Map.of("itemId", "toothbrush"));
-        Assertions.assertEquals(201, third.status(), "限流線內的第 3 筆該成功: " + third.body());
-        ctx.put(ScenarioKeys.THIRD_RESPONSE, third);
-    }
-
     @Given("^新住客以 session \"([^\"]+)\" 送出需求 選單項「([^」]+)」$")
     public void newGuestCreatesMenuRequest(String sessionSymbol, String label) {
         ScenarioContext.HttpResult created = guest.createRequest(

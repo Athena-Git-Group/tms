@@ -22,7 +22,6 @@ public final class ScenarioKeys {
     public static final Key<HttpResult> RELOGIN_RESULT = key("reloginResult");
     public static final Key<HttpResult> OLD_TOKEN_RESULT = key("oldTokenResult");
 
-    public static final Key<HttpResult> THIRD_RESPONSE = key("thirdResponse");
     public static final Key<String> MY_TITLE = key("myTitle");
     public static final Key<String> FREE_TEXT = key("freeText");
     public static final Key<ListAppender<ILoggingEvent>> ALERT_APPENDER = key("alertAppender");

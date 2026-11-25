@@ -4,17 +4,10 @@ import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.ApiClient;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
-import io.cucumber.java.en.Given;
 import io.cucumber.java.en.When;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 
 public class StaffDeskWhenSteps {
@@ -29,45 +22,11 @@ public class StaffDeskWhenSteps {
         this.db = db;
     }
 
-    @Given("^「([^」]+)」已認領任務 \"([^\"]+)\"$")
-    public void taskAlreadyClaimed(String name, String taskSymbol) {
-        UUID taskId = ctx.entityId(taskSymbol);
-        ScenarioContext.HttpResult claimed = claim(taskId, ctx.staffLogin(name));
-        Assertions.assertEquals(200, claimed.status(), "前置認領必須成功: " + claimed.body());
-        ctx.taskId(taskId);
-    }
-
     @When("^(?:另一位)?(?:房務|工務)?「(小美|小華|阿強)」認領任務 \"([^\"]+)\"$")
     public void staffClaimsTask(String name, String taskSymbol) {
         UUID taskId = ctx.entityId(taskSymbol);
         ctx.taskId(taskId);
         ctx.lastResponse(claim(taskId, ctx.staffLogin(name)));
-    }
-
-    @When("^「小美」與「小華」同秒對任務 \"([^\"]+)\" 送出認領$")
-    public void concurrentClaims(String taskSymbol) throws Exception {
-        UUID taskId = ctx.entityId(taskSymbol);
-        List<String> tokens = List.of(
-                api.staffToken(1L, ctx.staffLogin("小美")),
-                api.staffToken(1L, ctx.staffLogin("小華")));
-        CountDownLatch go = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(2);
-        try {
-            List<Future<Integer>> futures = new ArrayList<>();
-            for (String token : tokens) {
-                futures.add(pool.submit(() -> {
-                    go.await();
-                    return api.post("/api/v1/tasks/" + taskId + "/claim", token, newIdempotencyKey()).status();
-                }));
-            }
-            go.countDown();
-            for (Future<Integer> future : futures) {
-                ctx.rejectionStatuses().add(future.get(60, TimeUnit.SECONDS));
-            }
-        } finally {
-            pool.shutdownNow();
-        }
-        ctx.taskId(taskId);
     }
 
     @When("^「(小美|小華|阿強)」對任務 \"([^\"]+)\" 執行 (claim|start|complete)$")

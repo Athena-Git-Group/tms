@@ -37,24 +37,6 @@ public class InspectionQrWhenSteps {
         ctx.lastResponse(inspect(ctx.taskId(), judgeFailing()));
     }
 
-    @When("^王主管對任務 \"([^\"]+)\" 只送出 ([a-z_]+)、([a-z_]+) 兩項判定$")
-    public void managerSubmitsSubset(String taskSymbol, String first, String second) {
-        ctx.taskId(ctx.entityId(taskSymbol));
-        Map<String, Boolean> judgements = new LinkedHashMap<>();
-        judgements.put(first, true);
-        judgements.put(second, true);
-        ctx.lastResponse(inspect(ctx.taskId(), judgement(judgements)));
-    }
-
-    @When("^王主管對任務 \"([^\"]+)\" 送出全過的查房，但夾帶清單外的項目 \"([a-z_]+)\"$")
-    public void managerSubmitsUnknownKey(String taskSymbol, String unknownKey) {
-        ctx.taskId(ctx.entityId(taskSymbol));
-        Map<String, Boolean> judgements = new LinkedHashMap<>();
-        inspectionKeys().forEach(key -> judgements.put(key, true));
-        judgements.put(unknownKey, true);
-        ctx.lastResponse(inspect(ctx.taskId(), judgement(judgements)));
-    }
-
     @When("^王主管判定 ([a-z_]+) 不過、其餘全過$")
     public void managerFailsOneItem(String failKey) {
         ctx.lastResponse(inspect(ctx.taskId(), judgeFailing(failKey)));

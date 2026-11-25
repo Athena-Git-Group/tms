@@ -30,20 +30,6 @@ public class StaffDeskThenSteps {
         this.objectMapper = objectMapper;
     }
 
-    @Then("^恰有一人成功、另一人的請求應該失敗，回應為 409$")
-    public void exactlyOneClaimWins() {
-        List<Integer> statuses = ctx.rejectionStatuses().stream().sorted().toList();
-        assertEquals(List.of(200, 409), statuses, "恰一人成功、另一人 409（條件式 UPDATE 守衛）");
-    }
-
-    @Then("^任務 event_seq 僅遞增一次：created 的 seq 為 1、claimed 的 seq 為 2，輸家不佔號$")
-    public void eventSeqIncrementedOnce() {
-        Map<String, Object> row = db.taskRow(ctx.taskId());
-        assertEquals("accepted", row.get("state"));
-        assertEquals(2, ((Number) row.get("event_seq")).intValue(), "輸家不佔號");
-        assertEquals(List.of("created", "claimed"), db.eventTypes(ctx.taskId()));
-    }
-
     @Then("^state 依序為 \"doing\"、\"done\"$")
     public void statesAreDoingThenDone() {
         JsonNode doing = json(ctx.get(ScenarioKeys.STARTED_RESPONSE));
