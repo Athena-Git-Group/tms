@@ -36,6 +36,7 @@ export interface GuestTask {
   answer: string | null;
   rating: number | null;
   createdAt: string;
+  endedAt: string | null;
 }
 
 export interface GuestQuota {

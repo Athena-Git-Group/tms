@@ -4,8 +4,8 @@ import com.athena.tms.entity.Task;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-public record GuestTaskView(UUID id, String type, String state, String dept, String title, String answer, Integer rating, OffsetDateTime createdAt) {
+public record GuestTaskView(UUID id, String type, String state, String dept, String title, String answer, Integer rating, OffsetDateTime createdAt, OffsetDateTime endedAt) {
     public static GuestTaskView from(Task task) {
-        return new GuestTaskView(task.getId(), task.getType(), task.getState(), task.getDept(), task.getTitle(), task.getAnswer(), task.getRating(), task.getCreatedAt());
+        return new GuestTaskView(task.getId(), task.getType(), task.getState(), task.getDept(), task.getTitle(), task.getAnswer(), task.getRating(), task.getCreatedAt(), task.getEndedAt());
     }
 }

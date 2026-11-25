@@ -1,0 +1,57 @@
+getDeskSettingsAndpatchDeskSettings:
+  get:
+    operationId: getDeskSettings
+    summary: 讀查房與驗收設定
+    description: >-
+      櫃檯 Web 的設定頁打開時讀一次，回飯店兩個開關的現值。飯店沒設定過的開關回 true。
+      只有 manager（房務主管與工務主管）與 duty_manager 可以呼叫；frontdesk 與其他角色回 403 forbidden。
+      設定頁不跟員工事件串流：另一位主管改了開關，這一頁重新打開才看得到。
+    tags:
+    - 櫃檯設定 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯設定.yaml#/DeskSettings'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+  patch:
+    operationId: patchDeskSettings
+    summary: 改查房與驗收設定
+    description: >-
+      只改 body 裡有帶的開關，沒帶的維持原值；回改完之後兩個開關的現值。
+      用 PATCH 而不是整包 PUT：兩位主管同時各改一個不同的開關時，兩個改動都留下，不會互相蓋掉；
+      同時改同一個開關時，後提交的為準。
+      body 不是 JSON 物件、兩個開關都沒帶，或帶了但值不是 true、false 時回 422 validation_failed，設定不變。
+      寫入 tenant_config：inspectionRequired 寫進 inspection_waived_enabled，值相反（false 寫 true，true 寫 false）；
+      repairVerificationRequired 原值寫進 repair_verification_required。兩鍵都用 JSON 的 true、false，
+      updated_by 記呼叫者、updated_at 記當下；帶了的值跟現值一樣也照樣寫入，最後修改的人才留得下來。
+      交易提交後立即生效。inspectionRequired 只影響之後才開工的打掃單（開工當下鎖定，見 tasksStart）；
+      repairVerificationRequired 在工務按完成時讀（見 tasksComplete）。兩個開關都不回頭改已經在等查房或等驗收的單。
+      不必帶 Idempotency-Key：body 寫的是開關的結果而不是切換，重送同一份 body 得到同一個結果。
+      只有 manager 與 duty_manager 可以呼叫；frontdesk 與其他角色回 403 forbidden，設定不變。
+    tags:
+    - 櫃檯設定 API
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/櫃檯設定.yaml#/DeskSettingsPatch'
+    responses:
+      '200':
+        description: 已寫入。回兩個開關改完之後的現值。
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯設定.yaml#/DeskSettings'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'

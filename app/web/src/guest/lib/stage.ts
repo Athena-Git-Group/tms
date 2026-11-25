@@ -1,3 +1,4 @@
+import { awaitsReview } from '../../lib/awaiting-review';
 import type { Dept, GuestTask, RequestState } from '../api/types';
 
 export type StageTone = 'neutral' | 'accepted' | 'doing' | 'done';
@@ -98,7 +99,6 @@ const COMPLETED: StageRow = {
   stepSubs: [null, 'guest.step.deptReceived', null, null],
   homeCard: null,
 };
-const CLOSED: StageRow = { ...COMPLETED, ratable: false };
 const CANCELLED: StageRow = {
   labelKey: LABEL.cancelled,
   tone: 'neutral',
@@ -121,7 +121,7 @@ export const STAGE_TABLE: Readonly<Record<RequestState, StageRow>> = {
   interrupted: PROCESSING,
   done: COMPLETED,
   inspected: COMPLETED,
-  closed: CLOSED,
+  closed: COMPLETED,
   cancelled: CANCELLED,
 };
 
@@ -139,19 +139,21 @@ export interface TextRef<K extends string = string> {
   createdAt: string;
 }
 
-export function stageOf(task: Pick<GuestTask, 'state'>): StageRow {
-  return STAGE_TABLE[task.state];
+type Staged = Pick<GuestTask, 'state' | 'endedAt'>;
+
+export function stageOf(task: Staged): StageRow {
+  return awaitsReview(task) ? PROCESSING : STAGE_TABLE[task.state];
 }
 
 export function deptLabelKey(dept: Dept | null | undefined): DeptLabelKey {
   return DEPT_LABEL[dept ?? 'frontdesk'];
 }
 
-export function canRate(task: Pick<GuestTask, 'state' | 'rating' | 'answer'>): boolean {
+export function canRate(task: Pick<GuestTask, 'state' | 'endedAt' | 'rating' | 'answer'>): boolean {
   return stageOf(task).ratable && task.rating == null && task.answer == null;
 }
 
-export function showsProgress(task: Pick<GuestTask, 'state' | 'answer'>): boolean {
+export function showsProgress(task: Pick<GuestTask, 'state' | 'endedAt' | 'answer'>): boolean {
   return stageOf(task).step !== null && task.answer == null;
 }
 
@@ -165,7 +167,7 @@ export interface MessageBoxView {
   body: MessageBody;
 }
 
-export function messageBox(task: Pick<GuestTask, 'state' | 'answer'>): MessageBoxView | null {
+export function messageBox(task: Pick<GuestTask, 'state' | 'endedAt' | 'answer'>): MessageBoxView | null {
   const message = stageOf(task).message;
   if (message !== 'cancelled' && task.answer != null) {
     return { kind: 'answer', titleKey: 'guest.message.answer.title', body: { text: task.answer } };
@@ -184,7 +186,7 @@ export interface StepView {
 
 export const STEP_TITLES = [LABEL.submitted, LABEL.accepted, LABEL.processing, LABEL.completed] as const;
 
-export function stepView(task: Pick<GuestTask, 'state' | 'answer' | 'dept' | 'createdAt'>): StepView[] | null {
+export function stepView(task: Pick<GuestTask, 'state' | 'endedAt' | 'answer' | 'dept' | 'createdAt'>): StepView[] | null {
   const row = stageOf(task);
   if (row.step === null || !showsProgress(task)) return null;
   const current = row.step;
@@ -200,12 +202,12 @@ export function stepView(task: Pick<GuestTask, 'state' | 'answer' | 'dept' | 'cr
   });
 }
 
-export function homeCardLine(task: Pick<GuestTask, 'state' | 'dept' | 'createdAt'>): TextRef<HomeCardKey> | null {
+export function homeCardLine(task: Pick<GuestTask, 'state' | 'endedAt' | 'dept' | 'createdAt'>): TextRef<HomeCardKey> | null {
   const key = stageOf(task).homeCard;
   return key ? { key, deptKey: deptLabelKey(task.dept), createdAt: task.createdAt } : null;
 }
 
-export function latestActive<T extends Pick<GuestTask, 'state'>>(tasks: readonly T[]): T | null {
+export function latestActive<T extends Staged>(tasks: readonly T[]): T | null {
   return tasks.find((task) => stageOf(task).section === 'active') ?? null;
 }
 
@@ -213,7 +215,7 @@ const SECTION_ORDER: readonly StageSection[] = ['active', 'ended'];
 
 export type RequestSection<T> = { section: StageSection; tasks: T[] };
 
-export function splitSections<T extends Pick<GuestTask, 'state'>>(tasks: readonly T[]): RequestSection<T>[] {
+export function splitSections<T extends Staged>(tasks: readonly T[]): RequestSection<T>[] {
   return SECTION_ORDER.map((section) => ({ section, tasks: tasks.filter((task) => stageOf(task).section === section) })).filter(
     (group) => group.tasks.length > 0,
   );
@@ -224,7 +226,7 @@ export type HomeRequestsSection<T> =
   | { kind: 'card'; task: T; count: number }
   | { kind: 'idle'; count: number };
 
-export function homeRequestsSection<T extends Pick<GuestTask, 'state'>>(tasks: readonly T[]): HomeRequestsSection<T> {
+export function homeRequestsSection<T extends Staged>(tasks: readonly T[]): HomeRequestsSection<T> {
   if (tasks.length === 0) return { kind: 'none' };
   const task = latestActive(tasks);
   return task ? { kind: 'card', task, count: tasks.length } : { kind: 'idle', count: tasks.length };

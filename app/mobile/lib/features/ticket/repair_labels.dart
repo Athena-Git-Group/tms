@@ -194,9 +194,14 @@ enum RepairCompletionStage {
 
   closedVerified,
 
-  closedNoAction;
+  closedNoAction,
 
-  bool get isClosed => this == closedVerified || this == closedNoAction;
+  closedWithoutVerification;
+
+  bool get isClosed =>
+      this == closedVerified ||
+      this == closedNoAction ||
+      this == closedWithoutVerification;
 }
 
 RepairCompletionStage repairCompletionStage(RepairTicketDetail ticket) {
@@ -204,8 +209,11 @@ RepairCompletionStage repairCompletionStage(RepairTicketDetail ticket) {
     case 'done':
       return RepairCompletionStage.awaitingVerification;
     case 'closed':
-      return ticket.resolutionType == 'no_action_needed'
-          ? RepairCompletionStage.closedNoAction
+      if (ticket.resolutionType == 'no_action_needed') {
+        return RepairCompletionStage.closedNoAction;
+      }
+      return ticket.verifiedBy == null && ticket.verifiedAt == null
+          ? RepairCompletionStage.closedWithoutVerification
           : RepairCompletionStage.closedVerified;
     default:
       return RepairCompletionStage.notCompleted;
@@ -240,6 +248,8 @@ String repairStatusSummaryText(
       return reporter && result != null ? '$result · 等主管驗收' : '已完修 · 等主管驗收';
     case RepairCompletionStage.closedNoAction:
       return '已結案 · 不需處理';
+    case RepairCompletionStage.closedWithoutVerification:
+      return '已結案 · 免驗收';
     case RepairCompletionStage.closedVerified:
       final by = ticket.verifiedBy;
       return by == null ? '已結案' : '已結案 · $by驗收';
@@ -265,12 +275,20 @@ String _reporterOpenText(RepairTicketDetail ticket) {
   }
 }
 
-const List<String> repairStepLabels = ['待開始', '維修中', '完修', '驗收'];
+List<String> repairStepLabels(RepairTicketDetail ticket) => [
+  '待開始',
+  '維修中',
+  '完修',
+  repairCompletionStage(ticket) ==
+          RepairCompletionStage.closedWithoutVerification
+      ? '免驗收'
+      : '驗收',
+];
 
 int repairCurrentStepIndex(RepairTicketDetail ticket) {
   final stage = repairCompletionStage(ticket);
   if (stage.isClosed) {
-    return repairStepLabels.length;
+    return repairStepLabels(ticket).length;
   }
   if (stage == RepairCompletionStage.awaitingVerification) {
     return 3;

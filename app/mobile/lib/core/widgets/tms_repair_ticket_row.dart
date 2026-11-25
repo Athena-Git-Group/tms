@@ -59,7 +59,8 @@ class TmsRepairTicketRow extends StatelessWidget {
                   where: place,
                   palette: tmsRepairSquarePalette(
                     isUrgent: ticket.isUrgent,
-                    isDone: ticket.state == 'done',
+                    isDone:
+                        ticket.state == 'done' || ticket.state == 'closed',
                   ),
                   fontSize: ticket.roomNo == null ? 13 : 16,
                 ),

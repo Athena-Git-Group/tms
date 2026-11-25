@@ -45,7 +45,9 @@ public final class Network {
 
     public static final Api DESK_ANSWER = new Api("POST", "/api/v1/desk/tasks/*/answer");
 
-    public static final List<Api> DESK_WRITES = List.of(DESK_ASSIGN, DESK_UNDO_ASSIGN, DESK_ANSWER);
+    public static final Api DESK_SETTINGS_UPDATE = new Api("PATCH", "/api/v1/desk/settings");
+
+    public static final List<Api> DESK_WRITES = List.of(DESK_ASSIGN, DESK_UNDO_ASSIGN, DESK_ANSWER, DESK_SETTINGS_UPDATE);
 
     public static final Api STAFF_STREAM = new Api("GET", "/staff/stream");
 

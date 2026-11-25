@@ -32,6 +32,8 @@ public class Task {
     private Integer estMin;
     private OffsetDateTime startedAt;
     private OffsetDateTime doneAt;
+    @Column(insertable = false, updatable = false)
+    private OffsetDateTime endedAt;
     private int redoCount = 0;
     private Integer rating;
     private UUID planId;
@@ -115,6 +117,10 @@ public class Task {
     @Generated
     public OffsetDateTime getDoneAt() {
         return this.doneAt;
+    }
+
+    public OffsetDateTime getEndedAt() {
+        return this.endedAt;
     }
 
     @Generated

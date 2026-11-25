@@ -190,9 +190,17 @@ public class InspectionGivenSteps {
                 .update();
     }
 
+    @假設("{string} 開始了 {string} 的續住整理")
+    public void staffStartsStayover(String staffName, String roomNo) {
+        startStayover(staffName, roomNo);
+    }
+
     private void startStayoverWithWaiver(String staffName, String roomNo, boolean waived) {
         updateTenantConfig("inspection_waived_enabled", waived);
+        startStayover(staffName, roomNo);
+    }
 
+    private void startStayover(String staffName, String roomNo) {
         UUID assigneeId = UUID.fromString(world.staffId(staffName));
         roomFixtures.ensureRoom(roomNo, RoomFixtures.floorFromRoomNo(roomNo));
         UUID taskId = taskFixtures.builder()

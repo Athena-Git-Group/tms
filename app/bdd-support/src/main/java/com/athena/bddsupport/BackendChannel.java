@@ -2392,9 +2392,12 @@ public class BackendChannel {
                 setBackendClock(seed.startedAt());
                 postTaskAction(taskId, "start", seed.assignee());
             }
-            if (seed.situation() == GuestSeed.Situation.CLOSED) {
+            if (seed.situation() == GuestSeed.Situation.CLOSED
+                    || seed.situation() == GuestSeed.Situation.DONE_AWAITING_VERIFICATION) {
                 setBackendClock(now);
                 completeRepairTask(taskId, seed.assignee());
+            }
+            if (seed.situation() == GuestSeed.Situation.CLOSED) {
                 verifyRepairTicket(taskId, defaultStaff(MANAGER_NAME), "passed", null);
             }
         } finally {
@@ -2633,6 +2636,14 @@ public class BackendChannel {
             throw new AssertionError("預期後端以 4xx 拒絕 POST /tasks/" + taskId + "/" + action
                     + "，實際 HTTP " + response.statusCode() + "，body=" + response.body());
         }
+        return parseJson(response.body());
+    }
+
+    public JsonNode patchDeskSettings(CreatedStaff manager, Map<String, Object> patch) {
+        HttpResponse<String> response = send(request("PATCH", "/desk/settings", jwt(manager))
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(toJson(patch), StandardCharsets.UTF_8)));
+        requireSuccess(response, "改櫃檯設定 " + patch);
         return parseJson(response.body());
     }
 

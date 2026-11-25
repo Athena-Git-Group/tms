@@ -1,5 +1,6 @@
 import type { DeskTask } from '../api/types';
 import type { CardFilter } from '../stores/board-view';
+import { awaitsReview } from './awaiting-review';
 
 export type BoardColumn =
   | 'triage'
@@ -32,7 +33,7 @@ export function columnOf(task: DeskTask): BoardColumn {
     case 'deferred':
       return task.state;
     case 'done':
-      return task.endedAt ? 'closed' : 'done';
+      return awaitsReview(task) ? 'done' : 'closed';
     case 'inspected':
     case 'closed':
     case 'cancelled':

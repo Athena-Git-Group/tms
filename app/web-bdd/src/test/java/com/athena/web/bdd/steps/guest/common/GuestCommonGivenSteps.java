@@ -35,12 +35,15 @@ public class GuestCommonGivenSteps {
 
     private static final Set<Situation> ACCEPTED = Set.of(Situation.HOUSEKEEPING_ACCEPTED,
             Situation.ENGINEERING_ACCEPTED, Situation.DEFERRED, Situation.DOING, Situation.INTERRUPTED,
+            Situation.DONE_AWAITING_INSPECTION, Situation.DONE_AWAITING_VERIFICATION,
             Situation.DONE, Situation.INSPECTION_PASSED, Situation.CLOSED);
 
     private static final Set<Situation> STARTED = Set.of(Situation.DOING, Situation.INTERRUPTED,
+            Situation.DONE_AWAITING_INSPECTION, Situation.DONE_AWAITING_VERIFICATION,
             Situation.DONE, Situation.INSPECTION_PASSED, Situation.CLOSED);
 
     private static final Set<Situation> SETTLED_NOW = Set.of(Situation.DEFERRED, Situation.INTERRUPTED,
+            Situation.DONE_AWAITING_INSPECTION, Situation.DONE_AWAITING_VERIFICATION,
             Situation.DONE, Situation.INSPECTION_PASSED, Situation.CLOSED);
 
     private final WebWorld world;
@@ -209,8 +212,8 @@ public class GuestCommonGivenSteps {
     private static String defaultType(Situation situation) {
         return switch (situation) {
             case TRIAGE, ANSWERED -> "other";
-            case INSPECTION_PASSED -> "cleaning";
-            case CLOSED, ENGINEERING_POOL, ENGINEERING_ACCEPTED -> "repair";
+            case INSPECTION_PASSED, DONE_AWAITING_INSPECTION -> "cleaning";
+            case CLOSED, DONE_AWAITING_VERIFICATION, ENGINEERING_POOL, ENGINEERING_ACCEPTED -> "repair";
             default -> "amenity";
         };
     }

@@ -103,7 +103,10 @@ tasksStart:
     summary: 開始任務
     description: >-
       負責人開工，接受 accepted→doing，也接受本人延後的 deferred→doing。
-      開工當下依租戶設定 inspection_waived_cleaning_types 鎖定是否免查房，並把交辦標為已讀。
+      開工當下依飯店的「需要房務主管查房」鎖定是否免查房，並把交辦標為已讀：
+      開關關掉時（tenant_config.inspection_waived_enabled 為 true，即 DeskSettings.inspectionRequired 為 false），
+      打掃單的 tasks.inspection_waived 鎖成 true，其他類型一律 false。不分打掃種類。鎖定之後改設定不影響這一次的完成；
+      查房或抽查退回重做的單回到 accepted，重新開工時照那一刻的開關再決定一次。
       同一位員工已有另一筆 doing 時，回 409 doing_task_exists，context 帶那一筆的 taskId 與 roomNo，
       message 例如「305 還在進行中」。
       主管延後（沒有負責人）的 deferred 不能直接開工。
@@ -135,8 +138,11 @@ tasksComplete:
       不回寫 PMS 房況（沒有人查過，不能讓 PMS 當成可售）；其他的轉 done 等查房。
       修繕任務（工務單）：resolutionType 選填，四選一（fixed／temporary／cannot_fix／no_action_needed，省略視為 fixed）；
       resolutionNote 選填。fixed、temporary、cannot_fix 這一次請求的 photoIds 至少 1 張，否則回 422 completion_photo_required，
-      完成後工務單轉 done（已完修、等主管驗收），之後由主管呼叫 verifyRepairTicket 通過或不通過；
-      temporary 另外自動建立追蹤單並進工務待認領；cannot_fix 會把房況轉為停用待確認（rooms.hk_state=out_of_order）。
+      完成後工務單轉 done（已完修、等主管驗收），之後由主管呼叫 verifyRepairTicket 通過或不通過。
+      飯店把「需要工務主管驗收」關掉時（tenant_config.repair_verification_required 為 false，即 DeskSettings.repairVerificationRequired 為 false），
+      這三種結果改成直接轉 closed（已結案）並寫入結束時間，不進待驗收，驗收人與驗收時間留空，
+      completed 事件的 payload 另帶 verificationWaived: true。這個開關在按完成這一刻讀：開工時是開、完成前被關掉的單照樣直接結案。
+      temporary 另外自動建立追蹤單並進工務待認領；cannot_fix 會把房況轉為停用待確認（rooms.hk_state=out_of_order）；兩者不論要不要驗收都照做。
       no_action_needed（不需處理）的 photoIds 可省略或為空陣列，不建追蹤單、不改房況，工務單直接轉 closed（已結案），
       不進待驗收、不計入任何主管的待驗收。
       驗收不通過退回重修的工務單，再完修時以這一次的完修結果、說明與照片為準。
@@ -208,6 +214,11 @@ tasksRate:
   post:
     operationId: tasksRate
     summary: rate
+    description: >-
+      住客為一張需求評 1 到 5 星，一張只能評一次。只在需求已經結束時收：tasks.ended_at 有值，而且 state 是 done、inspected 或 closed。
+      還在等房務主管查房或等主管驗收的單（state 為 done 而 ended_at 為 null）、已取消的單、已評過的單回 409 state_conflict。
+      這和住客頁顯示「已完成」的時機相同（見 GuestRequest.endedAt）。櫃檯當場回答的單後端不另外擋，住客頁不顯示評分卡。
+      住客頁實際呼叫的 /guest/requests/{id}/rating 照同一條規則。
     tags:
     - 任務 API
     parameters:

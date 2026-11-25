@@ -2,20 +2,23 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tms_staff_app/core/api_client.dart';
+import 'package:tms_staff_app/core/theme.dart';
+import 'package:tms_staff_app/core/widgets/tms_category_square.dart';
 import 'package:tms_staff_app/core/widgets/tms_repair_ticket_row.dart';
 
 void main() {
-  EngineeringTicket ticket({String? returnReason}) => EngineeringTicket(
-    ticketNo: 'W-0115',
-    taskId: 'task-115',
-    roomNo: '210',
-    isPublicArea: false,
-    title: '冷氣濾網更換',
-    state: 'doing',
-    isUrgent: false,
-    source: 'staff_report',
-    verificationReturnReason: returnReason,
-  );
+  EngineeringTicket ticket({String? returnReason, String state = 'doing'}) =>
+      EngineeringTicket(
+        ticketNo: 'W-0115',
+        taskId: 'task-115',
+        roomNo: '210',
+        isPublicArea: false,
+        title: '冷氣濾網更換',
+        state: state,
+        isUrgent: false,
+        source: 'staff_report',
+        verificationReturnReason: returnReason,
+      );
 
   Future<void> pump(WidgetTester tester, EngineeringTicket t) =>
       tester.pumpWidget(
@@ -48,5 +51,19 @@ void main() {
     expect(find.text('驗收退回'), findsOneWidget);
     expect(find.text('出風仍不冷'), findsOneWidget);
     handle.dispose();
+  });
+
+  testWidgets('已結案的單跟已完修一樣用收尾的灰底方塊', (tester) async {
+    for (final state in ['done', 'closed']) {
+      await pump(tester, ticket(state: state));
+      final square = tester.widget<TmsCategorySquare>(
+        find.byType(TmsCategorySquare),
+      );
+      expect(
+        square.palette.background,
+        TmsColors.groupedBackground,
+        reason: state,
+      );
+    }
   });
 }

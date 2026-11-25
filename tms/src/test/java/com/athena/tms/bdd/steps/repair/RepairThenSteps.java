@@ -513,9 +513,13 @@ public class RepairThenSteps {
                     .queryOne("SELECT resolution_type FROM repair_tickets WHERE task_id = ?", taskId)
                     .map(r -> r.get("resolution_type"))
                     .orElse(null);
-            if (!"no_action_needed".equals(resolutionType)) {
-                throw new AssertionError("tasks.state 為 closed 時應是不需處理結案，實際 resolution_type=" + resolutionType
-                        + "（單號 " + ticketNo + "）");
+            long waivedCompletions = dbProbe.count(
+                    "SELECT count(*) FROM task_events WHERE task_id = ? AND type = 'completed'"
+                            + " AND payload ->> 'verificationWaived' = 'true'",
+                    taskId);
+            if (!"no_action_needed".equals(resolutionType) && waivedCompletions == 0) {
+                throw new AssertionError("tasks.state 為 closed 又沒人驗收時，應是不需處理或免驗收結案，實際 resolution_type="
+                        + resolutionType + "、完修事件沒有 verificationWaived（單號 " + ticketNo + "）");
             }
         }
 

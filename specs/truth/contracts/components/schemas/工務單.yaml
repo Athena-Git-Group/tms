@@ -157,8 +157,9 @@ RepairTicket:
   description: >-
     工務單詳情。工務單本身就是一筆修繕任務，taskId 可以直接用在 tasksClaim、tasksStart、tasksComplete、verifyRepairTicket。
     畫面上的驗收狀態由 state 加三組欄位組成：state=done 是已完修、等主管驗收；state=closed 是已結案，
-    resolutionType=no_action_needed 表示以「不需處理」完修直接結案（verifiedBy 為 null），其他完修結果表示驗收通過結案
-    （verifiedBy／verifiedAt 有值）；state 為 accepted 或 pool 且 lastVerifyFailedAt 有值，而完修時間為 null，
+    resolutionType=no_action_needed 表示以「不需處理」完修直接結案（verifiedBy 為 null）；其他完修結果而 verifiedBy／verifiedAt 有值，
+    表示驗收通過結案；其他完修結果而 verifiedBy 為 null，表示完修當下飯店不需要工務主管驗收、免驗收結案。
+    state 為 accepted 或 pool 且 lastVerifyFailedAt 有值，而完修時間為 null，
     表示驗收不通過、退回重修中。
   allOf:
   - $ref: './shared.yaml#/RepairTicketSummary'
@@ -253,7 +254,8 @@ RepairTicket:
         nullable: true
         description: >-
           驗收通過的主管顯示名稱（repair_tickets.verified_by JOIN staff_accounts），只記通過的那一次，房務主管或工務主管都可能；
-          尚未驗收通過，或以不需處理結案時為 null。三種視角的狀態列「已結案 · <主管> 驗收」都顯示它。
+          尚未驗收通過、以不需處理結案，或完修當下飯店不需要工務主管驗收而直接結案時為 null。
+          三種視角的狀態列「已結案 · <主管> 驗收」都顯示它。
       verifiedAt:
         type: string
         format: date-time

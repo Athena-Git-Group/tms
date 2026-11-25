@@ -162,35 +162,6 @@ public class ShellThenSteps {
         });
     }
 
-    @那麼("側欄的 {string} 底下沒有展開任何項目")
-    public void sidebarItemNotExpanded(String item) {
-        Locator found = shell.sidebarItem(item);
-        Locator accountCard = shell.accountCard();
-        eventually("側欄「" + item + "」底下不應該展開項目", () -> {
-            if (found.count() != 1 || !found.isVisible()) {
-                return "側欄上看不到「" + item + "」";
-            }
-            if ("true".equals(found.getAttribute("aria-expanded"))) {
-                return "「" + item + "」標成了展開";
-            }
-            BoundingBox itemBox = found.boundingBox();
-            double top = itemBox.y + itemBox.height;
-            double bottom = accountCard.count() > 0 && accountCard.first().isVisible()
-                    ? accountCard.first().boundingBox().y
-                    : Double.POSITIVE_INFINITY;
-            List<String> between = new ArrayList<>();
-            Locator pressables = shell.sidebar().locator(PRESSABLE_SELECTOR);
-            for (int i = 0; i < pressables.count(); i++) {
-                Locator candidate = pressables.nth(i);
-                BoundingBox box = candidate.isVisible() ? candidate.boundingBox() : null;
-                if (box != null && box.y >= top - TOLERANCE_PX && box.y + box.height <= bottom + TOLERANCE_PX) {
-                    between.add(candidate.innerText().strip());
-                }
-            }
-            return between.isEmpty() ? null : "「" + item + "」底下多出了 " + between;
-        });
-    }
-
     @那麼("畫面是 {string}，頁標題是 {string}")
     public void screenIsPageWithTitle(String pageName, String title) {
         waitForPathAndTitle(pageName, title);

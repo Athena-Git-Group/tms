@@ -3,6 +3,7 @@ export const PATHS = {
   changePassword: '/change-password',
   board: '/board',
   triage: '/triage',
+  settings: '/settings',
 } as const;
 
 export type AppPath = (typeof PATHS)[keyof typeof PATHS];

@@ -39,8 +39,9 @@ public class TaskEngine {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final RepairTicketOpener repairTicketOpener;
+    private final ManagerReviewSettings managerReviewSettings;
 
-    public TaskEngine(JdbcTemplate jdbcTemplate, TaskRepository taskRepository, TaskEventRepository taskEventRepository, OutboxWriter outboxWriter, ObjectMapper objectMapper, Clock clock, RepairTicketOpener repairTicketOpener) {
+    public TaskEngine(JdbcTemplate jdbcTemplate, TaskRepository taskRepository, TaskEventRepository taskEventRepository, OutboxWriter outboxWriter, ObjectMapper objectMapper, Clock clock, RepairTicketOpener repairTicketOpener, ManagerReviewSettings managerReviewSettings) {
         this.jdbcTemplate = jdbcTemplate;
         this.taskRepository = taskRepository;
         this.taskEventRepository = taskEventRepository;
@@ -48,6 +49,7 @@ public class TaskEngine {
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.repairTicketOpener = repairTicketOpener;
+        this.managerReviewSettings = managerReviewSettings;
     }
 
     @Transactional
@@ -187,7 +189,7 @@ public class TaskEngine {
             throw new UnprocessableEntityException("開始任務必須是具名員工");
         }
         OffsetDateTime now = OffsetDateTime.now(this.clock);
-        boolean waiverEnabled = "true".equals(this.tenantConfigText(tenantId, "inspection_waived_enabled"));
+        boolean waiverEnabled = !this.managerReviewSettings.inspectionRequired(tenantId);
         int seq = this.guard("開始", "UPDATE tasks\n   SET state = 'doing', started_at = COALESCE(started_at, ?), segment_started_at = ?,\n       inspection_waived = (type = 'cleaning' AND ?),\n       hold_reason = NULL, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ?\n   AND (state = 'accepted' OR (state = 'deferred' AND deferred_by_self)) AND assignee_id = ?\nRETURNING event_seq\n", now, now, waiverEnabled, tenantId, taskId, actor.id());
         return this.recordEvent(tenantId, taskId, seq, "started", actor, null);
     }
@@ -412,7 +414,7 @@ public class TaskEngine {
         if (rating < 1 || rating > 5) {
             throw new UnprocessableEntityException("評分必須是 1–5 的整數，收到: " + rating);
         }
-        int seq = this.guard("評分", "UPDATE tasks\n   SET rating = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('done', 'inspected') AND rating IS NULL\nRETURNING event_seq\n", rating, tenantId, taskId);
+        int seq = this.guard("評分", "UPDATE tasks\n   SET rating = ?, event_seq = event_seq + 1, updated_at = now()\n WHERE tenant_id = ? AND id = ? AND state IN ('done', 'inspected', 'closed') AND ended_at IS NOT NULL AND rating IS NULL\nRETURNING event_seq\n", rating, tenantId, taskId);
         return this.recordEvent(tenantId, taskId, seq, "rated", Actor.guest(), TaskEngine.payload("rating", rating));
     }
 

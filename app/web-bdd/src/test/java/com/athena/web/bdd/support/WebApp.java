@@ -29,6 +29,8 @@ public final class WebApp {
 
     public static final String TRIAGE = path("triage");
 
+    public static final String SETTINGS = path("settings");
+
     private WebApp() {
     }
 

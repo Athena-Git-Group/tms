@@ -12,6 +12,7 @@ import { boardPollMs, showsConnectionAlert, useLiveUpdates } from '../features/r
 import { tileCounts } from '../lib/board-counts';
 import { logOut } from '../lib/log-out';
 import { PATHS, hotelPath } from '../lib/paths';
+import { canChangeSettings } from '../lib/route-access';
 import { sidebarOpen } from '../lib/sidebar';
 import { useHotelCode } from '../lib/use-hotel-code';
 import { BoardSubtitle, RoomSearch } from '../pages/board/BoardPage';
@@ -22,12 +23,14 @@ import { useSessionStore } from '../stores/session';
 import { ConnectionAlertBar } from './ConnectionAlertBar';
 import { visibleUnopenedEntries } from './unopened-entries';
 
-type ShellPage = 'board' | 'triage';
+type ShellPage = 'board' | 'triage' | 'settings';
 
-const SHELL_PAGES: readonly ShellPage[] = ['board', 'triage'];
+const NAV_PAGES = ['board', 'triage'] as const satisfies readonly ShellPage[];
 
 function shellPageOf(pathname: string): ShellPage {
-  return pathname.endsWith(PATHS.triage) ? 'triage' : 'board';
+  if (pathname.endsWith(PATHS.triage)) return 'triage';
+  if (pathname.endsWith(PATHS.settings)) return 'settings';
+  return 'board';
 }
 
 const ICON_PATHS = {
@@ -82,7 +85,7 @@ function Icon({ name, className = 'size-[22px] stroke-[1.8]' }: { name: IconName
   );
 }
 
-const PAGE_ICONS: Record<ShellPage, IconName> = { board: 'board', triage: 'tray' };
+const PAGE_ICONS: Record<(typeof NAV_PAGES)[number], IconName> = { board: 'board', triage: 'tray' };
 
 const ICON_BUTTON =
   'flex size-touch shrink-0 items-center justify-center rounded-full border-none bg-transparent p-0 text-brand';
@@ -158,7 +161,7 @@ export function DeskShell() {
           </button>
         </div>
         <div className="mt-1.5 flex min-h-0 flex-auto flex-col gap-0.5 overflow-y-auto">
-          {SHELL_PAGES.map((target) => (
+          {NAV_PAGES.map((target) => (
             <Link
               key={target}
               to={hotelPath(hotelCode, PATHS[target])}
@@ -176,16 +179,16 @@ export function DeskShell() {
               <span className="grow">{t(entry.labelKey)}</span>
             </button>
           ))}
-          {visibleUnopenedEntries('sidebarSettings', session?.role).map((entry) => (
-            <button
-              key={entry.labelKey}
-              type="button"
-              className="mt-3 flex min-h-touch items-center gap-2 rounded-control border-none bg-transparent px-3 text-left text-[17px] font-semibold text-text-4"
+          {session && canChangeSettings(session.role) && (
+            <Link
+              to={hotelPath(hotelCode, PATHS.settings)}
+              aria-current={page === 'settings' ? 'page' : undefined}
+              className="group mt-3 flex min-h-touch items-center gap-2 rounded-control border-none bg-transparent px-3 text-left text-[17px] font-semibold text-text no-underline aria-[current=page]:bg-brand aria-[current=page]:text-white"
             >
-              <span className="grow">{t(entry.labelKey)}</span>
-              <Icon name={entry.icon} className="size-4 stroke-[1.8] text-brand" />
-            </button>
-          ))}
+              <span className="grow">{t('shell.settings')}</span>
+              <Icon name="chevron" className="size-4 stroke-[1.8] text-brand group-aria-[current=page]:text-white" />
+            </Link>
+          )}
         </div>
         {session && (
           <button
@@ -226,7 +229,8 @@ export function DeskShell() {
           )}
           <div className="grow">
             <h1 className="m-0 text-[28px] leading-[1.15] font-bold whitespace-nowrap">{t(`shell.titles.${page}`)}</h1>
-            {page === 'board' ? <BoardSubtitle /> : <TriageSubtitle />}
+            {page === 'board' && <BoardSubtitle />}
+            {page === 'triage' && <TriageSubtitle />}
           </div>
           {page === 'board' && <RoomSearch />}
           {visibleUnopenedEntries('toolbar', session?.role).map((entry) => (

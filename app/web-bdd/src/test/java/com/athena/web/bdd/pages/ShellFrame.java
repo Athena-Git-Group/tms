@@ -31,12 +31,21 @@ public class ShellFrame extends PageObject {
         return switch (pageName.strip()) {
             case "總覽看板" -> WebApp.BOARD;
             case "待派單頁" -> WebApp.TRIAGE;
-            default -> throw new IllegalArgumentException("頁只接受「總覽看板」或「待派單頁」，收到「" + pageName + "」");
+            case "設定頁" -> WebApp.SETTINGS;
+            default -> throw new IllegalArgumentException("頁只接受「總覽看板」「待派單頁」或「設定頁」，收到「" + pageName + "」");
         };
     }
 
     public static String titleOf(String pageName) {
-        return WebApp.BOARD.equals(pathOf(pageName)) ? "總覽看板" : "待派單";
+        String path = pathOf(pageName);
+        return WebApp.BOARD.equals(path) ? "總覽看板" : WebApp.TRIAGE.equals(path) ? "待派單" : "設定";
+    }
+
+    public static String pageNameAt(String path) {
+        return path.endsWith(WebApp.BOARD) ? "總覽看板"
+                : path.endsWith(WebApp.TRIAGE) ? "待派單頁"
+                : path.endsWith(WebApp.SETTINGS) ? "設定頁"
+                : null;
     }
 
     public static boolean sidebarOpenByDefault(String pageName) {
@@ -77,6 +86,9 @@ public class ShellFrame extends PageObject {
     public void waitForPage(String pageName) {
         page().getByRole(AriaRole.HEADING, new Page.GetByRoleOptions()
                 .setName(titleOf(pageName)).setExact(true).setLevel(1)).waitFor();
+        if (WebApp.SETTINGS.equals(pathOf(pageName))) {
+            new SettingsPage(world).waitUntilLoaded();
+        }
     }
 
     public Locator openSidebarButton() {
@@ -230,7 +242,8 @@ public class ShellFrame extends PageObject {
 
     private static Locator pressables(Locator layer, Pattern name) {
         Locator any = null;
-        for (AriaRole role : List.of(AriaRole.BUTTON, AriaRole.LINK, AriaRole.ROW, AriaRole.MENUITEM, AriaRole.TAB)) {
+        for (AriaRole role : List.of(AriaRole.BUTTON, AriaRole.LINK, AriaRole.ROW, AriaRole.MENUITEM, AriaRole.TAB,
+                AriaRole.SWITCH)) {
             Locator byRole = layer.getByRole(role, new Locator.GetByRoleOptions().setName(name));
             any = any == null ? byRole : any.or(byRole);
         }
