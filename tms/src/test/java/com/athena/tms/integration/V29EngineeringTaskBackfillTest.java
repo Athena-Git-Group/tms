@@ -3,6 +3,7 @@ package com.athena.tms.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import com.athena.tms.SharedContainers;
 import java.sql.Timestamp;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -17,20 +18,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-@Testcontainers
 class V29EngineeringTaskBackfillTest {
 
     private static final String VERSION_BEFORE_BACKFILL = "28";
     private static final AtomicInteger DATABASE_SEQ = new AtomicInteger();
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
+    private static final PostgreSQLContainer<?> POSTGRES = SharedContainers.postgres();
 
     private String jdbcUrl;
     private JdbcTemplate jdbc;
@@ -38,8 +35,7 @@ class V29EngineeringTaskBackfillTest {
     @BeforeEach
     void freshDatabaseAtV28() {
         String database = "v29_case_" + DATABASE_SEQ.incrementAndGet();
-        new JdbcTemplate(dataSource(POSTGRES.getJdbcUrl())).execute("CREATE DATABASE " + database);
-        jdbcUrl = POSTGRES.getJdbcUrl().replaceFirst("/[^/?]+(\\?|$)", "/" + database + "$1");
+        jdbcUrl = SharedContainers.database(database);
         jdbc = new JdbcTemplate(dataSource(jdbcUrl));
         flyway(VERSION_BEFORE_BACKFILL).migrate();
     }

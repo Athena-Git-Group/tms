@@ -1,5 +1,6 @@
 package com.athena.tms.relaywake;
 
+import com.athena.tms.SharedContainers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,7 +37,6 @@ public class RelayWakeSteps {
 
     private static final long TENANT_ID = 1L;
     private static final UUID ROOM_301 = UUID.fromString("00000000-0000-7000-8000-000000000301");
-    private static final String TASK_EVENTS_TOPIC = "tms.task-events";
     private static final Duration KAFKA_WAIT = Duration.ofSeconds(15);
 
     @Autowired
@@ -169,7 +169,7 @@ public class RelayWakeSteps {
     private Map<UUID, ConsumerRecord<String, String>> awaitEvents(Collection<UUID> taskIds, String eventType) {
         Map<UUID, ConsumerRecord<String, String>> found = new HashMap<>();
         try (KafkaConsumer<String, String> consumer = newConsumer()) {
-            consumer.subscribe(List.of(TASK_EVENTS_TOPIC));
+            consumer.subscribe(List.of(RelayWakeSpringConfiguration.TASK_EVENTS_TOPIC));
             long deadline = System.nanoTime() + KAFKA_WAIT.toNanos();
             while (found.size() < taskIds.size() && System.nanoTime() < deadline) {
                 for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(200))) {
@@ -188,7 +188,7 @@ public class RelayWakeSteps {
     private List<ConsumerRecord<String, String>> readTaskEvents(Duration window) {
         List<ConsumerRecord<String, String>> records = new ArrayList<>();
         try (KafkaConsumer<String, String> consumer = newConsumer()) {
-            consumer.subscribe(List.of(TASK_EVENTS_TOPIC));
+            consumer.subscribe(List.of(RelayWakeSpringConfiguration.TASK_EVENTS_TOPIC));
             long deadline = System.nanoTime() + window.toNanos();
             while (System.nanoTime() < deadline) {
                 consumer.poll(Duration.ofMillis(200)).forEach(records::add);
@@ -199,7 +199,7 @@ public class RelayWakeSteps {
 
     private static KafkaConsumer<String, String> newConsumer() {
         return new KafkaConsumer<>(Map.of(
-                "bootstrap.servers", RelayWakeSpringConfiguration.KAFKA.getBootstrapServers(),
+                "bootstrap.servers", SharedContainers.kafka().getBootstrapServers(),
                 "group.id", "relay-wake-" + UUID.randomUUID(),
                 "auto.offset.reset", "earliest",
                 "key.deserializer", StringDeserializer.class,

@@ -43,11 +43,11 @@ public class SseSupport {
 
     public void produceRaw(long timestamp, String key, String value) throws Exception {
         Map<String, Object> props = Map.of(
-                "bootstrap.servers", CucumberSpringConfiguration.KAFKA.getBootstrapServers(),
+                "bootstrap.servers", CucumberSpringConfiguration.kafkaBootstrapServers(),
                 "key.serializer", StringSerializer.class,
                 "value.serializer", StringSerializer.class);
         try (KafkaProducer<String, String> producer = new KafkaProducer<>(props)) {
-            producer.send(new ProducerRecord<>("tms.task-events", null, timestamp, key, value)).get(10, TimeUnit.SECONDS);
+            producer.send(new ProducerRecord<>(CucumberSpringConfiguration.TASK_EVENTS_TOPIC, null, timestamp, key, value)).get(10, TimeUnit.SECONDS);
         }
     }
 

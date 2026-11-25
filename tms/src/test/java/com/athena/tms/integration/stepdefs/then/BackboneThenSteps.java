@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.common.error.StateConflictException;
+import com.athena.tms.integration.stepdefs.CucumberSpringConfiguration;
 import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.ScenarioKeys;
 import com.athena.tms.integration.stepdefs.utils.Awaits;
@@ -159,7 +160,7 @@ public class BackboneThenSteps {
         assertEquals("pending", db.outboxStatus(headId), "等重試的首筆仍 pending");
         assertEquals("pending", db.outboxStatus(tailId), "同鍵後續列必須跟著等，不得先送");
         assertEquals(0, db.outboxAttempts(tailId), "後續列連試都不該試");
-        List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.push", Duration.ofSeconds(3L));
+        List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll(CucumberSpringConfiguration.PUSH_TOPIC, Duration.ofSeconds(3L));
         ctx.put(ScenarioKeys.PUSH_RECORDS, records);
         String blockedKey = aggregateKeyOf(headId);
         assertTrue(records.stream().noneMatch(r -> blockedKey.equals(r.key())), "被封鎖鍵整串不得外流");
@@ -183,7 +184,7 @@ public class BackboneThenSteps {
         Long soloId = freeIds.getFirst();
         assertEquals("sent", db.outboxStatus(soloId));
         String soloKey = aggregateKeyOf(soloId);
-        List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3L));
+        List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll(CucumberSpringConfiguration.TASK_EVENTS_TOPIC, Duration.ofSeconds(3L));
         assertTrue(records.stream().anyMatch(r -> soloKey.equals(r.key())), "事件實際到達 Kafka");
     }
 
@@ -207,7 +208,7 @@ public class BackboneThenSteps {
     public void duplicateIdenticalRecordsOnKafka(String idempotencyKey) {
         Long outboxId = ctx.get(ScenarioKeys.outboxId(idempotencyKey));
         String key = aggregateKeyOf(outboxId);
-        List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3L));
+        List<ConsumerRecord<String, String>> records = KafkaProbe.consumeAll(CucumberSpringConfiguration.TASK_EVENTS_TOPIC, Duration.ofSeconds(3L));
         List<String> values = records.stream().filter(r -> key.equals(r.key())).map(ConsumerRecord::value).toList();
         assertEquals(2, values.size(), "重送前模擬的那一筆＋relay 這輪真正送的那一筆，共兩筆");
         assertEquals(values.get(0), values.get(1), "兩筆內容必須一致，下游才能單靠 (task_id, seq) 去重");
