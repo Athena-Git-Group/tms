@@ -12,6 +12,8 @@
 
 <nav class="site" aria-label="交接手冊各頁">
   <a href="index.html" aria-current="page">總覽</a>
+  <a href="orientation.html">新人導讀</a>
+  <a href="skills.html">流程 Skill</a>
   <a href="setup.html">第一天</a>
   <a href="test.html">本機手測</a>
   <a href="bdd.html">BDD 測試</a>
@@ -24,7 +26,7 @@
 <header>
   <p class="eyebrow">TMS 任務交辦系統 · 工程交接</p>
   <h1>TMS 交接手冊</h1>
-  <p class="stand">這一頁 3 分鐘讀完：系統長什麼樣、你該先讀哪一頁、交接前最要緊的幾件事。細節都在後面六頁，照你手上的任務挑著讀就好。</p>
+  <p class="stand">這一頁 3 分鐘讀完：系統長什麼樣、你該先讀哪一頁、交接前最要緊的幾件事。細節都在後面八頁，照你手上的任務挑著讀就好。</p>
 </header>
 
 <section id="who">
@@ -32,7 +34,7 @@
   <div class="key"><b class="lbl">重點</b>
     <p>給接手這個 repo 的工程師。讀完能在自己的 Mac 上把三條驗收測試跑起來、知道新增一個測試場景要改哪幾個檔，並看懂員工 App 與 Java 後端怎麼組起來、哪裡會咬人。</p>
   </div>
-  <p>這裡只講「程式怎麼跑、測試怎麼跑、會在哪裡卡住」。需求以 <code>specs/truth/features/</code> 的可執行規格為準，資料表以 <code>tms/src/main/resources/db/migration/</code> 的 Flyway 遷移檔為準；<code>docs/</code> 底下 11、12、13 等開發前的設計稿沒有跟著程式碼更新，不要拿來當依據。</p>
+  <p>這裡只講「程式怎麼跑、測試怎麼跑、會在哪裡卡住」。需求以 <code>specs/truth/features/</code> 的可執行規格為準，資料表以 <code>tms/src/main/resources/db/migration/</code> 的 Flyway 遷移檔為準。</p>
 </section>
 
 <section id="overview">
@@ -116,6 +118,15 @@
   </div>
   <div class="routes">
     <div class="route">
+      <h3>我想先看懂 repo 與規格</h3>
+      <ol>
+        <li><a href="orientation.html">新人導讀</a>：app、specs、tms 各是什麼</li>
+        <li><a href="orientation.html#reading-order">新人導讀：第一次讀 specs 的順序</a></li>
+        <li><a href="skills.html">流程 Skill</a>：規格和程式是怎麼一棒棒產出的</li>
+        <li><a href="orientation.html#claim-walk">新人導讀：跟著「認領」讀一遍後端</a></li>
+      </ol>
+    </div>
+    <div class="route">
       <h3>我第一天報到</h3>
       <ol>
         <li><a href="setup.html">第一天</a>：裝機、確認環境通了</li>
@@ -153,9 +164,11 @@
 <section id="pages">
   <h2>各頁在講什麼、要讀多久？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>六頁各自獨立，每頁 10 分鐘內讀完；查表型的細節都收在可展開的區塊裡，需要時再打開。</p>
+    <p>八頁各自獨立，每頁 10 分鐘內讀完；查表型的細節都收在可展開的區塊裡，需要時再打開。</p>
   </div>
   <div class="cards">
+    <a class="card" href="orientation.html"><b>新人導讀</b><span>app、specs、tms 各是什麼，規格怎麼讀、怎麼產出，跟著一個請求讀後端。</span><small>約 9 分鐘</small></a>
+    <a class="card" href="skills.html"><b>流程 Skill</b><span>16 個流程指令各做什麼、何時停下問人，新功能、小 bug、規格改動各走哪幾步。</span><small>約 10 分鐘</small></a>
     <a class="card" href="setup.html"><b>第一天</b><span>裝機清單、repo 地圖、三套環境與 port 總表。</span><small>約 8 分鐘</small></a>
     <a class="card" href="test.html"><b>本機手測</b><span>起手動環境、掃房間 QR，從住客、櫃檯、員工 App、主管一路點回住客。</span><small>約 7 分鐘</small></a>
     <a class="card" href="bdd.html"><b>BDD 測試</b><span>規格怎麼變成三條可執行的驗收測試，每條怎麼跑、怎麼加場景。</span><small>約 10 分鐘</small></a>
@@ -180,7 +193,7 @@
 </section>
 
 <nav class="pager" aria-label="上一頁與下一頁">
-  <a class="next" href="setup.html"><small>下一頁</small>第一天 →</a>
+  <a class="next" href="orientation.html"><small>下一頁</small>新人導讀 →</a>
 </nav>
 
 </div>

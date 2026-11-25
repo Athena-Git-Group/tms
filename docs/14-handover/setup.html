@@ -12,6 +12,8 @@
 
 <nav class="site" aria-label="交接手冊各頁">
   <a href="index.html">總覽</a>
+  <a href="orientation.html">新人導讀</a>
+  <a href="skills.html">流程 Skill</a>
   <a href="setup.html" aria-current="page">第一天</a>
   <a href="test.html">本機手測</a>
   <a href="bdd.html">BDD 測試</a>
@@ -137,7 +139,7 @@ tms/   獨立；自己的行為規格測試在 tms/src/test，不用 bdd-support
         <tr><td><code>specs/plans/NNN-*/</code></td><td>每一輪需求的工作包：<code>spec.md</code>、<code>plan.md</code>、<code>tasks.md</code>、<code>implement-notes.md</code> 等</td><td>Markdown</td></tr>
         <tr><td><code>scripts/manual-env/</code></td><td>給人手動操作的獨立環境（不是測試）</td><td>bash</td></tr>
         <tr><td><code>docker-compose.yml</code></td><td>開發堆疊：Postgres 16 與 Kafka</td><td>Docker Compose</td></tr>
-        <tr><td><code>docs/</code></td><td>設計文件</td><td>HTML</td></tr>
+        <tr><td><code>docs/</code></td><td>這份交接手冊（<code>14-handover/</code>）、README 用的架構圖（<code>diagrams/</code>）、SaaS 營運後台的需求共識與原型（<code>saas/</code>）</td><td>HTML、PNG／SVG、Markdown</td></tr>
       </tbody>
     </table></div>
     </div>
@@ -219,7 +221,7 @@ bash scripts/manual-env/seed.sh             <span class="c"># 清掉並重灌示
     <tbody>
       <tr><td class="id">5433</td><td>開發 Postgres（database <code>tms</code>；手動環境另用 <code>tms_manual</code>）。本機 5432 被別的 Postgres 佔用，所以對外改 5433</td><td>App 驗收、Web 驗收、手動環境</td></tr>
       <tr><td class="id">9092</td><td>開發 Kafka</td><td>同上</td></tr>
-      <tr><td class="id">8080</td><td>後端（開測試時鐘）</td><td>Web 驗收（寫死，不能改）；App 驗收預設</td></tr>
+      <tr><td class="id">8080</td><td>後端（開測試時鐘）</td><td>Web 驗收預設（<code>BACKEND_PORT</code> 可改）；App 驗收預設</td></tr>
       <tr><td class="id">5199</td><td>Web 驗收用的 vite 開發伺服器（可用 <code>WEB_PORT</code> 改）</td><td><code>app/web-bdd/run-feature.sh</code></td></tr>
       <tr><td class="id">5173</td><td>vite 預設埠；Web 驗收直接下 mvn 又沒給 <code>-Dweb.baseUrl</code> 時的預設網址</td><td>手動下 mvn 時才會碰到</td></tr>
       <tr><td class="id">8081／5434／9094</td><td>App 驗收的隔離堆疊：後端／<code>tms-bdd-postgres</code>／<code>tms-bdd-kafka</code></td><td>讓 App 與 Web 驗收能同時跑</td></tr>
@@ -232,7 +234,7 @@ bash scripts/manual-env/seed.sh             <span class="c"># 清掉並重灌示
 </section>
 
 <nav class="pager" aria-label="上一頁與下一頁">
-  <a href="index.html"><small>上一頁</small>← 總覽</a>
+  <a href="skills.html"><small>上一頁</small>← 流程 Skill</a>
   <a class="next" href="test.html"><small>下一頁</small>本機手測 →</a>
 </nav>
 

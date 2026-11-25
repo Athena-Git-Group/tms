@@ -12,6 +12,8 @@
 
 <nav class="site" aria-label="交接手冊各頁">
   <a href="index.html">總覽</a>
+  <a href="orientation.html">新人導讀</a>
+  <a href="skills.html">流程 Skill</a>
   <a href="setup.html">第一天</a>
   <a href="test.html">本機手測</a>
   <a href="bdd.html" aria-current="page">BDD 測試</a>
@@ -120,7 +122,7 @@
 <section id="lines">
   <h2>三條線各自怎麼跑、怎麼加場景？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>後端線完全自給自足，只要 Docker；App 線要先自己起好開測試時鐘的後端；網頁線的腳本會幫你起後端與 vite，但不起容器。挑你要的那一條讀。</p>
+    <p>後端線完全自給自足，只要 Docker；App 線要先自己起好帶 <code>test-support</code> 設定檔的後端；網頁線的腳本會幫你起後端與 vite，但不起容器。挑你要的那一條讀。</p>
   </div>
 
   <div class="tabs">
@@ -205,13 +207,13 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
       <h4 class="sub">① 它在測什麼？</h4>
       <p>在 iOS simulator 裡真的點 App 畫面。<b>Appium</b> 是讓程式遠端操作手機 App 的伺服器：測試對它下「找到這個元素、點它」，它再透過 iOS 的 XCUITest 去操作。</p>
       <p>這裡用原生 XCUITest driver，不用 appium-flutter-driver，所以 App 裡每個要被找到的元素都要掛一個 <b>Semantics identifier</b>——Flutter 寫進系統無障礙樹的字串 id，Appium 用 <code>AppiumBy.accessibilityId</code> 找它（約定見 <a href="mobile.html#test-contract">Flutter App</a>）。</p>
-      <p>這條線還依賴 App 內的<b>測試後門</b>：以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯時（<code>app/mobile/lib/core/test_backdoor.dart:50</code>），App 在 simulator 內的 <code>127.0.0.1:9099</code> 開小 HTTP 伺服器，讓測試撥時鐘、讀狀態、注入斷線。</p>
+      <p>這條線還依賴 App 內的<b>測試後門</b>：以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯時（<code>app/mobile/lib/core/test_backdoor.dart:56</code>），App 在 simulator 內的 <code>127.0.0.1:9099</code> 開小 HTTP 伺服器，讓測試撥時鐘、讀狀態、注入斷線，也用來直接帶入登入狀態（<code>/session</code>）與把 App 重置回登入頁（<code>/reset</code>）。</p>
 
       <h4 class="sub">② 怎麼跑？</h4>
-      <p>腳本<b>不會</b>幫你起後端，要先自己起，而且一定要開測試時鐘（<code>TMS_TEST_CLOCK_ENABLED=true</code>，後端才會有 <code>/api/v1/test/clock</code>）：</p>
-      <div class="cmd"><pre class="api"><span class="c"># 先起開發堆疊＋開測試時鐘的後端（8080）</span>
+      <p>腳本<b>不會</b>幫你起後端，要先自己起，而且一定要帶 <code>test-support</code> 設定檔（<code>SPRING_PROFILES_ACTIVE=test-support</code>）。只有帶了它，後端才有可撥時間的測試時鐘 <code>/api/v1/test/clock</code> 與其他 <code>/api/v1/test/**</code> 測試端點；沒帶的話，腳本第一步的就緒檢查就會停下來：</p>
+      <div class="cmd"><pre class="api"><span class="c"># 先起開發堆疊＋帶 test-support 設定檔的後端（8080）</span>
 docker compose up -d
-TMS_DB_URL=jdbc:postgresql://localhost:5433/tms TMS_TEST_CLOCK_ENABLED=true \
+TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support \
   JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run</pre></div>
       <div class="cmd"><pre class="api"><span class="c"># 再跑單一模組（不帶參數會列出可選模組）</span>
 UDID=B07951C2-DF41-4AF6-9C98-0DFC7413ED8C app/bdd/run-module.sh 工務單</pre></div>
@@ -241,9 +243,9 @@ BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434 \
       <p>以 <code>specs/truth/features/ios-app/待認領/待認領列表.feature:4-23</code> 為例：</p>
       <ol class="flow">
         <li><code>app/bdd/run-module.sh 待認領</code> 完成就緒檢查、編譯安裝 App、起 Appium，再以 <code>-Dcucumber.features=../../specs/truth/features/ios-app/待認領</code> 執行 <code>RunModuleFeatureTest</code>。</li>
-        <li><code>AppiumWorld</code> 的 <code>@Before(order=0)</code>（<code>AppiumWorld.java:95-100</code>）建好 <code>IOSDriver</code>，呼叫 <code>resetAppState()</code>：清後端資料、重置時鐘、重開 App、等後門 9099 的 <code>/state</code> 回應。</li>
+        <li><code>AppiumWorld</code> 的 <code>@Before(order=0)</code>（<code>AppiumWorld.java:97-102</code>）建好 <code>IOSDriver</code>，呼叫 <code>resetAppState()</code>：先叫 App 測試後門 9099 的 <code>/reset</code> 清掉 App 記在記憶體裡的狀態並回登入頁（叫不到才用 <code>simctl</code> 重開 App），再清後端資料、重置時鐘。</li>
         <li>「<code>房務待認領有以下任務：</code>」→ <code>steps/pool/PoolGivenSteps.java:20</code> → <code>BackendChannel</code> 用 JDBC 直接把任務寫進資料庫。</li>
-        <li>「<code>"阿美" 在 App 打開待認領</code>」→ <code>steps/pool/PoolWhenSteps.java:21</code> → 透過 Appium 登入這位員工並切到待認領頁，元素都用 <code>accessibilityId</code> 定位。</li>
+        <li>「<code>"阿美" 在 App 打開待認領</code>」→ <code>steps/pool/PoolWhenSteps.java:21</code> → 用後端登入 API 取得這位員工的登入結果，交給後門 <code>/session</code> 直接進首頁（<code>AppiumWorld.java:263-281</code>），再透過 Appium 切到待認領頁，元素都用 <code>accessibilityId</code> 定位。</li>
         <li>「<code>待認領列表依序為 317、313、314、215、418</code>」→ <code>steps/pool/PoolThenSteps.java:56</code>：先打 <code>GET /pool</code> 比順序，再讀畫面上每張卡片的 Semantics identifier 比順序；不符時印出元素樹。</li>
       </ol>
 
@@ -257,7 +259,7 @@ BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434 \
       <h4 class="sub">⑤ 這條線專屬的坑</h4>
       <ul class="rules">
         <li><b>Appium 4723 與 simulator 全機唯一</b>：兩個 App 驗收同時跑會搶同一個 session，整輪作廢。開跑前 <code>lsof -i:4723</code> 與 <code>ps aux | grep RunModuleFeatureTest</code>。</li>
-        <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:90</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器已找不到，一律用 <code>UDID=</code> 指定。</li>
+        <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:92</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器已找不到，一律用 <code>UDID=</code> 指定。</li>
         <li><b>App 一定要用 <code>TEST_BACKDOOR=true</code> 編譯</b>，否則每個場景都「等測試後門就緒逾時」。偶發的同一錯誤多半是環境訊號，重跑一次再判斷。</li>
         <li><b>simulator 剛開機時 <code>simctl install</code> 會靜默失敗</b>（<code>env.sh</code> 已加重裝驗證）；另外要接硬體鍵盤，否則螢幕鍵盤會蓋住密碼欄：<code>defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true</code>。</li>
         <li><b>全量要 60–90 分鐘</b>，電腦睡眠會殺掉它：開跑前掛 <code>caffeinate -dimsu -t 28800</code>。</li>
@@ -271,11 +273,11 @@ BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434 \
           <thead><tr><th>角色</th><th>位置</th></tr></thead>
           <tbody>
             <tr><td>入口</td><td><code>app/bdd/src/test/java/com/athena/app/bdd/</code>：<code>RunTruthFeaturesTest</code>（全量）、<code>RunModuleFeatureTest</code>（配合 <code>-Dcucumber.features</code>）、<code>RunF3PushFeatureTest</code>（只跑推播）</td></tr>
-            <tr><td>共享世界與每場景重置</td><td><code>AppiumWorld.java</code>：建立或沿用 Appium session（跨場景共用）；每場景 <code>resetAppState()</code>＝清後端業務資料 → 重置時鐘 → <code>simctl terminate／launch</code> 重開 App → 等後門 9099</td></tr>
+            <tr><td>共享世界與每場景重置</td><td><code>AppiumWorld.java</code>：建立或沿用 Appium session（跨場景共用）；每場景 <code>resetAppState()</code>＝後門 <code>/reset</code> 讓 App 回登入頁（叫不到才 <code>simctl terminate／launch</code> 重開）→ 清後端業務資料 → 重置時鐘。登入只是前置條件時走後門 <code>/session</code>，驗證登入畫面本身的步驟、必須先改密碼的帳號、或帶 <code>-Dappium.login.via-screen=true</code> 時才在畫面上打字登入</td></tr>
             <tr><td>Step 定義</td><td><code>bdd/steps/{account,ask,common,handover,manager,pool,push,repair,system,taskexecution,today}/</code></td></tr>
             <tr><td>依賴注入</td><td>PicoContainer（<code>cucumber-picocontainer</code>），不用 Spring</td></tr>
             <tr><td>腳本</td><td><code>run-module.sh</code>、<code>run-all.sh</code>、<code>run-f3.sh</code>，共用 <code>lib/env.sh</code></td></tr>
-            <tr><td>推播與系統權限</td><td>推播用 <code>xcrun simctl push</code> 送 payload（<code>AppiumWorld.java:920, 937</code>）；偏好設定用 <code>simctl spawn defaults</code> 寫 <code>flutter.&lt;key&gt;</code>。headless 下 <code>simctl privacy grant notifications</code> 會失敗，權限彈窗靠 Appium 的 <code>setAutoAcceptAlerts(true)</code> 自動按掉</td></tr>
+            <tr><td>推播與系統權限</td><td>推播用 <code>xcrun simctl push</code> 送 payload（<code>AppiumWorld.java:962, 979</code>）；偏好設定用 <code>simctl spawn defaults</code> 寫 <code>flutter.&lt;key&gt;</code>。headless 下 <code>simctl privacy grant notifications</code> 會失敗，權限彈窗靠 Appium 的 <code>setAutoAcceptAlerts(true)</code> 自動按掉</td></tr>
           </tbody>
         </table></div>
         </div>
@@ -293,6 +295,7 @@ BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434 \
         <li><code>ipad</code>：WebKit 1180×820，觸控。</li>
         <li><code>phone</code>：WebKit 393×852，觸控（住客頁專用，語言預設繁中）。</li>
       </ul>
+      <p>櫃檯網頁以 <code>desktop</code> 跑整套。<code>ipad</code> 跑整個目錄時，腳本只跑標了 <code>@ipad</code> 的 feature，也就是畫面會因尺寸或觸控而不同的那幾份；其餘行為在兩種尺寸下相同，不必整套重跑。新寫的規格只要有 iPad 專屬的畫面或手勢，就在「功能:」上一行加 <code>@ipad</code>。指定單一份 feature 時照樣全跑；真的要整套都跑 iPad，設 <code>IPAD_ALL_SCENARIOS=1</code>。</p>
 
       <h4 class="sub">② 怎麼跑？</h4>
       <p>先 <code>docker compose up -d</code>；腳本會自己起 8080 後端與 5199 vite，但<b>不會</b>幫你起容器。</p>
@@ -335,7 +338,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
       <h4 class="sub">⑤ 這條線專屬的坑</h4>
       <ul class="rules">
         <li><b>後端只能是 8080</b>：<code>app/web/vite.config.ts</code> 把後端寫死成 <code>http://localhost:8080</code>，代理 <code>/api</code>、<code>/staff/stream</code>、<code>/guest/stream</code>、<code>/guest</code>。手動環境（8083）是用 <code>node -e</code> 呼叫 vite 的 <code>createServer</code> 在啟動時蓋掉代理，沒有改設定檔。</li>
-        <li><b>沿用既有的 8080 後端時，它沒開測試時鐘會報錯</b>：先 <code>run-feature.sh --stop</code>。</li>
+        <li><b>沿用既有的 8080 後端時，它沒帶 <code>test-support</code> 設定檔會報錯</b>：先 <code>run-feature.sh --stop</code>。</li>
         <li><b>命令列另指定 <code>cucumber.plugin</code> 時要帶上 <code>StepPhaseListener</code></b>：它不是報表，而是讓「後端沒有任何資料被改動」這類結果句拿得到 When 之前的快照。</li>
         <li><b>表格欄位有白名單</b>：<code>TaskTableRows</code> 不認得的欄位直接丟錯（<code>TaskTableRows.java:110</code>）。</li>
         <li><b>住客頁沒有自己的入口</b>：只有 <code>RunFrontdeskWebFeaturesTest</code>，寫死讀 <code>frontdesk-web/</code>；腳本用 <code>-Dcucumber.features=</code> 指路徑時 Cucumber 會忽略寫死的目錄，所以同一個入口也能跑 <code>guest-web/</code>。</li>
@@ -467,11 +470,11 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
       <path class="sk-edge" d="M 820 388 Q 824 400 820 410" marker-end="url(#hv-a)"/>
       <rect class="sk-shape sk-fill" x="680" y="412" width="280" height="50" rx="14"/>
       <text class="sk-t sk-t-b" x="696" y="436">vite 開發伺服器 :5199</text>
-      <text class="sk-t-s" x="696" y="454">代理寫死到 localhost:8080</text>
+      <text class="sk-t-s" x="696" y="454">代理預設轉到 localhost:8080</text>
 
       <rect class="sk-shape sk-fill sk-acc" x="380" y="522" width="230" height="70" rx="14"/>
       <text class="sk-t sk-t-b" x="396" y="550">後端 jar :8080</text>
-      <text class="sk-t-s" x="396" y="572">TMS_TEST_CLOCK_ENABLED=true</text>
+      <text class="sk-t-s" x="396" y="572">profile：test-support</text>
       <text class="sk-t-s" x="396" y="586">（App 線可改連隔離的 8081）</text>
       <path class="sk-edge" d="M 470 472 Q 466 498 474 520" marker-end="url(#hv-a)"/>
       <text class="sk-t-lb" x="352" y="503">API_BASE_URL（編譯期決定）</text>
@@ -498,7 +501,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
       <text class="sk-t-warn" x="520" y="704" text-anchor="middle">JDBC 直寫種資料、每場景 TRUNCATE</text>
     </svg>
     </div>
-    <figcaption>線 1 完全自給自足（左）；線 2 與線 3 都是「黑箱驗收」：打一個事先起好、開了測試時鐘的後端，並由 bdd-support 直接對資料庫種資料與清資料（中下）。</figcaption>
+    <figcaption>線 1 完全自給自足（左）；線 2 與線 3 都是「黑箱驗收」：打一個事先起好、帶 test-support 設定檔的後端，並由 bdd-support 直接對資料庫種資料與清資料（中下）。</figcaption>
   </figure>
   <p>改連隔離堆疊用環境變數切換：<code>BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434</code>。這套堆疊目前 repo 裡沒有啟動腳本，見<a href="pitfalls.html#todo">接手待查</a>。</p>
 </section>
@@ -515,7 +518,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
     <li><b>規格有缺口</b>（會影響驗收意圖或句型邊界）時回到規格流程；<code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code> 有多筆「待回交」的範例。</li>
     <li><b><code>specs/plans/NNN-*/features/acceptance/*.feature</code> 不被任何測試線執行</b>：它是需求階段的業務流程驗收稿，要先拆成介面層級的 truth feature 才會變成可執行測試。</li>
   </ul>
-  <p>完整的需求流程是 <code>/specify</code> → … → <code>/dsl-refine</code>（寫 truth feature 與 dsl）→ <code>/tasks</code> → <code>/implement</code> → <code>/bdd</code>，這些是 repo 內 <code>.athena</code> 與 Claude Code 的流程指令。</p>
+  <p>完整的需求流程是 <code>/specify</code> → … → <code>/dsl-refine</code>（寫 truth feature 與 dsl）→ <code>/tasks</code> → <code>/implement</code> → <code>/bdd</code>，每一步做什麼、何時停下來，見 <a href="skills.html">流程 Skill</a>。</p>
 </section>
 
 <nav class="pager" aria-label="上一頁與下一頁">

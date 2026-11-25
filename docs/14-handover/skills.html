@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・流程 Skill</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .sk-dashbox{stroke-dasharray:7 5}
+  dl.terms{margin:10px 0 20px; max-width:42em}
+  dl.terms dt{font-weight:700; margin-top:10px}
+  dl.terms dd{margin:2px 0 0 0; padding-left:14px; border-left:2px solid var(--line); font-size:14.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="orientation.html">新人導讀</a>
+  <a href="skills.html" aria-current="page">流程 Skill</a>
+  <a href="setup.html">第一天</a>
+  <a href="test.html">本機手測</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">流程 Skill</span></p>
+
+<header>
+  <p class="eyebrow">交接 · 流程 Skill</p>
+  <h1>流程 Skill：一個需求怎麼一步步變成規格、任務與程式</h1>
+  <p class="stand">這個 repo 的規格與程式，是用 16 個 Claude Code 指令（skill）一棒接一棒做出來的。這一頁說明每一棒做什麼、讀什麼寫什麼、什麼時候會停下來問人，以及平常開發該挑哪幾棒走。測試本身怎麼跑，見 <a href="bdd.html">BDD 測試</a>。</p>
+  <p class="readtime">約 10 分鐘</p>
+</header>
+
+<section id="map">
+  <h2>這 16 個 skill 是什麼？整條流程長什麼樣？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>skill 是一份寫給 AI 的作業手冊（<code>SKILL.md</code>），在 Claude Code 裡打 <code>/名稱</code> 就照著做。16 個 skill 排成一條線：需求 → 規格 → 系統分析 → 可執行規格 → 任務 → 程式。主要階段由人打指令推進，中間的細活由上一棒委派下一棒。</p>
+  </div>
+  <p>每個 skill 是一個資料夾，裡面除了 <code>SKILL.md</code>，多半還附有它要遵守的判準（<code>rules/</code>），不少也附範本（<code>templates/</code>）。它們放在 <code>.agents/skills/</code>，另在 <code>.claude/skills/</code> 放了指回同一份內容的捷徑，Claude Code 才找得到。</p>
+  <p>讀這一頁會反覆碰到幾個詞，先講清楚：</p>
+  <dl class="terms">
+    <dt>truth（現況規格）</dt>
+    <dd><code>specs/truth/</code> 底下「系統現在長什麼樣」的規格，永遠只有一份：技術選型 <code>techstack.md</code>、API 契約 <code>contracts/</code>、資料模型 <code>data/</code>、可執行規格 <code>features/</code>。</dd>
+    <dt>工作包</dt>
+    <dd><code>specs/plans/NNN-名稱/</code>，一次需求變更一包，裝這次的需求、分析與任務。</dd>
+    <dt>truth-delta（變更紀錄）</dt>
+    <dd>每個工作包裡的 <code>truth-delta.md</code>：逐列記下這次對 truth 新增（<code>ADD</code>）、修改（<code>MODIFY</code>）、刪除（<code>DELETE</code>）或確認不動（<code>NOOP</code>）了什麼，以及原因。</dd>
+    <dt>Gherkin 與 DSL</dt>
+    <dd>Gherkin 是用「假設／當／那麼」寫情境的格式，就是 <code>.feature</code> 檔。DSL 是每個資料夾裡的 <code>dsl.md</code>，一張「句型表」，寫明每一句 Gherkin 實際代表什麼操作、要查哪些資料。</dd>
+  </dl>
+
+  <figure>
+    <div class="figwrap">
+    <svg viewBox="0 0 940 760" role="img" aria-label="流程圖：人打 /specify 建立工作包；接著人打 /technical-research（會改 techstack）與 /spec-by-example（驗收情境，不進 truth）；再打 /system-analysis，它依 Wave 委派 /ui-plan、/data-plan、/api-plan，其中 data-plan 與 api-plan 會改 truth；接著人打 /dsl-refine（改 features，委派 /gherkin-and-dsl 稽核）；四個會改 truth 的 skill 改完都委派 /truth-delta 記到 truth-delta.md；最後人打 /tasks 與 /implement，implement 在轉綠與重構時委派 /bdd。任何一步遇到高影響缺口都會叫 /clarify 停下來問人。">
+      <defs>
+        <marker id="fl-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
+        <marker id="fl-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-acc"/></marker>
+      </defs>
+
+      <!-- 第一列：規格 -->
+      <text class="sk-t-acc" x="40" y="58">① 人輸入需求描述</text>
+      <rect class="sk-shape sk-fill" x="40" y="70" width="190" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="135" y="100" text-anchor="middle">/specify</text>
+      <text class="sk-t-s" x="135" y="124" text-anchor="middle">開新工作包・寫 spec.md</text>
+      <text class="sk-t-s" x="135" y="162" text-anchor="middle">可加跑 /clarify-over-specs</text>
+
+      <path class="sk-edge" d="M 230 92 Q 262 60 298 56" marker-end="url(#fl-a)"/>
+      <text class="sk-t-lb" x="236" y="48">人接著打</text>
+      <path class="sk-edge" d="M 230 120 Q 262 152 298 154" marker-end="url(#fl-a)"/>
+
+      <rect class="sk-shape sk-fill sk-acc" x="300" y="20" width="240" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="420" y="50" text-anchor="middle">/technical-research</text>
+      <text class="sk-t-s" x="420" y="74" text-anchor="middle">research.md・改 techstack.md</text>
+
+      <rect class="sk-shape sk-fill" x="300" y="120" width="240" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="420" y="150" text-anchor="middle">/spec-by-example</text>
+      <text class="sk-t-s" x="420" y="174" text-anchor="middle">業務驗收情境・不進 truth</text>
+
+      <path class="sk-edge" d="M 540 56 Q 584 64 618 92" marker-end="url(#fl-a)"/>
+      <path class="sk-edge" d="M 540 154 Q 584 146 618 120" marker-end="url(#fl-a)"/>
+
+      <rect class="sk-shape sk-fill" x="620" y="70" width="270" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="755" y="100" text-anchor="middle">/system-analysis</text>
+      <text class="sk-t-s" x="755" y="124" text-anchor="middle">plan.md・盤點介面、分 Wave</text>
+
+      <!-- 委派到三個 planner -->
+      <path class="sk-edge" d="M 700 140 Q 520 190 150 248" marker-end="url(#fl-a)"/>
+      <path class="sk-edge" d="M 730 140 Q 600 200 440 248" marker-end="url(#fl-a)"/>
+      <path class="sk-edge" d="M 770 140 Q 774 196 752 248" marker-end="url(#fl-a)"/>
+      <text class="sk-t-lb" x="790" y="200">自動委派（依 Wave）</text>
+
+      <!-- 第二列：三個 planner -->
+      <rect class="sk-shape sk-fill sk-dashbox" x="40" y="250" width="220" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="150" y="280" text-anchor="middle">/ui-plan</text>
+      <text class="sk-t-s" x="150" y="304" text-anchor="middle">畫面雛形 ui/・不進 truth</text>
+
+      <rect class="sk-shape sk-fill sk-acc sk-dashbox" x="330" y="250" width="220" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="440" y="280" text-anchor="middle">/data-plan</text>
+      <text class="sk-t-s" x="440" y="304" text-anchor="middle">改 data/data-model.dbml</text>
+
+      <rect class="sk-shape sk-fill sk-acc sk-dashbox" x="620" y="250" width="270" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="755" y="280" text-anchor="middle">/api-plan</text>
+      <text class="sk-t-s" x="755" y="304" text-anchor="middle">改 contracts/（API 契約）</text>
+
+      <!-- 第三列：truth-delta 與 dsl-refine -->
+      <path class="sk-edge" d="M 755 320 Q 760 360 755 398" marker-end="url(#fl-a)"/>
+      <text class="sk-t-lb" x="768" y="366">人接著打</text>
+
+      <rect class="sk-shape sk-fill sk-acc" x="620" y="400" width="270" height="74" rx="16"/>
+      <text class="sk-t sk-t-b" x="755" y="430" text-anchor="middle">/dsl-refine</text>
+      <text class="sk-t-s" x="755" y="454" text-anchor="middle">改 features/・委派 /gherkin-and-dsl 稽核</text>
+
+      <rect class="sk-shape sk-soft sk-dashbox" x="330" y="400" width="220" height="74" rx="16"/>
+      <text class="sk-t sk-t-b" x="440" y="430" text-anchor="middle">/truth-delta</text>
+      <text class="sk-t-s" x="440" y="454" text-anchor="middle">記一筆到 truth-delta.md</text>
+
+      <path class="sk-edge-acc sk-dash" d="M 440 320 Q 444 360 440 398" marker-end="url(#fl-acc)"/>
+      <path class="sk-edge-acc sk-dash" d="M 620 430 Q 586 426 552 434" marker-end="url(#fl-acc)"/>
+      <path class="sk-edge-acc sk-dash" d="M 660 320 Q 600 370 548 404" marker-end="url(#fl-acc)"/>
+      <path class="sk-edge-acc sk-dash" d="M 300 70 Q 282 72 284 120 L 284 380 Q 288 420 328 432" marker-end="url(#fl-acc)"/>
+      <text class="sk-t-acc" x="40" y="380">改完 truth 都委派記帳</text>
+      <text class="sk-t-acc" x="40" y="400">（綠框四個）</text>
+
+      <!-- 第四列：任務與實作 -->
+      <path class="sk-edge" d="M 755 474 Q 760 520 755 558" marker-end="url(#fl-a)"/>
+      <text class="sk-t-lb" x="768" y="522">人接著打</text>
+
+      <rect class="sk-shape sk-fill" x="620" y="560" width="270" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="755" y="590" text-anchor="middle">/tasks</text>
+      <text class="sk-t-s" x="755" y="614" text-anchor="middle">tasks.md・逐條可照做</text>
+
+      <path class="sk-edge" d="M 620 595 Q 586 590 552 595" marker-end="url(#fl-a)"/>
+      <text class="sk-t-lb" x="556" y="580">人接著打</text>
+
+      <rect class="sk-shape sk-fill" x="330" y="560" width="220" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="440" y="590" text-anchor="middle">/implement</text>
+      <text class="sk-t-s" x="440" y="614" text-anchor="middle">一條一條做、做完打勾</text>
+
+      <path class="sk-edge" d="M 330 595 Q 296 590 262 595" marker-end="url(#fl-a)"/>
+      <text class="sk-t-lb" x="250" y="652">轉綠、重構時委派</text>
+
+      <rect class="sk-shape sk-fill sk-dashbox" x="40" y="560" width="220" height="70" rx="16"/>
+      <text class="sk-t sk-t-b" x="150" y="590" text-anchor="middle">/bdd</text>
+      <text class="sk-t-s" x="150" y="614" text-anchor="middle">紅 → 綠 → 重構</text>
+
+      <!-- 圖例 -->
+      <rect class="sk-shape sk-fill" x="40" y="692" width="44" height="26" rx="8"/>
+      <text class="sk-t-lb" x="94" y="710">人手動打</text>
+      <rect class="sk-shape sk-fill sk-dashbox" x="190" y="692" width="44" height="26" rx="8"/>
+      <text class="sk-t-lb" x="244" y="710">由上一棒委派</text>
+      <rect class="sk-shape sk-fill sk-acc" x="370" y="692" width="44" height="26" rx="8"/>
+      <text class="sk-t-lb" x="424" y="710">會改 specs/truth</text>
+      <text class="sk-t-warn" x="40" y="746">任何一棒遇到會改變結果的缺口，都叫 /clarify 停下來問人；/constitution 另外維護共同規則</text>
+    </svg>
+    </div>
+    <figcaption>實線框是人要自己打的指令，虛線框由上一棒叫起來；綠框是會直接改 <code>specs/truth/</code> 的四個「truth 負責者」，改完都交給 <code>/truth-delta</code> 記帳。<code>/technical-research</code> 與 <code>/spec-by-example</code> 都只需要 <code>spec.md</code>，誰先誰後都可以。</figcaption>
+  </figure>
+</section>
+
+<section id="stages">
+  <h2>每一棒做什麼、讀什麼寫什麼、什麼時候會停下來？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>前半段（到 <code>/dsl-refine</code>）在寫規格，後半段（<code>/tasks</code> 之後）在寫程式。每一棒只寫自己負責的檔，碰到會改變結果的缺口就停下來問人，不自己猜。</p>
+  </div>
+  <p>下面照順序走一遍。舉例都取自工作包 <code>specs/plans/007-frontdesk-create-request/</code>（櫃檯代開單），它從頭到尾走完整條線，最後的 <code>tasks.md</code> 有 183 條任務全部打勾。</p>
+  <ol class="flow">
+    <li><b><code>/specify</code></b>：把一段需求描述變成新的工作包，寫 <code>spec.md</code>（使用者故事、需求、驗收情境與邊界情況）與 <code>checklists/requirements.md</code>，並建好空的 <code>truth-delta.md</code>。它明文禁止改 truth，也禁止改舊工作包。寫完可以再跑 <code>/clarify-over-specs</code>，把整份 spec 掃一遍找高影響缺口。</li>
+    <li><b><code>/technical-research</code></b>：做技術調查寫 <code>research.md</code>，並直接更新 <code>specs/truth/techstack.md</code>。007 在這一步決定了「同一把防重複鍵兩個請求同時進來，只做一次」要怎麼實作。</li>
+    <li><b><code>/spec-by-example</code></b>：把 spec 寫成給產品經理看的業務驗收情境，放在工作包的 <code>features/acceptance/</code>。這一層不分前端後端，也不會被任何測試執行。</li>
+    <li><b><code>/system-analysis</code></b>：盤點這次動到哪些系統介面，排成幾個 Wave（可以同時進行的一批工作），寫進 <code>plan.md</code>，再委派 <code>/ui-plan</code>、<code>/data-plan</code>、<code>/api-plan</code>。007 的 Wave 1 讓畫面與資料模型同時做，Wave 2 才定 API，因為 API 要回什麼取決於前兩者。</li>
+    <li><b><code>/dsl-refine</code></b>：把業務驗收情境拆成各介面（後端、櫃檯網頁、住客網頁、員工 App）可執行的 <code>.feature</code> 與 <code>dsl.md</code>，直接寫進 <code>specs/truth/features/</code>，再委派 <code>/gherkin-and-dsl</code> 檢查句型與用腳本稽核。</li>
+    <li><b><code>/tasks</code></b>：把工作包與 truth 變成 <code>tasks.md</code>。順序固定：先裝新技術（Setup）、再搭共用骨架（Foundational）、接著把測試層一次對齊最新的 truth，最後才是每個 feature 的產品程式。</li>
+    <li><b><code>/implement</code></b>：照 <code>tasks.md</code> 一條一條做，每做完一條驗證後立刻打勾，不能跳步。碰到「讓測試轉綠」與「重構」的任務時委派 <code>/bdd</code>；全部打勾後會問你要不要 commit，不會自己 commit。</li>
+  </ol>
+  <p><code>/bdd</code> 一次只處理一個 feature 檔，走 red／green／refactor 三步：<b>紅</b>是先讓測試以正確的理由失敗，<b>綠</b>是只補剛好讓它通過的程式，<b>重構</b>是在測試全綠的保護下整理程式。它把每句 Gherkin 接到一段測試程式，這段程式叫 <b>step definition</b>；step definition 怎麼寫、測試怎麼跑，見 <a href="bdd.html#skeleton">BDD 測試：三條線共用的骨架</a>。</p>
+  <p>停下來的時機各棒都寫得很明確，歸納起來有三種。第一種是需求本身有洞：任何一棒發現會改變故事切分、驗收結果、對外契約或既有行為的缺口，都會叫 <code>/clarify</code>，一輪問 1 到 3 題、一次訪談最多 5 題，每題附背景、選項與推薦答案，沒拿到回答就不往下做。第二種是上游給的東西不夠：<code>/tasks</code> 找不到某句話唯一的 DSL 定義、<code>/bdd</code> 發現 feature 或 <code>dsl.md</code> 有缺口，都會退回 <code>/dsl-refine</code>。第三種是 <code>/implement</code> 發現 truth 與任務互相矛盾，停下受影響的任務並回報。</p>
+  <details>
+    <summary>16 個 skill 一覽 <span class="hint">— 誰觸發、讀什麼、寫什麼、會不會改 truth</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>skill</th><th>誰觸發</th><th>主要讀</th><th>寫到哪</th><th>改 truth？</th></tr></thead>
+      <tbody>
+        <tr><td><code>/specify</code></td><td>人</td><td>需求描述、truth 現況</td><td>新工作包：<code>spec.md</code>、<code>checklists/requirements.md</code>、空的 <code>truth-delta.md</code></td><td>否</td></tr>
+        <tr><td><code>/clarify-over-specs</code></td><td>人（可選）</td><td><code>spec.md</code>、checklist</td><td>回寫 <code>spec.md</code> 與 checklist</td><td>否</td></tr>
+        <tr><td><code>/clarify</code></td><td>各棒遇到缺口時叫，也可由人叫</td><td>呼叫者給的缺口</td><td>在對話中出題；呼叫者要求時寫問答紀錄</td><td>否</td></tr>
+        <tr><td><code>/technical-research</code></td><td>人</td><td><code>spec.md</code>、<code>techstack.md</code></td><td><code>research.md</code></td><td>是：<code>techstack.md</code></td></tr>
+        <tr><td><code>/spec-by-example</code></td><td>人</td><td><code>spec.md</code></td><td><code>features/acceptance/*.feature</code></td><td>否</td></tr>
+        <tr><td><code>/system-analysis</code></td><td>人</td><td><code>spec.md</code>、<code>research.md</code>、<code>truth-delta.md</code>、truth</td><td><code>plan.md</code></td><td>否</td></tr>
+        <tr><td><code>/ui-plan</code></td><td><code>/system-analysis</code> 委派</td><td>工作包、<code>truth-delta.md</code>、相關 contracts 與 features</td><td><code>ui/ui-plan.md</code>、<code>ui/*.html</code> 靜態雛形</td><td>否</td></tr>
+        <tr><td><code>/data-plan</code></td><td><code>/system-analysis</code> 委派</td><td>工作包、現有資料模型</td><td>—</td><td>是：<code>data/</code></td></tr>
+        <tr><td><code>/api-plan</code></td><td><code>/system-analysis</code> 委派</td><td>工作包、現有 API 契約</td><td>—</td><td>是：<code>contracts/</code></td></tr>
+        <tr><td><code>/dsl-refine</code></td><td>人</td><td>驗收情境、<code>plan.md</code>、<code>truth-delta.md</code>、現有 feature 與 <code>dsl.md</code></td><td>—</td><td>是：<code>features/</code></td></tr>
+        <tr><td><code>/gherkin-and-dsl</code></td><td><code>/dsl-refine</code> 委派，也可由人叫</td><td>目標 feature 與 <code>dsl.md</code></td><td>修 feature 與 <code>dsl.md</code>、跑稽核腳本</td><td>隨呼叫者</td></tr>
+        <tr><td><code>/truth-delta</code></td><td>四個 truth 負責者委派</td><td>呼叫者交來的改動列</td><td><code>truth-delta.md</code> 該負責者那一段</td><td>否（只記帳）</td></tr>
+        <tr><td><code>/tasks</code></td><td>人</td><td>整個工作包、<code>truth-delta.md</code>、相關 truth</td><td><code>tasks.md</code></td><td>否</td></tr>
+        <tr><td><code>/implement</code></td><td>人</td><td><code>tasks.md</code>、<code>truth-delta.md</code></td><td>程式與測試；回寫 <code>tasks.md</code> 打勾</td><td>否</td></tr>
+        <tr><td><code>/bdd</code></td><td><code>/implement</code> 委派，也可由人叫</td><td>單一 feature 檔與 <code>dsl.md</code></td><td>step definition、測試與產品程式</td><td>否</td></tr>
+        <tr><td><code>/constitution</code></td><td>人</td><td><code>.agents/constitution/</code></td><td>同一個資料夾裡的規則檔</td><td>否</td></tr>
+      </tbody>
+    </table></div>
+    <p>每個 skill 的完整步驟在 <code>.agents/skills/&lt;名稱&gt;/SKILL.md</code>，判準在同資料夾的 <code>rules/</code>。</p>
+    </div>
+  </details>
+</section>
+
+<section id="truth-first">
+  <h2>為什麼 truth 由規劃階段直接改，而不是做完再合併？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>四塊 truth 各有唯一一個負責的 skill，在規劃階段就直接改好；<code>truth-delta.md</code> 只是這次改了什麼的紀錄，沒有「做完再合併回 truth」的步驟。舊工作包寫完就不再動，每次新需求都開新的編號。</p>
+  </div>
+  <p>問題是：一次需求變更期間，同時有「系統現在的樣子」和「這次要改成的樣子」兩個版本。後面每一棒（畫面、API、資料、測試、任務）都要知道要照哪一個版本做，而且彼此要對得上。</p>
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>工作包裡各寫一份新版規格，做完再合併回 truth</h4>
+    <p>規劃期間 API 規劃讀到的是舊資料模型、畫面規劃讀到的是舊 API，各自推理出不同版本。合併那一步又是人工對帳，最容易漏，漏了 truth 就不再是現況。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>負責者直接改 truth，另記一份變更紀錄</h4>
+    <p><code>techstack.md</code> 歸 <code>/technical-research</code>、<code>contracts/</code> 歸 <code>/api-plan</code>、<code>data/</code> 歸 <code>/data-plan</code>、<code>features/</code> 歸 <code>/dsl-refine</code>，其他 skill 一律只讀。負責者改完就叫 <code>/truth-delta</code>，在 <code>truth-delta.md</code> 自己那一段追加一列，寫明動作、改了哪裡、為什麼；沒改也要記一列 <code>NOOP</code>，表示「看過了，不用動」。後面的 skill 讀 truth 拿到的一定是新版，讀 <code>truth-delta.md</code> 就知道這次動了哪裡。</p>
+    <p>例如 007 的 <code>truth-delta.md</code>，<code>/api-plan</code> 那段第一列就是新增 <code>POST /desk/requests</code>，並寫明錯誤碼與防重複規則；<code>/tasks</code> 再依每一列是新增、修改還是刪除，決定要排「讓測試轉綠」還是「移除程式再跑回歸」的任務。</p>
+    <p><b class="lbl">權衡</b>truth 在程式寫好前就已經是新版，中間這段時間 truth 與程式不一致，測試會紅，這是預期的；007 就在動工前把這批紅燈逐條記進 <code>implement-notes.md</code>。另外 <code>/truth-delta</code> 看到高影響的修改或刪除、卻沒有經過 <code>/clarify</code> 確認時會拒絕記錄，逼你先問過人。</p>
+  </div>
+  <p>同樣的道理，舊工作包是歷史，不回頭改。即使這次是修改或刪除既有行為，<code>/specify</code> 也一定開新的 <code>NNN</code>，讓每個決定都查得到出處。</p>
+</section>
+
+<section id="manual">
+  <h2>為什麼每個 skill 都要人手動觸發？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>16 個 skill 都設了 <code>disable-model-invocation: true</code>，意思是 AI 不能自己決定啟動它們，一定要人打 <code>/名稱</code>。代價是每個主要階段都要人接著打下一棒。</p>
+  </div>
+  <p>問題是：這些 skill 會開新工作包、改 truth、改程式。如果 AI 可以自己決定什麼時候用，你只是問一句「代開單能不能一次開兩張」，它可能就順手開了一個新工作包，或改了 API 契約。</p>
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>讓 AI 看情況自動啟動</h4>
+    <p>省掉打指令的功夫，但規格什麼時候被改、為什麼被改，人不一定知道；改到 truth 的動作尤其難收拾。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>關掉自動啟動，主要階段由人推進</h4>
+    <p>每一棒做完都會回報產出與「可以進下一棒了嗎」，人看過再打下一個指令，等於每一棒之間都有一道人工關卡。</p>
+    <p><b class="lbl">權衡</b>SKILL.md 裡寫的「委派」（例如 <code>/system-analysis</code> 委派 <code>/api-plan</code>）也受這個開關影響：AI 不一定能自動叫起下一棒，所以有些 skill 直接寫明要去讀下一棒的手冊，例如 <code>/dsl-refine</code> 明寫要先讀 <code>../gherkin-and-dsl/SKILL.md</code>。如果 AI 沒有接下去，就自己打該指令，並把工作包路徑告訴它。</p>
+  </div>
+</section>
+
+<section id="routes">
+  <h2>新功能、小 bug、規格改動，各要走哪幾棒？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>新功能走完整條線。規格改動也一樣要開新工作包，只是動作多了修改與刪除。小 bug 先看現有規格抓不抓得到它：抓得到就直接用 <code>/bdd</code> 修，抓不到就等於規格有缺口，改走規格改動。</p>
+  </div>
+  <div class="routes">
+    <div class="route">
+      <h3>新功能</h3>
+      <ol>
+        <li><code>/specify</code>（需要時加 <code>/clarify-over-specs</code>）</li>
+        <li><code>/technical-research</code> 與 <code>/spec-by-example</code></li>
+        <li><code>/system-analysis</code>（會帶出 ui、data、api 三個規劃）</li>
+        <li><code>/dsl-refine</code></li>
+        <li><code>/tasks</code> → <code>/implement</code></li>
+      </ol>
+    </div>
+    <div class="route">
+      <h3>規格改動（改或刪既有行為）</h3>
+      <ol>
+        <li>同樣用 <code>/specify</code> 開新工作包，在 spec 寫明改哪些既有行為</li>
+        <li>同樣走到 <code>/dsl-refine</code>；truth-delta 會出現 <code>MODIFY</code>、<code>DELETE</code> 列，各負責者會先叫 <code>/clarify</code> 確認</li>
+        <li><code>/tasks</code> 會先排「把舊測試對齊新規格」，再排產品程式或「移除程式＋回歸」</li>
+        <li><code>/implement</code></li>
+      </ol>
+    </div>
+    <div class="route">
+      <h3>小 bug</h3>
+      <ol>
+        <li>在 <code>specs/truth/features/</code> 找描述這個行為的場景</li>
+        <li>場景已經紅：直接打 <code>/bdd</code>，指定那個 feature 檔、從 green 開始</li>
+        <li>沒有場景抓得到：<code>/bdd</code> 不會自己寫 feature，改走「規格改動」路線</li>
+      </ol>
+    </div>
+  </div>
+  <p>工作包 006（派給工務的單一律開成工務單）就是一個走完整條線的錯誤修正：它是實機走過一輪才發現的問題，修法改了 API 契約、資料模型與四個介面的可執行規格，所以照樣開了新工作包。它沒有 <code>research.md</code> 和 <code>ui/</code>，因為沒有新技術也沒有新畫面，但 <code>truth-delta.md</code> 裡 <code>/technical-research</code> 那段仍然記了一列，表示看過技術選型、不用改。</p>
+  <p><code>/constitution</code> 不在日常路線上。它維護 <code>.agents/constitution/</code> 裡的共同規則（例如規格文件一律怎麼寫），想讓所有 skill 都遵守同一條規矩時才用。</p>
+</section>
+
+<section id="traps">
+  <h2>現在用這套流程會踩到什麼？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>幾個 SKILL.md 指到不存在的資料夾、指令或過時的名稱，AI 會照字面去找，找不到時要你告訴它怎麼辦。另外稽核腳本需要先裝好 <code>uv</code>。</p>
+  </div>
+  <p>下面的位置格式是 <code>路徑:行號</code>，都相對於 repo 根目錄。</p>
+  <ul class="plain">
+    <li><b>規則資料夾不存在</b>：多個 skill 要讀 <code>.agents/constitution/CONSTITUTION.md</code> 與 <code>shared.md</code>，但 repo 裡沒有這個資料夾，例如 <code>.agents/skills/specify/SKILL.md:18</code>、<code>.agents/skills/tasks/SKILL.md:16</code>、<code>.agents/skills/implement/SKILL.md:48</code>。讀不到時只能照 SKILL.md 自己的判準走；要補，就用 <code>/constitution</code> 建。</li>
+    <li><b><code>/dsl-refine</code> 的介面名稱過時</b>：說明寫它更新 <code>features/backend/</code> 與 <code>features/frontend/</code>（<code>.agents/skills/dsl-refine/SKILL.md:3</code>），實際的介面資料夾是 <code>backend</code>、<code>frontdesk-web</code>、<code>guest-web</code>、<code>ios-app</code> 四個。用的時候要明講是哪個介面。</li>
+    <li><b><code>/clarify-over-specs</code> 指向不存在的 <code>/plan</code></b>：說明與結尾的建議下一步都寫 <code>/plan</code>（<code>.agents/skills/clarify-over-specs/SKILL.md:3</code>、<code>:38</code>），對應的是 <code>/system-analysis</code>；照本頁的順序，中間還有 <code>/technical-research</code> 與 <code>/spec-by-example</code>。</li>
+    <li><b>稽核腳本要 <code>uv</code></b>：<code>/gherkin-and-dsl</code> 用 <code>uv run</code> 跑 <code>scripts/audit_feature_dsl_topology.py</code>（<code>.agents/skills/gherkin-and-dsl/SKILL.md:58</code>）。沒裝就 <code>brew install uv</code>；這支腳本沒有外部套件，用 Python 3.10 以上直接跑也行。</li>
+    <li><b><code>/constitution</code> 指向不存在的 skill</b>：它說後續要接上規則時交給 <code>/skill-engineering</code>（<code>.agents/skills/constitution/SKILL.md:38</code>），repo 裡沒有這個 skill。</li>
+  </ul>
+  <p>其他和測試執行有關的坑（simulator、埠號、會清空資料庫），見 <a href="pitfalls.html#test-traps">坑與待查：跑測試時會卡在哪</a>。</p>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="orientation.html"><small>上一頁</small>← 新人導讀</a>
+  <a class="next" href="setup.html"><small>下一頁</small>第一天 →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>
