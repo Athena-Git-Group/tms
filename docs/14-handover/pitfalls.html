@@ -91,7 +91,7 @@
     <li><b>JWT 密鑰與 <code>tms_app</code> 密碼的預設值都是開發用</b>：正式環境要設 <code>TMS_JWT_SECRET</code>，並 <code>ALTER ROLE tms_app</code> 改密碼（<code>V1__schema.sql:387</code> 的註解）。</li>
     <li><b>舊整合測試還在保護舊行為</b>：<code>tms/src/test/resources/features/*.feature</code> 不是 truth，但在全套裡跑。改行為時要一起看。</li>
     <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單只要有一筆重試用完被標 <code>failed</code>，這張單之後的事件全部停送，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
-    <li><b>註解規範</b>：改任何註解前先讀 <code>.athena/skills/tms-build/references/code-comments.md</code>；有一批禁用詞（守衛、空窗、投影）。</li>
+    <li><b>註解規範</b>：改任何註解前先讀 <a href="code-comments.md"><code>docs/14-handover/code-comments.md</code></a>；有一批禁用詞（守衛、空窗、投影）。</li>
   </ul>
 </section>
 

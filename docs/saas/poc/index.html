@@ -11,8 +11,7 @@
 /*
  * SaaS 營運後台 POC
  *
- * 設計 token 沿用 docs/13-poc/shared/styles.css（同一套顏色與字體角色），
- * 但這份是單檔、自給自足，不引用 13-poc 的檔案，避免兩個 POC 互相綁死。
+ * 單檔、自給自足，不引用其他 POC 的檔案。
  * 顏色只在 token 層定義；元件一律吃 var(--color-*)。
  */
 :root {
@@ -321,7 +320,7 @@ pre.json { font-family: var(--font-mono); font-size: 12.5px; background: var(--c
     standard: { label: '標準', modules: ['guest_request', 'triage', 'lost_found', 'notices', 'cleaning_plan', 'inspection'] },
     premium:  { label: '進階', modules: MODULES.map(function (m) { return m.id; }) }
   };
-  // TMS tenant_config 的 key（docs/12 §6 ＋ 13-poc 設定頁）；copy: true｜'review'（複製後飯店必改）
+  // TMS tenant_config 的 key；copy: true｜'review'（複製後飯店必改）
   var CONFIG_KEYS = [
     { key: 'standard_cleaning_minutes', label: '標準清掃工時', copy: true },
     { key: 'shift_capacity',            label: '班次容量',     copy: true },
