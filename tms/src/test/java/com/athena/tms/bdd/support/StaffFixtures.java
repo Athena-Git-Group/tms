@@ -12,6 +12,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 public class StaffFixtures {
 
+    public static final String PLAN_ROOM_PREFIX = "PLANROOM-F";
+
     public static final String DEFAULT_PASSWORD = "demo1234";
 
     public static final String DEFAULT_SHIFT_END = "17:00";
@@ -207,7 +209,7 @@ public class StaffFixtures {
     private void assignPlanRoom(long tenantId, UUID staffId, Integer floor, String shiftEndHHmm, OffsetDateTime now) {
         int effectiveFloor = floor != null ? floor : 0;
         String shift = shiftEndHHmm != null ? shiftEndHHmm : "default";
-        String placeholderRoomNo = "PLANROOM-F" + effectiveFloor;
+        String placeholderRoomNo = PLAN_ROOM_PREFIX + effectiveFloor;
         UUID roomId = roomFixtures.ensureRoom(placeholderRoomNo, effectiveFloor);
 
         UUID planId = UuidV7.generate();

@@ -93,8 +93,6 @@ public class BackendChannel {
 
     private static final String DESK_CLERK_NAME = "林佩君";
 
-    private static final String DESK_TASK_TITLE = "櫃檯代開的備品";
-
     private static Map<String, String> infoPage(String key, String title, String body) {
         Map<String, String> page = new LinkedHashMap<>();
         page.put("key", key);
@@ -183,6 +181,8 @@ public class BackendChannel {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    private static final String FAULT_TRIGGER_PREFIX = "bdd_fault_";
 
     private Connection connection;
     private Long cachedTenantId;
@@ -1618,7 +1618,7 @@ public class BackendChannel {
             UUID roomId = ensureRoom(spec.roomNo, floorFromRoomNo(spec.roomNo));
             String taskNo = repair ? null : takeDisplayNo("task_counters", "T-", TASK_NO_FORMAT, spec.displayNo);
             String title = spec.title != null ? spec.title : titleFromGuestText();
-            String note = repair && spec.guestText == null ? null : taskNote();
+            String note = repair && spec.guestText == null && spec.menuKey == null ? null : taskNote();
             LocalDate workDate = cleaning ? times[TIME_CREATED].toLocalDate() : null;
             boolean planAssigned = "accepted".equals(initialState);
             if (spec.urgent && !repair) {
@@ -1998,12 +1998,23 @@ public class BackendChannel {
 
         private String taskNote() {
             if (spec.guestText == null) {
-                return spec.note;
+                if (spec.menuKey == null) {
+                    return spec.note;
+                }
+                require(spec.note == null || repair, "對應品項與備註只能給一個（工務單的備註寫在工務單上，不受限）");
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("menu_key", spec.menuKey);
+                item.put("quantity", spec.menuQuantity);
+                return toJson(item);
             }
             Map<String, Object> fields = new LinkedHashMap<>();
             fields.put("text", spec.guestText);
             putIfPresent(fields, "lang", spec.guestLang);
             putIfPresent(fields, "llm_translated", spec.translatedText);
+            if (spec.menuKey != null) {
+                fields.put("rule_id", "bdd-menu-" + spec.menuKey);
+                fields.put("menu_key", spec.menuKey);
+            }
             return toJson(fields);
         }
 
@@ -2207,6 +2218,16 @@ public class BackendChannel {
         return (UUID) id;
     }
 
+    public void supersedeReservations(String roomNo, OffsetDateTime from, OffsetDateTime to) {
+        long tenantId = ensureTenant();
+        UUID roomId = ensureRoom(roomNo, floorFromRoomNo(roomNo));
+        execute("""
+                UPDATE reservations_cache SET superseded_at = ?
+                 WHERE tenant_id = ? AND room_id = ? AND superseded_at IS NULL
+                   AND tstzrange(checkin_at, checkout_at) && tstzrange(?, ?)
+                """, backendNow(), tenantId, roomId, from, to);
+    }
+
     public UUID guestSubmitRequest(String roomNo, String text, String lang) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("text", text);
@@ -2311,6 +2332,18 @@ public class BackendChannel {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public UUID guestSessionSubmitMenuItem(String sessionToken, String itemKey, int quantity) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("itemId", itemKey);
+        body.put("quantity", quantity);
+        HttpResponse<String> response = send(requestOutsideApi("/guest/requests", null)
+                .header(GUEST_SESSION_HEADER, sessionToken)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        requireSuccess(response, "另一支手機送出需求：POST /guest/requests（" + itemKey + " ×" + quantity + "）");
+        return UUID.fromString(parseJson(response.body()).path("id").asText());
     }
 
     public void guestRateRequest(String sessionToken, UUID taskId, int rating) {
@@ -2431,15 +2464,6 @@ public class BackendChannel {
         });
     }
 
-    public UUID seedDeskTask(String roomNo, OffsetDateTime createdAt) {
-        return createTaskInSituation(TaskSituation.POOL,
-                TaskSituationSpec.of(roomNo, "amenity", "desk")
-                        .title(DESK_TASK_TITLE)
-                        .dept("housekeeping")
-                        .createdBy(defaultStaff(DESK_CLERK_NAME))
-                        .createdAt(createdAt));
-    }
-
     public void setClassificationRule(String keyword, String dept, String type) {
         Map<String, Object> rule = new LinkedHashMap<>();
         rule.put("rule_id", "bdd-" + keyword);
@@ -2529,6 +2553,83 @@ public class BackendChannel {
             body.put("via", via);
         }
         return postDeskAction("/desk/tasks/" + taskId + "/assign", actor, body);
+    }
+
+    public JsonNode deskCreateRequests(CreatedStaff actor, String roomNo, List<Map<String, Object>> items,
+            Map<String, Object> other, String idempotencyKey) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("roomNo", roomNo);
+        body.put("items", items);
+        body.put("other", other);
+        HttpResponse<String> response = send(request("POST", "/desk/requests", jwt(actor))
+                .header(IDEMPOTENCY_KEY_HEADER, idempotencyKey)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
+        requireSuccess(response, "櫃檯代開單：POST /desk/requests（" + actor.name() + "，" + roomNo + "）");
+        return parseJson(response.body());
+    }
+
+    public JsonNode listDeskRooms(CreatedStaff actor) {
+        HttpResponse<String> response = send(request("GET", "/desk/rooms", jwt(actor)).GET());
+        requireSuccess(response, "代開單的房間清單：GET /desk/rooms（" + actor.name() + "）");
+        return parseJson(response.body());
+    }
+
+    public void removeRoom(String roomNo) {
+        Connection db = connection();
+        try {
+            db.setAutoCommit(false);
+            try (PreparedStatement skipForeignKeys = db.prepareStatement("SET LOCAL session_replication_role = replica");
+                    PreparedStatement delete = db.prepareStatement("DELETE FROM rooms WHERE tenant_id = ? AND room_no = ?")) {
+                skipForeignKeys.execute();
+                bind(delete, ensureTenant(), roomNo);
+                delete.executeUpdate();
+            }
+            db.commit();
+        } catch (SQLException e) {
+            try {
+                db.rollback();
+            } catch (SQLException ignored) {
+            }
+            throw new IllegalStateException("從房間主檔移除 " + roomNo + " 失敗", e);
+        } finally {
+            try {
+                db.setAutoCommit(true);
+            } catch (SQLException ignored) {
+            }
+        }
+    }
+
+    public void changeRoleToHousekeeping(CreatedStaff staff) {
+        execute("UPDATE staff_accounts SET role = 'housekeeping', dept = 'housekeeping', updated_at = ?"
+                        + " WHERE tenant_id = ? AND id = ?",
+                OffsetDateTime.now(), ensureTenant(), staff.id());
+    }
+
+    public void invalidateLogin(CreatedStaff staff) {
+        setCredentials(staff.id(), staff.loginId(), staff.password());
+    }
+
+    public void failTaskTitled(String title) {
+        String name = FAULT_TRIGGER_PREFIX + "task_title_" + Integer.toHexString(title.hashCode() & 0x7fffffff);
+        String literal = "'" + title.replace("'", "''") + "'";
+        execute("CREATE OR REPLACE FUNCTION " + name + "() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN "
+                + "IF NEW.title = " + literal + " THEN RAISE EXCEPTION 'bdd: 這張單在測試裡被設定成開不出來'; END IF; "
+                + "RETURN NEW; END $$");
+        execute("DROP TRIGGER IF EXISTS " + name + " ON tasks");
+        execute("CREATE TRIGGER " + name + " BEFORE INSERT ON tasks FOR EACH ROW EXECUTE FUNCTION " + name + "()");
+    }
+
+    public void removeFaultTriggers() {
+        List<Map<String, Object>> triggers = queryRows("""
+                SELECT t.tgname AS name, c.relname AS table_name
+                FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+                WHERE t.tgname LIKE ?
+                """, FAULT_TRIGGER_PREFIX + "%");
+        for (Map<String, Object> trigger : triggers) {
+            execute("DROP TRIGGER IF EXISTS " + trigger.get("name") + " ON " + trigger.get("table_name"));
+            execute("DROP FUNCTION IF EXISTS " + trigger.get("name") + "()");
+        }
     }
 
     public JsonNode deskUndoAssign(UUID taskId, CreatedStaff actor) {

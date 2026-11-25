@@ -4,6 +4,7 @@ import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.DeskApi;
 import com.athena.tms.bdd.support.DeskContext;
+import com.athena.tms.bdd.support.DeskCreateFaults;
 import com.athena.tms.bdd.support.HandoverFixtures;
 import com.athena.tms.bdd.support.InspectionFixtures;
 import com.athena.tms.bdd.support.JobTrigger;
@@ -222,6 +223,12 @@ public class BddSpringConfiguration {
             return new DeskApi(
                     bddApiClient, scenarioWorld, deskContext, dbProbe,
                     tenantFixtures, roomFixtures, reservationFixtures, mutableClock, staffFixtures);
+        }
+
+        @Bean(destroyMethod = "removeAll")
+        @ScenarioScope
+        DeskCreateFaults deskCreateFaults(JdbcClient jdbcClient) {
+            return new DeskCreateFaults(jdbcClient);
         }
 
         @Bean(destroyMethod = "close")

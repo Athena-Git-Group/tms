@@ -1,6 +1,9 @@
 package com.athena.tms.bdd.support;
 
 import com.athena.tms.bdd.ScenarioWorld;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public class DeskContext {
 
@@ -13,6 +16,11 @@ public class DeskContext {
     private ScenarioWorld.ApiResponse resentAssignResponse;
     private String lastSentAnswer;
     private java.util.Map<String, Integer> completedCountsBeforeAnswer;
+    private String lastCreateStaff;
+    private String lastCreateIdempotencyKey;
+    private Map<String, Object> lastCreateRequestBody;
+    private final List<ScenarioWorld.ApiResponse> createResponses = new ArrayList<>();
+    private ScenarioWorld.ApiResponse lastRoomsResponse;
 
     public void rememberAssignIdempotencyKey(String idempotencyKey) {
         this.lastAssignIdempotencyKey = idempotencyKey;
@@ -108,5 +116,58 @@ public class DeskContext {
             throw new IllegalStateException("本 scenario 尚未讀取櫃檯看板");
         }
         return lastBoardReader;
+    }
+
+    public synchronized void rememberCreateRequest(String staffName, String idempotencyKey, Map<String, Object> body) {
+        this.lastCreateStaff = staffName;
+        this.lastCreateIdempotencyKey = idempotencyKey;
+        this.lastCreateRequestBody = body;
+    }
+
+    public synchronized void rememberCreateResponse(ScenarioWorld.ApiResponse response) {
+        createResponses.add(response);
+    }
+
+    public String lastCreateStaff() {
+        requireCreateRequest();
+        return lastCreateStaff;
+    }
+
+    public String lastCreateIdempotencyKey() {
+        requireCreateRequest();
+        return lastCreateIdempotencyKey;
+    }
+
+    public Map<String, Object> lastCreateRequestBody() {
+        requireCreateRequest();
+        return lastCreateRequestBody;
+    }
+
+    public synchronized List<ScenarioWorld.ApiResponse> createResponses() {
+        return List.copyOf(createResponses);
+    }
+
+    public synchronized ScenarioWorld.ApiResponse lastCreateResponse() {
+        if (createResponses.isEmpty()) {
+            throw new IllegalStateException("本 scenario 尚未代開過單");
+        }
+        return createResponses.get(createResponses.size() - 1);
+    }
+
+    public void rememberRoomsResponse(ScenarioWorld.ApiResponse response) {
+        this.lastRoomsResponse = response;
+    }
+
+    public ScenarioWorld.ApiResponse lastRoomsResponse() {
+        if (lastRoomsResponse == null) {
+            throw new IllegalStateException("本 scenario 尚未讀取代開單的房間清單");
+        }
+        return lastRoomsResponse;
+    }
+
+    private void requireCreateRequest() {
+        if (lastCreateRequestBody == null) {
+            throw new IllegalStateException("本 scenario 尚未代開過單");
+        }
     }
 }

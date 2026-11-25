@@ -103,6 +103,7 @@ export interface DeskTask {
   title: string;
   guestTyped: boolean;
   guestText?: DeskGuestText | null;
+  menuKey?: string | null;
   assigneeId?: string | null;
   assigneeName?: string | null;
   createdAt: string;
@@ -188,4 +189,54 @@ export interface DeskAssignRequest {
 
 export interface DeskAnswerRequest {
   answer: string;
+}
+
+export type DeskMenuKey =
+  | '毛巾'
+  | '浴巾'
+  | '礦泉水'
+  | '拖鞋'
+  | '牙刷組'
+  | '嬰兒床'
+  | '加床'
+  | '冰塊'
+  | '冷氣'
+  | '熱水'
+  | '燈具'
+  | '電視';
+
+export type DeskCreateRequestDept = 'housekeeping' | 'engineering';
+
+export interface DeskCreateRequestItem {
+  menuKey: DeskMenuKey;
+  quantity: number;
+}
+
+export interface DeskCreateRequestOther {
+  text: string;
+  dept: DeskCreateRequestDept;
+}
+
+export interface DeskCreateRequestsRequest {
+  roomNo: string;
+  items: DeskCreateRequestItem[];
+  other?: DeskCreateRequestOther | null;
+}
+
+export interface DeskCreateRequestsResult {
+  serverTime: string;
+  tasks: DeskTask[];
+}
+
+export interface DeskRoomGuest {
+  name?: string | null;
+  vip: boolean;
+  checkinDate: string;
+  checkoutDate: string;
+}
+
+export interface DeskRoom {
+  roomNo: string;
+  occupied: boolean;
+  guest?: DeskRoomGuest | null;
 }

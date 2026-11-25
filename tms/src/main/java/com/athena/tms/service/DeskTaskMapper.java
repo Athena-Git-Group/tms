@@ -21,7 +21,8 @@ public class DeskTaskMapper {
     public DeskTask toDeskTask(Map<String, Object> row) {
         String state = (String) row.get("state");
         String type = (String) row.get("type");
-        DeskGuestText guestText = this.guestText(row.get("note"));
+        JsonNode noteFields = this.noteFields(row.get("note"));
+        DeskGuestText guestText = guestText(noteFields);
         OffsetDateTime createdAt = (OffsetDateTime) row.get("created_at");
         boolean interrupted = "interrupted".equals(state);
         boolean deferred = "deferred".equals(state);
@@ -42,6 +43,7 @@ public class DeskTaskMapper {
                 (String) row.get("title"),
                 "guest".equals(row.get("source")) && guestText != null,
                 guestText,
+                textOrNull(noteFields, "menu_key"),
                 (UUID) row.get("assignee_id"),
                 (String) row.get("assignee_name"),
                 createdAt,
@@ -98,7 +100,7 @@ public class DeskTaskMapper {
         return new DeskTask.Sop(((Number) done).intValue(), ((Number) total).intValue());
     }
 
-    private DeskGuestText guestText(Object note) {
+    private JsonNode noteFields(Object note) {
         if (note == null) {
             return null;
         }
@@ -108,7 +110,11 @@ public class DeskTaskMapper {
         } catch (JacksonException notJson) {
             return null;
         }
-        if (fields == null || !fields.isObject()) {
+        return fields != null && fields.isObject() ? fields : null;
+    }
+
+    private static DeskGuestText guestText(JsonNode fields) {
+        if (fields == null) {
             return null;
         }
         String original = textOrNull(fields, "text");
@@ -119,6 +125,9 @@ public class DeskTaskMapper {
     }
 
     private static String textOrNull(JsonNode fields, String name) {
+        if (fields == null) {
+            return null;
+        }
         JsonNode value = fields.get(name);
         return value == null || value.isNull() ? null : value.asString();
     }

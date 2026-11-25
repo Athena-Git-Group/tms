@@ -112,6 +112,23 @@ public class DeskApi {
         return apiClient.post(answerPath(taskId), staff(staffName), answerBody(answer), null);
     }
 
+    public ScenarioWorld.ApiResponse createRequests(
+            String staffName, String roomNo, List<Map<String, Object>> items, Map<String, Object> other,
+            String idempotencyKey) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("roomNo", roomNo);
+        body.put("items", items);
+        body.put("other", other);
+        deskContext.rememberCreateRequest(staffName, idempotencyKey, body);
+        ScenarioWorld.ApiResponse response = apiClient.post("/desk/requests", staff(staffName), body, idempotencyKey);
+        deskContext.rememberCreateResponse(response);
+        return response;
+    }
+
+    public ScenarioWorld.ApiResponse listRooms(String staffName) {
+        return apiClient.get("/desk/rooms", staff(staffName));
+    }
+
     public ScenarioWorld.ApiResponse createGuestRequest(String roomNo, String text, String lang) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("text", text);

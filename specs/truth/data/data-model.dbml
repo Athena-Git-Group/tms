@@ -30,7 +30,17 @@ Table tenant_config {
   Indexes {
     (tenant_id, key) [unique]
   }
-  Note: '「什麼都可調」的落地。inspection_items/sop_items 兩鍵為 sop_items 表的門面（讀寫轉進表）。'
+  Note: '''
+  「什麼都可調」的落地。inspection_items/sop_items 兩鍵為 sop_items 表的門面（讀寫轉進表）。
+  request_menu 的值：住客掃碼頁可勾選的項目陣列，每項 {key, label, dept, type}；key 是項目的鍵，用中文品名（例如「毛巾」「礦泉水」「牙刷組」），
+    在同一家飯店內不重複，寫進 tasks.note 的 menu_key 就是它。沒有設定或陣列為空時用出廠預設五項（衣架、毛巾、牙刷組、礦泉水、吹風機）。
+  classification_rules 的值：住客打字的分類規則陣列，每條 {rule_id, keywords, dept, type, menu_key?}；keywords 是非空字串陣列，dept 必填，
+    缺 keywords 或 dept 的規則略過不用。menu_key 選填：這條規則對應的品項鍵，值與 request_menu 的 key、櫃檯代開的品項鍵同一套中文品名
+    （例如冷氣不冷、冷氣沒風的規則填「冷氣」）；住客打字比對到有 menu_key 的規則時，建單時把它寫進 tasks.note 的 menu_key，
+    櫃檯看板用它判斷這張單對應哪個品項。沒填就是「沒有對應品項」，比對與分流的結果不受影響；舊設定不必修改。
+    menu_key 不要求一定出現在 request_menu 裡：櫃檯代開的 12 個品項鍵有一部分不在住客選單上（例如「冷氣」）。
+  櫃檯代開的 12 個品項是程式裡的固定清單，不存在本表，也不讀 request_menu；它與住客選單只靠品項鍵相等連起來（見 tasks Note 的「櫃檯代開」段）。
+  '''
 }
 
 Table staff_accounts {
@@ -171,9 +181,9 @@ Table reservations_cache {
 Table tasks {
   id             uuid        [pk]
   tenant_id      bigint      [not null, ref: > tenants.id]
-  task_no        text        [note: '租戶內遞增單號，格式 T- 加 4 位數（不足補零，超過 9999 照實際位數），例如 T-1040；建單時由 task_counters 取號，與建單同交易，寫入後不改。工務單開單路徑直接建成 type=repair 的單為 NULL：它的單號只有 repair_tickets.ticket_no 一個；櫃檯從待派單派給工務的單保留派單前取的 T-，type=repair 之後對外只顯示 W-（見 tasks Note 的單號段）。amenity、cleaning、other 必有值：住客的需求一律不以 type=repair 建單，所以都有 T-；V29 退回待派單的舊單補取號給人看與口頭溝通用，系統之間引用一律用 id']
+  task_no        text        [note: '租戶內遞增單號，格式 T- 加 4 位數（不足補零，超過 9999 照實際位數），例如 T-1040；建單時由 task_counters 取號，與建單同交易，寫入後不改。工務單開單路徑直接建成 type=repair 的單為 NULL：它的單號只有 repair_tickets.ticket_no 一個，櫃檯代開的工務品項與給工務的其他需求也屬這一類，只有 W-；櫃檯從待派單派給工務的單保留派單前取的 T-，type=repair 之後對外只顯示 W-（見 tasks Note 的單號段）。amenity、cleaning、other 必有值：住客的需求一律不以 type=repair 建單，所以都有 T-；V29 退回待派單的舊單補取號給人看與口頭溝通用，系統之間引用一律用 id']
   type           text        [not null, note: 'CHECK: amenity|repair|cleaning|other']
-  source         text        [not null, note: 'CHECK: guest|desk|system|staff（staff 為本 plan 新增：房務開立的工務單）']
+  source         text        [not null, note: 'CHECK: guest|desk|system|staff（staff 為本 plan 新增：房務開立的工務單）。desk＝櫃檯開出的單：櫃檯畫面的代開單（frontdesk、manager、duty_manager 都可，不看開單人的部門），以及工務單開單端點由櫃檯部門直接開的工務單']
   room_id        uuid        [not null]
   reservation_id uuid        [note: 'guest 來源必填；住客查詢一律以它過濾（不按房號）']
   dept           text        [not null, note: 'CHECK: housekeeping|engineering|frontdesk（triage 時掛 frontdesk）。不變式：dept=engineering 的任務一律 type=repair，且恰好有一列 repair_tickets（task_id 相同；V29 之前就已結束的歷史任務除外）；會讓任務成為工務部門的只有建單（dept 直接是 engineering）與從待派單派給工務兩個動作，兩者都在同一交易開立工務單。住客的需求不會以 engineering 或 type=repair 建單（命中的部門是工務、或命中的類型是修繕，一律進 triage、type=other）']
@@ -181,7 +191,7 @@ Table tasks {
   event_seq      int         [not null, default: 0, note: '事件取號器：守衛 UPDATE 同句 +1 RETURNING']
   assignee_id    uuid        [note: '池中為空']
   title          text        [not null]
-  note           text        [note: '住客原文/翻譯/交代——PII 去識別化範圍。住客打字的單存成 JSON 文字：text（原文）、lang（原文語言）、rule_id（命中的分類規則），有翻譯時另有 llm_translated，有部門建議時另有 llm_suggested_dept（只記錄，不影響歸屬，畫面不顯示）；住客點選單的單存 menu_key 與 quantity。建單後不因派單、復原或當場回答而改寫，櫃檯的回覆另存 answer']
+  note           text        [note: '住客原文/翻譯/交代——PII 去識別化範圍。住客打字的單存成 JSON 文字：text（原文）、lang（原文語言）、rule_id（命中的分類規則），有翻譯時另有 llm_translated，有部門建議時另有 llm_suggested_dept（只記錄，不影響歸屬，畫面不顯示）；住客點選單的單存 menu_key 與 quantity。住客打字比對到帶 menu_key 的分類規則時，同一份 JSON 另記 menu_key（與 rule_id 並存，不記 quantity）。櫃檯代開品項開出的單（含工務品項開成的工務單）存 menu_key 與 quantity，形狀與住客點選單相同（工務品項的 quantity 一律 1）；櫃檯代開的其他需求不記 note（NULL），文字就是 title。menu_key 一律是品項鍵（中文品名，見 tenant_config Note），看板的「對應品項」直接讀這個鍵；「住客打字的單」看 source=guest 且有 text。建單後不因派單、復原或當場回答而改寫，櫃檯的回覆另存 answer']
   answer         text        [note: 'nullable。櫃檯當場回答給住客的回覆全文（去掉頭尾空白後 1–120 字），住客進度頁、櫃檯看板與單筆詳情都讀這一欄。只在當場回答（triage→done）那一句守衛 UPDATE 寫入，寫入後不改；其他單一律 NULL。有值＝這張單是當場回答結案的，與「有一筆 answered 事件」等價，看板分辨「已回答」與一般的 done 直接看這一欄。投影欄位：真相是 task_events.type=answered 的 payload.answer。PII 去識別化範圍']
   est_min        int         [note: '排房帶入；credit 換算屬 Q1 未決']
   started_at     timestamptz [note: '第一次開工時間；查房退回或抽查退回時清空重計']
@@ -198,7 +208,7 @@ Table tasks {
   urgent         boolean     [not null, default: false, note: '本 plan 新增。只有 repair 會是 true；待認領排在所有非急件之前。本輪起與 repair_tickets.is_urgent 同步（開單判定與主管降級時一併寫入），本欄只是供排序索引直接用、避免 JOIN repair_tickets，權威判定結果看 repair_tickets.is_urgent/urgent_rule']
   priority_notify boolean    [not null, default: false, note: '本 plan 新增投影欄位（原本只在事件）。請假退回、主管附交代退池時為 true；待認領排序第二鍵']
   reminder_stage text        [note: '本輪新增。CHECK: staff_reminded|manager_notified，NULL＝尚未進入未接提醒。只有 state=pool 時有意義：排程依 tenant_config.unclaimed_reminder_minutes（依 urgent 分一般／急件門檻）掃描，到門檻時寫入該階段並各發一次推播（PushPayload.event=unclaimed_reminder_staff|unclaimed_reminder_manager），每階段只發一次；任務離開 pool（認領、改派、撤回等）時清空為 NULL。待認領排序以「不是 NULL」排最前（彼此間依房號），其餘維持既有排序。對應 contracts PoolItem.reminderStage']
-  pool_source    text        [note: '本 plan 新增投影欄位。最近一次進池的來源標籤。CHECK: guest_scan|desk_forward|manager_requeue|leave_return|shift_end_return|inspection_return|verification_return|staff_report|system。verification_return＝工務單驗收不通過時原處理人已下班或請假，單回到工務待認領']
+  pool_source    text        [note: '本 plan 新增投影欄位。最近一次進池的來源標籤。櫃檯代開的單（房務與工務都算）建單即進池，記 desk_forward。CHECK: guest_scan|desk_forward|manager_requeue|leave_return|shift_end_return|inspection_return|verification_return|staff_report|system。verification_return＝工務單驗收不通過時原處理人已下班或請假，單回到工務待認領']
   return_reason  text        [note: '本 plan 新增投影欄位。最近一次退池的原因，例如「小陳請假」、「班末退池 · 交給下一班」']
   requeue_note   text        [note: '本 plan 新增投影欄位。接手進度交代，例如「浴室已刷完，還沒換床單」；任務詳情的交辦以 requeue_progress 顯示。PII 去識別化範圍']
   due_at         timestamptz [note: '自動化規則增補。系統準備工單的到期時間顯示（規則可設「建單後 N 分鐘到期」），與未接提醒／裁決 B 廢除的逾時升級鏈無關，純粹是準備工單自己的到期時刻標示']
@@ -296,6 +306,24 @@ Table tasks {
       櫃檯歷程不為它組句子，今天的派單張數只數沒被收回的 triaged，不受影響。
     當場回答 triage→done：同句寫 answer、done_at、ended_at，note 不動；task_events.type=answered，payload 帶 answer。dept 維持 frontdesk，
       所以這張單不會出現在房務或工務的完成數裡。當場回答之後沒有復原。
+  櫃檯代開（櫃檯畫面的代開單，frontdesk、manager、duty_manager 都可以送；不新增欄位、不新增值）：
+    一次送出是一個房號加若干品項與一段選填的其他需求，每個選了的品項開一張單（數量寫在標題與 note.quantity，不拆成多張），其他需求有字時再開一張。
+    全部直接以 state=pool 建單、不經 triage、沒有 assignee，source=desk、pool_source=desk_forward、reservation_id 為 NULL：
+      房務品項：dept=housekeeping、type=amenity、task_no 取 T-，title 依品項表（例如「毛巾 ×2」「冰塊 ×2 桶」），note={menu_key, quantity}。
+      給房務的其他需求：dept=housekeeping、type=other、task_no 取 T-，title 是去掉頭尾空白的原文，note 為 NULL。
+      工務品項：dept=engineering、type=repair、task_no 為 NULL，同一交易開一列 repair_tickets（W-，見 repair_tickets Note 的「櫃檯代開」），
+        title 是「{品名}有問題」，note={menu_key, quantity:1}。
+      給工務的其他需求：同工務品項，category=other，title 是去掉頭尾空白的原文，note 為 NULL。
+    品項鍵（寫進 note.menu_key 的值）是中文品名，與 request_menu 的 key、classification_rules 的 menu_key 同一套：
+      毛巾、浴巾、礦泉水、拖鞋、牙刷組、嬰兒床、加床、冰塊（房務）；冷氣、熱水、燈具、電視（工務）。
+      「同一個品項」＝兩張單的 menu_key 相等，不做別名或模糊比對；住客選單的出廠預設中「毛巾」「牙刷組」「礦泉水」三項與代開品項鍵相同，
+      「衣架」「吹風機」沒有對應的代開品項，飯店自訂的選單項目只有在 key 一字不差等於品項鍵時才算同一個品項。
+      同仁在手機開的工務單不寫 menu_key，所以不會被當成同一個品項。
+    一次送出的所有單（一般單與工務單）、各自的 created 事件、工務單列、T-／W- 取號、outbox 的推播與即時訊號在同一個交易：
+      任何一張開不成就整個回滾，task_counters 與 repair_ticket_counters 的遞增一起退回，不會跳號，也不會留下已送出的推播。
+    歷程「櫃檯代開「{標題}」，進{部門}待認領」由 created 事件的建立快照（source=desk、state=pool、dept、title）組出，不另加事件型別或標記；
+      created 之後沒有 triaged 是它與「住客需求被櫃檯派出」的差別。操作者是 created 事件的 actor_id（送出的那一位），actor_role 記他當下的角色。
+    住客的每房額度只數住客送的需求（source=guest），櫃檯代開的單不算進去。
   單號：type=repair 的單號是 repair_tickets.ticket_no（W-），其餘類型是 tasks.task_no（T-）；對外一張單只顯示一個單號。櫃檯從待派單派給工務的單兩個欄位都有值（T- 是派單前取的），對外依 type 只顯示 W-。
     不讓工務單也領 T- 單號：同一張工務單會有兩個號碼，手機 App、推播與主管待辦一律用 W- 稱呼它。也不借用 repair_ticket_counters：W- 的序號只屬於工務單。
     不拿 id 的片段當單號：UUID 不是流水號，電話裡唸不出來。task_no 隨 created 事件的建立快照一起記下，重放時原號還原，不重新取號。
@@ -370,7 +398,13 @@ Table processed_ops {
   Indexes {
     (tenant_id, op_id) [pk]
   }
-  Note: '弱網重送去重簿（GR-002/E-11）。'
+  Note: '''
+  弱網重送去重簿（GR-002/E-11）。
+  一般寫入：由冪等過濾器在業務交易提交後另寫一列（狀態碼小於 500 才寫），寫入失敗只記警告，同一把鍵同時送來的兩個請求都會執行。
+  櫃檯代開單（一次開多張單）不靠提交後另寫：業務交易一開始以「tenant_id＋op_id」取交易版 advisory lock（pg_advisory_xact_lock），鎖內再查一次本表，
+    有列就回放；沒有就開單，並在同一個交易裡寫入本表。開單與「這把鍵已處理」一起提交、一起回滾；同一把鍵的第二個請求等第一個結束後拿到它的結果。
+    過濾器在提交後再寫同一把鍵時以 ON CONFLICT DO NOTHING 略過，不覆寫交易內寫的那一列。
+  '''
 }
 
 Table cleaning_plans {
@@ -637,7 +671,7 @@ Table repair_tickets {
   room_id         uuid        [not null, note: '由原任務帶入；冗餘自 tasks.room_id，供重複單查詢使用']
   category        text        [not null, note: 'CHECK: air_conditioning|plumbing_electrical|furniture_equipment|door_lock|other（冷氣、水電、家具／設備、門鎖、其他）']
   description     text        [note: '報修說明，選填。PII 去識別化範圍']
-  reporter_id     uuid        [not null, note: '報修人；撤回與補照片的授權依據。櫃檯轉單時是按派單的那一位（櫃檯、主管或值班主管）']
+  reporter_id     uuid        [not null, note: '報修人；撤回與補照片的授權依據。櫃檯轉單時是按派單的那一位（櫃檯、主管或值班主管）；櫃檯代開時是送出的那一位（frontdesk、manager 或 duty_manager，不看他的部門）']
   source_task_id  uuid        [note: '開單時所在的原任務']
   resolution_note text        [note: '工務處理說明，完修時寫入，選填（no_action_needed 也一樣）。驗收不通過退回重修時清空，再完修時寫入這一次的說明']
   resolution_type text        [note: 'nullable。CHECK: fixed|temporary|cannot_fix|no_action_needed（已修好、暫時處理、無法修復、不需處理）。每次完修守衛成功後由 RepairService.resolveOnComplete 在同一交易寫入，請求省略時寫 fixed；驗收不通過退回重修時清空，再完修時寫入這一次的結果。所以 state 為 done 或 closed 時必有值（這個欄位出現前就完修的舊單例外，可能為 NULL），其他狀態為 NULL。no_action_needed 不要求完修照片、不建追蹤單、不改房況，完成當下 tasks 直接 closed，不進待驗收。對應 contracts RepairTicket.resolutionType、CompleteTaskRequest.resolutionType 與待驗收清單每列的完修結果']
@@ -650,7 +684,7 @@ Table repair_tickets {
   last_verify_failed_by     uuid [note: 'nullable。最近一次判不通過的主管 staff_accounts.id。與 last_verify_failed_reason、last_verify_failed_at 三欄同一句 UPDATE 寫入，三欄同為 NULL 或同有值。顯示名稱由 JOIN staff_accounts 取得']
   last_verify_failed_at     timestamptz [note: 'nullable。最近一次判不通過的時間，規則同 last_verify_failed_by。也是區分完修照片輪次的界線：uploaded_at 晚於它的 completion 照片屬於重修後這一輪']
   origin_ticket_task_id uuid  [note: '本輪新增，nullable，自我參照 repair_tickets.task_id。完修時 resolutionType=temporary 系統自動建立追蹤單時，追蹤單這欄指回原單；原單（非追蹤單）為 NULL。對應 contracts RepairTicket.originTicketNo（顯示時 JOIN 取原單 ticket_no）']
-  origin          text        [not null, default: 'reported', note: '本輪新增。CHECK: reported|scheduled。reported＝有人報修（房務報修、工務自開、櫃檯交辦三條路徑都算）；scheduled＝每日排程規則建出的定期保養。工務首頁的「今日保養 {已完成}/{總數}」只數 scheduled 的那一群，報修的三個計數只數 reported，兩邊不重疊。對應 contracts engineeringSummary.maintenanceDone／maintenanceTotal']
+  origin          text        [not null, default: 'reported', note: '本輪新增。CHECK: reported|scheduled。reported＝有人報修（房務報修、工務自開、櫃檯交辦、櫃檯轉單、櫃檯代開都算）；scheduled＝每日排程規則建出的定期保養。工務首頁的「今日保養 {已完成}/{總數}」只數 scheduled 的那一群，報修的三個計數只數 reported，兩邊不重疊。對應 contracts engineeringSummary.maintenanceDone／maintenanceTotal']
   created_at      timestamptz [not null]
   Indexes {
     (tenant_id, ticket_no) [unique]
@@ -659,12 +693,18 @@ Table repair_tickets {
   Note: '''
   工務單（FR-011–021）。狀態與負責人一律看 tasks（轉移全集見 tasks Note）：pool→accepted→doing→done→closed；doing→closed（no_action_needed，或飯店不需要工務主管驗收）；
   done→accepted 或 pool（驗收不通過）；pool→cancelled（staff_withdrew）。
-  送出時與原任務的中斷、照片綁定在同一交易：所有照片 status=uploaded 才能建立，否則整筆不落地，原任務也不變（FR-014）。
+  照片要求依開單路徑：工務單開單端點（房務報修、工務自開、櫃檯部門直開）至少 1 張照片，送出時與原任務的中斷、照片綁定在同一交易：
+    所有照片 status=uploaded 才能建立，否則整筆不落地，原任務也不變（FR-014）。櫃檯轉單與櫃檯代開不要求照片，開單時沒有照片列。
   急件改由系統判定（使用者裁決 C）：開單交易同時寫入 is_urgent／urgent_rule 與 tasks.urgent；急件推播的防重複鍵以工務單為單位（repair_urgent:{ticket_no}:{收件人}），櫃檯派給工務、復原、再派開出的新工務單是另一張，判定為急件時照常推播；主管降級（downgradeRepairTicketUrgency）只改 is_urgent 與 urgent_downgrade_reason，urgent_rule 保留原判定理由不變。
   開單去向：房務報修、工務自開、櫃檯交辦、定期保養一律直接進工務待認領（pool），一般件與急件都一樣，沒有主管審核；直開且帶 assigneeId 時直接 accepted。
   櫃檯轉單：櫃檯從待派單把住客需求派給工務時，同一張任務在派單交易內成為工務單（不另建任務）：ticket_no 取 repair_ticket_counters 下一號、category=other、
     description 與 source_task_id 為 NULL、reporter_id 為操作者、不要求照片，is_urgent／urgent_rule 依與其他開單路徑相同的急件規則判定；之後的完修與驗收規則與其他工務單相同。
     已有 repair_tickets 列的任務再走到開單步驟時原樣沿用，不取號、不改欄位。
+  櫃檯代開：櫃檯畫面代開的工務品項（冷氣、熱水、燈具、電視）與給工務的其他需求，建單交易內新建任務（source=desk、pool_source=desk_forward、state=pool、
+    沒有 assignee，見 tasks Note 的「櫃檯代開」）並開一列本表：ticket_no 取 repair_ticket_counters 下一號、reporter_id 為送出的那一位、
+    description 寫入與標題相同的文字（工務品項為「{品名}有問題」，給工務的其他需求為櫃檯打的文字，工務 App 詳情頂部顯示 description）、source_task_id 為 NULL、origin=reported、不要求照片；category 依品項：冷氣→air_conditioning、熱水與燈具→plumbing_electrical、
+    電視→furniture_equipment、其他需求→other。對應的品項鍵記在 tasks.note 的 menu_key，本表不另存。
+    來源一律 desk＋desk_forward，不看送出者的部門（工務部門或沒有部門的主管代開也一樣，不會記成 staff）；急件照其他開單路徑相同的規則判定。
   舊資料修補（V29，一次性；舊版本先停，Flyway 在新版啟動時執行）：對象是 dept=engineering、尚未結束（state 不是 done、inspected、closed、cancelled）、沒有本表列的任務。
     只認兩種，其餘任何一張都讓遷移以例外停下並帶筆數，不默默搬動：
     櫃檯派來的（最新一筆 triaged 的 payload.dept=engineering，且它的 actor_id 有值）：type 改成 repair，依櫃檯轉單規則補一列，created_at 取那筆 triaged 的時間、
@@ -694,7 +734,7 @@ Table repair_tickets {
   工務首頁的報修三個計數（手上／今天已完修／急件）只數 origin=reported，「今日保養」只數 origin=scheduled，兩群互斥不重疊；「今天已完修」以 done_at 落在今天、state 為 done 或 closed 計。
   主管待驗收清單由 tasks 與本表既有欄位即時算出，不加欄位：tasks.state=done 且 resolution_type IS DISTINCT FROM 'no_action_needed'，排序用 tasks.done_at；判定全文見 tasks Note。
   驗收人與最近一次不通過判定人的顯示名稱，由 verified_by、last_verify_failed_by JOIN staff_accounts 取得。
-  工務直開欄位對應（CreateRepairTicketRequest）：roomId／isPublicArea 決定 tasks.room_id（isPublicArea 時用既有公共區域佔位房，見 tasks 表待認領 NOOP 慣例，不新增欄位）；assigneeId 直接寫 tasks.assignee_id；呼叫者部門決定 tasks.source（房務報修與工務自開皆為 staff，櫃檯交辦為 desk，兩值已在既有 CHECK 內）。
+  工務直開欄位對應（CreateRepairTicketRequest）：roomId／isPublicArea 決定 tasks.room_id（isPublicArea 時用既有公共區域佔位房，見 tasks 表待認領 NOOP 慣例，不新增欄位）；assigneeId 直接寫 tasks.assignee_id；這條端點由呼叫者部門決定 tasks.source（房務報修與工務自開皆為 staff，櫃檯部門直開為 desk 並記 pool_source=desk_forward，其他部門被擋，兩值已在既有 CHECK 內）；依部門決定來源只限這條端點，櫃檯轉單與櫃檯代開的來源由開單路徑決定，不看部門。
   '''
 }
 

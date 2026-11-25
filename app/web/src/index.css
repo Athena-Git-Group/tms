@@ -34,6 +34,27 @@
     50% { opacity: .5; }
   }
 
+  --animate-drop-in: dropIn .28s ease-out;
+
+  @keyframes dropIn {
+    from { transform: translateY(-16px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  --animate-badge-pop: badgePop .42s cubic-bezier(.34, 1.56, .64, 1);
+
+  @keyframes badgePop {
+    from { transform: scale(0); }
+    to { transform: scale(1); }
+  }
+
+  --animate-created-card: dropIn .28s ease-out, createdGlow 1.1s ease-out 2;
+
+  @keyframes createdGlow {
+    from { box-shadow: 0 0 0 0 rgba(12, 118, 128, .45); }
+    to { box-shadow: 0 0 0 10px rgba(12, 118, 128, 0); }
+  }
+
   --animate-rise-in: riseIn .26s ease-out;
 
   @keyframes riseIn {
@@ -67,6 +88,11 @@
 
   --width-answer-panel: min(640px, calc(100% - 80px));
   --max-height-answer-panel: calc(100% - 72px);
+
+  --width-create-request-panel: min(640px, calc(100% - 80px));
+  --height-create-request-panel: min(760px, calc(100% - 72px));
+  --radius-sheet: 34px;
+  --min-height-item-tile: 92px;
 
   --width-account-panel: 540px;
   --height-account-panel: 620px;

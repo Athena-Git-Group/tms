@@ -18,4 +18,8 @@ extends ApiException {
     public UnprocessableEntityException(String code, String message, Map<String, Object> context) {
         super(422, code, message, context);
     }
+
+    public UnprocessableEntityException(String message, java.util.List<ApiError.Detail> details) {
+        super(422, DEFAULT_CODE, message, null, details);
+    }
 }

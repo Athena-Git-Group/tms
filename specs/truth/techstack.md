@@ -21,8 +21,8 @@
 | App 掃碼 | `mobile_scanner` | 住客 QR 掃碼進需求；已知從 Sheet 進入後黑屏風險，需鎖版本並做 dispose／re-init |
 | App 視覺 | Flutter 自訂 Cupertino 風主題，以 `ui/prototype/Main.dc.html` 視覺規格為準 | iOS 不追 Liquid Glass／Live Activity，本增量視覺降級已簽核 |
 | App 端驗收規格 | Gherkin feature files（`# language: zh-TW`） | App 端行為測項，例如照片、離線重送、推播去處；runner 見「測試與驗證」 |
-| 櫃檯 Web 框架與建置 | `React` ＋ `TypeScript`，以 `Vite` 建置成單頁應用（登入後由瀏覽器自己換頁，建置結果是一包靜態檔） | 櫃檯人員、主管、值班主管用的總覽看板、待派單、派單與當場回答畫面；程式在本 repo `app/web/`；直接呼叫 `tms` 後端，不另起後端；套件版本在建立 `app/web/` 時鎖定當下的穩定版 |
-| 櫃檯 Web 換頁 | `React Router` | 登入、改密碼、總覽看板、待派單四個頁面之間的切換；詳情、當場回答、帳號是蓋在頁面上的面板 |
+| 櫃檯 Web 框架與建置 | `React` ＋ `TypeScript`，以 `Vite` 建置成單頁應用（登入後由瀏覽器自己換頁，建置結果是一包靜態檔） | 櫃檯人員、主管、值班主管用的總覽看板、待派單、派單、當場回答與代開單畫面；程式在本 repo `app/web/`；直接呼叫 `tms` 後端，不另起後端；套件版本在建立 `app/web/` 時鎖定當下的穩定版 |
+| 櫃檯 Web 換頁 | `React Router` | 登入、改密碼、總覽看板、待派單四個頁面之間的切換；詳情、當場回答、代開單、帳號是蓋在頁面上的面板 |
 | 櫃檯 Web 後端資料 | `TanStack Query` | 從後端抓資料、收到即時訊號後換上那張卡片或重抓、連線異常或讀取失敗時每 4 秒輪詢（畫面上寫每 5 秒）、送出失敗時把畫面回復原狀 |
 | 櫃檯 Web 畫面狀態 | `Zustand` | 只存在畫面上的狀態：登入身分、泳道、篩選、房號搜尋、拖曳中的提示 |
 | 櫃檯 Web 樣式與版面 | `Tailwind CSS`；一份隨視窗伸縮的版面，以設計圖 1180×820 為基準 | 主要使用環境是電腦瀏覽器，同時支援 iPad 橫向；視窗更寬時看板的欄跟著變寬；電腦最小支援視窗 1280×720，iPad 橫向 1180×820 同樣支援，更小就出現捲軸、不另外設計；滑鼠與觸控都能完成所有操作 |
@@ -61,7 +61,7 @@
 | --- | --- | --- |
 | 資料庫 | `PostgreSQL 16` | 權威狀態，包括 tasks、task_events、outbox、processed_ops 等 |
 | Schema 遷移 | `Flyway` | 資料庫版本管理 |
-| 冪等 | `Idempotency-Key` ＋ `processed_ops` | 重送回放，含離線重送 |
+| 冪等 | `Idempotency-Key` ＋ `processed_ops`；一次開多張單的寫入另在業務交易內以 `pg_advisory_xact_lock` 鎖住這把鍵，並在同一個交易裡寫 `processed_ops` | 重送回放，含離線重送；一次開多張單時，提交與「這把鍵已處理」同進退，同一把鍵同時送兩次也只開一批 |
 | 本機環境 | `docker-compose`（Postgres 埠 5433、Kafka） | 開發用依賴服務 |
 
 ### 測試與驗證
@@ -79,7 +79,8 @@
 | 住客掃碼頁 BDD techstack | 與櫃檯 Web 同一個 `app/web-bdd/` 模組（`Cucumber-JVM` ＋ `Playwright for Java`），同一個 glue 套件，住客的步驟與頁面物件各自一個子套件；跑 `specs/truth/features/guest-web/` 的 Gherkin 做 E2E；`run-feature.sh` 的 feature 路徑可用 `guest-web/…` 指定根 | 住客情境的前提與觸發多是飯店那邊的動作（同仁認領、櫃檯回答、主管換 QR、撥時鐘），`BackendChannel` 都有或一個 helper 就補得上；不另起模組或 Node 測試線。runner 不用加：腳本一律以 `-Dcucumber.features` 指定，Cucumber 的 JUnit 引擎在這個屬性有值時忽略 runner 寫死的目錄 |
 | 住客掃碼頁驗收的視窗與輸入 | Playwright 的第三組瀏覽器設定 `phone`：WebKit、393 × 852、開啟觸控、語言預設繁體中文；規格句型寫「手機直向 393 × 852 觸控」 | 住客的規格只在 `phone` 跑；WebKit 近似 iPhone 上的 Safari，不等於真機，安全區域與工具列收放要在真機看一次 |
 | BDD 後端資料準備補的 helper | `BackendChannel` 加取房間 QR 代碼與換 QR 的 helper（以主管身分呼叫 `GET /admin/rooms/{roomNo}/qr`、`POST /admin/rooms/{roomNo}/qr/rotate`，這兩個端點不在 `/api/v1` 下），以及住客評分的 helper | 住客驗收要用真的代碼開 `/g/{代碼}`；換 QR 走正式 API 才會連坐撤銷 session，直接寫表測不到真的行為 |
-| Web 單元測試 | `Vitest` | 只測沒有畫面的純計算；櫃檯例如看板分欄與未結案張數、等待 10 分與 20 分的門檻、瀏覽器語言比對；住客例如狀態值對顯示階段的對照表、狀態訊息框的優先序、10 分鐘額度估算、報修文字組合、問候時段、住客的瀏覽器語言比對、401 重換一次的狀態機；驗收仍以 E2E 為主線 |
+| 櫃檯 Web 送出失敗的模擬 | Playwright 攔請求：`route.abort` 模擬沒送到後端；`route.fetch()` 轉給真的後端後再中斷，模擬後端已提交但回應遺失；資料庫暫時觸發器（測試直接連資料庫裝上、情境結束移除）讓交易在中途真的失敗 | 驗收一次送出多張單的全有或全無、重送回放不重複；正式程式不為測試開後門 |
+| Web 單元測試 | `Vitest` | 只測沒有畫面的純計算；櫃檯例如看板分欄與未結案張數、等待 10 分與 20 分的門檻、瀏覽器語言比對，代開單的張數、摘要、單標題、房號輸入過濾、建議房號、類似單比對與冪等鍵保留規則；住客例如狀態值對顯示階段的對照表、狀態訊息框的優先序、10 分鐘額度估算、報修文字組合、問候時段、住客的瀏覽器語言比對、401 重換一次的狀態機；驗收仍以 E2E 為主線 |
 
 ## 本次開發不引入的技術
 

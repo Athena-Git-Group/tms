@@ -13,9 +13,11 @@ import io.cucumber.java.zh_tw.當;
 import io.cucumber.java.zh_tw.那麼;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
@@ -53,7 +55,11 @@ public class PushGuestSteps {
     public void guestAlreadySentRequestsWithinMinutes(int minutesIgnored, String roomNo, int count) {
         String sessionToken = ensureGuestSession(roomNo);
         for (int i = 1; i <= count; i++) {
-            createGuestRequest(sessionToken, "節流測試需求" + i, 1);
+            ScenarioWorld.ApiResponse resp = createGuestRequest(sessionToken, "節流測試需求" + i, 1);
+            if (resp.status() < 200 || resp.status() > 299) {
+                throw new IllegalStateException("「" + roomNo + "」的住客第 " + i + " 筆需求沒有建單，狀態碼="
+                        + resp.status() + "，body=" + resp.body());
+            }
         }
     }
 
@@ -61,6 +67,10 @@ public class PushGuestSteps {
     public void guestScansForItem(String roomNo, String itemWithQuantity) {
         String sessionToken = ensureGuestSession(roomNo);
         ParsedItem item = ParsedItem.parse(itemWithQuantity);
+        Set<String> before = new HashSet<>();
+        dbProbe.queryMaps("SELECT id FROM tasks WHERE tenant_id = ?", tenantFixtures.testTenantId())
+                .forEach(row -> before.add(String.valueOf(row.get("id"))));
+        world.setTaskIdsBeforeGuestRequest(before);
         ScenarioWorld.ApiResponse resp = createGuestRequest(sessionToken, item.name(), item.quantity());
         String taskId = textOrNull(resp.json(), "id");
         if (taskId != null) {

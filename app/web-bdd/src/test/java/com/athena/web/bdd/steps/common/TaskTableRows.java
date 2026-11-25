@@ -24,7 +24,7 @@ public final class TaskTableRows {
     private static final Set<String> COLUMNS = Set.of(
             "房號", "狀況", "標題", "類型", "部門", "負責人", "住客", "VIP", "入住日", "退房日", "來源",
             "住客原話", "原文語言", "翻譯", "時間", "建立", "派出時間", "到手時間", "派單方式", "經手人",
-            "原負責人", "說明", "SOP", "單號", "急件");
+            "原負責人", "說明", "SOP", "單號", "急件", "對應品項");
 
     private static final Map<String, String> SOURCE = Map.of(
             "住客掃碼", "guest", "櫃檯開單", "desk", "系統排房", "system", "同仁報修", "staff");
@@ -67,6 +67,7 @@ public final class TaskTableRows {
     private static final Pattern DAYS_AGO = Pattern.compile("(\\d+) ?天前 (\\d{1,2}):(\\d{2})");
     private static final Pattern MONTH_DAY = Pattern.compile("(\\d{1,2})/(\\d{1,2})");
     private static final Pattern SOP = Pattern.compile("(\\d+)/(\\d+)");
+    private static final Pattern QUANTITY_IN_TITLE = Pattern.compile("×\\s*(\\d+)");
 
     private final WebWorld world;
 
@@ -124,6 +125,7 @@ public final class TaskTableRows {
         applyPeople(row, situation, source, typeTerm, dept, spec);
         applyNote(row, situation, spec);
         applyExtras(row, spec);
+        applyMenuKey(row, title, spec);
         UUID reservationId = reservation(row, roomNo, source);
         if (reservationId != null) {
             spec.reservationId(reservationId);
@@ -274,6 +276,15 @@ public final class TaskTableRows {
                 }
             }
         }
+    }
+
+    private static void applyMenuKey(Map<String, String> row, String title, TaskSituationSpec spec) {
+        String menuKey = cell(row, "對應品項");
+        if (menuKey == null) {
+            return;
+        }
+        Matcher quantity = title == null ? null : QUANTITY_IN_TITLE.matcher(title);
+        spec.menuKey(menuKey, quantity != null && quantity.find() ? Integer.parseInt(quantity.group(1)) : 1);
     }
 
     private void applyExtras(Map<String, String> row, TaskSituationSpec spec) {

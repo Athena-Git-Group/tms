@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登入 TMS 櫃檯</title>
+  <link rel="stylesheet" href="desk.css" />
+</head>
+<body data-page="login">
+  <main class="auth">
+    <div class="auth-top">
+      <button class="lang-btn" id="langBtn" data-t-label="語言" aria-label="語言" aria-haspopup="menu" aria-expanded="false">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+        <span id="langName">繁體中文</span>
+      </button>
+      <div class="menu" id="langMenu" role="menu" data-t-label="語言" aria-label="語言" hidden></div>
+    </div>
+    <div class="auth-body">
+      <form class="auth-col" id="form" novalidate>
+        <div class="auth-head">
+          <span class="app-mark" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="12" cy="10.5" r="2.2"/><path d="M8 16.5a4 4 0 0 1 8 0"/></svg>
+          </span>
+          <div>
+            <h1 class="auth-title" data-t="登入 TMS 櫃檯" style="margin:0">登入 TMS 櫃檯</h1>
+            <div class="auth-hotel">雅典娜酒店</div>
+            <div class="auth-note" data-t="這台裝置是櫃檯共用的，請用自己的帳號登入">這台裝置是櫃檯共用的，請用自己的帳號登入</div>
+          </div>
+        </div>
+        <div class="stack-8">
+          <div class="field-card">
+            <div class="field">
+              <label for="empNo" data-t="員工編號">員工編號</label>
+              <input id="empNo" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="12" />
+            </div>
+            <div class="field">
+              <label for="pw" data-t="密碼">密碼</label>
+              <input id="pw" type="password" autocomplete="off" maxlength="32" />
+              <button type="button" class="eye" id="eye" aria-label="顯示密碼"></button>
+            </div>
+          </div>
+          <span class="form-err" id="err" role="alert" hidden></span>
+          <div class="notice-card" id="notice" role="alert" hidden>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16v.5"/></svg>
+            <div><b id="noticeTitle"></b><span id="noticeBody"></span></div>
+          </div>
+        </div>
+        <div class="stack-4">
+          <button type="submit" class="btn-primary" id="submit" data-t="登入" disabled>登入</button>
+          <button type="button" class="btn-link" id="forgot" data-t="忘記密碼？">忘記密碼？</button>
+        </div>
+      </form>
+    </div>
+  </main>
+  <script src="desk.js"></script>
+</body>
+</html>

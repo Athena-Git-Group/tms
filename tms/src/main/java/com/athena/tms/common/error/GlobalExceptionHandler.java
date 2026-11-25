@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
     @ExceptionHandler(value={ApiException.class})
     public ResponseEntity<ApiError> handleApiException(ApiException ex) {
-        return ResponseEntity.status((int)ex.getStatus()).body(new ApiError(ex.getCode(), ex.getMessage(), null, ex.getContext()));
+        return ResponseEntity.status((int)ex.getStatus()).body(new ApiError(ex.getCode(), ex.getMessage(), ex.getDetails(), ex.getContext()));
     }
 
     @ExceptionHandler(value={MissingRequestHeaderException.class})

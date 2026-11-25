@@ -86,9 +86,12 @@ listGuestRequestsAndcreateGuestRequest:
       由櫃檯以 deskAssignTask 派給工務，派單時才開工務單。住客端看到的是「已送出」、部門「櫃檯」。
       LLM 只做翻譯與建議，不直接決定歸屬（基線 FR-003）。
       進 pool 時推播該部門員工（PushPayload.event=pool_new_request），並標示是否與收件人同樓層（FR-047）。
-      同一房 10 分鐘內第 4 筆回 429（基線 E-01）。張數以 tasks 的建立時間（營業時鐘）現數：
-      住客送的（勾選單與自由文字合併）與櫃檯替這間房代開的都算，已取消的也算，不分是哪一筆訂房；
-      建立剛好滿 10 分鐘的那一筆不再佔名額。成功時回應標頭帶送出這筆之後住客這次住宿剩下的名額，標頭與 listGuestRequests 相同。
+      勾選單在 note 記 menu_key（選單項目的 key）與數量；自由文字命中的分類規則帶 menu_key 時，note 另記這個 menu_key
+      （規則形狀見 ClassificationRule），櫃檯看板的 DeskTask.menuKey 讀的就是它。
+      每房額度：同一房任何 10 分鐘內，住客送的需求（source=guest）已有 3 筆時，第 4 筆回 429（基線 E-01）。張數以 tasks 的建立時間（營業時鐘）現數：
+      住客送的（勾選單與自由文字合併）都算，已取消的也算，不分是哪一筆訂房；建立剛好滿 10 分鐘的那一筆不再佔名額。
+      只數住客送的：櫃檯代開的單（deskCreateRequests，source=desk）不算進名額，櫃檯代開之後住客能送的筆數不會變少。
+      成功時回應標頭帶送出這筆之後住客這次住宿剩下的名額，標頭與 listGuestRequests 相同。
     tags:
     - 住客掃碼 API
     parameters:

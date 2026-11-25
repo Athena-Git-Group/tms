@@ -145,6 +145,7 @@ public class CommonGivenSteps {
         for (Network.Api write : Network.DESK_WRITES) {
             world.network().disconnect(page, write);
         }
+        world.network().disconnect(page, Network.DESK_CREATE_REQUESTS);
     }
 
     @假設("看板資料的回應被延後")

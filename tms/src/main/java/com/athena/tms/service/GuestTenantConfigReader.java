@@ -63,7 +63,7 @@ public class GuestTenantConfigReader {
                     }
                 });
             }
-            if ((rule = new ClassificationRule(GuestTenantConfigReader.text(node, "rule_id"), keywords, GuestTenantConfigReader.text(node, "dept"), GuestTenantConfigReader.text(node, "type"))).keywords().isEmpty() || rule.dept() == null) continue;
+            if ((rule = new ClassificationRule(GuestTenantConfigReader.text(node, "rule_id"), keywords, GuestTenantConfigReader.text(node, "dept"), GuestTenantConfigReader.text(node, "type"), GuestTenantConfigReader.text(node, "menu_key"))).keywords().isEmpty() || rule.dept() == null) continue;
             rules.add(rule);
         }
         return rules;
@@ -94,6 +94,6 @@ public class GuestTenantConfigReader {
     public record MenuItem(String key, String label, String dept, String type) {
     }
 
-    public record ClassificationRule(String ruleId, List<String> keywords, String dept, String type) {
+    public record ClassificationRule(String ruleId, List<String> keywords, String dept, String type, String menuKey) {
     }
 }

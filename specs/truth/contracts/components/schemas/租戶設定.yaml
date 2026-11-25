@@ -9,7 +9,9 @@ tenant_config:
       description: 封閉鍵集：standard_cleaning_minutes|shift_capacity|inspection_items|sop_items|guest_info_pages|request_menu|minutes_per_credit|classification_rules|scan_fail_threshold|low_rating_threshold|shift_times|retention_days|inspection_waived_cleaning_types（免查房的打掃種類，預設 [stayover]；後端不讀這一鍵，免查房看 inspection_waived_enabled）|inspection_waived_enabled（免查房開關，值為 boolean，未設定或不是 true 時視為需要查房。true 時打掃單開工當下鎖成免查，不分打掃種類；櫃檯設定頁的「需要房務主管查房」是它的反向，見 DeskSettings.inspectionRequired）|repair_verification_required（需要工務主管驗收，值為 boolean，未設定或不是 false 時視為 true。false 時工務按完成就結案、不進待驗收；工務按完成那一刻才讀，見 DeskSettings.repairVerificationRequired）|pms.writeback.room_status|pms.provider|unclaimed_reminder_minutes|notification_retention_days（這四鍵的說明見 data-model.dbml 的 tenant_config.key）|completion_celebration_enabled（本輪新增：完成慶祝的氣氛呈現開關，值為 boolean，預設 true。false 時完成畫面仍出現、接續按鈕仍可用，只是不呈現飾帶、彩屑、入場動態與今日進度——關掉的是氣氛，不是接力；不影響 nextStep 與 cleaningDoneToday 的計算）|self_inspection_allowed（允許主管查自己清的房，值為 boolean，未設定時視為 true。true 時房務主管可以查自己清的房，查房送出與待查房清單都把它當一般的待查房，只有一位房務主管的飯店不必設定也查得到自己清的房；飯店設為 false 時清房者不能查自己清的房：查房送出回 403，自己清的房也不出現在自己的待查房清單與格數。這一鍵只管清房者與查房者是同一人這一條，沒有查房權限的角色不論設定如何都不能送出查房）
     value:
       type: string
-      description: 結構依 key 而異
+      description: >-
+        結構依 key 而異，是一段 JSON 文字。request_menu 的值是 RequestMenuItem 陣列；classification_rules 的值是 ClassificationRule 陣列
+        （每條可選填 menu_key，對應的品項鍵）。
     updatedAt:
       type: string
       format: date-time
@@ -34,8 +36,68 @@ tenant_configRequest:
       description: 封閉鍵集，與 tenant_config.key 相同，各鍵說明見 tenant_config.key。
     value:
       type: string
-      description: 結構依 key 而異
+      description: >-
+        結構依 key 而異，是一段 JSON 文字。request_menu 的值是 RequestMenuItem 陣列；classification_rules 的值是 ClassificationRule 陣列
+        （每條可選填 menu_key，對應的品項鍵）。
   required:
   - tenantId
   - key
   - value
+RequestMenuItem:
+  type: object
+  description: >-
+    tenant_config 的 request_menu 值（JSON 陣列）裡的一項：住客掃碼頁可勾選的項目。欄位名照存放的 JSON 寫法。
+    沒有設定或陣列為空時用出廠預設五項（衣架、毛巾、牙刷組、礦泉水、吹風機）。
+  required:
+  - key
+  - label
+  - dept
+  - type
+  properties:
+    key:
+      type: string
+      description: >-
+        項目的鍵，用中文品名（例「毛巾」），同一家飯店內不重複；住客勾選後寫進 tasks.note 的 menu_key，櫃檯看板的 DeskTask.menuKey 讀它。
+        與櫃檯代開的品項鍵（DeskMenuKey）一字不差相同時，兩邊的單算同一個品項。
+      example: 毛巾
+    label:
+      type: string
+      description: 住客掃碼頁上顯示的名稱。
+    dept:
+      type: string
+      description: 勾選後歸屬的部門，值同 tasks.dept。命中 engineering 時住客照舊不直通工務（見 createGuestRequest）。
+    type:
+      type: string
+      description: 值同 tasks.type。
+ClassificationRule:
+  type: object
+  description: >-
+    tenant_config 的 classification_rules 值（JSON 陣列）裡的一條：住客打字的分類規則。欄位名照存放的 JSON 寫法。
+    缺 keywords 或 dept 的規則略過不用。
+  required:
+  - keywords
+  - dept
+  properties:
+    rule_id:
+      type: string
+      description: 規則編號；住客打字命中時記進 tasks.note 的 rule_id。
+    keywords:
+      type: array
+      minItems: 1
+      items:
+        type: string
+      description: 關鍵字，住客打的字含其中任一個就算命中。
+    dept:
+      type: string
+      description: 命中後的部門，值同 tasks.dept。命中 engineering 時住客照舊不直通工務，改進待派單（見 createGuestRequest）。
+    type:
+      type: string
+      description: 命中後的類型，值同 tasks.type；沒填時照既有規則處理。
+    menu_key:
+      type: string
+      description: >-
+        選填。這條規則對應的品項鍵，值與 request_menu 的 key、櫃檯代開的品項鍵（DeskMenuKey）同一套中文品名，
+        例如「冷氣不冷」「冷氣沒風」的規則填「冷氣」。住客打字命中帶 menu_key 的規則時，建單時把它寫進 tasks.note 的 menu_key
+        （與 rule_id 並存），櫃檯看板的 DeskTask.menuKey 因此帶出這個鍵，代開單面板的類似單提醒把它當成同一個品項。
+        沒填就是沒有對應品項，命中與分流的結果不受影響；不要求一定出現在 request_menu 裡（例如「冷氣」不在住客選單上）。
+      example: 冷氣

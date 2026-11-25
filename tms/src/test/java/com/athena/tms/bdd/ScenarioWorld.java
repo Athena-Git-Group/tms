@@ -22,6 +22,7 @@ public class ScenarioWorld {
     private String lastAnswerId;
     private String lastEscalationId;
     private String lastIdempotencyKey;
+    private java.util.Set<String> taskIdsBeforeGuestRequest;
 
     public void rememberStaff(String name, String staffId, String jwt) {
         staffIds.put(name, staffId);
@@ -215,6 +216,17 @@ public class ScenarioWorld {
         this.lastIdempotencyKey = key;
     }
 
+    public java.util.Set<String> taskIdsBeforeGuestRequest() {
+        if (taskIdsBeforeGuestRequest == null) {
+            throw new IllegalStateException("沒有住客送出需求之前的任務快照：前一個 When 要先記下");
+        }
+        return taskIdsBeforeGuestRequest;
+    }
+
+    public void setTaskIdsBeforeGuestRequest(java.util.Set<String> ids) {
+        this.taskIdsBeforeGuestRequest = java.util.Set.copyOf(ids);
+    }
+
     private static String required(Map<String, String> map, String key, String kind) {
         String v = map.get(key);
         if (v == null) {
@@ -223,6 +235,16 @@ public class ScenarioWorld {
         return v;
     }
 
-    public record ApiResponse(int status, String body, tools.jackson.databind.JsonNode json) {
+    public record ApiResponse(
+            int status, String body, tools.jackson.databind.JsonNode json,
+            org.springframework.http.HttpHeaders headers) {
+
+        public ApiResponse(int status, String body, tools.jackson.databind.JsonNode json) {
+            this(status, body, json, new org.springframework.http.HttpHeaders());
+        }
+
+        public String header(String name) {
+            return headers == null ? null : headers.getFirst(name);
+        }
     }
 }

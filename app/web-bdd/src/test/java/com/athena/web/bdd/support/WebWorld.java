@@ -43,6 +43,7 @@ public class WebWorld {
 
     @Before(order = 0)
     public void prepareScenario() {
+        BACKEND.removeFaultTriggers();
         BACKEND.resetBusinessData();
         defaults = BACKEND.ensureFrontdeskDefaults();
         clocks.startAtDefault();
@@ -62,7 +63,11 @@ public class WebWorld {
             try {
                 closeContexts();
             } finally {
-                clocks.reset();
+                try {
+                    clocks.reset();
+                } finally {
+                    BACKEND.removeFaultTriggers();
+                }
             }
         }
     }

@@ -101,7 +101,8 @@ CreateRepairTicketRequest:
     ②工務不經過任何房務任務直接開單，或櫃檯交辦開單，sourceTaskId 留空，改帶 roomId 或 isPublicArea=true
     （兩者擇一，不可同時帶 sourceTaskId 與 roomId／isPublicArea，否則回 422 repair_source_conflict；
     三者都沒帶回 422 repair_source_missing）。呼叫者部門決定 tasks.source：房務報修與工務自開都是 staff，
-    櫃檯交辦是 desk。
+    櫃檯交辦是 desk。依部門決定來源只限這個請求（createRepairTicket）；櫃檯代開單（deskCreateRequests）不用這個請求，
+    來源一律 desk＋desk_forward、不看部門、不帶照片。
   required:
   - category
   - photoIds

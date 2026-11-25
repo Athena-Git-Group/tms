@@ -35,7 +35,7 @@ Unauthorized:
       schema:
         $ref: './schemas/shared.yaml#/Error'
 TooManyRequests:
-  description: 超過限流，例如同一房 10 分鐘內第 4 筆需求。
+  description: 超過限流，例如同一房 10 分鐘內住客送的第 4 筆需求（櫃檯代開的單不算）。
   content:
     application/json:
       schema:

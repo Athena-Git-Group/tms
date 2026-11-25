@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 同一房任何 10 分鐘內最多 3 筆需求。張數一律從資料庫的 tasks 現數，不另外記一份：
- * 住客送的（勾選單與自由文字）與櫃檯替這間房代開的都算，已取消的也算，
+ * 只數住客送的（勾選單與自由文字），櫃檯代開的不算；已取消的也算，
  * 時間看 created_at，以注入的營業時鐘為準；created_at 剛好滿 10 分鐘的那一筆不再佔名額。
  */
 @Component
@@ -26,7 +26,7 @@ public class RoomRequestRateLimiter {
             SELECT count(*) AS taken, min(created_at) AS oldest
               FROM tasks
              WHERE tenant_id = ? AND %s = ?
-               AND source IN ('guest', 'desk')
+               AND source = 'guest'
                AND created_at > ? AND created_at <= ?
             """;
 
@@ -53,14 +53,14 @@ public class RoomRequestRateLimiter {
         return this.count("room_id", tenantId, roomId).remaining() > 0;
     }
 
-    /** 這間房目前的名額，櫃檯代開的也算在內；再送會不會回 429 以這個為準。 */
+    /** 這間房目前的名額，不分是哪一筆訂房；再送會不會回 429 以這個為準。 */
     public Quota roomQuota(long tenantId, UUID roomId) {
         return this.count("room_id", tenantId, roomId);
     }
 
     /**
      * 住客這次住宿自己看得到的名額：只數這筆訂房的需求（含已取消的），
-     * 櫃檯不綁訂房代開的單住客看不到，也不在這裡扣，所以這個數字可能比 {@link #roomQuota} 寬。
+     * 同一房別的訂房送的不在這裡扣，所以這個數字可能比 {@link #roomQuota} 寬。
      */
     public Quota stayQuota(long tenantId, UUID reservationId) {
         return this.count("reservation_id", tenantId, reservationId);

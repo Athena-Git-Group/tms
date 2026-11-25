@@ -225,3 +225,128 @@ deskAnswerTask:
       '422':
         $ref: '../../components/responses.yaml#/UnprocessableEntity'
     x-realtime-note: 結案後員工事件串流送出這張單的 task 訊號（type 為 answered）；住客事件串流也會通知這位住客。
+listDeskRooms:
+  get:
+    operationId: listDeskRooms
+    summary: 代開單面板的房間清單
+    description: >-
+      代開單面板打開時讀一次：這家飯店每一間客房的房號，以及每間現在有沒有在住的住客（姓名、是否 VIP、入住與退房日期）。
+      一次回完、不分頁、沒有查詢參數；房號是否有效、住客卡、空房提示與建議房號都由畫面從這一份算，打字時不再打後端。
+      系統內部代表公共區域的佔位房（房號「公共區域」）不在清單裡，因為代開單只開給客房。
+      「在住」看訂房副本，不看房間主檔的 occupancy：有一筆沒有被取代、入住時間已到、退房時間未到的訂房就是在住，
+      與看板卡片 DeskTask.guestName 的認定方式相同。同一間房同一時刻不會有兩筆在住訂房（訂房副本的住期不重疊約束），所以每間最多一位住客。
+      回傳順序不保證；建議房號的排序（依房號由小到大）由畫面自己做。
+      這份資料可能比送出當下舊：送出時後端會再檢查一次房號（deskCreateRequests 的 404 not_found）。
+      只有 frontdesk、manager、duty_manager 可以呼叫，其他角色回 403 forbidden；房務與工務讀不到住客資料。
+      不重做 listRooms：那個端點給房況板用，欄位與權限都不同。
+    tags:
+    - 櫃檯看板與派單 API
+    responses:
+      '200':
+        description: 成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskRoom'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+    x-realtime-note: >-
+      不需要即時同步。房間與在住住客變動慢，畫面把這一份放在查詢快取裡，五分鐘內再打開面板直接用快取、同時在背景重讀；
+      員工事件串流不為房間或訂房送訊號。
+deskCreateRequests:
+  post:
+    operationId: deskCreateRequests
+    summary: 櫃檯代開單
+    description: >-
+      櫃檯替住客把需求開成單：一個房號，一次送出若干常用品項（各帶數量）與一段選填的其他需求（帶要給的部門）。
+      每個品項開一張單，不論數量（數量寫在標題）；其他需求有字時再開一張。全部直接以 state=pool 進部門待認領，
+      不經過待派單（沒有 triaged 事件）、沒有負責人，source=desk、待認領來源分流 pool_source=desk_forward。
+
+
+      四種單長什麼樣（品項的部門、上限、標題與修繕分類見 DeskMenuKey）：
+      房務品項：dept=housekeeping、type=amenity、取 T- 單號，標題「{品名} ×{數量}」（冰塊是「冰塊 ×{數量} 桶」）。
+      給房務的其他需求：dept=housekeeping、type=other、取 T- 單號，標題是去掉頭尾空白後的文字。
+      工務品項：開成工務單——dept=engineering、type=repair、只有 W- 工務單號（不取 T-），標題「{品名}有問題」，工務單的 description 寫入同一句，修繕分類依 DeskMenuKey。
+      給工務的其他需求：同工務品項，修繕分類 other，標題與工務單的 description 都是去掉頭尾空白後的文字。
+      標題一律由後端依品項鍵組成、一律是繁體中文，不隨操作者的介面語言改變；請求不帶標題、部門、類型或修繕分類。
+
+
+      代開的工務單走工務單的開單步驟（與 createRepairTicket 共用），但規則依這條開單路徑決定，不看開單人的部門：
+      不要求照片（開單時沒有照片列）；來源一律 desk＋desk_forward；報修人是送出的那一位（frontdesk、manager 或 duty_manager 都可以）；
+      說明（description）與標題同句、原任務（sourceTaskId）為空；origin=reported；急件照飯店的急件規則判定，判定為急件時同交易送出急件推播
+      （櫃檯畫面照舊不顯示急件）。之後的認領、完修、主管驗收、結案都照工務單既有的規則。
+      createRepairTicket 的行為（照片 1–3 張、依部門決定來源、角色放行）不因這條路徑而改變。
+
+
+      全有或全無：這一次的所有單（一般單與工務單）、各自的 created 事件、工務單列、T-／W- 取號、推播與即時訊號的待送匣，
+      都在同一個交易裡；任何一張開不成就整個回滾，一張都不留，流水號也一起退回、不跳號。
+      後端先檢查完整個請求（內容 422、房號 404）才開第一張。
+
+
+      重送不重開：必須帶 Idempotency-Key，沒帶回 400 idempotency_key_required。這個端點的冪等比櫃檯其他寫入多兩道保障：
+      交易一開始以「飯店＋鍵」取交易鎖，鎖內再查一次冪等紀錄，有就直接回放；沒有就開單，並在同一個交易裡記下這次的回應。
+      所以同一把鍵同時送來兩個請求時，第二個等第一個結束後拿到它的結果；開單成功與「這把鍵已處理」一起提交、一起回滾。
+      回放時回應的狀態碼與內容與第一次相同，並帶 Idempotency-Replayed: true；卡片就是第一次開出的那幾張（id 相同），
+      畫面照成功處理、依 id 高亮。同一把鍵即使請求內容不同也回放第一次的結果，所以畫面在房號、任一品項數量、
+      其他需求文字或部門一改就換一把新鍵。
+      4xx 的結果也會被記下、同一把鍵重送會回放同一個錯誤，所以畫面收到 4xx 就丟掉這把鍵；
+      5xx 與沒有收到回應時保留這把鍵，內容沒改就用同一把再送。
+
+
+      不算住客的每房額度：代開的單不受「同一房 10 分鐘內最多 3 筆」限制，也不佔住客的名額（見 createGuestRequest），
+      所以這個端點不會回 429。
+      代開的單 reservation_id 為空，照住客掃碼頁既有的規則不出現在住客的「我的需求」。
+
+
+      檢查與錯誤（依序）：
+      角色不是 frontdesk、manager、duty_manager 回 403 forbidden（不看部門）；
+      沒帶 Idempotency-Key 回 400 idempotency_key_required；
+      內容不合規定一律回 422 validation_failed，details 逐項列出 field 與 issue：品項鍵不在 DeskMenuKey 裡、同一個品項鍵出現兩次、
+      數量小於 1 或超過該品項的上限、其他需求去掉頭尾空白後是空的或超過 60 字、其他需求的部門不是 housekeeping 或 engineering、
+      房號空白，以及品項與其他需求都沒有（一張單都不會開）；
+      房號不是這家飯店的客房（查不到，或是公共區域佔位房）回 404 not_found，context 帶 roomNo。
+      操作者記實際登入的那一位：歷程第一筆 created 的操作者、詳情面板「櫃檯代開（{姓名}）」與工務單的報修人都是他。
+    tags:
+    - 櫃檯看板與派單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/IdempotencyKey'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskCreateRequestsRequest'
+    responses:
+      '201':
+        description: >-
+          全部開成。回這次開出的每一張單的看板卡片與後端現在的時間；重送回放時狀態碼與內容相同，另帶 Idempotency-Replayed。
+        headers:
+          Idempotency-Replayed:
+            description: 這次回應是同一把冪等鍵第一次結果的回放時為 true；第一次執行時不帶。
+            schema:
+              type: string
+              enum:
+              - 'true'
+        content:
+          application/json:
+            schema:
+              $ref: '../../components/schemas/櫃檯看板與派單.yaml#/DeskCreateRequestsResult'
+      '400':
+        $ref: '../../components/responses.yaml#/BadRequest'
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
+      '422':
+        $ref: '../../components/responses.yaml#/UnprocessableEntity'
+    x-realtime-note: >-
+      每張單的 created 事件各自經待送匣送出，員工事件串流照既有規則送 task 訊號：櫃檯、主管、值班主管的連線收全館並帶整張卡片，
+      房務與工務的連線收自己部門的，待認領不用重新整理就出現。進待認領時照既有做法推播該部門同仁（PushPayload.event=pool_new_request），
+      工務單判定為急件時另送急件推播。交易回滾時這些訊號與推播都不會送出。
+      送出的那一台櫃檯先用回應的卡片放上看板並高亮，之後收到同一張單的訊號照 DeskTask.seq 的規則合併，不會出現兩張。

@@ -115,7 +115,9 @@ public class BddApiClient {
             int status = response.getStatusCode().value();
             String raw = readBody(response);
             JsonNode json = raw.isBlank() ? null : objectMapper.readTree(raw);
-            return new ScenarioWorld.ApiResponse(status, raw, json);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.putAll(response.getHeaders());
+            return new ScenarioWorld.ApiResponse(status, raw, json, headers);
         });
 
         world.setLastRequest(new ScenarioWorld.ApiRequest(method.name(), path, body));

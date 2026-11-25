@@ -339,6 +339,62 @@ public class RepairThenSteps {
         assertNoRepairTicketCreatedSinceGuard();
     }
 
+    @那麼("代開的工務單如下：")
+    public void deskCreatedTicketsAre(DataTable table) {
+        long tenantId = tenantFixtures.testTenantId();
+        for (Map<String, String> row : table.asMaps(String.class, String.class)) {
+            String ticketNo = row.get("單號");
+            String where = "代開的工務單 " + ticketNo;
+            Map<String, Object> ticket = dbProbe
+                    .queryOne("SELECT * FROM repair_tickets WHERE tenant_id = ? AND ticket_no = ?", tenantId, ticketNo)
+                    .orElseThrow(() -> new AssertionError("repair_tickets 查無 " + ticketNo));
+            UUID taskId = toUuid(ticket.get("task_id"));
+            check(where + "的 room_id", roomFixtures.roomId(row.get("房號")), toUuid(ticket.get("room_id")));
+            check(where + "的 reporter_id", world.staffId(row.get("報修人")), String.valueOf(ticket.get("reporter_id")));
+            check(where + "的 description", row.get("說明"), ticket.get("description"));
+            check(where + "的 category", Terms.repairCategory(row.get("類別")), ticket.get("category"));
+            if (!ticket.containsKey("origin")) {
+                throw new AssertionError(where + "：repair_tickets 沒有 origin 欄位，無法確認 origin=reported");
+            }
+            check(where + "的 origin", "reported", ticket.get("origin"));
+            check(where + "的 source_task_id", null, ticket.get("source_task_id"));
+            long photos = dbProbe.count("SELECT count(*) FROM repair_photos WHERE ticket_task_id = ?", taskId);
+            check(where + "的 repair_photos 張數", 0L, photos);
+
+            Map<String, Object> task = dbProbe.taskRow(taskId).orElseThrow(() -> new AssertionError("tasks 查無 " + ticketNo));
+            check(where + "任務的 type", "repair", task.get("type"));
+            check(where + "任務的 dept", "engineering", task.get("dept"));
+            check(where + "任務的 state", "pool", task.get("state"));
+            check(where + "任務的 assignee_id", null, task.get("assignee_id"));
+            check(where + "任務的 task_no", null, task.get("task_no"));
+            check(where + "任務的 title", row.get("標題"), task.get("title"));
+            check(where + "任務的 source", "desk", task.get("source"));
+            check(where + "任務的 pool_source", "desk_forward", task.get("pool_source"));
+            List<Map<String, Object>> events = dbProbe.eventsOf(taskId);
+            if (events.size() != 1 || !"created".equals(events.getFirst().get("type"))) {
+                throw new AssertionError(where + "的事件應只有一筆 created、沒有 triaged，實際 " + events);
+            }
+
+            ScenarioWorld.ApiResponse read =
+                    apiClient.get("/repair-tickets/" + taskId, BddApiClient.Auth.staff(engineeringStaffJwt()));
+            if (read.status() != 200 || read.json() == null) {
+                throw new AssertionError("readRepairTicket(" + ticketNo + ") 預期 200，實際 status=" + read.status()
+                        + "，body=" + read.body());
+            }
+            JsonNode json = read.json();
+            check("readRepairTicket.ticketNo", ticketNo, json.path("ticketNo").asText(null));
+            check("readRepairTicket.category", Terms.repairCategory(row.get("類別")), json.path("category").asText(null));
+            check("readRepairTicket.reporterName", row.get("報修人"), json.path("reporterName").asText(null));
+            check("readRepairTicket.description", row.get("說明"), json.path("description").asText(null));
+            check("readRepairTicket.photoCount", 0, json.path("photoCount").asInt(-1));
+
+            ScenarioWorld.ApiResponse pool =
+                    apiClient.get("/pool?category=repair", BddApiClient.Auth.staff(engineeringStaffJwt()));
+            JsonNode item = requirePoolItem(pool, ticketNo);
+            check("PoolItem(" + ticketNo + ").source", "desk_forward", item.path("source").asText(null));
+        }
+    }
+
     @那麼("{string} 共有 {int} 張照片")
     public void ticketHasPhotoCount(String ticketNo, int expectedCount) {
         UUID taskId = UUID.fromString(world.repairTicketTaskId(ticketNo));
@@ -1002,7 +1058,8 @@ public class RepairThenSteps {
         long tenantId = tenantFixtures.testTenantId();
         UUID staffId = dbProbe
                 .queryOne(
-                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = 'engineering' AND active = true LIMIT 1",
+                        "SELECT id FROM staff_accounts WHERE tenant_id = ? AND dept = 'engineering' AND active = true"
+                                + " ORDER BY (role = 'engineering') DESC LIMIT 1",
                         tenantId)
                 .map(row -> toUuid(row.get("id")))
                 .orElseThrow(() -> new IllegalStateException("找不到在職的工務員工，請先在 Given 建立"));
