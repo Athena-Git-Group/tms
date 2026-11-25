@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 public class StaffFixtures {
@@ -15,6 +16,11 @@ public class StaffFixtures {
     public static final String PLAN_ROOM_PREFIX = "PLANROOM-F";
 
     public static final String DEFAULT_PASSWORD = "demo1234";
+
+    // 測試員工的密碼用最低強度雜湊，登入照樣走正式的編碼器驗證，因為 BCrypt 雜湊自帶強度。
+    // 用正式強度每位員工要算約 77 毫秒，整套測試建上千位員工會多花兩分多鐘。
+    private static final PasswordEncoder FIXTURE_ENCODER = new BCryptPasswordEncoder(4);
+    private static final String DEFAULT_PASSWORD_HASH = FIXTURE_ENCODER.encode(DEFAULT_PASSWORD);
 
     public static final String DEFAULT_SHIFT_END = "17:00";
 
@@ -25,19 +31,16 @@ public class StaffFixtures {
     private final JdbcClient jdbcClient;
     private final TenantFixtures tenantFixtures;
     private final RoomFixtures roomFixtures;
-    private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     public StaffFixtures(
             JdbcClient jdbcClient,
             TenantFixtures tenantFixtures,
             RoomFixtures roomFixtures,
-            PasswordEncoder passwordEncoder,
             JwtService jwtService) {
         this.jdbcClient = jdbcClient;
         this.tenantFixtures = tenantFixtures;
         this.roomFixtures = roomFixtures;
-        this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
 
@@ -91,7 +94,7 @@ public class StaffFixtures {
                             (id, tenant_id, name, login_id, password_hash, role, dept, active, status, created_at, updated_at)
                         VALUES (?, ?, ?, ?, ?, 'housekeeping', 'housekeeping', true, 'active', ?, ?)
                         """)
-                .params(id, tenantId, name, loginId, passwordEncoder.encode(rawPassword), now, now)
+                .params(id, tenantId, name, loginId, FIXTURE_ENCODER.encode(rawPassword), now, now)
                 .update();
         JwtService.IssuedToken issued = jwtService.issue(tenantId, id, "housekeeping", "housekeeping");
         return new CreatedStaff(tenantId, id, loginId, rawPassword, issued.token());
@@ -110,7 +113,7 @@ public class StaffFixtures {
 
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {
         long tenantId = tenantFixtures.testTenantId();
-        String passwordHash = passwordEncoder.encode(rawPassword);
+        String passwordHash = FIXTURE_ENCODER.encode(rawPassword);
         jdbcClient
                 .sql(
                         "UPDATE staff_accounts SET login_id = ?, password_hash = ?, updated_at = ?"
@@ -188,8 +191,8 @@ public class StaffFixtures {
 
         long tenantId = tenantFixtures.testTenantId();
         UUID id = UuidV7.generate();
-        String loginId = "fx-" + id.toString().replace("-", "").substring(0, 12);
-        String passwordHash = passwordEncoder.encode(DEFAULT_PASSWORD);
+        String loginId = "fx-" + id.toString().replace("-", "").substring(20);
+        String passwordHash = DEFAULT_PASSWORD_HASH;
         OffsetDateTime now = OffsetDateTime.now();
 
         jdbcClient

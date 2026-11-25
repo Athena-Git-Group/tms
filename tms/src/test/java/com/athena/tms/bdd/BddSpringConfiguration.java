@@ -30,7 +30,6 @@ import com.athena.tms.bdd.support.TaskFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.service.JwtService;
 import com.athena.tms.service.TaskEngine;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import io.cucumber.spring.CucumberContextConfiguration;
 import io.cucumber.spring.ScenarioScope;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -157,9 +156,8 @@ public class BddSpringConfiguration {
                 JdbcClient jdbcClient,
                 TenantFixtures tenantFixtures,
                 RoomFixtures roomFixtures,
-                PasswordEncoder passwordEncoder,
                 JwtService jwtService) {
-            return new StaffFixtures(jdbcClient, tenantFixtures, roomFixtures, passwordEncoder, jwtService);
+            return new StaffFixtures(jdbcClient, tenantFixtures, roomFixtures, jwtService);
         }
 
         @Bean
