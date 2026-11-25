@@ -44,8 +44,7 @@ public class WebWorld {
     @Before(order = 0)
     public void prepareScenario() {
         BACKEND.removeFaultTriggers();
-        BACKEND.resetBusinessData();
-        defaults = BACKEND.ensureFrontdeskDefaults();
+        defaults = BACKEND.resetToFrontdeskDefaults();
         clocks.startAtDefault();
     }
 
