@@ -1,0 +1,11 @@
+ErrorResponse:
+  type: object
+  required:
+    - code
+    - message
+  properties:
+    code:
+      type: string
+    message:
+      type: string
+      description: 錯誤與系統回覆必須用業務原文句型。

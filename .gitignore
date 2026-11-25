@@ -5,7 +5,25 @@
 .idea/
 
 # Claude / Athena 工作目錄（本機工具狀態，不進 repo）
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/specify/
+!.agents/skills/clarify-over-specs/
+!.agents/skills/clarify/
+!.agents/skills/spec-by-example/
+!.agents/skills/technical-research/
+!.agents/skills/truth-delta/
+!.agents/skills/system-analysis/
+!.agents/skills/api-plan/
+!.agents/skills/data-plan/
+!.agents/skills/ui-plan/
+!.agents/skills/dsl-refine/
+!.agents/skills/tasks/
+!.agents/skills/implement/
+!.agents/skills/bdd/
+!.agents/skills/gherkin-and-dsl/
+!.agents/skills/constitution/
 .athena/*
 .claude/
 CLAUDE.md

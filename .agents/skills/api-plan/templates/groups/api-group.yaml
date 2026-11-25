@@ -1,0 +1,29 @@
+# 預設放在 groups/<api-group>.yaml。
+# groups 底下再開一層是 incremental：超過 10 個 yaml 才開該層，用來區隔不同 groups。
+{{PATH_1_OPERATION_ID}}:
+  {{METHOD_1}}:
+    summary: {{METHOD_1_SUMMARY}}
+    description: {{METHOD_1_DESCRIPTION}}
+    operationId: {{PATH_1_OPERATION_ID}}
+    tags:
+      - {{API_GROUP_NAME}}
+    requestBody:
+      required: {{METHOD_1_REQUEST_REQUIRED}}
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/{{API_GROUP_FILE}}.yaml#/{{METHOD_1_REQUEST_SCHEMA}}
+    responses:
+      '{{METHOD_1_SUCCESS_STATUS}}':
+        description: {{METHOD_1_SUCCESS_DESCRIPTION}}
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/{{API_GROUP_FILE}}.yaml#/{{METHOD_1_RESPONSE_SCHEMA}}
+      '{{METHOD_1_ERROR_STATUS}}':
+        description: {{METHOD_1_ERROR_DESCRIPTION}}
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/shared.yaml#/{{ERROR_SCHEMA}}
+    x-realtime-note: {{METHOD_1_REALTIME_NOTE}}

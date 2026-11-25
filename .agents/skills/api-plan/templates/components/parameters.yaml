@@ -1,0 +1,7 @@
+{{PARAMETER_1_NAME}}:
+  name: {{PARAMETER_1_NAME}}
+  in: {{PARAMETER_1_IN}}
+  required: {{PARAMETER_1_REQUIRED}}
+  description: {{PARAMETER_1_DESCRIPTION}}
+  schema:
+    type: {{PARAMETER_1_TYPE}}

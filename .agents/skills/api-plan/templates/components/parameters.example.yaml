@@ -1,0 +1,7 @@
+productId:
+  name: productId
+  in: path
+  required: true
+  description: 商品識別。
+  schema:
+    type: string
