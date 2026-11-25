@@ -1,0 +1,25 @@
+# 根檔只掛 info、tags 與 $ref。groups 預設一層；超過 10 個 yaml 才再開該層。
+openapi: 3.0.3
+info:
+  title: {{API_TITLE}}
+  version: {{API_VERSION}}
+  description: {{API_DESCRIPTION}}
+tags:
+  - name: {{API_GROUP_1_NAME}}
+    description: {{API_GROUP_1_DESCRIPTION}}
+  - name: {{API_GROUP_2_NAME}}
+    description: {{API_GROUP_2_DESCRIPTION}}
+paths:
+  {{PATH_1}}:
+    $ref: ./groups/{{API_GROUP_1_FILE}}.yaml#/{{PATH_1_OPERATION_ID}}
+  {{PATH_2}}:
+    $ref: ./groups/{{API_GROUP_2_FILE}}.yaml#/{{PATH_2_OPERATION_ID}}
+components:
+  parameters:
+    {{PARAMETER_1_NAME}}:
+      $ref: ./components/parameters.yaml#/{{PARAMETER_1_NAME}}
+  schemas:
+    {{SHARED_SCHEMA_NAME}}:
+      $ref: ./components/schemas/shared.yaml#/{{SHARED_SCHEMA_NAME}}
+    {{GROUP_1_SCHEMA_NAME}}:
+      $ref: ./components/schemas/{{API_GROUP_1_FILE}}.yaml#/{{GROUP_1_SCHEMA_NAME}}

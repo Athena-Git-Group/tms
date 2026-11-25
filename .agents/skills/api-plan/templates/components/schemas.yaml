@@ -1,0 +1,8 @@
+{{SCHEMA_1_NAME}}:
+  type: {{SCHEMA_1_TYPE}}
+  description: {{SCHEMA_1_DESCRIPTION}}
+  required:
+    - {{SCHEMA_1_REQUIRED_FIELD}}
+  properties:
+    {{SCHEMA_1_REQUIRED_FIELD}}:
+      type: {{SCHEMA_1_REQUIRED_FIELD_TYPE}}

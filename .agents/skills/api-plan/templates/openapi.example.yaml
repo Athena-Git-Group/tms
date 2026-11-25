@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: 電商網站 API 契約範例
+  version: 0.1.0
+  description: 以商品查詢、加入購物車為例。根檔只掛 info、tags 與 $ref。
+tags:
+  - name: catalog
+    description: 商品查詢
+  - name: cart
+    description: 購物車
+paths:
+  /products/search:
+    $ref: ./groups/catalog.yaml#/searchProducts
+  /carts/items/add:
+    $ref: ./groups/cart.yaml#/addCartItem
+components:
+  schemas:
+    ErrorResponse:
+      $ref: ./components/schemas/shared.yaml#/ErrorResponse
+    ProductSearchRequest:
+      $ref: ./components/schemas/catalog.yaml#/ProductSearchRequest
+    ProductSearchResponse:
+      $ref: ./components/schemas/catalog.yaml#/ProductSearchResponse
+    AddCartItemRequest:
+      $ref: ./components/schemas/cart.yaml#/AddCartItemRequest
+    AddCartItemResponse:
+      $ref: ./components/schemas/cart.yaml#/AddCartItemResponse
