@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交接・新人導讀</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&family=LXGW+WenKai+TC:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav class="site" aria-label="交接手冊各頁">
+  <a href="index.html">總覽</a>
+  <a href="orientation.html" aria-current="page">新人導讀</a>
+  <a href="skills.html">流程 Skill</a>
+  <a href="setup.html">第一天</a>
+  <a href="test.html">本機手測</a>
+  <a href="bdd.html">BDD 測試</a>
+  <a href="mobile.html">Flutter App</a>
+  <a href="backend.html">Java 後端</a>
+  <a href="pitfalls.html">坑與待查</a>
+</nav>
+<p class="crumbs"><a href="index.html">TMS 交接手冊</a> / <span aria-current="page">新人導讀</span></p>
+
+<header>
+  <p class="eyebrow">交接 · 新人導讀</p>
+  <h1>新人導讀：app、specs、tms 各是什麼，從哪裡讀起</h1>
+  <p class="stand">新人第一週最常問三件事：<code>app/</code> 底下五個資料夾各是什麼、<code>specs/</code> 該怎麼讀、不會 Java 的人怎麼看懂 <code>tms/</code> 後端。這一頁依序回答，並說明規格是用哪一串指令一步步產出來的。細節都指到其他頁，這裡只給地圖。</p>
+  <p class="readtime">約 9 分鐘</p>
+</header>
+
+<section id="app-folders">
+  <h2><code>app/</code> 底下五個資料夾各是什麼、彼此怎麼牽連？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>兩個是給人用的畫面（員工 App、櫃檯與住客網頁），三個是測試：兩個驗收專案，加上它們共用的「準備測試資料」工具庫。驗收要讀的 feature 檔不放在 <code>app/</code>，統一放在 <code>specs/truth/features/</code>。</p>
+  </div>
+  <p>先分清楚「產品」和「測試」。<code>mobile</code> 與 <code>web</code> 是真的會交到使用者手上的東西；<code>bdd</code>、<code>web-bdd</code> 與 <code>bdd-support</code> 只在開發時用，負責證明產品照規格運作。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>資料夾</th><th>是什麼</th><th>技術</th></tr></thead>
+    <tbody>
+      <tr><td><code>app/mobile/</code></td><td>員工 App（房務、工務、主管）</td><td>Flutter</td></tr>
+      <tr><td><code>app/web/</code></td><td>櫃檯網頁；住客掃房間 QR 開的住客頁也在這裡（<code>app/web/src/guest/</code>）</td><td>React＋Vite＋TypeScript</td></tr>
+      <tr><td><code>app/bdd-support/</code></td><td>共用的測試資料工具：直接寫資料庫來準備與清除資料，本身不含任何測試</td><td>Java 函式庫</td></tr>
+      <tr><td><code>app/bdd/</code></td><td>員工 App 驗收：在 iOS simulator 裡真的點畫面</td><td>Java＋Cucumber＋Appium</td></tr>
+      <tr><td><code>app/web-bdd/</code></td><td>櫃檯網頁與住客頁驗收：開瀏覽器真的點畫面</td><td>Java＋Cucumber＋Playwright</td></tr>
+    </tbody>
+  </table></div>
+  <p><code>bdd</code> 和 <code>web-bdd</code> 都依賴 <code>bdd-support</code>，而且是透過本機 Maven 倉庫找到它，所以改了 <code>bdd-support</code> 要重新 <code>mvn install</code>。用下面的腳本跑時會自動做，自己直接下 <code>mvn</code> 才要記得。兩條驗收線讀的 feature 檔分別在 <code>specs/truth/features/ios-app/</code> 與 <code>specs/truth/features/{frontdesk-web,guest-web}/</code>；後端自己的行為規格則在 <code>specs/truth/features/backend/</code>。</p>
+  <p>兩條線的差別在起不起後端。<b>網頁驗收的腳本會自己起後端與網頁</b>，一行就跑；<b>App 驗收的腳本不會</b>，要先自己起一個帶 <code>test-support</code> 設定檔的後端（它才有測試用的撥時鐘端點），否則腳本第一步就停下來告訴你怎麼起。</p>
+  <div class="cmd"><pre class="api"><span class="c"># 網頁驗收：腳本自己起 8080 後端與 5199 網頁，跑完收掉</span>
+bash app/web-bdd/run-feature.sh frontdesk-web/待派單/待派單清單.feature desktop</pre></div>
+  <div class="cmd"><pre class="api"><span class="c"># App 驗收：先起開發堆疊與帶 test-support 設定的後端（8080）</span>
+docker compose up -d
+TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support \
+  JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run
+
+<span class="c"># 另開一個終端機，跑單一模組（不帶參數會列出可選模組）</span>
+app/bdd/run-module.sh 工務單
+app/bdd/run-all.sh          <span class="c"># 全部模組，約 60–90 分鐘</span></pre></div>
+  <p>simulator 的指定方式、隔離堆疊與每條線怎麼加場景，見 <a href="bdd.html#lines">BDD 測試：三條線各自怎麼跑</a>；工具要先裝哪些，見 <a href="setup.html#install">第一天</a>。</p>
+</section>
+
+<section id="specs">
+  <h2><code>specs/</code> 裡的 truth 和 plans 差在哪？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p><code>truth/</code> 是「系統現在長什麼樣」，永遠只有一份；<code>plans/NNN-*/</code> 是「每一次需求變更做了什麼」，一次一包。兩者靠每包裡的 <code>truth-delta.md</code> 串起來。</p>
+  </div>
+  <p>問題是：規格要同時回答兩種問題。新人想知道「認領現在的規則是什麼」，維護的人想知道「上次為什麼改了認領」。只用一份會被覆寫的文件，就答不了第二題；只留一包包變更紀錄，又要從頭疊加才答得了第一題。</p>
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>只有一份規格，每次需求直接改它</h4>
+    <p>現況清楚，但改了什麼、為什麼改都不見了；出問題時無從回查是哪一次需求引進的。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>現況一份、變更一包包，中間用 truth-delta 對帳</h4>
+    <p><code>specs/truth/</code> 只寫現況：<code>contracts/</code> 是 API 契約（入口 <code>openapi.yaml</code>，細節依業務分在 <code>groups/</code>），<code>data/data-model.dbml</code> 是資料模型，<code>features/</code> 是可執行的規格，另有 <code>techstack.md</code> 記技術選型。</p>
+    <p><code>specs/plans/</code> 底下每個 <code>NNN-名稱/</code> 是一次需求變更的工作包，目前有 001 到 008。每包裡的 <code>truth-delta.md</code> 逐列記下這次把 truth 的哪一塊新增、修改、刪除或確認不動，以及理由，常附上程式位置。</p>
+    <p><b class="lbl">權衡</b>每次需求都要同時維護兩處，而且 truth 必須在實作前先改好。換來的是現況永遠可直接讀，歷史也查得到。</p>
+  </div>
+  <details>
+    <summary>一個工作包裡有哪些檔 <span class="hint">— 依產出順序（8 種）</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>檔案</th><th>內容</th></tr></thead>
+      <tbody>
+        <tr><td><code>spec.md</code></td><td>這次要做什麼：使用者故事與系統規則（另有 <code>checklists/requirements.md</code> 檢查完整度）</td></tr>
+        <tr><td><code>features/acceptance/*.feature</code></td><td>用業務語言寫的驗收情境，還不分介面</td></tr>
+        <tr><td><code>research.md</code></td><td>技術調查與選型理由</td></tr>
+        <tr><td><code>plan.md</code></td><td>這次動到哪些系統介面、分幾波做</td></tr>
+        <tr><td><code>ui/</code></td><td>畫面設計與靜態雛形</td></tr>
+        <tr><td><code>truth-delta.md</code></td><td>這次對 <code>specs/truth/</code> 的每一筆改動與理由</td></tr>
+        <tr><td><code>tasks.md</code></td><td>可直接照做的實作任務清單，做完一項打勾</td></tr>
+        <tr><td><code>implement-notes.md</code></td><td>實作時的發現、已知會紅的測試、留給下一手的事</td></tr>
+      </tbody>
+    </table></div>
+    <p>不是每包都有全部的檔。006 是錯誤修正，沒有 <code>research.md</code> 與 <code>ui/</code>，另外多了 <code>evidence/</code> 放實機截圖；001、002 還沒有 <code>implement-notes.md</code>。<code>plans/</code> 底下另有一個不帶編號的 <code>desk-board-push-card/</code>，只有一份設計筆記，不是完整工作包。</p>
+    </div>
+  </details>
+</section>
+
+<section id="reading-order">
+  <h2>第一次讀 specs，該照什麼順序讀？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>由粗到細：先看手冊總覽的全景，再讀 truth 的句型表與一個模組，接著把一整包工作包從頭讀到尾，最後順著 truth-delta 指的程式位置回到程式碼。</p>
+  </div>
+  <p>先讀 truth 是因為它是現況，工作包裡的每份文件都假設你知道現況。讀 truth 時不要從 <code>.feature</code> 開始，先讀 <code>dsl.md</code>：它是這個介面的「句型表」，說明每句 Given／When／Then 實際代表什麼操作、狀態用語對到資料庫哪個值。每個介面根目錄有一份共用的，每個模組資料夾裡再各有一份。</p>
+  <ol class="flow">
+    <li><b>手冊<a href="index.html#overview">總覽</a>的全景圖</b>：系統有哪些方塊、怎麼連。</li>
+    <li><b><code>specs/truth/features/backend/dsl.md</code></b>：後端共用句型與狀態用語對照（例如「待認領」就是 <code>pool</code>）。</li>
+    <li><b>挑一個模組讀到底</b>：例如 <code>specs/truth/features/backend/任務執行/</code>，先讀該資料夾的 <code>dsl.md</code>，再讀裡面的 <code>.feature</code>。</li>
+    <li><b>讀完整一包 006</b>（<code>specs/plans/006-engineering-pool-repair-ticket/</code>）：照 <code>spec.md</code> → <code>features/acceptance/</code> → <code>plan.md</code> → <code>truth-delta.md</code> → <code>tasks.md</code> → <code>implement-notes.md</code> 的順序。</li>
+    <li><b>回到程式碼</b>：<code>truth-delta.md</code> 的理由欄常寫著程式位置，例如 <code>eng_pool_screen.dart:247</code>，照著打開看。</li>
+  </ol>
+  <p>選 006 是因為它從住客報修一路走到主管驗收，前後端都碰到。它的 <code>implement-notes.md</code> 同時是目前「已知會紅的測試」清單，第一次跑測試時會用到。</p>
+</section>
+
+<section id="pipeline">
+  <h2>規格和工作包是怎麼一步步產出來的？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>用一串 Claude Code 指令（skill）依序產出，放在 <code>.agents/skills/</code>（<code>.claude/skills/</code> 是指回那裡的捷徑）：從需求描述開始，經過驗收情境、技術調查、系統分析、更新 truth，最後拆成任務並實作。每一步只寫自己負責的檔。</p>
+  </div>
+  <p>這串指令的用意是讓「需求 → 規格 → 程式」每一步都留下檔案，並且分清楚誰能動 truth。會改 <code>specs/truth/</code> 的步驟（技術調查、API、資料、可執行規格）每次改完都要在 <code>truth-delta.md</code> 記一筆，這件記帳工作由 <code>/truth-delta</code> 代勞，不用手動叫。</p>
+  <ol class="flow">
+    <li><b><code>/specify</code></b>：把一段需求描述變成新的工作包，寫 <code>spec.md</code>。需要時接著跑 <code>/clarify-over-specs</code>，找出高影響的缺口來問人。</li>
+    <li><b><code>/spec-by-example</code></b>：把 spec 收斂成業務語言的驗收情境 <code>features/acceptance/</code>。它和下一步都只需要 <code>spec.md</code>，先後可以對調。</li>
+    <li><b><code>/technical-research</code></b>：寫 <code>research.md</code>，並更新 <code>specs/truth/techstack.md</code>。</li>
+    <li><b><code>/system-analysis</code></b>：盤點動到哪些介面、分幾波，寫 <code>plan.md</code>。</li>
+    <li><b><code>/api-plan</code>、<code>/data-plan</code>、<code>/ui-plan</code></b>：由 <code>/system-analysis</code> 依波次委派，分別更新 API 契約、資料模型，以及產出畫面設計 <code>ui/</code>（畫面設計不進 truth）。</li>
+    <li><b><code>/dsl-refine</code></b>：把驗收情境拆成各介面可執行的 <code>.feature</code> 與 <code>dsl.md</code>，寫進 <code>specs/truth/features/</code>。</li>
+    <li><b><code>/tasks</code> → <code>/implement</code></b>：產出 <code>tasks.md</code>，再逐項實作並打勾；先由 <code>/implement</code> 自己把新句子寫成會失敗的測試（紅），到「讓測試轉綠」與「重構」的任務才交給 <code>/bdd</code>。</li>
+  </ol>
+  <details>
+    <summary>每個指令讀什麼、寫什麼 <span class="hint">— 13 個指令的輸入與輸出</span></summary>
+    <div class="in">
+    <div class="tablewrap"><table>
+      <thead><tr><th>指令</th><th>讀</th><th>寫</th><th>動 truth？</th></tr></thead>
+      <tbody>
+        <tr><td><code>/specify</code></td><td>需求描述</td><td>新的 <code>specs/plans/NNN-*/</code>：<code>spec.md</code>、<code>checklists/requirements.md</code>、空的 <code>truth-delta.md</code></td><td>否</td></tr>
+        <tr><td><code>/clarify-over-specs</code>（可選）</td><td><code>spec.md</code></td><td>回寫 <code>spec.md</code> 與 checklist；問人時委派 <code>/clarify</code></td><td>否</td></tr>
+        <tr><td><code>/spec-by-example</code></td><td><code>spec.md</code></td><td><code>features/acceptance/*.feature</code></td><td>否</td></tr>
+        <tr><td><code>/technical-research</code></td><td><code>spec.md</code></td><td><code>research.md</code></td><td>是：<code>techstack.md</code></td></tr>
+        <tr><td><code>/system-analysis</code></td><td><code>spec.md</code>、<code>research.md</code>、<code>truth-delta.md</code>、truth</td><td><code>plan.md</code>，並交給下面三個指令</td><td>否</td></tr>
+        <tr><td><code>/api-plan</code></td><td><code>plan.md</code>、<code>research.md</code>、<code>truth-delta.md</code>、<code>techstack.md</code></td><td>—</td><td>是：<code>contracts/</code></td></tr>
+        <tr><td><code>/data-plan</code></td><td>同上</td><td>—</td><td>是：<code>data/</code></td></tr>
+        <tr><td><code>/ui-plan</code></td><td>同上</td><td><code>ui/</code></td><td>否</td></tr>
+        <tr><td><code>/dsl-refine</code></td><td>驗收情境、system-analysis 產物</td><td>—</td><td>是：<code>features/</code></td></tr>
+        <tr><td><code>/tasks</code></td><td><code>spec.md</code>、<code>plan.md</code>、<code>research.md</code>、<code>ui/</code>、<code>truth-delta.md</code>、truth</td><td><code>tasks.md</code></td><td>否</td></tr>
+        <tr><td><code>/implement</code></td><td><code>tasks.md</code></td><td>程式碼與測試；回寫 <code>tasks.md</code> 打勾</td><td>否</td></tr>
+        <tr><td><code>/bdd</code></td><td>單一 <code>.feature</code> 與 <code>dsl.md</code></td><td>程式碼與測試（由 <code>/implement</code> 委派）</td><td>否</td></tr>
+        <tr><td><code>/truth-delta</code></td><td>上面任一個動 truth 的指令交來的改動列</td><td><code>truth-delta.md</code></td><td>否（只記帳）</td></tr>
+      </tbody>
+    </table></div>
+    <p>每個指令的完整規則在 <code>.agents/skills/&lt;指令名&gt;/SKILL.md</code>。部分指令會讀 <code>.agents/constitution/</code> 下的規則檔，這個資料夾目前不在 repo 裡，指令讀不到時只能照 <code>SKILL.md</code> 本身的規則走。</p>
+    </div>
+  </details>
+  <p>每一步何時停下來問人、為什麼 truth 在規劃階段就直接改、平常修 bug 或改規格該走哪幾步，見 <a href="skills.html">流程 Skill</a>。</p>
+</section>
+
+<section id="backend-tour">
+  <h2>不熟 Java，怎麼讀得懂 <code>tms/</code> 後端？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>它是一個 Spring Boot 4.1.1、Java 25 的單一 Maven 專案，分三層：<code>controller</code> 收請求、<code>service</code> 做業務規則、<code>dao</code> 存取資料庫。從網址找到 controller，再一路往下點就讀得懂；行為「應該」怎樣，以規格為準，不以程式為準。</p>
+  </div>
+  <p>所有程式在 <code>tms/src/main/java/com/athena/tms/</code>。三層的意思很單純：<b>controller</b> 是門口，每個方法對到一個網址；<b>service</b> 是辦事員，判斷誰能做、狀態能不能變，任務狀態的核心是 <code>TaskEngine</code>，員工操作任務的入口是 <code>TaskExecutionService</code>；<b>dao</b> 是檔案櫃，負責讀寫資料表。資料表的來歷看 <code>tms/src/main/resources/db/migration/</code> 的 Flyway 遷移檔，目前從 <code>V1</code> 到 <code>V29</code>；後端的行為規格測試在 <code>tms/src/test/java/com/athena/tms/bdd/</code>。</p>
+  <p>讀的時候有三個實用的入口：</p>
+  <ul class="plain">
+    <li><b>從網址進去</b>：在 controller 搜 <code>@PostMapping</code>／<code>@GetMapping</code>，對照 <code>specs/truth/contracts/openapi.yaml</code> 的同名路徑，它會指到 <code>groups/</code> 底下寫清楚請求、回應與錯誤碼的那份檔。注意 controller 類別上的 <code>@RequestMapping("/api/v1")</code> 是共同前綴。</li>
+    <li><b>用 IntelliJ 的 Find Usages</b>（⌥F7）：看一個方法被誰呼叫，比讀全檔快得多。</li>
+    <li><b>先讀規格再讀程式</b>：<code>src/main</code> 是從編譯檔反編譯還原的，原本的註解都不在了，還有不少多餘的型別轉換。想知道某個行為「應該」怎樣，先看 <code>specs/truth/features/backend/</code>。</li>
+  </ul>
+  <div class="cmd"><pre class="api"><span class="c"># 起後端（先 docker compose up -d；連 5433 的 Postgres 與 9092 的 Kafka）</span>
+TMS_DB_URL=jdbc:postgresql://localhost:5433/tms \
+  JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run</pre></div>
+  <p><code>TMS_DB_URL</code> 不能省：沒設時資料庫遷移（Flyway）會預設連 5432，與應用本身的 5433 不同。根目錄沒有 <code>./mvnw</code>，後端一律用 <code>./tms/mvnw</code>。套件分法、多飯店隔離、登入與設定檔，見 <a href="backend.html">Java 後端</a>；遷移檔為什麼一個字都不能改，見 <a href="backend.html#flyway">遷移規矩</a>。</p>
+</section>
+
+<section id="claim-walk">
+  <h2>員工按下「認領」，後端程式會經過哪些地方？</h2>
+  <div class="key"><b class="lbl">重點</b>
+    <p>一條請求依序經過 controller、權限判斷、狀態變更，再在同一個交易裡記事件與待送匣；交易提交後由背景工作把事件送上 Kafka，最後推到櫃檯看板與各員工的即時連線。跟一遍，就認得後端大部分的骨架。</p>
+  </div>
+  <p>下面的路徑都相對於 <code>tms/src/main/java/com/athena/tms/</code>。<b>待送匣（outbox）</b>是資料庫裡的一張表，要送出去的事件先寫在這裡，再由背景工作投遞，所以資料與事件不會一個成功一個失敗。</p>
+  <ol class="flow">
+    <li><b>門口</b>：<code>controller/TaskExecutionController.java:38</code> 的 <code>@PostMapping("/tasks/{id}/claim")</code>，加上前綴就是 <code>POST /api/v1/tasks/{id}/claim</code>，只把單號轉交給 service。</li>
+    <li><b>判斷能認領哪個部門的單</b>：<code>service/TaskExecutionService.java:108</code> 的 <code>claim</code> 取出飯店與登入者，再由 <code>:120</code> 的 <code>claimDept</code> 決定部門；主管認領別部門的單會在 <code>:127</code> 被拒（403）。</li>
+    <li><b>改狀態</b>：<code>service/TaskEngine.java:176</code> 的 <code>claim</code>（上一行 <code>@Transactional</code> 表示整段是一個交易）把任務從 <code>pool</code> 改成 <code>accepted</code>；條件裡帶著「現在是 <code>pool</code>、部門相符」，兩人同時搶只有一人成功。</li>
+    <li><b>記事件並放進待送匣</b>：同一交易裡呼叫 <code>TaskEngine.java:489</code> 的 <code>recordEvent</code>，<code>:499</code> 寫一筆 <code>task_events</code>，<code>:500</code> 經 <code>OutboxWriter</code> 寫一筆 outbox。</li>
+    <li><b>送上 Kafka</b>：交易一提交，<code>service/OutboxRelay.java:74</code> 被叫醒，把待送事件依序送到 <code>tms.task-events</code>；沒被叫醒也會每 2 秒自己巡一次。</li>
+    <li><b>推給畫面</b>：<code>service/TaskEventsSseConsumer.java:79</code> 收到事件，更新櫃檯看板，並推給相關員工的即時連線。</li>
+  </ol>
+  <p>手機推播走的是另一條路：需要通知人的操作會另外寫一筆推播待送（<code>PushOutboxWriter</code>），送到 <code>tms.push</code>，再由 <code>push/PushDeliveryConsumer.java:40</code> 經 FCM 送出。認領本身不發推播。整個事件流的圖與故障時會怎樣，見 <a href="backend.html#modules">Java 後端：一個狀態變化怎麼變成推播與即時更新</a>；這條規則在規格裡的寫法，見 <code>specs/truth/features/backend/待認領/主管認領自己部門的單.feature</code>。</p>
+</section>
+
+<nav class="pager" aria-label="上一頁與下一頁">
+  <a href="index.html"><small>上一頁</small>← 總覽</a>
+  <a class="next" href="skills.html"><small>下一頁</small>流程 Skill →</a>
+</nav>
+
+</div>
+<script src="site.js"></script>
+</body>
+</html>

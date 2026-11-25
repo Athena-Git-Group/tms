@@ -12,6 +12,8 @@
 
 <nav class="site" aria-label="交接手冊各頁">
   <a href="index.html">總覽</a>
+  <a href="orientation.html">新人導讀</a>
+  <a href="skills.html">流程 Skill</a>
   <a href="setup.html">第一天</a>
   <a href="test.html">本機手測</a>
   <a href="bdd.html">BDD 測試</a>
@@ -128,10 +130,10 @@
     <li><b>連哪個後端</b>：<code>--dart-define=API_BASE_URL=...</code>，預設 <code>http://localhost:8080/api/v1</code>（<code>core/api_client.dart:9-12</code>）。沒有環境檔、沒有執行期切換畫面；simulator 的 localhost 就是 Mac 本身。</li>
     <li><b>登入</b>：<code>POST /staff-accounts/login</code>，body 只有 <code>{loginId, password}</code>（<code>api_client.dart:35-39</code>）。<b>App 登入畫面沒有飯店代碼欄位</b>，後端怎麼決定飯店見 <a href="backend.html#auth">Java 後端</a>。<code>mustChangePassword</code> 為真時導到強制改密碼頁；429 加 <code>remainingMinutes</code> 表示帳號被鎖。</li>
     <li><b>token 只放記憶體</b>（<code>api_client.dart:22</code>），重開 App 要重新登入；每個請求帶 <code>Authorization: Bearer</code>。</li>
-    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉（<code>api_client.dart:439-476</code>）。沒有逾時、自動重試、攔截器、統一 401 處理。</li>
-    <li><b>冪等</b>：寫入請求帶 <code>idempotent: true</code> 就自動加 <code>Idempotency-Key</code>（UUID v4，<code>api_client.dart:478-487</code>）——同一操作重送時後端回放上次結果，不會做兩次。</li>
-    <li><b>錯誤</b>：非 2xx 丟 <code>ApiException</code>，從 JSON <code>{code, message, context}</code> 解析錯誤碼（<code>api_client.dart:490-530</code>）。</li>
-    <li><b>離線</b>：沒有 SSE 或 WebSocket。<code>OfflineQueue</code>（<code>core/connection_status.dart:45-120</code>）離線時暫存寫入、恢復後依序重送（最多 5 次、間隔 300ms）；連線不穩時每 5 秒輪詢今日資料。但這兩個旗標<b>只有測試後門會設定</b>，正式環境沒有偵測網路的程式。</li>
+    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉（<code>api_client.dart:442-479</code>）。沒有逾時、自動重試、攔截器、統一 401 處理。</li>
+    <li><b>冪等</b>：寫入請求帶 <code>idempotent: true</code> 就自動加 <code>Idempotency-Key</code>（UUID v4，<code>api_client.dart:481-490</code>）——同一操作重送時後端回放上次結果，不會做兩次。</li>
+    <li><b>錯誤</b>：非 2xx 丟 <code>ApiException</code>，從 JSON <code>{code, message, context}</code> 解析錯誤碼（<code>api_client.dart:493-533</code>）。</li>
+    <li><b>離線</b>：沒有 SSE 或 WebSocket。<code>OfflineQueue</code>（<code>core/connection_status.dart:45-125</code>）離線時暫存寫入、恢復後依序重送（最多 5 次、間隔 300ms）；連線不穩時每 5 秒輪詢今日資料。但這兩個旗標<b>只有測試後門會設定</b>，正式環境沒有偵測網路的程式。</li>
   </ul>
 
   <h3>推播收到後，App 怎麼決定打開哪一頁？</h3>
@@ -151,9 +153,9 @@
     <li>可停用的元件要明確傳 <code>enabled</code>：<code>CupertinoButton(onPressed: null)</code> 不會把停用狀態寫進無障礙樹，測試會判斷錯。</li>
     <li>命名是 <code>畫面.元素</code> 的點分隔小寫，例如 <code>home.screen</code>、<code>engPool.screen</code>、<code>me.logout-button</code>、<code>home.task.&lt;房號&gt;.card</code>、<code>ticket.stepper.&lt;n&gt;--current</code>、<code>system.offline-bar</code>。全專案兩百多處；主管相關的集中在 <code>features/manager/manager_ids.dart</code>。</li>
   </ul>
-  <p>測試後門只有以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯的 App 才會開（<code>core/test_backdoor.dart</code>），在 <code>127.0.0.1:9099</code> 提供撥時鐘、讀狀態、模擬斷線等能力，也會寫一份 log 到系統暫存目錄的 <code>tms_backdoor_log.txt</code>。</p>
+  <p>測試後門只有以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯的 App 才會開（<code>core/test_backdoor.dart</code>），在 <code>127.0.0.1:9099</code> 提供撥時鐘、讀狀態、模擬斷線、帶入登入狀態、重置回登入頁等能力，也會寫一份 log 到系統暫存目錄的 <code>tms_backdoor_log.txt</code>。</p>
   <details>
-    <summary>測試後門的端點 <span class="hint">— 8 個路徑與用途</span></summary>
+    <summary>測試後門的端點 <span class="hint">— 10 個路徑與用途</span></summary>
     <div class="in">
     <div class="tablewrap"><table>
       <thead><tr><th>路徑</th><th>做什麼</th></tr></thead>
@@ -163,6 +165,8 @@
         <tr><td><code>/offline</code>、<code>/flaky-connection</code></td><td>模擬離線、連線不穩</td></tr>
         <tr><td><code>/upload-fail</code>、<code>/drop-write-response</code></td><td>模擬上傳失敗、寫入成功但回應遺失</td></tr>
         <tr><td><code>/offline-queue</code>、<code>/remembered-account</code></td><td>查離線暫存、設定記住的帳號</td></tr>
+        <tr><td><code>POST /session</code></td><td>接收後端登入 API 的回應，直接帶入登入狀態並進首頁，讓驗收不必在畫面上打字登入</td></tr>
+        <tr><td><code>POST /reset</code></td><td>清掉 App 記在記憶體裡的狀態（登入身分、離線暫存、待切分頁等）並回登入頁，讓驗收每個場景不必重開 App</td></tr>
       </tbody>
     </table></div>
     </div>

@@ -12,6 +12,8 @@
 
 <nav class="site" aria-label="交接手冊各頁">
   <a href="index.html">總覽</a>
+  <a href="orientation.html">新人導讀</a>
+  <a href="skills.html">流程 Skill</a>
   <a href="setup.html">第一天</a>
   <a href="test.html">本機手測</a>
   <a href="bdd.html">BDD 測試</a>
@@ -36,7 +38,7 @@
   <ul class="rules">
     <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:25</code> 把 JDK 路徑寫死成原機器的使用者目錄，換機器要設 <code>MANUAL_JAVA</code>。</li>
     <li><b>OrbStack＋Testcontainers</b>：OrbStack 的 Docker 29 拒絕 API 1.40 以下，而 docker-java 沒指定時退回 1.32，會看到「client version 1.32 is too old」。試過 <code>DOCKER_HOST</code>、<code>DOCKER_API_VERSION</code>、升級 Testcontainers 都沒用，<b>唯一解法是 <code>-DargLine="-Dapi.version=1.44"</code></b>，把值傳進 surefire 分出來的 JVM（<code>specs/plans/003-manager-sign-off-queues/implement-notes.md:109-114</code>）。沒有寫進任何設定檔，每次都要帶。</li>
-    <li><b>Flyway 預設埠與應用預設埠不同</b>：<code>application.properties:12</code> 的 Flyway 預設連 5432、<code>:3</code> 的應用預設連 5433。沒設 <code>TMS_DB_URL</code> 時 Flyway 會連到 5432——在原機器上那是別的 Postgres。</li>
+    <li><b>Flyway 預設埠與應用預設埠不同</b>：<code>application.properties:11</code> 的 Flyway 預設連 5432、<code>:3</code> 的應用預設連 5433。沒設 <code>TMS_DB_URL</code> 時 Flyway 會連到 5432——在原機器上那是別的 Postgres。</li>
     <li><b>電腦睡眠會殺掉長時間執行</b>：App 全量驗收要 60–90 分鐘，開跑前掛 <code>caffeinate -dimsu -t 28800</code>。</li>
     <li><b>macOS 內建 bash 3.2</b> 會把變數名後面緊接的全形標點吃進變數名，腳本訊息一律寫成 <code>${var}</code>。新寫腳本時照做。</li>
   </ul>
@@ -58,7 +60,7 @@
     <li><b>bdd-support 改了要重新 install</b>；直接下 <code>mvn</code> 時更要記得。</li>
     <li><b><code>-Dcucumber.features</code> 會讓場景跑兩遍</b>：有這個屬性時 Cucumber 引擎忽略入口寫死的目錄，surefire 又會再發現同一批 feature 一次。三個專案都已設 <code>excludeJUnit5Engines=cucumber</code>，<code>run-module.sh</code> 也會另外帶。</li>
     <li><b>App 一定要用 <code>TEST_BACKDOOR=true</code> 編譯</b>，否則每個場景都「等測試後門就緒逾時」。</li>
-    <li><b>後端要開測試時鐘</b>（<code>TMS_TEST_CLOCK_ENABLED=true</code>）；Web 驗收沿用的 8080 後端沒開時鐘會報錯，先 <code>run-feature.sh --stop</code>。</li>
+    <li><b>App 驗收的後端要帶 <code>test-support</code> 設定檔</b>（<code>SPRING_PROFILES_ACTIVE=test-support</code>），否則沒有 <code>/api/v1/test/clock</code>，<code>run-module.sh</code>／<code>run-all.sh</code> 第一步就停。Web 驗收的腳本自己起後端時會帶；沿用的 8080 後端沒帶會報錯，先 <code>run-feature.sh --stop</code>。</li>
   </ul>
   <p class="group-t">simulator 的怪癖</p>
   <ul class="rules">
@@ -82,16 +84,16 @@
 <section id="backend-traps">
   <h2>改後端程式碼與遷移時要小心什麼？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p><code>src/main</code> 是反編譯還原的，原本的註解都沒了；既有 Flyway 遷移檔連註解都不能動；測試時鐘端點不設權限，部署時務必關閉。</p>
+    <p><code>src/main</code> 是反編譯還原的，原本的註解都沒了；既有 Flyway 遷移檔連註解都不能動；測試端點不設權限，部署時絕不能帶 <code>test-support</code> 設定檔。</p>
   </div>
   <ul class="rules">
     <li><b><code>src/main</code> 是從編譯產物反編譯還原的</b>（<code>tms/pom.xml:15</code> 的 description 寫著 "reconstructed from compiled artifacts"）：原本的 Javadoc 與註解都沒了，風格也像反編譯產物（大量 <code>this.</code>、多餘的型別強轉）。<code>src/test</code> 是重寫過的。</li>
     <li><b>既有 Flyway 遷移檔不能動</b>，包含註解。整理反編譯程式碼的註解時，遷移檔要排除在外。</li>
-    <li><b>測試時鐘端點 <code>/api/v1/test/clock</code> 是 <code>permitAll</code></b>（<code>SecurityConfig.java:62</code>），只靠 <code>tms.test-clock.enabled</code> 保護。部署時務必保持關閉。</li>
+    <li><b>測試端點 <code>/api/v1/test/**</code>（含撥時鐘的 <code>/api/v1/test/clock</code>）不驗身分</b>（<code>config/TestSupportConfig.java:31-34</code> 一律 <code>permitAll</code>）。它們只在啟動時帶 <code>test-support</code> 設定檔才存在（<code>:18</code> 的 <code>@Profile</code>），所以對外部署時絕不能帶這個設定檔。</li>
     <li><b>JWT 密鑰與 <code>tms_app</code> 密碼的預設值都是開發用</b>：正式環境要設 <code>TMS_JWT_SECRET</code>，並 <code>ALTER ROLE tms_app</code> 改密碼（<code>V1__schema.sql:387</code> 的註解）。</li>
     <li><b>舊整合測試還在保護舊行為</b>：<code>tms/src/test/resources/features/*.feature</code> 不是 truth，但在全套裡跑。改行為時要一起看。</li>
     <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單只要有一筆重試用完被標 <code>failed</code>，這張單之後的事件全部停送，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
-    <li><b>註解規範</b>：改任何註解前先讀 <a href="code-comments.md"><code>docs/14-handover/code-comments.md</code></a>；有一批禁用詞（守衛、空窗、投影）。</li>
+    <li><b>註解規範</b>：改任何註解前先讀 <code>docs/14-handover/code-comments.md</code>；有一批禁用詞（守衛、空窗、投影）。</li>
   </ul>
 </section>
 
@@ -103,7 +105,7 @@
   <ul class="rules">
     <li><b>Android 正式版缺網路權限</b>：<code>android/app/src/main/AndroidManifest.xml</code> 只宣告了 <code>POST_NOTIFICATIONS</code>；<code>INTERNET</code> 只在 <code>src/debug</code> 與 <code>src/profile</code> 裡，release APK 會連不上網。Android 也沒有允許 http 明碼的設定。（只讀檔確認，尚未實際建置驗證。）</li>
     <li><b>Android 整條路都沒驗證過</b>：沒有 <code>google-services.json</code>，App 驗收的 <code>AppiumWorld.start()</code> 遇到 Android 直接丟 <code>UnsupportedOperationException</code>。</li>
-    <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:90</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器的 <code>simctl list</code> 裡找不到，一律用 <code>UDID=</code> 指定（例如 <code>iPhone 18 Pro</code>＝<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）。</li>
+    <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:92</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器的 <code>simctl list</code> 裡找不到，一律用 <code>UDID=</code> 指定（例如 <code>iPhone 18 Pro</code>＝<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）。</li>
     <li><b>App 連哪個後端是編譯期決定的</b>，不帶 <code>API_BASE_URL</code> 就連 8080（資料會被測試清掉）。</li>
     <li><b>token 只在記憶體、沒有逾時、沒有統一 401 處理</b>：token 過期後的行為要自己留意。</li>
     <li><b>iOS 沒有 App Transport Security 例外</b>：實機連 http 區網 IP 會被擋。</li>

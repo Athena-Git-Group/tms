@@ -67,7 +67,30 @@ bash scripts/manual-env/stop.sh              # 全停；資料保留
 
 `app.sh` 會自己挑 simulator：有開機中的 iPhone 就用它，沒有就挑最新 iOS 版本的第一台 iPhone 開機。
 想指定就加 `--device "iPhone Air"` 或 UDID。`start.sh` 和 `stop.sh` 都可以只帶 `backend` 或 `web`，只動一半。
-log 在 `~/.tms-manual-env/backend.log` 和 `~/.tms-manual-env/web.log`。
+
+## 怎麼看後端、網頁、App 的 log？
+
+後端和網頁是 `start.sh` 在背景起的，輸出都寫進 `~/.tms-manual-env/` 底下的檔案，用 `tail -f` 跟著看就好：
+
+```bash
+tail -f ~/.tms-manual-env/backend.log                                     # 後端（8083）
+tail -f ~/.tms-manual-env/backend.log | grep -iE 'error|exception|warn'   # 只看出錯的
+tail -f ~/.tms-manual-env/web.log                                         # 網頁（5300）
+```
+
+`web.log` 只記網頁開發伺服器（Vite）自己的輸出，例如編譯錯誤、改檔後的重新載入。
+畫面上的錯誤、網頁打出去的 API 和回應不在這裡，要在瀏覽器按 ⌥⌘I 打開開發者工具，看 Console 和 Network 分頁。
+住客頁在手機上出問題時，先在電腦瀏覽器開 `qr.sh <房號>` 印出的網址重現，比較好看。
+
+員工 App 要看 log 有兩種方式，差在 App 是怎麼開起來的：
+
+- **用 `app.sh --run` 開（建議）**：App 在前景跑，log 直接印在這個終端機，按 `r` 可以 hot reload。
+  終端機裡也會印出一個 Flutter DevTools 網址，要看網路請求或畫面元件樹時打開它。
+- **用 `app.sh` 或 `up.sh --app` 開**：App 是 `xcrun simctl launch` 在背景開的，終端機看不到輸出。
+  另開一個終端機跑 `cd app/mobile && flutter logs` 接上 simulator 的 log；有好幾台 simulator 開著時加 `-d <UDID>` 指定。
+
+一邊操作一邊對照時，開三個終端機分頁最方便：一個 `tail -f backend.log`、一個 `tail -f web.log`、
+一個 `app.sh --run`，在 App 或網頁上按下去，就能同時看到前端和後端各自的反應。
 
 ## 要用哪些帳號？
 
