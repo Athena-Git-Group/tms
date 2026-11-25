@@ -14,7 +14,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
 
-  await TestBackdoor.maybeStart();
+  await TestBackdoor.maybeStart(navigatorKey: rootNavigatorKey);
 
   installFirebasePushTokenService();
 

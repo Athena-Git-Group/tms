@@ -51,6 +51,8 @@ public class AppiumWorld {
     private static final int MAX_LOGIN_ATTEMPTS = 2;
     private static final Duration LOGIN_TIMEOUT = Duration.ofSeconds(25);
 
+    private static final boolean LOGIN_VIA_SCREEN = Boolean.getBoolean("appium.login.via-screen");
+
     private final String platform;
     private final String androidAppPackage;
 
@@ -194,9 +196,36 @@ public class AppiumWorld {
         offlineWindowPendingCount = null;
         offlineWindowTaskStates = null;
         offlineWindowUnitStates = null;
+        resetAppInPlaceOrRelaunch();
         backend.resetBusinessData();
         backend.resetBackendClock();
+    }
 
+    /**
+     * 每個場景要從「App 剛開、停在登入頁」開場。重開 App 每場景要四秒多，所以平常改由測試後門
+     * 清掉行程內狀態並回到登入頁；後門叫不到時代表 App 已經不在前景或掛了，才退回真的重開。
+     * 這一步要排在清後端資料之前，否則前一個場景畫面上還沒送完的請求會寫進剛清好的資料。
+     */
+    private void resetAppInPlaceOrRelaunch() {
+        if (!resetAppInPlace()) {
+            relaunchApp();
+        }
+    }
+
+    private boolean resetAppInPlace() {
+        try {
+            driver().executeScript("mobile: activateApp", Map.of("bundleId", bundleId));
+            sendOnce("/reset", "{}");
+            return true;
+        } catch (IOException | RuntimeException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("重置 App 狀態時被中斷", e);
+        }
+    }
+
+    private void relaunchApp() {
         runSimctl("terminate", udid, bundleId);
         runSimctlRequired("launch", udid, bundleId);
         waitForBackdoorReady();
@@ -226,6 +255,11 @@ public class AppiumWorld {
         return backend;
     }
 
+    /**
+     * 只在「登入是前置條件」時呼叫：要驗證登入畫面本身的場景走自己的畫面操作步驟，不經過這裡。
+     * 平常用後端登入 API 拿到的 session 經測試後門交給 App，省掉逐格打字；
+     * 帳號需要強制改密碼時，真實登入會先進改密畫面而不是首頁，所以仍走畫面。
+     */
     public void ensureLoggedInAs(BackendChannel.CreatedStaff staff) {
         if (loggedInStaff != null) {
             if (!loggedInStaff.id().equals(staff.id())) {
@@ -234,17 +268,27 @@ public class AppiumWorld {
             }
             return;
         }
-        Duration timeout = LOGIN_TIMEOUT;
-        String landing = landingScreenId(staff);
         settleDeferredStartsViaBackendExcept(staff);
         postBackdoorJson("/remembered-account", "{\"employee\":null}");
+        JsonNode session = LOGIN_VIA_SCREEN ? null : backend.loginResponse(staff);
+        if (session == null || session.path("mustChangePassword").asBoolean()) {
+            loginThroughScreen(staff);
+        } else {
+            postBackdoorJson("/session", session.toString());
+            waitForTestId(landingScreenId(staff), LOGIN_TIMEOUT);
+        }
+        loggedInStaff = staff;
+    }
+
+    private void loginThroughScreen(BackendChannel.CreatedStaff staff) {
+        Duration timeout = LOGIN_TIMEOUT;
+        String landing = landingScreenId(staff);
         typeInto("login.shared-device.staff-id-field", timeout, staff.loginId());
         typeInto("login.password-field", timeout, staff.password());
         for (int attempt = 1; attempt <= MAX_LOGIN_ATTEMPTS; attempt++) {
             dismissForgotPasswordAlert();
             tapWhenEnabled("login.submit-button", timeout);
             if (waitForTestIdQuietly(landing, timeout) != null) {
-                loggedInStaff = staff;
                 return;
             }
             if (driver().findElements(byTestId("login.submit-button")).isEmpty()) {
@@ -252,7 +296,6 @@ public class AppiumWorld {
             }
         }
         waitForTestId(landing, timeout);
-        loggedInStaff = staff;
     }
 
     private void dismissForgotPasswordAlert() {
@@ -1297,9 +1340,7 @@ public class AppiumWorld {
     }
 
     public void restartApp() {
-        runSimctl("terminate", udid, bundleId);
-        runSimctlRequired("launch", udid, bundleId);
-        waitForBackdoorReady();
+        relaunchApp();
         loggedInStaff = null;
         currentTaskRoomNo = null;
         offlineWindowPendingCount = null;

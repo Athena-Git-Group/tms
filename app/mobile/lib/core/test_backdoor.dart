@@ -1,10 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
 
+import '../features/login/login_screen.dart';
+import '../features/manager/pool_dept_preference.dart';
+import '../features/shell/main_shell.dart';
 import 'api_client.dart';
 import 'connection_status.dart';
+import 'landing.dart';
+import 'push_token_service.dart';
 
 class TestHooks {
   TestHooks._();
@@ -55,10 +61,13 @@ class TestBackdoor {
 
   static HttpServer? _server;
 
-  static Future<void> maybeStart() async {
+  static GlobalKey<NavigatorState>? _navigatorKey;
+
+  static Future<void> maybeStart({GlobalKey<NavigatorState>? navigatorKey}) async {
     if (!_enabled || _server != null) {
       return;
     }
+    _navigatorKey = navigatorKey;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     _server = server;
     server.listen(_handleRequest);
@@ -131,6 +140,18 @@ class TestBackdoor {
               payload['pathPrefix'] as String? ?? '';
           _respondOk(request);
           break;
+        case 'POST /session':
+          final session = LoginResult.fromJson(payload);
+          ApiClient.instance.adoptSession(session);
+          unawaited(PushTokenService.instance?.start());
+          _replaceAllRoutes(landingShellForLogin(session));
+          _respondOk(request);
+          break;
+        case 'POST /reset':
+          _resetInMemoryState();
+          _replaceAllRoutes(const LoginScreen());
+          _respondOk(request);
+          break;
         case 'POST /flaky-connection':
           ConnectionStatus.instance
               .setUnstable(payload['flaky'] as bool? ?? false);
@@ -144,6 +165,26 @@ class TestBackdoor {
       request.response.statusCode = HttpStatus.badRequest;
       await request.response.close();
     }
+  }
+
+  /// 讓測試不必重開 App 也能從乾淨狀態開場：清掉的是行程內所有會跨畫面留存的狀態，
+  /// 畫面上的計時器與輪詢則隨路由一起移除。漏清任何一項，前一個場景的登入身分、
+  /// 待送佇列或待切分頁就會帶進下一個場景。
+  static void _resetInMemoryState() {
+    TestHooks.instance.reset();
+    OfflineQueue.instance.clear();
+    MainShellTabRequest.pending.value = null;
+    MainShellTabRequest.poolHighlightRoomNo.value = null;
+    MainShellTabRequest.poolHighlightTaskId.value = null;
+    PoolDeptPreference.changes.value = null;
+    ApiClient.instance = ApiClient();
+  }
+
+  static void _replaceAllRoutes(Widget screen) {
+    _navigatorKey?.currentState?.pushAndRemoveUntil(
+      CupertinoPageRoute<void>(builder: (_) => screen),
+      (route) => false,
+    );
   }
 
   static void _respondOk(HttpRequest request) {

@@ -76,6 +76,11 @@ class OfflineQueue {
 
   void enqueue(PendingOperation operation) => _add(operation);
 
+  void clear() {
+    _pending.clear();
+    pendingCount.value = 0;
+  }
+
   Future<void> flush() async {
     if (_flushing) {
       return;
