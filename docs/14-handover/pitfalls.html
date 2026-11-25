@@ -103,7 +103,7 @@
   <ul class="rules">
     <li><b>Android 正式版缺網路權限</b>：<code>android/app/src/main/AndroidManifest.xml</code> 只宣告了 <code>POST_NOTIFICATIONS</code>；<code>INTERNET</code> 只在 <code>src/debug</code> 與 <code>src/profile</code> 裡，release APK 會連不上網。Android 也沒有允許 http 明碼的設定。（只讀檔確認，尚未實際建置驗證。）</li>
     <li><b>Android 整條路都沒驗證過</b>：沒有 <code>google-services.json</code>，App 驗收的 <code>AppiumWorld.start()</code> 遇到 Android 直接丟 <code>UnsupportedOperationException</code>。</li>
-    <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:90</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器的 <code>simctl list</code> 裡找不到，一律用 <code>UDID=</code> 指定（例如 <code>iPhone 18 Pro</code>＝<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）。</li>
+    <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:92</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器的 <code>simctl list</code> 裡找不到，一律用 <code>UDID=</code> 指定（例如 <code>iPhone 18 Pro</code>＝<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）。</li>
     <li><b>App 連哪個後端是編譯期決定的</b>，不帶 <code>API_BASE_URL</code> 就連 8080（資料會被測試清掉）。</li>
     <li><b>token 只在記憶體、沒有逾時、沒有統一 401 處理</b>：token 過期後的行為要自己留意。</li>
     <li><b>iOS 沒有 App Transport Security 例外</b>：實機連 http 區網 IP 會被擋。</li>
