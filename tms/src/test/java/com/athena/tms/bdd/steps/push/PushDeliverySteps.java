@@ -110,6 +110,11 @@ public class PushDeliverySteps {
         pushSender.failTransiently(currentToken(staffName, fingerprint), Integer.MAX_VALUE);
     }
 
+    @假設("處理 {string} 手機 {string} 的推播時資料庫會先連不上 {int} 次")
+    public void databaseUnavailableWhileDelivering(String staffName, String fingerprint, int times) {
+        pushSender.failWithDatabaseOutage(currentToken(staffName, fingerprint), times);
+    }
+
     @當("{string} 的推播 {string} 被重送一次")
     public void pushRedelivered(String staffName, String title) throws Exception {
         Map<String, Object> outbox = outboxRowFor(staffName, title);

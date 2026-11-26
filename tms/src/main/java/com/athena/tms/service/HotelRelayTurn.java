@@ -29,15 +29,15 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * 替一家飯店把 outbox 裡 pending 的訊息送上 Kafka，送一輪就交還執行緒。
+ * 替一個租戶把 outbox 裡 pending 的訊息送上 Kafka，送一輪就交還執行緒。
  *
  * <h2>這個類別要保證什麼</h2>
  *
  * <ol>
  *   <li><b>同一個隊伍的訊息照寫入順序送上 Kafka。</b>隊伍是 kind 加 aggregate_key。
  *       例如同一間房先後兩筆房況回寫若顛倒，PMS 會被舊狀態蓋掉，而且無法自動修正。</li>
- *   <li><b>一家飯店一輪佔用執行緒的時間有上限。</b>這樣其他飯店最多只等這一輪。</li>
- *   <li><b>多個 instance 同時替同一家飯店送也不會亂序或重複認領。</b></li>
+ *   <li><b>一個租戶一輪佔用執行緒的時間有上限。</b>這樣其他租戶最多只等這一輪。</li>
+ *   <li><b>多個 instance 同時替同一個租戶送也不會亂序或重複認領。</b></li>
  * </ol>
  *
  * <h2>怎麼做到</h2>
@@ -52,9 +52,9 @@ import org.springframework.stereotype.Component;
  * 條件已不符就一列也不改。不需要另外的跨 instance 協調。
  *
  * <h3>2. 掃描範圍與等待時間都有上限</h3>
- * 認領只看這家飯店最舊的 scan-window 筆可送列。被擋住的隊伍在限制筆數之前就整隊排除，
+ * 認領只看這個租戶最舊的 scan-window 筆可送列。被擋住的隊伍在限制筆數之前就整隊排除，
  * 所以一個重試用完的隊伍後面堆再多筆，也不會把範圍塞滿。認領與標記結果的交易都設了
- * lock_timeout 與 statement_timeout，一家飯店的列被別的交易鎖住時，這一輪會拋例外結束，交給排班表暫停這家飯店。
+ * lock_timeout 與 statement_timeout，一個租戶的列被別的交易鎖住時，這一輪會拋例外結束，交給排班表暫停這個租戶。
  *
  * <h3>3. 一回合的訊息一起送出，再一起等確認</h3>
  * 每回合各隊伍最多一筆，所以並行送出不影響隊伍內順序。單筆 send() 可能卡住最多 max.block.ms，
@@ -146,7 +146,7 @@ class HotelRelayTurn {
             List<Claimed> toSend = new ArrayList<>();
             for (Claimed row : claimed) {
                 if (row.exhausted()) {
-                    log.error("outbox {} 重試次數用盡，標 failed 等人工處理（飯店 {}，aggregate_key={}）", row.id(), tenantId, row.aggregateKey());
+                    log.error("outbox {} 重試次數用盡，標 failed 等人工處理（租戶 {}，aggregate_key={}）", row.id(), tenantId, row.aggregateKey());
                     metrics.exhausted(tenantId, row.kind());
                 } else {
                     toSend.add(row);

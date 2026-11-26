@@ -9,7 +9,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 /**
- * 只開 1 個 relay 工作執行緒：多開幾個執行緒會掩蓋輪流制沒做對的問題，1 個還過得了才證明是輪流在保護其他飯店。
+ * 只開 1 個 relay 工作執行緒：多開幾個執行緒會掩蓋輪流制沒做對的問題，1 個還過得了才證明是輪流在保護其他租戶。
  * 定時補漏拉到 1 小時，訊息只能靠提交喚醒送出。Kafka 單筆上限調小，才做得出一筆永遠送不出去的訊息。
  */
 @CucumberContextConfiguration

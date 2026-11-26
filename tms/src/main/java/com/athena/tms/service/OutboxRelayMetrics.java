@@ -12,8 +12,8 @@ import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 
 /**
- * relay 的指標。lag 是每家飯店從寫入 outbox 到 Kafka 確認收到的時間，用來看有沒有哪家飯店被別家拖慢。
- * 每家飯店都有自己的一組時間序列，所以直方圖只留固定幾個門檻，不開完整百分位。
+ * relay 的指標。lag 是每個租戶從寫入 outbox 到 Kafka 確認收到的時間，用來看有沒有哪個租戶被別的租戶拖慢。
+ * 每個租戶都有自己的一組時間序列，所以直方圖只留固定幾個門檻，不開完整百分位。
  */
 @Component
 class OutboxRelayMetrics {
@@ -26,11 +26,11 @@ class OutboxRelayMetrics {
 
     OutboxRelayMetrics(MeterRegistry registry) {
         this.registry = registry;
-        this.passes = Counter.builder("tms.outbox.relay.passes").description("relay 跑完的飯店輪數").register(registry);
+        this.passes = Counter.builder("tms.outbox.relay.passes").description("relay 跑完的租戶輪數").register(registry);
     }
 
     void readyHotels(Supplier<Number> readyCount) {
-        Gauge.builder("tms.outbox.relay.ready.hotels", readyCount).description("排隊等 relay 的飯店數").register(registry);
+        Gauge.builder("tms.outbox.relay.ready.hotels", readyCount).description("排隊等 relay 的租戶數").register(registry);
     }
 
     void sent(long tenantId, String kind, Duration lag) {

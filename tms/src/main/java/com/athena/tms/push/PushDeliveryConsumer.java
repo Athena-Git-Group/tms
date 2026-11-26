@@ -83,7 +83,7 @@ public class PushDeliveryConsumer {
     public void onDeadLetter(ConsumerRecord<String, String> record) {
         String tenantHeader = header(record, OutboxKafkaHeaders.TENANT_ID);
         countDelivery(tenantHeader == null ? "unknown" : tenantHeader, "dead_lettered");
-        log.error("push 訊息重試用盡，留在 {}（飯店 {}，冪等鍵 {}，key={}）：{}",
+        log.error("push 訊息重試用盡，留在 {}（租戶 {}，冪等鍵 {}，key={}）：{}",
                 record.topic(), tenantHeader,
                 header(record, OutboxKafkaHeaders.IDEMPOTENCY_KEY), record.key(),
                 header(record, KafkaHeaders.DLT_EXCEPTION_MESSAGE));
@@ -143,7 +143,7 @@ public class PushDeliveryConsumer {
                 .register(meterRegistry).increment();
     }
 
-    // 從 relay 送上 Kafka 到消費者開始處理的等待時間，用來看一家飯店的推播有沒有被別家飯店的推播擋在後面。
+    // 從 relay 送上 Kafka 到消費者開始處理的等待時間，用來看一個租戶的推播有沒有被別的租戶的推播擋在後面。
     // 只量第一次投遞，重試 topic 的等待包含刻意的重試間隔，混進來就看不出排隊。
     private void recordQueueWait(String tenant, ConsumerRecord<String, String> record) {
         Timer.builder("tms.push.queue.wait").tag(TenantMetricsConfig.TENANT_TAG, tenant)

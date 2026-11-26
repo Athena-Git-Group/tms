@@ -47,7 +47,7 @@ class TenantSweepTest extends PostgresSpringTest {
 
         TenantSweep sweep = executor.forEachTenant("test-job", tenantId -> {
             if (tenantId == broken) {
-                throw new IllegalStateException("這家飯店的資料壞了");
+                throw new IllegalStateException("這個租戶的資料壞了");
             }
             ran.add(tenantId);
         });

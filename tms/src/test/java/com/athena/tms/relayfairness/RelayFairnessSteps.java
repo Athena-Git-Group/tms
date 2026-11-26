@@ -172,7 +172,7 @@ public class RelayFairnessSteps {
 
     @那麼("飯店 {long} 積的待送最後都送上 Kafka，每個隊伍照寫入順序、每筆剛好一次")
     public void backlogDeliveredInLaneOrder(long tenantId) {
-        // 被鎖住而暫停的飯店，暫停結束後要等下一次喚醒；定時補漏拉長了，只能靠提交喚醒。
+        // 被鎖住而暫停的租戶，暫停結束後要等下一次喚醒；定時補漏拉長了，只能靠提交喚醒。
         awaitUntil(() -> backlogPending() == 0, () -> {
             if (parkedByLock) {
                 createTaskAndCommit(tenantId, "再喚醒 " + runId);

@@ -36,7 +36,7 @@ public class OutboxRetentionJob {
     public TenantSweep purgeSentMessages() {
         OffsetDateTime cutoff = OffsetDateTime.now().minus(this.retention);
         return this.tenantScopedExecutor.forEachTenant("outbox-retention", tenantId -> {
-            // 分批刪：每家飯店的單一 SQL 有執行時間上限，積了好幾天的大飯店一次刪不完會每小時逾時、永遠清不掉。
+            // 分批刪：每個租戶的單一 SQL 有執行時間上限，積了好幾天的大租戶一次刪不完會每小時逾時、永遠清不掉。
             int purged = 0;
             int batch;
             do {

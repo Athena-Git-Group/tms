@@ -29,7 +29,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 直接跑一家飯店的一輪送出，驗證認領 SQL 的隊伍規則。應用帳號連線，RLS 生效。
+ * 直接跑一個租戶的一輪送出，驗證認領 SQL 的隊伍規則。應用帳號連線，RLS 生效。
  * 定時補漏拉長到 1 小時，背景 relay 不會插手這裡用 SQL 直接寫入的列。
  */
 @SpringBootTest(properties = {"tms.outbox.relay.poll-interval=1h", "tms.outbox.relay.scan-window=100"})
@@ -56,6 +56,9 @@ class HotelRelayTurnTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private TenantScopedExecutor tenants;
 
     private final JdbcTemplate admin = adminJdbc();
     private final String runId = "turn-" + UUID.randomUUID();
@@ -120,6 +123,18 @@ class HotelRelayTurnTest {
         assertThat(admin.queryForObject(
                 "SELECT count(*) FROM outbox WHERE aggregate_key = ? AND status = 'pending' AND attempts = 0",
                 Long.class, runId + ":stopped-lane-0")).isEqualTo(3000);
+    }
+
+    @Test
+    void theSafetyNetSkipsATenantWhosePendingRowsAllSitBehindAFailedRow() {
+        insert(1L, "stopped", 0, 8);
+        insert(2L, "stopped", 0, 8);
+        admin.update("UPDATE outbox SET status = 'failed' WHERE aggregate_key = ?", runId + ":stopped");
+        insert(1L, "stopped", 1, 0);
+        insert(2L, "stopped", 1, 0);
+        insert(2L, "healthy", 0, 0);
+
+        assertThat(tenants.tenantsWithDueOutbox()).containsExactly(2L);
     }
 
     @Test

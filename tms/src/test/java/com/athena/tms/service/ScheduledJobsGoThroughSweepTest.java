@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 
 /**
- * 新增的排程工作若直接逐家飯店跑、或忘了加跨 instance 鎖，一家飯店出錯就會中斷其他飯店，
+ * 新增的排程工作若直接逐個租戶跑、或忘了加跨 instance 鎖，一個租戶出錯就會中斷其他租戶，
  * 多個 instance 也會重複執行。這裡把規則寫成檢查：排程方法要嘛標 {@link PerInstance}，
  * 要嘛加 {@link SchedulerLock} 並回傳 {@link TenantScopedExecutor#forEachTenant} 的結果。
  */

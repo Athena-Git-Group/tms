@@ -15,12 +15,12 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 把 outbox 的訊息送上 Kafka，並且讓每家飯店的送出互不拖累。
+ * 把 outbox 的訊息送上 Kafka，並且讓每個租戶的送出互不拖累。
  *
- * <p>提交寫了 outbox 的交易後，只喚醒那一家飯店，讓看板的即時更新不必等定時輪詢。
- * 定時補漏只問資料庫哪幾家飯店有到期的訊息，再喚醒那幾家，用來接手重試、
+ * <p>提交寫了 outbox 的交易後，只喚醒那一個租戶，讓看板的即時更新不必等定時輪詢。
+ * 定時補漏只問資料庫哪幾個租戶有到期的訊息，再喚醒那幾個，用來接手重試、
  * 當掉的 instance 留下的租約，以及別的 instance 提交的訊息。
- * 固定數量的工作執行緒依 {@link HotelRunQueue} 輪流服務各家飯店，每輪的送出由 {@link HotelRelayTurn} 負責。
+ * 固定數量的工作執行緒依 {@link HotelRunQueue} 輪流服務各個租戶，每輪的送出由 {@link HotelRelayTurn} 負責。
  */
 @Component
 @EnableConfigurationProperties(RelaySettings.class)
@@ -113,10 +113,13 @@ public class OutboxRelay implements SmartLifecycle {
             try {
                 outcome = turn.run(tenantId, () -> running);
             } catch (Throwable e) {
-                log.error("飯店 {} 這輪 relay 出錯，這家飯店暫停一段時間再試，其他飯店照常: {}", tenantId, e.getMessage(), e);
-            } finally {
-                current.finish(tenantId, outcome);
+                log.error("租戶 {} 這輪 relay 出錯，這個租戶暫停一段時間再試，其他租戶照常: {}", tenantId, e.getMessage(), e);
+            }
+            current.finish(tenantId, outcome);
+            try {
                 metrics.turn(tenantId, outcome, Duration.ofNanos(System.nanoTime() - started));
+            } catch (RuntimeException e) {
+                log.warn("relay 指標記錄失敗，不影響送出: {}", e.getMessage(), e);
             }
         }
     }
@@ -126,7 +129,7 @@ public class OutboxRelay implements SmartLifecycle {
             try {
                 tenants.tenantsWithDueOutbox().forEach(current::signal);
             } catch (RuntimeException e) {
-                log.warn("relay 定時補漏查不到有待送訊息的飯店，下一輪再試: {}", e.getMessage());
+                log.warn("relay 定時補漏查不到有待送訊息的租戶，下一輪再試: {}", e.getMessage());
             }
             try {
                 Thread.sleep(settings.pollInterval());

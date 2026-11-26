@@ -37,9 +37,9 @@ public class JobTrigger {
             default -> throw new IllegalArgumentException(
                     "未知的排程工作名稱：" + jobName + "；已知名稱：" + KNOWN_JOBS);
         };
-        // 排程工作會吞掉單一飯店的例外繼續跑下一家，測試要把它翻回失敗，否則壞掉的步驟會被當成通過。
+        // 排程工作會吞掉單一租戶的例外繼續跑下一個，測試要把它翻回失敗，否則壞掉的步驟會被當成通過。
         if (sweep != null && !sweep.failedTenants().isEmpty()) {
-            throw new IllegalStateException("排程工作 " + jobName + " 處理這些飯店時失敗：" + sweep.failedTenants());
+            throw new IllegalStateException("排程工作 " + jobName + " 處理這些租戶時失敗：" + sweep.failedTenants());
         }
     }
 }
