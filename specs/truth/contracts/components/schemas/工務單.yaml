@@ -41,7 +41,7 @@ RepairPhoto:
   type: object
   description: >-
     一張工務單照片。status=uploaded 時內容一定已存進雲端儲存，可用 getRepairPhotoContent 以 id 讀取
-    （這版之前用假內容開的舊單例外，讀取回 404）。
+    （這版之前用假內容開的舊單例外，讀取回 404，也不能再附到新的工務單）。
   required:
   - id
   - status
@@ -136,8 +136,8 @@ CreateRepairTicketRequest:
         format: uuid
       description: >-
         0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；
-        有任一張不存在、屬於別家飯店或還沒上傳回 422 photo_not_uploaded；有任一張 purpose 不是 report 回 422 photo_purpose_mismatch；
-        有任一張已附在別張工務單上回 409 photo_already_attached。被拒絕時不建立工務單，原任務也不被中斷。
+        有任一張不存在、屬於別家飯店、還沒上傳或是舊版假照片（storage_ref 不是 repair-photos/ 開頭）回 422 photo_not_uploaded；有任一張 purpose 不是 report 回 422 photo_purpose_mismatch；
+        有任一張已附在別張工務單上，或另一個同時送出的請求先把它附走了，回 409 photo_already_attached。被拒絕時不建立工務單，原任務也不被中斷。
     interruptSourceTask:
       type: boolean
       description: true 表示「中斷 → 需要工務協助」模式；只有帶 sourceTaskId 時才有意義，省略視為 false。

@@ -63,6 +63,8 @@ uploadRepairPhotoContentAndgetRepairPhotoContent:
       內容是空的回 422 photo_empty；Content-Type 不是 image/jpeg，或內容前三個位元組不是 FF D8 FF，回 415 photo_type_unsupported。
       照片不存在或屬於別家飯店回 404 not_found；呼叫者不是建立這張照片的員工回 403 forbidden；
       照片已附到工務單上（開單、補照片或完修引用過）回 409 photo_already_attached。以上任何一種拒絕，照片的狀態與存的內容都不變。
+      上傳與開單、補照片、完修的綁定都先鎖住照片那一列，同一張照片的上傳與綁定一次只做一件，綁定之後才到的上傳一律回 409。
+      超過 5 MB 的請求，後端最多讀完 6 MB 再回 413，用戶端收得到錯誤回應；大於 6 MB 時後端可能回應後直接關閉連線。
       照片還沒附到工務單時，上傳失敗可以用同一個照片 id 重送，只需重試失敗的那張；重送寫到同一個物件名稱，以最後一次成功的內容為準。
       雲端儲存寫入失敗時回 5xx，照片維持原狀態，可以重試。
     tags:
@@ -100,13 +102,16 @@ uploadRepairPhotoContentAndgetRepairPhotoContent:
     operationId: getRepairPhotoContent
     summary: 讀一張照片的內容
     description: >-
-      回傳已上傳照片的原始 JPEG 位元組，由後端從雲端儲存讀出後轉送，不發給手機直接下載的網址。
-      同一家飯店、角色是 housekeeping、engineering、manager 或 frontdesk 的員工都可以讀，跟 readRepairTicket 的實際範圍相同，
-      不另外檢查呼叫者是不是這張工務單的報修人或處理人。
-      照片不存在、屬於別家飯店、status 還是 pending，或資料庫記為 uploaded 但雲端儲存找不到內容（例如舊版用假內容開的單），
-      一律回 404 not_found，不透露照片是否存在。
-      App 用 RepairTicket.photos 與 completionPhotos 裡每張的 id 呼叫這支。照片附到工務單後內容不再改，
-      回應帶 Cache-Control: private, max-age=3600，App 可以依照片 id 快取。
+      回傳已上傳照片的原始 JPEG 位元組，由後端從雲端儲存讀出後轉送，不發給手機或瀏覽器直接下載的網址。
+      同一家飯店、角色是 housekeeping、engineering、manager、frontdesk 或 duty_manager 的員工都可以讀：
+      前四種跟 readRepairTicket 的實際範圍相同，duty_manager 是為了櫃檯 Web 的詳情面板（readDeskTask 回的照片 id）。
+      不另外檢查呼叫者是不是這張工務單的報修人或處理人。owner 與住客 session 回 403 forbidden。
+      照片不存在、屬於別家飯店、status 還是 pending，或資料庫記為 uploaded 但雲端儲存找不到內容
+      （storage_ref 是這版之前的假值 upload:{photoId}），一律回 404 not_found，不透露照片是否存在。
+      App 用 RepairTicket.photos 與 completionPhotos、櫃檯 Web 用 DeskTaskDetail.repair.photos 與 completionPhotos 裡每張的 id 呼叫這支，
+      一律以 Authorization 標頭帶登入憑證，不把憑證放進網址。
+      快取：照片已附到工務單時內容不會再變，回 Cache-Control: private, max-age=86400, immutable；
+      還沒附上的照片建立者仍可重傳，回 Cache-Control: private, no-cache，每次都要向後端確認。
     tags:
     - 工務單 API
     parameters:
@@ -118,7 +123,10 @@ uploadRepairPhotoContentAndgetRepairPhotoContent:
           Cache-Control:
             schema:
               type: string
-            description: private, max-age=3600
+              enum:
+              - private, max-age=86400, immutable
+              - private, no-cache
+            description: 已附到工務單的照片是 private, max-age=86400, immutable；還沒附上的是 private, no-cache。
         content:
           image/jpeg:
             schema:
@@ -264,8 +272,8 @@ appendRepairTicketPhotos:
     description: >-
       報修人，以及在該房開單前檢查時觸發這張單重複提示的員工，可以在工務單完修前補照片，每次 1–3 張。
       先檢查工務單：已完修（done）、已結案（closed）或已撤回（cancelled）時回 409 ticket_closed；其他員工回 403。
-      再檢查照片：超過 3 張回 422 photo_limit；任一張不存在、屬於別家飯店或還沒上傳回 422 photo_not_uploaded；
-      任一張 purpose 不是 report 回 422 photo_purpose_mismatch；任一張已附在別張工務單上回 409 photo_already_attached。
+      再檢查照片：超過 3 張回 422 photo_limit；任一張不存在、屬於別家飯店、還沒上傳或是舊版假照片回 422 photo_not_uploaded；
+      任一張 purpose 不是 report 回 422 photo_purpose_mismatch；任一張已附在別張工務單上，或另一個同時送出的請求先把它附走了，回 409 photo_already_attached。
       被拒絕時一張都不補上。
       事件只記補了幾張，不含照片本體。
     tags:

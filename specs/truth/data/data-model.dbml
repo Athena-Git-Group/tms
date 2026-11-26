@@ -767,7 +767,7 @@ Table repair_photos {
   ticket_task_id uuid        [note: '開單、補照片或完修之前為空；綁定後不可改，綁定後內容也不能再上傳（409 photo_already_attached）；一張照片只能綁一張工務單']
   purpose        text        [not null, note: 'CHECK: report|completion（報修照片或完修照片）']
   status         text        [not null, default: 'pending', note: 'CHECK: pending|uploaded；內容上傳成功才轉 uploaded，重試沿用同一個 id']
-  storage_ref    text        [note: '照片本體在雲端儲存裡的物件名稱 repair-photos/{tenant_id}/{id}.jpg（本體不入庫，不帶服務商網址或前綴）；內容寫進雲端儲存成功後才與 status=uploaded 同一句寫入；讀照片一律用這個值，不重新組名字。這版之前的列可能是假值 upload:{id}，雲端儲存沒有內容']
+  storage_ref    text        [note: '照片本體在雲端儲存裡的物件名稱 repair-photos/{tenant_id}/{id}.jpg（本體不入庫，不帶服務商網址或前綴）；內容寫進雲端儲存成功後才與 status=uploaded 同一句寫入；讀照片一律用這個值，不重新組名字。這版之前的列可能是假值 upload:{id}，雲端儲存沒有內容：讀取回 404，開單、補照片、完修時視同未上傳（photo_not_uploaded）']
   taken_at       timestamptz [not null, note: '拍攝時間，與 App 加上的「房號 · 拍攝時間」浮水印一致']
   uploaded_by    uuid        [not null, note: '建立這張照片的員工；只有他能上傳內容']
   created_at     timestamptz [not null]
@@ -779,6 +779,7 @@ Table repair_photos {
   工務單照片（兩段式：先建 pending 列取得 id，再上傳內容）。
   照片內容是 1 位元組到 5 MB 的 JPEG，存在雲端儲存（本機與測試是 fake-gcs-server），物件名稱即 storage_ref；同一張照片重傳寫到同一個物件名稱，以最後一次為準。
   不變條件：status=uploaded 時 storage_ref 有值且雲端儲存有內容（舊假值除外）；綁到工務單的照片 status 一定是 uploaded，開單與補照片只綁 purpose=report，完修只綁 purpose=completion。
+  上傳內容與綁定都在交易內以 SELECT … FOR UPDATE 鎖住照片列（多張時依 id 排序上鎖）；綁定的 UPDATE 只改 ticket_task_id 為空或已是這張單的列，改到的筆數少於要綁的張數就整筆回滾並回 409 photo_already_attached。
   一張工務單的 report 照片在開單時 1–3 張，每次補照片 1–3 張；修繕任務每次以 fixed、temporary、cannot_fix 完修時，這次請求至少帶 1 張 completion，no_action_needed 不要求。
   驗收不通過不解綁已綁定的 completion 照片；區分輪次看 uploaded_at 與 repair_tickets.last_verify_failed_at。
   未綁定的 pending 列由排程清理（保留期限依 tenant_config.retention_days）。

@@ -2,7 +2,7 @@
 
 **Plan Package**: `specs/plans/009-repair-photo-storage`
 
-本檔回答三個技術問題：後端用哪個程式庫接雲端儲存、本機與測試怎麼模擬雲端儲存、App 用什麼拍照與壓縮。每題先寫結論，再寫查證過的事實與還沒查證的風險。產品面的決定見 `spec.md`「為什麼這樣定？」，程式落點見 `plan.md`。
+本檔回答四個技術問題：後端用哪個程式庫接雲端儲存、本機與測試怎麼模擬雲端儲存、App 用什麼拍照與壓縮、App 與櫃檯 Web 怎麼顯示需要登入才拿得到的照片。每題先寫結論，再寫查證過的事實與還沒查證的風險。產品面的決定見 `spec.md`「為什麼這樣定？」，程式落點見 `plan.md`。
 
 ## 後端用哪個程式庫接雲端儲存？
 
@@ -18,10 +18,10 @@
 | 設定 | 本機與測試 | 正式環境 |
 | --- | --- | --- |
 | 儲存空間名稱 | 本機 `tms-repair-photos-local`；測試每份 Spring 設定各用自己的名稱 | 維運開好的儲存空間 |
-| 模擬服務位址 | `http://localhost:4443`（測試用 Testcontainers 給的位址） | 留空 |
+| 模擬服務位址 | `http://localhost:4443`（測試用 Testcontainers 給的位址） | 留空：寫在 `application-prod.properties` 的 `tms.storage.emulator-host=`，正式環境以 `prod` 設定組啟動 |
 | 登入憑證 | 不需要（程式庫的無憑證模式） | 伺服器本身的身分（程式庫預設的 Application Default Credentials） |
 
-模擬服務位址有值時，程式庫用 `StorageOptions.newBuilder().setHost(位址).setProjectId(任意值).setCredentials(NoCredentials.getInstance())`；留空時用 `StorageOptions.getDefaultInstance()`，憑證與專案從執行環境取得。這是唯一一處看模擬服務位址的分支，存取照片的程式沒有分支。
+模擬服務位址有值時，程式庫用 `StorageOptions.newBuilder().setHost(位址).setProjectId(任意值).setCredentials(NoCredentials.getInstance())`；留空時用 `StorageOptions.getDefaultInstance()`，憑證與專案從執行環境取得。這是唯一一處看模擬服務位址的分支，存取照片的程式沒有分支。兩種情況都設 `HttpTransportOptions` 的連線與讀取逾時各 10 秒、`RetrySettings` 的總時限 10 秒；模擬服務模式啟動時建立儲存空間，失敗就讓後端啟動失敗。
 
 ## 本機與自動化測試怎麼模擬雲端儲存？
 
@@ -75,7 +75,7 @@
 - **相簿裡的 HEIC 或 PNG 會不會被轉成 JPEG**：`image_picker` 在 iOS 有縮放或品質參數時通常會重新編碼，但不同系統版本與原始格式（例如 PNG 截圖、HEIC）的結果要在真機上確認。App 上傳前檢查開頭三個位元組，不是 JPEG 就照 spec 提示「這張照片不能用」，不會送出後才被後端拒絕。若真機驗證發現常見的相簿照片都轉不成 JPEG，才加 `flutter_image_compress` 做轉檔，屆時另記一列 `/technical-research` 改動。
 - **拍攝時間**：從相簿選的照片用 `XFile.lastModified()` 當拍攝時間；這是檔案修改時間，不一定等於快門時間。拿 EXIF 的拍攝時間要多一個套件，這版不做。
 
-## App 怎麼顯示需要登入才拿得到的照片？
+## App 與櫃檯 Web 怎麼顯示需要登入才拿得到的照片？
 
 **結論**：在 `ApiClient` 加一個讀照片內容的方法，沿用既有的登入標頭與錯誤處理；畫面用一個小元件把讀到的位元組包成 `MemoryImage`，同一次打開 App 期間依照片編號放在記憶體快取裡。不加 `cached_network_image` 之類的套件。
 
@@ -83,3 +83,5 @@
 
 - `Image.network` 可以帶標頭，但登入逾時、401 換頁、測試裡替換 `ApiClient.instance` 這些既有行為都在 `ApiClient`，繞過它就要再做一次。
 - 一張工務單最多幾張照片，每張幾百 KB，記憶體快取足夠；照片附上之後內容不再改，以照片編號當快取鍵不會讀到舊內容。
+
+櫃檯 Web 同樣不讓瀏覽器自己抓圖：登入憑證只存在分頁的 session store，靠程式放進 `Authorization` 標頭，`<img src>` 帶不了。做法是 `fetch` 帶標頭拿到 `Blob`，`URL.createObjectURL` 轉成只在這個分頁有效的 `blob:` 網址給 `<img>`，元件卸載或換單時 `URL.revokeObjectURL` 釋放。把憑證接在網址查詢字串上雖然能讓 `<img src>` 直接用，但網址會留在瀏覽紀錄與伺服器存取紀錄，不採用。瀏覽器對帶 `Authorization` 的 `fetch` 回應，只要回應標了 `Cache-Control: private, max-age=…` 就會放進自己的快取，照片附上之後後端就這樣標。

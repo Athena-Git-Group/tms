@@ -23,6 +23,7 @@
 | App 端驗收規格 | Gherkin feature files（`# language: zh-TW`） | App 端行為測項，例如照片、離線重送、推播去處；runner 見「測試與驗證」 |
 | 櫃檯 Web 框架與建置 | `React` ＋ `TypeScript`，以 `Vite` 建置成單頁應用（登入後由瀏覽器自己換頁，建置結果是一包靜態檔） | 櫃檯人員、主管、值班主管用的總覽看板、待派單、派單、當場回答與代開單畫面；程式在本 repo `app/web/`；直接呼叫 `tms` 後端，不另起後端；套件版本在建立 `app/web/` 時鎖定當下的穩定版 |
 | 櫃檯 Web 換頁 | `React Router` | 登入、改密碼、總覽看板、待派單四個頁面之間的切換；詳情、當場回答、代開單、帳號是蓋在頁面上的面板 |
+| 櫃檯 Web 照片顯示 | 瀏覽器內建 `fetch` ＋ `URL.createObjectURL` | 工務單詳情面板的照片：帶 `Authorization` 標頭讀照片位元組，轉成 `blob:` 網址給 `<img>`，卸載或換單時釋放；登入憑證不進網址；不加圖片套件 |
 | 櫃檯 Web 後端資料 | `TanStack Query` | 從後端抓資料、收到即時訊號後換上那張卡片或重抓、連線異常或讀取失敗時每 4 秒輪詢（畫面上寫每 5 秒）、送出失敗時把畫面回復原狀 |
 | 櫃檯 Web 畫面狀態 | `Zustand` | 只存在畫面上的狀態：登入身分、泳道、篩選、房號搜尋、拖曳中的提示 |
 | 櫃檯 Web 樣式與版面 | `Tailwind CSS`；一份隨視窗伸縮的版面，以設計圖 1180×820 為基準 | 主要使用環境是電腦瀏覽器，同時支援 iPad 橫向；視窗更寬時看板的欄跟著變寬；電腦最小支援視窗 1280×720，iPad 橫向 1180×820 同樣支援，更小就出現捲軸、不另外設計；滑鼠與觸控都能完成所有操作 |
@@ -52,7 +53,7 @@
 | 即時推送 | SSE（`SseEmitter`） | 住客與後台即時更新 |
 | 訊息佇列 | `Apache Kafka 3.9`（outbox → relay → Kafka） | 事件分發給 SSE、投影、推播消費者、PMS 回寫消費者 |
 | 排程 | `Quartz`（租戶感知）＋ Spring 排程 | 班前排房、班末掃描、到期提醒、清理；relay 輪詢用 Spring 排程 |
-| 照片儲存 | Google Cloud Storage，以官方 Java 程式庫 `com.google.cloud:google-cloud-storage`（版本與 `firebase-admin` 間接帶入的相同）存取；本機與測試接 `fake-gcs-server` 模擬服務 | 工務單照片內容，物件名稱 `repair-photos/{tenantId}/{photoId}.jpg`；只有一套存取程式，本機與正式環境只差設定 `tms.storage.bucket`、`tms.storage.emulator-host`（正式環境留空）與登入憑證（正式環境用 Application Default Credentials）；照片經後端轉送給 App，不發直接下載的網址 |
+| 照片儲存 | Google Cloud Storage，以官方 Java 程式庫 `com.google.cloud:google-cloud-storage`（版本與 `firebase-admin` 間接帶入的相同）存取；本機與測試接 `fake-gcs-server` 模擬服務 | 工務單照片內容，物件名稱 `repair-photos/{tenantId}/{photoId}.jpg`；只有一套存取程式，本機與正式環境只差設定 `tms.storage.bucket`、`tms.storage.emulator-host`（正式環境以 `prod` 設定組的 `application-prod.properties` 設成空值）與登入憑證（正式環境用 Application Default Credentials）；連線、讀取與重試總時限各約 10 秒；模擬服務模式啟動時建立儲存空間，失敗就啟動失敗；照片經後端轉送給 App 與櫃檯 Web，不發直接下載的網址 |
 | 推播 | 推播消費者（Kafka `tms.push` → Firebase Cloud Messaging，`firebase-admin` SDK） | 員工推播事件送到登記的手機（iOS 經 FCM 轉 APNS）；以 outbox 冪等鍵去重並寫 `push_deliveries` 送達紀錄；暫時性錯誤指數退避重試 3 次後進 `tms.push.DLT`；未設定 `tms.push.fcm.credentials-path` 時只寫日誌與送達紀錄 |
 | 時間來源 | 注入的 `java.time.Clock` | 計時、排序、提醒都以同一個可替換時鐘為準 |
 

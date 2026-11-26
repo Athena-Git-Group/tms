@@ -244,8 +244,8 @@ CompleteTaskRequest:
         format: uuid
       description: >-
         修繕任務的完修照片，每張都要是本飯店已上傳（status=uploaded）、purpose=completion、還沒附在別張工務單上的照片：
-        不存在、別家飯店或還沒上傳回 422 photo_not_uploaded；purpose 是 report 回 422 photo_purpose_mismatch；
-        已附在別張工務單上回 409 photo_already_attached。被拒絕時工務單維持原狀態，沒有事件、沒有推播。
+        不存在、別家飯店、還沒上傳或是舊版假照片（storage_ref 不是 repair-photos/ 開頭）回 422 photo_not_uploaded；purpose 是 report 回 422 photo_purpose_mismatch；
+        已附在別張工務單上，或另一個同時送出的請求先把它附走了，回 409 photo_already_attached。被拒絕時工務單維持原狀態，沒有事件、沒有推播。
         resolutionType 為 fixed、temporary、cannot_fix（含省略）時，這一次請求至少帶 1 張，否則回 422 completion_photo_required；
         驗收不通過退回重修後再完修也一樣，上一輪的照片不能抵用。
         resolutionType 為 no_action_needed 時可以省略或送空陣列。
