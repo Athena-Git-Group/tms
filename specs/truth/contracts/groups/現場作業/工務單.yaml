@@ -27,7 +27,11 @@ createRepairPhoto:
     summary: 建立一張工務單照片的上傳位置
     description: >-
       照片採兩段式：先建立照片 id，再用 uploadRepairPhotoContent 上傳內容，最後在開單、補照片或完修時引用 id。
-      壓縮（長邊 1600px、JPEG）與「房號 · 拍攝時間」浮水印在 App 端完成，後端不做影像處理。
+      壓縮（長邊 1600px、JPEG）在 App 端完成，後端不做影像處理；「房號 · 拍攝時間」浮水印只疊在 App 畫面上，不畫進照片。
+      建立照片的員工記為 uploadedBy，之後只有他能上傳這張照片的內容。
+      purpose 不是 report 或 completion、或沒帶，回 422 validation_failed，details 帶 field=purpose；
+      takenAt 有值但不是帶時區的日期時間，回 422 validation_failed，details 帶 field=takenAt；兩者都不建立照片。
+      takenAt 沒帶時以後端收到請求的時間為準。
     tags:
     - 工務單 API
     parameters:
@@ -47,11 +51,20 @@ createRepairPhoto:
               $ref: '../../components/schemas/工務單.yaml#/RepairPhoto'
       '422':
         $ref: '../../components/responses.yaml#/UnprocessableEntity'
-uploadRepairPhotoContent:
+uploadRepairPhotoContentAndgetRepairPhotoContent:
   put:
     operationId: uploadRepairPhotoContent
     summary: 上傳或重試一張照片的內容
-    description: 上傳成功後 status=uploaded。上傳失敗時用同一個照片 id 重送，只需重試失敗的那張。這個操作是冪等的。
+    description: >-
+      body 是照片的原始位元組，Content-Type 必須是 image/jpeg。後端先檢查內容，再把它存進雲端儲存，
+      物件名稱是 repair-photos/{tenantId}/{photoId}.jpg，存好之後照片才轉 status=uploaded，
+      storage_ref 記下這個物件名稱，uploadedAt 只在第一次成功時寫入。
+      檢查依序是：超過 5 MB（5,242,880 位元組，Content-Length 或實際讀到的長度）回 413 photo_too_large；
+      內容是空的回 422 photo_empty；Content-Type 不是 image/jpeg，或內容前三個位元組不是 FF D8 FF，回 415 photo_type_unsupported。
+      照片不存在或屬於別家飯店回 404 not_found；呼叫者不是建立這張照片的員工回 403 forbidden；
+      照片已附到工務單上（開單、補照片或完修引用過）回 409 photo_already_attached。以上任何一種拒絕，照片的狀態與存的內容都不變。
+      照片還沒附到工務單時，上傳失敗可以用同一個照片 id 重送，只需重試失敗的那張；重送寫到同一個物件名稱，以最後一次成功的內容為準。
+      雲端儲存寫入失敗時回 5xx，照片維持原狀態，可以重試。
     tags:
     - 工務單 API
     parameters:
@@ -63,17 +76,60 @@ uploadRepairPhotoContent:
           schema:
             type: string
             format: binary
+            maxLength: 5242880
     responses:
       '200':
-        description: 成功
+        description: 成功，status=uploaded。
         content:
           application/json:
             schema:
               $ref: '../../components/schemas/工務單.yaml#/RepairPhoto'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
       '404':
         $ref: '../../components/responses.yaml#/NotFound'
+      '409':
+        $ref: '../../components/responses.yaml#/Conflict'
+      '413':
+        $ref: '../../components/responses.yaml#/PayloadTooLarge'
+      '415':
+        $ref: '../../components/responses.yaml#/UnsupportedMediaType'
       '422':
         $ref: '../../components/responses.yaml#/UnprocessableEntity'
+  get:
+    operationId: getRepairPhotoContent
+    summary: 讀一張照片的內容
+    description: >-
+      回傳已上傳照片的原始 JPEG 位元組，由後端從雲端儲存讀出後轉送，不發給手機直接下載的網址。
+      同一家飯店、角色是 housekeeping、engineering、manager 或 frontdesk 的員工都可以讀，跟 readRepairTicket 的實際範圍相同，
+      不另外檢查呼叫者是不是這張工務單的報修人或處理人。
+      照片不存在、屬於別家飯店、status 還是 pending，或資料庫記為 uploaded 但雲端儲存找不到內容（例如舊版用假內容開的單），
+      一律回 404 not_found，不透露照片是否存在。
+      App 用 RepairTicket.photos 與 completionPhotos 裡每張的 id 呼叫這支。照片附到工務單後內容不再改，
+      回應帶 Cache-Control: private, max-age=3600，App 可以依照片 id 快取。
+    tags:
+    - 工務單 API
+    parameters:
+    - $ref: '../../components/parameters.yaml#/PhotoId'
+    responses:
+      '200':
+        description: 成功，body 是照片內容。
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+            description: private, max-age=3600
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+      '401':
+        $ref: '../../components/responses.yaml#/Unauthorized'
+      '403':
+        $ref: '../../components/responses.yaml#/Forbidden'
+      '404':
+        $ref: '../../components/responses.yaml#/NotFound'
 precheckRepairTicket:
   post:
     operationId: precheckRepairTicket
@@ -206,8 +262,11 @@ appendRepairTicketPhotos:
     operationId: appendRepairTicketPhotos
     summary: 補照片到工務單
     description: >-
-      報修人，以及在該房開單前檢查時觸發這張單重複提示的員工，可以在工務單完修前補照片，每次 1–3 張，而且都必須已上傳。
-      工務單已完修（done）、已結案（closed）或已撤回（cancelled）時回 409 ticket_closed；其他員工回 403。
+      報修人，以及在該房開單前檢查時觸發這張單重複提示的員工，可以在工務單完修前補照片，每次 1–3 張。
+      先檢查工務單：已完修（done）、已結案（closed）或已撤回（cancelled）時回 409 ticket_closed；其他員工回 403。
+      再檢查照片：超過 3 張回 422 photo_limit；任一張不存在、屬於別家飯店或還沒上傳回 422 photo_not_uploaded；
+      任一張 purpose 不是 report 回 422 photo_purpose_mismatch；任一張已附在別張工務單上回 409 photo_already_attached。
+      被拒絕時一張都不補上。
       事件只記補了幾張，不含照片本體。
     tags:
     - 工務單 API

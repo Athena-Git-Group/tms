@@ -28,6 +28,18 @@ UnprocessableEntity:
     application/json:
       schema:
         $ref: './schemas/shared.yaml#/Error'
+PayloadTooLarge:
+  description: 內容超過大小上限，例如工務單照片超過 5 MB（photo_too_large）。
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
+UnsupportedMediaType:
+  description: 內容格式不支援，例如工務單照片不是 JPEG（photo_type_unsupported）。
+  content:
+    application/json:
+      schema:
+        $ref: './schemas/shared.yaml#/Error'
 Unauthorized:
   description: 憑證無效或已過期，例如住客 session 已過退房時間或已被撤銷。
   content:

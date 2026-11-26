@@ -36,9 +36,12 @@ CreateRepairPhotoRequest:
     takenAt:
       type: string
       format: date-time
-      description: 拍攝時間。從相簿選取的照片用檔案時間；這個值和 App 加上的浮水印一致。
+      description: 拍攝時間，帶時區的日期時間。從相簿選取的照片用檔案時間；這個值和 App 畫面上疊的浮水印一致。格式錯回 422 validation_failed。
 RepairPhoto:
   type: object
+  description: >-
+    一張工務單照片。status=uploaded 時內容一定已存進雲端儲存，可用 getRepairPhotoContent 以 id 讀取
+    （這版之前用假內容開的舊單例外，讀取回 404）。
   required:
   - id
   - status
@@ -131,7 +134,10 @@ CreateRepairTicketRequest:
       items:
         type: string
         format: uuid
-      description: 0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；有任一張還沒上傳回 422 photo_not_uploaded。
+      description: >-
+        0 張回 422 photo_required，提示「至少需要 1 張照片」；超過 3 張回 422 photo_limit，提示「最多 3 張」；
+        有任一張不存在、屬於別家飯店或還沒上傳回 422 photo_not_uploaded；有任一張 purpose 不是 report 回 422 photo_purpose_mismatch；
+        有任一張已附在別張工務單上回 409 photo_already_attached。被拒絕時不建立工務單，原任務也不被中斷。
     interruptSourceTask:
       type: boolean
       description: true 表示「中斷 → 需要工務協助」模式；只有帶 sourceTaskId 時才有意義，省略視為 false。
@@ -151,6 +157,7 @@ AppendRepairPhotosRequest:
       type: array
       minItems: 1
       maxItems: 3
+      description: 每張都要是本飯店已上傳、purpose=report、還沒附在別張工務單上的照片；超過 3 張回 422 photo_limit。錯誤碼見 appendRepairTicketPhotos。
       items:
         type: string
         format: uuid
@@ -167,6 +174,8 @@ RepairTicket:
   - type: object
     required:
     - photoCount
+    - photos
+    - completionPhotos
     - urgentJudgement
     - origin
     - viewerIsAssignee
@@ -177,6 +186,9 @@ RepairTicket:
         description: 報修說明，報修人沒填為 null；定期保養單是保養說明。
       photos:
         type: array
+        description: >-
+          報修照片（purpose=report），依拍攝時間排序，含開單與之後補的照片。App 用每張的 id 呼叫 getRepairPhotoContent 顯示照片，
+          看大圖的張數與順序照這個陣列。
         items:
           $ref: '#/RepairPhoto'
       photoCount:
@@ -202,7 +214,7 @@ RepairTicket:
         description: >-
           這一輪完修附的照片。單被驗收不通過退回過時，只回最近一次不通過之後上傳的完修照片
           （上傳時間晚於 lastVerifyFailedAt）；退回重修中、還沒再完修時為空陣列。
-          上一輪的完修照片不對外提供，畫面不顯示「上一次完修」區段。
+          上一輪的完修照片不對外提供，畫面不顯示「上一次完修」區段。App 用每張的 id 呼叫 getRepairPhotoContent 顯示照片。
         items:
           $ref: '#/RepairPhoto'
       resolutionNote:

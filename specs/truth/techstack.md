@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | 員工端 App 框架 | `Flutter`（stable 3.47），單一程式碼庫支援 iOS ＋ Android 雙平台 | 房務／工務員工的接單、執行、工務單、查一下；App 程式碼在本 repo `app/`，BDD harness 在 `app/bdd/`；iOS 先行，Android 待本機裝 SDK 後跟進；**有條件採用**——gate 在一日 Appium spike，失敗則改採 React Native |
 | App 推播 | `firebase_messaging` | 員工推播事件的收件與導頁；已知 iOS `getInitialMessage()` 歷史缺陷，F3 推播為第一支落地的 Appium 金絲雀情境 |
-| App 相機與照片 | `camera` ＋ `image_picker`（拍攝與選取）、`flutter_image_compress`（壓縮）、`dart:ui` Canvas（浮水印，於 isolate／`compute()` 中執行） | 工務單照片 1–3 張的拍攝、壓縮與浮水印 |
+| App 相機與照片 | `image_picker`（打開系統相機拍攝、打開系統相簿選取；以 `maxWidth`／`maxHeight` 1600、`imageQuality` 80 縮放並壓成 JPEG） | 工務單照片 1–3 張的拍攝、選取與壓縮；「房號 · 拍攝時間」浮水印只疊在畫面上，不畫進照片；`--dart-define=TEST_BACKDOOR=true` 的測試版不打開相機，回固定的測試照片；照片以 `ApiClient` 讀回、依照片 id 放記憶體快取顯示 |
 | App 掃碼 | `mobile_scanner` | 住客 QR 掃碼進需求；已知從 Sheet 進入後黑屏風險，需鎖版本並做 dispose／re-init |
 | App 視覺 | Flutter 自訂 Cupertino 風主題，以 `ui/prototype/Main.dc.html` 視覺規格為準 | iOS 不追 Liquid Glass／Live Activity，本增量視覺降級已簽核 |
 | App 端驗收規格 | Gherkin feature files（`# language: zh-TW`） | App 端行為測項，例如照片、離線重送、推播去處；runner 見「測試與驗證」 |
@@ -52,6 +52,7 @@
 | 即時推送 | SSE（`SseEmitter`） | 住客與後台即時更新 |
 | 訊息佇列 | `Apache Kafka 3.9`（outbox → relay → Kafka） | 事件分發給 SSE、投影、推播消費者、PMS 回寫消費者 |
 | 排程 | `Quartz`（租戶感知）＋ Spring 排程 | 班前排房、班末掃描、到期提醒、清理；relay 輪詢用 Spring 排程 |
+| 照片儲存 | Google Cloud Storage，以官方 Java 程式庫 `com.google.cloud:google-cloud-storage`（版本與 `firebase-admin` 間接帶入的相同）存取；本機與測試接 `fake-gcs-server` 模擬服務 | 工務單照片內容，物件名稱 `repair-photos/{tenantId}/{photoId}.jpg`；只有一套存取程式，本機與正式環境只差設定 `tms.storage.bucket`、`tms.storage.emulator-host`（正式環境留空）與登入憑證（正式環境用 Application Default Credentials）；照片經後端轉送給 App，不發直接下載的網址 |
 | 推播 | 推播消費者（Kafka `tms.push` → Firebase Cloud Messaging，`firebase-admin` SDK） | 員工推播事件送到登記的手機（iOS 經 FCM 轉 APNS）；以 outbox 冪等鍵去重並寫 `push_deliveries` 送達紀錄；暫時性錯誤指數退避重試 3 次後進 `tms.push.DLT`；未設定 `tms.push.fcm.credentials-path` 時只寫日誌與送達紀錄 |
 | 時間來源 | 注入的 `java.time.Clock` | 計時、排序、提醒都以同一個可替換時鐘為準 |
 
@@ -62,14 +63,14 @@
 | 資料庫 | `PostgreSQL 16` | 權威狀態，包括 tasks、task_events、outbox、processed_ops 等 |
 | Schema 遷移 | `Flyway` | 資料庫版本管理 |
 | 冪等 | `Idempotency-Key` ＋ `processed_ops`；一次開多張單的寫入另在業務交易內以 `pg_advisory_xact_lock` 鎖住這把鍵，並在同一個交易裡寫 `processed_ops` | 重送回放，含離線重送；一次開多張單時，提交與「這把鍵已處理」同進退，同一把鍵同時送兩次也只開一批 |
-| 本機環境 | `docker-compose`（Postgres 埠 5433、Kafka） | 開發用依賴服務 |
+| 本機環境 | `docker-compose`（Postgres 埠 5433、Kafka、`fake-gcs-server` 埠 4443） | 開發用依賴服務；`fake-gcs-server` 是照片儲存的模擬服務，後端啟動時在模擬服務裡建立儲存空間 |
 
 ### 測試與驗證
 
 | 類別 | 採用技術 | 用途 |
 | --- | --- | --- |
 | 後端 BDD techstack | `Cucumber-JVM` ＋ `Spring Boot Test` | 後端 E2E：跑後端 Gherkin，以真實 HTTP 打 API，並斷言資料庫權威狀態與 outbox |
-| 後端 E2E 依賴 | `Testcontainers`（PostgreSQL、Kafka） | 測試時啟動真的資料庫與訊息佇列 |
+| 後端 E2E 依賴 | `Testcontainers`（PostgreSQL、Kafka、`fake-gcs-server`） | 測試時啟動真的資料庫、訊息佇列與照片儲存模擬服務；照片真的寫進模擬服務再讀出比對 |
 | 員工 App BDD techstack | `Appium` ＋ `Cucumber-JVM`（iOS：vanilla `XCUITest` driver；Android：vanilla `UiAutomator2` driver） | 一套 Gherkin ＋ 一套 Java step definitions 驅動兩平台；driver 讀取 Flutter `Semantics(identifier:)` 曝露到原生 accessibility API 的節點；與後端共用 Cucumber-JVM 生態 |
 | App 元素定位 | `Semantics(identifier:)` 掛 dot＋kebab accessibility id，Java step 層 `byTestId()` helper 分流 | iOS 以 `AppiumBy.accessibilityId(id)` 定位（對應 `accessibilityIdentifier`）；Android 以 resource-id 比對定位（`identifier` 落成 `resource-id`，不是 `content-desc`），兩平台 locator 不同，不可共用同一個呼叫 |
 | App 測試後門 | `--dart-define` 隔離的 debug build ＋ localhost debug HTTP endpoint | 可注入裝置時間、強制離線、強制第 N 張照片上傳失敗；Wave 1 App 骨架即內建，不得後補；Java step definitions 直接打，不做成隱藏 UI |
@@ -88,11 +89,13 @@
 - 記憶體或 embedded Kafka 替代品做驗收
 - 直接對接 APNS：iOS 推播一律經 FCM 轉送，後端只維護一種推播地址
 - LLM 問答（查一下只做關鍵字比對與出處，介面留椿）
-- 後端影像處理函式庫（照片壓縮與浮水印由 App 端處理）
+- 後端影像處理函式庫（照片壓縮由 App 端處理，後端只檢查是不是 JPEG 與大小後原樣存放）
 - iOS 專屬 BDD runner（XCUITest ＋ Cucumberish）與 Maestro：雙平台改採 Appium ＋ Cucumber-JVM，不另建平台專屬測試線
 - `Skip`、`Swift SDK for Android` 等跨平台工具鏈：隨 Swift 雙平台路線一併放棄，改採 Flutter 單一程式碼庫
 - `appium-flutter-driver`、`appium-flutter-integration-driver`：前者建在已棄用的 `flutter_driver` SDK 上且只能測 debug/profile build，後者要把測試 harness 編進 App；兩者都會打破 Appium 黑箱驅動與 App 實作解耦，改採 vanilla XCUITest／UiAutomator2
-- 純 Dart `image` 套件做照片壓縮：release build 下 decode/encode 過慢，改用 `flutter_image_compress`
+- 純 Dart `image` 套件做照片壓縮：release build 下 decode/encode 過慢，改用 `image_picker` 本身的縮放與壓縮
+- `camera`、`flutter_image_compress`：員工只需要系統相機與系統相簿，不需要 App 內嵌取景畫面；浮水印不畫進照片，就不需要另外重新編碼
+- 讓 App 直接向雲端儲存下載照片的臨時網址（signed URL）：照片經後端轉送，等流量成為問題再改
 - iOS 26 Liquid Glass、Live Activity／動態島：Flutter 無官方支援，本增量視覺降級，不追求
 - `Next.js` 等需要另外部署 Node 伺服器來產生畫面的框架：櫃檯 Web 是登入後才使用的內部工具，建置成靜態檔即可
 - 以 `~/IdeaProjects/tms-web` 的程式當櫃檯 Web 的基底：只借它的函式庫組合，不借程式、設定與版本
