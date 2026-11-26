@@ -329,9 +329,9 @@
 **Test Scope**:
 - `cd app/mobile && flutter test`
 
-- [ ] T055 加 `image_picker` 與 iOS 權限說明
+- [X] T055 加 `image_picker` 與 iOS 權限說明
   - `app/mobile/pubspec.yaml` 加 `image_picker`（`flutter pub add image_picker`，鎖當下穩定版）；`app/mobile/ios/Runner/Info.plist` 加 `NSCameraUsageDescription`「拍下要報修或已修好的地方，附在工務單上」、`NSPhotoLibraryUsageDescription`「選擇要附在工務單上的照片」；`cd app/mobile/ios && pod install` 後 `flutter build ios --simulator --debug` 能建置。
-- [ ] T056 先寫會紅的畫面與單元測試
+- [X] T056 先寫會紅的畫面與單元測試
   - 新增 `app/mobile/test/repair_photo_capture_test.dart`：選「拍照」呼叫拍照函式時帶相機來源、選「從相簿選擇」帶相簿來源；取消時不呼叫 `createRepairPhoto`；拿到的位元組不是 JPEG 時丟出照片不能用，不上傳；拍攝時間用檔案時間；測試版回固定測試照片。
   - 擴充 `app/mobile/test/photo_test.dart`：看大圖依照片清單逐張顯示圖片（以假的 `ApiClient` 回固定 JPEG）、讀照片失敗時顯示「照片無法顯示」。
   - 新增或擴充工務單詳情的畫面測試（`engineering_contract_fields_test.dart` 或新檔）：報修照片與完修照片格子各自拿到 `image`，數量等於回應陣列長度；格子的 `Semantics` value 在載入後是 `loaded`、失敗是 `failed`。
