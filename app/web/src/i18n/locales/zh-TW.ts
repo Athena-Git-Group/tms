@@ -310,6 +310,17 @@ export const zhTW = {
         staff: '同仁報修（{{name}}）',
       },
     },
+    photos: {
+      report: '報修照片',
+      completion: '完修照片',
+      unavailable: '照片無法顯示',
+      viewer: {
+        previous: '上一張',
+        next: '下一張',
+        close: '關閉',
+        counter: '{{index}} / {{total}}',
+      },
+    },
     timeline: '歷程（住客來電詢問時看這裡）',
     events: {
       guestTyped: '掃碼送出文字需求「{{text}}」',

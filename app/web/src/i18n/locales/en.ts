@@ -311,6 +311,17 @@ export const en: Translation = {
         staff: 'Staff report ({{name}})',
       },
     },
+    photos: {
+      report: 'Reported photos',
+      completion: 'Completion photos',
+      unavailable: 'Photo unavailable',
+      viewer: {
+        previous: 'Previous',
+        next: 'Next',
+        close: 'Close',
+        counter: '{{index}} / {{total}}',
+      },
+    },
     timeline: 'History (check here when a guest calls)',
     events: {
       guestTyped: 'Sent a text request by QR: “{{text}}”',

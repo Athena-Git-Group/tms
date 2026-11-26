@@ -129,6 +129,12 @@ export interface DeskTask {
   } | null;
 }
 
+export interface RepairPhoto {
+  id: string;
+  status: 'pending' | 'uploaded';
+  takenAt?: string;
+}
+
 export interface DeskTaskDetail extends DeskTask {
   serverTime: string;
   answer?: string | null;
@@ -145,6 +151,8 @@ export interface DeskTaskDetail extends DeskTask {
   repair?: {
     resolutionType?: RepairResolutionType | null;
     verifiedByName?: string | null;
+    photos?: RepairPhoto[];
+    completionPhotos?: RepairPhoto[];
   } | null;
   timeline: DeskTimelineEntry[];
 }
