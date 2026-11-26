@@ -472,8 +472,10 @@ public class BackendChannel {
             if (id == null) {
                 throw new IllegalStateException("寫入預設帳號 " + staff.loginId() + " 沒有回傳 id");
             }
-            staffByName.put(staff.name(), new CreatedStaff(id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
-                    staff.role(), staff.dept()));
+            CreatedStaff created = new CreatedStaff(id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
+                    staff.role(), staff.dept());
+            staffByName.put(staff.name(), created);
+            staffById.put(id, created);
         }
         return staffByName;
     }
