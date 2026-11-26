@@ -78,3 +78,25 @@ dsl 沒寫死、照最小解讀做的地方：
   建立照片輸入錯誤回 500、附照片沒檢查、櫃檯詳情沒有照片），沒有步驟例外。審查判定其餘八項解讀與 dsl 一致。
 - 提交分兩次：Phase 1–2 的環境與存照片介面一次，Phase 2–3 的後端測試層一次（`tasks.md` 只寫了後者；
   前者沒有指定提交點，跟著先提交，Phase 4 的提交才只含產品碼）。
+
+## T049 上傳與讀照片
+
+- `照片內容上傳與查看.feature` 25 run 全綠。
+- 超大照片提早回 413 的手動檢查改用同一個情境對照：「阿美上傳一張沒壓縮的大照片」送 5,242,881 位元組（只多 1 位元組，卻已超過 Tomcat 預設可讀掉的 2 MB），
+  以 `-Dserver.tomcat.max-swallow-size=2MB` 跑，用戶端拿到 I/O 錯誤（連線被切，收不到回應）；用設定檔的 6MB 跑，收到 413 與 `photo_too_large`。
+  沒有另起後端用 `curl` 送 5.5 MB：要起後端得連本機共用的 5433 資料庫與 9092 Kafka，而它們正被別的 session 使用；
+  5.5 MB 與這個情境走同一條路（`Content-Length` 超過上限就不讀 body，剩下的交給 Tomcat 讀掉），差別只在大小仍在 6 MB 內。
+- `Cache-Control` 照 dsl 的字串原樣回（`private, max-age=86400, immutable`、`private, no-cache`）；Spring 的 `CacheControl` 會把順序排成 `no-cache, private`，所以直接寫標頭。
+
+## Phase 4A–4C
+
+- T050：`markUploaded` 與 `"upload:"` 假值已刪；`PhotoStorage` 只有 `GcsPhotoStorage` 一個實作，看模擬位址只有 `StorageConfig` 一處；`readContent` 對舊列只認 `repair-photos/` 前綴。
+- T051：`照片完整性與冪等送出.feature` 16 run、`驗收不通過與重修.feature` 9 run 全綠。`RepairPhotoAttachTest`（`PostgresSpringTest` 底下）兩案綠：
+  事先把其中一張照片綁到別張單、直接呼叫綁定方法，回 409 `photo_already_attached` 且另一張也沒綁上（交易回滾）；
+  兩個執行緒同時以同一張照片開單，恰好一次成功、一次 409。為了讓測試直接呼叫，`bindUnclaimedPhotos` 由 private 改成同套件可見。
+- T052：開單（`requireUploadedPhotos` 只留張數，已上傳的判斷交給共用檢查）、補照片、完修三處都只透過 `requireAttachablePhotos`；
+  三個呼叫點都在 `@Transactional` 方法裡（`create`、`appendPhotos`、`TaskExecutionService.complete`）。
+  `TaskExecutionService` 仍有一句查 `repair_photos`，那是「完修照片不能全是上一輪」的既有規則，照 plan 保留。
+- T053：`重複報修補照片與撤回.feature` 12 run 全綠。
+- T054 後端全套：767 run、2 failures、0 errors。剩下的兩個都是 `單筆詳情與歷程.feature` 的櫃檯詳情照片（T063 的範圍，T001 基準就已失敗）；
+  基準其餘 31 個失敗都轉綠，沒有新失敗。

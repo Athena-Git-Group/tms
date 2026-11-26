@@ -20,6 +20,7 @@ import com.athena.tms.service.PushOutboxWriter;
 import com.athena.tms.service.StaffAvailability;
 import com.athena.tms.service.TaskEngine;
 import com.athena.tms.service.TaskRowLookup;
+import com.athena.tms.storage.PhotoStorage;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -60,6 +61,7 @@ public class RepairService {
 
     private static final String VERIFY_PASSED = "passed";
     private static final String VERIFY_FAILED = "failed";
+    private static final String PHOTO_KEY_PREFIX = "repair-photos/";
 
     private final JdbcTemplate jdbcTemplate;
     private final TaskEngine taskEngine;
@@ -68,6 +70,7 @@ public class RepairService {
     private final ObjectMapper objectMapper;
     private final StaffAvailability staffAvailability;
     private final RepairTicketOpener repairTicketOpener;
+    private final PhotoStorage photoStorage;
     private final Clock clock;
 
     public RepairService(
@@ -78,6 +81,7 @@ public class RepairService {
             ObjectMapper objectMapper,
             StaffAvailability staffAvailability,
             RepairTicketOpener repairTicketOpener,
+            PhotoStorage photoStorage,
             Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.taskEngine = taskEngine;
@@ -86,16 +90,17 @@ public class RepairService {
         this.objectMapper = objectMapper;
         this.staffAvailability = staffAvailability;
         this.repairTicketOpener = repairTicketOpener;
+        this.photoStorage = photoStorage;
         this.clock = clock;
     }
 
     @Transactional
-    public Map<String, Object> createPhoto(String purpose, String takenAt) {
+    public Map<String, Object> createPhoto(String purpose, OffsetDateTime takenAt) {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         UUID photoId = UuidV7.generate();
         OffsetDateTime now = OffsetDateTime.now(clock);
-        OffsetDateTime taken = takenAt == null ? now : OffsetDateTime.parse(takenAt);
+        OffsetDateTime taken = takenAt == null ? now : takenAt;
         jdbcTemplate.update(
                 """
                 INSERT INTO repair_photos (id, tenant_id, purpose, status, taken_at, uploaded_by, created_at)
@@ -110,23 +115,58 @@ public class RepairService {
     }
 
     @Transactional
-    public Map<String, Object> markUploaded(UUID photoId) {
+    public Map<String, Object> storeContent(UUID photoId, byte[] jpeg) {
         long tenantId = TenantContext.require();
-        OffsetDateTime now = OffsetDateTime.now(clock);
-        int updated = jdbcTemplate.update(
+        CurrentActor actor = CurrentActor.require();
+        Map<String, Object> photo = jdbcTemplate.queryForList(
+                "SELECT uploaded_by, ticket_task_id FROM repair_photos WHERE tenant_id = ? AND id = ? FOR UPDATE",
+                tenantId, photoId).stream().findFirst()
+                .orElseThrow(() -> new NotFoundException("查無照片: " + photoId));
+        if (!actor.staffId().equals(photo.get("uploaded_by"))) {
+            throw new ForbiddenException("只有建立照片的員工能上傳它的內容");
+        }
+        if (photo.get("ticket_task_id") != null) {
+            throw new StateConflictException("photo_already_attached", "照片已附在工務單上，內容不能再換");
+        }
+        String key = photoKey(tenantId, photoId);
+        photoStorage.put(key, jpeg);
+        jdbcTemplate.update(
                 """
                 UPDATE repair_photos
                    SET status = 'uploaded', storage_ref = ?, uploaded_at = COALESCE(uploaded_at, ?)
                  WHERE tenant_id = ? AND id = ?
                 """,
-                "upload:" + photoId, now, tenantId, photoId);
-        if (updated == 0) {
-            throw new NotFoundException("查無照片: " + photoId);
-        }
+                key, OffsetDateTime.now(clock), tenantId, photoId);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", photoId.toString());
         body.put("status", "uploaded");
         return body;
+    }
+
+    public record PhotoContent(byte[] jpeg, boolean attached) {
+    }
+
+    @Transactional(readOnly = true)
+    public PhotoContent readContent(UUID photoId) {
+        long tenantId = TenantContext.require();
+        Map<String, Object> photo = jdbcTemplate.queryForList(
+                """
+                SELECT storage_ref, ticket_task_id FROM repair_photos
+                 WHERE tenant_id = ? AND id = ? AND status = 'uploaded'
+                """,
+                tenantId, photoId).stream().findFirst()
+                .orElseThrow(() -> new NotFoundException("查無照片: " + photoId));
+        String storageRef = (String) photo.get("storage_ref");
+        if (storageRef == null || !storageRef.startsWith(PHOTO_KEY_PREFIX)) {
+            throw new NotFoundException("照片沒有內容: " + photoId);
+        }
+        byte[] jpeg = photoStorage.open(storageRef)
+                .orElseThrow(() -> new NotFoundException("照片沒有內容: " + photoId));
+        return new PhotoContent(jpeg, photo.get("ticket_task_id") != null);
+    }
+
+    private static String photoKey(long tenantId, UUID photoId) {
+        return PHOTO_KEY_PREFIX + tenantId + "/" + photoId + ".jpg";
     }
 
     @Transactional
@@ -228,6 +268,11 @@ public class RepairService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
+        String state = jdbcTemplate.queryForObject(
+                "SELECT state FROM tasks WHERE tenant_id = ? AND id = ?", String.class, tenantId, ticketTaskId);
+        if (List.of(TaskState.DONE, TaskState.CLOSED, TaskState.CANCELLED).contains(state)) {
+            throw new StateConflictException("ticket_closed", "工務單已修好、已結案或已撤回，不能再補照片");
+        }
 
         boolean isReporter =
                 actor.staffId().toString().equalsIgnoreCase(String.valueOf(ticket.get("reporter_id")));
@@ -243,6 +288,10 @@ public class RepairService {
             }
         }
 
+        if (photoIds.size() > 3) {
+            throw new UnprocessableEntityException("photo_limit", "最多 3 張");
+        }
+        requireAttachablePhotos(tenantId, photoIds, "report", ticketTaskId);
         bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
         return ticketView(tenantId, ticketTaskId);
     }
@@ -471,12 +520,60 @@ public class RepairService {
         return "system".equals(row.get("source")) && row.get("origin_ticket_task_id") == null;
     }
 
-    private void bindUnclaimedPhotos(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
-        for (UUID photoId : photoIds) {
-            jdbcTemplate.update(
-                    "UPDATE repair_photos SET ticket_task_id = ? WHERE tenant_id = ? AND id = ? AND ticket_task_id IS NULL",
-                    ticketTaskId, tenantId, photoId);
+    /**
+     * 開單、補照片、完修共用的照片檢查。鎖住照片列直到交易結束，同時附同一張照片的兩個請求才會排隊；
+     * 依編號順序上鎖，避免兩個請求各拿一半的鎖互等。呼叫者必須在交易裡。
+     */
+    public void requireAttachablePhotos(long tenantId, List<UUID> photoIds, String purpose, UUID ticketTaskId) {
+        List<UUID> distinct = photoIds.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return;
         }
+        List<Object> params = new ArrayList<>(distinct.size() + 1);
+        params.add(tenantId);
+        params.addAll(distinct);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT id, status, purpose, ticket_task_id, storage_ref FROM repair_photos"
+                        + " WHERE tenant_id = ? AND id IN (" + placeholders(distinct.size()) + ")"
+                        + " ORDER BY id FOR UPDATE",
+                params.toArray());
+        boolean allUploaded = rows.size() == distinct.size() && rows.stream().allMatch(row ->
+                "uploaded".equals(row.get("status"))
+                        && row.get("storage_ref") instanceof String ref && ref.startsWith(PHOTO_KEY_PREFIX));
+        if (!allUploaded) {
+            throw new UnprocessableEntityException("photo_not_uploaded", "有照片還沒上傳成功");
+        }
+        if (rows.stream().anyMatch(row -> !purpose.equals(row.get("purpose")))) {
+            throw new UnprocessableEntityException("photo_purpose_mismatch", "照片用途不符");
+        }
+        if (rows.stream().anyMatch(row -> row.get("ticket_task_id") != null
+                && !row.get("ticket_task_id").equals(ticketTaskId))) {
+            throw new StateConflictException("photo_already_attached", "照片已附在別張工務單上");
+        }
+    }
+
+    /** 改到的筆數少於照片張數就丟 409：requireAttachablePhotos 已上鎖時不會發生，漏了上鎖也不會默默少一張。 */
+    void bindUnclaimedPhotos(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
+        List<UUID> distinct = photoIds.stream().distinct().toList();
+        if (distinct.isEmpty()) {
+            return;
+        }
+        List<Object> params = new ArrayList<>(distinct.size() + 3);
+        params.add(ticketTaskId);
+        params.add(tenantId);
+        params.addAll(distinct);
+        params.add(ticketTaskId);
+        int bound = jdbcTemplate.update(
+                "UPDATE repair_photos SET ticket_task_id = ? WHERE tenant_id = ? AND id IN ("
+                        + placeholders(distinct.size()) + ") AND (ticket_task_id IS NULL OR ticket_task_id = ?)",
+                params.toArray());
+        if (bound != distinct.size()) {
+            throw new StateConflictException("photo_already_attached", "照片已附在別張工務單上");
+        }
+    }
+
+    private static String placeholders(int count) {
+        return String.join(", ", Collections.nCopies(count, "?"));
     }
 
     @Transactional
@@ -677,17 +774,7 @@ public class RepairService {
         if (photoIds.size() > 3) {
             throw new UnprocessableEntityException("photo_limit", "最多 3 張");
         }
-        String placeholders = String.join(", ", Collections.nCopies(photoIds.size(), "?"));
-        List<Object> params = new ArrayList<>(photoIds.size() + 1);
-        params.add(tenantId);
-        params.addAll(photoIds);
-        Integer uploaded = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM repair_photos WHERE tenant_id = ? AND status = 'uploaded' AND id IN ("
-                        + placeholders + ")",
-                Integer.class, params.toArray());
-        if (uploaded == null || uploaded != photoIds.size()) {
-            throw new UnprocessableEntityException("photo_not_uploaded", "有照片還沒上傳成功");
-        }
+        requireAttachablePhotos(tenantId, photoIds, "report", null);
     }
 
     private void pushVerificationFailed(long tenantId, UUID ticketTaskId, Map<String, Object> ticket, UUID assigneeId,

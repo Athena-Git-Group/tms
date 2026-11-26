@@ -253,10 +253,10 @@
 **Test Scope**:
 - `specs/truth/features/backend/工務單/照片內容上傳與查看.feature`
 
-- [ ] T049 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T049 [BDD-GREEN] 讓 Test Scope 全綠
   - 落點：`repair/RepairController.java`（PUT 讀 `Content-Type`、`Content-Length` 與輸入串流；新增 `GET /repair-photos/{photoId}/content` 回 `ResponseEntity<byte[]>`、`image/jpeg`，`Cache-Control` 照照片是否已附上：已附上 `private, max-age=86400, immutable`、還沒附上 `private, no-cache`；建立照片檢查 `purpose`、`takenAt` 回 `validation_failed`）、`repair/RepairPhotoContent.java`、`repair/RepairService.java`（`markUploaded` 換成 `storeContent`；新增 `readContent`，`storage_ref` 不是 `repair-photos/` 開頭或儲存裡沒有物件都回 404）、`config/SecurityConfig.java`（在 `GET /api/v1/**` 之前加 `requestMatchers(HttpMethod.GET, "/api/v1/repair-photos/*/content").hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "duty_manager")`）、`common/error/` 視需要新增 413、415 的例外類別（沿用 `ApiException`）。
   - 另跑一次手動檢查並記到 `implement-notes.md`：以 `curl` 送 5.5 MB 的內容，收到 413 與 `photo_too_large` 的 body，不是連線被重設。
-- [ ] T050 [BDD-REFACTOR] 刪掉 `markUploaded` 與 `"upload:"` 假值的所有殘留（`readContent` 對舊列的判斷只認前綴），確認存照片只有 `GcsPhotoStorage` 一個實作、看模擬位址只有 `StorageConfig` 一處
+- [X] T050 [BDD-REFACTOR] 刪掉 `markUploaded` 與 `"upload:"` 假值的所有殘留（`readContent` 對舊列的判斷只認前綴），確認存照片只有 `GcsPhotoStorage` 一個實作、看模擬位址只有 `StorageConfig` 一處
 
 ## Phase 4B: MODIFY Feature File - backend/工務單/照片完整性與冪等送出.feature
 
@@ -280,10 +280,10 @@
 - `specs/truth/features/backend/工務單/照片完整性與冪等送出.feature`
 - `specs/truth/features/backend/工務單/驗收不通過與重修.feature`（回歸：這一輪照片的規則）
 
-- [ ] T051 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T051 [BDD-GREEN] 讓 Test Scope 全綠
   - 落點：`repair/RepairService.java`（`requireAttachablePhotos`；`requireUploadedPhotos` 改用它；`bindUnclaimedPhotos` 回傳筆數並比對）、`service/TaskExecutionService.java`（`requireCompletionPhotos` 呼叫它；綁定完修照片處同樣比對筆數）。
   - 加一支不走 Cucumber 的整合測試（`PostgresSpringTest` 底下）：直接呼叫綁定方法，讓其中一張照片事先綁到別張單（模擬漏鎖），確認回 409 `photo_already_attached`、交易回滾；另一支用兩個執行緒同時以同一張照片開單，確認恰好一次成功、一次 409。
-- [ ] T052 [BDD-REFACTOR] 確認開單、完修兩處不再各自查 `repair_photos.status`，只透過共用檢查；三個呼叫點都在 `@Transactional` 方法裡
+- [X] T052 [BDD-REFACTOR] 確認開單、完修兩處不再各自查 `repair_photos.status`，只透過共用檢查；三個呼叫點都在 `@Transactional` 方法裡
 
 ## Phase 4C: MODIFY Feature File - backend/工務單/重複報修補照片與撤回.feature
 
@@ -303,9 +303,9 @@
 **Test Scope**:
 - `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature`
 
-- [ ] T053 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T053 [BDD-GREEN] 讓 Test Scope 全綠
   - 落點：`repair/RepairService.java` 的 `appendPhotos`；`repair/RepairController.java` 只留空陣列的 422，超過 3 張交給服務。
-- [ ] T054 [BDD-REFACTOR] 後端全套與 T001 基準比沒有新失敗；只加 Phase 4A 至 4C 的檔案，提交一次
+- [X] T054 [BDD-REFACTOR] 後端全套與 T001 基準比沒有新失敗；只加 Phase 4A 至 4C 的檔案，提交一次
 
 ## Phase 4D: 員工 App 拍照、選照片與顯示照片
 

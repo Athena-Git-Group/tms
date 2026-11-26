@@ -336,6 +336,7 @@ public class TaskExecutionService {
         if (request.photoIds() == null || request.photoIds().isEmpty()) {
             throw new UnprocessableEntityException("completion_photo_required", "需要完修照片");
         }
+        repairService.requireAttachablePhotos(tenantId, request.photoIds(), "completion", taskId);
         String placeholders = String.join(", ", Collections.nCopies(request.photoIds().size(), "?"));
         List<Object> params = new ArrayList<>();
         params.add(tenantId);
