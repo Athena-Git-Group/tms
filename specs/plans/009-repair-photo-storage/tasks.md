@@ -426,9 +426,9 @@
 **Boundary**:
 - 不改 truth、不加 feature、不重跑 GREEN 當通過條件。
 
-- [ ] T068 subagent review（`plan.md` quality gate）：逐項對 `plan.md`「程式現況跟本版差在哪裡」23 列與落點清單，確認每一列都已處理或有理由不處理；特別確認 `server.tomcat.max-swallow-size`、`application-prod.properties`、`StorageConfig` 的逾時與啟動失敗、`FOR UPDATE` 加筆數比對、`SecurityConfig` 的讀照片 matcher 都在。
-- [ ] T069 subagent review（`spec.md` 與 acceptance quality gate）：逐條對 spec 的系統規則、邊界情況、白話 NFR 與三份 acceptance feature，確認都有 truth 情境、Flutter 測試、Vitest、整合測試或 Phase 5 的實機步驟承接；「同時附同一張照片」由 T051 的整合測試承接。
-- [ ] T070 subagent review（`research.md` quality gate）：確認 `research.md` 列的設定項目、模擬服務參數、逾時與「還沒查證的風險」都已在實作或 `implement-notes.md` 有結論。
+- [X] T068 subagent review（`plan.md` quality gate）：逐項對 `plan.md`「程式現況跟本版差在哪裡」23 列與落點清單，確認每一列都已處理或有理由不處理；特別確認 `server.tomcat.max-swallow-size`、`application-prod.properties`、`StorageConfig` 的逾時與啟動失敗、`FOR UPDATE` 加筆數比對、`SecurityConfig` 的讀照片 matcher 都在。
+- [X] T069 subagent review（`spec.md` 與 acceptance quality gate）：逐條對 spec 的系統規則、邊界情況、白話 NFR 與三份 acceptance feature，確認都有 truth 情境、Flutter 測試、Vitest、整合測試或 Phase 5 的實機步驟承接；「同時附同一張照片」由 T051 的整合測試承接。
+- [X] T070 subagent review（`research.md` quality gate）：確認 `research.md` 列的設定項目、模擬服務參數、逾時與「還沒查證的風險」都已在實作或 `implement-notes.md` 有結論。
 
 ## Phase 5: Appium 回歸與實機驗證
 
