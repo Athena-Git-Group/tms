@@ -1,6 +1,18 @@
-# TMS 本機開發環境：Postgres + Kafka
+# TMS 本機開發環境：Postgres + Kafka（＋選用的 Conduktor Console 看 Kafka）
 #
 # 啟動：  docker compose up -d
+#
+# 連 Conduktor（看 Kafka topic、訊息、consumer group 的網頁工具）一起起：
+#   docker compose --profile conduktor up -d
+#   打開 http://localhost:8088 登入。
+#
+#   登入帳密（預設，只供本機使用）：
+#     帳號 admin@tms.local
+#     密碼 Tms_local1!
+#   想換帳密或填 Conduktor 授權碼：cp .env.example .env 後修改 .env，
+#   再跑一次上面的 up 指令。.env 不進版控；沒有 .env 就用上面的預設值，
+#   沒填授權碼就以免費的社群版執行。
+#
 # 停止：  docker compose down          （保留資料）
 # 重置：  docker compose down -v      （連資料一起清掉，下次啟動 Flyway 重建）
 #
@@ -42,11 +54,12 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      # client 在宿主機上連，所以 advertise localhost
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # 兩個對外入口：宿主機上的 app 連 localhost:9092；
+      # 同一個 docker 網路裡的容器（例如 Conduktor）連 kafka:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
       # 單 broker，所有內部 topic 的複本數只能是 1
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -60,6 +73,53 @@ services:
       timeout: 10s
       retries: 10
 
+  # 以下兩個服務只在 --profile conduktor 時啟動，平常的 docker compose up 不會帶起來
+  conduktor-postgres:
+    image: postgres:16-alpine
+    container_name: tms-conduktor-postgres
+    profiles: [conduktor]
+    environment:
+      POSTGRES_DB: conduktor
+      POSTGRES_USER: conduktor
+      POSTGRES_PASSWORD: conduktor
+    volumes:
+      - tms-conduktor-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conduktor -d conduktor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  conduktor-console:
+    image: conduktor/conduktor-console:1.48.1
+    container_name: tms-conduktor-console
+    profiles: [conduktor]
+    depends_on:
+      conduktor-postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      # 8080 是後端，所以 Console 開在 8088
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - tms-conduktor-data:/var/conduktor
+    environment:
+      CDK_DATABASE_URL: "postgresql://conduktor:conduktor@conduktor-postgres:5432/conduktor"
+      CDK_ORGANIZATION_NAME: "tms-local"
+      CDK_ADMIN_EMAIL: "${CDK_ADMIN_EMAIL:-admin@tms.local}"
+      # 密碼至少 8 碼且要有大小寫、數字、符號，不然 Console 起不來
+      CDK_ADMIN_PASSWORD: "${CDK_ADMIN_PASSWORD:-Tms_local1!}"
+      # 沒有授權碼時以社群版執行
+      CDK_LICENSE: "${CDK_LICENSE:-}"
+      # 開機就登記好這座 Kafka，走容器網路的 INTERNAL 入口
+      CDK_CLUSTERS_0_ID: tms-kafka
+      CDK_CLUSTERS_0_NAME: "tms-kafka"
+      CDK_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka:29092"
+
 volumes:
   tms-pgdata:
   tms-kafka-data:
+  tms-conduktor-pgdata:
+  tms-conduktor-data:
