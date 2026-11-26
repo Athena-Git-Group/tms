@@ -60,6 +60,10 @@
 | MODIFY | `specs/truth/features/backend/dsl.md` -> Then `這次操作被拒絕，錯誤碼為 "{錯誤碼}"` 的錯誤碼舉例 | 補 `not_found`（讀照片與上傳內容兩種情況）、`photo_not_uploaded`（含舊版假照片）、`photo_purpose_mismatch`、`photo_already_attached`（含同時送出）、`photo_empty`、`photo_type_unsupported`、`photo_too_large`、`photo_limit`、`ticket_closed` 與各自的 HTTP 狀態。句型與必查語意不變。 | 新情境用到這些錯誤碼；步驟實作的錯誤碼對 HTTP 狀態表要跟著補。 |
 | MODIFY | `specs/truth/features/backend/dsl.md` -> Given `已有以下工務單：` 的 `怎麼做` | 建立的已上傳照片要把測試 JPEG 寫進照片儲存，`storage_ref` 寫物件名稱。句型與欄位不變。 | 維持「已上傳就讀得到內容」的不變條件。 |
 | NOOP | `specs/truth/features/backend/工務單/驗收不通過與重修.feature`、`完修與回到原任務.feature`、`工務視角維修與開單.feature`、`開立工務單與急件.feature`、`櫃檯轉來的工務單.feature`、`櫃檯代開的工務單.feature`、`主管驗收的狀態守衛.feature`；`櫃檯看板與派單/櫃檯介面的角色權限.feature` | 已檢查，不需修改。工務單情境用的上傳句型語意由模組說明段統一改成送合法 JPEG；退回重修要附這一輪照片的規則不變。讀照片的角色規則寫在 `照片內容上傳與查看.feature`，櫃檯介面的角色權限只管 `/desk/**`。 | 句型文字不變。 |
+| MODIFY | `specs/truth/features/backend/工務單/照片完整性與冪等送出.feature` | 審查後再加 3 條 Rule：完修一次最多 3 張（`photo_limit`）；完修照片一張合格一張未上傳時整次被拒、合格的也沒附上；以不需處理完成時附了未上傳的照片被拒。 | spec「完修附的照片要符合什麼？」的 3 張上限與不需處理帶照片、邊界情況「完修時同時帶了合法與不合法的照片」原本沒有情境承接。 |
+| MODIFY | `specs/truth/features/backend/工務單/重複報修補照片與撤回.feature` | 審查後再加 1 條 Rule：補已附在別張單上的照片回 `photo_already_attached`，兩張單的照片張數都不變。 | spec「補照片要符合什麼？」的已附在別張單上原本沒有情境承接。 |
+| ADD | `specs/truth/features/backend/工務單/dsl.md` -> When `"{工務}" 附照片 "{照片}"、"{另一張照片}" 以已修好完成 "{單號}"`、`"{工務}" 附照片 "{照片}" 以完修結果 "{結果}" 完成 "{單號}"` | 一次附兩張指定照片完修；以指定完修結果附一張指定照片完修。 | 上面兩條新 Rule 的 Act。 |
+| MODIFY | `specs/truth/features/backend/工務單/dsl.md` -> 模組說明「報修與驗收」段、When `"{工務}" 附 {張數} 張完修照片、處理說明 "{說明}" 完成 "{單號}"` | 補「不需處理帶了照片也照完修照片規則檢查」「一次最多 3 張，超過回 `photo_limit`」。句型文字不變。 | 跟 spec 對齊。 |
 
 ### 員工 App
 
