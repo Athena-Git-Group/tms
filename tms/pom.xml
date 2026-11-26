@@ -17,6 +17,7 @@
 		<java.version>25</java.version>
 		<cucumber.version>7.22.1</cucumber.version>
 		<testcontainers.version>1.21.3</testcontainers.version>
+		<shedlock.version>7.10.1</shedlock.version>
 	</properties>
 	<dependencies>
 		<!-- core web / persistence / messaging / scheduling, per HELP.md initializr selection -->
@@ -69,6 +70,16 @@
 		</dependency>
 
 		<!-- migrations（Boot 4 的 Flyway 自動配置在獨立模組 spring-boot-flyway） -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-flyway</artifactId>

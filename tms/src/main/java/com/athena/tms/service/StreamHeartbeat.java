@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import com.athena.tms.common.PerInstance;
 import com.athena.tms.service.StreamConnectionRegistry;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,7 @@ public class StreamHeartbeat {
     }
 
     @Scheduled(fixedDelayString="${tms.stream.heartbeat-interval:15s}")
+    @PerInstance
     public void beat() {
         this.registry.broadcastHeartbeat();
     }

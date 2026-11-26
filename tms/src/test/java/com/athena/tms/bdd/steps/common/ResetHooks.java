@@ -5,6 +5,7 @@ import com.athena.tms.bdd.support.KafkaGroupAwait;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.RecordingPushSender;
 import com.athena.tms.config.KafkaTopicsProperties;
+import com.athena.tms.push.PushProperties;
 import io.cucumber.java.Before;
 import java.time.Duration;
 import java.util.List;
@@ -18,16 +19,19 @@ public class ResetHooks {
     private final KafkaTopicsProperties topics;
     private final RecordingPushSender recordingPushSender;
     private final MutableClock clock;
+    private final PushProperties pushProperties;
 
     public ResetHooks(
             JdbcClient jdbc,
             KafkaGroupAwait kafkaGroupAwait,
             KafkaTopicsProperties topics,
             RecordingPushSender recordingPushSender,
-            MutableClock clock) {
+            MutableClock clock,
+            PushProperties pushProperties) {
         this.jdbc = jdbc;
         this.kafkaGroupAwait = kafkaGroupAwait;
         this.topics = topics;
+        this.pushProperties = pushProperties;
         this.recordingPushSender = recordingPushSender;
         this.clock = clock;
     }
@@ -35,7 +39,7 @@ public class ResetHooks {
     @Before(order = 0)
     public void drainPushConsumer() {
         awaitNoPendingPushOutbox(Duration.ofSeconds(10));
-        kafkaGroupAwait.awaitCaughtUp("tms-push-sender", topics.getPush(), Duration.ofSeconds(15));
+        kafkaGroupAwait.awaitCaughtUp(pushProperties.getConsumer().getGroup(), topics.getPush(), Duration.ofSeconds(15));
         recordingPushSender.reset();
     }
 

@@ -1,5 +1,6 @@
 package com.athena.tms.bdd.steps.push;
 
+import com.athena.tms.SharedContainers;
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
@@ -9,6 +10,7 @@ import com.athena.tms.bdd.support.RecordingPushSender;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.common.OutboxKafkaHeaders;
 import com.athena.tms.config.KafkaTopicsProperties;
+import com.athena.tms.push.PushProperties;
 import io.cucumber.java.zh_tw.假設;
 import io.cucumber.java.zh_tw.當;
 import io.cucumber.java.zh_tw.那麼;
@@ -19,8 +21,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.http.HttpMethod;
 import org.springframework.kafka.core.KafkaTemplate;
 import tools.jackson.databind.JsonNode;
@@ -43,6 +49,7 @@ public class PushDeliverySteps {
     private final KafkaTopicsProperties topics;
     private final KafkaGroupAwait kafkaGroupAwait;
     private final ObjectMapper objectMapper;
+    private final PushProperties pushProperties;
 
     private final Map<String, String> tokens = new HashMap<>();
     private final Map<String, Integer> registrations = new HashMap<>();
@@ -57,7 +64,8 @@ public class PushDeliverySteps {
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicsProperties topics,
             KafkaGroupAwait kafkaGroupAwait,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            PushProperties pushProperties) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -68,6 +76,7 @@ public class PushDeliverySteps {
         this.topics = topics;
         this.kafkaGroupAwait = kafkaGroupAwait;
         this.objectMapper = objectMapper;
+        this.pushProperties = pushProperties;
     }
 
     @假設("{string} 的手機 {string} 已登記推播")
@@ -95,6 +104,21 @@ public class PushDeliverySteps {
         pushSender.markTokenInvalid(currentToken(staffName, fingerprint));
     }
 
+    @假設("推播服務對 {string} 手機 {string} 會先暫時出錯 {int} 次")
+    public void pushServiceFailsTransiently(String staffName, String fingerprint, int times) {
+        pushSender.failTransiently(currentToken(staffName, fingerprint), times);
+    }
+
+    @假設("推播服務對 {string} 手機 {string} 一直暫時出錯")
+    public void pushServiceKeepsFailing(String staffName, String fingerprint) {
+        pushSender.failTransiently(currentToken(staffName, fingerprint), Integer.MAX_VALUE);
+    }
+
+    @假設("處理 {string} 手機 {string} 的推播時資料庫會先連不上 {int} 次")
+    public void databaseUnavailableWhileDelivering(String staffName, String fingerprint, int times) {
+        pushSender.failWithDatabaseOutage(currentToken(staffName, fingerprint), times);
+    }
+
     @當("{string} 的推播 {string} 被重送一次")
     public void pushRedelivered(String staffName, String title) throws Exception {
         Map<String, Object> outbox = outboxRowFor(staffName, title);
@@ -107,7 +131,7 @@ public class PushDeliverySteps {
                 OutboxKafkaHeaders.IDEMPOTENCY_KEY,
                 String.valueOf(outbox.get("idempotency_key")).getBytes(StandardCharsets.UTF_8)));
         kafkaTemplate.send(record).get(10, TimeUnit.SECONDS);
-        if (!kafkaGroupAwait.awaitCaughtUp("tms-push-sender", topics.getPush(), Duration.ofSeconds(15))) {
+        if (!kafkaGroupAwait.awaitCaughtUp(pushProperties.getConsumer().getGroup(), topics.getPush(), Duration.ofSeconds(15))) {
             throw new AssertionError("推播消費者 15 秒內沒有讀完重送的訊息");
         }
     }
@@ -126,6 +150,49 @@ public class PushDeliverySteps {
         if (!UUID.fromString(world.staffId(staffName)).equals(row.get("recipient_staff_id"))) {
             throw new AssertionError("送達紀錄的收件人不是 " + staffName + "：" + row);
         }
+    }
+
+    @那麼("{string} 的推播 {string} 在 {int} 秒內送達紀錄為 {string}")
+    public void deliveryRecordStatusWithin(String staffName, String title, int seconds, String statusTerm) {
+        long started = System.nanoTime();
+        String idempotencyKey = String.valueOf(outboxRowFor(staffName, title).get("idempotency_key"));
+        Duration remaining = Duration.ofSeconds(seconds).minusNanos(System.nanoTime() - started);
+        outboxAwait.withPollInterval(Duration.ofMillis(50)).withTimeout(remaining).waitForRow(
+                staffName + " 的推播「" + title + "」" + seconds + " 秒內送達紀錄狀態為 " + statusTerm,
+                "SELECT * FROM push_deliveries WHERE tenant_id = ? AND idempotency_key = ? AND status = ?",
+                tenantFixtures.testTenantId(), idempotencyKey, status(statusTerm));
+    }
+
+    @那麼("{string} 的推播 {string} 最後送達紀錄為 {string}")
+    public void deliveryRecordStatusEventually(String staffName, String title, String statusTerm) {
+        String idempotencyKey = String.valueOf(outboxRowFor(staffName, title).get("idempotency_key"));
+        outboxAwait.withTimeout(Duration.ofSeconds(30)).waitForRow(
+                staffName + " 的推播「" + title + "」重送後送達紀錄狀態為 " + statusTerm,
+                "SELECT * FROM push_deliveries WHERE tenant_id = ? AND idempotency_key = ? AND status = ?",
+                tenantFixtures.testTenantId(), idempotencyKey, status(statusTerm));
+    }
+
+    @那麼("{string} 的推播 {string} 重送用完後進入無法送達區")
+    public void deadLettered(String staffName, String title) {
+        String idempotencyKey = String.valueOf(outboxRowFor(staffName, title).get("idempotency_key"));
+        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(Map.of(
+                "bootstrap.servers", SharedContainers.kafka().getBootstrapServers(),
+                "group.id", "push-dead-letter-probe-" + UUID.randomUUID(),
+                "auto.offset.reset", "earliest",
+                "key.deserializer", StringDeserializer.class,
+                "value.deserializer", StringDeserializer.class))) {
+            consumer.subscribe(List.of(topics.getPushDeadLetter()));
+            long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+            while (System.nanoTime() < deadline) {
+                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(200))) {
+                    Header header = record.headers().lastHeader(OutboxKafkaHeaders.IDEMPOTENCY_KEY);
+                    if (header != null && idempotencyKey.equals(new String(header.value(), StandardCharsets.UTF_8))) {
+                        return;
+                    }
+                }
+            }
+        }
+        throw new AssertionError(staffName + " 的推播「" + title + "」30 秒內沒有進入 " + topics.getPushDeadLetter());
     }
 
     @那麼("推播服務收到送往 {string} 手機 {string} 的 {string}")
@@ -188,6 +255,14 @@ public class PushDeliverySteps {
         if (rows.getFirst().get("revoked_at") == null) {
             throw new AssertionError(staffName + " 的手機 " + fingerprint + " 預期已解除（revoked_at 非空），實際為空");
         }
+    }
+
+    private static String status(String statusTerm) {
+        String expected = STATUS_TERMS.get(statusTerm);
+        if (expected == null) {
+            throw new IllegalArgumentException("送達紀錄狀態只支援 " + STATUS_TERMS.keySet() + "，實際=" + statusTerm);
+        }
+        return expected;
     }
 
     private void register(String staffName, String fingerprint) {

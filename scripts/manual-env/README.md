@@ -190,11 +190,10 @@ Open Developer Tool → Simulator 打開視窗。simulator 本身用 `xcrun simc
   `GRANT USAGE ON SCHEMA public` 和 `ALL SEQUENCES IN SCHEMA public`。套在別的 schema 時，
   應用帳號 `tms_app` 拿不到那個 schema 的使用權限，V1 建的序號也沒授權，後端寫不進去。
   另開 database 時 `public` 是那個 database 自己的，遷移原封不動就能用。
-- **Kafka**：用啟動參數把四個 topic（task-events、push、push.DLT、pms-status）換成
-  `manual.tms.*`，事件串流的 consumer group 前綴也換成 `manual.sse`。推播的 consumer group
-  `tms-push-sender` 寫死在程式裡改不掉，所以 8083 和 8080 會在同一個 group 裡，但各自只訂自己的
-  topic，Kafka 只把 `manual.tms.push` 的分區分給 8083，不會搶到測試的訊息。
-  副作用：8083 起停時同一個 group 會重新分配一次分區，8080 的推播消費會停頓幾秒。
+- **Kafka**：用啟動參數把三個 topic（task-events、push、pms-status）換成 `manual.tms.*`；
+  推播的重試 topic 與 DLT 由 push topic 名稱推導，會跟著變成 `manual.tms.push.retry-*`、
+  `manual.tms.push.DLT`。事件串流的 consumer group 前綴換成 `manual.sse`，推播的 consumer group
+  換成 `manual.tms-push-sender`，所以 8083 起停不會讓 8080 的推播消費重新分配分區。
 - **登入憑證**：JWT 簽章金鑰和測試後端一樣（都是預設值），8080 發的 token 拿到 8083 也驗得過；
   兩邊資料不同，只是不要混用。
 - **simulator**：另一個 session 的 App 端到端測試會用 Appium 佔住它自己的 simulator。

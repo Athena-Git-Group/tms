@@ -8,6 +8,7 @@ public class PushProperties {
 
     private final Fcm fcm = new Fcm();
     private final Retry retry = new Retry();
+    private final Consumer consumer = new Consumer();
 
     public Fcm getFcm() {
         return fcm;
@@ -15,6 +16,10 @@ public class PushProperties {
 
     public Retry getRetry() {
         return retry;
+    }
+
+    public Consumer getConsumer() {
+        return consumer;
     }
 
     public static class Fcm {
@@ -32,6 +37,7 @@ public class PushProperties {
     public static class Retry {
         private Duration initialInterval = Duration.ofSeconds(1);
         private int maxAttempts = 3;
+        private Duration maxInterval = Duration.ofSeconds(30);
 
         public Duration getInitialInterval() {
             return initialInterval;
@@ -47,6 +53,35 @@ public class PushProperties {
 
         public void setMaxAttempts(int maxAttempts) {
             this.maxAttempts = maxAttempts;
+        }
+
+        public Duration getMaxInterval() {
+            return maxInterval;
+        }
+
+        public void setMaxInterval(Duration maxInterval) {
+            this.maxInterval = maxInterval;
+        }
+    }
+
+    public static class Consumer {
+        private int concurrency = 3;
+        private String group = "tms-push-sender";
+
+        public String getGroup() {
+            return group;
+        }
+
+        public void setGroup(String group) {
+            this.group = group;
+        }
+
+        public int getConcurrency() {
+            return concurrency;
+        }
+
+        public void setConcurrency(int concurrency) {
+            this.concurrency = concurrency;
         }
     }
 }
