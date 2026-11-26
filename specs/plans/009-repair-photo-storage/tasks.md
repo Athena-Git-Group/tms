@@ -396,7 +396,7 @@
 - `specs/truth/features/frontdesk-web/單筆詳情/工務單照片.feature`（`desktop` 與 `ipad` 各一次）
 - `specs/truth/features/frontdesk-web/單筆詳情/詳情面板內容.feature`（回歸：既有區塊不變）
 
-- [ ] T063 [BDD-GREEN] 後端櫃檯詳情帶照片
+- [X] T063 [BDD-GREEN] 後端櫃檯詳情帶照片
   - 落點：`dto/desk/DeskTaskDetail.java`（`repair` 加 `photos`、`completionPhotos`，型別沿用工務單的照片 DTO）、`service/DeskBoardService.java`（工務單時呼叫 `RepairService` 組照片清單的方法；必要時把它從 `ticketView` 抽成可共用的方法）。
   - 驗證：`單筆詳情與歷程.feature` 全綠；`照片內容上傳與查看.feature` 仍全綠（值班主管讀照片）。
 - [ ] T064 先寫會紅的 Vitest

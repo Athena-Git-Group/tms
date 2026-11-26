@@ -463,7 +463,7 @@ public class RepairService {
         return body;
     }
 
-    private List<Map<String, Object>> reportPhotos(long tenantId, UUID ticketTaskId) {
+    public List<Map<String, Object>> reportPhotos(long tenantId, UUID ticketTaskId) {
         return photoViews(jdbcTemplate.queryForList(
                 """
                 SELECT p.id, p.status, p.taken_at
@@ -474,7 +474,7 @@ public class RepairService {
                 tenantId, ticketTaskId));
     }
 
-    private List<Map<String, Object>> completionPhotos(long tenantId, UUID ticketTaskId) {
+    public List<Map<String, Object>> completionPhotos(long tenantId, UUID ticketTaskId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
                 SELECT p.id, p.status, p.taken_at

@@ -100,3 +100,11 @@ dsl 沒寫死、照最小解讀做的地方：
 - T053：`重複報修補照片與撤回.feature` 12 run 全綠。
 - T054 後端全套：767 run、2 failures、0 errors。剩下的兩個都是 `單筆詳情與歷程.feature` 的櫃檯詳情照片（T063 的範圍，T001 基準就已失敗）；
   基準其餘 31 個失敗都轉綠，沒有新失敗。
+
+## T063 櫃檯詳情帶照片
+
+- `DeskTaskDetail.repair` 多 `photos`、`completionPhotos`，每張 `{id, status, takenAt}`，由 `RepairService.reportPhotos`／`completionPhotos` 組（與工務單詳情同一段查詢，完修照片只有這一輪）。
+  工務單照片沒有獨立的 DTO 類別，沿用 `RepairService` 回的同一種 Map。不是工務單時 `repair` 整個是 null。
+- `單筆詳情與歷程.feature` 16 run、`照片內容上傳與查看.feature` 25 run 全綠。
+- 後端全套最後一次：829 run、0 failures、0 errors（T001 基準 33 個失敗全部轉綠，沒有新失敗）。
+- `tasks.md` 把 Phase 4F 的提交放在 T067（櫃檯 Web 那一棒）；T063 先單獨提交，櫃檯 Web 那一棒只需提交自己的檔案。
