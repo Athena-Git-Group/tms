@@ -37,3 +37,6 @@ reviews/
 # Maven 建置產物（app/bdd 等 Java 模組）
 target/
 .tms-parity/
+
+# 本機 docker compose 的私人設定（Conduktor 帳密、授權碼）
+.env
