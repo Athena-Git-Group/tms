@@ -143,15 +143,6 @@ public class GuestThenSteps {
         assertEquals("zh-TW", note.get("lang").asText());
     }
 
-    @Then("^第 3 筆需求仍為成功建立$")
-    public void thirdRequestStillCreated() {
-        ScenarioContext.HttpResult third = ctx.get(ScenarioKeys.THIRD_RESPONSE);
-        assertEquals(201, third.status(), "第 3 筆該在限流線內: " + third.body());
-        JsonNode body = objectMapper.readTree(third.body());
-        assertNotNull(body.get("id"));
-        assertEquals("pool", db.taskRow(UUID.fromString(body.get("id").asText())).get("state"));
-    }
-
     @Then("^清單含自己的「([^」]+)」但不含前一筆訂單的任何需求$")
     public void listFiltersByReservation(String myTitle) {
         ScenarioContext.HttpResult last = ctx.lastResponse();

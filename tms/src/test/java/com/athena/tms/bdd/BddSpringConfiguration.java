@@ -1,5 +1,6 @@
 package com.athena.tms.bdd;
 
+import com.athena.tms.SharedContainers;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.DeskApi;
@@ -30,27 +31,19 @@ import com.athena.tms.bdd.support.TaskFixtures;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.service.JwtService;
 import com.athena.tms.service.TaskEngine;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import io.cucumber.spring.CucumberContextConfiguration;
 import io.cucumber.spring.ScenarioScope;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-import java.util.List;
-import java.util.Map;
-import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.kafka.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
 import tools.jackson.databind.ObjectMapper;
 
 @CucumberContextConfiguration
@@ -58,23 +51,21 @@ import tools.jackson.databind.ObjectMapper;
 @ActiveProfiles("test")
 public class BddSpringConfiguration {
 
-    @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
-
-    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka:4.0.0"));
-
     static {
-        POSTGRES.start();
-        KAFKA.start();
-        createTopics();
+        SharedContainers.createTopics("tms.task-events", "tms.push", "tms.push.DLT");
     }
 
     @DynamicPropertySource
-    static void wireFlyway(DynamicPropertyRegistry registry) {
-        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.flyway.user", POSTGRES::getUsername);
-        registry.add("spring.flyway.password", POSTGRES::getPassword);
-        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
+    static void wireContainers(DynamicPropertyRegistry registry) {
+        PostgreSQLContainer<?> postgres = SharedContainers.postgres();
+        String url = SharedContainers.database("truth");
+        registry.add("spring.datasource.url", () -> url);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.flyway.url", () -> url);
+        registry.add("spring.flyway.user", postgres::getUsername);
+        registry.add("spring.flyway.password", postgres::getPassword);
+        registry.add("spring.kafka.bootstrap-servers", SharedContainers.kafka()::getBootstrapServers);
         registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");
     }
 
@@ -134,7 +125,7 @@ public class BddSpringConfiguration {
 
         @Bean(destroyMethod = "close")
         KafkaGroupAwait kafkaGroupAwait() {
-            return new KafkaGroupAwait(KAFKA.getBootstrapServers());
+            return new KafkaGroupAwait(SharedContainers.kafka().getBootstrapServers());
         }
 
         @Bean
@@ -157,9 +148,8 @@ public class BddSpringConfiguration {
                 JdbcClient jdbcClient,
                 TenantFixtures tenantFixtures,
                 RoomFixtures roomFixtures,
-                PasswordEncoder passwordEncoder,
                 JwtService jwtService) {
-            return new StaffFixtures(jdbcClient, tenantFixtures, roomFixtures, passwordEncoder, jwtService);
+            return new StaffFixtures(jdbcClient, tenantFixtures, roomFixtures, jwtService);
         }
 
         @Bean
@@ -267,18 +257,6 @@ public class BddSpringConfiguration {
             return new PmsProbe(
                     outboxAwait, dbProbe, tenantFixtures, roomFixtures,
                     automationRuleService, scenarioWorld, mutableClock);
-        }
-    }
-
-    private static void createTopics() {
-        try (AdminClient admin = AdminClient.create(
-                Map.of("bootstrap.servers", KAFKA.getBootstrapServers()))) {
-            admin.createTopics(List.of(
-                    new NewTopic("tms.task-events", 1, (short) 1),
-                    new NewTopic("tms.push", 1, (short) 1),
-                    new NewTopic("tms.push.DLT", 1, (short) 1))).all().get();
-        } catch (Exception e) {
-            throw new IllegalStateException("建立 Kafka topic 失敗", e);
         }
     }
 }

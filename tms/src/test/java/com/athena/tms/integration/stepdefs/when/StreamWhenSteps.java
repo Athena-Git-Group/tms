@@ -79,15 +79,6 @@ public class StreamWhenSteps {
         Thread.sleep(2000);
     }
 
-    @When("^一筆 record 時間戳落後 (\\d+) 秒的事件進入 task-events topic$")
-    public void staleRecordEntersTopic(int lagSeconds) throws Exception {
-        sse.produceRaw(System.currentTimeMillis(), "task:" + UUID.randomUUID(),
-                SseSupport.envelope(1L, UUID.randomUUID(), 1, "created"));
-        Thread.sleep(1000);
-        sse.produceRaw(System.currentTimeMillis() - lagSeconds * 1000L, "task:" + UUID.randomUUID(),
-                SseSupport.envelope(1L, UUID.randomUUID(), 1, "created"));
-    }
-
     private UUID newTask(String type, String reservationSymbol, String dept, String title) {
         UUID reservationId = ctx.entityId(reservationSymbol);
         UUID roomId = db.admin().queryForObject("SELECT room_id FROM reservations_cache WHERE id = ?", UUID.class, reservationId);

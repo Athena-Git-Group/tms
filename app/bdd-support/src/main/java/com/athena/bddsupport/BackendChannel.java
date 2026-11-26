@@ -306,27 +306,103 @@ public class BackendChannel {
     public synchronized FrontdeskDefaults ensureFrontdeskDefaults() {
         long tenantId = ensureFrontdeskTenant();
         cachedTenantId = tenantId;
+        try {
+            Connection db = connection();
+            insertFrontdeskRooms(db, tenantId, "DO NOTHING");
+            Map<String, CreatedStaff> staffByName = upsertFrontdeskStaff(db, tenantId);
+            setTenantConfig(tenantId, "guest_info_pages", FRONTDESK_INFO_PAGES);
+            return new FrontdeskDefaults(tenantId, FRONTDESK_TENANT_CODE, Collections.unmodifiableMap(staffByName));
+        } catch (SQLException e) {
+            throw new IllegalStateException("建立櫃檯 Web 的預設房間與帳號失敗", e);
+        }
+    }
 
-        OffsetDateTime now = OffsetDateTime.now();
+    /**
+     * 把資料庫恢復成櫃檯 Web 每個場景開頭的樣子，效果等同 {@link #resetBusinessData()} 之後再 {@link #ensureFrontdeskDefaults()}。
+     *
+     * <p>房間與員工帳號是每個場景都一樣的基準資料，所以不清空重建，只把場景改過的部分蓋回去：
+     * 不屬於預設的房間與帳號刪掉，預設的那幾列除了 id 之外整列寫回建立時的值。
+     * 只蓋部分欄位的話，前一個場景改過的房況、帳號狀態或密碼會留到下一個場景。
+     * 其餘資料表一律清空。整件事和 {@link #resetBusinessData()} 一樣先鎖好所有表再動手，理由寫在那裡。
+     */
+    public synchronized FrontdeskDefaults resetToFrontdeskDefaults() {
+        long tenantId = ensureFrontdeskTenant();
+        cachedTenantId = tenantId;
+        List<String> tables = resettableTables();
+        List<String> cleared = tables.stream().filter(t -> !BASELINE_TABLES.contains(t)).toList();
+        Map<String, CreatedStaff> staffByName = new LinkedHashMap<>();
+        lockAllThen("LOCK TABLE " + String.join(", ", tables) + " IN ACCESS EXCLUSIVE MODE", db -> {
+            try (java.sql.Statement statement = db.createStatement()) {
+                statement.execute("TRUNCATE TABLE " + String.join(", ", cleared) + " RESTART IDENTITY CASCADE");
+            }
+            deleteRowsOutsideFrontdeskDefaults(db, tenantId);
+            insertFrontdeskRooms(db, tenantId, """
+                    DO UPDATE SET floor = EXCLUDED.floor, room_type = EXCLUDED.room_type, hk_state = EXCLUDED.hk_state,
+                        occupancy = EXCLUDED.occupancy, updated_at = EXCLUDED.updated_at""");
+            staffByName.clear();
+            staffByName.putAll(upsertFrontdeskStaff(db, tenantId));
+            try (PreparedStatement statement = db.prepareStatement(
+                    "INSERT INTO tenant_config (tenant_id, key, value, updated_at) VALUES (?, ?, ?::jsonb, ?)")) {
+                bind(statement, tenantId, "guest_info_pages", toJson(FRONTDESK_INFO_PAGES), OffsetDateTime.now());
+                statement.executeUpdate();
+            }
+        }, "還原櫃檯 Web 的預設資料");
+        jwtByStaffId.clear();
+        return new FrontdeskDefaults(tenantId, FRONTDESK_TENANT_CODE, Collections.unmodifiableMap(staffByName));
+    }
+
+    private static final List<String> BASELINE_TABLES = List.of("rooms", "staff_accounts");
+
+    private List<String> resettableTables;
+
+    private List<String> resettableTables() {
+        if (resettableTables == null) {
+            resettableTables = queryRows("""
+                    SELECT table_name FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+                      AND table_name NOT IN ('flyway_schema_history', 'tenants')
+                    ORDER BY table_name
+                    """).stream().map(r -> (String) r.get("table_name")).toList();
+        }
+        return resettableTables;
+    }
+
+    private void deleteRowsOutsideFrontdeskDefaults(Connection db, long tenantId) throws SQLException {
+        try (PreparedStatement rooms = db.prepareStatement(
+                "DELETE FROM rooms WHERE tenant_id <> ? OR NOT (room_no = ANY (?))");
+             PreparedStatement staff = db.prepareStatement(
+                     "DELETE FROM staff_accounts WHERE tenant_id <> ? OR NOT (login_id = ANY (?))")) {
+            rooms.setLong(1, tenantId);
+            rooms.setArray(2, db.createArrayOf("text", frontdeskRoomNumbers().toArray()));
+            rooms.executeUpdate();
+            staff.setLong(1, tenantId);
+            staff.setArray(2, db.createArrayOf("text", FRONTDESK_STAFF.stream().map(DefaultStaff::loginId).toArray()));
+            staff.executeUpdate();
+        }
+    }
+
+    private static List<String> frontdeskRoomNumbers() {
+        List<String> roomNumbers = new ArrayList<>();
         for (int floor = FRONTDESK_FIRST_FLOOR; floor <= FRONTDESK_LAST_FLOOR; floor++) {
             for (int seq = 1; seq <= FRONTDESK_ROOMS_PER_FLOOR; seq++) {
-                execute("""
-                        INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at)
-                        VALUES (?, ?, ?, ?, 'standard_double', 'cleaned', 'vacant', ?)
-                        ON CONFLICT (tenant_id, room_no) DO NOTHING
-                        """, UUID.randomUUID(), tenantId, String.format("%d%02d", floor, seq), floor, now);
+                roomNumbers.add(String.format("%d%02d", floor, seq));
             }
         }
+        return roomNumbers;
+    }
 
-        Map<String, CreatedStaff> staffByName = new LinkedHashMap<>();
-        for (DefaultStaff staff : FRONTDESK_STAFF) {
-            staffByName.put(staff.name(), upsertFrontdeskStaff(tenantId, staff, now));
+    private void insertFrontdeskRooms(Connection db, long tenantId, String onConflict) throws SQLException {
+        try (PreparedStatement statement = db.prepareStatement("""
+                INSERT INTO rooms (id, tenant_id, room_no, floor, room_type, hk_state, occupancy, updated_at)
+                SELECT gen_random_uuid(), ?, room_no, room_no::int / 100, 'standard_double', 'cleaned', 'vacant', ?
+                FROM unnest(?::text[]) AS room_no
+                ON CONFLICT (tenant_id, room_no)
+                """ + onConflict)) {
+            statement.setLong(1, tenantId);
+            statement.setObject(2, OffsetDateTime.now());
+            statement.setArray(3, db.createArrayOf("text", frontdeskRoomNumbers().toArray()));
+            statement.executeUpdate();
         }
-
-        setTenantConfig(tenantId, "guest_info_pages", FRONTDESK_INFO_PAGES);
-
-        return new FrontdeskDefaults(tenantId, FRONTDESK_TENANT_CODE,
-                java.util.Collections.unmodifiableMap(staffByName));
     }
 
     public synchronized void ensureGuestDefaults() {
@@ -356,26 +432,46 @@ public class BackendChannel {
         return ((Number) row.get("id")).longValue();
     }
 
-    private CreatedStaff upsertFrontdeskStaff(long tenantId, DefaultStaff staff, OffsetDateTime now) {
+    private Map<String, CreatedStaff> upsertFrontdeskStaff(Connection db, long tenantId) throws SQLException {
         if (frontdeskPasswordHash == null) {
             frontdeskPasswordHash = passwordEncoder.encode(FRONTDESK_PASSWORD);
         }
-        Object id = queryScalar("""
+        Map<String, UUID> idByLoginId = new LinkedHashMap<>();
+        try (PreparedStatement statement = db.prepareStatement("""
                 INSERT INTO staff_accounts
                     (id, tenant_id, name, login_id, password_hash, role, dept, active, status,
                      must_change_password, failed_login_count, locked_until, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, true, 'active', false, 0, NULL, ?, ?)
+                SELECT gen_random_uuid(), ?, s.name, s.login_id, ?, s.role, s.dept, true, 'active', false, 0, NULL, ?, ?
+                FROM unnest(?::text[], ?::text[], ?::text[], ?::text[]) AS s(name, login_id, role, dept)
                 ON CONFLICT (tenant_id, login_id) DO UPDATE
                     SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash,
                         role = EXCLUDED.role, dept = EXCLUDED.dept, active = true, status = 'active',
                         must_change_password = false, failed_login_count = 0, locked_until = NULL,
-                        updated_at = EXCLUDED.updated_at
-                RETURNING id
-                """, UUID.randomUUID(), tenantId, staff.name(), staff.loginId(), frontdeskPasswordHash,
-                staff.role(), staff.dept(), now, now)
-                .orElseThrow(() -> new IllegalStateException("寫入預設帳號 " + staff.loginId() + " 沒有回傳 id"));
-        return new CreatedStaff((UUID) id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
-                staff.role(), staff.dept());
+                        created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at
+                RETURNING id, login_id
+                """)) {
+            OffsetDateTime now = OffsetDateTime.now();
+            bind(statement, tenantId, frontdeskPasswordHash, now, now);
+            statement.setArray(5, db.createArrayOf("text", FRONTDESK_STAFF.stream().map(DefaultStaff::name).toArray()));
+            statement.setArray(6, db.createArrayOf("text", FRONTDESK_STAFF.stream().map(DefaultStaff::loginId).toArray()));
+            statement.setArray(7, db.createArrayOf("text", FRONTDESK_STAFF.stream().map(DefaultStaff::role).toArray()));
+            statement.setArray(8, db.createArrayOf("text", FRONTDESK_STAFF.stream().map(DefaultStaff::dept).toArray()));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    idByLoginId.put(resultSet.getString("login_id"), (UUID) resultSet.getObject("id"));
+                }
+            }
+        }
+        Map<String, CreatedStaff> staffByName = new LinkedHashMap<>();
+        for (DefaultStaff staff : FRONTDESK_STAFF) {
+            UUID id = idByLoginId.get(staff.loginId());
+            if (id == null) {
+                throw new IllegalStateException("寫入預設帳號 " + staff.loginId() + " 沒有回傳 id");
+            }
+            staffByName.put(staff.name(), new CreatedStaff(id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
+                    staff.role(), staff.dept()));
+        }
+        return staffByName;
     }
 
     /**
@@ -392,20 +488,23 @@ public class BackendChannel {
      * 後端之後才來的查詢會排在清空後面，所以後端再忙也輪得到清空。全部鎖到手之後 TRUNCATE 不必再等任何人。
      */
     public void resetBusinessData() {
-        List<Map<String, Object>> rows = queryRows("""
-                SELECT table_name FROM information_schema.tables
-                WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-                  AND table_name NOT IN ('flyway_schema_history', 'tenants')
-                ORDER BY table_name
-                """);
-        if (rows.isEmpty()) {
+        List<String> tables = resettableTables();
+        if (tables.isEmpty()) {
             return;
         }
-        String tables = String.join(", ", rows.stream().map(r -> (String) r.get("table_name")).toList());
-        lockAllThenTruncate(
-                "LOCK TABLE " + tables + " IN ACCESS EXCLUSIVE MODE",
-                "TRUNCATE TABLE " + tables + " RESTART IDENTITY CASCADE");
+        String joined = String.join(", ", tables);
+        String truncateSql = "TRUNCATE TABLE " + joined + " RESTART IDENTITY CASCADE";
+        lockAllThen("LOCK TABLE " + joined + " IN ACCESS EXCLUSIVE MODE", db -> {
+            try (java.sql.Statement statement = db.createStatement()) {
+                statement.execute(truncateSql);
+            }
+        }, "清空業務資料");
         jwtByStaffId.clear();
+    }
+
+    @FunctionalInterface
+    private interface LockedWork {
+        void run(Connection db) throws SQLException;
     }
 
     private static final Duration RESET_LOCK_WAIT = Duration.ofMillis(400);
@@ -416,7 +515,7 @@ public class BackendChannel {
 
     private static final List<String> RESET_RETRYABLE_STATES = List.of("57014", "55P03", "40P01");
 
-    private void lockAllThenTruncate(String lockSql, String truncateSql) {
+    private void lockAllThen(String lockSql, LockedWork work, String what) {
         Connection db = connection();
         long deadline = System.nanoTime() + RESET_PATIENCE.toNanos();
         int attempts = 0;
@@ -428,22 +527,25 @@ public class BackendChannel {
                     statement.execute("SET LOCAL statement_timeout = " + RESET_LOCK_WAIT.toMillis());
                     statement.execute(lockSql);
                     statement.execute("SET LOCAL statement_timeout = 0");
-                    statement.execute(truncateSql);
+                    work.run(db);
                     db.commit();
                     return;
                 } catch (SQLException e) {
                     db.rollback();
                     if (!RESET_RETRYABLE_STATES.contains(e.getSQLState()) || System.nanoTime() > deadline) {
-                        throw new IllegalStateException("清空業務資料失敗（試了 " + attempts + " 次）：" + truncateSql, e);
+                        throw new IllegalStateException(what + "失敗（試了 " + attempts + " 次）", e);
                     }
+                } catch (RuntimeException e) {
+                    db.rollback();
+                    throw e;
                 }
                 Thread.sleep(RESET_RETRY_PAUSE_MS);
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("清空業務資料時交易控制失敗", e);
+            throw new IllegalStateException(what + "時交易控制失敗", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("清空業務資料時被中斷", e);
+            throw new IllegalStateException(what + "時被中斷", e);
         } finally {
             try {
                 db.setAutoCommit(true);

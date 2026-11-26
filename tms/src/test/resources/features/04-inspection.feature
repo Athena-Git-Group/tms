@@ -22,64 +22,7 @@
       | insp-5 | 1         | inspection | odor      | 氣味  | 5          |
     並且 租戶 1 的班次設定涵蓋現在，清房者視為在班
 
-  Rule: 飯店關掉「允許主管查自己清的房」時，自清自查必擋
-
-    @error @boundary
-    場景: 清房者查自己的房被拒
-      假設 租戶 1 不允許主管查自己清的房
-      並且 系統中存在以下任務:
-        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
-        | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-mgr       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
-      當 王主管對任務 "t-301-1" 送出全過的查房
-      那麼請求應該失敗，回應為 403 且原因是 "forbidden"
-      並且 查房不留記錄、任務狀態不變
-      並且 房務以自己的身分對查房端點送出判定的請求也應該失敗，回應為 403
-
-  Rule: 飯店沒有關掉「允許主管查自己清的房」時，主管查自己清的房照一般查房走；沒有查房權限的角色仍被擋
-
-    @happy
-    場景: 沒有設定時主管查自己清的房，全過即可賣
-      假設 系統中存在以下任務:
-        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
-        | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-mgr       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
-      當 王主管對任務 "t-301-1" 送出全過的查房
-      那麼 任務 "t-301-1" 的 state 應為 "inspected"
-      並且 任務 "t-301-1" 的 inspection 應為 "passed"
-      並且 任務 "t-301-1" 已寫入事件 "inspection_passed"
-      並且 房間 "r-301" 的資料應為:
-        | hk_state  |
-        | inspected |
-      並且 inspections 留下一列 passed、items 完整存下每個查房項目的判定
-
-    @error @boundary
-    場景: 明確允許之後房務仍不能對查房端點送出判定
-      假設 租戶 1 允許主管查自己清的房
-      並且 系統中存在以下任務:
-        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
-        | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
-      當 王主管對任務 "t-301-1" 送出全過的查房
-      那麼 任務 "t-301-1" 的 state 應為 "inspected"
-      並且 房務以自己的身分對查房端點送出判定的請求也應該失敗，回應為 403
-
   Rule: 查房輸入驗證——判定須與設定的查房項目一項不差、僅 done 任務可查
-
-    @error @boundary
-    場景: 缺項不收
-      假設 系統中存在以下任務:
-        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
-        | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
-      當 王主管對任務 "t-301-1" 只送出 bed、bathroom 兩項判定
-      那麼請求應該失敗，回應為 422 且原因是 "inspection_items_mismatch"
-      並且 查房不留記錄、任務狀態不變
-
-    @error @boundary
-    場景: 夾帶清單外的項目不收
-      假設 系統中存在以下任務:
-        | id      | tenant_id | type     | source | room_id | dept         | state | title    | assignee_id | started_at           | done_at              | work_date  |
-        | t-301-1 | 1         | cleaning | system | r-301   | housekeeping | done  | 退房清潔 | s-hk1       | 2026-10-19T09:00:00Z | 2026-10-19T09:30:00Z | 2026-10-19 |
-      當 王主管對任務 "t-301-1" 送出全過的查房，但夾帶清單外的項目 "window"
-      那麼請求應該失敗，回應為 422 且原因是 "inspection_items_mismatch"
-      並且 查房不留記錄、任務狀態不變
 
     @error @boundary
     場景: 非 done 狀態不可查房

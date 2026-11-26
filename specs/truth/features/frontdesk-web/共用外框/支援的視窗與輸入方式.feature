@@ -1,4 +1,5 @@
 # language: zh-TW
+@ipad
 功能: 支援的視窗與輸入方式
 
   背景:

@@ -2,6 +2,7 @@ package com.athena.tms.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.athena.tms.PostgresSpringTest;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -17,26 +18,14 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", TestSupportConfig.PROFILE})
-@Testcontainers
 class TestClockEnabledTest {
 
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
-
     @DynamicPropertySource
-    static void wireContainer(DynamicPropertyRegistry registry) {
-        registry.add("spring.flyway.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.flyway.user", POSTGRES::getUsername);
-        registry.add("spring.flyway.password", POSTGRES::getPassword);
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", () -> "tms_app");
-        registry.add("spring.datasource.password", () -> "tms_app");
+    static void wirePostgres(DynamicPropertyRegistry registry) {
+        PostgresSpringTest.wireDatabase(registry, "test_support");
     }
 
     @LocalServerPort

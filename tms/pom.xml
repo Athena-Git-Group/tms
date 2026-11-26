@@ -176,6 +176,19 @@
 	</dependencies>
 
 	<build>
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+			</testResource>
+			<!-- 平行時 surefire 會在 Maven 自己的程序裡先探索測試，那裡的工作目錄不一定是 tms/，所以規格改從 classpath 讀 -->
+			<testResource>
+				<directory>../specs/truth/features/backend</directory>
+				<targetPath>truth-features/backend</targetPath>
+				<includes>
+					<include>**/*.feature</include>
+				</includes>
+			</testResource>
+		</testResources>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
@@ -202,5 +215,32 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- 最久的 truth 套件獨佔一個 JVM，其餘測試在另一個 JVM 同時跑。用 -Dcucumber.features 指相對 tms/ 的路徑時不啟用，
+		     因為平行時這個路徑會在 Maven 自己的程序裡解析，工作目錄不是 tms/ 就找不到 -->
+		<profile>
+			<id>parallel-forks</id>
+			<activation>
+				<property>
+					<name>!cucumber.features</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<forkCount>2</forkCount>
+							<reuseForks>true</reuseForks>
+							<!-- 字母序讓最久的 bdd.RunTruthFeaturesTest 最早開跑 -->
+							<runOrder>alphabetical</runOrder>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

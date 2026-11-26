@@ -17,7 +17,7 @@ public final class KafkaProbe {
 
     public static List<ConsumerRecord<String, String>> consumeAll(String topic, Duration window) {
         Map<String, Object> props = Map.of(
-                "bootstrap.servers", CucumberSpringConfiguration.KAFKA.getBootstrapServers(),
+                "bootstrap.servers", CucumberSpringConfiguration.kafkaBootstrapServers(),
                 "group.id", "bdd-" + UUID.randomUUID(),
                 "auto.offset.reset", "earliest",
                 "key.deserializer", StringDeserializer.class,

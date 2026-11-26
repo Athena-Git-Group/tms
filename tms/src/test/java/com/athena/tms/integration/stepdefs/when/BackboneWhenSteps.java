@@ -1,6 +1,7 @@
 package com.athena.tms.integration.stepdefs.when;
 
 import com.athena.tms.common.error.StateConflictException;
+import com.athena.tms.integration.stepdefs.CucumberSpringConfiguration;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.entity.Task;
@@ -159,7 +160,7 @@ public class BackboneWhenSteps {
 
     @When("^消費者從頭讀取 task-events topic$")
     public void readTaskEventsTopic() {
-        ctx.put(ScenarioKeys.TASK_EVENT_RECORDS, KafkaProbe.consumeAll("tms.task-events", Duration.ofSeconds(3)));
+        ctx.put(ScenarioKeys.TASK_EVENT_RECORDS, KafkaProbe.consumeAll(CucumberSpringConfiguration.TASK_EVENTS_TOPIC, Duration.ofSeconds(3)));
     }
 
     @When("^應用連線嘗試 UPDATE 或 DELETE task_events 的列$")

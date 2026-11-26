@@ -1,4 +1,5 @@
 # language: zh-TW
+@ipad
 功能: 拖曳派單
 
   背景:

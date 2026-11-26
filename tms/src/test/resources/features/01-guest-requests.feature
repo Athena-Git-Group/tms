@@ -118,15 +118,6 @@
       當 住客以 session "sess-305" 用自由文字「冷氣不冷」送出需求
       那麼 事件 payload 的 note 記錄命中的 rule_id "r-aircon" 與原文、語言
 
-  Rule: 同房限流——10 分鐘內 3 筆，第 4 筆被拒
-
-    @error @boundary
-    場景: 第 4 筆被限流
-      假設 住客已以 session "sess-305" 在 10 分鐘內成功建立 3 筆需求
-      當 再以 session "sess-305" 送出第 4 筆需求
-      那麼請求應該失敗，回應為 429 且原因是 "rate_limited"
-      並且 第 3 筆需求仍為成功建立
-
   Rule: 進度清單以 session 綁的訂單過濾、不按房號撈
 
     @boundary

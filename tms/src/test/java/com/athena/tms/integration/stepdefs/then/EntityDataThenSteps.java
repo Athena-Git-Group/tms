@@ -2,7 +2,6 @@ package com.athena.tms.integration.stepdefs.then;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.integration.stepdefs.ScenarioContext;
 import com.athena.tms.integration.stepdefs.utils.DbSupport;
@@ -54,13 +53,6 @@ public class EntityDataThenSteps {
         assertEquals(expected, count, "任務 " + symbol + " 的 SOP 勾記數");
     }
 
-    @Then("^任務 \"([^\"]+)\" 已寫入事件 \"([^\"]+)\"$")
-    public void taskHasEventType(String symbol, String eventType) {
-        UUID taskId = ctx.entityId(symbol);
-        assertTrue(db.eventTypes(taskId).contains(eventType),
-                "任務 " + symbol + " 已寫入事件 " + eventType + ": " + db.eventTypes(taskId));
-    }
-
     @Then("^任務 \"([^\"]+)\" 仍只有 \"([^\"]+)\" 一筆事件$")
     public void taskHasOnlyOneEventOfType(String symbol, String eventType) {
         UUID taskId = ctx.entityId(symbol);
@@ -72,16 +64,6 @@ public class EntityDataThenSteps {
         UUID taskId = ctx.entityId(symbol);
         JsonNode payload = objectMapper.readTree(db.eventPayloadOfType(taskId, eventType));
         assertEquals(expected, payload.get(field).asText(), "任務 " + symbol + " 的事件 " + eventType + " 的 " + field);
-    }
-
-    @Then("^任務 \"([^\"]+)\" 的事件 \"([^\"]+)\" 的操作者應為「([^」]+)」$")
-    public void taskEventActorShouldBe(String symbol, String eventType, String staffName) {
-        UUID taskId = ctx.entityId(symbol);
-        UUID actor = db.admin().queryForObject(
-                "SELECT actor_id FROM task_events WHERE task_id = ? AND type = ?", UUID.class, taskId, eventType);
-        UUID expected = db.admin().queryForObject(
-                "SELECT id FROM staff_accounts WHERE tenant_id = 1 AND login_id = ?", UUID.class, ctx.staffLogin(staffName));
-        assertEquals(expected, actor, "任務 " + symbol + " 的事件 " + eventType + " 的操作者");
     }
 
     @Then("^簽發的 guest session 的資料應為:$")

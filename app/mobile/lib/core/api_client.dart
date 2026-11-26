@@ -37,8 +37,7 @@ class ApiClient {
       body: {'loginId': loginId, 'password': password},
     );
     final result = LoginResult.fromJson(json as Map<String, dynamic>);
-    _token = result.token;
-    _session = result;
+    adoptSession(result);
     return result;
   }
 
@@ -55,9 +54,13 @@ class ApiClient {
       },
     );
     final result = LoginResult.fromJson(json as Map<String, dynamic>);
+    adoptSession(result);
+    return result;
+  }
+
+  void adoptSession(LoginResult result) {
     _token = result.token;
     _session = result;
-    return result;
   }
 
   MyToday? get lastKnownToday => _lastKnownToday;

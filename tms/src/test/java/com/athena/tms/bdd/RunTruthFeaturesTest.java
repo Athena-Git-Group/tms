@@ -3,12 +3,12 @@ package com.athena.tms.bdd;
 import org.junit.platform.suite.api.ConfigurationParameter;
 import org.junit.platform.suite.api.ConfigurationParameters;
 import org.junit.platform.suite.api.IncludeEngines;
-import org.junit.platform.suite.api.SelectDirectories;
+import org.junit.platform.suite.api.SelectClasspathResource;
 import org.junit.platform.suite.api.Suite;
 
 @Suite
 @IncludeEngines("cucumber")
-@SelectDirectories("../specs/truth/features/backend")
+@SelectClasspathResource("truth-features/backend")
 @ConfigurationParameters({
         @ConfigurationParameter(key = "cucumber.glue", value = "com.athena.tms.bdd"),
         @ConfigurationParameter(key = "cucumber.plugin",

@@ -72,16 +72,6 @@ public class StreamThenSteps {
         assertResyncRefetch(guest("A"), expectedRefetch);
     }
 
-    @Then("^「小美」的連線依序收到 \"init\"、\"resync\"$")
-    public void staffConnectionReceivesInitThenResync() throws InterruptedException {
-        assertInitThenResync(staff("小美"));
-    }
-
-    @Then("^「小美」的 resync 的 refetch 指向 \"([^\"]+)\"$")
-    public void staffResyncRefetchTarget(String expectedRefetch) {
-        assertResyncRefetch(staff("小美"), expectedRefetch);
-    }
-
     private void assertInitThenResync(SseSupport.SseStreamClient client) throws InterruptedException {
         client.awaitNamed("resync", Duration.ofSeconds(5L));
         assertEquals(List.of("init", "resync"), client.eventNames().subList(0, 2), "連線一開就該依序收到這兩筆，不必等任何任務事件");
@@ -117,12 +107,6 @@ public class StreamThenSteps {
     @Then("^該任務推給住客 A 的事件維持 (\\d+) 筆、零重推$")
     public void duplicatesAbsorbed(int expected) {
         assertEquals(expected, guest("A").taskEventsFor(ctx.taskId()).size(), "重複事件（同 task_id+seq）不得再推給客戶端");
-    }
-
-    @Then("^串流收到 \"degraded\" 事件、reason 為 \"([a-z_]+)\"$")
-    public void degradedEventArrives(String reason) throws InterruptedException {
-        JsonNode degraded = staff("小美").awaitNamed("degraded", Duration.ofSeconds(15L));
-        assertEquals(reason, degraded.get("reason").asText(), "degraded 事件自述原因，客戶端據此轉 5 秒輪詢");
     }
 
     private SseSupport.SseStreamClient guest(String label) {

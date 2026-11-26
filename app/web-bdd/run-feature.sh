@@ -14,6 +14,9 @@
 #                 瀏覽器設定。desktop 是電腦 1280 × 720 滑鼠（Chromium）；ipad 是 iPad 橫向
 #                 1180 × 820 觸控（WebKit）；phone 是手機直向 393 × 852 觸控（WebKit）。
 #                 不給時，根是 guest-web/ 用 phone，其餘用 desktop。
+#                 ipad 跑整個目錄時只跑標了 @ipad 的場景：畫面差異只出在少數幾份規格，
+#                 其餘行為與 desktop 相同，整套重跑一次要多十幾分鐘卻抓不到新問題。
+#                 指定單一份 feature 時照樣全跑；要整套都跑，設 IPAD_ALL_SCENARIOS=1。
 #
 # 選項：
 #   --keep     跑完不關這一次起的後端與開發伺服器。之後每一次執行都會直接沿用它們，
@@ -275,6 +278,11 @@ if [ -n "$FEATURE_ARG" ]; then
   CUCUMBER_FEATURES="../../specs/truth/features/${FEATURES_ROOT_NAME}/${FEATURE_ARG}"
 else
   CUCUMBER_FEATURES="../../specs/truth/features/${FEATURES_ROOT_NAME}"
+fi
+
+TAG_FILTER=""
+if [ "$PROFILE" = "ipad" ] && [ ! -f "$FEATURES_ROOT/$FEATURE_FILE_PART" ] && [ -z "${IPAD_ALL_SCENARIOS:-}" ]; then
+  TAG_FILTER="@ipad"
 fi
 
 is_backend_of_this_checkout() {
@@ -581,7 +589,7 @@ fi
 
 SERVICES_READY=1
 
-log "6/6 跑 RunFrontdeskWebFeaturesTest（${CUCUMBER_FEATURES#../../}，${PROFILE}）"
+log "6/6 跑 RunFrontdeskWebFeaturesTest（${CUCUMBER_FEATURES#../../}，${PROFILE}${TAG_FILTER:+，只跑標了 ${TAG_FILTER} 的場景}）"
 
 run_tests() {
   set -o pipefail
@@ -589,6 +597,7 @@ run_tests() {
   mvn test \
     -Dcucumber.features="$CUCUMBER_FEATURES" \
     -Dweb.profile="$PROFILE" \
+    ${TAG_FILTER:+"-Dcucumber.filter.tags=$TAG_FILTER"} \
     -Dweb.baseUrl="$WEB_URL" \
     -Dbackend.base.url="$BACKEND_URL" \
     -Dbackend.db.url="$TMS_DB_URL" 2>&1 | tee "$TEST_LOG"

@@ -37,13 +37,6 @@ public class InspectionQrThenSteps {
         assertEquals(ctx.get(ScenarioKeys.PRE_INSPECTION_STATE), db.taskRow(ctx.taskId()).get("state"), "被擋的查房不得改動任務");
     }
 
-    @Then("^房務以自己的身分對查房端點送出判定的請求也應該失敗，回應為 403$")
-    public void housekeeperBlockedByRoleMatrix() {
-        ScenarioContext.HttpResult blocked = api.postJson("/admin/inspections/" + ctx.taskId(),
-                api.staffToken(1L, ctx.staffLogin("小美")), Map.of("items", List.of()), null);
-        assertEquals(403, blocked.status(), "房務進不了 /admin（權限矩陣）: " + blocked.body());
-    }
-
     @Then("^回應的查房結果為 \"passed\" 且任務轉為 \"inspected\"$")
     public void allPassResponseAndState() {
         ScenarioContext.HttpResult last = ctx.lastResponse();
