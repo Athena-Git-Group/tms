@@ -1,5 +1,6 @@
 package com.athena.tms.config;
 
+import java.time.Duration;
 import lombok.Generated;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,8 @@ public class KafkaTopicsProperties {
     private String taskEvents = "tms.task-events";
     private String push = "tms.push";
     private String pmsStatus = "tms.pms-status";
-    private String pushDeadLetter = "tms.push.DLT";
+    private int partitions = 12;
+    private final Retention retention = new Retention();
 
     public String topicFor(String kind) {
         return switch (kind) {
@@ -22,11 +24,19 @@ public class KafkaTopicsProperties {
     }
 
     public String getPushDeadLetter() {
-        return this.pushDeadLetter;
+        return this.push + ".DLT";
     }
 
-    public void setPushDeadLetter(String pushDeadLetter) {
-        this.pushDeadLetter = pushDeadLetter;
+    public int getPartitions() {
+        return this.partitions;
+    }
+
+    public void setPartitions(int partitions) {
+        this.partitions = partitions;
+    }
+
+    public Retention getRetention() {
+        return this.retention;
     }
 
     public String getPmsStatus() {
@@ -55,5 +65,35 @@ public class KafkaTopicsProperties {
     @Generated
     public void setPush(String push) {
         this.push = push;
+    }
+
+    public static class Retention {
+        private Duration taskEvents = Duration.ofDays(3);
+        private Duration push = Duration.ofDays(3);
+        private Duration pmsStatus = Duration.ofDays(7);
+
+        public Duration getTaskEvents() {
+            return this.taskEvents;
+        }
+
+        public void setTaskEvents(Duration taskEvents) {
+            this.taskEvents = taskEvents;
+        }
+
+        public Duration getPush() {
+            return this.push;
+        }
+
+        public void setPush(Duration push) {
+            this.push = push;
+        }
+
+        public Duration getPmsStatus() {
+            return this.pmsStatus;
+        }
+
+        public void setPmsStatus(Duration pmsStatus) {
+            this.pmsStatus = pmsStatus;
+        }
     }
 }

@@ -43,6 +43,5 @@ public class RelayFairnessSpringConfiguration {
         registry.add("spring.kafka.bootstrap-servers", SharedContainers.kafka()::getBootstrapServers);
         registry.add("tms.kafka.topic.task-events", () -> TASK_EVENTS_TOPIC);
         registry.add("tms.kafka.topic.push", () -> PUSH_TOPIC);
-        registry.add("tms.kafka.topic.push-dead-letter", () -> PUSH_TOPIC + ".DLT");
     }
 }
