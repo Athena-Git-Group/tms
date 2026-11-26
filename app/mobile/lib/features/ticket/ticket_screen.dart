@@ -5,11 +5,11 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/repair_photo_capture.dart';
+import '../../core/repair_photo_image.dart';
 import '../../core/system_status.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_alert.dart';
-import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_viewer.dart';
 import '../../core/widgets/tms_sheet.dart';
 import '../../core/widgets/tms_toast.dart';
@@ -339,7 +339,7 @@ class _TicketScreenState extends State<TicketScreen> {
     }
   }
 
-  void _openViewer(int index) {
+  void _openViewer(List<RepairTicketPhoto> photos, int index) {
     final ticket = _ticket;
     if (ticket == null) {
       return;
@@ -349,8 +349,15 @@ class _TicketScreenState extends State<TicketScreen> {
       title: '${ticket.ticketNo} · ${repairCategoryText(ticket.category)}',
       initialIndex: index,
       photos: [
-        for (var i = 0; i < ticket.photoCount; i++)
-          TmsViewerPhoto(description: '${ticket.ticketNo} 照片 ${i + 1}'),
+        for (var i = 0; i < photos.length; i++)
+          TmsViewerPhoto(
+            description: '${ticket.ticketNo} 照片 ${i + 1}',
+            photo: RepairPhotoImage(
+              photoId: photos[i].id,
+              fit: BoxFit.contain,
+              onDark: true,
+            ),
+          ),
       ],
     );
   }
@@ -360,12 +367,12 @@ class _TicketScreenState extends State<TicketScreen> {
     if (taskId == null) {
       return;
     }
-    final source = await showTmsPhotoActionSheet(context);
-    if (source == null || !mounted) {
+    final capture = await pickRepairPhoto(context);
+    if (capture == null || !mounted) {
       return;
     }
     try {
-      final photoId = await captureAndUploadRepairPhoto(purpose: 'report');
+      final photoId = await uploadRepairPhoto(capture, purpose: 'report');
       await ApiClient.instance.appendRepairTicketPhotos(
         taskId,
         photoIds: [photoId],

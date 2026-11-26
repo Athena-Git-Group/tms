@@ -208,9 +208,9 @@
 - [X] T030 [P] [BDD-RED] `櫃檯詳情的報修照片有 {報修張數} 張、完修照片有 {完修張數} 張，"{員工}" 每一張都讀得到`
   - 讀照片用 `exchangeBytes(GET, …)`。
 - [X] T031 [P] [BDD-RED] `櫃檯詳情沒有工務單的照片`
-- [ ] T032 [BDD-ALIGN] 員工 App `已有以下工務單：`
+- [X] T032 [BDD-ALIGN] 員工 App `已有以下工務單：`
   - 確認 `app/bdd/.../steps/repair/RepairGivenSteps.java:163` 呼叫的 `insertReportPhotos` 已是 T010 的新版（經 API 上傳內容），完修照片走 `completeRepairTask`；不需要改 stepdef 時在 review 記下理由。
-- [ ] T033 [BDD-RED] 員工 App `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`
+- [X] T033 [BDD-RED] 員工 App `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`
   - 依 `ticket.photo.{序號}`／`ticket.completion-photo.{序號}` 取格子，讀 accessibility value（iOS 是 `value` 屬性）等於 `loaded`；格數與 `BackendChannel` 讀到的 `photos`／`completionPhotos` 長度一致。
 - [ ] T034 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單有 {報修張數} 張報修照片、{完修張數} 張完修照片`
 - [ ] T035 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單第 {第幾張} 張報修照片是舊版的假照片`
@@ -329,23 +329,23 @@
 **Test Scope**:
 - `cd app/mobile && flutter test`
 
-- [ ] T055 加 `image_picker` 與 iOS 權限說明
+- [X] T055 加 `image_picker` 與 iOS 權限說明
   - `app/mobile/pubspec.yaml` 加 `image_picker`（`flutter pub add image_picker`，鎖當下穩定版）；`app/mobile/ios/Runner/Info.plist` 加 `NSCameraUsageDescription`「拍下要報修或已修好的地方，附在工務單上」、`NSPhotoLibraryUsageDescription`「選擇要附在工務單上的照片」；`cd app/mobile/ios && pod install` 後 `flutter build ios --simulator --debug` 能建置。
-- [ ] T056 先寫會紅的畫面與單元測試
+- [X] T056 先寫會紅的畫面與單元測試
   - 新增 `app/mobile/test/repair_photo_capture_test.dart`：選「拍照」呼叫拍照函式時帶相機來源、選「從相簿選擇」帶相簿來源；取消時不呼叫 `createRepairPhoto`；拿到的位元組不是 JPEG 時丟出照片不能用，不上傳；拍攝時間用檔案時間；測試版回固定測試照片。
   - 擴充 `app/mobile/test/photo_test.dart`：看大圖依照片清單逐張顯示圖片（以假的 `ApiClient` 回固定 JPEG）、讀照片失敗時顯示「照片無法顯示」。
   - 新增或擴充工務單詳情的畫面測試（`engineering_contract_fields_test.dart` 或新檔）：報修照片與完修照片格子各自拿到 `image`，數量等於回應陣列長度；格子的 `Semantics` value 在載入後是 `loaded`、失敗是 `failed`。
   - 主管視角案例：以 `TicketEntry.verifyQueue`、主管身分、`state`=done 的工務單打開 `TicketScreen`（同 `features/manager/manager_queue_screen.dart:101` 的進入方式），假的 `ApiClient` 回 2 張報修、1 張完修照片；斷言兩個區塊的格子都拿到圖片、底部同時有「通過」「不通過」，按下之前不必捲到別處就看得到照片區塊。
   - 提交一次，訊息寫明先紅。
-- [ ] T057 拍照與選照片
+- [X] T057 拍照與選照片
   - `core/repair_photo_capture.dart`：`captureAndUploadRepairPhoto` 加 `source` 參數與可替換的拍照函式；正式版 `ImagePicker().pickImage(source, maxWidth: 1600, maxHeight: 1600, imageQuality: 80)`；檢查 `FF D8 FF`；拍攝時間 `XFile.lastModified()`，拿不到用 `deviceNow()`。`core/api_client.dart` 的 `createRepairPhoto` 加 `takenAt` 參數。
   - 四個呼叫者把照片選單的結果傳進去，拍到的位元組存在 `RepairPhoto` 上供縮圖：`features/task/repair_sheet.dart`、`features/ticket/repair_ticket_form_sheet.dart`、`features/ticket/ticket_complete_sheet.dart`、`features/ticket/ticket_screen.dart`。
   - 權限被拒（`camera_access_denied`、`photo_access_denied`）與照片不能用，照 spec 的提示文字顯示，用既有的提示框元件。
-- [ ] T058 顯示照片
+- [X] T058 顯示照片
   - 新增 `core/repair_photo_image.dart`（`ApiClient.instance.fetchRepairPhotoContent(id)`、依 id 記憶體快取、`MemoryImage`、失敗狀態）；`core/api_client.dart` 加 `fetchRepairPhotoContent`。
   - `features/ticket/ticket_detail_engineering.dart`、`features/ticket/ticket_detail_housekeeping.dart` 的 `TmsPhotoCell` 給 `image:`，`Semantics` 帶 value（`loaded`、`loading`、`failed`）；`features/ticket/ticket_screen.dart` 的看大圖改依 `photos`／`completionPhotos` 建 `TmsViewerPhoto(image: …)`。
-- [ ] T059 [BDD-GREEN] `flutter test` 與 `flutter analyze` 全綠
-- [ ] T060 [BDD-REFACTOR] 刪掉不再被正式版呼叫的程式路徑（`takePhotoJpeg` 只留給測試版）；提交一次
+- [X] T059 [BDD-GREEN] `flutter test` 與 `flutter analyze` 全綠
+- [X] T060 [BDD-REFACTOR] 刪掉不再被正式版呼叫的程式路徑（`takePhotoJpeg` 只留給測試版）；提交一次
 
 ## Phase 4E: MODIFY Feature File - ios-app/工務單/主管視角.feature
 
@@ -364,9 +364,9 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/工務單/主管視角.feature`
 
-- [ ] T061 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T061 [BDD-GREEN] 讓 Test Scope 全綠
   - `app/bdd/run-module.sh 工務單`，只看主管視角這份；失敗時先確認 T010 的測試資料真的存了內容（以 `BackendChannel.photoContent` 讀得到）。
-- [ ] T062 [BDD-REFACTOR] 主管視角整份與 T001 基準比沒有新失敗；提交一次
+- [X] T062 [BDD-REFACTOR] 主管視角整份與 T001 基準比沒有新失敗；提交一次
 
 ## Phase 4F: 櫃檯 Web 的工務單詳情顯示照片
 

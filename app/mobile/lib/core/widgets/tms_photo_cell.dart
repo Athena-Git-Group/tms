@@ -27,7 +27,7 @@ class TmsPhotoUploaded extends TmsPhotoUpload {
 class TmsPhotoCell extends StatelessWidget {
   const TmsPhotoCell({
     super.key,
-    this.image,
+    this.photo,
     this.sizeLabel,
     this.upload = const TmsPhotoIdle(),
     this.onRemove,
@@ -37,7 +37,7 @@ class TmsPhotoCell extends StatelessWidget {
     this.edge = size,
   });
 
-  final ImageProvider<Object>? image;
+  final Widget? photo;
 
   final String? sizeLabel;
 
@@ -59,7 +59,7 @@ class TmsPhotoCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final upload = this.upload;
     final sizeLabel = this.sizeLabel;
-    final image = this.image;
+    final photo = this.photo;
     final onRemove = this.onRemove;
     final onTap = upload is TmsPhotoFailed ? onRetry : this.onTap;
 
@@ -69,7 +69,7 @@ class TmsPhotoCell extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           const ColoredBox(color: TmsColors.neutralContainer),
-          if (image != null) Image(image: image, fit: BoxFit.cover),
+          ?photo,
           if (sizeLabel != null)
             Positioned(
               left: 0,

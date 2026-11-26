@@ -838,6 +838,59 @@ public class RepairThenSteps {
 
     private static final String COMPLETION_PHOTO_PREFIX = "ticket.completion-photo.";
 
+    private static final Duration PHOTO_LOAD_TIMEOUT = Duration.ofSeconds(10);
+
+    @那麼("工務單詳情的 {string} 照片 {int} 張都顯示出圖片")
+    public void ticketDetailPhotosShowImages(String kind, int count) {
+        String prefix;
+        String apiField;
+        switch (kind) {
+            case "報修" -> {
+                prefix = "ticket.photo.";
+                apiField = "photos";
+            }
+            case "完修" -> {
+                prefix = COMPLETION_PHOTO_PREFIX;
+                apiField = "completionPhotos";
+            }
+            default -> throw new IllegalArgumentException("認不得的照片種類「" + kind + "」（只支援 報修｜完修）");
+        }
+        world.waitForTestId("ticket.screen", SCREEN_TIMEOUT);
+        int onScreen = countIdsMatching(prefix, java.util.regex.Pattern.quote(prefix) + "[0-9]+");
+        if (onScreen != count) {
+            throw new AssertionError(kind + "照片格子應有 " + count + " 格，畫面上 " + onScreen + " 格");
+        }
+        int api = readTicket(singleTicketRow("1 = 1", "本情境唯一的工務單")).path(apiField).size();
+        if (api != count) {
+            throw new AssertionError("readRepairTicket." + apiField + " 應有 " + count + " 張，實際 " + api + " 張");
+        }
+        for (int i = 1; i <= count; i++) {
+            String id = prefix + i;
+            String state = waitForPhotoState(id);
+            if (!"loaded".equals(state)) {
+                throw new AssertionError(kind + "照片第 " + i + " 格（" + id + "）應畫出圖片（value=loaded），實際 value=" + state);
+            }
+        }
+    }
+
+    private String waitForPhotoState(String id) {
+        long deadline = System.nanoTime() + PHOTO_LOAD_TIMEOUT.toNanos();
+        String state = null;
+        while (System.nanoTime() < deadline) {
+            state = world.waitForTestId(id, SCREEN_TIMEOUT).getAttribute("value");
+            if (!"loading".equals(state)) {
+                return state;
+            }
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return state;
+    }
+
     @那麼("工務單詳情的主管動作為 {string}")
     public void managerActionsAre(String actionsText) {
         Set<String> expected = switch (actionsText) {

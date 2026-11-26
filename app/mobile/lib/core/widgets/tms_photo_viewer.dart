@@ -5,9 +5,9 @@ import '../tms_semantics.dart';
 import 'tms_motion.dart';
 
 class TmsViewerPhoto {
-  const TmsViewerPhoto({this.image, required this.description});
+  const TmsViewerPhoto({this.photo, required this.description});
 
-  final ImageProvider<Object>? image;
+  final Widget? photo;
 
   final String description;
 }
@@ -216,15 +216,12 @@ class _TmsPhotoViewerState extends State<TmsPhotoViewer> {
           onPageChanged: (index) => setState(() => _index = index),
           itemBuilder: (context, index) {
             final photo = widget.photos[index];
-            final image = photo.image;
             return TmsSemantics(
               id: 'photoViewer.photo.${index + 1}',
               label: photo.description,
               child: InteractiveViewer(
                 maxScale: 4,
-                child: image == null
-                    ? const SizedBox.expand()
-                    : Image(image: image, fit: BoxFit.contain),
+                child: photo.photo ?? const SizedBox.expand(),
               ),
             );
           },

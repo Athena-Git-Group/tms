@@ -273,7 +273,10 @@ class _FakeApiClient extends ApiClient {
       throw const ApiException(statusCode: 500, body: '{}');
 
   @override
-  Future<String> createRepairPhoto({required String purpose}) async =>
+  Future<String> createRepairPhoto({
+    required String purpose,
+    required DateTime takenAt,
+  }) async =>
       'photo-1';
 
   @override
