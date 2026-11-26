@@ -43,6 +43,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import com.google.cloud.storage.Storage;
+import com.athena.tms.bdd.support.PhotoStorageProbe;
 import org.testcontainers.containers.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
@@ -67,6 +69,7 @@ public class BddSpringConfiguration {
         registry.add("spring.flyway.password", postgres::getPassword);
         registry.add("spring.kafka.bootstrap-servers", SharedContainers.kafka()::getBootstrapServers);
         registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");
+        SharedContainers.wireStorage(registry, "truth-photos");
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -93,6 +96,11 @@ public class BddSpringConfiguration {
         @ScenarioScope
         RepairCountGuard repairCountGuard(DbProbe dbProbe, TenantFixtures tenantFixtures) {
             return new RepairCountGuard(dbProbe, tenantFixtures);
+        }
+
+        @Bean
+        PhotoStorageProbe photoStorageProbe(Storage storage, Environment environment) {
+            return new PhotoStorageProbe(storage, environment.getRequiredProperty("tms.storage.bucket"));
         }
 
         @Bean

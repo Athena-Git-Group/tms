@@ -419,7 +419,11 @@ public class TaskFixtures {
                 case "cancelled": {
                     Task task = poolOrTriageCreate(tenantId, roomId, workDate, "pool", createActor);
                     Actor actor = assigneeId != null ? Actor.staff(dept, assigneeId) : Actor.staff("manager", null);
-                    engine.cancel(tenantId, task.getId(), cancelReason, actor);
+                    if ("staff_withdrew".equals(cancelReason)) {
+                        engine.withdrawFromPool(tenantId, task.getId(), actor);
+                    } else {
+                        engine.cancel(tenantId, task.getId(), cancelReason, actor);
+                    }
                     return task;
                 }
                 default:

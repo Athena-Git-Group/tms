@@ -2,6 +2,7 @@ package com.athena.tms.bdd.steps.repair;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.PhotoFixtures;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.LastOperationGuard;
 import com.athena.tms.bdd.support.RepairCountGuard;
@@ -378,12 +379,12 @@ public class RepairWhenSteps {
                     apiClient.post("/repair-photos", BddApiClient.Auth.staff(jwt), photoBody);
             String photoId = createResp.json() != null ? createResp.json().path("id").asText(null) : null;
             if (photoId != null) {
-                apiClient.exchange(
+                apiClient.exchangeBytes(
                         HttpMethod.PUT,
                         "/repair-photos/" + photoId + "/content",
                         BddApiClient.Auth.staff(jwt),
-                        "fixture-jpeg-bytes",
-                        null);
+                        PhotoFixtures.jpeg(photoId),
+                        PhotoFixtures.JPEG);
                 ids.add(photoId);
             }
         }

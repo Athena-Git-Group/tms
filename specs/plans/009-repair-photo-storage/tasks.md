@@ -44,13 +44,13 @@
 
 **Goal**: 後端有官方雲端儲存程式庫，本機 docker-compose 與後端測試都有 `fake-gcs-server`，冒煙測試證明寫入、讀出、覆寫在模擬服務上成立。
 
-- [ ] T001 量改動前的基準
+- [X] T001 量改動前的基準
   - Read:
     - `specs/truth/techstack.md` -> 測試與驗證
   - 在任何產品碼或測試碼改動之前，跑後端全套、`flutter test`、`app/bdd/run-module.sh 工務單`、`cd app/web && npx vitest run`、`bash app/web-bdd/run-feature.sh 單筆詳情 desktop` 與 `ipad`，把每一組的失敗清單（測試類別與方法，或 feature 檔名與行號）與失敗數記到 `implement-notes.md`。
   - 不修任何既有失敗。
 
-- [ ] T002 加入雲端儲存程式庫與設定項目
+- [X] T002 加入雲端儲存程式庫與設定項目
   - Read:
     - `specs/truth/techstack.md` -> 後端「照片儲存」列
     - `research.md` -> 後端用哪個程式庫接雲端儲存？
@@ -60,7 +60,7 @@
   - 新增 `tms/src/main/resources/application-prod.properties`，內容只有 `tms.storage.emulator-host=`（空值）：正式環境以 `prod` 設定組啟動就不接模擬服務，不靠把環境變數設成空字串。`README.md` 的部署或設定段補一句。
   - 不寫存照片的程式。
 
-- [ ] T003 本機 docker-compose 加 fake-gcs-server
+- [X] T003 本機 docker-compose 加 fake-gcs-server
   - Read:
     - `specs/truth/techstack.md` -> 本機環境
     - `docker-compose.yml` -> 檔頭說明與 Conduktor 的寫法
@@ -71,7 +71,7 @@
   - 確認 `app/web-bdd/run-feature.sh` 與 `app/bdd/run-module.sh` 起後端前，本機的 `fake-gcs` 已經在跑；沒有就照腳本既有的依賴檢查方式補一句提示（不改腳本的其他行為）。
   - 不改 Postgres、Kafka、Conduktor 的設定。
 
-- [ ] T004 後端測試加共用的 fake-gcs-server 容器
+- [X] T004 後端測試加共用的 fake-gcs-server 容器
   - Read:
     - `specs/truth/techstack.md` -> 後端 E2E 依賴
     - `tms/src/test/java/com/athena/tms/SharedContainers.java`
@@ -79,7 +79,7 @@
   - 四份 Spring 設定的 `@DynamicPropertySource` 加 `tms.storage.emulator-host` 與各自的 `tms.storage.bucket`：`bdd/BddSpringConfiguration.java`（`truth-photos`）、`integration/stepdefs/CucumberSpringConfiguration.java`（`integration-photos`）、`relaywake/RelayWakeSpringConfiguration.java`（`relaywake-photos`）、`PostgresSpringTest.java`（`postgres-photos`）。
   - 不寫業務測試。
 
-- [ ] T005 冒煙測試：在模擬服務上寫入、讀出、覆寫
+- [X] T005 冒煙測試：在模擬服務上寫入、讀出、覆寫
   - Read:
     - `research.md` -> 本機與自動化測試怎麼模擬雲端儲存？
   - 新增 `tms/src/test/java/com/athena/tms/storage/FakeGcsSmokeTest.java`：用 T004 的容器與官方程式庫（`setHost`、`NoCredentials`）建立儲存空間、`storage.create` 寫一份位元組、`readAllBytes` 讀回相同、同名再寫一份後讀回第二份、讀不存在的名字得到 404。
@@ -90,7 +90,7 @@
 
 **Goal**: 存照片的介面與唯一實作、送收原始位元組的測試客戶端、測試用照片內容、App 與櫃檯 Web 共用的照片測試資料、新錯誤碼對照就位；既有測試改送合法 JPEG，後端全套仍照基準。
 
-- [ ] T006 存照片的介面與實作
+- [X] T006 存照片的介面與實作
   - Read:
     - `truth-delta.md` -> `/technical-research` 後端「照片儲存」列
     - `plan.md` -> 存照片的程式切在哪裡？、上傳怎麼檢查？（交易與連線池的權衡）
@@ -101,7 +101,7 @@
     - 一支 `StorageConfig` 的測試：模擬位址指向沒有服務的埠時，Spring context 起不來，錯誤訊息含該位址；`prod` 設定組下 `tms.storage.emulator-host` 是空值。
   - 不做：在 `RepairService` 呼叫它；任何上傳或讀取端點。
 
-- [ ] T007 送收原始位元組的測試客戶端、測試用照片內容與照片標籤
+- [X] T007 送收原始位元組的測試客戶端、測試用照片內容與照片標籤
   - Read:
     - `plan.md` -> 本機與測試環境怎麼接？（「測試的 HTTP 客戶端」段）
     - `specs/truth/features/backend/工務單/dsl.md` -> 「照片內容與存放」段、`"{員工}" 以 "{內容}" 上傳照片 "{照片}" 的內容` 的內容對照
@@ -113,7 +113,7 @@
     - 一個直接讀寫照片儲存物件的測試用 helper（讀物件位元組與 `Content-Type`、刪除物件），給 Then 比對與「舊版的假照片」用。註冊進 `BddSpringConfiguration`。
   - 不做：步驟實作。
 
-- [ ] T008 既有上傳步驟改用 `exchangeBytes` 送真的 JPEG 位元組
+- [X] T008 既有上傳步驟改用 `exchangeBytes` 送真的 JPEG 位元組
   - Read:
     - `truth-delta.md` -> `/dsl-refine`「模組說明『照片內容與存放』段」MODIFY 列
     - `tms/src/test/java/com/athena/tms/bdd/steps/repair/RepairGivenSteps.java`（約 415、433、476 行）、`RepairWhenSteps.java`（約 385 行）
@@ -122,14 +122,14 @@
   - 不做：改句型或斷言。
   - 驗證：後端全套照基準（產品碼還不檢查格式，這一步只是讓下一段不會整批被 415 擋下）。
 
-- [ ] T009 錯誤碼對 HTTP 狀態表
+- [X] T009 錯誤碼對 HTTP 狀態表
   - Read:
     - `specs/truth/features/backend/dsl.md` -> `這次操作被拒絕，錯誤碼為 "{錯誤碼}"`
     - `specs/truth/contracts/components/schemas/shared.yaml` -> `Error`
   - 只做：`bdd/steps/common/CommonThenSteps.java` 的 `ERROR_CODE_HTTP_STATUS` 加 `photo_purpose_mismatch`=422、`photo_already_attached`=409、`photo_empty`=422、`photo_type_unsupported`=415、`photo_too_large`=413，以及 `not_found`=404、`validation_failed`=422、`photo_limit`=422、`ticket_closed`=409（若還沒有）。
   - 不做：改斷言邏輯。
 
-- [ ] T010 App 與櫃檯 Web 共用的照片測試資料
+- [X] T010 App 與櫃檯 Web 共用的照片測試資料
   - Read:
     - `plan.md` -> 櫃檯 Web 怎麼接？（「測試資料」段）
     - `specs/truth/features/ios-app/dsl.md` -> `已有以下工務單：`
@@ -177,37 +177,37 @@
 - 員工 App T032–T033 用模擬器，排隊做。櫃檯 Web T034–T047 共用 `pages/DetailPanel.java`，同一個 subagent 依序做或先由一人加好 page object 再平行。
 - T048 等全部回來再啟動 subagent 來 review。
 
-- [ ] T011 [P] [BDD-ALIGN] 後端 `已有以下工務單：`
+- [X] T011 [P] [BDD-ALIGN] 後端 `已有以下工務單：`
   - Read: `tms/src/test/java/com/athena/tms/bdd/support/` 裡建立 `repair_photos` 測試資料的 helper（以 `grep -rn "INSERT INTO repair_photos" tms/src/test/java` 找）
   - 建立已上傳照片時，把 `PhotoFixtures` 的合法 JPEG（每張不同）寫進照片儲存，`storage_ref` 寫 `repair-photos/{tenantId}/{photoId}.jpg`。
-- [ ] T012 [P] [BDD-RED] `"{員工}" 已上傳照片 "{照片}"，用途為 "{用途}"`
-- [ ] T013 [P] [BDD-RED] `"{員工}" 已建立照片 "{照片}"，用途為 "{用途}"，還沒上傳內容`
-- [ ] T014 [P] [BDD-RED] `照片 "{照片}" 已附在 "{單號}"`
-- [ ] T015 [P] [BDD-RED] `別家飯店的員工已上傳照片 "{照片}"，用途為 "{用途}"`
+- [X] T012 [P] [BDD-RED] `"{員工}" 已上傳照片 "{照片}"，用途為 "{用途}"`
+- [X] T013 [P] [BDD-RED] `"{員工}" 已建立照片 "{照片}"，用途為 "{用途}"，還沒上傳內容`
+- [X] T014 [P] [BDD-RED] `照片 "{照片}" 已附在 "{單號}"`
+- [X] T015 [P] [BDD-RED] `別家飯店的員工已上傳照片 "{照片}"，用途為 "{用途}"`
   - Read: `tms/src/test/java/com/athena/tms/bdd/support/TenantFixtures.java`、`StaffFixtures.java`（另建一家飯店與員工的既有做法，見 `帳號與登入/員工登入.feature` 的別家飯店情境步驟）
-- [ ] T016 [P] [BDD-RED] `照片 "{照片}" 不存在`
-- [ ] T017 [P] [BDD-RED] `照片 "{照片}" 是舊版的假照片`
+- [X] T016 [P] [BDD-RED] `照片 "{照片}" 不存在`
+- [X] T017 [P] [BDD-RED] `照片 "{照片}" 是舊版的假照片`
   - 用 T007 的照片儲存 helper 刪物件，再以 SQL 改 `storage_ref`。
-- [ ] T018 [P] [BDD-RED] `"{員工}" 以 "{內容}" 上傳照片 "{照片}" 的內容`
+- [X] T018 [P] [BDD-RED] `"{員工}" 以 "{內容}" 上傳照片 "{照片}" 的內容`
   - 用 `exchangeBytes(PUT, …, PhotoFixtures 位元組, 對照的 Content-Type)`。
-- [ ] T019 [P] [BDD-RED] `"{員工}" 查看照片 "{照片}"`
+- [X] T019 [P] [BDD-RED] `"{員工}" 查看照片 "{照片}"`
   - 用 `exchangeBytes(GET, …, null, null)`，回寫狀態碼、`Content-Type`、`Cache-Control` 與位元組。
-- [ ] T020 [P] [BDD-RED] `"{員工}" 建立照片，用途為 "{用途}"、拍攝時間為 "{拍攝時間}"`
-- [ ] T021 [P] [BDD-RED] `"{工務}" 附照片 "{照片}" 以已修好完成 "{單號}"`
-- [ ] T022 [P] [BDD-RED] `"{員工}" 補照片 "{照片}" 到 "{單號}"`
-- [ ] T023 [P] [BDD-RED] `"{員工}" 從 "{任務}" 附照片 "{照片}" 開立水電工務單`
-- [ ] T024 [P] [BDD-RED] `照片 "{照片}" 已上傳，存的是 "{內容}"`
+- [X] T020 [P] [BDD-RED] `"{員工}" 建立照片，用途為 "{用途}"、拍攝時間為 "{拍攝時間}"`
+- [X] T021 [P] [BDD-RED] `"{工務}" 附照片 "{照片}" 以已修好完成 "{單號}"`
+- [X] T022 [P] [BDD-RED] `"{員工}" 補照片 "{照片}" 到 "{單號}"`
+- [X] T023 [P] [BDD-RED] `"{員工}" 從 "{任務}" 附照片 "{照片}" 開立水電工務單`
+- [X] T024 [P] [BDD-RED] `照片 "{照片}" 已上傳，存的是 "{內容}"`
   - 「再讀確認」用 `exchangeBytes(GET, …)`。
-- [ ] T025 [P] [BDD-RED] `照片 "{照片}" 仍未上傳`
-- [ ] T026 [P] [BDD-RED] `看到的照片是 "{照片}" 存的內容`
+- [X] T025 [P] [BDD-RED] `照片 "{照片}" 仍未上傳`
+- [X] T026 [P] [BDD-RED] `看到的照片是 "{照片}" 存的內容`
   - 讀 T019 回寫的 `exchangeBytes` 回應，含 `Cache-Control` 依照片是否已附上。
-- [ ] T027 [P] [BDD-RED] `照片 "{照片}" 的第一次上傳時間是 "{時刻}"`
-- [ ] T028 [P] [BDD-RED] `系統沒有建立照片`
-- [ ] T029 [P] [BDD-RED] `"{員工}" 打開 "{單號}" 時，"{種類}" 照片 {張數} 張都看得到`
+- [X] T027 [P] [BDD-RED] `照片 "{照片}" 的第一次上傳時間是 "{時刻}"`
+- [X] T028 [P] [BDD-RED] `系統沒有建立照片`
+- [X] T029 [P] [BDD-RED] `"{員工}" 打開 "{單號}" 時，"{種類}" 照片 {張數} 張都看得到`
   - 讀照片用 `exchangeBytes(GET, …)`。
-- [ ] T030 [P] [BDD-RED] `櫃檯詳情的報修照片有 {報修張數} 張、完修照片有 {完修張數} 張，"{員工}" 每一張都讀得到`
+- [X] T030 [P] [BDD-RED] `櫃檯詳情的報修照片有 {報修張數} 張、完修照片有 {完修張數} 張，"{員工}" 每一張都讀得到`
   - 讀照片用 `exchangeBytes(GET, …)`。
-- [ ] T031 [P] [BDD-RED] `櫃檯詳情沒有工務單的照片`
+- [X] T031 [P] [BDD-RED] `櫃檯詳情沒有工務單的照片`
 - [ ] T032 [BDD-ALIGN] 員工 App `已有以下工務單：`
   - 確認 `app/bdd/.../steps/repair/RepairGivenSteps.java:163` 呼叫的 `insertReportPhotos` 已是 T010 的新版（經 API 上傳內容），完修照片走 `completeRepairTask`；不需要改 stepdef 時在 review 記下理由。
 - [ ] T033 [BDD-RED] 員工 App `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`
@@ -228,7 +228,7 @@
 - [ ] T046 [BDD-RED] 櫃檯 Web `詳情面板的照片區塊標題依序是 "{報修}"、"{完修}"`
 - [ ] T047 [BDD-RED] 櫃檯 Web `詳情面板的照片縮圖都在面板寬度內，每張至少 44 × 44`
 
-- [ ] T048 subagent review (phase quality gate)
+- [X] T048 subagent review (phase quality gate)
   - 驗證：後端三份工務單 feature 與 `櫃檯看板與派單/單筆詳情與歷程.feature`、App `工務單` 模組、櫃檯 Web `單筆詳情/工務單照片.feature` 各跑 dry-run，undefined step 為 0；實跑時新情境的失敗只能是斷言或產品行為（例如上傳仍回 200、讀照片回 404 因為端點不存在、詳情面板沒有照片區塊），不能是步驟找不到。確認上傳與讀照片的後端步驟都走 `exchangeBytes`。
   - 通過後只加 Phase 2 至 3 的測試檔，提交一次，提交訊息寫明這一批是先紅的測試。
 

@@ -14,6 +14,8 @@ public class LastOperationGuard {
     private CreateRequestSnapshot createRequestSnapshot;
     private ExistingRows existingRowsBeforeCreate;
     private boolean createRequestIsLatest;
+    private List<UUID> photoIds;
+    private List<Map<String, Object>> photosBefore;
 
     public LastOperationGuard(DbProbe dbProbe) {
         this.dbProbe = dbProbe;
@@ -36,11 +38,36 @@ public class LastOperationGuard {
         long outboxMaxId = dbProbe.count("SELECT COALESCE(MAX(id), 0) FROM outbox");
         snapshot = new Snapshot(taskId, row, eventCount, outboxCount, repairTicketRow, inspectionCount, outboxMaxId);
         createRequestIsLatest = false;
+        photoIds = null;
+        photosBefore = null;
         eventsBefore = dbProbe.eventsOf(taskId);
         tenantTaskCountBefore = row == null
                 ? -1
                 : dbProbe.count("SELECT count(*) FROM tasks WHERE tenant_id = ?", row.get("tenant_id"));
         return snapshot;
+    }
+
+    /** 附照片的操作被拒絕時，這些照片的綁定與上傳狀態也要不變；在 {@link #captureFor} 之後呼叫。 */
+    public void capturePhotos(List<UUID> ids) {
+        photoIds = List.copyOf(ids);
+        photosBefore = photoRows(photoIds);
+    }
+
+    /** 沒有記下照片時回 null。 */
+    public List<Map<String, Object>> photosBefore() {
+        return photosBefore;
+    }
+
+    public List<Map<String, Object>> photosNow() {
+        return photoRows(photoIds);
+    }
+
+    private List<Map<String, Object>> photoRows(List<UUID> ids) {
+        return ids.stream()
+                .flatMap(id -> dbProbe.queryOne(
+                        "SELECT id, ticket_task_id, status, storage_ref, uploaded_at FROM repair_photos WHERE id = ?",
+                        id).stream())
+                .toList();
     }
 
     public Snapshot captureWithoutTask() {
@@ -93,6 +120,8 @@ public class LastOperationGuard {
         createRequestSnapshot = createRequestCounts(tenantId);
         existingRowsBeforeCreate = existingRows(tenantId);
         createRequestIsLatest = true;
+        photoIds = null;
+        photosBefore = null;
         return createRequestSnapshot;
     }
 
