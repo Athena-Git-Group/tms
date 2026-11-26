@@ -108,3 +108,20 @@ dsl 沒寫死、照最小解讀做的地方：
 - `單筆詳情與歷程.feature` 16 run、`照片內容上傳與查看.feature` 25 run 全綠。
 - 後端全套最後一次：829 run、0 failures、0 errors（T001 基準 33 個失敗全部轉綠，沒有新失敗）。
 - `tasks.md` 把 Phase 4F 的提交放在 T067（櫃檯 Web 那一棒）；T063 先單獨提交，櫃檯 Web 那一棒只需提交自己的檔案。
+
+## Phase 4D 員工 App 拍照、選照片與顯示照片
+
+- T055：`image_picker` 1.2.4；iOS 專案沒有 `Podfile`（外掛走 Swift Package Manager），`pod install` 不適用；`flutter build ios --simulator --debug` 建置成功。
+- 拍照與上傳拆成兩步，不照 plan 寫的「`captureAndUploadRepairPhoto` 加 `source` 參數」：
+  `captureRepairPhoto(source)` 拍或選，回傳 `CapturedRepairPhoto`（JPEG 位元組＋拍攝時間）；`uploadRepairPhoto(photo, purpose:)` 建立照片並上傳。
+  理由：上傳失敗按「重試」時要重送同一張照片，合在一起的話重試會再打開一次相機；縮圖也要在上傳前就有位元組。
+  四個呼叫者共用 `pickRepairPhoto(context)`：照片選單、拍或選、權限被拒與照片不能用的提示都在這裡，呼叫者只處理「拿到照片或 null」。
+- 可替換的拍照函式是 `repairPhotoPicker`（回 `XFile`），測試版（`TEST_BACKDOOR`）預設為 `testBuildRepairPhotoPicker`；
+  `flutter test` 沒有外掛，`test/flutter_test_config.dart` 讓所有畫面測試也用它，既有開單、完修的畫面測試不必各自換。
+- 浮水印的時間改用照片的拍攝時間（測試版是 `deviceNow()`，跟原本一樣）；完修面板原本用 `DateTime.now()`，改成一致。
+- 顯示：`core/repair_photo_image.dart` 的 `RepairPhotoImage` 以 `RepairPhotoLoad`（`loading`、`loaded`、`failed`）為唯一狀態，
+  `loaded` 是圖片真的解碼出第一個畫格才算；快取依照片編號放記憶體、最多 40 張、讀失敗不留，跟著 `ApiClient` 物件走（登出會換新的物件）。
+  `TmsPhotoCell`、`TmsViewerPhoto` 原本從沒被給值的 `image` 參數改成放一個元件的 `photo`，面板縮圖放本機位元組、詳情放 `RepairPhotoImage`。
+- 完修照片格子原本點了沒反應，順手讓它打開完修照片的大圖（主管驗收時要看細節）；看大圖只在同一種照片裡切換。
+- `RepairTicketDetail.photoCount` 刪掉，工務視角改照 `photos` 清單畫格子，與 dsl「格數與 `photos` 長度一致」相同。
+- T059：`flutter test` 544 通過、0 失敗（基準 527，多 17 個新測試）；`flutter analyze` 剩 9 個 `use_null_aware_elements` info，都在沒改到的舊行，基準就有。

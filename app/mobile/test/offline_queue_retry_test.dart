@@ -96,7 +96,10 @@ Future<bool> _submitAcTicketWithPhoto() {
   return OfflineQueue.instance.submit(
     kind: 'repair-ticket',
     send: (idempotencyKey) async {
-      photoId ??= await ApiClient.instance.createRepairPhoto(purpose: 'report');
+      photoId ??= await ApiClient.instance.createRepairPhoto(
+        purpose: 'report',
+        takenAt: DateTime(2026, 11, 26, 14, 32),
+      );
       await ApiClient.instance.createRepairTicket(
         sourceTaskId: 'task-310',
         category: 'air_conditioning',

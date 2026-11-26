@@ -85,7 +85,7 @@ void main() {
   Future<void> openTicket(
     WidgetTester tester,
     TicketView view, {
-    TicketEntry? entry,
+    TicketEntry entry = TicketEntry.elsewhere,
   }) async {
     usePhoneSurface(tester);
     await tester.pumpWidget(

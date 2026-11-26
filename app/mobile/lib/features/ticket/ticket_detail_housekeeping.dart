@@ -6,6 +6,7 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_action_bar.dart';
 import '../../core/widgets/tms_callout.dart';
 import '../../core/widgets/tms_card.dart';
+import '../../core/repair_photo_image.dart';
 import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_scroll_nav_bar.dart';
@@ -31,7 +32,8 @@ class TicketDetailHousekeeping extends StatelessWidget {
   final VoidCallback onWithdraw;
   final VoidCallback onAddPhoto;
 
-  final void Function(int index) onOpenPhoto;
+  final void Function(List<RepairTicketPhoto> photos, int index)
+  onOpenPhoto;
 
   static const double _scrollThreshold = 4;
 
@@ -411,8 +413,9 @@ class TicketDetailHousekeeping extends StatelessWidget {
                 id: 'ticket.photo.${i + 1}',
                 child: TmsPhotoCell(
                   edge: null,
+                  photo: RepairPhotoImage(photoId: photos[i].id),
                   semanticsLabel: '放大 ${detail.ticketNo} 照片 ${i + 1}',
-                  onTap: () => onOpenPhoto(i),
+                  onTap: () => onOpenPhoto(photos, i),
                 ),
               ),
             if (canAdd)

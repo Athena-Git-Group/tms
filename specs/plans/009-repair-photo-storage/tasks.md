@@ -337,15 +337,15 @@
   - 新增或擴充工務單詳情的畫面測試（`engineering_contract_fields_test.dart` 或新檔）：報修照片與完修照片格子各自拿到 `image`，數量等於回應陣列長度；格子的 `Semantics` value 在載入後是 `loaded`、失敗是 `failed`。
   - 主管視角案例：以 `TicketEntry.verifyQueue`、主管身分、`state`=done 的工務單打開 `TicketScreen`（同 `features/manager/manager_queue_screen.dart:101` 的進入方式），假的 `ApiClient` 回 2 張報修、1 張完修照片；斷言兩個區塊的格子都拿到圖片、底部同時有「通過」「不通過」，按下之前不必捲到別處就看得到照片區塊。
   - 提交一次，訊息寫明先紅。
-- [ ] T057 拍照與選照片
+- [X] T057 拍照與選照片
   - `core/repair_photo_capture.dart`：`captureAndUploadRepairPhoto` 加 `source` 參數與可替換的拍照函式；正式版 `ImagePicker().pickImage(source, maxWidth: 1600, maxHeight: 1600, imageQuality: 80)`；檢查 `FF D8 FF`；拍攝時間 `XFile.lastModified()`，拿不到用 `deviceNow()`。`core/api_client.dart` 的 `createRepairPhoto` 加 `takenAt` 參數。
   - 四個呼叫者把照片選單的結果傳進去，拍到的位元組存在 `RepairPhoto` 上供縮圖：`features/task/repair_sheet.dart`、`features/ticket/repair_ticket_form_sheet.dart`、`features/ticket/ticket_complete_sheet.dart`、`features/ticket/ticket_screen.dart`。
   - 權限被拒（`camera_access_denied`、`photo_access_denied`）與照片不能用，照 spec 的提示文字顯示，用既有的提示框元件。
-- [ ] T058 顯示照片
+- [X] T058 顯示照片
   - 新增 `core/repair_photo_image.dart`（`ApiClient.instance.fetchRepairPhotoContent(id)`、依 id 記憶體快取、`MemoryImage`、失敗狀態）；`core/api_client.dart` 加 `fetchRepairPhotoContent`。
   - `features/ticket/ticket_detail_engineering.dart`、`features/ticket/ticket_detail_housekeeping.dart` 的 `TmsPhotoCell` 給 `image:`，`Semantics` 帶 value（`loaded`、`loading`、`failed`）；`features/ticket/ticket_screen.dart` 的看大圖改依 `photos`／`completionPhotos` 建 `TmsViewerPhoto(image: …)`。
-- [ ] T059 [BDD-GREEN] `flutter test` 與 `flutter analyze` 全綠
-- [ ] T060 [BDD-REFACTOR] 刪掉不再被正式版呼叫的程式路徑（`takePhotoJpeg` 只留給測試版）；提交一次
+- [X] T059 [BDD-GREEN] `flutter test` 與 `flutter analyze` 全綠
+- [X] T060 [BDD-REFACTOR] 刪掉不再被正式版呼叫的程式路徑（`takePhotoJpeg` 只留給測試版）；提交一次
 
 ## Phase 4E: MODIFY Feature File - ios-app/工務單/主管視角.feature
 

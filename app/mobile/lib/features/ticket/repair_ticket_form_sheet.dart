@@ -7,7 +7,6 @@ import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/today_refresh.dart';
 import '../../core/widgets/tms_card.dart';
-import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_segmented_control.dart';
 import '../../core/widgets/tms_sheet.dart';
@@ -118,16 +117,17 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
     if (_photos.length >= _maxPhotos) {
       return;
     }
-    final source = await showTmsPhotoActionSheet(context);
-    if (source == null || !mounted) {
+    final capture = await pickRepairPhoto(context);
+    if (capture == null || !mounted) {
       return;
     }
     final photo = RepairPhoto(
+      capture: capture,
       watermark: repairPhotoWatermark(
         roomNo: _placeType == _PlaceType.area
             ? PoolItem.publicAreaRoomNo
             : _roomController.text,
-        takenAt: DateTime.now(),
+        takenAt: capture.takenAt,
       ),
     );
     setState(() {
@@ -140,7 +140,7 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
   Future<void> _upload(RepairPhoto photo) async {
     setState(() => photo.uploading = true);
     try {
-      photo.photoId = await captureAndUploadRepairPhoto(purpose: 'report');
+      photo.photoId = await uploadRepairPhoto(photo.capture, purpose: 'report');
       photo.uploadFailed = false;
     } catch (_) {
       photo.uploadFailed = true;
@@ -396,6 +396,7 @@ class _RepairTicketFormSheetState extends State<RepairTicketFormSheet> {
         id: 'repair.photo.${index + 1}.watermark-label',
         label: photo.watermark,
         child: TmsPhotoCell(
+          photo: Image(image: photo.thumbnail, fit: BoxFit.cover),
           upload: upload,
           onRemove: photo.uploading ? null : () => _removePhoto(index),
           onRetry: () => _upload(photo),

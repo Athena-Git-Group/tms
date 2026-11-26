@@ -6,6 +6,7 @@ import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_action_bar.dart';
 import '../../core/widgets/tms_callout.dart';
 import '../../core/widgets/tms_card.dart';
+import '../../core/repair_photo_image.dart';
 import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_scroll_nav_bar.dart';
@@ -40,7 +41,8 @@ class TicketDetailEngineering extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onReleaseToPool;
   final VoidCallback onComplete;
-  final void Function(int index) onOpenPhoto;
+  final void Function(List<RepairTicketPhoto> photos, int index)
+  onOpenPhoto;
 
   final bool managerView;
 
@@ -407,12 +409,12 @@ class TicketDetailEngineering extends StatelessWidget {
   }
 
   Widget? _photoSection(RepairTicketDetail detail) {
-    final count = detail.photoCount;
-    if (count == 0) {
+    final photos = detail.photos;
+    if (photos.isEmpty) {
       return null;
     }
     return _sectionWithHeader(
-      '報修照片（$count 張，含浮水印）',
+      '報修照片（${photos.length} 張，含浮水印）',
       TmsCard(
         style: TmsCardStyle.inSheet,
         padding: const EdgeInsets.all(TmsSpacing.md),
@@ -423,13 +425,14 @@ class TicketDetailEngineering extends StatelessWidget {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            for (var i = 0; i < count; i++)
+            for (var i = 0; i < photos.length; i++)
               TmsSemantics(
                 id: 'ticket.photo.${i + 1}',
                 child: TmsPhotoCell(
                   edge: null,
+                  photo: RepairPhotoImage(photoId: photos[i].id),
                   semanticsLabel: '放大報修照片 ${i + 1}',
-                  onTap: () => onOpenPhoto(i),
+                  onTap: () => onOpenPhoto(photos, i),
                 ),
               ),
           ],
@@ -461,7 +464,9 @@ class TicketDetailEngineering extends StatelessWidget {
                 id: 'ticket.completion-photo.${i + 1}',
                 child: TmsPhotoCell(
                   edge: null,
-                  semanticsLabel: '完修照片 ${i + 1}',
+                  photo: RepairPhotoImage(photoId: photos[i].id),
+                  semanticsLabel: '放大完修照片 ${i + 1}',
+                  onTap: () => onOpenPhoto(photos, i),
                 ),
               ),
           ],

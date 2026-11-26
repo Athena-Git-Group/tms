@@ -1,11 +1,11 @@
-import 'dart:typed_data';
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tms_staff_app/core/api_client.dart';
 import 'package:tms_staff_app/core/repair_photo_capture.dart';
 import 'package:tms_staff_app/core/test_backdoor.dart';
+import 'package:tms_staff_app/core/theme.dart';
 import 'package:tms_staff_app/core/widgets/tms_photo_action_sheet.dart';
 
 import 'support/fixture_jpeg.dart';
@@ -143,5 +143,58 @@ void main() {
 
     expect(bytes.sublist(0, 3), [0xFF, 0xD8, 0xFF]);
     expect(await file.lastModified(), deviceNow());
+  });
+
+  Future<CapturedRepairPhoto?> pickThrough(
+    WidgetTester tester,
+    String menuItem,
+  ) async {
+    CapturedRepairPhoto? picked;
+    await tester.pumpWidget(
+      CupertinoApp(
+        theme: buildTmsCupertinoTheme(),
+        home: Builder(
+          builder: (context) => CupertinoButton(
+            onPressed: () async => picked = await pickRepairPhoto(context),
+            child: const Text('加入照片'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('加入照片'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(menuItem));
+    await tester.pumpAndSettle();
+    return picked;
+  }
+
+  testWidgets('相機權限被拒，跳出沒有相機權限的提示', (tester) async {
+    repairPhotoPicker = (_) async =>
+        throw PlatformException(code: 'camera_access_denied');
+
+    expect(await pickThrough(tester, '拍照'), isNull);
+    expect(find.text('沒有相機權限'), findsOneWidget);
+    expect(find.text('請到手機的設定裡允許，才能附照片。'), findsOneWidget);
+    await tester.tap(find.text('好'));
+    await tester.pumpAndSettle();
+    expect(find.text('沒有相機權限'), findsNothing);
+  });
+
+  testWidgets('相簿權限被拒，跳出沒有相簿權限的提示', (tester) async {
+    repairPhotoPicker = (_) async =>
+        throw PlatformException(code: 'photo_access_denied');
+
+    expect(await pickThrough(tester, '從相簿選擇'), isNull);
+    expect(find.text('沒有相簿權限'), findsOneWidget);
+  });
+
+  testWidgets('選到不是 JPEG 的照片，跳出這張照片不能用', (tester) async {
+    repairPhotoPicker = (_) async =>
+        XFile.fromData(Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]));
+
+    expect(await pickThrough(tester, '從相簿選擇'), isNull);
+    expect(find.text('這張照片不能用'), findsOneWidget);
+    expect(find.text('請改用拍照，或選另一張照片。'), findsOneWidget);
+    expect(api.created, isEmpty);
   });
 }
