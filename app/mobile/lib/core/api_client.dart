@@ -5,7 +5,10 @@ import 'dart:math';
 import 'dart:typed_data';
 
 class ApiClient {
-  ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl;
+  ApiClient({
+    String? baseUrl,
+    this.photoReadTimeout = const Duration(seconds: 10),
+  }) : baseUrl = baseUrl ?? _defaultBaseUrl;
 
   static const String _defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -19,6 +22,9 @@ class ApiClient {
   static String dropWriteResponsePathPrefix = '';
 
   final String baseUrl;
+
+  /// 讀照片沒有逾時的話，連線卡住時格子會一直停在讀取中，也不會讓重開時重抓。
+  final Duration photoReadTimeout;
 
   String? _token;
 
@@ -247,27 +253,31 @@ class ApiClient {
   }
 
   Future<Uint8List> fetchRepairPhotoContent(String photoId) async {
-    final client = HttpClient();
+    final client = HttpClient()..connectionTimeout = photoReadTimeout;
     try {
-      final request = await client.getUrl(
-        Uri.parse('$baseUrl/repair-photos/$photoId/content'),
-      );
-      _authorize(request);
-      final response = await request.close();
-      final bytes = await response.fold<BytesBuilder>(
-        BytesBuilder(copy: false),
-        (builder, chunk) => builder..add(chunk),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        throw ApiException(
-          statusCode: response.statusCode,
-          body: utf8.decode(bytes.takeBytes(), allowMalformed: true),
-        );
-      }
-      return bytes.takeBytes();
+      return await _readPhoto(client, photoId).timeout(photoReadTimeout);
     } finally {
-      client.close();
+      client.close(force: true);
     }
+  }
+
+  Future<Uint8List> _readPhoto(HttpClient client, String photoId) async {
+    final request = await client.getUrl(
+      Uri.parse('$baseUrl/repair-photos/$photoId/content'),
+    );
+    _authorize(request);
+    final response = await request.close();
+    final bytes = await response.fold<BytesBuilder>(
+      BytesBuilder(copy: false),
+      (builder, chunk) => builder..add(chunk),
+    );
+    if (response.statusCode != HttpStatus.ok) {
+      throw ApiException(
+        statusCode: response.statusCode,
+        body: utf8.decode(bytes.takeBytes(), allowMalformed: true),
+      );
+    }
+    return bytes.takeBytes();
   }
 
   Future<RepairTicketDetail> createRepairTicket({
