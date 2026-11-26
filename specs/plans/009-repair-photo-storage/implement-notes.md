@@ -125,3 +125,25 @@ dsl 沒寫死、照最小解讀做的地方：
 - 完修照片格子原本點了沒反應，順手讓它打開完修照片的大圖（主管驗收時要看細節）；看大圖只在同一種照片裡切換。
 - `RepairTicketDetail.photoCount` 刪掉，工務視角改照 `photos` 清單畫格子，與 dsl「格數與 `photos` 長度一致」相同。
 - T059：`flutter test` 544 通過、0 失敗（基準 527，多 17 個新測試）；`flutter analyze` 剩 9 個 `use_null_aware_elements` info，都在沒改到的舊行，基準就有。
+
+## Phase 3 員工 App 步驟（T032、T033）
+
+- 這兩題在 Phase 4D 之後才做（App 那一棒的順序），步驟只動 `app/bdd` 測試層。
+- T032 `已有以下工務單：` 不改 stepdef：`RepairGivenSteps` 呼叫的 `insertReportPhotos` 已是 T010 新版（以報修人身分經 API 建立並上傳不同的合法 JPEG 再綁定），
+  完修照片走 `completeRepairTask` → `createUploadedPhoto`，與 dsl 該列一致。定期保養單沒有報修人，報修照片以處理人身分上傳，屬合理的最小解讀。
+- T033 `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`：依 id 數格子（會捲動）、與 `readRepairTicket` 的 `photos`／`completionPhotos` 長度比、
+  每格 accessibility `value` 等 `loaded`（最多等 10 秒，`loading` 以外的值立刻判定）。
+- 獨立 subagent 審查：沒有阻擋問題。兩個非阻擋觀察記下不改：
+  1. 新步驟用 `singleTicketRow("1 = 1")`，情境有兩張以上工務單時會丟例外；本版只有主管視角一個情境用它，照同檔既有步驟的寫法。
+  2. `已有以下工務單：` 的定期保養列沒有報修人也沒有處理人時，照片張數預設 1 會 NullPointerException（86d62b1 就有，本版沒動）。
+
+## Phase 4E 主管視角（T061、T062）
+
+- 環境：本工作樹編譯的後端以 `test-support` profile 起在 8081，連 `tms-bdd-postgres` 5434、`tms-bdd-kafka` 9094、共用的 `tms-fake-gcs` 4443（儲存空間 `tms-repair-photos-app-bdd`）；
+  `app-bdd-support` 先從本工作樹 `mvn install`。
+- `app/bdd/lib/env.sh` 預設的 simulator `79F32D5C-…` 在這台機器已不存在（`simctl` 回 Invalid device），改用 `UDID=44385F18-EAE9-4E77-B955-D2E35293731A`（iPhone 18 Pro Max）。
+  `run-module.sh` 只收模組目錄，為了只跑一份 feature，用一支暫存腳本照它的步驟、`cucumber.features` 指到 `工務單/主管視角.feature`。
+- 結果：`主管視角.feature` 24 個情境全綠（含新情境「按通過或不通過之前先看照片」：報修 2 格、完修 1 格都是 `loaded`）。
+  全綠，所以沒有另跑 T001 基準比對。
+- 截圖：`evidence/app-manager-verify-ticket-photos.jpg`，主管從待驗收清單打開 W-0108，報修 2 張、完修 1 張縮圖都畫出圖片，底部是「不通過」「通過」。
+  測試照片是 1 × 1 的深色像素，所以縮圖是深色方塊（灰框是淺灰底 `#E5E5EA`）。

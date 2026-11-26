@@ -364,9 +364,9 @@
 **Test Scope**:
 - `specs/truth/features/ios-app/工務單/主管視角.feature`
 
-- [ ] T061 [BDD-GREEN] 讓 Test Scope 全綠
+- [X] T061 [BDD-GREEN] 讓 Test Scope 全綠
   - `app/bdd/run-module.sh 工務單`，只看主管視角這份；失敗時先確認 T010 的測試資料真的存了內容（以 `BackendChannel.photoContent` 讀得到）。
-- [ ] T062 [BDD-REFACTOR] 主管視角整份與 T001 基準比沒有新失敗；提交一次
+- [X] T062 [BDD-REFACTOR] 主管視角整份與 T001 基準比沒有新失敗；提交一次
 
 ## Phase 4F: 櫃檯 Web 的工務單詳情顯示照片
 
