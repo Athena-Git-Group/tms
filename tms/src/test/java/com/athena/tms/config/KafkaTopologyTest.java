@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.athena.tms.SharedContainers;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,22 +67,32 @@ class KafkaTopologyTest {
         assertThat(subscribed).contains(TASK_EVENTS, PUSH, PUSH + ".retry-0", PUSH + ".retry-1", PUSH + ".retry-2", PUSH + ".DLT");
 
         try (AdminClient admin = AdminClient.create(Map.of("bootstrap.servers", SharedContainers.kafka().getBootstrapServers()))) {
-            Map<String, Integer> partitions = admin.describeTopics(subscribed).allTopicNames().get().values().stream()
-                    .collect(Collectors.toMap(TopicDescription::name, d -> d.partitions().size()));
-            assertThat(partitions).allSatisfy((topic, count) -> assertThat(count).as(topic).isEqualTo(3));
+            assertThat(partitionsOnceSettled(admin, subscribed)).allSatisfy((topic, count) -> assertThat(count).as(topic).isEqualTo(3));
         }
     }
 
     @Test
     void everyTopicTheAppWritesToExistsWithTheDeclaredPartitionsAndRetention() throws Exception {
         try (AdminClient admin = AdminClient.create(Map.of("bootstrap.servers", SharedContainers.kafka().getBootstrapServers()))) {
-            Map<String, Integer> partitions = admin.describeTopics(List.of(TASK_EVENTS, PUSH, PMS_STATUS)).allTopicNames().get()
-                    .values().stream().collect(Collectors.toMap(TopicDescription::name, d -> d.partitions().size()));
-            assertThat(partitions).containsOnly(Map.entry(TASK_EVENTS, 3), Map.entry(PUSH, 3), Map.entry(PMS_STATUS, 3));
+            assertThat(partitionsOnceSettled(admin, List.of(TASK_EVENTS, PUSH, PMS_STATUS)))
+                    .containsOnly(Map.entry(TASK_EVENTS, 3), Map.entry(PUSH, 3), Map.entry(PMS_STATUS, 3));
 
             assertThat(retentionOf(admin, TASK_EVENTS)).isEqualTo(Duration.ofDays(3));
             assertThat(retentionOf(admin, PUSH)).isEqualTo(Duration.ofDays(3));
             assertThat(retentionOf(admin, PMS_STATUS)).isEqualTo(Duration.ofDays(7));
+        }
+    }
+
+    // broker 的 metadata 是最終一致的：補分區的請求已經成功，負載重時 describe 仍可能短暫看到舊的分區數。
+    private static Map<String, Integer> partitionsOnceSettled(AdminClient admin, Collection<String> topics) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+        while (true) {
+            Map<String, Integer> partitions = admin.describeTopics(topics).allTopicNames().get().values().stream()
+                    .collect(Collectors.toMap(TopicDescription::name, d -> d.partitions().size()));
+            if (partitions.values().stream().allMatch(count -> count == 3) || System.nanoTime() > deadline) {
+                return partitions;
+            }
+            Thread.sleep(200);
         }
     }
 
