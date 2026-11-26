@@ -3,7 +3,6 @@ package com.athena.tms.bdd.support;
 import com.athena.tms.service.UnclaimedReminderScanJob;
 import com.athena.tms.service.ShiftEndScanJob;
 import com.athena.tms.service.IdempotencyRetentionJob;
-import com.athena.tms.service.OutboxRelay;
 import com.athena.tms.service.OutboxRetentionJob;
 import com.athena.tms.service.StreamHeartbeat;
 import java.util.Set;
@@ -12,7 +11,7 @@ import org.springframework.context.ApplicationContext;
 public class JobTrigger {
 
     private static final Set<String> KNOWN_JOBS = Set.of(
-            "outbox-relay", "outbox-retention", "idempotency-retention", "stream-heartbeat",
+            "outbox-retention", "idempotency-retention", "stream-heartbeat",
             "unclaimed-reminder-scan", "shift-end-scan", "schedule-rule-scan");
 
     private final ApplicationContext applicationContext;
@@ -23,7 +22,6 @@ public class JobTrigger {
 
     public void run(String jobName) {
         switch (jobName) {
-            case "outbox-relay" -> applicationContext.getBean(OutboxRelay.class).poll();
             case "outbox-retention" -> applicationContext.getBean(OutboxRetentionJob.class).purgeSentMessages();
             case "idempotency-retention" ->
                     applicationContext.getBean(IdempotencyRetentionJob.class).purgeExpiredOps();

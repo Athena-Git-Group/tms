@@ -61,14 +61,14 @@ public class OutboxWriter {
         message.setPayload(payload);
         message.setCreatedAt(OffsetDateTime.now());
         OutboxMessage saved = (OutboxMessage)this.outboxMessageRepository.save(message);
-        this.eventPublisher.publishEvent(new OutboxEnqueued());
+        this.eventPublisher.publishEvent(new OutboxEnqueued(tenantId));
         return saved;
     }
 
     public boolean enqueueIfAbsent(long tenantId, String kind, String aggregateKey, String payloadJson, String idempotencyKey, OffsetDateTime createdAt) {
         int inserted = this.jdbcTemplate.update("INSERT INTO outbox (tenant_id, aggregate_key, kind, payload, idempotency_key, status, attempts, created_at)\nVALUES (?, ?, ?, ?::jsonb, ?, 'pending', 0, ?)\nON CONFLICT (tenant_id, kind, idempotency_key) DO NOTHING\n", tenantId, aggregateKey, kind, payloadJson, idempotencyKey, createdAt);
         if (inserted > 0) {
-            this.eventPublisher.publishEvent(new OutboxEnqueued());
+            this.eventPublisher.publishEvent(new OutboxEnqueued(tenantId));
         }
         return inserted > 0;
     }

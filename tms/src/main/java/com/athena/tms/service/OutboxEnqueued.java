@@ -1,4 +1,4 @@
 package com.athena.tms.service;
 
-public record OutboxEnqueued() {
+public record OutboxEnqueued(long tenantId) {
 }

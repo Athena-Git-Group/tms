@@ -1,232 +1,149 @@
 package com.athena.tms.service;
 
-import com.athena.tms.common.OutboxKafkaHeaders;
-import com.athena.tms.config.KafkaTopicsProperties;
-import com.athena.tms.service.TenantScopedExecutor;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import java.nio.charset.StandardCharsets;
+import com.athena.tms.service.HotelRunQueue.TurnOutcome;
+import java.time.Clock;
 import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.TimeUnit;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.header.internals.RecordHeader;
+import java.util.OptionalLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.convert.DurationStyle;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.SmartLifecycle;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+/**
+ * 把 outbox 的訊息送上 Kafka，並且讓每家飯店的送出互不拖累。
+ *
+ * <p>提交寫了 outbox 的交易後，只喚醒那一家飯店，讓看板的即時更新不必等定時輪詢。
+ * 定時補漏只問資料庫哪幾家飯店有到期的訊息，再喚醒那幾家，用來接手重試、
+ * 當掉的 instance 留下的租約，以及別的 instance 提交的訊息。
+ * 固定數量的工作執行緒依 {@link HotelRunQueue} 輪流服務各家飯店，每輪的送出由 {@link HotelRelayTurn} 負責。
+ */
 @Component
+@EnableConfigurationProperties(RelaySettings.class)
 public class OutboxRelay implements SmartLifecycle {
+
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
-    private static final int MAX_BACKOFF_SHIFT = 10;
-    private static final RowMapper<PendingMessage> PENDING_MAPPER = (rs, rowNum) -> new PendingMessage(rs.getLong("id"), rs.getLong("tenant_id"), rs.getString("aggregate_key"), rs.getString("kind"), rs.getString("payload"), rs.getString("idempotency_key"), rs.getInt("attempts"), rs.getObject("next_retry_at", OffsetDateTime.class));
-    private static final RowMapper<ClaimResult> CLAIM_MAPPER = (rs, rowNum) -> {
-        boolean exhausted = "failed".equals(rs.getString("status"));
-        return new ClaimResult(!exhausted, exhausted, rs.getInt("attempts"));
-    };
-    private final JdbcTemplate jdbcTemplate;
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final KafkaTopicsProperties topics;
-    private final TenantScopedExecutor tenantScopedExecutor;
-    private final int maxAttempts;
-    private final Duration backoffBase;
-    private final Duration sendTimeout;
-    private final Duration claimLease;
-    private final Duration pollInterval;
-    private final Counter passes;
-    private final BlockingQueue<Boolean> wakeSignal = new ArrayBlockingQueue<>(1);
-    private volatile Thread runner;
+    private static final Duration COOLDOWN_BASE = Duration.ofSeconds(1);
+    private static final Duration IDLE_WAIT = Duration.ofSeconds(1);
 
-    public OutboxRelay(JdbcTemplate jdbcTemplate, KafkaTemplate<String, String> kafkaTemplate, KafkaTopicsProperties topics, TenantScopedExecutor tenantScopedExecutor, MeterRegistry meterRegistry, @Value(value="${tms.outbox.relay.poll-interval:2s}") String pollInterval, @Value(value="${tms.outbox.relay.max-attempts:8}") int maxAttempts, @Value(value="${tms.outbox.relay.backoff-base:1s}") String backoffBase, @Value(value="${tms.outbox.relay.send-timeout:10s}") String sendTimeout, @Value(value="${tms.outbox.relay.claim-lease:60s}") String claimLease, @Value(value="${spring.kafka.producer.properties.max.block.ms:5000}") long producerMaxBlockMs, @Value(value="${spring.kafka.producer.properties.delivery.timeout.ms:120000}") long producerDeliveryTimeoutMs) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.kafkaTemplate = kafkaTemplate;
-        this.topics = topics;
-        this.tenantScopedExecutor = tenantScopedExecutor;
-        this.maxAttempts = maxAttempts;
-        this.backoffBase = DurationStyle.detectAndParse((String)backoffBase);
-        this.sendTimeout = DurationStyle.detectAndParse((String)sendTimeout);
-        this.claimLease = DurationStyle.detectAndParse((String)claimLease);
-        this.pollInterval = DurationStyle.detectAndParse(pollInterval);
-        this.passes = Counter.builder("tms.outbox.relay.passes").description("relay 跑完的輪數").register(meterRegistry);
-        if (this.sendTimeout.toMillis() < producerDeliveryTimeoutMs) {
-            throw new IllegalStateException("tms.outbox.relay.send-timeout（" + String.valueOf(this.sendTimeout) + "）必須大於等於 producer 的 delivery.timeout.ms（" + producerDeliveryTimeoutMs + "ms）。send-timeout 比它短，我們會在 producer 真正放棄之前就先認輸、把訊息排去重試，但 producer 可能之後還是把它送到了 Kafka，留下一筆我們自己不知道的重複送出。");
-        }
-        Duration worstCaseSend = Duration.ofMillis(producerMaxBlockMs).plus(this.sendTimeout);
-        if (this.claimLease.compareTo(worstCaseSend) <= 0) {
-            throw new IllegalStateException("tms.outbox.relay.claim-lease（" + String.valueOf(this.claimLease) + "）必須大於 producer max.block.ms + relay send-timeout 的總和（目前是 " + String.valueOf(worstCaseSend) + "）。租約撐不過單筆訊息最長可能卡住的時間，活著的 instance 會被誤判成當掉、同一筆被別的 instance 搶走重送，破壞同 aggregate_key 的送出順序。");
-        }
+    private final HotelRelayTurn turn;
+    private final TenantScopedExecutor tenants;
+    private final OutboxRelayMetrics metrics;
+    private final RelaySettings settings;
+    private volatile HotelRunQueue queue;
+    private volatile boolean running;
+    private List<Thread> workers = List.of();
+    private Thread tick;
+
+    OutboxRelay(HotelRelayTurn turn, TenantScopedExecutor tenants, OutboxRelayMetrics metrics, RelaySettings settings) {
+        this.turn = turn;
+        this.tenants = tenants;
+        this.metrics = metrics;
+        this.settings = settings;
+        this.queue = newQueue();
+        metrics.readyHotels(() -> this.queue.readyCount());
     }
 
-    @TransactionalEventListener(phase=TransactionPhase.AFTER_COMMIT, fallbackExecution=true)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onEnqueued(OutboxEnqueued event) {
-        this.wakeSignal.offer(Boolean.TRUE);
+        queue.signal(event.tenantId());
     }
 
     @Override
-    public void start() {
-        Thread thread = new Thread(this::runUntilStopped, "outbox-relay");
-        thread.setDaemon(true);
-        this.runner = thread;
-        thread.start();
-    }
-
-    @Override
-    public void stop() {
-        Thread thread = this.runner;
-        this.runner = null;
-        if (thread == null) {
+    public synchronized void start() {
+        if (running) {
             return;
         }
-        this.wakeSignal.offer(Boolean.TRUE);
-        try {
-            thread.join(this.sendTimeout.toMillis());
+        HotelRunQueue current = queue;
+        running = true;
+        List<Thread> started = new ArrayList<>();
+        for (int i = 0; i < settings.workers(); i++) {
+            started.add(daemon("outbox-relay-" + i, () -> work(current)));
         }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        workers = started;
+        tick = daemon("outbox-relay-tick", () -> tick(current));
+    }
+
+    @Override
+    public synchronized void stop() {
+        if (!running) {
+            return;
         }
-        if (thread.isAlive()) {
-            thread.interrupt();
+        running = false;
+        HotelRunQueue stopping = queue;
+        queue = newQueue();
+        stopping.close();
+        tick.interrupt();
+        long deadline = System.nanoTime() + settings.sendTimeout().plusSeconds(2).toNanos();
+        for (Thread worker : workers) {
+            try {
+                worker.join(Math.max(1, (deadline - System.nanoTime()) / 1_000_000));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            if (worker.isAlive()) {
+                worker.interrupt();
+            }
         }
     }
 
     @Override
     public boolean isRunning() {
-        return this.runner != null;
+        return running;
     }
 
-    private void runUntilStopped() {
-        while (this.runner == Thread.currentThread()) {
+    private void work(HotelRunQueue current) {
+        while (running && queue == current) {
+            OptionalLong next;
             try {
-                this.wakeSignal.poll(this.pollInterval.toMillis(), TimeUnit.MILLISECONDS);
-            }
-            catch (InterruptedException e) {
+                next = current.take(IDLE_WAIT);
+            } catch (InterruptedException e) {
                 return;
             }
-            if (this.runner != Thread.currentThread()) {
+            if (next.isEmpty()) {
+                continue;
+            }
+            long tenantId = next.getAsLong();
+            long started = System.nanoTime();
+            TurnOutcome outcome = TurnOutcome.FAILED;
+            try {
+                outcome = turn.run(tenantId, () -> running);
+            } catch (Throwable e) {
+                log.error("飯店 {} 這輪 relay 出錯，這家飯店暫停一段時間再試，其他飯店照常: {}", tenantId, e.getMessage(), e);
+            } finally {
+                current.finish(tenantId, outcome);
+                metrics.turn(tenantId, outcome, Duration.ofNanos(System.nanoTime() - started));
+            }
+        }
+    }
+
+    private void tick(HotelRunQueue current) {
+        while (running && queue == current) {
+            try {
+                tenants.tenantsWithDueOutbox().forEach(current::signal);
+            } catch (RuntimeException e) {
+                log.warn("relay 定時補漏查不到有待送訊息的飯店，下一輪再試: {}", e.getMessage());
+            }
+            try {
+                Thread.sleep(settings.pollInterval());
+            } catch (InterruptedException e) {
                 return;
             }
-            try {
-                this.poll();
-            }
-            catch (Throwable e) {
-                log.error("relay 這輪出錯，等下一輪再試: {}", (Object)e.getMessage(), (Object)e);
-            }
         }
     }
 
-    public void poll() {
-        for (long tenantId : this.tenantScopedExecutor.tenantIds()) {
-            try {
-                this.relayTenant(tenantId);
-            }
-            catch (Exception e) {
-                log.error("租戶 {} 這輪 relay 出錯，跳過、下一輪再試: {}", new Object[]{tenantId, e.getMessage(), e});
-            }
-        }
-        this.passes.increment();
+    private HotelRunQueue newQueue() {
+        return new HotelRunQueue(Clock.systemUTC(), COOLDOWN_BASE, settings.hotelCooldownMax());
     }
 
-    private void relayTenant(long tenantId) {
-        List<PendingMessage> pending = this.fetchPending(tenantId);
-        if (pending.isEmpty()) {
-            return;
-        }
-        block0: for (List<PendingMessage> sameLane : OutboxRelay.groupByLaneKeepingOrder(pending).values()) {
-            for (PendingMessage message : sameLane) {
-                OffsetDateTime now = OffsetDateTime.now();
-                if (message.nextRetryAt() != null && message.nextRetryAt().isAfter(now)) continue block0;
-                ClaimResult claim = this.claim(tenantId, message);
-                if (claim.exhausted()) {
-                    log.error("outbox {} 重試次數用盡，標 failed 等人工處理（aggregate_key={}）", (Object)message.id(), (Object)message.aggregateKey());
-                    continue block0;
-                }
-                if (claim.claimed() && this.sendOne(tenantId, message, claim.attempts())) continue;
-                continue block0;
-            }
-        }
-    }
-
-    private List<PendingMessage> fetchPending(long tenantId) {
-        return this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.jdbcTemplate.query("SELECT o.id, o.tenant_id, o.aggregate_key, o.kind, o.payload, o.idempotency_key, o.attempts, o.next_retry_at\n  FROM outbox o\n WHERE o.status = 'pending'\n   AND NOT EXISTS (\n       SELECT 1 FROM outbox f\n        WHERE f.kind = o.kind AND f.aggregate_key = o.aggregate_key AND f.status = 'failed'\n   )\n ORDER BY o.kind, o.aggregate_key, o.id\n", PENDING_MAPPER));
-    }
-
-    private ClaimResult claim(long tenantId, PendingMessage message) {
-        double leaseSeconds = (double)this.claimLease.toMillis() / 1000.0;
-        List rows = this.tenantScopedExecutor.callAsTenant(tenantId, () -> this.jdbcTemplate.query("UPDATE outbox\n   SET attempts = CASE WHEN attempts >= ? THEN attempts ELSE attempts + 1 END,\n       next_retry_at = CASE WHEN attempts >= ? THEN next_retry_at\n                            ELSE now() + make_interval(secs => ?) END,\n       status = CASE WHEN attempts >= ? THEN 'failed' ELSE status END\n WHERE id = ?\n   AND status = 'pending'\n   AND (next_retry_at IS NULL OR next_retry_at <= now())\nRETURNING attempts, status\n", CLAIM_MAPPER, new Object[]{this.maxAttempts, this.maxAttempts, leaseSeconds, this.maxAttempts, message.id()}));
-        return rows.isEmpty() ? ClaimResult.notClaimed() : (ClaimResult)rows.get(0);
-    }
-
-    private boolean sendOne(long tenantId, PendingMessage message, int attempts) {
-        try {
-            this.kafkaTemplate.send(this.toProducerRecord(message)).get(this.sendTimeout.toMillis(), TimeUnit.MILLISECONDS);
-        }
-        catch (Exception e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            Duration retryDelay = this.backoff(attempts);
-            double delaySeconds = (double)retryDelay.toMillis() / 1000.0;
-            this.tenantScopedExecutor.runAsTenant(tenantId, () -> this.jdbcTemplate.update("UPDATE outbox SET next_retry_at = now() + make_interval(secs => ?) WHERE id = ?", new Object[]{delaySeconds, message.id()}));
-            log.warn("outbox {} 送出失敗（第 {} 次），{} 後重試: {}", new Object[]{message.id(), attempts, retryDelay, e.getMessage()});
-            return false;
-        }
-        try {
-            this.tenantScopedExecutor.runAsTenant(tenantId, () -> this.jdbcTemplate.update("UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = ?", new Object[]{message.id()}));
-        }
-        catch (Exception e) {
-            log.error("outbox {} 已經送達 Kafka，但標記 sent 失敗；維持 pending，租約到期後會自動重送、由下游去重收尾: {}", new Object[]{message.id(), e.getMessage(), e});
-        }
-        return true;
-    }
-
-    private ProducerRecord<String, String> toProducerRecord(PendingMessage message) {
-        ProducerRecord<String, String> record = new ProducerRecord<>(this.topics.topicFor(message.kind()), message.aggregateKey(), message.payload());
-        record.headers().add(new RecordHeader(OutboxKafkaHeaders.TENANT_ID, Long.toString(message.tenantId()).getBytes(StandardCharsets.UTF_8)));
-        if (message.idempotencyKey() != null) {
-            record.headers().add(new RecordHeader(OutboxKafkaHeaders.IDEMPOTENCY_KEY, message.idempotencyKey().getBytes(StandardCharsets.UTF_8)));
-        }
-        return record;
-    }
-
-    private Duration backoff(int attempts) {
-        return this.backoffBase.multipliedBy(1L << Math.min(attempts - 1, 10));
-    }
-
-    private static Map<Lane, List<PendingMessage>> groupByLaneKeepingOrder(List<PendingMessage> pending) {
-        LinkedHashMap<Lane, List<PendingMessage>> byLane = new LinkedHashMap<Lane, List<PendingMessage>>();
-        for (PendingMessage message : pending) {
-            byLane.computeIfAbsent(new Lane(message.kind(), message.aggregateKey()), lane -> new ArrayList()).add(message);
-        }
-        return byLane;
-    }
-
-    /**
-     * 送出的排隊單位是 kind 加上 aggregate_key。同一隊一筆一筆照順序送，有一筆重試用完就整隊停送。
-     * 推播和單的事件即使 aggregate_key 相同也各排一隊，所以某一則推播送不出去時，那張單之後的事件照樣送出。
-     */
-    private record Lane(String kind, String aggregateKey) {
-    }
-
-    private record PendingMessage(long id, long tenantId, String aggregateKey, String kind, String payload, String idempotencyKey, int attempts, OffsetDateTime nextRetryAt) {
-    }
-
-    private record ClaimResult(boolean claimed, boolean exhausted, int attempts) {
-        static ClaimResult notClaimed() {
-            return new ClaimResult(false, false, -1);
-        }
+    private static Thread daemon(String name, Runnable body) {
+        Thread thread = new Thread(body, name);
+        thread.setDaemon(true);
+        thread.start();
+        return thread;
     }
 }
