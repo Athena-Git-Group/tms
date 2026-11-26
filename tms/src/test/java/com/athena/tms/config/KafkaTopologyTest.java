@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.athena.tms.SharedContainers;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.Config;
@@ -13,14 +15,16 @@ import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.common.config.ConfigResource;
 import org.apache.kafka.common.config.TopicConfig;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 /**
- * 應用啟動後，它會寫入的每個 topic 都已照宣告的分區數與保留期限存在。
+ * 應用啟動後，它會寫入或讀取的每個 topic 都已照宣告的分區數存在，不靠 broker 自動建立。
  * push topic 事先只建 1 個分區，驗證既有 topic 會被補到宣告的分區數。
  */
 @SpringBootTest(properties = "tms.kafka.topic.partitions=3")
@@ -49,6 +53,23 @@ class KafkaTopologyTest {
         registry.add("tms.kafka.topic.task-events", () -> TASK_EVENTS);
         registry.add("tms.kafka.topic.push", () -> PUSH);
         registry.add("tms.kafka.topic.pms-status", () -> PMS_STATUS);
+    }
+
+    @Autowired
+    private KafkaListenerEndpointRegistry listeners;
+
+    @Test
+    void everyTopicAListenerReadsExistsWithTheDeclaredPartitions() throws Exception {
+        Set<String> subscribed = listeners.getListenerContainers().stream()
+                .flatMap(container -> Arrays.stream(container.getContainerProperties().getTopics()))
+                .collect(Collectors.toSet());
+        assertThat(subscribed).contains(TASK_EVENTS, PUSH, PUSH + ".retry-0", PUSH + ".retry-1", PUSH + ".retry-2", PUSH + ".DLT");
+
+        try (AdminClient admin = AdminClient.create(Map.of("bootstrap.servers", SharedContainers.kafka().getBootstrapServers()))) {
+            Map<String, Integer> partitions = admin.describeTopics(subscribed).allTopicNames().get().values().stream()
+                    .collect(Collectors.toMap(TopicDescription::name, d -> d.partitions().size()));
+            assertThat(partitions).allSatisfy((topic, count) -> assertThat(count).as(topic).isEqualTo(3));
+        }
     }
 
     @Test

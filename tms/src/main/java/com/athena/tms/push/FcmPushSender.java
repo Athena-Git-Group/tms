@@ -28,6 +28,9 @@ public class FcmPushSender implements PushSender {
 
     private static final Logger log = LoggerFactory.getLogger(FcmPushSender.class);
     private static final String APP_NAME = "tms-push";
+    // SDK 預設不設逾時。一次卡住的 FCM 呼叫會佔住推播消費者的執行緒，連帶它負責的分區都停住，直到被踢出消費群組。
+    private static final int CONNECT_TIMEOUT_MS = 3_000;
+    private static final int READ_TIMEOUT_MS = 10_000;
 
     private final FirebaseMessaging messaging;
 
@@ -43,6 +46,8 @@ public class FcmPushSender implements PushSender {
         try (InputStream in = Files.newInputStream(credentialsPath)) {
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(in))
+                    .setConnectTimeout(CONNECT_TIMEOUT_MS)
+                    .setReadTimeout(READ_TIMEOUT_MS)
                     .build();
             FirebaseApp app = FirebaseApp.getApps().stream()
                     .filter(existing -> APP_NAME.equals(existing.getName()))

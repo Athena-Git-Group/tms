@@ -12,6 +12,7 @@ import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -56,6 +57,13 @@ public class PushDeliveryConsumer {
             return;
         }
         deliver(tenantId, message);
+    }
+
+    public void onDeadLetter(ConsumerRecord<String, String> record) {
+        log.error("push 訊息重試用盡，留在 {}（飯店 {}，冪等鍵 {}，key={}）：{}",
+                record.topic(), header(record, OutboxKafkaHeaders.TENANT_ID),
+                header(record, OutboxKafkaHeaders.IDEMPOTENCY_KEY), record.key(),
+                header(record, KafkaHeaders.DLT_EXCEPTION_MESSAGE));
     }
 
     private void deliver(long tenantId, PushMessage message) {

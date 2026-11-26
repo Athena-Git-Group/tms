@@ -1,5 +1,6 @@
 package com.athena.tms.bdd.steps.push;
 
+import com.athena.tms.SharedContainers;
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
 import com.athena.tms.bdd.support.DbProbe;
@@ -19,8 +20,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.http.HttpMethod;
 import org.springframework.kafka.core.KafkaTemplate;
 import tools.jackson.databind.JsonNode;
@@ -95,6 +100,16 @@ public class PushDeliverySteps {
         pushSender.markTokenInvalid(currentToken(staffName, fingerprint));
     }
 
+    @假設("推播服務對 {string} 手機 {string} 會先暫時出錯 {int} 次")
+    public void pushServiceFailsTransiently(String staffName, String fingerprint, int times) {
+        pushSender.failTransiently(currentToken(staffName, fingerprint), times);
+    }
+
+    @假設("推播服務對 {string} 手機 {string} 一直暫時出錯")
+    public void pushServiceKeepsFailing(String staffName, String fingerprint) {
+        pushSender.failTransiently(currentToken(staffName, fingerprint), Integer.MAX_VALUE);
+    }
+
     @當("{string} 的推播 {string} 被重送一次")
     public void pushRedelivered(String staffName, String title) throws Exception {
         Map<String, Object> outbox = outboxRowFor(staffName, title);
@@ -126,6 +141,49 @@ public class PushDeliverySteps {
         if (!UUID.fromString(world.staffId(staffName)).equals(row.get("recipient_staff_id"))) {
             throw new AssertionError("送達紀錄的收件人不是 " + staffName + "：" + row);
         }
+    }
+
+    @那麼("{string} 的推播 {string} 在 {int} 秒內送達紀錄為 {string}")
+    public void deliveryRecordStatusWithin(String staffName, String title, int seconds, String statusTerm) {
+        long started = System.nanoTime();
+        String idempotencyKey = String.valueOf(outboxRowFor(staffName, title).get("idempotency_key"));
+        Duration remaining = Duration.ofSeconds(seconds).minusNanos(System.nanoTime() - started);
+        outboxAwait.withPollInterval(Duration.ofMillis(50)).withTimeout(remaining).waitForRow(
+                staffName + " 的推播「" + title + "」" + seconds + " 秒內送達紀錄狀態為 " + statusTerm,
+                "SELECT * FROM push_deliveries WHERE tenant_id = ? AND idempotency_key = ? AND status = ?",
+                tenantFixtures.testTenantId(), idempotencyKey, status(statusTerm));
+    }
+
+    @那麼("{string} 的推播 {string} 最後送達紀錄為 {string}")
+    public void deliveryRecordStatusEventually(String staffName, String title, String statusTerm) {
+        String idempotencyKey = String.valueOf(outboxRowFor(staffName, title).get("idempotency_key"));
+        outboxAwait.withTimeout(Duration.ofSeconds(30)).waitForRow(
+                staffName + " 的推播「" + title + "」重送後送達紀錄狀態為 " + statusTerm,
+                "SELECT * FROM push_deliveries WHERE tenant_id = ? AND idempotency_key = ? AND status = ?",
+                tenantFixtures.testTenantId(), idempotencyKey, status(statusTerm));
+    }
+
+    @那麼("{string} 的推播 {string} 重送用完後進入無法送達區")
+    public void deadLettered(String staffName, String title) {
+        String idempotencyKey = String.valueOf(outboxRowFor(staffName, title).get("idempotency_key"));
+        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(Map.of(
+                "bootstrap.servers", SharedContainers.kafka().getBootstrapServers(),
+                "group.id", "push-dead-letter-probe-" + UUID.randomUUID(),
+                "auto.offset.reset", "earliest",
+                "key.deserializer", StringDeserializer.class,
+                "value.deserializer", StringDeserializer.class))) {
+            consumer.subscribe(List.of(topics.getPushDeadLetter()));
+            long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+            while (System.nanoTime() < deadline) {
+                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(200))) {
+                    Header header = record.headers().lastHeader(OutboxKafkaHeaders.IDEMPOTENCY_KEY);
+                    if (header != null && idempotencyKey.equals(new String(header.value(), StandardCharsets.UTF_8))) {
+                        return;
+                    }
+                }
+            }
+        }
+        throw new AssertionError(staffName + " 的推播「" + title + "」30 秒內沒有進入 " + topics.getPushDeadLetter());
     }
 
     @那麼("推播服務收到送往 {string} 手機 {string} 的 {string}")
@@ -188,6 +246,14 @@ public class PushDeliverySteps {
         if (rows.getFirst().get("revoked_at") == null) {
             throw new AssertionError(staffName + " 的手機 " + fingerprint + " 預期已解除（revoked_at 非空），實際為空");
         }
+    }
+
+    private static String status(String statusTerm) {
+        String expected = STATUS_TERMS.get(statusTerm);
+        if (expected == null) {
+            throw new IllegalArgumentException("送達紀錄狀態只支援 " + STATUS_TERMS.keySet() + "，實際=" + statusTerm);
+        }
+        return expected;
     }
 
     private void register(String staffName, String fingerprint) {
