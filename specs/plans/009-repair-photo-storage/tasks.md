@@ -212,21 +212,21 @@
   - 確認 `app/bdd/.../steps/repair/RepairGivenSteps.java:163` 呼叫的 `insertReportPhotos` 已是 T010 的新版（經 API 上傳內容），完修照片走 `completeRepairTask`；不需要改 stepdef 時在 review 記下理由。
 - [X] T033 [BDD-RED] 員工 App `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`
   - 依 `ticket.photo.{序號}`／`ticket.completion-photo.{序號}` 取格子，讀 accessibility value（iOS 是 `value` 屬性）等於 `loaded`；格數與 `BackendChannel` 讀到的 `photos`／`completionPhotos` 長度一致。
-- [ ] T034 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單有 {報修張數} 張報修照片、{完修張數} 張完修照片`
-- [ ] T035 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單第 {第幾張} 張報修照片是舊版的假照片`
-- [ ] T036 [BDD-RED] 櫃檯 Web `"{員工}" 開著 "{房號}" 詳情面板 "{區塊}" 第 {第幾張} 張照片的大圖`
-- [ ] T037 [BDD-RED] 櫃檯 Web `"{員工}" 點詳情面板 "{區塊}" 的第 {第幾張} 張縮圖`
-- [ ] T038 [BDD-RED] 櫃檯 Web `"{員工}" 在看大圖按 "{按鈕}"`
-- [ ] T039 [BDD-RED] 櫃檯 Web `詳情面板的 "{區塊}" 有 {張數} 張縮圖，依序是這張單的照片`
+- [X] T034 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單有 {報修張數} 張報修照片、{完修張數} 張完修照片`
+- [X] T035 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單第 {第幾張} 張報修照片是舊版的假照片`
+- [X] T036 [BDD-RED] 櫃檯 Web `"{員工}" 開著 "{房號}" 詳情面板 "{區塊}" 第 {第幾張} 張照片的大圖`
+- [X] T037 [BDD-RED] 櫃檯 Web `"{員工}" 點詳情面板 "{區塊}" 的第 {第幾張} 張縮圖`
+- [X] T038 [BDD-RED] 櫃檯 Web `"{員工}" 在看大圖按 "{按鈕}"`
+- [X] T039 [BDD-RED] 櫃檯 Web `詳情面板的 "{區塊}" 有 {張數} 張縮圖，依序是這張單的照片`
   - 圖片位元組在頁面裡以 `fetch(img.src)` 取 `blob:` 內容回傳，與 `BackendChannel.photoContent` 比對；攔頁面的網路請求，確認照片請求帶 `Authorization`、網址不含憑證。
-- [ ] T040 [BDD-RED] 櫃檯 Web `詳情面板的照片區塊排在 "{前}" 之後、"{後}" 之前`
-- [ ] T041 [BDD-RED] 櫃檯 Web `詳情面板沒有 "{區塊}" 這一排`
-- [ ] T042 [BDD-RED] 櫃檯 Web `詳情面板沒有照片`
-- [ ] T043 [BDD-RED] 櫃檯 Web `看大圖顯示 "{區塊}" 的第 {第幾張} 張，標示 "{計數}"`
-- [ ] T044 [BDD-RED] 櫃檯 Web `詳情面板 "{區塊}" 的第 {第幾張} 張顯示 "{文字}"`
-- [ ] T045 [BDD-RED] 櫃檯 Web `詳情面板 "{區塊}" 的第 {第幾張} 張是這張單的照片`
-- [ ] T046 [BDD-RED] 櫃檯 Web `詳情面板的照片區塊標題依序是 "{報修}"、"{完修}"`
-- [ ] T047 [BDD-RED] 櫃檯 Web `詳情面板的照片縮圖都在面板寬度內，每張至少 44 × 44`
+- [X] T040 [BDD-RED] 櫃檯 Web `詳情面板的照片區塊排在 "{前}" 之後、"{後}" 之前`
+- [X] T041 [BDD-RED] 櫃檯 Web `詳情面板沒有 "{區塊}" 這一排`
+- [X] T042 [BDD-RED] 櫃檯 Web `詳情面板沒有照片`
+- [X] T043 [BDD-RED] 櫃檯 Web `看大圖顯示 "{區塊}" 的第 {第幾張} 張，標示 "{計數}"`
+- [X] T044 [BDD-RED] 櫃檯 Web `詳情面板 "{區塊}" 的第 {第幾張} 張顯示 "{文字}"`
+- [X] T045 [BDD-RED] 櫃檯 Web `詳情面板 "{區塊}" 的第 {第幾張} 張是這張單的照片`
+- [X] T046 [BDD-RED] 櫃檯 Web `詳情面板的照片區塊標題依序是 "{報修}"、"{完修}"`
+- [X] T047 [BDD-RED] 櫃檯 Web `詳情面板的照片縮圖都在面板寬度內，每張至少 44 × 44`
 
 - [X] T048 subagent review (phase quality gate)
   - 驗證：後端三份工務單 feature 與 `櫃檯看板與派單/單筆詳情與歷程.feature`、App `工務單` 模組、櫃檯 Web `單筆詳情/工務單照片.feature` 各跑 dry-run，undefined step 為 0；實跑時新情境的失敗只能是斷言或產品行為（例如上傳仍回 200、讀照片回 404 因為端點不存在、詳情面板沒有照片區塊），不能是步驟找不到。確認上傳與讀照片的後端步驟都走 `exchangeBytes`。
@@ -399,22 +399,22 @@
 - [X] T063 [BDD-GREEN] 後端櫃檯詳情帶照片
   - 落點：`dto/desk/DeskTaskDetail.java`（`repair` 加 `photos`、`completionPhotos`，型別沿用工務單的照片 DTO）、`service/DeskBoardService.java`（工務單時呼叫 `RepairService` 組照片清單的方法；必要時把它從 `ticketView` 抽成可共用的方法）。
   - 驗證：`單筆詳情與歷程.feature` 全綠；`照片內容上傳與查看.feature` 仍全綠（值班主管讀照片）。
-- [ ] T064 先寫會紅的 Vitest
+- [X] T064 先寫會紅的 Vitest
   - 新增 `api/repair-photos.test.ts`：`fetchPhotoBlob(id)` 以 `vi.stubGlobal('fetch', …)` 驗證請求網址是 `/api/v1/repair-photos/{id}/content`、不含任何查詢字串、帶 `Authorization: Bearer <session token>`；200 回 `Blob`；404 丟出 `ApiError`（`code`=`not_found`）；`signal` 中止時不再回傳。
   - 新增 `lib/photo-urls.test.ts`：純函式 `diffPhotoUrls(previous, nextIds)` 回傳要新建與要釋放的 id；換單時舊的全部釋放；同一個 id 不重抓；配合注入的 `create`／`revoke` 函式驗證卸載時每個建過的網址都被釋放一次。
   - 新增 `lib/repair-photo-rows.test.ts`：依 `DeskTaskDetail` 算出要顯示的排（`repair` 為 null 沒有任何排；陣列空的那一排不出現；順序與回應相同）。
   - 提交一次，訊息寫明先紅。
-- [ ] T065 讀照片與照片元件
+- [X] T065 讀照片與照片元件
   - `api/types.ts`：`DeskTaskDetail.repair` 加 `photos`、`completionPhotos`（`{ id: string; status: 'pending' | 'uploaded'; takenAt?: string }[]`）。
   - `api/repair-photos.ts`：`fetchPhotoBlob(photoId, signal)`，用 `client.ts` 的 `authHeaders()` 與 `backendUrl()`，非 200 轉成既有的 `ApiError`。
   - `lib/photo-urls.ts`、`lib/repair-photo-rows.ts`：T064 測的兩個純函式。
   - `features/detail/RepairPhotoStrip.tsx`：兩排縮圖與看大圖，照 `plan.md`「櫃檯 Web 怎麼接？」的版面；`<img>` 用 `blob:` 網址，卸載、換單或 id 清單變了時 `URL.revokeObjectURL` 並中止請求；失敗格顯示 `detail.photos.unavailable`；看大圖有「上一張」「下一張」「關閉」、Esc 關閉、只在同一排切換、沿用縮圖已拿到的網址。
   - `features/detail/DetailPanel.tsx:120-132`：「內容」區塊之後、歷程之前放 `<RepairPhotoStrip task={task} />`。
   - `i18n/locales/zh-TW.ts`、`en.ts`、`ja.ts`、`vi.ts` 加 `detail.photos.report`、`detail.photos.completion`、`detail.photos.unavailable`、`detail.photos.viewer.previous`、`detail.photos.viewer.next`、`detail.photos.viewer.close`、`detail.photos.viewer.counter`，文字照 `spec.md`「櫃檯 Web 怎麼顯示照片？」；`i18n/locales/locales.test.ts` 照樣綠（四種語言的鍵一致）。
-- [ ] T066 [BDD-GREEN] Vitest 與櫃檯 Web 行為規格全綠
+- [X] T066 [BDD-GREEN] Vitest 與櫃檯 Web 行為規格全綠
   - `cd app/web && npx vitest run`、`npm run build` 綠。
   - `bash app/web-bdd/run-feature.sh --rebuild 單筆詳情/工務單照片.feature desktop`、同一份 `ipad`、`單筆詳情/詳情面板內容.feature desktop` 全綠。
-- [ ] T067 [BDD-REFACTOR] 確認 `app/web/src` 裡沒有任何把登入憑證接進網址的寫法（`grep -rn "token=" app/web/src` 沒有結果）；`單筆詳情` 整個模組 `desktop` 與 `ipad` 與 T001 基準比沒有新失敗；只加 Phase 4F 的檔案，提交一次
+- [X] T067 [BDD-REFACTOR] 確認 `app/web/src` 裡沒有任何把登入憑證接進網址的寫法（`grep -rn "token=" app/web/src` 沒有結果）；`單筆詳情` 整個模組 `desktop` 與 `ipad` 與 T001 基準比沒有新失敗；只加 Phase 4F 的檔案，提交一次
 
 ## Phase 4G: plan-side quality gate
 

@@ -14,6 +14,7 @@ import { useDeskPanelsStore } from '../../stores/desk-panels';
 import { useCorrectedNow, useServerClockStore } from '../../stores/server-clock';
 import { useSessionStore } from '../../stores/session';
 import { useAssignTask } from '../dispatch';
+import { RepairPhotoStrip } from './RepairPhotoStrip';
 
 const TAG_STYLES: Record<StatusTagTone, string> = {
   yellow: 'bg-[#FFF1C2] text-[#6B4E00]',
@@ -130,6 +131,7 @@ export function DetailPanel({ taskId }: { taskId: string }) {
                 ))}
               </dl>
             </section>
+            <RepairPhotoStrip task={task} />
             <section aria-labelledby={timelineId} className="flex flex-col gap-1.5">
               <h3 id={timelineId} className="m-0 px-4 text-[13px] font-normal text-text-2">
                 {t('detail.timeline')}

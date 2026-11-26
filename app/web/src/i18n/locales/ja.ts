@@ -311,6 +311,17 @@ export const ja: Translation = {
         staff: 'スタッフ報告（{{name}}）',
       },
     },
+    photos: {
+      report: '報告写真',
+      completion: '完了写真',
+      unavailable: '写真を表示できません',
+      viewer: {
+        previous: '前へ',
+        next: '次へ',
+        close: '閉じる',
+        counter: '{{index}} / {{total}}',
+      },
+    },
     timeline: '履歴（お客様からの問い合わせ時はここを確認）',
     events: {
       guestTyped: 'QR でテキスト依頼を送信「{{text}}」',

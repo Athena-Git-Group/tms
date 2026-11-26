@@ -311,6 +311,17 @@ export const vi: Translation = {
         staff: 'Nhân viên báo ({{name}})',
       },
     },
+    photos: {
+      report: 'Ảnh báo hỏng',
+      completion: 'Ảnh hoàn tất sửa chữa',
+      unavailable: 'Không thể hiển thị ảnh',
+      viewer: {
+        previous: 'Ảnh trước',
+        next: 'Ảnh sau',
+        close: 'Đóng',
+        counter: '{{index}} / {{total}}',
+      },
+    },
     timeline: 'Lịch sử (xem ở đây khi khách gọi hỏi)',
     events: {
       guestTyped: 'Gửi yêu cầu bằng chữ qua mã QR: “{{text}}”',

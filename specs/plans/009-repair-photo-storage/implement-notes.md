@@ -147,3 +147,26 @@ dsl 沒寫死、照最小解讀做的地方：
   全綠，所以沒有另跑 T001 基準比對。
 - 截圖：`evidence/app-manager-verify-ticket-photos.jpg`，主管從待驗收清單打開 W-0108，報修 2 張、完修 1 張縮圖都畫出圖片，底部是「不通過」「通過」。
   測試照片是 1 × 1 的深色像素，所以縮圖是深色方塊（灰框是淺灰底 `#E5E5EA`）。
+
+## 櫃檯 Web（T034–T047、T064–T067）
+
+- 基準：以 `git worktree add /tmp/tms-photo-web-base f23290e` 跑 `單筆詳情` 模組。desktop 105 個場景 92 過、13 錯，13 個全是 `工務單照片.feature` 的步驟還沒定義；
+  ipad 跑整個目錄只跑標了 `@ipad` 的場景，就是這份 feature 的 13 個，同樣全是沒定義。
+- 為了不清掉別人在用的 5433/`tms`，本棒兩邊都起自己的後端與資料庫：基準 8091＋`tms_photo_web_base`、本棒 8090＋`tms_photo_web`，網頁 5291／5290；
+  Kafka topic 與推播 group 用環境變數加前綴（`TMS_KAFKA_TOPIC_TASKEVENTS`、`TMS_KAFKA_TOPIC_PUSH`、`TMS_PUSH_CONSUMER_GROUP`），Maven 本機倉庫用 `MAVEN_ARGS` 另開，不碰 `~/.m2`。
+- `BackendChannel` 原本只記得自己 `createStaff` 建的員工帳密；櫃檯 Web 的預設帳號（阿強等）不在裡面，`replaceRepairPhotos` 以處理人身分上傳時找不到帳密。
+  改成寫入預設帳號時一併記下（`upsertFrontdeskStaff`）。
+- 第幾張照片一律照櫃檯詳情 `repair.photos`／`completionPhotos` 的順序（Given 與 Then 同一個來源）；比對位元組時以預設櫃檯人員林佩君讀照片，
+  櫃檯、主管、值班主管讀到的內容相同。
+- 讀照片請求的 `Authorization` 標頭不能在 Playwright 的請求事件裡讀：讀完整標頭要再跟瀏覽器來回一次，在事件處理裡等它會卡死（WebKit 實際卡住過）。先存請求，斷言時才讀。
+- 看大圖的按鈕文字 spec 只寫了中文；其他語言照慣用字：英文 Previous／Next／Close、日文 前へ／次へ／閉じる、越南文 Ảnh trước／Ảnh sau／Đóng。
+  feature 只按中文按鈕，這幾個字沒有驗收情境承接。
+- 縮圖的可及名稱是「區塊標題＋第幾張 / 共幾張」，沿用 `detail.photos.viewer.counter`，沒有另加字串。看大圖用 `createPortal` 掛在 `body`，`role=dialog`、`aria-modal`。
+- 審查（獨立 subagent）提出的等待條件問題都已改：看大圖要等圖片真的載入或顯示讀不到、換張要等圖片網址換掉、縮圖要等張數到齊再等載入、看大圖只認標題是照片區塊的對話框。
+  「沒有某一排」只查該排標題不在、後端陣列是空的，沒有另查其他按鈕（區塊不在就沒有屬於它的縮圖）。
+- WebKit 卡住過一次：React 開發模式把 effect 跑兩次，第一輪的 6 個照片請求送出後被中止，加上即時串流，iPad 上三張＋三張的情境照片一直停在讀取中。
+  改成照片請求排到下一個 microtask 才送，第一輪在送出前就已中止。之後 iPad 連跑都綠。
+- 看大圖的圖片撐滿中間區域（`object-contain`），測試用的 1 × 1 照片也看得清楚；真照片一樣等比縮放。
+- 驗證：Vitest 785 通過（基準 771，多 14 個新案例）；`npm run build`（含 `tsc --noEmit`）通過，這個套件沒有 lint 指令；
+  `工務單照片.feature` desktop 13/13、ipad 13/13；`單筆詳情` 模組 desktop 105/105（基準 92/105，13 個新情境轉綠，沒有新失敗）、ipad 13/13（基準 0/13）；
+  `grep -rn "token=" app/web/src` 沒有結果。截圖在 `evidence/frontdesk-web-detail-photos.png`、`evidence/frontdesk-web-photo-viewer.png`（測試照片是 1 × 1 的黑色 JPEG）。
