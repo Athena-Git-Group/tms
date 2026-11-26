@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.Locale;
 
-/** 上傳照片內容的檢查：先看大小，再看是不是空的，最後看宣稱的格式與開頭位元組。 */
 final class RepairPhotoContent {
 
     static final int MAX_BYTES = 5 * 1024 * 1024;
