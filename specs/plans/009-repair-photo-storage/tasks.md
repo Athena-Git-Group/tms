@@ -208,9 +208,9 @@
 - [X] T030 [P] [BDD-RED] `櫃檯詳情的報修照片有 {報修張數} 張、完修照片有 {完修張數} 張，"{員工}" 每一張都讀得到`
   - 讀照片用 `exchangeBytes(GET, …)`。
 - [X] T031 [P] [BDD-RED] `櫃檯詳情沒有工務單的照片`
-- [ ] T032 [BDD-ALIGN] 員工 App `已有以下工務單：`
+- [X] T032 [BDD-ALIGN] 員工 App `已有以下工務單：`
   - 確認 `app/bdd/.../steps/repair/RepairGivenSteps.java:163` 呼叫的 `insertReportPhotos` 已是 T010 的新版（經 API 上傳內容），完修照片走 `completeRepairTask`；不需要改 stepdef 時在 review 記下理由。
-- [ ] T033 [BDD-RED] 員工 App `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`
+- [X] T033 [BDD-RED] 員工 App `工務單詳情的 "{種類}" 照片 {張數} 張都顯示出圖片`
   - 依 `ticket.photo.{序號}`／`ticket.completion-photo.{序號}` 取格子，讀 accessibility value（iOS 是 `value` 屬性）等於 `loaded`；格數與 `BackendChannel` 讀到的 `photos`／`completionPhotos` 長度一致。
 - [ ] T034 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單有 {報修張數} 張報修照片、{完修張數} 張完修照片`
 - [ ] T035 [BDD-RED] 櫃檯 Web `"{房號}" 的工務單第 {第幾張} 張報修照片是舊版的假照片`
