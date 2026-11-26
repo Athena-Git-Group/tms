@@ -170,3 +170,15 @@ dsl 沒寫死、照最小解讀做的地方：
 - 驗證：Vitest 785 通過（基準 771，多 14 個新案例）；`npm run build`（含 `tsc --noEmit`）通過，這個套件沒有 lint 指令；
   `工務單照片.feature` desktop 13/13、ipad 13/13；`單筆詳情` 模組 desktop 105/105（基準 92/105，13 個新情境轉綠，沒有新失敗）、ipad 13/13（基準 0/13）；
   `grep -rn "token=" app/web/src` 沒有結果。截圖在 `evidence/frontdesk-web-detail-photos.png`、`evidence/frontdesk-web-photo-viewer.png`（測試照片是 1 × 1 的黑色 JPEG）。
+
+## T071 與合併後的驗證（983e786）
+
+- 三條分支合併後由獨立的驗證 session 重跑，產品碼沒有改動。
+- 後端全套 829 run、0 failures、0 errors；`flutter test` 544 通過；`flutter analyze` 只有基準就有的 9 個 `use_null_aware_elements` info；
+  Vitest 785 通過，`npm run build` 通過。
+- 櫃檯 Web `單筆詳情` 模組：desktop 105/105、ipad 13/13（後端 8092＋`tms_verify_web`、網頁 5292、Kafka topic 前綴 `verify009.`、另開的 Maven 本機倉庫）。
+- T071：`app/bdd/run-module.sh 工務單` 74 個情境全綠（後端 8081 以 `test-support` 起，連 `tms-bdd-postgres` 5434、`tms-bdd-kafka` 9094、`tms-fake-gcs` 4443；模擬器 `44385F18-…`）。
+- 真照片：以工務阿強經 API 開單附一張 1200 × 900 的彩色 JPEG（190,576 位元組），讀回的 sha256 與原檔相同
+  （`989c86ba…48f9eb`），fake-gcs-server 的 `repair-photos/3/{照片編號}.jpg` 大小與內容都相同。
+  林佩君打開櫃檯詳情與看大圖都是這張照片：`evidence/verify-real-photo-detail-panel.png`、`evidence/verify-real-photo-viewer.png`；
+  原檔與執行紀錄在 `evidence/verify-real-photo-source.jpg`、`evidence/verify-real-photo-proof.log`。
