@@ -52,6 +52,7 @@ public class CucumberSpringConfiguration {
         registry.add("spring.kafka.bootstrap-servers", SharedContainers.kafka()::getBootstrapServers);
         registry.add("tms.kafka.topic.task-events", () -> TASK_EVENTS_TOPIC);
         registry.add("tms.kafka.topic.push", () -> PUSH_TOPIC);
+        SharedContainers.wireStorage(registry, "integration-photos");
         registry.add("tms.stream.heartbeat-interval", () -> "1s");
         registry.add("tms.stream.degraded-threshold", () -> "5s");
         registry.add("spring.kafka.consumer.auto-offset-reset", () -> "earliest");

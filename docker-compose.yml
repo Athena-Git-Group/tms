@@ -1,4 +1,4 @@
-# TMS 本機開發環境：Postgres + Kafka（＋選用的 Conduktor Console 看 Kafka）
+# TMS 本機開發環境：Postgres + Kafka + 照片儲存模擬服務（＋選用的 Conduktor Console 看 Kafka）
 #
 # 啟動：  docker compose up -d
 #
@@ -25,6 +25,11 @@
 #   Flyway 管理帳號 tms / tms（下面 POSTGRES_USER 建的就是它）
 #   應用帳號 tms_app / tms_app（V1 migration 會自己建立並授權，不用手動處理）
 # Kafka 在預設的 localhost:9092，topic 開 auto-create，app 直接用預設值即可。
+#
+# 照片存放（模擬雲端儲存）：工務單照片存在 fake-gcs-server（localhost:4443），
+# 它模擬 Google Cloud Storage，後端用的是跟正式環境同一套官方程式庫，只差連線位址。
+# 後端啟動時自己建立儲存空間，預設名稱 tms-repair-photos-local（TMS_STORAGE_BUCKET 可改）；
+# 這個服務沒起來，後端會啟動失敗。照片存在 tms-fake-gcs-data volume，down -v 會一起清掉。
 
 services:
   postgres:
@@ -71,6 +76,20 @@ services:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
       interval: 10s
       timeout: 10s
+      retries: 10
+
+  fake-gcs:
+    image: fsouza/fake-gcs-server:1.56.1
+    container_name: tms-fake-gcs
+    command: ["-scheme", "http", "-port", "4443", "-public-host", "localhost:4443", "-external-url", "http://localhost:4443"]
+    ports:
+      - "127.0.0.1:4443:4443"
+    volumes:
+      - tms-fake-gcs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:4443/storage/v1/b || exit 1"]
+      interval: 5s
+      timeout: 3s
       retries: 10
 
   # 以下兩個服務只在 --profile conduktor 時啟動，平常的 docker compose up 不會帶起來
@@ -123,3 +142,4 @@ volumes:
   tms-kafka-data:
   tms-conduktor-pgdata:
   tms-conduktor-data:
+  tms-fake-gcs-data:

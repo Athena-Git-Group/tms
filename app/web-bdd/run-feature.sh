@@ -41,7 +41,7 @@
 #
 # 它依序做的事：
 #   1. 檢查參數、JDK 25、node、Playwright 瀏覽器。
-#   2. 確認資料庫與 Kafka 連得上。這兩個容器不歸本腳本管，連不上就停下來。
+#   2. 確認資料庫、Kafka 與照片儲存模擬服務（fake-gcs）連得上。這些容器不歸本腳本管，連不上就停下來。
 #   3. 把 app-bdd-support 裝進 Maven 本機倉庫。
 #   4. 準備 BACKEND_PORT 的後端：已經有本工作目錄的後端在跑就沿用，沒有就建置並啟動。
 #   5. 準備開發伺服器：已經有本工作目錄的在跑就沿用，沒有就啟動。
@@ -408,7 +408,7 @@ fi
 
 take_lock
 
-log "2/6 確認資料庫與 Kafka 連得上"
+log "2/6 確認資料庫、Kafka 與照片儲存模擬服務連得上"
 
 db_host_port="$(printf '%s' "$TMS_DB_URL" | sed -n -E 's|^jdbc:postgresql://([^/?]+).*$|\1|p')"
 [ -n "$db_host_port" ] || fail "TMS_DB_URL 看不懂（要長成 jdbc:postgresql://主機:埠/資料庫）：${TMS_DB_URL}"
@@ -423,6 +423,11 @@ kafka_host="${TMS_KAFKA_BOOTSTRAP%%:*}"
 kafka_port="${TMS_KAFKA_BOOTSTRAP##*:}"
 if ! nc -z -w 3 "$kafka_host" "$kafka_port" >/dev/null 2>&1; then
   fail "連不上 Kafka ${TMS_KAFKA_BOOTSTRAP}。本腳本不會啟動容器；請在 repo 根目錄跑 docker compose up -d，確認 tms-kafka 起來了再重跑。"
+fi
+
+storage_host_port="$(printf '%s' "${TMS_STORAGE_EMULATOR_HOST:-http://localhost:4443}" | sed -E 's|^[a-z]+://||; s|/.*$||')"
+if ! nc -z -w 3 "${storage_host_port%%:*}" "${storage_host_port##*:}" >/dev/null 2>&1; then
+  fail "連不上照片儲存模擬服務 ${storage_host_port}，後端會啟動失敗。本腳本不會啟動容器；請在 repo 根目錄跑 docker compose up -d，確認 tms-fake-gcs 起來了再重跑。"
 fi
 
 log "3/6 把 app-bdd-support 裝進 Maven 本機倉庫"

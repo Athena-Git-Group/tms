@@ -114,6 +114,13 @@
 			<version>9.9.0</version>
 		</dependency>
 
+		<!-- 照片儲存：雲端儲存官方程式庫，與 firebase-admin 帶進來的同一版；本機與測試接 fake-gcs-server -->
+		<dependency>
+			<groupId>com.google.cloud</groupId>
+			<artifactId>google-cloud-storage</artifactId>
+			<version>2.64.0</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
