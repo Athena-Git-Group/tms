@@ -10,6 +10,7 @@ import com.athena.tms.bdd.support.RecordingPushSender;
 import com.athena.tms.bdd.support.TenantFixtures;
 import com.athena.tms.common.OutboxKafkaHeaders;
 import com.athena.tms.config.KafkaTopicsProperties;
+import com.athena.tms.push.PushProperties;
 import io.cucumber.java.zh_tw.假設;
 import io.cucumber.java.zh_tw.當;
 import io.cucumber.java.zh_tw.那麼;
@@ -48,6 +49,7 @@ public class PushDeliverySteps {
     private final KafkaTopicsProperties topics;
     private final KafkaGroupAwait kafkaGroupAwait;
     private final ObjectMapper objectMapper;
+    private final PushProperties pushProperties;
 
     private final Map<String, String> tokens = new HashMap<>();
     private final Map<String, Integer> registrations = new HashMap<>();
@@ -62,7 +64,8 @@ public class PushDeliverySteps {
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicsProperties topics,
             KafkaGroupAwait kafkaGroupAwait,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            PushProperties pushProperties) {
         this.world = world;
         this.apiClient = apiClient;
         this.dbProbe = dbProbe;
@@ -73,6 +76,7 @@ public class PushDeliverySteps {
         this.topics = topics;
         this.kafkaGroupAwait = kafkaGroupAwait;
         this.objectMapper = objectMapper;
+        this.pushProperties = pushProperties;
     }
 
     @假設("{string} 的手機 {string} 已登記推播")
@@ -127,7 +131,7 @@ public class PushDeliverySteps {
                 OutboxKafkaHeaders.IDEMPOTENCY_KEY,
                 String.valueOf(outbox.get("idempotency_key")).getBytes(StandardCharsets.UTF_8)));
         kafkaTemplate.send(record).get(10, TimeUnit.SECONDS);
-        if (!kafkaGroupAwait.awaitCaughtUp("tms-push-sender", topics.getPush(), Duration.ofSeconds(15))) {
+        if (!kafkaGroupAwait.awaitCaughtUp(pushProperties.getConsumer().getGroup(), topics.getPush(), Duration.ofSeconds(15))) {
             throw new AssertionError("推播消費者 15 秒內沒有讀完重送的訊息");
         }
     }

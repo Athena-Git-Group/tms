@@ -66,6 +66,15 @@ public class PushProperties {
 
     public static class Consumer {
         private int concurrency = 3;
+        private String group = "tms-push-sender";
+
+        public String getGroup() {
+            return group;
+        }
+
+        public void setGroup(String group) {
+            this.group = group;
+        }
 
         public int getConcurrency() {
             return concurrency;

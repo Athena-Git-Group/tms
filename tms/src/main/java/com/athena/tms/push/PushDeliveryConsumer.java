@@ -53,7 +53,7 @@ public class PushDeliveryConsumer {
     @KafkaListener(
             id = "push-delivery",
             topics = "${tms.kafka.topic.push}",
-            groupId = "tms-push-sender",
+            groupId = "${tms.push.consumer.group:tms-push-sender}",
             containerFactory = PushDeliveryKafkaConfig.LISTENER_FACTORY)
     public void onRecord(ConsumerRecord<String, String> record) {
         String idempotencyKey = header(record, OutboxKafkaHeaders.IDEMPOTENCY_KEY);

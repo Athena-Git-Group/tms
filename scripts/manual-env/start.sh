@@ -68,9 +68,9 @@ start_backend() {
         --spring.profiles.active=test-support \
         --tms.kafka.topic.task-events="${KAFKA_TOPIC_PREFIX}tms.task-events" \
         --tms.kafka.topic.push="${KAFKA_TOPIC_PREFIX}tms.push" \
-        --tms.kafka.topic.push-dead-letter="${KAFKA_TOPIC_PREFIX}tms.push.DLT" \
         --tms.kafka.topic.pms-status="${KAFKA_TOPIC_PREFIX}tms.pms-status" \
         --tms.stream.consumer-group="${KAFKA_TOPIC_PREFIX}sse" \
+        --tms.push.consumer.group="${KAFKA_TOPIC_PREFIX}tms-push-sender" \
         > "$BACKEND_LOG" 2>&1 &
     echo $! > "$BACKEND_PID_FILE"
   )
