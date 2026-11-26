@@ -7,6 +7,7 @@ import com.athena.tms.SharedContainers;
 import com.google.cloud.NoCredentials;
 import com.google.cloud.storage.BucketInfo;
 import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageException;
 import com.google.cloud.storage.StorageOptions;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -41,11 +42,10 @@ class GcsPhotoStorageTest {
     }
 
     @Test
-    void missingBucketIsAnErrorNotAMissingPhoto() {
+    void missingBucketFailsTheUpload() {
         String bucket = "never-created-" + UUID.randomUUID();
 
-        assertThatThrownBy(() -> new GcsPhotoStorage(storage, bucket).open("repair-photos/1/any.jpg"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(bucket);
+        assertThatThrownBy(() -> new GcsPhotoStorage(storage, bucket).put("repair-photos/1/any.jpg", new byte[] {1}))
+                .isInstanceOf(StorageException.class);
     }
 }

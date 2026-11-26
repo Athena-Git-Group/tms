@@ -268,6 +268,8 @@ public class RepairService {
         long tenantId = TenantContext.require();
         CurrentActor actor = CurrentActor.require();
         Map<String, Object> ticket = requireTicket(tenantId, ticketTaskId);
+        requireTicketOpen(jdbcTemplate.queryForObject(
+                "SELECT state FROM tasks WHERE tenant_id = ? AND id = ?", String.class, tenantId, ticketTaskId));
 
         boolean isReporter =
                 actor.staffId().toString().equalsIgnoreCase(String.valueOf(ticket.get("reporter_id")));
@@ -287,15 +289,19 @@ public class RepairService {
             throw new UnprocessableEntityException("photo_limit", "最多 3 張");
         }
         requireAttachablePhotos(tenantId, photoIds, "report", ticketTaskId);
-        // 鎖到交易結束，同時進來的完修要等補照片寫完才轉狀態；先鎖照片再鎖單，跟完修的上鎖順序相同
-        String state = jdbcTemplate.queryForObject(
+        // 開頭沒上鎖的檢查之後，完修可能剛把單轉掉，所以鎖住再看一次；鎖到交易結束，同時進來的完修要等補照片寫完。
+        // 先鎖照片再鎖單，跟完修的上鎖順序相同，兩個請求碰到同一張照片時不會互等
+        requireTicketOpen(jdbcTemplate.queryForObject(
                 "SELECT state FROM tasks WHERE tenant_id = ? AND id = ? FOR UPDATE",
-                String.class, tenantId, ticketTaskId);
+                String.class, tenantId, ticketTaskId));
+        bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
+        return ticketView(tenantId, ticketTaskId);
+    }
+
+    private static void requireTicketOpen(String state) {
         if (List.of(TaskState.DONE, TaskState.CLOSED, TaskState.CANCELLED).contains(state)) {
             throw new StateConflictException("ticket_closed", "工務單已修好、已結案或已撤回，不能再補照片");
         }
-        bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
-        return ticketView(tenantId, ticketTaskId);
     }
 
     @Transactional

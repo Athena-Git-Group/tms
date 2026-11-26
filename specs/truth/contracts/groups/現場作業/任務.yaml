@@ -138,7 +138,7 @@ tasksComplete:
       不回寫 PMS 房況（沒有人查過，不能讓 PMS 當成可售）；其他的轉 done 等查房。
       修繕任務（工務單）：resolutionType 選填，四選一（fixed／temporary／cannot_fix／no_action_needed，省略視為 fixed）；
       resolutionNote 選填。fixed、temporary、cannot_fix 這一次請求的 photoIds 至少 1 張，否則回 422 completion_photo_required；
-      每張的檢查與錯誤碼（photo_not_uploaded、photo_purpose_mismatch、photo_already_attached）見 CompleteTaskRequest.photoIds；
+      超過 3 張回 422 photo_limit；每張的檢查與錯誤碼（photo_not_uploaded、photo_purpose_mismatch、photo_already_attached）見 CompleteTaskRequest.photoIds；
       完成後工務單轉 done（已完修、等主管驗收），之後由主管呼叫 verifyRepairTicket 通過或不通過。
       飯店把「需要工務主管驗收」關掉時（tenant_config.repair_verification_required 為 false，即 DeskSettings.repairVerificationRequired 為 false），
       這三種結果改成直接轉 closed（已結案）並寫入結束時間，不進待驗收，驗收人與驗收時間留空，

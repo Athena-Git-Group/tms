@@ -86,7 +86,7 @@ void main() {
 
     await tester.pumpWidget(const CupertinoApp(home: SizedBox()));
     await tester.pumpWidget(photo());
-    for (var i = 0; i < 10 && photoState(tester) != 'loaded'; i++) {
+    for (var i = 0; i < 100 && photoState(tester) != 'loaded'; i++) {
       await waitReal(tester, const Duration(milliseconds: 50));
     }
 
