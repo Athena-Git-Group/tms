@@ -1,5 +1,7 @@
 package com.athena.tms.service;
 
+import com.athena.tms.service.TenantScopedExecutor.TenantSweep;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +20,12 @@ public class ScheduleRuleScanJob {
     @Scheduled(
             fixedDelayString = "${tms.schedule-rule.scan-interval:1m}",
             initialDelayString = "${tms.schedule-rule.scan-initial-delay:1m}")
-    public void scan() {
-        tenantScopedExecutor.forEachTenant(automationRuleService::scanSchedules);
+    @SchedulerLock(name = "schedule-rule-scan", lockAtMostFor = "10m", lockAtLeastFor = "45s")
+    public TenantSweep onSchedule() {
+        return scan();
+    }
+
+    public TenantSweep scan() {
+        return tenantScopedExecutor.forEachTenant("schedule-rule-scan", automationRuleService::scanSchedules);
     }
 }

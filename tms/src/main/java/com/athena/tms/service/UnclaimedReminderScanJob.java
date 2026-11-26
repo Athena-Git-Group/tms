@@ -1,5 +1,7 @@
 package com.athena.tms.service;
 
+import com.athena.tms.service.TenantScopedExecutor.TenantSweep;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.athena.tms.repair.RepairService;
 import java.time.Clock;
 import java.time.Duration;
@@ -40,8 +42,13 @@ public class UnclaimedReminderScanJob {
     @Scheduled(
             fixedDelayString = "${tms.escalation.scan-interval:1m}",
             initialDelayString = "${tms.escalation.scan-initial-delay:1m}")
-    public void scan() {
-        tenantScopedExecutor.forEachTenant(this::scanTenant);
+    @SchedulerLock(name = "unclaimed-reminder-scan", lockAtMostFor = "10m", lockAtLeastFor = "45s")
+    public TenantSweep onSchedule() {
+        return scan();
+    }
+
+    public TenantSweep scan() {
+        return tenantScopedExecutor.forEachTenant("unclaimed-reminder-scan", this::scanTenant);
     }
 
     private void scanTenant(long tenantId) {

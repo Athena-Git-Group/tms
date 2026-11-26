@@ -1,5 +1,7 @@
 package com.athena.tms.service;
 
+import com.athena.tms.service.TenantScopedExecutor.TenantSweep;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.athena.tms.dto.ShiftTimes;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -43,8 +45,13 @@ public class ShiftEndScanJob {
     @Scheduled(
             fixedDelayString = "${tms.shift-end.scan-interval:1m}",
             initialDelayString = "${tms.shift-end.scan-initial-delay:1m}")
-    public void scan() {
-        tenantScopedExecutor.forEachTenant(this::scanTenant);
+    @SchedulerLock(name = "shift-end-scan", lockAtMostFor = "10m", lockAtLeastFor = "45s")
+    public TenantSweep onSchedule() {
+        return scan();
+    }
+
+    public TenantSweep scan() {
+        return tenantScopedExecutor.forEachTenant("shift-end-scan", this::scanTenant);
     }
 
     private void scanTenant(long tenantId) {
