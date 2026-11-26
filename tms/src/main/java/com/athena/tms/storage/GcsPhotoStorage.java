@@ -30,10 +30,14 @@ public class GcsPhotoStorage implements PhotoStorage {
         try {
             return Optional.of(storage.readAllBytes(bucket, key));
         } catch (StorageException e) {
-            if (e.getCode() == NOT_FOUND) {
-                return Optional.empty();
+            if (e.getCode() != NOT_FOUND) {
+                throw e;
             }
-            throw e;
+            // 物件不在與儲存空間不在都回 404；後者是設定錯，當成照片不存在會讓每張照片都靜靜顯示讀不到
+            if (storage.get(bucket) == null) {
+                throw new IllegalStateException("照片儲存空間 " + bucket + " 不存在", e);
+            }
+            return Optional.empty();
         }
     }
 }

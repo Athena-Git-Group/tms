@@ -1,12 +1,15 @@
 package com.athena.tms.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.ServerSocket;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 import org.springframework.core.io.DefaultResourceLoader;
 
@@ -37,5 +40,30 @@ class StorageConfigTest {
         ConfigDataEnvironmentPostProcessor.applyTo(environment, new DefaultResourceLoader(), null, List.of("prod"));
 
         assertThat(environment.getProperty("tms.storage.emulator-host")).isEmpty();
+    }
+
+    @Test
+    void prodProfileRefusesToStartWithoutABucketName() {
+        StandardEnvironment environment = environmentWithoutOsVariables();
+        ConfigDataEnvironmentPostProcessor.applyTo(environment, new DefaultResourceLoader(), null, List.of("prod"));
+
+        assertThatThrownBy(() -> environment.getProperty("tms.storage.bucket"))
+                .hasMessageContaining("TMS_STORAGE_BUCKET");
+    }
+
+    @Test
+    void prodProfileUsesTheBucketNameFromTheEnvironment() {
+        StandardEnvironment environment = environmentWithoutOsVariables();
+        environment.getPropertySources().addFirst(
+                new MapPropertySource("deploy", Map.of("TMS_STORAGE_BUCKET", "hotel-photos-prod")));
+        ConfigDataEnvironmentPostProcessor.applyTo(environment, new DefaultResourceLoader(), null, List.of("prod"));
+
+        assertThat(environment.getProperty("tms.storage.bucket")).isEqualTo("hotel-photos-prod");
+    }
+
+    private static StandardEnvironment environmentWithoutOsVariables() {
+        StandardEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+        return environment;
     }
 }

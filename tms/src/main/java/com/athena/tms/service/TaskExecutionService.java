@@ -216,9 +216,7 @@ public class TaskExecutionService {
     private Map<String, Object> completeRepair(
             long tenantId, UUID taskId, Map<String, Object> task, CompleteTaskRequest request) {
         RepairResolution resolution = RepairResolution.of(request.resolutionType());
-        if (resolution.requiresPhotos()) {
-            requireCompletionPhotos(tenantId, taskId, request);
-        }
+        requireCompletionPhotos(tenantId, taskId, request.photoIds(), resolution);
         boolean verificationWaived = !resolution.closesOnComplete()
                 && !managerReviewSettings.repairVerificationRequired(tenantId);
         Map<String, Object> completedPayload = verificationWaived
@@ -332,16 +330,26 @@ public class TaskExecutionService {
         return done;
     }
 
-    private void requireCompletionPhotos(long tenantId, UUID taskId, CompleteTaskRequest request) {
-        if (request.photoIds() == null || request.photoIds().isEmpty()) {
-            throw new UnprocessableEntityException("completion_photo_required", "需要完修照片");
+    private void requireCompletionPhotos(
+            long tenantId, UUID taskId, List<UUID> photoIds, RepairResolution resolution) {
+        if (photoIds == null || photoIds.isEmpty()) {
+            if (resolution.requiresPhotos()) {
+                throw new UnprocessableEntityException("completion_photo_required", "需要完修照片");
+            }
+            return;
         }
-        repairService.requireAttachablePhotos(tenantId, request.photoIds(), "completion", taskId);
-        String placeholders = String.join(", ", Collections.nCopies(request.photoIds().size(), "?"));
+        if (photoIds.size() > 3) {
+            throw new UnprocessableEntityException("photo_limit", "最多 3 張");
+        }
+        repairService.requireAttachablePhotos(tenantId, photoIds, "completion", taskId);
+        if (!resolution.requiresPhotos()) {
+            return;
+        }
+        String placeholders = String.join(", ", Collections.nCopies(photoIds.size(), "?"));
         List<Object> params = new ArrayList<>();
         params.add(tenantId);
         params.add(taskId);
-        params.addAll(request.photoIds());
+        params.addAll(photoIds);
         Integer stale = jdbcTemplate.queryForObject(
                 """
                 SELECT count(*) FROM repair_photos p
@@ -351,7 +359,7 @@ public class TaskExecutionService {
                    AND COALESCE(p.uploaded_at, p.created_at) <= rt.last_verify_failed_at
                    AND p.id IN (""" + placeholders + ")",
                 Integer.class, params.toArray());
-        if (stale != null && stale == request.photoIds().size()) {
+        if (stale != null && stale == photoIds.size()) {
             throw new UnprocessableEntityException("completion_photo_required", "需要這一次的完修照片");
         }
     }

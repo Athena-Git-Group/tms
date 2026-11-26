@@ -194,12 +194,26 @@ public class RepairPhotoSteps {
 
     @當("{string} 附照片 {string} 以已修好完成 {string}")
     public void engineerCompletesWithPhoto(String staffName, String label, String ticketNo) {
+        completeWithPhotos(staffName, "fixed", ticketNo, List.of(label));
+    }
+
+    @當("{string} 附照片 {string}、{string} 以已修好完成 {string}")
+    public void engineerCompletesWithTwoPhotos(String staffName, String label, String otherLabel, String ticketNo) {
+        completeWithPhotos(staffName, "fixed", ticketNo, List.of(label, otherLabel));
+    }
+
+    @當("{string} 附照片 {string} 以完修結果 {string} 完成 {string}")
+    public void engineerCompletesWithPhotoAndResolution(
+            String staffName, String label, String resolutionChinese, String ticketNo) {
+        completeWithPhotos(staffName, Terms.resolutionType(resolutionChinese), ticketNo, List.of(label));
+    }
+
+    private void completeWithPhotos(String staffName, String resolutionType, String ticketNo, List<String> labels) {
         UUID ticketTaskId = RepairTicketRefs.taskId(world, ticketNo);
+        List<String> photoIds = labels.stream().map(label -> world.photo(label).photoId()).toList();
         lastOperationGuard.captureFor(ticketTaskId);
-        lastOperationGuard.capturePhotos(List.of(UUID.fromString(world.photo(label).photoId())));
-        Map<String, Object> body = Map.of(
-                "resolutionType", "fixed",
-                "photoIds", List.of(world.photo(label).photoId()));
+        lastOperationGuard.capturePhotos(photoIds.stream().map(UUID::fromString).toList());
+        Map<String, Object> body = Map.of("resolutionType", resolutionType, "photoIds", photoIds);
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), body);
     }
 
