@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.athena.tms.SharedContainers;
 import com.athena.tms.common.TenantContext;
+import com.athena.tms.config.TenantMetricsConfig;
 import com.athena.tms.dto.Actor;
 import com.athena.tms.dto.TaskCreateCommand;
 import com.athena.tms.service.TaskEngine;
@@ -162,6 +163,13 @@ public class RelayFairnessSteps {
                 "飯店 2 送出時飯店 1 積的待送應該還沒送完，否則證明不了飯店 2 沒有排在後面等");
     }
 
+    @那麼("營運看得到飯店 {long} 自己的送出延遲指標")
+    public void perHotelLagRecorded(long tenantId) {
+        long recorded = meterRegistry.find("tms.outbox.relay.lag").tag(TenantMetricsConfig.TENANT_TAG, Long.toString(tenantId))
+                .timers().stream().mapToLong(Timer::count).sum();
+        assertTrue(recorded > 0, "飯店 " + tenantId + " 的訊息送出後，依飯店分開的送出延遲指標應該有紀錄");
+    }
+
     @那麼("飯店 {long} 積的待送最後都送上 Kafka，每個隊伍照寫入順序、每筆剛好一次")
     public void backlogDeliveredInLaneOrder(long tenantId) {
         // 被鎖住而暫停的飯店，暫停結束後要等下一次喚醒；定時補漏拉長了，只能靠提交喚醒。
@@ -240,7 +248,7 @@ public class RelayFairnessSteps {
     }
 
     private double turns(long tenantId) {
-        return meterRegistry.find("tms.outbox.relay.turn").tag("tenant", Long.toString(tenantId)).timers().stream()
+        return meterRegistry.find("tms.outbox.relay.turn").tag(TenantMetricsConfig.TENANT_TAG, Long.toString(tenantId)).timers().stream()
                 .mapToDouble(Timer::count).sum();
     }
 

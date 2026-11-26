@@ -1,5 +1,7 @@
 package com.athena.tms.service;
 
+import static com.athena.tms.config.TenantMetricsConfig.TENANT_TAG;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -16,7 +18,6 @@ import org.springframework.stereotype.Component;
 @Component
 class OutboxRelayMetrics {
 
-    private static final String TENANT = "tenant";
     private static final Duration[] LAG_BUCKETS = {
             Duration.ofMillis(50), Duration.ofMillis(250), Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(30)};
 
@@ -33,25 +34,25 @@ class OutboxRelayMetrics {
     }
 
     void sent(long tenantId, String kind, Duration lag) {
-        Counter.builder("tms.outbox.relay.sent").tag(TENANT, Long.toString(tenantId)).tag("kind", kind)
+        Counter.builder("tms.outbox.relay.sent").tag(TENANT_TAG, Long.toString(tenantId)).tag("kind", kind)
                 .register(registry).increment();
-        Timer.builder("tms.outbox.relay.lag").tag(TENANT, Long.toString(tenantId)).tag("kind", kind)
+        Timer.builder("tms.outbox.relay.lag").tag(TENANT_TAG, Long.toString(tenantId)).tag("kind", kind)
                 .serviceLevelObjectives(LAG_BUCKETS).register(registry).record(lag);
     }
 
     void sendFailed(long tenantId, String kind) {
-        Counter.builder("tms.outbox.relay.send.failures").tag(TENANT, Long.toString(tenantId)).tag("kind", kind)
+        Counter.builder("tms.outbox.relay.send.failures").tag(TENANT_TAG, Long.toString(tenantId)).tag("kind", kind)
                 .register(registry).increment();
     }
 
     void exhausted(long tenantId, String kind) {
-        Counter.builder("tms.outbox.relay.exhausted").tag(TENANT, Long.toString(tenantId)).tag("kind", kind)
+        Counter.builder("tms.outbox.relay.exhausted").tag(TENANT_TAG, Long.toString(tenantId)).tag("kind", kind)
                 .register(registry).increment();
     }
 
     void turn(long tenantId, HotelRunQueue.TurnOutcome outcome, Duration took) {
         passes.increment();
-        Timer.builder("tms.outbox.relay.turn").tag(TENANT, Long.toString(tenantId))
+        Timer.builder("tms.outbox.relay.turn").tag(TENANT_TAG, Long.toString(tenantId))
                 .tag("outcome", outcome.name().toLowerCase(Locale.ROOT))
                 .register(registry).record(took);
     }

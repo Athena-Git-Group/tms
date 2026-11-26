@@ -1,5 +1,6 @@
 package com.athena.tms.service;
 
+import com.athena.tms.config.TenantMetricsConfig;
 import com.athena.tms.dao.TenantRepository;
 import com.athena.tms.entity.Tenant;
 import io.micrometer.core.instrument.Counter;
@@ -75,7 +76,7 @@ public class TenantScopedExecutor {
             }
             catch (RuntimeException e) {
                 failed.add(tenantId);
-                Counter.builder("tms.scheduled.tenant.failures").tag("job", jobName).tag("tenant", Long.toString(tenantId)).register(this.meterRegistry).increment();
+                Counter.builder("tms.scheduled.tenant.failures").tag("job", jobName).tag(TenantMetricsConfig.TENANT_TAG, Long.toString(tenantId)).register(this.meterRegistry).increment();
                 log.error("排程 {} 處理飯店 {} 失敗，跳過這家飯店、繼續下一家: {}", new Object[]{jobName, tenantId, e.getMessage(), e});
             }
         }

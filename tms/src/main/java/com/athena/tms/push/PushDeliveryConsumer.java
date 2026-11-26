@@ -1,8 +1,14 @@
 package com.athena.tms.push;
 
 import com.athena.tms.common.OutboxKafkaHeaders;
+import com.athena.tms.config.KafkaTopicsProperties;
+import com.athena.tms.config.TenantMetricsConfig;
 import com.athena.tms.service.TenantScopedExecutor;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -26,16 +32,22 @@ public class PushDeliveryConsumer {
     private final PushSender pushSender;
     private final TenantScopedExecutor tenantScopedExecutor;
     private final ObjectMapper objectMapper;
+    private final KafkaTopicsProperties topics;
+    private final MeterRegistry meterRegistry;
 
     public PushDeliveryConsumer(
             PushDeliveryRecorder recorder,
             PushSender pushSender,
             TenantScopedExecutor tenantScopedExecutor,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            KafkaTopicsProperties topics,
+            MeterRegistry meterRegistry) {
         this.recorder = recorder;
         this.pushSender = pushSender;
         this.tenantScopedExecutor = tenantScopedExecutor;
         this.objectMapper = objectMapper;
+        this.topics = topics;
+        this.meterRegistry = meterRegistry;
     }
 
     @KafkaListener(
@@ -56,22 +68,33 @@ public class PushDeliveryConsumer {
             log.warn("push 訊息 payload 不是 PushPayload 形狀，略過（offset={} 冪等鍵={}）", record.offset(), idempotencyKey);
             return;
         }
-        deliver(tenantId, message);
+        String tenant = Long.toString(tenantId);
+        if (topics.getPush().equals(record.topic())) {
+            recordQueueWait(tenant, record);
+        }
+        try {
+            countDelivery(tenant, deliver(tenantId, message));
+        } catch (PushTransientException e) {
+            countDelivery(tenant, "transient_failure");
+            throw e;
+        }
     }
 
     public void onDeadLetter(ConsumerRecord<String, String> record) {
+        String tenantHeader = header(record, OutboxKafkaHeaders.TENANT_ID);
+        countDelivery(tenantHeader == null ? "unknown" : tenantHeader, "dead_lettered");
         log.error("push 訊息重試用盡，留在 {}（飯店 {}，冪等鍵 {}，key={}）：{}",
-                record.topic(), header(record, OutboxKafkaHeaders.TENANT_ID),
+                record.topic(), tenantHeader,
                 header(record, OutboxKafkaHeaders.IDEMPOTENCY_KEY), record.key(),
                 header(record, KafkaHeaders.DLT_EXCEPTION_MESSAGE));
     }
 
-    private void deliver(long tenantId, PushMessage message) {
+    private String deliver(long tenantId, PushMessage message) {
         Optional<String> status = tenantScopedExecutor.callAsTenant(
                 tenantId, () -> recorder.statusOf(tenantId, message.idempotencyKey()));
         if (status.isPresent() && !PushDeliveryRecorder.STATUS_FAILED.equals(status.get())) {
             log.info("push 冪等鍵 {} 已處理過（{}），跳過重複投遞", message.idempotencyKey(), status.get());
-            return;
+            return "duplicate";
         }
         List<PushDeviceAddress> devices = tenantScopedExecutor.callAsTenant(
                 tenantId, () -> recorder.activeDevices(tenantId, message.recipientStaffId()));
@@ -79,7 +102,7 @@ public class PushDeliveryConsumer {
             tenantScopedExecutor.runAsTenant(tenantId, () -> recorder.record(
                     tenantId, message.idempotencyKey(), message.recipientStaffId(),
                     PushDeliveryRecorder.STATUS_SKIPPED_NO_TOKEN, null));
-            return;
+            return PushDeliveryRecorder.STATUS_SKIPPED_NO_TOKEN;
         }
 
         boolean anySent = false;
@@ -112,6 +135,21 @@ public class PushDeliveryConsumer {
         String error = lastError;
         tenantScopedExecutor.runAsTenant(tenantId, () -> recorder.record(
                 tenantId, message.idempotencyKey(), message.recipientStaffId(), finalStatus, error));
+        return finalStatus;
+    }
+
+    private void countDelivery(String tenant, String outcome) {
+        Counter.builder("tms.push.deliveries").tag(TenantMetricsConfig.TENANT_TAG, tenant).tag("outcome", outcome)
+                .register(meterRegistry).increment();
+    }
+
+    // 從 relay 送上 Kafka 到消費者開始處理的等待時間，用來看一家飯店的推播有沒有被別家飯店的推播擋在後面。
+    // 只量第一次投遞，重試 topic 的等待包含刻意的重試間隔，混進來就看不出排隊。
+    private void recordQueueWait(String tenant, ConsumerRecord<String, String> record) {
+        Timer.builder("tms.push.queue.wait").tag(TenantMetricsConfig.TENANT_TAG, tenant)
+                .serviceLevelObjectives(Duration.ofMillis(250), Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(30))
+                .register(meterRegistry)
+                .record(Duration.ofMillis(Math.max(0, System.currentTimeMillis() - record.timestamp())));
     }
 
     private void revokeAll(long tenantId, List<UUID> deviceIds) {
