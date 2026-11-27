@@ -33,7 +33,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 
-/** 工務單照片的建立、上傳、讀取與綁定句型；語意見 {@code 工務單/dsl.md} 的「照片內容與存放」。 */
 public class RepairPhotoSteps {
 
     private static final Map<String, String> PURPOSE = Map.of("報修", "report", "完修", "completion");

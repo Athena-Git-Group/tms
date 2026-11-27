@@ -289,8 +289,6 @@ public class RepairService {
             throw new UnprocessableEntityException("photo_limit", "最多 3 張");
         }
         requireAttachablePhotos(tenantId, photoIds, "report", ticketTaskId);
-        // 開頭沒上鎖的檢查之後，完修可能剛把單轉掉，所以鎖住再看一次；鎖到交易結束，同時進來的完修要等補照片寫完。
-        // 先鎖照片再鎖單，跟完修的上鎖順序相同，兩個請求碰到同一張照片時不會互等
         requireTicketOpen(jdbcTemplate.queryForObject(
                 "SELECT state FROM tasks WHERE tenant_id = ? AND id = ? FOR UPDATE",
                 String.class, tenantId, ticketTaskId));
@@ -528,10 +526,6 @@ public class RepairService {
         return "system".equals(row.get("source")) && row.get("origin_ticket_task_id") == null;
     }
 
-    /**
-     * 開單、補照片、完修共用的照片檢查。鎖住照片列直到交易結束，同時附同一張照片的兩個請求才會排隊；
-     * 依編號順序上鎖，避免兩個請求各拿一半的鎖互等。呼叫者必須在交易裡。
-     */
     public void requireAttachablePhotos(long tenantId, List<UUID> photoIds, String purpose, UUID ticketTaskId) {
         List<UUID> distinct = photoIds.stream().distinct().toList();
         if (distinct.isEmpty()) {
@@ -560,7 +554,6 @@ public class RepairService {
         }
     }
 
-    /** 改到的筆數少於照片張數就丟 409：requireAttachablePhotos 已上鎖時不會發生，漏了上鎖也不會默默少一張。 */
     void bindUnclaimedPhotos(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
         List<UUID> distinct = photoIds.stream().distinct().toList();
         if (distinct.isEmpty()) {

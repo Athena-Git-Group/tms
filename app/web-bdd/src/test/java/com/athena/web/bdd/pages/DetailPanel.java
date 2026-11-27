@@ -413,7 +413,6 @@ public class DetailPanel extends PageObject {
         waitViewerImageSettled("");
     }
 
-    /** 等看大圖的圖片載入完成或顯示讀不到；previousSrc 不是空字串時，還要等圖片換掉。 */
     public void waitViewerImageSettled(String previousSrc) {
         page().waitForFunction("""
                 ([dialog, previous, unavailable]) => {

@@ -25,11 +25,6 @@
 #   Flyway 管理帳號 tms / tms（下面 POSTGRES_USER 建的就是它）
 #   應用帳號 tms_app / tms_app（V1 migration 會自己建立並授權，不用手動處理）
 # Kafka 在預設的 localhost:9092，topic 開 auto-create，app 直接用預設值即可。
-#
-# 照片存放（模擬雲端儲存）：工務單照片存在 fake-gcs-server（localhost:4443），
-# 它模擬 Google Cloud Storage，後端用的是跟正式環境同一套官方程式庫，只差連線位址。
-# 後端啟動時自己建立儲存空間，預設名稱 tms-repair-photos-local（TMS_STORAGE_BUCKET 可改）；
-# 這個服務沒起來，後端會啟動失敗。照片存在 tms-fake-gcs-data volume，down -v 會一起清掉。
 
 services:
   postgres:

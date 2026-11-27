@@ -26,7 +26,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 照片綁定的兩道防線：漏了上鎖時改到的筆數比對仍回 409 並回滾；同時以同一張照片開兩張單只有一張成立。 */
 class RepairPhotoAttachTest extends PostgresSpringTest {
 
     private static final long TENANT_ID = 1L;

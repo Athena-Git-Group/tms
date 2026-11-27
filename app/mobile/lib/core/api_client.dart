@@ -23,7 +23,6 @@ class ApiClient {
 
   final String baseUrl;
 
-  /// 讀照片沒有逾時的話，連線卡住時格子會一直停在讀取中，也不會讓重開時重抓。
   final Duration photoReadTimeout;
 
   String? _token;

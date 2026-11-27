@@ -19,7 +19,6 @@ WEB_HOST="${MANUAL_WEB_HOST:-localhost}"
 KAFKA_BOOTSTRAP="${MANUAL_KAFKA_BOOTSTRAP:-localhost:9092}"
 # 這套環境用的 Kafka topic 一律加這個前綴，跟驗收測試的 tms.* 分開。
 KAFKA_TOPIC_PREFIX="${MANUAL_KAFKA_TOPIC_PREFIX:-manual.}"
-# 照片跟驗收測試共用同一個模擬雲端儲存，但放在另一個儲存空間；後端啟動時讀這個環境變數。
 export TMS_STORAGE_BUCKET="${MANUAL_STORAGE_BUCKET:-tms-repair-photos-manual}"
 
 if [[ -n "${MANUAL_JAVA:-}" ]]; then

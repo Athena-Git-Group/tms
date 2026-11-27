@@ -6,10 +6,8 @@ import 'package:flutter/cupertino.dart';
 import 'api_client.dart';
 import 'theme.dart';
 
-/// 照片格子的 accessibility value 用這三個名稱，Appium 靠它分辨畫出圖片與灰框。
 enum RepairPhotoLoad { loading, loaded, failed }
 
-/// 快取跟著登入用的 [ApiClient] 走，換人登入就不會看到上一個人的快取。
 final Expando<_PhotoContentCache> _caches = Expando();
 
 class _PhotoContentCache {

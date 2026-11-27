@@ -47,13 +47,11 @@ public class LastOperationGuard {
         return snapshot;
     }
 
-    /** 附照片的操作被拒絕時，這些照片的綁定與上傳狀態也要不變；在 {@link #captureFor} 之後呼叫。 */
     public void capturePhotos(List<UUID> ids) {
         photoIds = List.copyOf(ids);
         photosBefore = photoRows(photoIds);
     }
 
-    /** 沒有記下照片時回 null。 */
     public List<Map<String, Object>> photosBefore() {
         return photosBefore;
     }

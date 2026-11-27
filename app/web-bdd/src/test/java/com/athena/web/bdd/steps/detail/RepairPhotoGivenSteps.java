@@ -20,7 +20,6 @@ public class RepairPhotoGivenSteps {
 
     private final CommonGivenSteps common;
 
-    /** photoRequests 只為了在登入前就開始記錄讀照片的請求；有照片的場景都先跑這裡的照片句。 */
     public RepairPhotoGivenSteps(WebWorld world, PhotoRequests photoRequests, CommonGivenSteps common) {
         this.world = world;
         this.shell = new ShellFrame(world);

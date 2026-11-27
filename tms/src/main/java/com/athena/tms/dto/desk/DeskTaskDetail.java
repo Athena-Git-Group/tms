@@ -24,7 +24,6 @@ public record DeskTaskDetail(
 
     public record Cancellation(String reason, String byName) {}
 
-    /** photos、completionPhotos 與工務單詳情同一份清單（同排序、完修照片只有這一輪）。 */
     public record Repair(
             String resolutionType,
             String verifiedByName,

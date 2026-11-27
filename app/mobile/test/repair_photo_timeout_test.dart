@@ -7,7 +7,6 @@ import 'package:tms_staff_app/core/repair_photo_image.dart';
 
 import 'support/fixture_jpeg.dart';
 
-/// 第一個請求收下就不回，之後的請求回測試照片。
 class _StallFirstServer {
   _StallFirstServer._(this._server) {
     _server.listen((request) {

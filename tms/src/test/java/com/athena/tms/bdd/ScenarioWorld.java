@@ -95,7 +95,6 @@ public class ScenarioWorld {
 
     private final Map<String, PhotoLabel> photoLabels = new HashMap<>();
 
-    /** 照片標籤對到的照片；{@code content} 是最後一次成功上傳的位元組，沒有成功上傳過是 null。 */
     public record PhotoLabel(String photoId, byte[] content, java.time.OffsetDateTime uploadedAt) {
     }
 

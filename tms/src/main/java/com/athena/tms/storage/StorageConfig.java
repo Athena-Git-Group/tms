@@ -18,7 +18,6 @@ public class StorageConfig {
 
     private static final Logger log = LoggerFactory.getLogger(StorageConfig.class);
 
-    // 上傳在資料庫交易裡寫雲端儲存，卡住時佔著連線；程式庫預設的總時限是幾十秒
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
     private static final int CONFLICT = 409;
@@ -76,7 +75,6 @@ public class StorageConfig {
         try {
             storage.close();
         } catch (Exception ignored) {
-            // 啟動已經失敗，關閉時的錯誤不蓋過原因
         }
     }
 }

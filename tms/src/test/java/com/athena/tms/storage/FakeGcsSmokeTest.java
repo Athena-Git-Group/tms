@@ -14,10 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/**
- * 官方程式庫對 fake-gcs-server 的寫入、讀出、覆寫都成立。
- * 帶 {@code -Dfakegcs.url=http://localhost:4443} 時改打本機 docker compose 起的模擬服務。
- */
 class FakeGcsSmokeTest {
 
     @Test
