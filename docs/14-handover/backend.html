@@ -384,7 +384,7 @@
   </div>
   <div class="opt great">
     <h4><span class="tag">現在的做法</span>只寫一套，用 Google 官方程式庫；本機接模擬服務</h4>
-    <p><code>PhotoStorage</code> 只有「存」與「讀」兩個方法，唯一的實作 <code>GcsPhotoStorage</code> 用 Google 官方的雲端儲存程式庫。本機與自動化測試把連線位址指向 fake-gcs-server，它說的是跟雲端儲存一樣的語言，所以同一段程式在本機寫進模擬服務、在正式環境寫進真的雲端儲存。整個後端只有 <code>StorageConfig</code> 一處看「有沒有模擬服務位址」（<code>storage/StorageConfig.java:40-49</code>）：有位址就用無憑證模式連過去，並在啟動時建立儲存空間，建不起來就讓後端啟動失敗（<code>:50-57</code>）；位址留空就用伺服器本身的雲端身分連真的雲端儲存。連線、讀取與重試總時限都是 10 秒。</p>
+    <p><code>PhotoStorage</code> 只有「存」與「讀」兩個方法，唯一的實作 <code>GcsPhotoStorage</code> 用 Google 官方的雲端儲存程式庫。本機與自動化測試把它連到 fake-gcs-server，它說的是跟雲端儲存一樣的語言，所以同一段程式在本機寫進模擬服務、在正式環境寫進真的雲端儲存。整個後端只有 <code>StorageConfig</code> 一處看儲存模式 <code>tms.storage.mode</code>：模擬服務模式（<code>emulator</code>，預設）用無憑證的方式連 <code>tms.storage.emulator-host</code> 給的位址，並在啟動時建立儲存空間，建不起來就讓後端啟動失敗；雲端模式（<code>gcs</code>）用伺服器本身的雲端身分連真的雲端儲存，正式環境的 <code>prod</code> 設定組就是設成這個模式。連線、讀取與重試總時限都是 10 秒。</p>
     <p>每張照片的名字是 <code>repair-photos/{飯店編號}/{照片編號}.jpg</code>（<code>repair/RepairService.java:168-170</code>）。照片編號在建立照片時就產生，同一張照片重傳會寫到同一個名字、整份蓋掉，重送幾次結果都一樣；名字不帶雲端廠商的網址，換廠商時資料庫不用改。</p>
     <p><b class="lbl">權衡</b>本機多跑一個容器，而且它沒起來後端就起不來。換來的是每一次本機測試都跑過正式環境會跑的那段程式。</p>
   </div>
@@ -415,10 +415,11 @@
       <tr><td>Kafka（<code>:15-19</code>）</td><td><code>localhost:9092</code>；topic <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code></td><td><code>TMS_KAFKA_BOOTSTRAP</code></td></tr>
       <tr><td>JWT（<code>:36-37</code>）</td><td>開發用的不安全密鑰；效期 12 小時</td><td><code>TMS_JWT_SECRET</code></td></tr>
       <tr><td>FCM 憑證（<code>:39</code>）</td><td>空字串＝不打 FCM，只寫 log 與 <code>push_deliveries</code></td><td><code>TMS_PUSH_FCM_CREDENTIALS_PATH</code>（Spring 寬鬆綁定）或 <code>--tms.push.fcm.credentials-path=</code></td></tr>
-      <tr><td>照片儲存空間（<code>:46</code>）</td><td><code>tms-repair-photos-local</code>；<code>prod</code> 設定組下沒有預設值，沒給就啟動失敗（<code>application-prod.properties:3</code>）</td><td><code>TMS_STORAGE_BUCKET</code></td></tr>
-      <tr><td>照片模擬服務位址（<code>:48</code>）</td><td><code>http://localhost:4443</code>；<code>prod</code> 設定組下是空值，改用伺服器本身的雲端身分連真的雲端儲存（<code>application-prod.properties:2</code>）</td><td><code>TMS_STORAGE_EMULATOR_HOST</code></td></tr>
-      <tr><td>上傳過大時讀掉多少（<code>:50</code>）</td><td><code>server.tomcat.max-swallow-size=6MB</code>：照片超過 5 MB 時後端提早回 413，Tomcat 要把剩下的 body 讀掉，手機才收得到回應</td><td>—</td></tr>
-      <tr><td>正式環境設定組</td><td>不帶</td><td><code>SPRING_PROFILES_ACTIVE=prod</code></td></tr>
+      <tr><td>照片儲存空間</td><td><code>tms-repair-photos-local</code>；<code>prod</code> 設定組下沒有預設值，沒給就啟動失敗</td><td><code>TMS_STORAGE_BUCKET</code></td></tr>
+      <tr><td>照片儲存模式</td><td><code>emulator</code>（接本機模擬服務）；<code>prod</code> 設定組把它設成 <code>gcs</code>，用伺服器本身的雲端身分連真的雲端儲存</td><td><code>tms.storage.mode</code>，平常不用自己設，帶 <code>prod</code> 設定組即可</td></tr>
+      <tr><td>照片模擬服務位址</td><td><code>http://localhost:4443</code>；只有模擬服務模式會用到</td><td><code>TMS_STORAGE_EMULATOR_HOST</code></td></tr>
+      <tr><td>上傳過大時讀掉多少</td><td><code>server.tomcat.max-swallow-size=6MB</code>：照片超過 5 MB 時後端提早回 413，Tomcat 要把剩下的 body 讀掉，手機才收得到回應</td><td>—</td></tr>
+      <tr><td>正式環境設定組</td><td>不帶；帶了之後照片儲存模式變成 <code>gcs</code>，而且一定要給 <code>TMS_STORAGE_BUCKET</code></td><td><code>SPRING_PROFILES_ACTIVE=prod</code></td></tr>
       <tr><td>測試端點（不在設定檔裡）</td><td>不帶；帶了 <code>test-support</code> 設定檔才有可撥時間的 <code>/api/v1/test/clock</code> 與其他 <code>/api/v1/test/**</code>（<code>config/TestSupportConfig.java</code>），只給驗收與手動測試用</td><td><code>SPRING_PROFILES_ACTIVE=test-support</code></td></tr>
       <tr><td>HTTP port</td><td>未設定，Spring 預設 8080</td><td><code>SERVER_PORT</code></td></tr>
     </tbody>

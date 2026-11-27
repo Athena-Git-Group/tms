@@ -39,7 +39,7 @@
     <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:25-29</code> 用 <code>/usr/libexec/java_home -v 25</code> 找 JDK，JDK 25 裝在它找不到的地方時要設 <code>MANUAL_JAVA</code>。</li>
     <li><b>OrbStack＋Testcontainers</b>：OrbStack 的 Docker 29 拒絕 API 1.40 以下，而 docker-java 沒指定時退回 1.32，會看到「client version 1.32 is too old」。試過 <code>DOCKER_HOST</code>、<code>DOCKER_API_VERSION</code>、升級 Testcontainers 都沒用，<b>唯一解法是 <code>-DargLine="-Dapi.version=1.44"</code></b>，把值傳進 surefire 分出來的 JVM（<code>specs/plans/003-manager-sign-off-queues/implement-notes.md:109-114</code>）。沒有寫進任何設定檔，每次都要帶。</li>
     <li><b>Flyway 預設埠與應用預設埠不同</b>：<code>application.properties:11</code> 的 Flyway 預設連 5432、<code>:3</code> 的應用預設連 5433。沒設 <code>TMS_DB_URL</code> 時 Flyway 會連到 5432——在原機器上那是別的 Postgres。</li>
-    <li><b>照片模擬服務沒起，後端起不來</b>：後端啟動時要向 4443 的 <code>tms-fake-gcs</code> 建立照片的儲存空間，失敗就停（<code>storage/StorageConfig.java:50-57</code>），log 寫「照片儲存模擬服務 … 建立儲存空間 … 失敗」。連不上時要等滿 10 秒的時限才失敗。手動環境的 <code>up.sh</code> 只檢查 Postgres 與 Kafka 的埠（<code>scripts/manual-env/up.sh:30-37</code>），這兩個早就在跑時不會幫你補起照片模擬服務，要自己 <code>docker compose up -d</code>。</li>
+    <li><b>照片模擬服務沒起，後端起不來</b>：後端啟動時要向 4443 的 <code>tms-fake-gcs</code> 建立照片的儲存空間，失敗就停（<code>storage/StorageConfig.java</code>），log 寫「照片儲存模擬服務 … 建立儲存空間 … 失敗」。連不上時要等滿 10 秒的時限才失敗。手動環境的 <code>up.sh</code> 只檢查 Postgres 與 Kafka 的埠（<code>scripts/manual-env/up.sh:30-37</code>），這兩個早就在跑時不會幫你補起照片模擬服務，要自己 <code>docker compose up -d</code>。</li>
     <li><b>電腦睡眠會殺掉長時間執行</b>：App 全量驗收要 60–90 分鐘，開跑前掛 <code>caffeinate -dimsu -t 28800</code>。</li>
     <li><b>macOS 內建 bash 3.2</b> 會把變數名後面緊接的全形標點吃進變數名，腳本訊息一律寫成 <code>${var}</code>。新寫腳本時照做。</li>
   </ul>
@@ -92,9 +92,9 @@
     <li><b><code>src/main</code> 是從編譯產物反編譯還原的</b>（<code>tms/pom.xml:15</code> 的 description 寫著 "reconstructed from compiled artifacts"）：原本的 Javadoc 與註解都沒了，風格也像反編譯產物（大量 <code>this.</code>、多餘的型別強轉）。<code>src/test</code> 是重寫過的。改任何註解前先讀 <code>docs/14-handover/code-comments.md</code>，有一批禁用詞（守衛、空窗、投影）。</li>
     <li><b>既有 Flyway 遷移檔不能動</b>，包含註解。整理反編譯程式碼的註解時，遷移檔要排除在外。</li>
     <li><b>測試端點 <code>/api/v1/test/**</code>（含撥時鐘的 <code>/api/v1/test/clock</code>）不驗身分</b>（<code>config/TestSupportConfig.java:31-34</code> 一律 <code>permitAll</code>）。它們只在啟動時帶 <code>test-support</code> 設定檔才存在（<code>:18</code> 的 <code>@Profile</code>），所以對外部署時絕不能帶這個設定檔。</li>
-    <li><b>正式環境有三個值不能用預設</b>：JWT 密鑰要設 <code>TMS_JWT_SECRET</code>；<code>tms_app</code> 的密碼要 <code>ALTER ROLE tms_app</code> 改掉（<code>V1__schema.sql:387</code> 的註解）；照片要以 <code>SPRING_PROFILES_ACTIVE=prod</code> 啟動並設 <code>TMS_STORAGE_BUCKET</code>，沒給就啟動失敗，不會默默存進本機用的儲存空間（<code>application-prod.properties:1-3</code>）。</li>
+    <li><b>正式環境有三個值不能用預設</b>：JWT 密鑰要設 <code>TMS_JWT_SECRET</code>；<code>tms_app</code> 的密碼要 <code>ALTER ROLE tms_app</code> 改掉（<code>V1__schema.sql:387</code> 的註解）；照片要以 <code>SPRING_PROFILES_ACTIVE=prod</code> 啟動（這個設定組把照片儲存模式設成 <code>gcs</code>，連真的雲端儲存）並設 <code>TMS_STORAGE_BUCKET</code>，沒給就啟動失敗，不會默默存進本機用的儲存空間。</li>
     <li><b>舊整合測試還在保護舊行為</b>：<code>tms/src/test/resources/features/*.feature</code> 不是 truth，但在全套裡跑。改行為時要一起看。</li>
-    <li><b>照片上限的 413 要靠 <code>server.tomcat.max-swallow-size</code></b>：照片超過 5 MB 時後端不讀 body 就回 413，剩下的由 Tomcat 讀掉；Tomcat 預設只肯讀 2 MB，超過就直接切斷連線，手機收到的是連線錯誤而不是 413。所以 <code>application.properties:50</code> 設成 6MB，調高照片上限時要一起調。</li>
+    <li><b>照片上限的 413 要靠 <code>server.tomcat.max-swallow-size</code></b>：照片超過 5 MB 時後端不讀 body 就回 413，剩下的由 Tomcat 讀掉；Tomcat 預設只肯讀 2 MB，超過就直接切斷連線，手機收到的是連線錯誤而不是 413。所以 <code>application.properties</code> 把它設成 6MB，調高照片上限時要一起調。</li>
     <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單只要有一筆重試用完被標 <code>failed</code>，這張單之後的事件全部停送，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
   </ul>
 </section>
@@ -126,7 +126,7 @@
     <div class="in"><div class="tablewrap"><table>
       <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
       <tbody>
-        <tr><td class="id">U2</td><td>測試目前綠不綠</td><td>盤點時沒有實跑任何測試。只能引用 006 implement-notes 的基準：後端行為規格 14 筆紅、Web 即時更新時序逾時數筆、住客 1 筆、App 工務單 11 筆</td><td>照<a href="setup.html#verify">三步確認</a>實跑一次，與 implement-notes 的清單比對</td></tr>
+        <tr><td class="id">U2</td><td>測試目前綠不綠</td><td>後端全套全綠：838 個測試、0 失敗、0 錯誤。App 與網頁驗收沒有整套跑過的結果可對照</td><td>照<a href="setup.html#verify">三步確認</a>實跑一次；App 跑一次 <code>app/bdd/run-all.sh</code>，網頁用 <code>run-feature.sh</code> 逐模組跑完</td></tr>
         <tr><td class="id">U13</td><td>App 是否曾在 Appium 上完整跑過一輪</td><td>紀錄上有一項「員工 App 連 Appium 實跑」曾待補跑，目前狀態不明</td><td><code>app/bdd/run-all.sh</code> 跑一次</td></tr>
         <tr><td class="id">U4</td><td><code>TESTCONTAINERS_RYUK_DISABLED=true</code> 為什麼要帶</td><td>所有指令都這樣下，但 repo 裡沒寫理由</td><td>拿掉跑一次看看會不會失敗</td></tr>
         <tr><td class="id">U5</td><td>後端 dry-run 會不會仍起容器；後端能不能用 <code>xxx.feature:行號</code> 只跑一個場景</td><td>Web 的 dry-run 已知仍會起後端與 vite；後端兩件事都沒實測（Cucumber 標準語法理論上可行）</td><td>實跑一次</td></tr>
