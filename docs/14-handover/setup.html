@@ -94,7 +94,7 @@ bash app/web-bdd/run-feature.sh frontdesk-web/待派單/待派單清單.feature 
   <p>第 2 步起的三個容器裡，<code>tms-fake-gcs</code> 是<b>照片模擬服務</b>：工務單照片正式環境存在 Google 雲端儲存，本機改存在這個模仿雲端儲存的開源服務（fake-gcs-server），後端用的是同一套官方程式庫，只差連線位址。後端啟動時會向它建立放照片的「儲存空間」（雲端儲存裡的一個大資料夾，英文叫 bucket），<b>連不上就啟動失敗</b>，所以只起 Postgres 與 Kafka 是不夠的。</p>
 
   <div class="callout warn">
-    <p><b>後端全套應該是全綠的</b>（838 個測試、0 失敗、0 錯誤），沒有「已知會紅」的清單。第一步跑出紅燈，問題就在環境或你的改動，先對照<a href="pitfalls.html#setup-traps">裝環境時會卡在哪</a>。</p>
+    <p><b>後端全套應該是全綠的</b>（840 個測試、0 失敗、0 錯誤），沒有「已知會紅」的清單。第一步跑出紅燈，問題就在環境或你的改動，先對照<a href="pitfalls.html#setup-traps">裝環境時會卡在哪</a>。</p>
   </div>
 </section>
 

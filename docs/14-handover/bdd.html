@@ -192,7 +192,7 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
             <tr><td>每場景共享狀態</td><td><code>bdd/ScenarioWorld.java</code>（<code>@ScenarioScope</code>：員工 id 與 JWT、任務 id、工務單號、最後一次回應…）</td></tr>
             <tr><td>每場景重置</td><td><code>bdd/steps/common/ResetHooks.java</code>：等推播 outbox 清空、消費者群組追平；重置時鐘；<code>TRUNCATE</code> 所有 public 表（保留 <code>flyway_schema_history</code>、<code>tenants</code>）</td></tr>
             <tr><td>Step 定義</td><td><code>bdd/steps/&lt;模組&gt;/Xxx{Given,When,Then}Steps.java</code>，與 truth 模組目錄大致一一對應</td></tr>
-            <tr><td>輔助工具</td><td><code>bdd/support/</code>：<code>BddApiClient</code>（自動帶冪等鍵與 JWT；<code>exchangeBytes</code> 原樣送收位元組，給照片上傳與讀照片用，<code>BddApiClient.java:132</code>）、<code>PhotoFixtures</code>（各種照片內容：JPEG、剛好 5 MB、超過 5 MB、PNG、標錯格式、空白）、<code>PhotoStorageProbe</code>（直接查測試儲存空間裡存了什麼）、<code>DeskApi</code>、<code>DbProbe</code>、<code>LastOperationGuard</code>（When 前拍快照，給「沒有任何資料被改動」這類 Then）、各種 <code>*Fixtures</code>、<code>Terms</code>（中文用語轉資料值，例如「工務」→<code>engineering</code>）</td></tr>
+            <tr><td>輔助工具</td><td><code>bdd/support/</code>：<code>BddApiClient</code>（自動帶冪等鍵與 JWT；<code>exchangeBytes</code> 原樣送收位元組，給照片上傳與讀照片用，<code>BddApiClient.java:128</code>）、<code>PhotoFixtures</code>（各種照片內容：JPEG、剛好 5 MB、超過 5 MB、PNG、標錯格式、空白）、<code>PhotoStorageProbe</code>（直接查測試儲存空間裡存了什麼）、<code>DeskApi</code>、<code>DbProbe</code>、<code>LastOperationGuard</code>（When 前拍快照，給「沒有任何資料被改動」這類 Then）、各種 <code>*Fixtures</code>、<code>Terms</code>（中文用語轉資料值，例如「工務」→<code>engineering</code>）</td></tr>
             <tr><td>其他測試</td><td><code>relaywake/RunOutboxRelayWakeTest.java</code>（驗證待送匣在交易提交後立刻送出）；其餘是一般 JUnit 測試（<code>auth/</code>、<code>service/</code>、<code>config/</code> 等）。舊整合線的 glue 是 <code>com.athena.tms.integration.stepdefs</code></td></tr>
           </tbody>
         </table></div>
@@ -385,7 +385,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
     <p><b class="lbl">權衡</b>後端行為規格測試另有自己的 <code>tms/src/test/.../bdd/support/*Fixtures</code>，兩邊的 SQL 是<b>手動對照維護</b>的：改了一邊，要記得檢查另一邊。</p>
   </div>
 
-  <p>照片是唯一的例外。工務單照片的內容必須真的存在照片模擬服務裡，畫面才讀得到，光寫一列資料庫不夠；所以 <code>insertReportPhotos</code>、<code>replaceRepairPhotos</code> 以上傳者的身分經正式 API 建立並上傳照片，再用 SQL 把照片綁到工務單（<code>BackendChannel.java:1389-1416</code>）。上傳者必須是同一個 <code>BackendChannel</code> 建過、知道帳密的員工。每張照片都是內容不同、真的解得開的 1 × 1 JPEG：只有開頭結尾記號的假 JPEG 過得了後端檢查，但 App 與瀏覽器會顯示「照片無法顯示」。另有 <code>markLegacyPhoto</code>（把照片改成舊版留下的樣子）、<code>repairPhotoIds</code>（照工務單詳情的排序列出照片編號）、<code>photoContent</code>（以某位員工身分讀照片）。所以跑 App 線與網頁線時，後端連的照片模擬服務 4443 一定要在。</p>
+  <p>照片是唯一的例外。工務單照片的內容必須真的存在照片模擬服務裡，畫面才讀得到，光寫一列資料庫不夠；所以 <code>insertReportPhotos</code>、<code>replaceRepairPhotos</code> 以上傳者的身分經正式 API 建立並上傳照片，再用 SQL 把照片綁到工務單（<code>BackendChannel.java:1389-1413</code>）。上傳者必須是同一個 <code>BackendChannel</code> 建過、知道帳密的員工。每張照片都是內容不同、真的解得開的 1 × 1 JPEG：只有開頭結尾記號的假 JPEG 過得了後端檢查，但 App 與瀏覽器會顯示「照片無法顯示」。另有 <code>markPhotoWithFakeUploadReference</code>（把照片的存放位置改成照片功能做好之前那種假的位置）、<code>repairPhotoIds</code>（照工務單詳情的排序列出照片編號）、<code>photoContent</code>（以某位員工身分讀照片）。所以跑 App 線與網頁線時，後端連的照片模擬服務 4443 一定要在。</p>
 
   <p>內建兩組預設資料：App 線的「測試飯店」（代碼 <code>test-hotel</code>，密碼 <code>demo1234</code>）；櫃檯網頁的「雅典娜酒店」（代碼 <code>athena</code>，密碼 <code>Tms12345</code>，12 個帳號 <code>F0101</code>…<code>O0001</code>，客房 2–5 樓每層 01–16）。</p>
   <p>員工編號刻意不跟其他飯店重複，因為後端登入沒帶飯店代碼時會跨飯店找帳號（<a href="backend.html#auth">登入怎麼決定飯店</a>）。</p>

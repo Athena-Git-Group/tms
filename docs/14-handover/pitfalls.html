@@ -36,7 +36,7 @@
     <p>最常見的兩個：JDK 不是 25，以及後端測試忘了帶 <code>-DargLine="-Dapi.version=1.44"</code>。啟動後端時永遠帶 <code>TMS_DB_URL</code>，而且照片模擬服務 4443 要先起好。</p>
   </div>
   <ul class="rules">
-    <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:25-29</code> 用 <code>/usr/libexec/java_home -v 25</code> 找 JDK，JDK 25 裝在它找不到的地方時要設 <code>MANUAL_JAVA</code>。</li>
+    <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:24-28</code> 用 <code>/usr/libexec/java_home -v 25</code> 找 JDK，JDK 25 裝在它找不到的地方時要設 <code>MANUAL_JAVA</code>。</li>
     <li><b>OrbStack＋Testcontainers</b>：OrbStack 的 Docker 29 拒絕 API 1.40 以下，而 docker-java 沒指定時退回 1.32，會看到「client version 1.32 is too old」。試過 <code>DOCKER_HOST</code>、<code>DOCKER_API_VERSION</code>、升級 Testcontainers 都沒用，<b>唯一解法是 <code>-DargLine="-Dapi.version=1.44"</code></b>，把值傳進 surefire 分出來的 JVM（<code>specs/plans/003-manager-sign-off-queues/implement-notes.md:109-114</code>）。沒有寫進任何設定檔，每次都要帶。</li>
     <li><b>Flyway 預設埠與應用預設埠不同</b>：<code>application.properties:11</code> 的 Flyway 預設連 5432、<code>:3</code> 的應用預設連 5433。沒設 <code>TMS_DB_URL</code> 時 Flyway 會連到 5432——在原機器上那是別的 Postgres。</li>
     <li><b>照片模擬服務沒起，後端起不來</b>：後端啟動時要向 4443 的 <code>tms-fake-gcs</code> 建立照片的儲存空間，失敗就停（<code>storage/StorageConfig.java</code>），log 寫「照片儲存模擬服務 … 建立儲存空間 … 失敗」。連不上時要等滿 10 秒的時限才失敗。手動環境的 <code>up.sh</code> 只檢查 Postgres 與 Kafka 的埠（<code>scripts/manual-env/up.sh:30-37</code>），這兩個早就在跑時不會幫你補起照片模擬服務，要自己 <code>docker compose up -d</code>。</li>
@@ -126,7 +126,7 @@
     <div class="in"><div class="tablewrap"><table>
       <thead><tr><th>#</th><th>沒確認的事</th><th>目前知道的</th><th>建議怎麼查</th></tr></thead>
       <tbody>
-        <tr><td class="id">U2</td><td>測試目前綠不綠</td><td>後端全套全綠：838 個測試、0 失敗、0 錯誤。App 與網頁驗收沒有整套跑過的結果可對照</td><td>照<a href="setup.html#verify">三步確認</a>實跑一次；App 跑一次 <code>app/bdd/run-all.sh</code>，網頁用 <code>run-feature.sh</code> 逐模組跑完</td></tr>
+        <tr><td class="id">U2</td><td>測試目前綠不綠</td><td>後端全套全綠：840 個測試、0 失敗、0 錯誤。App 與網頁驗收沒有整套跑過的結果可對照</td><td>照<a href="setup.html#verify">三步確認</a>實跑一次；App 跑一次 <code>app/bdd/run-all.sh</code>，網頁用 <code>run-feature.sh</code> 逐模組跑完</td></tr>
         <tr><td class="id">U13</td><td>App 是否曾在 Appium 上完整跑過一輪</td><td>紀錄上有一項「員工 App 連 Appium 實跑」曾待補跑，目前狀態不明</td><td><code>app/bdd/run-all.sh</code> 跑一次</td></tr>
         <tr><td class="id">U4</td><td><code>TESTCONTAINERS_RYUK_DISABLED=true</code> 為什麼要帶</td><td>所有指令都這樣下，但 repo 裡沒寫理由</td><td>拿掉跑一次看看會不會失敗</td></tr>
         <tr><td class="id">U5</td><td>後端 dry-run 會不會仍起容器；後端能不能用 <code>xxx.feature:行號</code> 只跑一個場景</td><td>Web 的 dry-run 已知仍會起後端與 vite；後端兩件事都沒實測（Cucumber 標準語法理論上可行）</td><td>實跑一次</td></tr>

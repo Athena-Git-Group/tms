@@ -185,7 +185,7 @@
   </div>
   <ol class="top">
     <li><b>每條 Java 指令都要切到 JDK 25，後端測試還要帶 <code>-DargLine="-Dapi.version=1.44"</code>。</b>原機器 shell 預設是 17；那個參數是 OrbStack 上跑 Testcontainers 的唯一解法，沒寫進任何設定檔。<a href="setup.html#verify">怎麼確認環境通了</a></li>
-    <li><b>已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。</b>第一次跑出紅燈，先對照它再懷疑環境。</li>
+    <li><b>後端全套應該全綠，沒有「已知會紅」的清單。</b>第一次跑出紅燈，問題就在環境或你的改動，先對照裝環境時會卡在哪。<a href="pitfalls.html#setup-traps">裝環境的坑</a></li>
     <li><b>App 與網頁驗收每個場景都會清空資料庫。</b>兩條線預設共用 8080／5433，不能同時跑；手動操作一律用 8083／<code>tms_manual</code>。<a href="setup.html#environments">三套環境</a></li>
     <li><b>既有的 Flyway 遷移檔一個字都不能改，連註解都不行。</b>改了後端就啟動失敗，要修只能新增更高版號的檔。<a href="backend.html#flyway">遷移規矩</a></li>
     <li><b>Android 正式版缺網路權限。</b><code>INTERNET</code> 只宣告在 debug 與 profile，release APK 會連不上網，是上線前最優先要修的一條。<a href="pitfalls.html#app-gaps">App 還沒補的洞</a></li>

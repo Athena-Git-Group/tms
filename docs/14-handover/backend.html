@@ -71,7 +71,7 @@
         <tr><td><code>lombok</code></td><td>1.18.46（optional）</td><td>打包時排除（<code>tms/pom.xml:180-191</code>）</td></tr>
         <tr><td>測試：<code>spring-boot-starter-test</code></td><td>Boot 管理</td><td>JUnit Jupiter 6.0.3、Mockito 5.23.0、AssertJ 3.27.7</td></tr>
         <tr><td>測試：<code>spring-security-test</code>、<code>spring-kafka-test</code>、<code>spring-boot-testcontainers</code></td><td>Boot 管理</td><td>—</td></tr>
-        <tr><td>測試：Testcontainers <code>junit-jupiter</code>／<code>postgresql</code>／<code>kafka</code></td><td>1.21.3</td><td>真 Postgres、真 Kafka；照片模擬服務用通用的 <code>GenericContainer</code> 起（<code>SharedContainers.java:32-36</code>）</td></tr>
+        <tr><td>測試：Testcontainers <code>junit-jupiter</code>／<code>postgresql</code>／<code>kafka</code></td><td>1.21.3</td><td>真 Postgres、真 Kafka；照片模擬服務用通用的 <code>GenericContainer</code> 起（<code>SharedContainers.java:32-35</code>）</td></tr>
         <tr><td>測試：<code>cucumber-java</code>／<code>cucumber-spring</code>／<code>cucumber-junit-platform-engine</code></td><td>7.22.1</td><td>行為規格測試</td></tr>
         <tr><td>測試：<code>junit-platform-suite</code></td><td>Boot 管理</td><td><code>@Suite</code> 入口</td></tr>
       </tbody>
@@ -109,7 +109,7 @@
       <tr><td><code>controller/</code>（22）</td><td>REST 與 SSE 端點：登入、住客、櫃檯看板、查房、主管佇列、請假、PMS 對接、員工帳號等</td></tr>
       <tr><td><code>service/</code>（53）</td><td>業務邏輯與背景工作：任務狀態機 <code>TaskEngine</code>、待送匣、即時串流、排程</td></tr>
       <tr><td><code>repair/</code>、<code>push/</code>（12）</td><td>工務單；推播</td></tr>
-      <tr><td><code>storage/</code>（3）</td><td>照片存取：介面 <code>PhotoStorage</code>、唯一的實作 <code>GcsPhotoStorage</code>、連線設定 <code>StorageConfig</code></td></tr>
+      <tr><td><code>storage/</code>（5）</td><td>照片存取：介面 <code>PhotoStorage</code>、唯一的實作 <code>GcsPhotoStorage</code>、連線設定 <code>StorageConfig</code>，以及讀儲存模式設定的 <code>StorageSettings</code> 與列出兩種模式的 <code>StorageMode</code></td></tr>
       <tr><td><code>handover/</code>、<code>kb/</code></td><td>交接班；「查一下」知識庫問答（關鍵字比對）</td></tr>
       <tr><td><code>filter/</code>（3）、<code>config/</code>（9）</td><td>認證與冪等過濾器；安全、多飯店資料來源、可撥時鐘等設定</td></tr>
       <tr><td><code>dao/</code>、<code>entity/</code>、<code>dto/</code>、<code>common/</code></td><td>資料存取、JPA 實體、請求回應物件、共用物件</td></tr>
@@ -360,14 +360,14 @@
     <div class="tablewrap"><table>
       <thead><tr><th>環節</th><th>位置</th></tr></thead>
       <tbody>
-        <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:489-501</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
-        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :74-77、巡查 :114、撈待送 :164、送出 :175-207）</td></tr>
+        <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:491-503</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
+        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :51-53、巡查 :127）、<code>service/HotelRelayTurn.java</code>（撈待送 :166、送出 :174-205）</td></tr>
         <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:20-30</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
-        <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :73、降級 :84-109、去重 :183-193）</td></tr>
+        <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :79、降級 :90-115、去重 :186-196）</td></tr>
         <tr><td>連線端點與權限</td><td><code>controller/StaffStreamController.java:17-21</code>、<code>config/SecurityConfig.java:50-51</code>、<code>filter/BearerTokenAuthFilter.java:49-53</code></td></tr>
         <tr><td>連線註冊表與過濾規則</td><td><code>service/StreamConnectionRegistry.java</code>、<code>service/StreamSubscriber.java:22-49</code>、<code>service/StreamConnection.java</code></td></tr>
         <tr><td>心跳與降級原因</td><td><code>service/StreamHeartbeat.java</code>、<code>service/StreamDegradation.java</code></td></tr>
-        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:40-64</code>、<code>push/PushDeliveryKafkaConfig.java:43-57</code></td></tr>
+        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:53-81</code>、<code>push/PushDeliveryKafkaConfig.java:43-57</code></td></tr>
         <tr><td>網頁連線與重連</td><td><code>features/realtime/use-live-updates.ts</code>、<code>stream-client.ts</code>、<code>live-connection.ts</code></td></tr>
         <tr><td>網頁換卡與重讀</td><td><code>features/realtime/follow-board.ts</code>、<code>stream-task.ts</code>、<code>refetch-on-signal.ts</code>、<code>lib/board-sync.ts</code>、<code>shell/DeskShell.tsx</code></td></tr>
       </tbody>
@@ -385,7 +385,7 @@
   <div class="opt great">
     <h4><span class="tag">現在的做法</span>只寫一套，用 Google 官方程式庫；本機接模擬服務</h4>
     <p><code>PhotoStorage</code> 只有「存」與「讀」兩個方法，唯一的實作 <code>GcsPhotoStorage</code> 用 Google 官方的雲端儲存程式庫。本機與自動化測試把它連到 fake-gcs-server，它說的是跟雲端儲存一樣的語言，所以同一段程式在本機寫進模擬服務、在正式環境寫進真的雲端儲存。整個後端只有 <code>StorageConfig</code> 一處看儲存模式 <code>tms.storage.mode</code>：模擬服務模式（<code>emulator</code>，預設）用無憑證的方式連 <code>tms.storage.emulator-host</code> 給的位址，並在啟動時建立儲存空間，建不起來就讓後端啟動失敗；雲端模式（<code>gcs</code>）用伺服器本身的雲端身分連真的雲端儲存，正式環境的 <code>prod</code> 設定組就是設成這個模式。連線、讀取與重試總時限都是 10 秒。</p>
-    <p>每張照片的名字是 <code>repair-photos/{飯店編號}/{照片編號}.jpg</code>（<code>repair/RepairService.java:168-170</code>）。照片編號在建立照片時就產生，同一張照片重傳會寫到同一個名字、整份蓋掉，重送幾次結果都一樣；名字不帶雲端廠商的網址，換廠商時資料庫不用改。</p>
+    <p>每張照片的名字是 <code>repair-photos/{飯店編號}/{照片編號}.jpg</code>（<code>repair/RepairService.java:169-171</code>）。照片編號在建立照片時就產生，同一張照片重傳會寫到同一個名字、整份蓋掉，重送幾次結果都一樣；名字不帶雲端廠商的網址，換廠商時資料庫不用改。</p>
     <p><b class="lbl">權衡</b>本機多跑一個容器，而且它沒起來後端就起不來。換來的是每一次本機測試都跑過正式環境會跑的那段程式。</p>
   </div>
   <p>讀照片也有一個選擇。一種做法是後端發一個有時效的下載網址，讓手機直接向雲端儲存拿照片，後端不用搬流量；但這要讓後端握有能簽網址的憑證，還得決定網址多久失效、外流了能不能撤回，而模擬服務對這種網址的支援也跟真的雲端儲存不同。現在的做法是手機與網頁都向後端要照片，後端確認身分後從雲端儲存讀出來轉送。照片已壓過、一張工務單最多幾張，多搬的流量不大；真的遇到流量問題再改成臨時網址，App 與網頁都只要換掉讀照片的那一個地方。</p>
@@ -394,9 +394,9 @@
   <h3 id="photo-rules">照片上傳、讀取、附到工務單上，各檢查什麼？</h3>
   <p>一張照片走三步：<code>POST /api/v1/repair-photos</code> 帶用途（<code>report</code> 或 <code>completion</code>）與帶時區的拍攝時間，建立一筆 <code>pending</code>（還沒上傳）的照片並拿回編號；<code>PUT /api/v1/repair-photos/{編號}/content</code> 把 JPEG 原樣當 body 送上來（<code>Content-Type: image/jpeg</code>），照片變成 <code>uploaded</code>；最後開單、補照片或完修時帶著照片編號，把它附到工務單上。</p>
   <ul class="plain">
-    <li><b>上傳</b>（<code>RepairPhotoContent.java</code>、<code>RepairService.java:117-144</code>）：超過 5 MB 回 413，內容是空的回 422，標頭不是 <code>image/jpeg</code> 或內容開頭不是 JPEG 的記號回 415；只有建立照片的員工能上傳（否則 403），照片附上工務單之後不能再換內容（409 <code>photo_already_attached</code>）。附上之前可以重傳，以最後一次為準。</li>
-    <li><b>讀取</b>（<code>RepairController.java:98-106</code>）：房務、工務、主管、櫃檯、值班主管都讀得到同一家飯店已上傳的照片，老闆帳號不行（<code>SecurityConfig.java:76-77</code>）。別家飯店的照片、還沒上傳的、儲存空間裡找不到的，一律回 404。已附上工務單的照片回應帶 <code>Cache-Control: private, max-age=86400, immutable</code>，還沒附上的帶 <code>private, no-cache</code>。</li>
-    <li><b>附上工務單</b>（<code>RepairService.java:535-561</code> 的 <code>requireAttachablePhotos</code>，開單、補照片、完修三處共用）：每張都要存在而且已上傳（否則 422 <code>photo_not_uploaded</code>），用途要對（422 <code>photo_purpose_mismatch</code>），不能已附在別張單上（409 <code>photo_already_attached</code>），一次最多 3 張（422 <code>photo_limit</code>）。完修結果是「不需處理」時不必附照片，但帶了照樣檢查。</li>
+    <li><b>上傳</b>（<code>RepairPhotoContent.java</code>、<code>RepairService.java:118-145</code>）：超過 5 MB 回 413，內容是空的回 422，標頭不是 <code>image/jpeg</code> 或內容開頭不是 JPEG 的記號回 415；只有建立照片的員工能上傳（否則 403），照片附上工務單之後不能再換內容（409 <code>photo_already_attached</code>）。附上之前可以重傳，以最後一次為準。</li>
+    <li><b>讀取</b>（<code>RepairController.java:97-108</code>）：房務、工務、主管、櫃檯、值班主管都讀得到同一家飯店已上傳的照片，老闆帳號不行（<code>SecurityConfig.java:76-77</code>）。別家飯店的照片、還沒上傳的、儲存空間裡找不到的，一律回 404。已附上工務單的照片回應帶 <code>Cache-Control: private, max-age=86400, immutable</code>，還沒附上的帶 <code>private, no-cache</code>。</li>
+    <li><b>附上工務單</b>（<code>RepairService.java:534-563</code> 的 <code>lockAttachablePhotos</code>，開單、補照片、完修三處共用，不在資料庫交易裡呼叫就直接丟錯）：每張都要存在而且已上傳（否則 422 <code>photo_not_uploaded</code>），用途要對（422 <code>photo_purpose_mismatch</code>），不能已附在別張單上（409 <code>photo_already_attached</code>），一次最多 3 張（422 <code>photo_limit</code>）。完修結果是「不需處理」時不必附照片，但帶了照樣檢查。</li>
     <li><b>同時附同一張照片</b>：檢查時就把照片的資料列鎖住，兩個請求排隊，只有一個成功、另一個 409。補照片先鎖照片再鎖工務單，跟完修同一個順序，兩個請求不會互等卡死。</li>
   </ul>
   <p><b class="lbl">權衡</b>上傳時「寫進雲端儲存」與「把照片標成已上傳」放在同一個資料庫交易裡：雲端寫失敗，整筆取消、照片維持未上傳；寫完雲端、還沒標記就當機，重傳是同名覆寫，結果一樣。代價是雲端儲存變慢時，這個請求會佔著一條資料庫連線，最多等 10 秒的時限。</p>
@@ -431,7 +431,7 @@
       <li>Kafka producer（<code>:22-26</code>）：<code>acks=all</code>、冪等開啟、<code>max.block.ms=5000</code>、<code>delivery.timeout.ms=10000</code>。</li>
       <li>outbox relay（<code>:28-30</code>）：輪詢 2s、送出逾時 10s、認領租約 60s；程式內最多重試 8 次。</li>
     </ul>
-    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於 <code>max.block.ms</code> 加送出逾時；違反就直接拋錯不啟動（<code>OutboxRelay.java:66, 70</code>）。測試設定檔把 relay 輪詢縮成 200ms、推播重試縮成 50ms，資料庫與 Kafka 位址由 Testcontainers 注入。</p>
+    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於兩倍 <code>max.block.ms</code>、送出逾時與資料庫語句逾時三者的總和；違反就直接拋錯不啟動（<code>HotelRelayTurn.java:129-135</code>）。測試設定檔把 relay 輪詢縮成 200ms、推播重試縮成 50ms，資料庫與 Kafka 位址由 Testcontainers 注入。</p>
     </div>
   </details>
 </section>

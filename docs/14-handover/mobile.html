@@ -131,7 +131,7 @@
     <li><b>連哪個後端</b>：<code>--dart-define=API_BASE_URL=...</code>，預設 <code>http://localhost:8080/api/v1</code>（<code>core/api_client.dart:9-12</code>）。沒有環境檔、沒有執行期切換畫面；simulator 的 localhost 就是 Mac 本身。</li>
     <li><b>登入</b>：<code>POST /staff-accounts/login</code>，body 只有 <code>{loginId, password}</code>（<code>api_client.dart:35-39</code>）。<b>App 登入畫面沒有飯店代碼欄位</b>，後端怎麼決定飯店見 <a href="backend.html#auth">Java 後端</a>。<code>mustChangePassword</code> 為真時導到強制改密碼頁；429 加 <code>remainingMinutes</code> 表示帳號被鎖。</li>
     <li><b>token 只放記憶體</b>（<code>api_client.dart:22</code>），重開 App 要重新登入；每個請求帶 <code>Authorization: Bearer</code>。</li>
-    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉。沒有逾時、自動重試、攔截器、統一 401 處理；唯一的例外是讀照片，連線與整個請求都限 10 秒（<code>api_client.dart:255-262</code>）。</li>
+    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉。沒有逾時、自動重試、攔截器、統一 401 處理；唯一的例外是讀照片，連線與整個請求都限 10 秒（<code>api_client.dart:254-261</code>）。</li>
     <li><b>冪等</b>：寫入請求帶 <code>idempotent: true</code> 就自動加 <code>Idempotency-Key</code>（UUID v4，<code>api_client.dart:481-490</code>）——同一操作重送時後端回放上次結果，不會做兩次。</li>
     <li><b>錯誤</b>：非 2xx 丟 <code>ApiException</code>，從 JSON <code>{code, message, context}</code> 解析錯誤碼（<code>api_client.dart:493-533</code>）。</li>
     <li><b>離線</b>：沒有 SSE 或 WebSocket。<code>OfflineQueue</code>（<code>core/connection_status.dart:45-125</code>）離線時暫存寫入、恢復後依序重送（最多 5 次、間隔 300ms）；連線不穩時每 5 秒輪詢今日資料。但這兩個旗標<b>只有測試後門會設定</b>，正式環境沒有偵測網路的程式。</li>
@@ -160,7 +160,7 @@
     <li>可停用的元件要明確傳 <code>enabled</code>：<code>CupertinoButton(onPressed: null)</code> 不會把停用狀態寫進無障礙樹，測試會判斷錯。</li>
     <li>命名是 <code>畫面.元素</code> 的點分隔小寫，例如 <code>home.screen</code>、<code>engPool.screen</code>、<code>me.logout-button</code>、<code>home.task.&lt;房號&gt;.card</code>、<code>ticket.stepper.&lt;n&gt;--current</code>、<code>system.offline-bar</code>。全專案兩百多處；主管相關的集中在 <code>features/manager/manager_ids.dart</code>。</li>
   </ul>
-  <p>照片格子的無障礙值是 <code>loading</code>、<code>loaded</code>、<code>failed</code> 三者之一（<code>repair_photo_image.dart:10</code>），驗收靠它分辨照片真的畫出來了還是灰框。</p>
+  <p>照片格子的無障礙值是 <code>loading</code>、<code>loaded</code>、<code>failed</code> 三者之一（<code>repair_photo_image.dart:9-12</code>），驗收靠它分辨照片真的畫出來了還是灰框。</p>
   <p>測試後門只有以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯的 App 才會開（<code>core/test_backdoor.dart</code>），在 <code>127.0.0.1:9099</code> 提供撥時鐘、讀狀態、模擬斷線、帶入登入狀態、重置回登入頁等能力，也會寫一份 log 到系統暫存目錄的 <code>tms_backdoor_log.txt</code>。</p>
   <details>
     <summary>測試後門的端點 <span class="hint">— 10 個路徑與用途</span></summary>
