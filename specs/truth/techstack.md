@@ -53,7 +53,7 @@
 | 即時推送 | SSE（`SseEmitter`） | 住客與後台即時更新 |
 | 訊息佇列 | `Apache Kafka 3.9`（outbox → relay → Kafka） | 事件分發給 SSE、投影、推播消費者、PMS 回寫消費者 |
 | 排程 | `Quartz`（租戶感知）＋ Spring 排程 | 班前排房、班末掃描、到期提醒、清理；relay 輪詢用 Spring 排程 |
-| 照片儲存 | Google Cloud Storage，以官方 Java 程式庫 `com.google.cloud:google-cloud-storage`（版本與 `firebase-admin` 間接帶入的相同）存取；本機與測試接 `fake-gcs-server` 模擬服務 | 工務單照片內容，物件名稱 `repair-photos/{tenantId}/{photoId}.jpg`；只有一套存取程式，本機與正式環境只差設定 `tms.storage.bucket`、`tms.storage.emulator-host`（正式環境以 `prod` 設定組的 `application-prod.properties` 設成空值）與登入憑證（正式環境用 Application Default Credentials）；連線、讀取與重試總時限各約 10 秒；模擬服務模式啟動時建立儲存空間，失敗就啟動失敗；照片經後端轉送給 App 與櫃檯 Web，不發直接下載的網址 |
+| 照片儲存 | Google Cloud Storage，以官方 Java 程式庫 `com.google.cloud:google-cloud-storage`（版本與 `firebase-admin` 間接帶入的相同）存取；本機與測試接 `fake-gcs-server` 模擬服務 | 工務單照片內容，物件名稱 `repair-photos/{tenantId}/{photoId}.jpg`；只有一套存取程式，本機與正式環境只差設定 `tms.storage.bucket`、`tms.storage.mode`（本機與測試 `emulator`、正式環境以 `prod` 設定組的 `application-prod.properties` 設成 `gcs`）、`tms.storage.emulator-host`（只有 `emulator` 模式看）與登入憑證（正式環境用 Application Default Credentials）；連線、讀取與重試總時限各約 10 秒；模擬服務模式啟動時建立儲存空間，失敗就啟動失敗；照片經後端轉送給 App 與櫃檯 Web，不發直接下載的網址 |
 | 推播 | 推播消費者（Kafka `tms.push` → Firebase Cloud Messaging，`firebase-admin` SDK） | 員工推播事件送到登記的手機（iOS 經 FCM 轉 APNS）；以 outbox 冪等鍵去重並寫 `push_deliveries` 送達紀錄；暫時性錯誤指數退避重試 3 次後進 `tms.push.DLT`；未設定 `tms.push.fcm.credentials-path` 時只寫日誌與送達紀錄 |
 | 時間來源 | 注入的 `java.time.Clock` | 計時、排序、提醒都以同一個可替換時鐘為準 |
 

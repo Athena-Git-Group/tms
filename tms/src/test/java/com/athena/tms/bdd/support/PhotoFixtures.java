@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-/** 測試用的照片內容；DSL「內容」參數的對照表在 {@code 工務單/dsl.md} 的上傳句。 */
 public final class PhotoFixtures {
 
     public static final String JPEG = "image/jpeg";
@@ -35,7 +34,6 @@ public final class PhotoFixtures {
         };
     }
 
-    /** 合法 JPEG：{@code FF D8 FF E0} 開頭、{@code FF D9} 結尾，中間是種子，種子不同內容就不同。 */
     public static byte[] jpeg(String seed) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.writeBytes(JPEG_HEAD);

@@ -10,16 +10,17 @@ import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(StorageSettings.class)
 public class StorageConfig {
 
     private static final Logger log = LoggerFactory.getLogger(StorageConfig.class);
 
-    // 上傳在資料庫交易裡寫雲端儲存，卡住時佔著連線；程式庫預設的總時限是幾十秒
-    private static final Duration TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration STORAGE_CALL_TIMEOUT = Duration.ofSeconds(10);
 
     private static final int CONFLICT = 409;
 
@@ -28,18 +29,31 @@ public class StorageConfig {
     @Bean(destroyMethod = "close")
     Storage storage(
             @Value("${tms.storage.bucket}") String bucket,
-            @Value("${tms.storage.emulator-host:}") String emulatorHost) {
+            StorageSettings settings) {
         StorageOptions.Builder options = StorageOptions.newBuilder()
                 .setTransportOptions(HttpTransportOptions.newBuilder()
-                        .setConnectTimeout((int) TIMEOUT.toMillis())
-                        .setReadTimeout((int) TIMEOUT.toMillis())
+                        .setConnectTimeout((int) STORAGE_CALL_TIMEOUT.toMillis())
+                        .setReadTimeout((int) STORAGE_CALL_TIMEOUT.toMillis())
                         .build())
                 .setRetrySettings(StorageOptions.getDefaultRetrySettings().toBuilder()
-                        .setTotalTimeoutDuration(TIMEOUT)
+                        .setTotalTimeoutDuration(STORAGE_CALL_TIMEOUT)
                         .build());
-        if (emulatorHost == null || emulatorHost.isBlank()) {
-            log.info("照片儲存：雲端儲存，儲存空間 {}", bucket);
-            return options.build().getService();
+        return switch (settings.mode()) {
+            case GCS -> cloudStorage(options, bucket);
+            case EMULATOR -> emulatorStorage(options, bucket, settings.emulatorHost());
+        };
+    }
+
+    private static Storage cloudStorage(StorageOptions.Builder options, String bucket) {
+        log.info("照片儲存：雲端儲存，儲存空間 {}", bucket);
+        return options.build().getService();
+    }
+
+    private static Storage emulatorStorage(StorageOptions.Builder options, String bucket, String emulatorHost) {
+        if (emulatorHost.isBlank()) {
+            throw new IllegalStateException(
+                    "tms.storage.mode=emulator 要設 tms.storage.emulator-host（環境變數 TMS_STORAGE_EMULATOR_HOST）；"
+                            + "正式環境要以 prod 設定組啟動");
         }
         Storage storage = options
                 .setHost(emulatorHost)
@@ -50,10 +64,15 @@ public class StorageConfig {
         try {
             ensureBucket(storage, bucket);
         } catch (RuntimeException e) {
-            closeQuietly(storage);
-            throw new IllegalStateException(
+            IllegalStateException startupFailure = new IllegalStateException(
                     "照片儲存模擬服務 " + emulatorHost + " 建立儲存空間 " + bucket
                             + " 失敗；本機請先 docker compose up -d，正式環境要以 prod 設定組啟動", e);
+            try {
+                storage.close();
+            } catch (Exception closeFailure) {
+                startupFailure.addSuppressed(closeFailure);
+            }
+            throw startupFailure;
         }
         log.info("照片儲存：模擬服務 {}，儲存空間 {}", emulatorHost, bucket);
         return storage;
@@ -69,14 +88,6 @@ public class StorageConfig {
             if (e.getCode() != CONFLICT) {
                 throw e;
             }
-        }
-    }
-
-    private static void closeQuietly(Storage storage) {
-        try {
-            storage.close();
-        } catch (Exception ignored) {
-            // 啟動已經失敗，關閉時的錯誤不蓋過原因
         }
     }
 }

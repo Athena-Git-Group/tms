@@ -21,7 +21,6 @@ import org.testcontainers.utility.DockerImageName;
  * <p>共用容器但不共用資料：每份 Spring context 設定拿自己的資料庫與 topic。
  * 先跑完的套件，它的 context 會留在快取裡，背景的 outbox relay 與 Kafka 消費者還在跑；
  * 若和下一個套件同庫同 topic，就會搶走對方的 outbox 列、讀到對方的事件，或被對方每個場景的清表清掉種子資料。
- * 照片儲存同理，每份設定用自己的儲存空間。
  */
 public final class SharedContainers {
 

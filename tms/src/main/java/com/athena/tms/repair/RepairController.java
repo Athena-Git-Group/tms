@@ -29,8 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class RepairController {
 
     private static final List<String> PHOTO_PURPOSES = List.of("report", "completion");
-    private static final String CACHE_ATTACHED = "private, max-age=86400, immutable";
-    private static final String CACHE_PENDING = "private, no-cache";
+    private static final String ATTACHED_PHOTO_NEVER_CHANGES = "private, max-age=86400, immutable";
+    private static final String PENDING_PHOTO_REVALIDATE = "private, no-cache";
 
     private final RepairService repairService;
 
@@ -86,7 +86,6 @@ public class RepairController {
         }
     }
 
-    // 不宣告 consumes：格式不符時要回本專案的 Error，不是 Spring 預設的 415
     @PutMapping("/repair-photos/{photoId}/content")
     public Map<String, Object> uploadRepairPhotoContent(@PathVariable UUID photoId, HttpServletRequest request)
             throws IOException {
@@ -98,11 +97,14 @@ public class RepairController {
     @GetMapping("/repair-photos/{photoId}/content")
     public ResponseEntity<byte[]> getRepairPhotoContent(@PathVariable UUID photoId) {
         RepairService.PhotoContent content = repairService.readContent(photoId);
-        // 附上工務單後內容不會再變；還沒附上時建立者還能重傳，每次都要向後端確認
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_JPEG)
-                .header(HttpHeaders.CACHE_CONTROL, content.attached() ? CACHE_ATTACHED : CACHE_PENDING)
+                .header(HttpHeaders.CACHE_CONTROL, cacheControlFor(content))
                 .body(content.jpeg());
+    }
+
+    private static String cacheControlFor(RepairService.PhotoContent content) {
+        return content.attached() ? ATTACHED_PHOTO_NEVER_CHANGES : PENDING_PHOTO_REVALIDATE;
     }
 
     @PostMapping("/repair-tickets/precheck")

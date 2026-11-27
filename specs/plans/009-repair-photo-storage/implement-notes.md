@@ -41,13 +41,13 @@
   以上傳者身分經 API 建立、上傳，再以 SQL 綁定。上傳者必須是同一個 `BackendChannel` 建立的員工，否則丟出說明「不知道他的帳密」。
 - 測試照片是 1 × 1 的真 JPEG，在開頭標記後插一段 JPEG 註解寫進序號：每張位元組不同，`sips` 解得開，App 與瀏覽器才顯示得出來
   （只塞亂數的「FF D8 FF … FF D9」過得了後端檢查，但畫面上會是「照片無法顯示」）。
-- 新增 `replaceRepairPhotos`、`markLegacyPhoto`、`repairPhotoIds`（排序同工務單詳情：拍攝時間、編號）、`photoContent`。
+- 新增 `replaceRepairPhotos`、`markPhotoWithFakeUploadReference`、`repairPhotoIds`（排序同工務單詳情：拍攝時間、編號）、`photoContent`。
 - 驗證：`mvn -q -f app/bdd-support/pom.xml install -DskipTests` 通過；`app/bdd`、`app/web-bdd` 的 `test-compile` 都通過。
   注意這一步把新版 `app-bdd-support` 裝進了共用的 `~/.m2`。
 
 ## T006 至 T009
 
-- T006：`StorageConfigTest` 兩案綠（模擬位址指向沒人聽的埠時 context 起不來、錯誤訊息含位址與儲存空間名稱；`prod` 設定組下 `tms.storage.emulator-host` 是空值）。
+- T006：`StorageConfigTest` 綠（模擬位址指向沒人聽的埠時 context 起不來、錯誤訊息含位址與儲存空間名稱；`emulator` 模式沒設模擬位址時 context 起不來；預設模式是 `emulator`；`prod` 設定組下 `tms.storage.mode` 是 `gcs`）。
   連不上時要等滿 10 秒的重試總時限才失敗，所以這支測試約 10 秒。
 - T008：四處既有上傳改送 `PhotoFixtures.jpeg(照片編號)`，`grep -rn "repair-photos" tms/src/test/java` 之外沒有其他送照片內容的地方。
 - T008／T009 驗證：後端全套 745 run、1 failure、30 errors，失敗清單與 T001 逐筆相同。

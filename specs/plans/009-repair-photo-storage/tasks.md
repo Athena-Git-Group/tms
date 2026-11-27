@@ -57,7 +57,7 @@
     - `plan.md` -> 存照片的程式切在哪裡？、上傳怎麼檢查？
   - `tms/pom.xml` 明確宣告 `com.google.cloud:google-cloud-storage`，版本先跑 `JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml -q dependency:tree -Dincludes=com.google.cloud:google-cloud-storage` 確認 `firebase-admin` 帶進來的版本（分支起點是 2.64.0），寫同一版。
   - `tms/src/main/resources/application.properties` 加 `tms.storage.bucket=${TMS_STORAGE_BUCKET:tms-repair-photos-local}`、`tms.storage.emulator-host=${TMS_STORAGE_EMULATOR_HOST:http://localhost:4443}` 與 `server.tomcat.max-swallow-size=6MB`（提早回 413 時 Tomcat 讀掉剩下的 body，用戶端才收得到回應，理由見 `plan.md`）；`application-test.properties` 不設儲存項目，由各 Spring 設定動態給。
-  - 新增 `tms/src/main/resources/application-prod.properties`，內容只有 `tms.storage.emulator-host=`（空值）：正式環境以 `prod` 設定組啟動就不接模擬服務，不靠把環境變數設成空字串。`README.md` 的部署或設定段補一句。
+  - 新增 `tms/src/main/resources/application-prod.properties`，寫 `tms.storage.mode=gcs`（`application.properties` 預設 `tms.storage.mode=emulator`）：正式環境以 `prod` 設定組啟動就接雲端儲存，不靠把模擬位址設成空字串。`README.md` 的部署或設定段補一句。
   - 不寫存照片的程式。
 
 - [X] T003 本機 docker-compose 加 fake-gcs-server
@@ -98,7 +98,7 @@
     - `storage/PhotoStorage.java`（`put(String key, byte[] jpeg)`、`Optional<byte[]> open(String key)`）。
     - `storage/GcsPhotoStorage.java`（官方程式庫；`put` 帶 `Content-Type: image/jpeg` 同名覆蓋；`open` 遇 404 回空、其他錯誤往外丟）。
     - `storage/StorageConfig.java`：依 `tms.storage.*` 建 `Storage`；`HttpTransportOptions` 的連線與讀取逾時各 10 秒、`RetrySettings.totalTimeout` 10 秒（模擬服務與正式環境都一樣）。模擬位址有值時用無憑證模式並建立不存在的儲存空間，**建立失敗就讓這個 bean 建立失敗、後端啟動失敗**，錯誤訊息寫出模擬位址與儲存空間名稱；空值時用預設憑證、不建立。啟動時記一行日誌寫出儲存空間名稱與是否為模擬服務。
-    - 一支 `StorageConfig` 的測試：模擬位址指向沒有服務的埠時，Spring context 起不來，錯誤訊息含該位址；`prod` 設定組下 `tms.storage.emulator-host` 是空值。
+    - 一支 `StorageConfig` 的測試：模擬位址指向沒有服務的埠時，Spring context 起不來，錯誤訊息含該位址；`prod` 設定組下 `tms.storage.mode` 是 `gcs`。
   - 不做：在 `RepairService` 呼叫它；任何上傳或讀取端點。
 
 - [X] T007 送收原始位元組的測試客戶端、測試用照片內容與照片標籤
@@ -138,7 +138,7 @@
   - 只做：
     - `insertReportPhotos(ticketTaskId, uploaderId, count)` 改成以上傳者身分呼叫 `createRepairPhoto` 與 `uploadRepairPhotoContent`（每張是不同的合法 JPEG），再以 SQL 把 `ticket_task_id` 設成這張單；不再寫 `fixture/{id}.jpg`。
     - `createCompletionPhoto` 改成每張內容不同的合法 JPEG（序號寫進內容）。
-    - 新增 `replaceRepairPhotos(ticketTaskId, reportCount, completionCount)`（先刪這張單已綁的照片列，再以報修人與處理人身分建立、上傳、綁定）、`markLegacyPhoto(photoId)`（只把 `storage_ref` 改成 `upload:{id}`）、`repairPhotoIds(ticketTaskId, purpose)`、`photoContent(photoId, staff)`（以該員工呼叫 `getRepairPhotoContent` 回位元組）。
+    - 新增 `replaceRepairPhotos(ticketTaskId, reportCount, completionCount)`（先刪這張單已綁的照片列，再以報修人與處理人身分建立、上傳、綁定）、`markPhotoWithFakeUploadReference(photoId)`（只把 `storage_ref` 改成 `upload:{id}`）、`repairPhotoIds(ticketTaskId, purpose)`、`photoContent(photoId, staff)`（以該員工呼叫 `getRepairPhotoContent` 回位元組）。
   - 不做：任何 stepdef。
   - 驗證：`mvn -q -f app/bdd-support/pom.xml install -DskipTests` 通過；這一步之後到 Phase 4A 完成之前，App 與櫃檯 Web 的行為規格因為後端還沒存內容會看到「照片無法顯示」，屬預期。
 

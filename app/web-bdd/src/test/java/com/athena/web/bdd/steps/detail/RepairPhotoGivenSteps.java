@@ -3,7 +3,6 @@ package com.athena.web.bdd.steps.detail;
 import com.athena.web.bdd.pages.DetailPanel;
 import com.athena.web.bdd.pages.ShellFrame;
 import com.athena.web.bdd.steps.common.CommonGivenSteps;
-import com.athena.web.bdd.support.PhotoRequests;
 import com.athena.web.bdd.support.WebWorld;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.cucumber.java.zh_tw.假設;
@@ -20,8 +19,7 @@ public class RepairPhotoGivenSteps {
 
     private final CommonGivenSteps common;
 
-    /** photoRequests 只為了在登入前就開始記錄讀照片的請求；有照片的場景都先跑這裡的照片句。 */
-    public RepairPhotoGivenSteps(WebWorld world, PhotoRequests photoRequests, CommonGivenSteps common) {
+    public RepairPhotoGivenSteps(WebWorld world, CommonGivenSteps common) {
         this.world = world;
         this.shell = new ShellFrame(world);
         this.detail = new DetailPanel(world);
@@ -52,7 +50,7 @@ public class RepairPhotoGivenSteps {
             throw new IllegalArgumentException(roomNo + " 只有 " + ids.size() + " 張報修照片，沒有第 " + nth + " 張");
         }
         UUID photoId = ids.get(nth - 1);
-        world.backend().markLegacyPhoto(photoId);
+        world.backend().markPhotoWithFakeUploadReference(photoId);
         try {
             world.backend().photoContent(photoId, RepairPhotos.reader(world));
         } catch (IllegalStateException expected) {

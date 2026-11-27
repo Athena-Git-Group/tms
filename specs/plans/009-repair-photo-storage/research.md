@@ -13,15 +13,16 @@
 - 分支起點 `7420c55` 上，`firebase-admin` 9.9.0 已經間接帶進 `com.google.cloud:google-cloud-storage` 2.64.0（2026-11-26 以 `JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml -q dependency:tree -Dincludes=com.google.cloud:google-cloud-storage` 實測）。
 - 程式不能只靠間接依賴：哪天 `firebase-admin` 升版或拿掉這個依賴，存照片的程式會在編譯期才發現少了程式庫。明確宣告，版本跟間接帶進來的一樣，避免同一個程式庫兩個版本。
 
-連線設定（實作時照這三項寫）：
+連線設定（實作時照這幾項寫）：
 
 | 設定 | 本機與測試 | 正式環境 |
 | --- | --- | --- |
 | 儲存空間名稱 | 本機 `tms-repair-photos-local`；測試每份 Spring 設定各用自己的名稱 | 維運開好的儲存空間 |
-| 模擬服務位址 | `http://localhost:4443`（測試用 Testcontainers 給的位址） | 留空：寫在 `application-prod.properties` 的 `tms.storage.emulator-host=`，正式環境以 `prod` 設定組啟動 |
+| 儲存模式 | `tms.storage.mode=emulator`（`application.properties` 的預設） | `tms.storage.mode=gcs`：寫在 `application-prod.properties`，正式環境以 `prod` 設定組啟動 |
+| 模擬服務位址 | `http://localhost:4443`（測試用 Testcontainers 給的位址） | 不用設，`gcs` 模式不看它 |
 | 登入憑證 | 不需要（程式庫的無憑證模式） | 伺服器本身的身分（程式庫預設的 Application Default Credentials） |
 
-模擬服務位址有值時，程式庫用 `StorageOptions.newBuilder().setHost(位址).setProjectId(任意值).setCredentials(NoCredentials.getInstance())`；留空時用 `StorageOptions.getDefaultInstance()`，憑證與專案從執行環境取得。這是唯一一處看模擬服務位址的分支，存取照片的程式沒有分支。兩種情況都設 `HttpTransportOptions` 的連線與讀取逾時各 10 秒、`RetrySettings` 的總時限 10 秒；模擬服務模式啟動時建立儲存空間，失敗就讓後端啟動失敗。
+`emulator` 模式時，程式庫用 `StorageOptions.newBuilder().setHost(位址).setProjectId(任意值).setCredentials(NoCredentials.getInstance())`；`gcs` 模式時用預設的 `StorageOptions`，憑證與專案從執行環境取得。這是唯一一處分辨儲存模式的分支，存取照片的程式沒有分支。兩種情況都設 `HttpTransportOptions` 的連線與讀取逾時各 10 秒、`RetrySettings` 的總時限 10 秒；模擬服務模式啟動時建立儲存空間，失敗就讓後端啟動失敗。
 
 ## 本機與自動化測試怎麼模擬雲端儲存？
 

@@ -125,10 +125,6 @@ public class BddApiClient {
         return result;
     }
 
-    /**
-     * 原樣送收位元組：body 不轉 JSON、{@code Content-Type} 照參數；回應保留狀態碼、標頭與原始位元組，
-     * 只有回應是 JSON 時才另外填 {@code body} 與 {@code json}，錯誤回應因此照樣讀得到錯誤碼。
-     */
     public ScenarioWorld.ApiResponse exchangeBytes(
             HttpMethod method, String path, Auth auth, byte[] body, String contentType) {
         RestClient.RequestBodySpec spec = restClient.method(method).uri(url(BASE_PATH, path));

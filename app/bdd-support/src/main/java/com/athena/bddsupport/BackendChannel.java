@@ -1386,7 +1386,6 @@ public class BackendChannel {
         postTaskAction(taskId, "complete", assignee, body);
     }
 
-    /** 以上傳者身分經 API 建立並上傳報修照片（每張內容不同、都是解得開的 JPEG），再綁到這張工務單。 */
     public void insertReportPhotos(UUID ticketTaskId, UUID uploaderId, int count) {
         CreatedStaff uploader = knownStaff(uploaderId);
         for (int i = 0; i < count; i++) {
@@ -1394,7 +1393,6 @@ public class BackendChannel {
         }
     }
 
-    /** 換掉這張單已綁的照片：報修照片以報修人、完修照片以處理人身分建立、上傳、綁定。 */
     public void replaceRepairPhotos(UUID ticketTaskId, int reportCount, int completionCount) {
         long tenantId = ensureTenant();
         execute("DELETE FROM repair_photos WHERE tenant_id = ? AND ticket_task_id = ?", tenantId, ticketTaskId);
@@ -1414,20 +1412,17 @@ public class BackendChannel {
         }
     }
 
-    /** 把照片改成這版之前留下的樣子：只改 storage_ref，照片儲存裡的內容不動，後端照樣讀不到。 */
-    public void markLegacyPhoto(UUID photoId) {
+    public void markPhotoWithFakeUploadReference(UUID photoId) {
         execute("UPDATE repair_photos SET storage_ref = ? WHERE tenant_id = ? AND id = ?",
                 "upload:" + photoId, ensureTenant(), photoId);
     }
 
-    /** 依工務單詳情的排序（拍攝時間、編號）列出綁在這張單上的照片編號；purpose 是 report 或 completion。 */
     public List<UUID> repairPhotoIds(UUID ticketTaskId, String purpose) {
         return queryRows("SELECT id FROM repair_photos WHERE tenant_id = ? AND ticket_task_id = ? AND purpose = ?"
                         + " ORDER BY taken_at, id", ensureTenant(), ticketTaskId, purpose)
                 .stream().map(row -> (UUID) row.get("id")).toList();
     }
 
-    /** 以該員工身分讀照片內容；不是 200 就丟例外並帶狀態碼。 */
     public byte[] photoContent(UUID photoId, CreatedStaff staff) {
         HttpResponse<byte[]> response = sendForBytes(
                 request("GET", "/repair-photos/" + photoId + "/content", jwt(staff)).GET());

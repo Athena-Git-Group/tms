@@ -325,9 +325,6 @@ public class CommonThenSteps {
 
     private void assertPhotosUnchanged() {
         List<Map<String, Object>> before = lastOperationGuard.photosBefore();
-        if (before == null) {
-            return;
-        }
         List<Map<String, Object>> after = lastOperationGuard.photosNow();
         if (!before.equals(after)) {
             throw new AssertionError("操作被拒絕後 repair_photos 仍被改動：操作前=" + before + "，操作後=" + after);

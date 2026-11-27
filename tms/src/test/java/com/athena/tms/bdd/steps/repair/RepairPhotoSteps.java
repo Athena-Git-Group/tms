@@ -27,13 +27,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 
-/** 工務單照片的建立、上傳、讀取與綁定句型；語意見 {@code 工務單/dsl.md} 的「照片內容與存放」。 */
 public class RepairPhotoSteps {
 
     private static final Map<String, String> PURPOSE = Map.of("報修", "report", "完修", "completion");
@@ -95,13 +95,13 @@ public class RepairPhotoSteps {
         String photoId = createPhotoArranged(jwt, purposeChinese, label);
         PhotoFixtures.PhotoContent content = PhotoFixtures.of(label, "一張 JPEG 照片");
         uploadArranged(jwt, photoId, content, label);
-        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId, content.bytes(), uploadedAt(photoId)));
+        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId, Optional.of(content.bytes()), uploadedAt(photoId)));
     }
 
     @假設("{string} 已建立照片 {string}，用途為 {string}，還沒上傳內容")
     public void staffCreatedPhotoWithoutContent(String staffName, String label, String purposeChinese) {
         String photoId = createPhotoArranged(world.jwt(staffName), purposeChinese, label);
-        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId, null, null));
+        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId, Optional.empty(), null));
     }
 
     @假設("照片 {string} 已附在 {string}")
@@ -127,7 +127,7 @@ public class RepairPhotoSteps {
         String photoId = createPhotoArranged(jwt, purposeChinese, label);
         PhotoFixtures.PhotoContent content = PhotoFixtures.of(label, "一張 JPEG 照片");
         uploadArranged(jwt, photoId, content, label);
-        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId, content.bytes(), uploadedAt(photoId)));
+        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId, Optional.of(content.bytes()), uploadedAt(photoId)));
     }
 
     @假設("照片 {string} 不存在")
@@ -136,7 +136,7 @@ public class RepairPhotoSteps {
         if (photoRow(photoId.toString()) != null) {
             throw new IllegalStateException("隨機產生的照片 id 已存在：" + photoId);
         }
-        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId.toString(), null, null));
+        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photoId.toString(), Optional.empty(), null));
     }
 
     @假設("照片 {string} 是舊版的假照片")
@@ -151,7 +151,7 @@ public class RepairPhotoSteps {
         if (updated != 1) {
             throw new IllegalStateException("前提「照片 " + label + " 是舊版的假照片」沒鋪起來：本飯店查無這張照片");
         }
-        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photo.photoId(), null, photo.uploadedAt()));
+        world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photo.photoId(), Optional.empty(), photo.uploadedAt()));
     }
 
     @當("{string} 以 {string} 上傳照片 {string} 的內容")
@@ -167,7 +167,7 @@ public class RepairPhotoSteps {
                 content.bytes(), content.contentType());
         if (isSuccess(response)) {
             OffsetDateTime uploadedAt = photo.uploadedAt() != null ? photo.uploadedAt() : uploadedAt(photo.photoId());
-            world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photo.photoId(), content.bytes(), uploadedAt));
+            world.rememberPhoto(label, new ScenarioWorld.PhotoLabel(photo.photoId(), Optional.of(content.bytes()), uploadedAt));
         }
     }
 
@@ -211,8 +211,7 @@ public class RepairPhotoSteps {
     private void completeWithPhotos(String staffName, String resolutionType, String ticketNo, List<String> labels) {
         UUID ticketTaskId = RepairTicketRefs.taskId(world, ticketNo);
         List<String> photoIds = labels.stream().map(label -> world.photo(label).photoId()).toList();
-        lastOperationGuard.captureFor(ticketTaskId);
-        lastOperationGuard.capturePhotos(photoIds.stream().map(UUID::fromString).toList());
+        lastOperationGuard.captureFor(ticketTaskId, photoIds.stream().map(UUID::fromString).toList());
         Map<String, Object> body = Map.of("resolutionType", resolutionType, "photoIds", photoIds);
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(world.jwt(staffName)), body);
     }
@@ -220,8 +219,7 @@ public class RepairPhotoSteps {
     @當("{string} 補照片 {string} 到 {string}")
     public void staffAppendsPhoto(String staffName, String label, String ticketNo) {
         UUID ticketTaskId = RepairTicketRefs.taskId(world, ticketNo);
-        lastOperationGuard.captureFor(ticketTaskId);
-        lastOperationGuard.capturePhotos(List.of(UUID.fromString(world.photo(label).photoId())));
+        lastOperationGuard.captureFor(ticketTaskId, List.of(UUID.fromString(world.photo(label).photoId())));
         Map<String, Object> body = Map.of("photoIds", List.of(world.photo(label).photoId()));
         apiClient.post("/repair-tickets/" + ticketTaskId + "/photos", BddApiClient.Auth.staff(world.jwt(staffName)), body);
     }
@@ -229,8 +227,7 @@ public class RepairPhotoSteps {
     @當("{string} 從 {string} 附照片 {string} 開立水電工務單")
     public void staffOpensPlumbingTicketWithPhoto(String staffName, String taskKey, String label) {
         UUID sourceTaskId = UUID.fromString(world.taskId(taskKey));
-        lastOperationGuard.captureFor(sourceTaskId);
-        lastOperationGuard.capturePhotos(List.of(UUID.fromString(world.photo(label).photoId())));
+        lastOperationGuard.captureFor(sourceTaskId, List.of(UUID.fromString(world.photo(label).photoId())));
         repairCountGuard.capture();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("sourceTaskId", sourceTaskId.toString());
@@ -319,12 +316,11 @@ public class RepairPhotoSteps {
             throw new AssertionError("查看照片 " + label + " 預期 200，實際 " + response.status() + "，body=" + response.body());
         }
         PhotoReads.assertJpegContentType("查看照片 " + label, response);
-        if (photo.content() == null) {
-            throw new IllegalStateException("照片「" + label + "」沒有成功上傳過的內容可比對");
-        }
-        if (!Arrays.equals(photo.content(), response.bytes())) {
+        byte[] uploaded = photo.content().orElseThrow(() ->
+                new IllegalStateException("照片「" + label + "」沒有成功上傳過的內容可比對"));
+        if (!Arrays.equals(uploaded, response.bytes())) {
             throw new AssertionError("查看照片 " + label + " 拿到的位元組不是最後一次成功上傳的內容（"
-                    + PhotoReads.lengthOf(response.bytes()) + " vs " + photo.content().length + " 位元組）");
+                    + PhotoReads.lengthOf(response.bytes()) + " vs " + uploaded.length + " 位元組）");
         }
         boolean attached = requirePhotoRow(photo.photoId()).get("ticket_task_id") != null;
         check("查看照片 " + label + " 的 Cache-Control",

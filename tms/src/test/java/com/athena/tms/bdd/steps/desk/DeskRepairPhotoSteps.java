@@ -16,7 +16,6 @@ import java.util.Set;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 
-/** 櫃檯詳情裡工務單照片的句型；語意見 {@code 櫃檯看板與派單/dsl.md}。 */
 public class DeskRepairPhotoSteps {
 
     private static final Set<String> PHOTO_FIELDS = Set.of("photos", "completionPhotos", "photoIds", "photoId");

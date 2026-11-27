@@ -5,7 +5,6 @@ import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import java.util.Optional;
 
-/** 繞過 API 直接讀寫照片儲存，給 Then 比對物件內容與準備「舊版的假照片」。 */
 public class PhotoStorageProbe {
 
     private final Storage storage;

@@ -6,11 +6,17 @@ import 'package:flutter/cupertino.dart';
 import 'api_client.dart';
 import 'theme.dart';
 
-/// 照片格子的 accessibility value 用這三個名稱，Appium 靠它分辨畫出圖片與灰框。
-enum RepairPhotoLoad { loading, loaded, failed }
+enum RepairPhotoLoad {
+  loading('loading'),
+  loaded('loaded'),
+  failed('failed');
 
-/// 快取跟著登入用的 [ApiClient] 走，換人登入就不會看到上一個人的快取。
-final Expando<_PhotoContentCache> _caches = Expando();
+  const RepairPhotoLoad(this.semanticsValue);
+
+  final String semanticsValue;
+}
+
+final Expando<_PhotoContentCache> _cachesByApiClient = Expando();
 
 class _PhotoContentCache {
   static const int _capacity = 40;
@@ -40,7 +46,7 @@ class _PhotoContentCache {
 
 Future<Uint8List> _readPhotoContent(String photoId) {
   final api = ApiClient.instance;
-  return (_caches[api] ??= _PhotoContentCache()).read(api, photoId);
+  return (_cachesByApiClient[api] ??= _PhotoContentCache()).read(api, photoId);
 }
 
 class RepairPhotoImage extends StatefulWidget {
@@ -126,7 +132,7 @@ class _RepairPhotoImageState extends State<RepairPhotoImage> {
   Widget build(BuildContext context) {
     final image = _image;
     return Semantics(
-      value: _load.name,
+      value: _load.semanticsValue,
       child: Stack(
         fit: StackFit.expand,
         children: [

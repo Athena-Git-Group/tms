@@ -9,7 +9,6 @@ import com.microsoft.playwright.Locator;
 
 final class RepairPhotos {
 
-    /** 預設的櫃檯人員；櫃檯、主管、值班主管讀到的照片內容相同，比對位元組時用誰讀都一樣。 */
     private static final String READER = "林佩君";
 
     private RepairPhotos() {
@@ -19,7 +18,6 @@ final class RepairPhotos {
         return world.staff(READER);
     }
 
-    /** 區塊名稱（任何一種介面語言）對到後端照片的用途。 */
     static String purposeOf(String rowTitle) {
         return switch (UiWords.traditionalChineseOf(rowTitle)) {
             case "報修照片" -> "report";

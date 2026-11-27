@@ -8,7 +8,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 
-/** 以 API 讀照片內容，並與照片儲存裡該照片 {@code storage_ref} 的物件比對。 */
 public final class PhotoReads {
 
     private PhotoReads() {

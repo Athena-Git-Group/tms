@@ -30,8 +30,6 @@ public class GcsPhotoStorage implements PhotoStorage {
         try {
             return Optional.of(storage.readAllBytes(bucket, key));
         } catch (StorageException e) {
-            // 儲存空間不在也回 404，這裡分不出來；不再查儲存空間，因為正式環境只給物件權限，查了反而 403。
-            // 儲存空間名稱設錯時第一次上傳就會失敗，不會只停在讀不到照片
             if (e.getCode() != NOT_FOUND) {
                 throw e;
             }
