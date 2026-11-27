@@ -341,7 +341,7 @@ public class TaskExecutionService {
         if (photoIds.size() > 3) {
             throw new UnprocessableEntityException("photo_limit", "最多 3 張");
         }
-        repairService.requireAttachablePhotos(tenantId, photoIds, "completion", taskId);
+        repairService.lockAttachablePhotos(tenantId, photoIds, "completion", taskId);
         if (!resolution.requiresPhotos()) {
             return;
         }

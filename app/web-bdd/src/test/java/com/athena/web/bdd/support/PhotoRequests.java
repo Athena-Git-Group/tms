@@ -1,6 +1,7 @@
 package com.athena.web.bdd.support;
 
 import com.microsoft.playwright.Request;
+import io.cucumber.java.Before;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -11,13 +12,17 @@ public final class PhotoRequests {
     public record Sent(String url, String authorization) {
     }
 
+    private final WebWorld world;
+
     private final List<Request> requests = new CopyOnWriteArrayList<>();
 
     public PhotoRequests(WebWorld world) {
+        this.world = world;
+    }
+
+    @Before(order = 0)
+    public void recordFromFirstBrowserContext() {
         world.onEveryNewContext(context -> context.onRequest(this::record));
-        if (world.hasPage()) {
-            world.page().context().onRequest(this::record);
-        }
     }
 
     private void record(Request request) {

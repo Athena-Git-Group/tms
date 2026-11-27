@@ -65,7 +65,7 @@ class RepairPhotoAttachTest extends PostgresSpringTest {
         jdbcTemplate.update("UPDATE repair_photos SET ticket_task_id = ? WHERE id = ?", otherTicket, taken);
 
         assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status ->
-                repairService.bindUnclaimedPhotos(TENANT_ID, ticket, List.of(free, taken))))
+                repairService.bindLockedPhotosOrConflict(TENANT_ID, ticket, List.of(free, taken))))
                 .isInstanceOfSatisfying(StateConflictException.class,
                         e -> assertThat(e.getCode()).isEqualTo("photo_already_attached"));
 

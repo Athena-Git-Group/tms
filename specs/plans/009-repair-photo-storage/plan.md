@@ -35,11 +35,11 @@ README.md                                            # 本機環境多一個服�
 scripts/manual-env/env.sh                            # 手動測試環境用自己的儲存空間名稱
 tms/pom.xml                                          # 明確宣告 google-cloud-storage
 tms/src/main/resources/application.properties        # tms.storage.*、server.tomcat.max-swallow-size
-tms/src/main/resources/application-prod.properties   # 新檔：tms.storage.emulator-host= （正式環境不接模擬服務）
+tms/src/main/resources/application-prod.properties   # 新檔：tms.storage.mode=gcs（正式環境接雲端儲存）
 tms/src/main/java/com/athena/tms/
 ├── storage/PhotoStorage.java                        # put(key, bytes)、open(key) 兩個動作的介面
 ├── storage/GcsPhotoStorage.java                     # 唯一的實作，官方程式庫
-├── storage/StorageConfig.java                       # 依 tms.storage.* 建 Storage；有模擬位址時建立儲存空間
+├── storage/StorageConfig.java                       # 依 tms.storage.* 建 Storage；模擬服務模式建立儲存空間
 ├── repair/RepairPhotoContent.java                   # 上傳內容的檢查：空、JPEG 開頭、5 MB
 ├── repair/RepairController.java                     # PUT 讀 body；新增 GET /repair-photos/{id}/content；建立照片的輸入檢查
 ├── repair/RepairService.java                        # storeContent、readContent、requireAttachablePhotos；appendPhotos 補檢查
@@ -221,21 +221,23 @@ public interface PhotoStorage {
 
 物件名稱由 `RepairService` 組：`"repair-photos/" + tenantId + "/" + photoId + ".jpg"`，跟 `storage_ref` 存同一個字串。讀照片時用資料庫裡的 `storage_ref`，不重新組名字，日後改命名規則時舊照片仍讀得到。
 
-`StorageConfig` 依 `tms.storage.bucket` 與 `tms.storage.emulator-host` 建出 `com.google.cloud.storage.Storage`：模擬位址有值時用無憑證模式並在啟動時建立不存在的儲存空間，建立失敗（模擬服務沒起來、位址錯）就讓這個 bean 建立失敗，後端啟動失敗並在錯誤訊息寫出位址與儲存空間名稱；空值時用預設憑證、不建立儲存空間。這是全程式唯一一處看模擬位址的地方。
+`StorageConfig` 依 `tms.storage.mode`、`tms.storage.bucket` 與 `tms.storage.emulator-host` 建出 `com.google.cloud.storage.Storage`。`tms.storage.mode` 只有兩個值：`emulator`（模擬服務）與 `gcs`（雲端儲存）。`emulator` 時用無憑證模式連 `tms.storage.emulator-host`，並在啟動時建立不存在的儲存空間；沒設模擬位址、或建立失敗（模擬服務沒起來、位址錯）就讓這個 bean 建立失敗，後端啟動失敗並在錯誤訊息寫出位址與儲存空間名稱。`gcs` 時用預設憑證、不建立儲存空間，也不看模擬位址。這是全程式唯一一處分辨兩種模式的地方。
 
 連線逾時與讀取逾時都設 10 秒，重試的總時限也是 10 秒（`HttpTransportOptions` 的 connect／read timeout 與 `RetrySettings.totalTimeout`）。程式庫預設的總時限是幾十秒，雲端儲存卡住時一個上傳請求會佔著資料庫連線那麼久；10 秒對一張 5 MB 以內的照片綽綽有餘。
 
 ```properties
 # application.properties
 tms.storage.bucket=${TMS_STORAGE_BUCKET:tms-repair-photos-local}
+tms.storage.mode=emulator
 tms.storage.emulator-host=${TMS_STORAGE_EMULATOR_HOST:http://localhost:4443}
 server.tomcat.max-swallow-size=6MB
 
 # application-prod.properties
-tms.storage.emulator-host=
+tms.storage.mode=gcs
+tms.storage.bucket=${TMS_STORAGE_BUCKET}
 ```
 
-預設值指向本機模擬服務，跟資料庫網址預設指向本機 5433 的做法一樣，開發者不用設任何環境變數。正式環境不靠「把環境變數設成空字串」：有些部署工具會把空字串的環境變數當成沒設，`${TMS_STORAGE_EMULATOR_HOST:…}` 就會落回預設值。改成新增 `application-prod.properties`，裡面寫 `tms.storage.emulator-host=`（空值），正式環境以 `prod` 設定組啟動，`TMS_STORAGE_BUCKET` 設成正式名稱。
+預設值指向本機模擬服務，跟資料庫網址預設指向本機 5433 的做法一樣，開發者不用設任何環境變數。正式環境不靠「把模擬位址設成空字串」來表示接雲端：有些部署工具會把空字串的環境變數當成沒設，`${TMS_STORAGE_EMULATOR_HOST:…}` 就會落回預設值，而且「空位址等於雲端」讀程式的人看不出來。改成明寫的 `tms.storage.mode`：`application-prod.properties` 寫 `tms.storage.mode=gcs`，正式環境以 `prod` 設定組啟動，`TMS_STORAGE_BUCKET` 設成正式名稱。
 
 預設值指向模擬服務是比較安全的方向：正式環境若漏了 `prod` 設定組，後端啟動時去連本機的 4443 埠建立儲存空間，連不上就啟動失敗，不會悄悄把照片寫到別處，也不會帶著壞掉的照片功能上線。後端啟動時記一行日誌寫出目前用的儲存空間與是否為模擬服務。
 

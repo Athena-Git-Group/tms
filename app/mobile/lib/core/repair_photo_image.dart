@@ -6,9 +6,17 @@ import 'package:flutter/cupertino.dart';
 import 'api_client.dart';
 import 'theme.dart';
 
-enum RepairPhotoLoad { loading, loaded, failed }
+enum RepairPhotoLoad {
+  loading('loading'),
+  loaded('loaded'),
+  failed('failed');
 
-final Expando<_PhotoContentCache> _caches = Expando();
+  const RepairPhotoLoad(this.semanticsValue);
+
+  final String semanticsValue;
+}
+
+final Expando<_PhotoContentCache> _cachesByApiClient = Expando();
 
 class _PhotoContentCache {
   static const int _capacity = 40;
@@ -38,7 +46,7 @@ class _PhotoContentCache {
 
 Future<Uint8List> _readPhotoContent(String photoId) {
   final api = ApiClient.instance;
-  return (_caches[api] ??= _PhotoContentCache()).read(api, photoId);
+  return (_cachesByApiClient[api] ??= _PhotoContentCache()).read(api, photoId);
 }
 
 class RepairPhotoImage extends StatefulWidget {
@@ -124,7 +132,7 @@ class _RepairPhotoImageState extends State<RepairPhotoImage> {
   Widget build(BuildContext context) {
     final image = _image;
     return Semantics(
-      value: _load.name,
+      value: _load.semanticsValue,
       child: Stack(
         fit: StackFit.expand,
         children: [

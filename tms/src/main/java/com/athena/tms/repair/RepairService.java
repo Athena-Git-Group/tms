@@ -32,6 +32,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -288,12 +289,16 @@ public class RepairService {
         if (photoIds.size() > 3) {
             throw new UnprocessableEntityException("photo_limit", "最多 3 張");
         }
-        requireAttachablePhotos(tenantId, photoIds, "report", ticketTaskId);
-        requireTicketOpen(jdbcTemplate.queryForObject(
-                "SELECT state FROM tasks WHERE tenant_id = ? AND id = ? FOR UPDATE",
-                String.class, tenantId, ticketTaskId));
-        bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
+        lockAttachablePhotos(tenantId, photoIds, "report", ticketTaskId);
+        requireTicketOpen(lockTicketStateAfterPhotos(tenantId, ticketTaskId));
+        bindLockedPhotosOrConflict(tenantId, ticketTaskId, photoIds);
         return ticketView(tenantId, ticketTaskId);
+    }
+
+    private String lockTicketStateAfterPhotos(long tenantId, UUID ticketTaskId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT state FROM tasks WHERE tenant_id = ? AND id = ? FOR UPDATE",
+                String.class, tenantId, ticketTaskId);
     }
 
     private static void requireTicketOpen(String state) {
@@ -336,7 +341,7 @@ public class RepairService {
     private void recordCompletionEvidence(
             long tenantId, UUID ticketTaskId, List<UUID> photoIds, String resolutionNote) {
         if (photoIds != null) {
-            bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
+            bindLockedPhotosOrConflict(tenantId, ticketTaskId, photoIds);
         }
         if (resolutionNote != null) {
             jdbcTemplate.update(
@@ -526,7 +531,10 @@ public class RepairService {
         return "system".equals(row.get("source")) && row.get("origin_ticket_task_id") == null;
     }
 
-    public void requireAttachablePhotos(long tenantId, List<UUID> photoIds, String purpose, UUID ticketTaskId) {
+    public void lockAttachablePhotos(long tenantId, List<UUID> photoIds, String purpose, UUID ticketTaskId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("lockAttachablePhotos 必須在交易裡呼叫，照片列的鎖才會留到綁定寫完");
+        }
         List<UUID> distinct = photoIds.stream().distinct().toList();
         if (distinct.isEmpty()) {
             return;
@@ -554,7 +562,7 @@ public class RepairService {
         }
     }
 
-    void bindUnclaimedPhotos(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
+    void bindLockedPhotosOrConflict(long tenantId, UUID ticketTaskId, List<UUID> photoIds) {
         List<UUID> distinct = photoIds.stream().distinct().toList();
         if (distinct.isEmpty()) {
             return;
@@ -639,7 +647,7 @@ public class RepairService {
                     poolSource, tenantId, ticketTaskId);
         }
 
-        bindUnclaimedPhotos(tenantId, ticketTaskId, photoIds);
+        bindLockedPhotosOrConflict(tenantId, ticketTaskId, photoIds);
 
         if (interruptSourceTask) {
             taskEngine.interrupt(tenantId, sourceTaskId, "等工務：" + categoryLabel, staffActor);
@@ -775,7 +783,7 @@ public class RepairService {
         if (photoIds.size() > 3) {
             throw new UnprocessableEntityException("photo_limit", "最多 3 張");
         }
-        requireAttachablePhotos(tenantId, photoIds, "report", null);
+        lockAttachablePhotos(tenantId, photoIds, "report", null);
     }
 
     private void pushVerificationFailed(long tenantId, UUID ticketTaskId, Map<String, Object> ticket, UUID assigneeId,

@@ -29,8 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class RepairController {
 
     private static final List<String> PHOTO_PURPOSES = List.of("report", "completion");
-    private static final String CACHE_ATTACHED = "private, max-age=86400, immutable";
-    private static final String CACHE_PENDING = "private, no-cache";
+    private static final String ATTACHED_PHOTO_NEVER_CHANGES = "private, max-age=86400, immutable";
+    private static final String PENDING_PHOTO_REVALIDATE = "private, no-cache";
 
     private final RepairService repairService;
 
@@ -99,8 +99,12 @@ public class RepairController {
         RepairService.PhotoContent content = repairService.readContent(photoId);
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_JPEG)
-                .header(HttpHeaders.CACHE_CONTROL, content.attached() ? CACHE_ATTACHED : CACHE_PENDING)
+                .header(HttpHeaders.CACHE_CONTROL, cacheControlFor(content))
                 .body(content.jpeg());
+    }
+
+    private static String cacheControlFor(RepairService.PhotoContent content) {
+        return content.attached() ? ATTACHED_PHOTO_NEVER_CHANGES : PENDING_PHOTO_REVALIDATE;
     }
 
     @PostMapping("/repair-tickets/precheck")

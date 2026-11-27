@@ -95,7 +95,7 @@ public class ScenarioWorld {
 
     private final Map<String, PhotoLabel> photoLabels = new HashMap<>();
 
-    public record PhotoLabel(String photoId, byte[] content, java.time.OffsetDateTime uploadedAt) {
+    public record PhotoLabel(String photoId, java.util.Optional<byte[]> content, java.time.OffsetDateTime uploadedAt) {
     }
 
     public void rememberPhoto(String label, PhotoLabel photo) {

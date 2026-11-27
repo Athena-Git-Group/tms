@@ -1412,7 +1412,7 @@ public class BackendChannel {
         }
     }
 
-    public void markLegacyPhoto(UUID photoId) {
+    public void markPhotoWithFakeUploadReference(UUID photoId) {
         execute("UPDATE repair_photos SET storage_ref = ? WHERE tenant_id = ? AND id = ?",
                 "upload:" + photoId, ensureTenant(), photoId);
     }

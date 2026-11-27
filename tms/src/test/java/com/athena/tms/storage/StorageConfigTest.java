@@ -25,7 +25,8 @@ class StorageConfigTest {
 
         new ApplicationContextRunner()
                 .withUserConfiguration(StorageConfig.class)
-                .withPropertyValues("tms.storage.bucket=unreachable-photos", "tms.storage.emulator-host=" + emulator)
+                .withPropertyValues("tms.storage.bucket=unreachable-photos", "tms.storage.mode=emulator",
+                        "tms.storage.emulator-host=" + emulator)
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure()).rootCause().isNotNull();
@@ -35,11 +36,30 @@ class StorageConfigTest {
     }
 
     @Test
-    void prodProfileTurnsOffTheEmulator() {
+    void contextFailsWhenEmulatorModeHasNoEmulatorHost() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(StorageConfig.class)
+                .withPropertyValues("tms.storage.bucket=local-photos", "tms.storage.mode=emulator")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).hasStackTraceContaining("tms.storage.emulator-host");
+                });
+    }
+
+    @Test
+    void defaultModeIsTheEmulator() {
+        StandardEnvironment environment = environmentWithoutOsVariables();
+        ConfigDataEnvironmentPostProcessor.applyTo(environment, new DefaultResourceLoader(), null, List.of());
+
+        assertThat(environment.getProperty("tms.storage.mode")).isEqualTo("emulator");
+    }
+
+    @Test
+    void prodProfileUsesCloudStorage() {
         StandardEnvironment environment = new StandardEnvironment();
         ConfigDataEnvironmentPostProcessor.applyTo(environment, new DefaultResourceLoader(), null, List.of("prod"));
 
-        assertThat(environment.getProperty("tms.storage.emulator-host")).isEmpty();
+        assertThat(environment.getProperty("tms.storage.mode")).isEqualTo("gcs");
     }
 
     @Test
