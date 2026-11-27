@@ -133,7 +133,7 @@
       <h3 class="panel-t">線 1：後端行為規格測試</h3>
 
       <h4 class="sub">① 它在測什麼？</h4>
-      <p>在同一個 JVM 裡起 Spring Boot，用真的 HTTP 打 API，再查資料庫確認權威狀態。資料庫與 Kafka 由 <b>Testcontainers</b>——測試開始時自動用 Docker 起真實容器、結束就丟掉的函式庫——自己起，所以不用先起任何服務。</p>
+      <p>在同一個 JVM 裡起 Spring Boot，用真的 HTTP 打 API，再查資料庫確認權威狀態。資料庫、Kafka 與照片模擬服務（fake-gcs-server，模仿 Google 雲端儲存）由 <b>Testcontainers</b>——測試開始時自動用 Docker 起真實容器、結束就丟掉的函式庫——自己起，所以不用先起任何服務。</p>
 
       <h4 class="sub">② 怎麼跑？</h4>
       <div class="cmd"><pre class="api">JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
@@ -186,13 +186,13 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
           <thead><tr><th>角色</th><th>位置</th></tr></thead>
           <tbody>
             <tr><td>入口</td><td><code>tms/src/test/java/com/athena/tms/bdd/RunTruthFeaturesTest.java</code>：<code>@Suite</code>＋<code>@SelectDirectories("../specs/truth/features/backend")</code>，glue＝<code>com.athena.tms.bdd</code></td></tr>
-            <tr><td>Spring 設定與容器</td><td><code>bdd/BddSpringConfiguration.java</code>：<code>@SpringBootTest(RANDOM_PORT)</code>＋<code>@ActiveProfiles("test")</code>；static 區塊起一次 <code>postgres:16-alpine</code> 與 <code>apache/kafka:4.0.0</code>，所有場景共用，並預建 <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code> 三個 topic</td></tr>
+            <tr><td>Spring 設定與容器</td><td><code>bdd/BddSpringConfiguration.java</code>：<code>@SpringBootTest(RANDOM_PORT)</code>＋<code>@ActiveProfiles("test")</code>；容器由 <code>SharedContainers</code> 起一次 <code>postgres:16-alpine</code>、<code>apache/kafka:4.0.0</code> 與 <code>fsouza/fake-gcs-server:1.56.1</code>，整個 JVM 共用，並預建 <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code> 三個 topic。每份 Spring 設定用自己的資料庫與照片儲存空間，這份是 <code>truth-photos</code>（<code>BddSpringConfiguration.java:72</code>）；新增一份會載入整個後端的 Spring 設定時，要記得呼叫 <code>SharedContainers.wireStorage</code>，否則它會去連本機 4443、連不上就整份失敗</td></tr>
             <tr><td>測試替身</td><td><code>MutableClock</code> 取代正式時鐘（可撥時間）、<code>RecordingPushSender</code> 取代推播發送（只記錄），都標 <code>@Primary</code></td></tr>
             <tr><td>非同步等待</td><td>Kafka 是真的，「寫入待送匣 → 搬上 Kafka → 消費者處理」整條都會走；<code>OutboxAwait</code>、<code>KafkaGroupAwait</code> 等到完成</td></tr>
             <tr><td>每場景共享狀態</td><td><code>bdd/ScenarioWorld.java</code>（<code>@ScenarioScope</code>：員工 id 與 JWT、任務 id、工務單號、最後一次回應…）</td></tr>
             <tr><td>每場景重置</td><td><code>bdd/steps/common/ResetHooks.java</code>：等推播 outbox 清空、消費者群組追平；重置時鐘；<code>TRUNCATE</code> 所有 public 表（保留 <code>flyway_schema_history</code>、<code>tenants</code>）</td></tr>
             <tr><td>Step 定義</td><td><code>bdd/steps/&lt;模組&gt;/Xxx{Given,When,Then}Steps.java</code>，與 truth 模組目錄大致一一對應</td></tr>
-            <tr><td>輔助工具</td><td><code>bdd/support/</code>：<code>BddApiClient</code>（自動帶冪等鍵與 JWT）、<code>DeskApi</code>、<code>DbProbe</code>、<code>LastOperationGuard</code>（When 前拍快照，給「沒有任何資料被改動」這類 Then）、各種 <code>*Fixtures</code>、<code>Terms</code>（中文用語轉資料值，例如「工務」→<code>engineering</code>）</td></tr>
+            <tr><td>輔助工具</td><td><code>bdd/support/</code>：<code>BddApiClient</code>（自動帶冪等鍵與 JWT；<code>exchangeBytes</code> 原樣送收位元組，給照片上傳與讀照片用，<code>BddApiClient.java:132</code>）、<code>PhotoFixtures</code>（各種照片內容：JPEG、剛好 5 MB、超過 5 MB、PNG、標錯格式、空白）、<code>PhotoStorageProbe</code>（直接查測試儲存空間裡存了什麼）、<code>DeskApi</code>、<code>DbProbe</code>、<code>LastOperationGuard</code>（When 前拍快照，給「沒有任何資料被改動」這類 Then）、各種 <code>*Fixtures</code>、<code>Terms</code>（中文用語轉資料值，例如「工務」→<code>engineering</code>）</td></tr>
             <tr><td>其他測試</td><td><code>relaywake/RunOutboxRelayWakeTest.java</code>（驗證待送匣在交易提交後立刻送出）；其餘是一般 JUnit 測試（<code>auth/</code>、<code>service/</code>、<code>config/</code> 等）。舊整合線的 glue 是 <code>com.athena.tms.integration.stepdefs</code></td></tr>
           </tbody>
         </table></div>
@@ -211,7 +211,7 @@ JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
 
       <h4 class="sub">② 怎麼跑？</h4>
       <p>腳本<b>不會</b>幫你起後端，要先自己起，而且一定要帶 <code>test-support</code> 設定檔（<code>SPRING_PROFILES_ACTIVE=test-support</code>）。只有帶了它，後端才有可撥時間的測試時鐘 <code>/api/v1/test/clock</code> 與其他 <code>/api/v1/test/**</code> 測試端點；沒帶的話，腳本第一步的就緒檢查就會停下來：</p>
-      <div class="cmd"><pre class="api"><span class="c"># 先起開發堆疊＋帶 test-support 設定檔的後端（8080）</span>
+      <div class="cmd"><pre class="api"><span class="c"># 先起開發堆疊（含照片模擬服務 4443，沒有它後端起不來）＋帶 test-support 設定檔的後端（8080）</span>
 docker compose up -d
 TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support \
   JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run</pre></div>
@@ -298,7 +298,7 @@ BACKEND_URL=http://127.0.0.1:8081 BACKEND_DB_PORT=5434 \
       <p>櫃檯網頁以 <code>desktop</code> 跑整套。<code>ipad</code> 跑整個目錄時，腳本只跑標了 <code>@ipad</code> 的 feature，也就是畫面會因尺寸或觸控而不同的那幾份；其餘行為在兩種尺寸下相同，不必整套重跑。新寫的規格只要有 iPad 專屬的畫面或手勢，就在「功能:」上一行加 <code>@ipad</code>。指定單一份 feature 時照樣全跑；真的要整套都跑 iPad，設 <code>IPAD_ALL_SCENARIOS=1</code>。</p>
 
       <h4 class="sub">② 怎麼跑？</h4>
-      <p>先 <code>docker compose up -d</code>；腳本會自己起 8080 後端與 5199 vite，但<b>不會</b>幫你起容器。</p>
+      <p>先 <code>docker compose up -d</code>；腳本會自己起 8080 後端與 5199 vite，但<b>不會</b>幫你起容器，開跑前會確認 Postgres、Kafka 與照片模擬服務 4443 都連得上。</p>
       <div class="cmd"><pre class="api">bash app/web-bdd/run-feature.sh frontdesk-web/待派單/待派單清單.feature desktop</pre></div>
       <details>
         <summary>完整參數、路徑規則與腳本流程 <span class="hint">— --keep／--stop、住客頁、dry-run、結束碼、日誌位置</span></summary>
@@ -313,7 +313,7 @@ bash app/web-bdd/run-feature.sh --stop                              <span class=
 <span class="c"># 只檢查句型（仍會先起後端與 vite）</span>
 MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &lt;路徑&gt;</pre></div>
         <p><b>路徑規則</b>：以 <code>guest-web/</code> 或 <code>frontdesk-web/</code> 開頭就相對於 <code>specs/truth/features/</code>，否則相對於 <code>frontdesk-web/</code>。可以指整份 feature、一個模組目錄，或單一場景（<code>xxx.feature:18</code>，冒號後是場景那一行的行號）。不給 profile 時 <code>guest-web/</code> 用 <code>phone</code>，其餘用 <code>desktop</code>。</p>
-        <p><b>腳本依序</b>：檢查 JDK 25、必要指令與 Playwright 瀏覽器 → 取目錄鎖（<code>app/web-bdd/target/run-feature/lock</code>）→ 確認 5433 與 9092 連得上 → install bdd-support → 起 8080 後端（沒有 jar 或原始碼比 jar 新就重建，約 30 秒）→ 起 vite 5199 → <code>mvn test</code> → 收掉自己起的行程。</p>
+        <p><b>腳本依序</b>：檢查 JDK 25、必要指令與 Playwright 瀏覽器 → 取目錄鎖（<code>app/web-bdd/target/run-feature/lock</code>）→ 確認 5433、9092 與 4443 連得上 → install bdd-support → 起 8080 後端（沒有 jar 或原始碼比 jar 新就重建，約 30 秒）→ 起 vite 5199 → <code>mvn test</code> → 收掉自己起的行程。</p>
         <p><b>結束碼</b>：0 通過、2 環境問題、130／143 被中斷，其他是 mvn 的結束碼。日誌在 <code>app/web-bdd/target/run-feature/{backend,web,test}.log</code>，報表在 <code>app/web-bdd/target/cucumber-reports/frontdesk-web.html</code>，失敗時會把開著的分頁截圖附進報表。</p>
         </div>
       </details>
@@ -366,7 +366,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
 <section id="bdd-support">
   <h2>App 與網頁的測試資料怎麼準備？為什麼不走後端 API？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p><code>app/bdd-support</code> 讓「假設」步驟直接用 JDBC 寫資料庫，「當」與讀回一律走正式 REST。後端刻意沒有測試用的造資料端點。代價是種資料的 SQL 要跟著資料表結構手動維護。</p>
+    <p><code>app/bdd-support</code> 讓「假設」步驟直接用 JDBC 寫資料庫（只有照片例外，要經正式 API 上傳），「當」與讀回一律走正式 REST。後端刻意沒有測試用的造資料端點。代價是種資料的 SQL 要跟著資料表結構手動維護。</p>
   </div>
   <p>黑箱驗收最大的麻煩是「假設」：要讓畫面出現一張「工務已認領、做到一半」的單，得先讓後端資料處於那個狀態。</p>
 
@@ -384,6 +384,8 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
     <p><code>resetBusinessData()</code>（<code>BackendChannel.java:436</code>）在同一個交易裡先 <code>LOCK TABLE</code> 再 <code>TRUNCATE … RESTART IDENTITY CASCADE</code>，避免與後端查詢互相卡死。</p>
     <p><b class="lbl">權衡</b>後端行為規格測試另有自己的 <code>tms/src/test/.../bdd/support/*Fixtures</code>，兩邊的 SQL 是<b>手動對照維護</b>的：改了一邊，要記得檢查另一邊。</p>
   </div>
+
+  <p>照片是唯一的例外。工務單照片的內容必須真的存在照片模擬服務裡，畫面才讀得到，光寫一列資料庫不夠；所以 <code>insertReportPhotos</code>、<code>replaceRepairPhotos</code> 以上傳者的身分經正式 API 建立並上傳照片，再用 SQL 把照片綁到工務單（<code>BackendChannel.java:1389-1416</code>）。上傳者必須是同一個 <code>BackendChannel</code> 建過、知道帳密的員工。每張照片都是內容不同、真的解得開的 1 × 1 JPEG：只有開頭結尾記號的假 JPEG 過得了後端檢查，但 App 與瀏覽器會顯示「照片無法顯示」。另有 <code>markLegacyPhoto</code>（把照片改成舊版留下的樣子）、<code>repairPhotoIds</code>（照工務單詳情的排序列出照片編號）、<code>photoContent</code>（以某位員工身分讀照片）。所以跑 App 線與網頁線時，後端連的照片模擬服務 4443 一定要在。</p>
 
   <p>內建兩組預設資料：App 線的「測試飯店」（代碼 <code>test-hotel</code>，密碼 <code>demo1234</code>）；櫃檯網頁的「雅典娜酒店」（代碼 <code>athena</code>，密碼 <code>Tms12345</code>，12 個帳號 <code>F0101</code>…<code>O0001</code>，客房 2–5 樓每層 01–16）。</p>
   <p>員工編號刻意不跟其他飯店重複，因為後端登入沒帶飯店代碼時會跨飯店找帳號（<a href="backend.html#auth">登入怎麼決定飯店</a>）。</p>
@@ -403,7 +405,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
   </div>
   <figure>
     <div class="figwrap">
-    <svg viewBox="0 0 980 710" role="img" aria-label="三條測試線與共用件：specs/truth/features 分別被後端、App、網頁三條測試線讀取；後端線用 Testcontainers 自帶 Postgres 與 Kafka；App 線經 Appium 4723 操作 simulator 內的 Flutter App，App 有測試後門 9099；網頁線經 Playwright 三組瀏覽器開 vite 5199；App 與 vite 都連到 8080 的後端 jar，後端讀寫開發 Postgres 5433 與 Kafka 9092；bdd-support 直接寫 Postgres 種資料">
+    <svg viewBox="0 0 980 710" role="img" aria-label="三條測試線與共用件：specs/truth/features 分別被後端、App、網頁三條測試線讀取；後端線用 Testcontainers 自帶 Postgres、Kafka 與照片模擬服務；App 線經 Appium 4723 操作 simulator 內的 Flutter App，App 有測試後門 9099；網頁線經 Playwright 三組瀏覽器開 vite 5199；App 與 vite 都連到 8080 的後端 jar，後端讀寫開發 Postgres 5433、Kafka 9092 與照片模擬服務 4443；bdd-support 直接寫 Postgres 種資料">
       <defs>
         <marker id="hv-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow"/></marker>
         <marker id="hv-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sk-arrow-acc"/></marker>
@@ -446,7 +448,8 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
       <text class="sk-t sk-t-b" x="230" y="466" text-anchor="middle">Kafka 4.0.0</text>
       <text class="sk-t-s" x="230" y="488" text-anchor="middle">容器</text>
       <text class="sk-t-acc" x="160" y="550" text-anchor="middle">Testcontainers 自己起，埠隨機</text>
-      <text class="sk-t-s" x="160" y="570" text-anchor="middle">不碰 5433／9092，不需先 docker compose</text>
+      <text class="sk-t-s" x="160" y="570" text-anchor="middle">另有照片模擬服務容器；不碰 5433／9092／4443</text>
+      <text class="sk-t-s" x="160" y="590" text-anchor="middle">不需先 docker compose</text>
 
       <path class="sk-edge" d="M 490 242 Q 494 266 490 288" marker-end="url(#hv-a)"/>
       <text class="sk-t-lb" x="502" y="270">點擊、輸入</text>
@@ -476,6 +479,7 @@ MAVEN_ARGS="-Dcucumber.execution.dry-run=true" bash app/web-bdd/run-feature.sh &
       <text class="sk-t sk-t-b" x="396" y="550">後端 jar :8080</text>
       <text class="sk-t-s" x="396" y="572">profile：test-support</text>
       <text class="sk-t-s" x="396" y="586">（App 線可改連隔離的 8081）</text>
+      <text class="sk-t-lb" x="396" y="612">照片存到模擬服務 :4443</text>
       <path class="sk-edge" d="M 470 472 Q 466 498 474 520" marker-end="url(#hv-a)"/>
       <text class="sk-t-lb" x="352" y="503">API_BASE_URL（編譯期決定）</text>
       <path class="sk-edge" d="M 700 462 Q 660 500 612 532" marker-end="url(#hv-a)"/>

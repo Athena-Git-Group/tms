@@ -33,12 +33,13 @@
 <section id="setup-traps">
   <h2>裝環境時會卡在哪？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>最常見的兩個：JDK 不是 25，以及後端測試忘了帶 <code>-DargLine="-Dapi.version=1.44"</code>。啟動後端時永遠帶 <code>TMS_DB_URL</code>。</p>
+    <p>最常見的兩個：JDK 不是 25，以及後端測試忘了帶 <code>-DargLine="-Dapi.version=1.44"</code>。啟動後端時永遠帶 <code>TMS_DB_URL</code>，而且照片模擬服務 4443 要先起好。</p>
   </div>
   <ul class="rules">
-    <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:25</code> 把 JDK 路徑寫死成原機器的使用者目錄，換機器要設 <code>MANUAL_JAVA</code>。</li>
+    <li><b>JDK 版本</b>：shell 預設是 17，所有 Java 專案都要 25。<code>run-feature.sh</code> 找不到 JDK 25 會以結束碼 2 離開；手動環境的 <code>scripts/manual-env/env.sh:25-29</code> 用 <code>/usr/libexec/java_home -v 25</code> 找 JDK，JDK 25 裝在它找不到的地方時要設 <code>MANUAL_JAVA</code>。</li>
     <li><b>OrbStack＋Testcontainers</b>：OrbStack 的 Docker 29 拒絕 API 1.40 以下，而 docker-java 沒指定時退回 1.32，會看到「client version 1.32 is too old」。試過 <code>DOCKER_HOST</code>、<code>DOCKER_API_VERSION</code>、升級 Testcontainers 都沒用，<b>唯一解法是 <code>-DargLine="-Dapi.version=1.44"</code></b>，把值傳進 surefire 分出來的 JVM（<code>specs/plans/003-manager-sign-off-queues/implement-notes.md:109-114</code>）。沒有寫進任何設定檔，每次都要帶。</li>
     <li><b>Flyway 預設埠與應用預設埠不同</b>：<code>application.properties:11</code> 的 Flyway 預設連 5432、<code>:3</code> 的應用預設連 5433。沒設 <code>TMS_DB_URL</code> 時 Flyway 會連到 5432——在原機器上那是別的 Postgres。</li>
+    <li><b>照片模擬服務沒起，後端起不來</b>：後端啟動時要向 4443 的 <code>tms-fake-gcs</code> 建立照片的儲存空間，失敗就停（<code>storage/StorageConfig.java:50-57</code>），log 寫「照片儲存模擬服務 … 建立儲存空間 … 失敗」。連不上時要等滿 10 秒的時限才失敗。手動環境的 <code>up.sh</code> 只檢查 Postgres 與 Kafka 的埠（<code>scripts/manual-env/up.sh:30-37</code>），這兩個早就在跑時不會幫你補起照片模擬服務，要自己 <code>docker compose up -d</code>。</li>
     <li><b>電腦睡眠會殺掉長時間執行</b>：App 全量驗收要 60–90 分鐘，開跑前掛 <code>caffeinate -dimsu -t 28800</code>。</li>
     <li><b>macOS 內建 bash 3.2</b> 會把變數名後面緊接的全形標點吃進變數名，腳本訊息一律寫成 <code>${var}</code>。新寫腳本時照做。</li>
   </ul>
@@ -72,28 +73,29 @@
 <section id="data-traps">
   <h2>哪些操作會不小心毀掉別人的資料？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>測試會清資料庫。手動操作一律用 8083／<code>tms_manual</code>，測試永遠不要指到它。</p>
+    <p>測試會清資料庫。手動操作一律用 8083／<code>tms_manual</code>，測試永遠不要指到它。所有環境共用同一組容器，<code>docker compose down -v</code> 會一次清掉大家的資料與照片。</p>
   </div>
   <ul class="rules">
     <li><b>測試會清資料庫</b>：<code>backend.db.url</code> 千萬不要指到 <code>tms_manual</code>。</li>
     <li><b>Web 驗收的後端只能是 8080</b>（vite 代理寫死）；5300 是手動環境、5199 是驗收，不要混用。</li>
-    <li><b>推播 consumer group 寫死</b>：8083 與 8080 互相起停會讓對方推播停頓幾秒。</li>
+    <li><b><code>docker compose down -v</code> 連照片一起清</b>：照片存在 <code>tms-fake-gcs-data</code> 這個 volume，<code>-v</code> 會跟資料庫一起刪掉；只想停容器用不帶 <code>-v</code> 的 <code>docker compose down</code>。</li>
+    <li><b>舊照片顯示「照片無法顯示」</b>：照片功能做好之前建的照片，資料庫裡記的是假的存放位置，讀照片一律回 404，App 與櫃檯網頁顯示灰框。手動環境示範資料裡 <code>W-0108</code> 的完修照片就是這種；重灌資料也一樣，因為示範資料本身就是這樣寫的（<code>scripts/seed-demo.sh:436-439</code>）。</li>
   </ul>
 </section>
 
 <section id="backend-traps">
   <h2>改後端程式碼與遷移時要小心什麼？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p><code>src/main</code> 是反編譯還原的，原本的註解都沒了；既有 Flyway 遷移檔連註解都不能動；測試端點不設權限，部署時絕不能帶 <code>test-support</code> 設定檔。</p>
+    <p><code>src/main</code> 是反編譯還原的，原本的註解都沒了；既有 Flyway 遷移檔連註解都不能動；測試端點不設權限，部署時絕不能帶 <code>test-support</code> 設定檔；正式環境要以 <code>prod</code> 設定組啟動並給照片的儲存空間名稱。</p>
   </div>
   <ul class="rules">
-    <li><b><code>src/main</code> 是從編譯產物反編譯還原的</b>（<code>tms/pom.xml:15</code> 的 description 寫著 "reconstructed from compiled artifacts"）：原本的 Javadoc 與註解都沒了，風格也像反編譯產物（大量 <code>this.</code>、多餘的型別強轉）。<code>src/test</code> 是重寫過的。</li>
+    <li><b><code>src/main</code> 是從編譯產物反編譯還原的</b>（<code>tms/pom.xml:15</code> 的 description 寫著 "reconstructed from compiled artifacts"）：原本的 Javadoc 與註解都沒了，風格也像反編譯產物（大量 <code>this.</code>、多餘的型別強轉）。<code>src/test</code> 是重寫過的。改任何註解前先讀 <code>docs/14-handover/code-comments.md</code>，有一批禁用詞（守衛、空窗、投影）。</li>
     <li><b>既有 Flyway 遷移檔不能動</b>，包含註解。整理反編譯程式碼的註解時，遷移檔要排除在外。</li>
     <li><b>測試端點 <code>/api/v1/test/**</code>（含撥時鐘的 <code>/api/v1/test/clock</code>）不驗身分</b>（<code>config/TestSupportConfig.java:31-34</code> 一律 <code>permitAll</code>）。它們只在啟動時帶 <code>test-support</code> 設定檔才存在（<code>:18</code> 的 <code>@Profile</code>），所以對外部署時絕不能帶這個設定檔。</li>
-    <li><b>JWT 密鑰與 <code>tms_app</code> 密碼的預設值都是開發用</b>：正式環境要設 <code>TMS_JWT_SECRET</code>，並 <code>ALTER ROLE tms_app</code> 改密碼（<code>V1__schema.sql:387</code> 的註解）。</li>
+    <li><b>正式環境有三個值不能用預設</b>：JWT 密鑰要設 <code>TMS_JWT_SECRET</code>；<code>tms_app</code> 的密碼要 <code>ALTER ROLE tms_app</code> 改掉（<code>V1__schema.sql:387</code> 的註解）；照片要以 <code>SPRING_PROFILES_ACTIVE=prod</code> 啟動並設 <code>TMS_STORAGE_BUCKET</code>，沒給就啟動失敗，不會默默存進本機用的儲存空間（<code>application-prod.properties:1-3</code>）。</li>
     <li><b>舊整合測試還在保護舊行為</b>：<code>tms/src/test/resources/features/*.feature</code> 不是 truth，但在全套裡跑。改行為時要一起看。</li>
+    <li><b>照片上限的 413 要靠 <code>server.tomcat.max-swallow-size</code></b>：照片超過 5 MB 時後端不讀 body 就回 413，剩下的由 Tomcat 讀掉；Tomcat 預設只肯讀 2 MB，超過就直接切斷連線，手機收到的是連線錯誤而不是 413。所以 <code>application.properties:50</code> 設成 6MB，調高照片上限時要一起調。</li>
     <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單只要有一筆重試用完被標 <code>failed</code>，這張單之後的事件全部停送，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
-    <li><b>註解規範</b>：改任何註解前先讀 <code>docs/14-handover/code-comments.md</code>；有一批禁用詞（守衛、空窗、投影）。</li>
   </ul>
 </section>
 
@@ -107,8 +109,8 @@
     <li><b>Android 整條路都沒驗證過</b>：沒有 <code>google-services.json</code>，App 驗收的 <code>AppiumWorld.start()</code> 遇到 Android 直接丟 <code>UnsupportedOperationException</code>。</li>
     <li><b>預設 simulator 不存在</b>：<code>app/bdd/lib/env.sh</code> 與 <code>AppiumWorld.java:92</code> 寫死的 <code>79F32D5C-7A71-47D6-AA8D-8142E68CFF48</code> 在原機器的 <code>simctl list</code> 裡找不到，一律用 <code>UDID=</code> 指定（例如 <code>iPhone 18 Pro</code>＝<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）。</li>
     <li><b>App 連哪個後端是編譯期決定的</b>，不帶 <code>API_BASE_URL</code> 就連 8080（資料會被測試清掉）。</li>
-    <li><b>token 只在記憶體、沒有逾時、沒有統一 401 處理</b>：token 過期後的行為要自己留意。</li>
-    <li><b>iOS 沒有 App Transport Security 例外</b>：實機連 http 區網 IP 會被擋。</li>
+    <li><b>token 只在記憶體、一般請求沒有逾時、沒有統一 401 處理</b>：token 過期後的行為要自己留意。只有讀照片有 10 秒逾時。</li>
+    <li><b>iOS 沒有 App Transport Security 例外</b>：實機連 http 區網 IP 會被擋。另外拍照與從相簿選照片在自動化測試裡一律換成固定的測試照片，真的相機、相簿與相簿裡 HEIC／PNG 的轉檔只能在真機上手動試。</li>
     <li><b>程式裡找不到 TODO</b>：註解已清理過，待辦要看各輪的 <code>specs/plans/*/tasks.md</code> 與 <code>implement-notes.md</code>。</li>
   </ul>
 </section>
@@ -167,7 +169,7 @@
         <tr><td class="id">U15</td><td>Jackson 2 與 3 並存，程式實際用哪一個</td><td><code>OutboxRelay</code>、<code>TaskEventsSseConsumer</code> 有注入 <code>ObjectMapper</code>，沒逐檔確認是哪個套件的</td><td>grep <code>import com.fasterxml</code> 與 <code>import tools.jackson</code></td></tr>
         <tr><td class="id">U17</td><td>反編譯的來源細節</td><td>「後端 <code>src/main</code> 由某個 commit 用 CFR 反編譯還原」只有口頭紀錄；repo 裡能佐證的只有 <code>tms/pom.xml:15</code> 的 description</td><td><code>git log --follow</code> 看 <code>tms/src/main</code> 的最早 commit</td></tr>
         <tr><td class="id">U18</td><td>Firebase 設定檔與 FCM 憑證路徑在正式環境放哪</td><td>後端讀 <code>tms.push.fcm.credentials-path</code>，空值就只記 log；部署方式沒有文件</td><td>與部署負責人確認</td></tr>
-        <tr><td class="id">U16</td><td>還沒讀過的程式</td><td><code>RolePermissions.frontdeskWebRoles()</code>（櫃檯網頁角色定義）、<code>scripts/seed-demo.sh</code>、<code>scripts/manual-env/seed.sh</code>、<code>lib/core/repair_photo_capture.dart</code> 的內容；後端套件表是依目錄抽樣，不是逐檔閱讀</td><td>需要時再讀</td></tr>
+        <tr><td class="id">U16</td><td>還沒讀過的程式</td><td><code>RolePermissions.frontdeskWebRoles()</code>（櫃檯網頁角色定義）、<code>scripts/seed-demo.sh</code>、<code>scripts/manual-env/seed.sh</code> 的內容；後端套件表是依目錄抽樣，不是逐檔閱讀</td><td>需要時再讀</td></tr>
       </tbody>
     </table></div></div>
   </details>

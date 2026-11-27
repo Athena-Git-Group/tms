@@ -74,7 +74,7 @@ app/bdd/run-all.sh          <span class="c"># 全部模組，約 60–90 分鐘<
   <div class="opt great">
     <h4><span class="tag">現在的做法</span>現況一份、變更一包包，中間用 truth-delta 對帳</h4>
     <p><code>specs/truth/</code> 只寫現況：<code>contracts/</code> 是 API 契約（入口 <code>openapi.yaml</code>，細節依業務分在 <code>groups/</code>），<code>data/data-model.dbml</code> 是資料模型，<code>features/</code> 是可執行的規格，另有 <code>techstack.md</code> 記技術選型。</p>
-    <p><code>specs/plans/</code> 底下每個 <code>NNN-名稱/</code> 是一次需求變更的工作包，目前有 001 到 008。每包裡的 <code>truth-delta.md</code> 逐列記下這次把 truth 的哪一塊新增、修改、刪除或確認不動，以及理由，常附上程式位置。</p>
+    <p><code>specs/plans/</code> 底下每個 <code>NNN-名稱/</code> 是一次需求變更的工作包，目前有 001 到 009。每包裡的 <code>truth-delta.md</code> 逐列記下這次把 truth 的哪一塊新增、修改、刪除或確認不動，以及理由，常附上程式位置。</p>
     <p><b class="lbl">權衡</b>每次需求都要同時維護兩處，而且 truth 必須在實作前先改好。換來的是現況永遠可直接讀，歷史也查得到。</p>
   </div>
   <details>
@@ -168,7 +168,7 @@ app/bdd/run-all.sh          <span class="c"># 全部模組，約 60–90 分鐘<
     <li><b>用 IntelliJ 的 Find Usages</b>（⌥F7）：看一個方法被誰呼叫，比讀全檔快得多。</li>
     <li><b>先讀規格再讀程式</b>：<code>src/main</code> 是從編譯檔反編譯還原的，原本的註解都不在了，還有不少多餘的型別轉換。想知道某個行為「應該」怎樣，先看 <code>specs/truth/features/backend/</code>。</li>
   </ul>
-  <div class="cmd"><pre class="api"><span class="c"># 起後端（先 docker compose up -d；連 5433 的 Postgres 與 9092 的 Kafka）</span>
+  <div class="cmd"><pre class="api"><span class="c"># 起後端（先 docker compose up -d；連 5433 的 Postgres、9092 的 Kafka、4443 的照片模擬服務）</span>
 TMS_DB_URL=jdbc:postgresql://localhost:5433/tms \
   JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run</pre></div>
   <p><code>TMS_DB_URL</code> 不能省：沒設時資料庫遷移（Flyway）會預設連 5432，與應用本身的 5433 不同。根目錄沒有 <code>./mvnw</code>，後端一律用 <code>./tms/mvnw</code>。套件分法、多飯店隔離、登入與設定檔，見 <a href="backend.html">Java 後端</a>；遷移檔為什麼一個字都不能改，見 <a href="backend.html#flyway">遷移規矩</a>。</p>
