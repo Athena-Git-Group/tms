@@ -246,10 +246,24 @@
   <h3 id="realtime-outbox">事件怎麼從資料庫送進 Kafka？</h3>
   <p><b>待送匣（outbox）</b>是資料庫裡的一張表，作用像寄信前先放進的待寄籃：要送出去的事件先寫在這裡，再由專人投遞。</p>
   <p><code>TaskEngine</code> 的每個狀態方法都包在一個交易裡，寫 <code>task_events</code> 的同時也寫一筆 outbox。兩者一起成功或一起失敗，所以不會「資料改了，事件沒記」，也不會「事件送了，資料卻回復原狀」。</p>
-  <p>投遞的是 <code>OutboxRelay</code>，一條背景執行緒。交易一提交它就被叫醒；沒人叫的話最多等 2 秒自己巡一次。每一輪逐家飯店撈出待送的紀錄，按單號分組依序送：<b>同一張單前一筆沒送成功，後面的先不送</b>，所以同一張單的事件不會亂序。</p>
-  <p>送上 Kafka 時，訊息的 key 就是 <code>task:&lt;單號&gt;</code>。Kafka 的一個主題會切成幾條平行的隊伍，叫<b>分區</b>；同一個 key 一定進同一條分區，所以讀的那端看到的也是原本的順序。</p>
-  <p>送失敗會等一下再試，間隔每次加倍（1 秒、2 秒、4 秒…）。8 次都失敗、再等完最後一次間隔（128 秒）就標為 <code>failed</code>，而且<b>這張單之後的事件全部停送，要人工處理</b>。推播用另一把 key（<code>push:task:&lt;單號&gt;</code>），推播卡住不會連帶擋住看板訊號。</p>
-  <p>多台後端都會跑 relay。每台送之前先在那筆紀錄上搶 60 秒的租約，租約內別台不碰，所以同一筆不會被兩台同時送。</p>
+  <p>投遞的是 <code>OutboxRelay</code>：每台後端有 4 條送件的背景執行緒，另有一條負責補漏。交易一提交，只有寫了 outbox 的那家飯店會被叫醒、排進送件的隊伍。補漏那條每 2 秒問資料庫一次「哪幾家飯店有到期該送的紀錄」，把它們也叫醒；重試、別台後端寫進來的紀錄、當掉的後端沒送完的紀錄，都靠它接手。</p>
+  <p>outbox 裡的紀錄分成一條條<b>隊伍</b>：同一張單的看板事件是一條，同一張單的推播是另一條。每次只拿每條隊伍最前面那一筆來送，<b>前一筆沒送成功，後面的先不送</b>，所以同一張單的事件不會亂序。看板與推播各走各的隊伍，一條卡住不會擋住另一條。</p>
+  <p>送上 Kafka 時，訊息的 key 是 <code>task:&lt;單號&gt;</code>（請假與下班提醒的推播用自己的 key），看板事件進 <code>tms.task-events</code>，推播進 <code>tms.push</code>。Kafka 的一個主題會切成幾條平行的隊伍，叫<b>分區</b>，正式設定是 12 條；同一個 key 一定進同一條分區，所以讀的那端看到的也是原本的順序。分區數只能加不能減，而且一加就會讓同一張單換到別的分區、短暫亂序，所以要在第一家客戶上線前定好。</p>
+  <p>送失敗會等一下再試，間隔每次加倍：1 秒、2 秒、4 秒，一路到 128 秒。第 8 次也失敗、等完那 128 秒之後，下一次輪到它時直接標成 <code>failed</code>，不再送；<b>這條隊伍之後的事件全部停送，要人工處理</b>。</p>
+  <p>多台後端會同時替同一家飯店送。拿到某條隊伍最前面那一筆時，資料庫在同一個語句裡把它保留 60 秒，叫<b>租約</b>；租約期間整條隊伍別人都拿不到，所以同一筆不會被兩台同時送，後面的也插不了隊。送完後成功就標 <code>sent</code>，失敗就把租約換成重試的等待時間。後端啟動時會檢查 60 秒比一回合最久可能卡住的時間長（兩段 5 秒的送出等待、10 秒的確認等待、5 秒的資料庫語句上限，共 25 秒），不夠長就拒絕啟動。</p>
+
+  <h3 id="realtime-fairness">一家飯店積壓或出問題，怎麼不拖慢其他飯店？</h3>
+  <p>所有飯店共用同一套 Kafka，也共用同一批送件執行緒。某家飯店一口氣進來幾千筆，或資料被一個很久的交易鎖住，送件的執行緒就可能整個卡在它身上，其他飯店的看板跟著不動。</p>
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>依序把每家飯店送完，或依飯店編號固定分給某條執行緒</h4>
+    <p>前者讓排在前面、積了 2,000 筆的飯店先送完，後面的飯店只能乾等；後者讓分到同一條執行緒的飯店互相拖累。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>飯店排隊、每輪限量、出錯的先暫停</h4>
+    <p>有東西要送的飯店排成一列，4 條執行緒輪流從列頭拿一家。每家一輪最多送 100 筆或約 250 毫秒，還有剩就排回列尾，讓等著的飯店先輪。所以任何一家新寫進去的事件，最多等排在它前面的每家各送一輪。同一家飯店在同一台後端上，同時只有一條執行緒在送。</p>
+    <p>一輪裡出錯的飯店（例如等鎖超過 1 秒、資料庫語句超過 5 秒）會暫停，第一次 1 秒，之後每次加倍，最長 60 秒；有一輪順利做完就歸零。暫停期間的喚醒不理，暫停結束後由下一次喚醒或補漏重新排入。</p>
+    <p><b class="lbl">權衡</b>這個設計擋的是「單一飯店出事」。Kafka 整個變慢時，一回合可能卡十幾秒，4 條執行緒一起被佔住，所有飯店都會變慢。不用每家飯店一條執行緒，是因為那樣補漏得逐家查詢，查詢量跟著飯店數長；現在一條查詢就問完所有飯店。每家飯店各自的推播限速沒有做。</p>
+  </div>
 
   <h3 id="realtime-broadcast">為什麼每台後端都要收到全部訊息？</h3>
   <p>網頁和後端之間靠 <b>SSE（伺服器推送事件）</b>：網頁對後端開一條不關的 HTTP 連線，後端有事就往裡面寫一段，網頁不必來問。這條連線只會掛在某<b>一台</b>後端上。</p>
@@ -264,8 +278,9 @@
     <p><code>TaskEventsSseConsumer</code> 的組名是 <code>sse-&lt;隨機 UUID&gt;</code>，每台自成一組，所以每台都收到全部，再各自挑出自己身上的連線推。啟動時 log 會印出實際組名。</p>
     <p><b class="lbl">權衡</b>每多一台後端，每則事件就多一次查資料庫；目前規模可以接受。</p>
   </div>
-  <p>推播剛好相反。<code>PushDeliveryConsumer</code> 讀 <code>tms.push</code>，組名預設是 <code>tms-push-sender</code>（設定 <code>tms.push.consumer.group</code> 可改，手動環境就加了 <code>manual.</code> 前綴），同一套環境的後端共用一組，所以一則推播只會有一台送，手機不會響兩次。</p>
-  <p>隨機組名還有一個後果。群組在每條分區上讀到第幾則，記在一個叫 <b>offset</b> 的書籤裡；新組沒有書籤，設定又是「從最新位置開始讀」（<code>auto-offset-reset=latest</code>）。所以<b>後端停機期間的事件，重啟後不會補讀</b>，要靠下面說的 resync 補回來。</p>
+  <p>推播剛好相反。<code>PushDeliveryConsumer</code> 讀 <code>tms.push</code>，組名預設是 <code>tms-push-sender</code>（設定 <code>tms.push.consumer.group</code> 可改，手動環境就加了 <code>manual.</code> 前綴），同一套環境的後端共用一組，所以一則推播只會有一台送，手機不會響兩次。每台用 3 條執行緒讀。</p>
+  <p>推播送不出去、而且是暫時性的（FCM 暫時故障、資料庫連不上），訊息會轉到另外的重試主題，依序等 1、2、4 秒再試，不卡在原分區擋住後面別家飯店的推播。3 次重試都失敗，就放進 <code>tms.push.DLT</code>。<b>DLT</b>（dead letter topic）是放棄處理的訊息另存的主題，這裡只記 log 與計數，不會再送。不屬於暫時性的錯誤不重試，直接進 DLT；內容缺欄位的訊息則記 log 後略過。</p>
+  <p>隨機組名還有一個後果。群組在每條分區上讀到第幾則，記在一個叫 <b>offset</b> 的書籤裡；新組沒有書籤，設定又是「從最新位置開始讀」（<code>auto-offset-reset=latest</code>）。所以<b>後端停機期間的事件，重啟後不會補讀</b>，要靠下面說的 resync 補回來。推播不一樣：組名固定、書籤一直在，所以全部後端停機期間進來的推播，重啟後會接著送。</p>
 
   <h3 id="realtime-route">後端收到事件後做了什麼、怎麼決定推給誰？</h3>
   <p>每台後端的 SSE 消費者對每則事件依序做這幾件事：</p>
@@ -334,7 +349,8 @@
 
   <h3 id="realtime-failure">Kafka 掛掉或後端重啟時會怎樣？</h3>
   <p>原則跟前面一樣：訊息掉了只會慢、不會錯，因為網頁最後都會從資料庫重讀。差別在於「多久之後」以及「要不要有人出手」。</p>
-  <p><b>Kafka 掛掉</b>時，寫入照常，事件都還在 outbox 裡等。relay 會間隔加倍地重試，Kafka 回來後依序補送。斷線約 5 分鐘內恢復不會出事，最多晚兩分鐘補送。但依程式碼推算，停超過約 5 到 6 分鐘，斷線當下正在排隊的每張單，最前面那一筆會重試用完、被標 <code>failed</code>，這張單之後就停送等人工；斷線期間才新增的單，要自己撐滿約 5 到 6 分鐘才會被標。</p>
+  <p><b>Kafka 掛掉</b>時，寫入照常，事件都還在 outbox 裡等，relay 照前面的間隔重試。Kafka 連不上時，每次嘗試要先空等 5 到 10 秒才判定失敗：5 秒是送出前等 Kafka 回應的上限（<code>max.block.ms</code>），10 秒是整筆送出的上限（<code>delivery.timeout.ms</code>）。會碰到哪一個，要看 Kafka 用戶端手上是否還留著主題資訊，程式碼看不出來。把 8 次嘗試和中間 7 段間隔加起來，一條隊伍從第一次送失敗算起，第 8 次嘗試落在約 2 分 40 秒到 3 分 20 秒之後。</p>
+  <p>所以 Kafka 在那之前恢復，這條隊伍最多再晚約一分鐘（當時正在等的那段間隔）就依序補上。停得比這更久，第 8 次也失敗，再等 128 秒，大約在第 5 分到 5 分半被標 <code>failed</code>，<b>就算 Kafka 那時已經恢復也一樣</b>。每條隊伍的時間從它自己第一次送失敗開始算；排隊的飯店與隊伍越多，輪到的間隔越長，實際時間只會更晚、不會更早。</p>
   <p>網頁這端，讀 Kafka 的元件若發出「停止」或「沒回應」的通知，後端會進入降級，網頁改成定時重讀，恢復時再整份重讀。不過 Kafka 掛掉時框架是否一定發出這些通知，屬於框架行為，程式碼無法保證；沒發的話，網頁只是暫時收不到訊號，畫面停在舊的狀態。</p>
   <p><b>後端重啟</b>時，掛在那台上的網頁會斷線，1 秒後重連。連上後必定收到 <code>resync</code> 並整份重讀，停機期間漏掉的變動就這樣補回來。消費者本身不補讀那段期間的事件。</p>
   <details>
@@ -343,8 +359,10 @@
     <div class="tablewrap"><table>
       <thead><tr><th>情境</th><th>寫入</th><th>網頁看到</th><th>怎麼恢復</th><th>人工</th></tr></thead>
       <tbody>
-        <tr><td>Kafka 短暫斷線</td><td>照常</td><td>訊號延遲；若後端進入降級，顯示警示並每 4 秒重讀</td><td>relay 重試後依序補送；<code>recovered</code> 時整份重讀</td><td>不用</td></tr>
-        <tr><td>Kafka 停超過約 5 到 6 分鐘，某筆重試 8 次用完</td><td>照常</td><td>那張單之後不再有訊號，只能靠重讀看到</td><td>無法自動恢復</td><td>要：查 <code>outbox</code> 裡 <code>status = 'failed'</code> 的紀錄</td></tr>
+        <tr><td>Kafka 斷線，在隊伍第 8 次嘗試前恢復（約 3 分鐘內）</td><td>照常</td><td>訊號延遲；若後端進入降級，顯示警示並每 4 秒重讀</td><td>relay 重試後依序補送，最多晚約一分鐘；<code>recovered</code> 時整份重讀</td><td>不用</td></tr>
+        <tr><td>Kafka 停超過約 3 分鐘，某條隊伍第 8 次嘗試也失敗</td><td>照常</td><td>約 5 分鐘後那張單之後不再有訊號，只能靠重讀看到</td><td>無法自動恢復，Kafka 回來也一樣</td><td>要：查 <code>outbox</code> 裡 <code>status = 'failed'</code> 的紀錄；改回 <code>pending</code>、<code>attempts</code> 歸零、<code>next_retry_at</code> 清空就會重新排隊</td></tr>
+        <tr><td>某家飯店的資料被鎖住或查詢太慢</td><td>其他飯店照常</td><td>只有那家飯店的訊號延遲</td><td>那家暫停 1 秒起、加倍到最長 60 秒後再試</td><td>不用</td></tr>
+        <tr><td>推播暫時送不出去</td><td>照常</td><td>看板不受影響；手機晚幾秒才響</td><td>重試主題等 1、2、4 秒再試；都失敗就進 <code>tms.push.DLT</code></td><td>進了 DLT 的不會自動重送，只有 log 與計數</td></tr>
         <tr><td>後端某台重啟</td><td>其他台照常</td><td>斷線約 1 秒後重連</td><td>重連必送 <code>resync</code>，整份重讀</td><td>不用</td></tr>
         <tr><td>消費者落後超過 10 秒</td><td>照常</td><td>警示加每 4 秒重讀</td><td>跟上後送 <code>recovered</code></td><td>不用</td></tr>
         <tr><td>某則事件處理出錯</td><td>照常</td><td>這一則沒推到</td><td>下次重讀或重連時對回來</td><td>不用</td></tr>
@@ -361,18 +379,19 @@
       <thead><tr><th>環節</th><th>位置</th></tr></thead>
       <tbody>
         <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:491-503</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
-        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :51-53、巡查 :127）、<code>service/HotelRelayTurn.java</code>（撈待送 :166、送出 :174-205）</td></tr>
-        <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:20-30</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
+        <tr><td>relay 喚醒、補漏、依隊伍依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :51-53、補漏 :127）、<code>service/HotelRelayTurn.java</code>（認領隊伍頭的 SQL :74-106、撈待送 :166、送出 :174-205、退避 :247-249）</td></tr>
+        <tr><td>飯店排隊、每輪限量、出錯暫停</td><td><code>service/HotelRunQueue.java</code>、<code>service/RelaySettings.java</code>（程式內預設值）、遷移檔 <code>V32__outbox_relay_by_tenant.sql</code>（補漏查詢的函式）</td></tr>
+        <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:15-30</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
         <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :79、降級 :90-115、去重 :186-196）</td></tr>
         <tr><td>連線端點與權限</td><td><code>controller/StaffStreamController.java:17-21</code>、<code>config/SecurityConfig.java:50-51</code>、<code>filter/BearerTokenAuthFilter.java:49-53</code></td></tr>
         <tr><td>連線註冊表與過濾規則</td><td><code>service/StreamConnectionRegistry.java</code>、<code>service/StreamSubscriber.java:22-49</code>、<code>service/StreamConnection.java</code></td></tr>
         <tr><td>心跳與降級原因</td><td><code>service/StreamHeartbeat.java</code>、<code>service/StreamDegradation.java</code></td></tr>
-        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:53-81</code>、<code>push/PushDeliveryKafkaConfig.java:43-57</code></td></tr>
+        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:53-81</code>、<code>push/PushDeliveryKafkaConfig.java</code>（讀取設定 :41-64、重試主題與 DLT :66-94）</td></tr>
         <tr><td>網頁連線與重連</td><td><code>features/realtime/use-live-updates.ts</code>、<code>stream-client.ts</code>、<code>live-connection.ts</code></td></tr>
         <tr><td>網頁換卡與重讀</td><td><code>features/realtime/follow-board.ts</code>、<code>stream-task.ts</code>、<code>refetch-on-signal.ts</code>、<code>lib/board-sync.ts</code>、<code>shell/DeskShell.tsx</code></td></tr>
       </tbody>
     </table></div>
-    <p>Spring Kafka 的確認模式與並行數，SSE 消費者在程式碼裡沒有設定，用框架預設；推播消費者則明確設為逐筆確認，重試用完轉進 <code>tms.push.DLT</code>。</p>
+    <p>Spring Kafka 的確認模式與並行數，SSE 消費者在程式碼裡沒有設定，用框架預設；推播消費者則明確設為逐筆確認、3 條執行緒、沒有書籤時從最早的位置讀；DLT 的讀取第一次上線從最新位置開始，舊的不重記。</p>
     </div>
   </details>
 
@@ -412,7 +431,7 @@
     <tbody>
       <tr><td>應用連線（<code>:3-5</code>）</td><td><code>jdbc:postgresql://localhost:5433/tms</code>，帳號 <code>tms_app</code>／<code>tms_app</code></td><td><code>TMS_DB_URL</code>、<code>TMS_DB_USER</code>、<code>TMS_DB_PASSWORD</code></td></tr>
       <tr><td>Flyway 連線（<code>:11-13</code>）</td><td><code>jdbc:postgresql://localhost:<b>5432</b>/tms</code>，帳號 <code>tms</code>／<code>tms</code></td><td>同樣讀 <code>TMS_DB_URL</code>；<code>TMS_DB_ADMIN_USER</code>、<code>TMS_DB_ADMIN_PASSWORD</code></td></tr>
-      <tr><td>Kafka（<code>:15-19</code>）</td><td><code>localhost:9092</code>；topic <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code></td><td><code>TMS_KAFKA_BOOTSTRAP</code></td></tr>
+      <tr><td>Kafka（<code>:15-20</code>）</td><td><code>localhost:9092</code>；topic <code>tms.task-events</code>、<code>tms.push</code>，各 12 個分區，後端啟動時自己建立；推播的重試主題與 <code>tms.push.DLT</code> 由框架照 <code>tms.push</code> 的名字推導</td><td><code>TMS_KAFKA_BOOTSTRAP</code></td></tr>
       <tr><td>JWT（<code>:36-37</code>）</td><td>開發用的不安全密鑰；效期 12 小時</td><td><code>TMS_JWT_SECRET</code></td></tr>
       <tr><td>FCM 憑證（<code>:39</code>）</td><td>空字串＝不打 FCM，只寫 log 與 <code>push_deliveries</code></td><td><code>TMS_PUSH_FCM_CREDENTIALS_PATH</code>（Spring 寬鬆綁定）或 <code>--tms.push.fcm.credentials-path=</code></td></tr>
       <tr><td>照片儲存空間</td><td><code>tms-repair-photos-local</code>；<code>prod</code> 設定組下沒有預設值，沒給就啟動失敗</td><td><code>TMS_STORAGE_BUCKET</code></td></tr>
@@ -428,10 +447,12 @@
     <summary>Kafka producer 與 relay 的數值 <span class="hint">— 改其中任何一個前先看這裡</span></summary>
     <div class="in">
     <ul class="plain">
-      <li>Kafka producer（<code>:22-26</code>）：<code>acks=all</code>、冪等開啟、<code>max.block.ms=5000</code>、<code>delivery.timeout.ms=10000</code>。</li>
-      <li>outbox relay（<code>:28-30</code>）：輪詢 2s、送出逾時 10s、認領租約 60s；程式內最多重試 8 次。</li>
+      <li>Kafka producer（<code>:22-26</code>）：<code>acks=all</code>、冪等開啟、<code>max.block.ms=5000</code>、<code>request.timeout.ms=9000</code>、<code>delivery.timeout.ms=10000</code>。</li>
+      <li>outbox relay（<code>:28-30</code>）：補漏間隔 2s、送出逾時 10s、認領租約 60s。</li>
+      <li>outbox relay 沒寫在設定檔、用程式內預設的（<code>service/RelaySettings.java</code>）：最多 8 次、退避從 1s 起加倍、4 條執行緒、每輪 100 筆或 250ms、一次最多看 1000 筆、等鎖 1s、語句 5s、飯店暫停最長 60s。</li>
+      <li>推播（<code>:40-44</code>）：重試從 1s 起、最多 3 次、最長間隔 30s；3 條讀取執行緒；組名 <code>tms-push-sender</code>。</li>
     </ul>
-    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於兩倍 <code>max.block.ms</code>、送出逾時與資料庫語句逾時三者的總和；違反就直接拋錯不啟動（<code>HotelRelayTurn.java:129-135</code>）。測試設定檔把 relay 輪詢縮成 200ms、推播重試縮成 50ms，資料庫與 Kafka 位址由 Testcontainers 注入。</p>
+    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於兩倍 <code>max.block.ms</code>、送出逾時與資料庫語句逾時三者的總和；違反就直接拋錯不啟動（<code>HotelRelayTurn.java:129-135</code>）。測試設定檔把 relay 補漏間隔縮成 200ms、分區數設成 1（同一主題的訊息才有確定的先後），推播重試間隔維持 1 秒；資料庫與 Kafka 位址由 Testcontainers 注入。</p>
     </div>
   </details>
 </section>

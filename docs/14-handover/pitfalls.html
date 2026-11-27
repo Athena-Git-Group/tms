@@ -95,7 +95,7 @@
     <li><b>正式環境有三個值不能用預設</b>：JWT 密鑰要設 <code>TMS_JWT_SECRET</code>；<code>tms_app</code> 的密碼要 <code>ALTER ROLE tms_app</code> 改掉（<code>V1__schema.sql:387</code> 的註解）；照片要以 <code>SPRING_PROFILES_ACTIVE=prod</code> 啟動（這個設定組把照片儲存模式設成 <code>gcs</code>，連真的雲端儲存）並設 <code>TMS_STORAGE_BUCKET</code>，沒給就啟動失敗，不會默默存進本機用的儲存空間。</li>
     <li><b>舊整合測試還在保護舊行為</b>：<code>tms/src/test/resources/features/*.feature</code> 不是 truth，但在全套裡跑。改行為時要一起看。</li>
     <li><b>照片上限的 413 要靠 <code>server.tomcat.max-swallow-size</code></b>：照片超過 5 MB 時後端不讀 body 就回 413，剩下的由 Tomcat 讀掉；Tomcat 預設只肯讀 2 MB，超過就直接切斷連線，手機收到的是連線錯誤而不是 413。所以 <code>application.properties</code> 把它設成 6MB，調高照片上限時要一起調。</li>
-    <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單只要有一筆重試用完被標 <code>failed</code>，這張單之後的事件全部停送，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
+    <li><b>即時更新不補送，靠重讀對回來</b>：後端重啟期間的 Kafka 事件不會補讀，網頁是靠重連時必收的 <code>resync</code> 整份重讀補回。另外待送匣裡某張單的看板事件只要有一筆重試用完被標 <code>failed</code>，這張單之後的看板事件全部停送（推播是另一條隊伍，同理）；Kafka 停超過約 3 分鐘就可能發生，而且 Kafka 恢復了也不會自己解開，要人工到 <code>outbox</code> 查 <code>status = 'failed'</code> 處理。詳見 <a href="backend.html#realtime-failure">Kafka 掛掉或後端重啟時會怎樣</a>。</li>
   </ul>
 </section>
 
