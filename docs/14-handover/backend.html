@@ -379,9 +379,9 @@
       <thead><tr><th>環節</th><th>位置</th></tr></thead>
       <tbody>
         <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:491-503</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
-        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :51-53、補漏 :127）、<code>service/HotelRelayTurn.java</code>（認領隊伍頭的 SQL :74-106、撈待送 :166、送出 :174-205、退避 :247-249）</td></tr>
+        <tr><td>relay 喚醒、補漏、依隊伍依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :51-53、補漏 :127）、<code>service/HotelRelayTurn.java</code>（認領隊伍頭的 SQL :74-106、撈待送 :166、送出 :174-205、退避 :247-249）</td></tr>
         <tr><td>飯店排隊、每輪限量、出錯暫停</td><td><code>service/HotelRunQueue.java</code>、<code>service/RelaySettings.java</code>（程式內預設值）、遷移檔 <code>V32__outbox_relay_by_tenant.sql</code>（補漏查詢的函式）</td></tr>
-        <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:20-30</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
+        <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:15-30</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
         <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :79、降級 :90-115、去重 :186-196）</td></tr>
         <tr><td>連線端點與權限</td><td><code>controller/StaffStreamController.java:17-21</code>、<code>config/SecurityConfig.java:50-51</code>、<code>filter/BearerTokenAuthFilter.java:49-53</code></td></tr>
         <tr><td>連線註冊表與過濾規則</td><td><code>service/StreamConnectionRegistry.java</code>、<code>service/StreamSubscriber.java:22-49</code>、<code>service/StreamConnection.java</code></td></tr>
