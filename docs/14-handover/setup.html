@@ -64,7 +64,7 @@
       <tbody>
         <tr><td><b>JDK 25</b></td><td>openjdk 25.0.2</td><td>後端與三個 Java 測試專案</td><td><code>/usr/libexec/java_home -v 25</code>；原機器預設 <code>JAVA_HOME</code> 是 17</td></tr>
         <tr><td>Maven</td><td>3.9.11</td><td>所有 Java 專案</td><td>後端用 <code>./tms/mvnw</code>；<code>app/*</code> 沒有 wrapper</td></tr>
-        <tr><td>Docker（OrbStack）</td><td>OrbStack 內建 Docker 29</td><td>開發用 Postgres＋Kafka；後端測試的 Testcontainers</td><td><code>docker context ls</code>；Testcontainers 要多帶 <code>-DargLine="-Dapi.version=1.44"</code>（<a href="pitfalls.html#setup-traps">原因</a>）</td></tr>
+        <tr><td>Docker（OrbStack）</td><td>OrbStack 內建 Docker 29</td><td>開發用 Postgres、Kafka 與照片模擬服務；後端測試的 Testcontainers</td><td><code>docker context ls</code>；Testcontainers 要多帶 <code>-DargLine="-Dapi.version=1.44"</code>（<a href="pitfalls.html#setup-traps">原因</a>）</td></tr>
         <tr><td>Flutter</td><td>3.47.9 stable（Dart 3.13.7）</td><td>員工 App 與 App 驗收</td><td><code>flutter --version</code></td></tr>
         <tr><td>Xcode＋iOS simulator</td><td>—</td><td>App 驗收</td><td><code>xcrun simctl list devices</code>。原機器可用的是 <code>iPhone 18 Pro</code>（<code>B07951C2-DF41-4AF6-9C98-0DFC7413ED8C</code>）；腳本寫死的預設 UDID 已不存在，要用 <code>UDID=</code> 指定</td></tr>
         <tr><td>Appium server</td><td>3.9.0＋XCUITest driver</td><td>App 驗收</td><td><code>appium --version</code>、<code>appium driver list --installed</code></td></tr>
@@ -86,14 +86,15 @@
 JAVA_HOME="$(/usr/libexec/java_home -v 25)" TESTCONTAINERS_RYUK_DISABLED=true \
   ./tms/mvnw -f tms/pom.xml test -DargLine="-Dapi.version=1.44"
 
-<span class="c"># 2) 起開發堆疊（Postgres 5433、Kafka 9092）</span>
+<span class="c"># 2) 起開發堆疊（Postgres 5433、Kafka 9092、照片模擬服務 4443）</span>
 docker compose up -d
 
 <span class="c"># 3) 跑一份櫃檯網頁驗收（腳本會自己起 8080 後端與 5199 vite）</span>
 bash app/web-bdd/run-feature.sh frontdesk-web/待派單/待派單清單.feature desktop</pre></div>
+  <p>第 2 步起的三個容器裡，<code>tms-fake-gcs</code> 是<b>照片模擬服務</b>：工務單照片正式環境存在 Google 雲端儲存，本機改存在這個模仿雲端儲存的開源服務（fake-gcs-server），後端用的是同一套官方程式庫，只差連線位址。後端啟動時會向它建立放照片的「儲存空間」（雲端儲存裡的一個大資料夾，英文叫 bucket），<b>連不上就啟動失敗</b>，所以只起 Postgres 與 Kafka 是不夠的。</p>
 
   <div class="callout warn">
-    <p><b>先看現況再動手。</b>已知會紅的測試清單在 <code>specs/plans/006-engineering-pool-repair-ticket/implement-notes.md</code>。第一次跑出紅燈時，先對照那份清單。</p>
+    <p><b>後端全套應該是全綠的</b>（840 個測試、0 失敗、0 錯誤），沒有「已知會紅」的清單。第一步跑出紅燈，問題就在環境或你的改動，先對照<a href="pitfalls.html#setup-traps">裝環境時會卡在哪</a>。</p>
   </div>
 </section>
 
@@ -138,7 +139,7 @@ tms/   獨立；自己的行為規格測試在 tms/src/test，不用 bdd-support
         <tr><td><code>specs/truth/</code></td><td>現行規格：可執行的 feature 檔、API 契約、資料模型、<code>techstack.md</code></td><td>中文 Gherkin、dbml、Markdown</td></tr>
         <tr><td><code>specs/plans/NNN-*/</code></td><td>每一輪需求的工作包：<code>spec.md</code>、<code>plan.md</code>、<code>tasks.md</code>、<code>implement-notes.md</code> 等</td><td>Markdown</td></tr>
         <tr><td><code>scripts/manual-env/</code></td><td>給人手動操作的獨立環境（不是測試）</td><td>bash</td></tr>
-        <tr><td><code>docker-compose.yml</code></td><td>開發堆疊：Postgres 16 與 Kafka</td><td>Docker Compose</td></tr>
+        <tr><td><code>docker-compose.yml</code></td><td>開發堆疊：Postgres 16、Kafka、照片模擬服務 fake-gcs-server；另有選用的 Kafka 管理網頁 Conduktor（<code>--profile conduktor</code> 才起）</td><td>Docker Compose</td></tr>
         <tr><td><code>docs/</code></td><td>這份交接手冊（<code>14-handover/</code>）、README 用的架構圖（<code>diagrams/</code>）、SaaS 營運後台的需求共識與原型（<code>saas/</code>）</td><td>HTML、PNG／SVG、Markdown</td></tr>
       </tbody>
     </table></div>
@@ -149,7 +150,7 @@ tms/   獨立；自己的行為規格測試在 tms/src/test，不用 bdd-support
 <section id="environments">
   <h2>測試、手動、開發三套環境為什麼要隔開？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>因為 App 與網頁驗收每個場景都會把資料庫清空。誰跟測試共用資料庫，誰的資料就會無聲消失。所以同一台 Postgres 與 Kafka 拆成互不相干的幾套邏輯環境。</p>
+    <p>因為 App 與網頁驗收每個場景都會把資料庫清空。誰跟測試共用資料庫，誰的資料就會無聲消失。所以同一台 Postgres、Kafka 與照片模擬服務拆成互不相干的幾套邏輯環境。</p>
   </div>
   <p>問題很具體：驗收在每個場景開頭都 <code>TRUNCATE</code>（清空整張表）它連到的資料庫，只留 <code>tenants</code> 與 <code>flyway_schema_history</code>。你開著 App 連 8080 手動點，同時有人在跑驗收，剛建的單下一秒就不見，而且沒有任何錯誤訊息。</p>
 
@@ -158,18 +159,19 @@ tms/   獨立；自己的行為規格測試在 tms/src/test，不用 bdd-support
     <p>手動與自動測試互相清掉對方的資料；測試又開著可撥的時鐘，手動操作時看到的「現在」可能是測試撥過的時間。</p>
   </div>
   <div class="opt great">
-    <h4><span class="tag">現在的做法</span>同一台 Postgres 與 Kafka，拆成互不相干的邏輯環境</h4>
+    <h4><span class="tag">現在的做法</span>同一套容器，拆成互不相干的邏輯環境</h4>
     <div class="tablewrap"><table>
-      <thead><tr><th>環境</th><th>後端</th><th>資料庫</th><th>Kafka</th><th>時鐘</th><th>用途</th></tr></thead>
+      <thead><tr><th>環境</th><th>後端</th><th>資料庫</th><th>Kafka</th><th>照片儲存空間</th><th>時鐘</th><th>用途</th></tr></thead>
       <tbody>
-        <tr><td><b>開發堆疊／驗收</b></td><td>8080</td><td>5433 / <code>tms</code></td><td>9092，topic <code>tms.*</code></td><td>可撥</td><td>Web 驗收、App 驗收預設</td></tr>
-        <tr><td><b>App 驗收隔離堆疊</b></td><td>8081</td><td>5434（<code>tms-bdd-postgres</code>）/ <code>tms</code></td><td>9094（<code>tms-bdd-kafka</code>）</td><td>可撥</td><td>讓 App 與 Web 驗收同時跑</td></tr>
-        <tr><td><b>手動環境</b></td><td>8083，網頁 5300</td><td>5433 / <code>tms_manual</code></td><td>9092，topic 前綴 <code>manual.</code></td><td>真實時鐘</td><td>人手動操作 App 與網頁</td></tr>
-        <tr><td><b>後端行為規格</b></td><td>隨機埠</td><td>Testcontainers</td><td>Testcontainers</td><td><code>MutableClock</code></td><td>測試線 1，與上面都無關</td></tr>
+        <tr><td><b>開發堆疊／驗收</b></td><td>8080</td><td>5433 / <code>tms</code></td><td>9092，topic <code>tms.*</code></td><td>4443 / <code>tms-repair-photos-local</code></td><td>可撥</td><td>Web 驗收、App 驗收預設</td></tr>
+        <tr><td><b>App 驗收隔離堆疊</b></td><td>8081</td><td>5434（<code>tms-bdd-postgres</code>）/ <code>tms</code></td><td>9094（<code>tms-bdd-kafka</code>）</td><td>共用 4443；起後端時用 <code>TMS_STORAGE_BUCKET</code> 另取名（例如 <code>tms-repair-photos-app-bdd</code>）</td><td>可撥</td><td>讓 App 與 Web 驗收同時跑</td></tr>
+        <tr><td><b>手動環境</b></td><td>8083，網頁 5300</td><td>5433 / <code>tms_manual</code></td><td>9092，topic 前綴 <code>manual.</code></td><td>4443 / <code>tms-repair-photos-manual</code></td><td>真實時鐘</td><td>人手動操作 App 與網頁</td></tr>
+        <tr><td><b>後端行為規格</b></td><td>隨機埠</td><td>Testcontainers</td><td>Testcontainers</td><td>Testcontainers，每份 Spring 設定各一個（例如 <code>truth-photos</code>）</td><td><code>MutableClock</code></td><td>測試線 1，與上面都無關</td></tr>
       </tbody>
     </table></div>
     <p>手動環境選「另開一個 database」而不是「另開一個 schema」，因為 <code>V1__schema.sql:396</code> 把授權寫死在 <code>public</code> schema 上（<code>GRANT USAGE ON SCHEMA public TO tms_app</code>）。</p>
-    <p><b class="lbl">權衡</b>推播消費者的 consumer group 名稱 <code>tms-push-sender</code> 寫死在程式裡，8083 與 8080 會落在同一個 group（各自訂閱不同 topic），任一邊起停時另一邊的推播會停頓幾秒。兩邊的 JWT 預設密鑰也相同，token 可以互通。</p>
+    <p>手動環境的後端另外帶上自己的 Kafka 消費者群組名稱（同樣加 <code>manual.</code> 前綴，<code>scripts/manual-env/start.sh:72-73</code>），所以 8083 起停不會打擾 8080 的推播與即時更新。</p>
+    <p><b class="lbl">權衡</b>幾套環境共用同一組容器，<code>docker compose down -v</code> 會一次清掉所有環境的資料與照片。兩邊的 JWT 預設密鑰相同，token 可以互通。</p>
   </div>
   <p>App 驗收隔離堆疊目前 repo 裡沒有啟動腳本，見<a href="pitfalls.html#todo">接手待查</a>。</p>
 </section>
@@ -221,6 +223,8 @@ bash scripts/manual-env/seed.sh             <span class="c"># 清掉並重灌示
     <tbody>
       <tr><td class="id">5433</td><td>開發 Postgres（database <code>tms</code>；手動環境另用 <code>tms_manual</code>）。本機 5432 被別的 Postgres 佔用，所以對外改 5433</td><td>App 驗收、Web 驗收、手動環境</td></tr>
       <tr><td class="id">9092</td><td>開發 Kafka</td><td>同上</td></tr>
+      <tr><td class="id">4443</td><td>照片模擬服務 <code>tms-fake-gcs</code>（模仿 Google 雲端儲存）；各環境用不同的儲存空間</td><td>所有在本機起的後端；沒起的話後端啟動失敗</td></tr>
+      <tr><td class="id">8088</td><td>Conduktor，看 Kafka topic 與訊息的網頁（<code>docker compose --profile conduktor up -d</code> 才有）</td><td>想看 Kafka 裡有什麼的人</td></tr>
       <tr><td class="id">8080</td><td>後端（開測試時鐘）</td><td>Web 驗收預設（<code>BACKEND_PORT</code> 可改）；App 驗收預設</td></tr>
       <tr><td class="id">5199</td><td>Web 驗收用的 vite 開發伺服器（可用 <code>WEB_PORT</code> 改）</td><td><code>app/web-bdd/run-feature.sh</code></td></tr>
       <tr><td class="id">5173</td><td>vite 預設埠；Web 驗收直接下 mvn 又沒給 <code>-Dweb.baseUrl</code> 時的預設網址</td><td>手動下 mvn 時才會碰到</td></tr>

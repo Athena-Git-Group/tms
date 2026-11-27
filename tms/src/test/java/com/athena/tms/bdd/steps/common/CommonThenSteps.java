@@ -17,6 +17,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -101,6 +102,11 @@ public class CommonThenSteps {
             Map.entry("photo_required", 422),
             Map.entry("photo_limit", 422),
             Map.entry("photo_not_uploaded", 422),
+            Map.entry("photo_purpose_mismatch", 422),
+            Map.entry("photo_empty", 422),
+            Map.entry("photo_already_attached", 409),
+            Map.entry("photo_type_unsupported", 415),
+            Map.entry("photo_too_large", 413),
             Map.entry("completion_photo_required", 422),
             Map.entry("verification_reason_required", 422),
             Map.entry("repair_source_missing", 422),
@@ -317,7 +323,16 @@ public class CommonThenSteps {
         }
     }
 
+    private void assertPhotosUnchanged() {
+        List<Map<String, Object>> before = lastOperationGuard.photosBefore();
+        List<Map<String, Object>> after = lastOperationGuard.photosNow();
+        if (!before.equals(after)) {
+            throw new AssertionError("操作被拒絕後 repair_photos 仍被改動：操作前=" + before + "，操作後=" + after);
+        }
+    }
+
     private void assertAuthoritativeStateUnchanged() {
+        assertPhotosUnchanged();
         if (lastOperationGuard.createRequestIsLatest()) {
             assertCreateRequestLeftNothing();
             return;

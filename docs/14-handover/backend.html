@@ -26,14 +26,14 @@
 <header>
   <p class="eyebrow">交接 · Java 後端</p>
   <h1>Java 後端：版本、模組與幾條硬規矩</h1>
-  <p class="stand">Spring Boot 4.1.1 的模組化單體，JDK 25，Postgres 16 加 Kafka。設定只有一份預設檔加一份測試檔，正式環境全靠環境變數覆寫。程式在 <code>tms/</code>。</p>
-  <p class="readtime">約 16 分鐘</p>
+  <p class="stand">Spring Boot 4.1.1 的模組化單體，JDK 25，Postgres 16 加 Kafka，工務單照片存在 Google 雲端儲存。設定是一份預設檔，加上測試用與正式環境用的兩份覆寫檔，其餘靠環境變數。程式在 <code>tms/</code>。</p>
+  <p class="readtime">約 18 分鐘</p>
 </header>
 
 <section id="versions">
   <h2>用什麼版本、相依哪些套件？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>Java 25、Spring Boot 4.1.1、Postgres 16、Kafka。後端有自己的 Maven wrapper <code>./tms/mvnw</code>。完整相依表收在下方，平常不用看。</p>
+    <p>Java 25、Spring Boot 4.1.1、Postgres 16、Kafka，照片用 Google 官方的雲端儲存程式庫。後端有自己的 Maven wrapper <code>./tms/mvnw</code>。完整相依表收在下方，平常不用看。</p>
   </div>
   <div class="tablewrap"><table>
     <thead><tr><th>項目</th><th>值</th><th>出處／備註</th></tr></thead>
@@ -44,6 +44,7 @@
       <tr><td>連帶版本</td><td>Spring Framework 7.0.9、Spring Security 7.1.1、Hibernate 7.4.5.Final、Tomcat 11.0.24</td><td>由 Boot 管理</td></tr>
       <tr><td>Postgres</td><td>16（<code>postgres:16-alpine</code>）</td><td>開發堆疊與 Testcontainers 相同</td></tr>
       <tr><td>Kafka broker</td><td>開發堆疊 3.9.1；Testcontainers 4.0.0</td><td>兩邊版本不同；client 是 kafka-clients 4.2.1</td></tr>
+      <tr><td>照片儲存</td><td><code>google-cloud-storage</code> 2.64.0；本機與測試接 <code>fsouza/fake-gcs-server:1.56.1</code></td><td><code>tms/pom.xml:118-122</code>，版本跟 <code>firebase-admin</code> 間接帶進來的同一版</td></tr>
     </tbody>
   </table></div>
   <p>值得記住的兩件事：<code>spring-boot-starter-quartz</code> <b>引入了但沒有用</b>（原始碼沒有任何 <code>org.quartz</code>，排程實際用 Spring <code>@Scheduled</code>）；Boot 4 的 Flyway 自動設定是獨立模組，少了 <code>spring-boot-flyway</code> 就不會自動跑（<code>tms/pom.xml:71</code>）。</p>
@@ -66,10 +67,11 @@
         <tr><td><code>postgresql</code>（runtime）</td><td>42.7.13</td><td>JDBC driver</td></tr>
         <tr><td><code>nimbus-jose-jwt</code></td><td>9.37.3（寫死）</td><td>JWT 簽發與驗證（<code>JwtService</code>）</td></tr>
         <tr><td><code>firebase-admin</code></td><td>9.9.0</td><td>FCM 推播（<code>FcmPushSender</code>，有設憑證路徑才啟用）</td></tr>
+        <tr><td><code>google-cloud-storage</code></td><td>2.64.0（寫死）</td><td>工務單照片存取（<code>GcsPhotoStorage</code>）</td></tr>
         <tr><td><code>lombok</code></td><td>1.18.46（optional）</td><td>打包時排除（<code>tms/pom.xml:180-191</code>）</td></tr>
         <tr><td>測試：<code>spring-boot-starter-test</code></td><td>Boot 管理</td><td>JUnit Jupiter 6.0.3、Mockito 5.23.0、AssertJ 3.27.7</td></tr>
         <tr><td>測試：<code>spring-security-test</code>、<code>spring-kafka-test</code>、<code>spring-boot-testcontainers</code></td><td>Boot 管理</td><td>—</td></tr>
-        <tr><td>測試：Testcontainers <code>junit-jupiter</code>／<code>postgresql</code>／<code>kafka</code></td><td>1.21.3</td><td>真 Postgres、真 Kafka</td></tr>
+        <tr><td>測試：Testcontainers <code>junit-jupiter</code>／<code>postgresql</code>／<code>kafka</code></td><td>1.21.3</td><td>真 Postgres、真 Kafka；照片模擬服務用通用的 <code>GenericContainer</code> 起（<code>SharedContainers.java:32-35</code>）</td></tr>
         <tr><td>測試：<code>cucumber-java</code>／<code>cucumber-spring</code>／<code>cucumber-junit-platform-engine</code></td><td>7.22.1</td><td>行為規格測試</td></tr>
         <tr><td>測試：<code>junit-platform-suite</code></td><td>Boot 管理</td><td><code>@Suite</code> 入口</td></tr>
       </tbody>
@@ -95,10 +97,11 @@
 </section>
 
 <section id="modules">
-  <h2>程式碼怎麼分套件？一個狀態變化怎麼變成推播與即時更新？</h2>
+  <h2>程式碼怎麼分套件？狀態變化怎麼變成推播，照片又存在哪？</h2>
   <div class="key"><b class="lbl">重點</b>
     <p>業務邏輯集中在 <code>service/</code>。任務狀態一變，事件和資料在同一個交易寫進資料庫，再經 Kafka 與 SSE 提醒網頁「這張單變了」。</p>
     <p>這條路只負責提醒；畫面上的真相永遠從資料庫重讀，所以掉一兩則訊息、後端重啟或 Kafka 暫停，畫面都會在重連或重讀後對回來。</p>
+    <p>工務單照片的本體放在雲端儲存，資料庫只記它叫什麼名字；App 與櫃檯網頁一律經後端讀照片，後端先確認是同一家飯店的員工。</p>
   </div>
   <div class="tablewrap"><table>
     <thead><tr><th>套件</th><th>職責</th></tr></thead>
@@ -106,6 +109,7 @@
       <tr><td><code>controller/</code>（22）</td><td>REST 與 SSE 端點：登入、住客、櫃檯看板、查房、主管佇列、請假、PMS 對接、員工帳號等</td></tr>
       <tr><td><code>service/</code>（53）</td><td>業務邏輯與背景工作：任務狀態機 <code>TaskEngine</code>、待送匣、即時串流、排程</td></tr>
       <tr><td><code>repair/</code>、<code>push/</code>（12）</td><td>工務單；推播</td></tr>
+      <tr><td><code>storage/</code>（5）</td><td>照片存取：介面 <code>PhotoStorage</code>、唯一的實作 <code>GcsPhotoStorage</code>、連線設定 <code>StorageConfig</code>，以及讀儲存模式設定的 <code>StorageSettings</code> 與列出兩種模式的 <code>StorageMode</code></td></tr>
       <tr><td><code>handover/</code>、<code>kb/</code></td><td>交接班；「查一下」知識庫問答（關鍵字比對）</td></tr>
       <tr><td><code>filter/</code>（3）、<code>config/</code>（9）</td><td>認證與冪等過濾器；安全、多飯店資料來源、可撥時鐘等設定</td></tr>
       <tr><td><code>dao/</code>、<code>entity/</code>、<code>dto/</code>、<code>common/</code></td><td>資料存取、JPA 實體、請求回應物件、共用物件</td></tr>
@@ -118,7 +122,7 @@
       <thead><tr><th>套件</th><th>代表類別</th></tr></thead>
       <tbody>
         <tr><td><code>service/</code></td><td><code>TaskEngine</code>、<code>TaskExecutionService</code>、<code>DeskBoardService</code>、<code>GuestRequestService</code>、<code>InspectionService</code>、<code>AuthService</code>、<code>JwtService</code>；待送匣一族（<code>OutboxWriter</code>、<code>OutboxRelay</code>…）；即時串流一族（<code>TaskEventsSseConsumer</code>、<code>StreamHeartbeat</code>…）；排程（<code>ScheduleRuleScanJob</code>、<code>ShiftEndScanJob</code>、<code>UnclaimedReminderScanJob</code>…）；<code>TenantScopedExecutor</code></td></tr>
-        <tr><td><code>repair/</code></td><td><code>RepairController</code>、<code>RepairService</code>、<code>RepairResolution</code> 等</td></tr>
+        <tr><td><code>repair/</code></td><td><code>RepairController</code>、<code>RepairService</code>、<code>RepairResolution</code>、<code>RepairPhotoContent</code>（檢查上傳的照片內容）等</td></tr>
         <tr><td><code>push/</code></td><td><code>PushDeliveryConsumer</code>、<code>FcmPushSender</code>／<code>LoggingPushSender</code>、<code>PushSenderConfig</code>（依憑證決定用哪個）、<code>PushDeliveryRecorder</code></td></tr>
         <tr><td><code>filter/</code></td><td><code>BearerTokenAuthFilter</code>、<code>IntegrationApiKeyAuthFilter</code>、<code>IdempotencyFilter</code></td></tr>
         <tr><td><code>config/</code></td><td><code>SecurityConfig</code>、<code>GuestScanSecurityConfig</code>、<code>TenantAwareDataSource</code>、<code>AdjustableClock</code>／<code>ClockConfig</code>（可撥時鐘）、<code>KafkaTopicsProperties</code> 等</td></tr>
@@ -260,7 +264,7 @@
     <p><code>TaskEventsSseConsumer</code> 的組名是 <code>sse-&lt;隨機 UUID&gt;</code>，每台自成一組，所以每台都收到全部，再各自挑出自己身上的連線推。啟動時 log 會印出實際組名。</p>
     <p><b class="lbl">權衡</b>每多一台後端，每則事件就多一次查資料庫；目前規模可以接受。</p>
   </div>
-  <p>推播剛好相反。<code>PushDeliveryConsumer</code> 讀 <code>tms.push</code>，組名固定是 <code>tms-push-sender</code>，全部後端共用一組，所以一則推播只會有一台送，手機不會響兩次。</p>
+  <p>推播剛好相反。<code>PushDeliveryConsumer</code> 讀 <code>tms.push</code>，組名預設是 <code>tms-push-sender</code>（設定 <code>tms.push.consumer.group</code> 可改，手動環境就加了 <code>manual.</code> 前綴），同一套環境的後端共用一組，所以一則推播只會有一台送，手機不會響兩次。</p>
   <p>隨機組名還有一個後果。群組在每條分區上讀到第幾則，記在一個叫 <b>offset</b> 的書籤裡；新組沒有書籤，設定又是「從最新位置開始讀」（<code>auto-offset-reset=latest</code>）。所以<b>後端停機期間的事件，重啟後不會補讀</b>，要靠下面說的 resync 補回來。</p>
 
   <h3 id="realtime-route">後端收到事件後做了什麼、怎麼決定推給誰？</h3>
@@ -356,14 +360,14 @@
     <div class="tablewrap"><table>
       <thead><tr><th>環節</th><th>位置</th></tr></thead>
       <tbody>
-        <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:489-501</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
-        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :74-77、巡查 :114、撈待送 :164、送出 :175-207）</td></tr>
+        <tr><td>同一交易寫事件與待送匣</td><td><code>service/TaskEngine.java:491-503</code>、<code>service/OutboxWriter.java:30-77</code></td></tr>
+        <tr><td>relay 喚醒、巡查、依 key 依序送、退避、租約</td><td><code>service/OutboxRelay.java</code>（喚醒 :51-53、巡查 :127）、<code>service/HotelRelayTurn.java</code>（撈待送 :166、送出 :174-205）</td></tr>
         <tr><td>Kafka 傳送與讀取設定</td><td><code>tms/src/main/resources/application.properties:20-30</code>；<code>tms.stream.*</code> 沒寫在設定檔，全用程式內預設值</td></tr>
-        <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :73、降級 :84-109、去重 :183-193）</td></tr>
+        <tr><td>SSE 消費者（隨機組名、落後、去重、查路由）</td><td><code>service/TaskEventsSseConsumer.java</code>（組名 :79、降級 :90-115、去重 :186-196）</td></tr>
         <tr><td>連線端點與權限</td><td><code>controller/StaffStreamController.java:17-21</code>、<code>config/SecurityConfig.java:50-51</code>、<code>filter/BearerTokenAuthFilter.java:49-53</code></td></tr>
         <tr><td>連線註冊表與過濾規則</td><td><code>service/StreamConnectionRegistry.java</code>、<code>service/StreamSubscriber.java:22-49</code>、<code>service/StreamConnection.java</code></td></tr>
         <tr><td>心跳與降級原因</td><td><code>service/StreamHeartbeat.java</code>、<code>service/StreamDegradation.java</code></td></tr>
-        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:40-64</code>、<code>push/PushDeliveryKafkaConfig.java:43-57</code></td></tr>
+        <tr><td>推播消費者</td><td><code>push/PushDeliveryConsumer.java:53-81</code>、<code>push/PushDeliveryKafkaConfig.java:43-57</code></td></tr>
         <tr><td>網頁連線與重連</td><td><code>features/realtime/use-live-updates.ts</code>、<code>stream-client.ts</code>、<code>live-connection.ts</code></td></tr>
         <tr><td>網頁換卡與重讀</td><td><code>features/realtime/follow-board.ts</code>、<code>stream-task.ts</code>、<code>refetch-on-signal.ts</code>、<code>lib/board-sync.ts</code>、<code>shell/DeskShell.tsx</code></td></tr>
       </tbody>
@@ -371,21 +375,51 @@
     <p>Spring Kafka 的確認模式與並行數，SSE 消費者在程式碼裡沒有設定，用框架預設；推播消費者則明確設為逐筆確認，重試用完轉進 <code>tms.push.DLT</code>。</p>
     </div>
   </details>
+
+  <h3 id="photos">工務單照片存在哪？本機和正式環境怎麼用同一套程式？</h3>
+  <p>照片一張幾百 KB，不適合塞進資料庫：備份會跟著照片一起變胖，每次查工務單也不該把照片一起搬出來。所以照片本體放在外面，資料庫的 <code>repair_photos</code> 表只在 <code>storage_ref</code> 欄記它在儲存空間裡的名字。難的是「外面」在本機和正式環境不一樣。</p>
+  <div class="opt bad">
+    <h4><span class="tag">壞做法</span>本機存電腦資料夾，正式環境另寫一套存雲端，用設定切換</h4>
+    <p>本機跑的永遠是資料夾那一套，雲端那一套要到上線才第一次真的被執行；權限、物件名稱、連線逾時的錯誤都留到正式環境才冒出來。</p>
+  </div>
+  <div class="opt great">
+    <h4><span class="tag">現在的做法</span>只寫一套，用 Google 官方程式庫；本機接模擬服務</h4>
+    <p><code>PhotoStorage</code> 只有「存」與「讀」兩個方法，唯一的實作 <code>GcsPhotoStorage</code> 用 Google 官方的雲端儲存程式庫。本機與自動化測試把它連到 fake-gcs-server，它說的是跟雲端儲存一樣的語言，所以同一段程式在本機寫進模擬服務、在正式環境寫進真的雲端儲存。整個後端只有 <code>StorageConfig</code> 一處看儲存模式 <code>tms.storage.mode</code>：模擬服務模式（<code>emulator</code>，預設）用無憑證的方式連 <code>tms.storage.emulator-host</code> 給的位址，並在啟動時建立儲存空間，建不起來就讓後端啟動失敗；雲端模式（<code>gcs</code>）用伺服器本身的雲端身分連真的雲端儲存，正式環境的 <code>prod</code> 設定組就是設成這個模式。連線、讀取與重試總時限都是 10 秒。</p>
+    <p>每張照片的名字是 <code>repair-photos/{飯店編號}/{照片編號}.jpg</code>（<code>repair/RepairService.java:169-171</code>）。照片編號在建立照片時就產生，同一張照片重傳會寫到同一個名字、整份蓋掉，重送幾次結果都一樣；名字不帶雲端廠商的網址，換廠商時資料庫不用改。</p>
+    <p><b class="lbl">權衡</b>本機多跑一個容器，而且它沒起來後端就起不來。換來的是每一次本機測試都跑過正式環境會跑的那段程式。</p>
+  </div>
+  <p>讀照片也有一個選擇。一種做法是後端發一個有時效的下載網址，讓手機直接向雲端儲存拿照片，後端不用搬流量；但這要讓後端握有能簽網址的憑證，還得決定網址多久失效、外流了能不能撤回，而模擬服務對這種網址的支援也跟真的雲端儲存不同。現在的做法是手機與網頁都向後端要照片，後端確認身分後從雲端儲存讀出來轉送。照片已壓過、一張工務單最多幾張，多搬的流量不大；真的遇到流量問題再改成臨時網址，App 與網頁都只要換掉讀照片的那一個地方。</p>
+  <p>櫃檯網頁的登入憑證不能放進圖片網址（網址會留在瀏覽器紀錄與各種伺服器紀錄裡），所以網頁跟呼叫其他端點一樣帶 <code>Authorization</code> 標頭去讀，拿到內容後轉成只有這個分頁看得到的暫時網址給圖片用，面板關掉就釋放（<code>app/web/src/api/repair-photos.ts</code>、<code>features/detail/RepairPhotoStrip.tsx</code>）。工務單詳情面板分「報修照片」「完修照片」兩排，點縮圖看大圖；住客網頁沒有照片功能。</p>
+
+  <h3 id="photo-rules">照片上傳、讀取、附到工務單上，各檢查什麼？</h3>
+  <p>一張照片走三步：<code>POST /api/v1/repair-photos</code> 帶用途（<code>report</code> 或 <code>completion</code>）與帶時區的拍攝時間，建立一筆 <code>pending</code>（還沒上傳）的照片並拿回編號；<code>PUT /api/v1/repair-photos/{編號}/content</code> 把 JPEG 原樣當 body 送上來（<code>Content-Type: image/jpeg</code>），照片變成 <code>uploaded</code>；最後開單、補照片或完修時帶著照片編號，把它附到工務單上。</p>
+  <ul class="plain">
+    <li><b>上傳</b>（<code>RepairPhotoContent.java</code>、<code>RepairService.java:118-145</code>）：超過 5 MB 回 413，內容是空的回 422，標頭不是 <code>image/jpeg</code> 或內容開頭不是 JPEG 的記號回 415；只有建立照片的員工能上傳（否則 403），照片附上工務單之後不能再換內容（409 <code>photo_already_attached</code>）。附上之前可以重傳，以最後一次為準。</li>
+    <li><b>讀取</b>（<code>RepairController.java:97-108</code>）：房務、工務、主管、櫃檯、值班主管都讀得到同一家飯店已上傳的照片，老闆帳號不行（<code>SecurityConfig.java:76-77</code>）。別家飯店的照片、還沒上傳的、儲存空間裡找不到的，一律回 404。已附上工務單的照片回應帶 <code>Cache-Control: private, max-age=86400, immutable</code>，還沒附上的帶 <code>private, no-cache</code>。</li>
+    <li><b>附上工務單</b>（<code>RepairService.java:534-563</code> 的 <code>lockAttachablePhotos</code>，開單、補照片、完修三處共用，不在資料庫交易裡呼叫就直接丟錯）：每張都要存在而且已上傳（否則 422 <code>photo_not_uploaded</code>），用途要對（422 <code>photo_purpose_mismatch</code>），不能已附在別張單上（409 <code>photo_already_attached</code>），一次最多 3 張（422 <code>photo_limit</code>）。完修結果是「不需處理」時不必附照片，但帶了照樣檢查。</li>
+    <li><b>同時附同一張照片</b>：檢查時就把照片的資料列鎖住，兩個請求排隊，只有一個成功、另一個 409。補照片先鎖照片再鎖工務單，跟完修同一個順序，兩個請求不會互等卡死。</li>
+  </ul>
+  <p><b class="lbl">權衡</b>上傳時「寫進雲端儲存」與「把照片標成已上傳」放在同一個資料庫交易裡：雲端寫失敗，整筆取消、照片維持未上傳；寫完雲端、還沒標記就當機，重傳是同名覆寫，結果一樣。代價是雲端儲存變慢時，這個請求會佔著一條資料庫連線，最多等 10 秒的時限。</p>
 </section>
 
 <section id="config">
   <h2>設定檔在哪裡、正式環境要設哪些環境變數？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>只有 <code>tms/src/main/resources/application.properties</code> 與 <code>application-test.properties</code>，沒有 yml、沒有 dev／prod profile。啟動後端永遠帶 <code>TMS_DB_URL</code>；上正式前一定要換掉 JWT 密鑰。</p>
+    <p>預設值都在 <code>tms/src/main/resources/application.properties</code>；<code>application-test.properties</code> 給後端測試，<code>application-prod.properties</code> 給正式環境（以 <code>prod</code> 設定組啟動），沒有 yml。啟動後端永遠帶 <code>TMS_DB_URL</code>；上正式前一定要換掉 JWT 密鑰，並給照片的儲存空間名稱。</p>
   </div>
   <div class="tablewrap"><table>
     <thead><tr><th>設定（行號）</th><th>預設值</th><th>環境變數</th></tr></thead>
     <tbody>
       <tr><td>應用連線（<code>:3-5</code>）</td><td><code>jdbc:postgresql://localhost:5433/tms</code>，帳號 <code>tms_app</code>／<code>tms_app</code></td><td><code>TMS_DB_URL</code>、<code>TMS_DB_USER</code>、<code>TMS_DB_PASSWORD</code></td></tr>
       <tr><td>Flyway 連線（<code>:11-13</code>）</td><td><code>jdbc:postgresql://localhost:<b>5432</b>/tms</code>，帳號 <code>tms</code>／<code>tms</code></td><td>同樣讀 <code>TMS_DB_URL</code>；<code>TMS_DB_ADMIN_USER</code>、<code>TMS_DB_ADMIN_PASSWORD</code></td></tr>
-      <tr><td>Kafka（<code>:15-18</code>）</td><td><code>localhost:9092</code>；topic <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code></td><td><code>TMS_KAFKA_BOOTSTRAP</code></td></tr>
-      <tr><td>JWT（<code>:34-35</code>）</td><td>開發用的不安全密鑰；效期 12 小時</td><td><code>TMS_JWT_SECRET</code></td></tr>
-      <tr><td>FCM 憑證（<code>:37-39</code>）</td><td>空字串＝不打 FCM，只寫 log 與 <code>push_deliveries</code></td><td><code>TMS_PUSH_FCM_CREDENTIALS_PATH</code>（Spring 寬鬆綁定）或 <code>--tms.push.fcm.credentials-path=</code></td></tr>
+      <tr><td>Kafka（<code>:15-19</code>）</td><td><code>localhost:9092</code>；topic <code>tms.task-events</code>、<code>tms.push</code>、<code>tms.push.DLT</code></td><td><code>TMS_KAFKA_BOOTSTRAP</code></td></tr>
+      <tr><td>JWT（<code>:36-37</code>）</td><td>開發用的不安全密鑰；效期 12 小時</td><td><code>TMS_JWT_SECRET</code></td></tr>
+      <tr><td>FCM 憑證（<code>:39</code>）</td><td>空字串＝不打 FCM，只寫 log 與 <code>push_deliveries</code></td><td><code>TMS_PUSH_FCM_CREDENTIALS_PATH</code>（Spring 寬鬆綁定）或 <code>--tms.push.fcm.credentials-path=</code></td></tr>
+      <tr><td>照片儲存空間</td><td><code>tms-repair-photos-local</code>；<code>prod</code> 設定組下沒有預設值，沒給就啟動失敗</td><td><code>TMS_STORAGE_BUCKET</code></td></tr>
+      <tr><td>照片儲存模式</td><td><code>emulator</code>（接本機模擬服務）；<code>prod</code> 設定組把它設成 <code>gcs</code>，用伺服器本身的雲端身分連真的雲端儲存</td><td><code>tms.storage.mode</code>，平常不用自己設，帶 <code>prod</code> 設定組即可</td></tr>
+      <tr><td>照片模擬服務位址</td><td><code>http://localhost:4443</code>；只有模擬服務模式會用到</td><td><code>TMS_STORAGE_EMULATOR_HOST</code></td></tr>
+      <tr><td>上傳過大時讀掉多少</td><td><code>server.tomcat.max-swallow-size=6MB</code>：照片超過 5 MB 時後端提早回 413，Tomcat 要把剩下的 body 讀掉，手機才收得到回應</td><td>—</td></tr>
+      <tr><td>正式環境設定組</td><td>不帶；帶了之後照片儲存模式變成 <code>gcs</code>，而且一定要給 <code>TMS_STORAGE_BUCKET</code></td><td><code>SPRING_PROFILES_ACTIVE=prod</code></td></tr>
       <tr><td>測試端點（不在設定檔裡）</td><td>不帶；帶了 <code>test-support</code> 設定檔才有可撥時間的 <code>/api/v1/test/clock</code> 與其他 <code>/api/v1/test/**</code>（<code>config/TestSupportConfig.java</code>），只給驗收與手動測試用</td><td><code>SPRING_PROFILES_ACTIVE=test-support</code></td></tr>
       <tr><td>HTTP port</td><td>未設定，Spring 預設 8080</td><td><code>SERVER_PORT</code></td></tr>
     </tbody>
@@ -394,10 +428,10 @@
     <summary>Kafka producer 與 relay 的數值 <span class="hint">— 改其中任何一個前先看這裡</span></summary>
     <div class="in">
     <ul class="plain">
-      <li>Kafka producer（<code>:20-24</code>）：<code>acks=all</code>、冪等開啟、<code>max.block.ms=5000</code>、<code>delivery.timeout.ms=10000</code>。</li>
-      <li>outbox relay（<code>:26-28</code>）：輪詢 2s、送出逾時 10s、認領租約 60s；程式內最多重試 8 次。</li>
+      <li>Kafka producer（<code>:22-26</code>）：<code>acks=all</code>、冪等開啟、<code>max.block.ms=5000</code>、<code>delivery.timeout.ms=10000</code>。</li>
+      <li>outbox relay（<code>:28-30</code>）：輪詢 2s、送出逾時 10s、認領租約 60s；程式內最多重試 8 次。</li>
     </ul>
-    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於 <code>max.block.ms</code> 加送出逾時；違反就直接拋錯不啟動（<code>OutboxRelay.java:66, 70</code>）。測試設定檔把 relay 輪詢縮成 200ms、推播重試縮成 50ms，資料庫與 Kafka 位址由 Testcontainers 注入。</p>
+    <p>relay 啟動時檢查兩條不等式：送出逾時要大於等於 <code>delivery.timeout.ms</code>，認領租約要大於兩倍 <code>max.block.ms</code>、送出逾時與資料庫語句逾時三者的總和；違反就直接拋錯不啟動（<code>HotelRelayTurn.java:129-135</code>）。測試設定檔把 relay 輪詢縮成 200ms、推播重試縮成 50ms，資料庫與 Kafka 位址由 Testcontainers 注入。</p>
     </div>
   </details>
 </section>
@@ -428,7 +462,7 @@
     <li><b>員工 token</b>：<code>POST /api/v1/staff-accounts/login</code> 換 HS256 JWT，內含租戶、員工、角色、部門與密碼指紋（<code>JwtService.java:49-56</code>）。filter 每次請求還會確認帳號存在、啟用、密碼指紋仍相符（改密碼後舊 token 立刻失效）、是否必須先改密碼（<code>BearerTokenAuthFilter.java:77-100</code>）。登入失敗多次會鎖定。</li>
     <li><b>住客</b>：掃房內 QR → <code>POST /guest/scan</code>（公開、有 IP 限流）換住客 session token，之後帶 <code>Authorization: Bearer</code> 或 <code>X-Guest-Session</code>。主管換新 QR 時一併撤銷舊 session。</li>
     <li><b>PMS 對接</b>：<code>/integration/**</code> 用 API key（<code>IntegrationApiKeyAuthFilter</code>），角色 <code>INTEGRATION</code>。</li>
-    <li><b>授權規則</b>：<code>SecurityConfig.java:44-80</code> 以「路徑＋角色」對應，角色有 <code>guest</code>、<code>housekeeping</code>、<code>engineering</code>、<code>manager</code>、<code>frontdesk</code>、<code>owner</code>、<code>INTEGRATION</code>。無 session、CSRF 關閉。</li>
+    <li><b>授權規則</b>：<code>SecurityConfig.java:45-81</code> 以「路徑＋角色」對應，角色有 <code>guest</code>、<code>housekeeping</code>、<code>engineering</code>、<code>manager</code>、<code>frontdesk</code>、<code>duty_manager</code>、<code>owner</code>、<code>INTEGRATION</code>。無 session、CSRF 關閉。</li>
     <li><b>冪等</b>：寫入端點帶 <code>Idempotency-Key</code>，<code>IdempotencyFilter</code> 搭配 <code>processed_ops</code> 表回放上次結果，保留 7 天。</li>
   </ul>
 </section>
@@ -438,7 +472,7 @@
   <div class="key"><b class="lbl">重點</b>
     <p><b>既有的遷移檔一個字都不能改，連註解都不行</b>——Flyway 會比對每個已套用檔案的 checksum（內容指紋），改了就啟動失敗。要修正只能新增更高版號的檔案。</p>
   </div>
-  <p>遷移檔在 <code>tms/src/main/resources/db/migration/</code>，命名 <code>V&lt;n&gt;__說明.sql</code>，目前是 V1 到 V28、連號無缺。後端啟動時 Flyway 會自動套用新版號。</p>
+  <p>遷移檔在 <code>tms/src/main/resources/db/migration/</code>，命名 <code>V&lt;n&gt;__說明.sql</code>，目前是 V1 到 V33、連號無缺。後端啟動時 Flyway 會自動套用新版號。</p>
   <ul class="rules">
     <li>新表要記得 GRANT 給 <code>tms_app</code>（V18 就是為了補 notifications 的授權）。</li>
     <li><code>V24__tenant_code.sql:14-30</code> 回填 <code>tenants.code</code> 時只認得「示範飯店、示範二店、測試飯店」三家；資料庫裡有其他飯店時這個遷移會失敗，要先補對照。</li>

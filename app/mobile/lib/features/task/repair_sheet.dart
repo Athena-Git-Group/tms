@@ -3,13 +3,11 @@ import 'package:flutter/cupertino.dart';
 import '../../core/api_client.dart';
 import '../../core/connection_status.dart';
 import '../../core/repair_photo_capture.dart';
-import '../../core/test_backdoor.dart';
 import '../../core/theme.dart';
 import '../../core/tms_semantics.dart';
 import '../../core/widgets/tms_card.dart';
 import '../../core/widgets/tms_grouped_list.dart';
 import '../../core/widgets/tms_option_row.dart';
-import '../../core/widgets/tms_photo_action_sheet.dart';
 import '../../core/widgets/tms_photo_cell.dart';
 import '../../core/widgets/tms_pill_button.dart';
 import '../../core/widgets/tms_sheet.dart';
@@ -106,15 +104,16 @@ class _RepairSheetState extends State<RepairSheet> {
       setState(() => _photoLimitHit = true);
       return;
     }
-    final source = await showTmsPhotoActionSheet(context);
-    if (source == null || !mounted) {
+    final capture = await pickRepairPhoto(context);
+    if (capture == null || !mounted) {
       return;
     }
     setState(() {
       _photos.add(RepairPhoto(
+        capture: capture,
         watermark: repairPhotoWatermark(
           roomNo: widget.roomNo,
-          takenAt: deviceNow(),
+          takenAt: capture.takenAt,
         ),
       ));
     });
@@ -134,7 +133,8 @@ class _RepairSheetState extends State<RepairSheet> {
         continue;
       }
       try {
-        photo.photoId = await captureAndUploadRepairPhoto(
+        photo.photoId = await uploadRepairPhoto(
+          photo.capture,
           purpose: 'report',
           photoIndex: i + 1,
         );
@@ -154,7 +154,8 @@ class _RepairSheetState extends State<RepairSheet> {
   Future<void> _retryPhoto(int index) async {
     final photo = _photos[index];
     try {
-      photo.photoId = await captureAndUploadRepairPhoto(
+      photo.photoId = await uploadRepairPhoto(
+        photo.capture,
         purpose: 'report',
         photoIndex: index + 1,
       );
@@ -627,6 +628,7 @@ class _RepairSheetState extends State<RepairSheet> {
           index,
           failed: photo.uploadFailed,
           child: TmsPhotoCell(
+            photo: Image(image: _photos[index].thumbnail, fit: BoxFit.cover),
             upload: upload,
             onRemove: _submitting ? null : () => _removePhoto(index),
             onRetry: () => _retryPhoto(index),

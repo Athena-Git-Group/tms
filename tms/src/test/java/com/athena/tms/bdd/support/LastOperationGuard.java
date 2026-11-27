@@ -14,6 +14,7 @@ public class LastOperationGuard {
     private CreateRequestSnapshot createRequestSnapshot;
     private ExistingRows existingRowsBeforeCreate;
     private boolean createRequestIsLatest;
+    private PhotoSnapshot photoSnapshot = PhotoSnapshot.NONE;
 
     public LastOperationGuard(DbProbe dbProbe) {
         this.dbProbe = dbProbe;
@@ -23,7 +24,15 @@ public class LastOperationGuard {
             Map<String, Object> repairTicketRow, long inspectionCount, long outboxMaxId) {
     }
 
+    public record PhotoSnapshot(List<UUID> photoIds, List<Map<String, Object>> rowsBefore) {
+        static final PhotoSnapshot NONE = new PhotoSnapshot(List.of(), List.of());
+    }
+
     public Snapshot captureFor(UUID taskId) {
+        return captureFor(taskId, List.of());
+    }
+
+    public Snapshot captureFor(UUID taskId, List<UUID> photoIds) {
         Map<String, Object> row = dbProbe.taskRow(taskId).orElse(null);
         int eventCount = dbProbe.eventsOf(taskId).size();
         String aggregateKey = "task:" + taskId;
@@ -36,11 +45,28 @@ public class LastOperationGuard {
         long outboxMaxId = dbProbe.count("SELECT COALESCE(MAX(id), 0) FROM outbox");
         snapshot = new Snapshot(taskId, row, eventCount, outboxCount, repairTicketRow, inspectionCount, outboxMaxId);
         createRequestIsLatest = false;
+        photoSnapshot = new PhotoSnapshot(List.copyOf(photoIds), photoRows(photoIds));
         eventsBefore = dbProbe.eventsOf(taskId);
         tenantTaskCountBefore = row == null
                 ? -1
                 : dbProbe.count("SELECT count(*) FROM tasks WHERE tenant_id = ?", row.get("tenant_id"));
         return snapshot;
+    }
+
+    public List<Map<String, Object>> photosBefore() {
+        return photoSnapshot.rowsBefore();
+    }
+
+    public List<Map<String, Object>> photosNow() {
+        return photoRows(photoSnapshot.photoIds());
+    }
+
+    private List<Map<String, Object>> photoRows(List<UUID> ids) {
+        return ids.stream()
+                .flatMap(id -> dbProbe.queryOne(
+                        "SELECT id, ticket_task_id, status, storage_ref, uploaded_at FROM repair_photos WHERE id = ?",
+                        id).stream())
+                .toList();
     }
 
     public Snapshot captureWithoutTask() {
@@ -93,6 +119,7 @@ public class LastOperationGuard {
         createRequestSnapshot = createRequestCounts(tenantId);
         existingRowsBeforeCreate = existingRows(tenantId);
         createRequestIsLatest = true;
+        photoSnapshot = PhotoSnapshot.NONE;
         return createRequestSnapshot;
     }
 

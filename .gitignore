@@ -4,7 +4,7 @@
 # IDE
 .idea/
 
-# Claude / Athena 工作目錄（本機工具狀態，不進 repo）
+# Claude / Athena 工作目錄（本機工具狀態，不進 repo；流程 skill 與其 .claude/skills 捷徑例外）
 .agents/*
 !.agents/skills/
 .agents/skills/*
@@ -25,8 +25,25 @@
 !.agents/skills/gherkin-and-dsl/
 !.agents/skills/constitution/
 .athena/*
-.claude/
-CLAUDE.md
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/specify
+!.claude/skills/clarify-over-specs
+!.claude/skills/clarify
+!.claude/skills/spec-by-example
+!.claude/skills/technical-research
+!.claude/skills/truth-delta
+!.claude/skills/system-analysis
+!.claude/skills/api-plan
+!.claude/skills/data-plan
+!.claude/skills/ui-plan
+!.claude/skills/dsl-refine
+!.claude/skills/tasks
+!.claude/skills/implement
+!.claude/skills/bdd
+!.claude/skills/gherkin-and-dsl
+!.claude/skills/constitution
 DISCOVERY-PLAN.md
 INDEX.md
 skills-lock.json

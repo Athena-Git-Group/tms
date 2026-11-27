@@ -73,6 +73,8 @@ public class SecurityConfig {
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/repair-photos/*/content")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/repair-photos/*/content")
+                        .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk", "duty_manager")
                         .requestMatchers(HttpMethod.GET, "/api/v1/**")
                         .hasAnyRole("housekeeping", "engineering", "manager", "frontdesk")
                         .requestMatchers("/api/v1/**").hasAnyRole("housekeeping", "engineering", "manager")

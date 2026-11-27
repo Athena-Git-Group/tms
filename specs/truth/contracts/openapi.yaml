@@ -191,7 +191,7 @@ paths:
   /repair-photos:
     $ref: './groups/現場作業/工務單.yaml#/createRepairPhoto'
   /repair-photos/{photoId}/content:
-    $ref: './groups/現場作業/工務單.yaml#/uploadRepairPhotoContent'
+    $ref: './groups/現場作業/工務單.yaml#/uploadRepairPhotoContentAndgetRepairPhotoContent'
   /repair-tickets:
     $ref: './groups/現場作業/工務單.yaml#/listRepairTicketsAndcreateRepairTicket'
   /repair-tickets/precheck:

@@ -39,7 +39,7 @@ check_backend_ready() {
   http_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$BACKEND_URL/api/v1/pool" || true)"
   if [ "$http_code" = "000" ]; then
     # ${} 不能省：macOS 內建的 bash 3.2 會把全形「）」的位元組併進變數名。
-    log "後端沒有回應（${BACKEND_URL}）。先起後端："
+    log "後端沒有回應（${BACKEND_URL}）。先起後端（docker compose 要含照片儲存模擬服務 tms-fake-gcs，沒有它後端起不來）："
     log "  docker compose up -d"
     log "  TMS_DB_URL=jdbc:postgresql://localhost:5433/tms SPRING_PROFILES_ACTIVE=test-support JAVA_HOME=\"\$(/usr/libexec/java_home -v 25)\" ./tms/mvnw -f tms/pom.xml spring-boot:run"
     return 1

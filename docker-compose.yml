@@ -1,4 +1,4 @@
-# TMS 本機開發環境：Postgres + Kafka（＋選用的 Conduktor Console 看 Kafka）
+# TMS 本機開發環境：Postgres + Kafka + 照片儲存模擬服務（＋選用的 Conduktor Console 看 Kafka）
 #
 # 啟動：  docker compose up -d
 #
@@ -73,6 +73,20 @@ services:
       timeout: 10s
       retries: 10
 
+  fake-gcs:
+    image: fsouza/fake-gcs-server:1.56.1
+    container_name: tms-fake-gcs
+    command: ["-scheme", "http", "-port", "4443", "-public-host", "localhost:4443", "-external-url", "http://localhost:4443"]
+    ports:
+      - "127.0.0.1:4443:4443"
+    volumes:
+      - tms-fake-gcs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:4443/storage/v1/b || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # 以下兩個服務只在 --profile conduktor 時啟動，平常的 docker compose up 不會帶起來
   conduktor-postgres:
     image: postgres:16-alpine
@@ -123,3 +137,4 @@ volumes:
   tms-kafka-data:
   tms-conduktor-pgdata:
   tms-conduktor-data:
+  tms-fake-gcs-data:

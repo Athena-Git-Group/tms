@@ -125,9 +125,52 @@ public class BddApiClient {
         return result;
     }
 
+    public ScenarioWorld.ApiResponse exchangeBytes(
+            HttpMethod method, String path, Auth auth, byte[] body, String contentType) {
+        RestClient.RequestBodySpec spec = restClient.method(method).uri(url(BASE_PATH, path));
+        if (auth instanceof Auth.Staff staff) {
+            spec = spec.header(HttpHeaders.AUTHORIZATION, "Bearer " + staff.jwt());
+        } else if (auth instanceof Auth.Guest guest) {
+            spec = spec.header(GUEST_SESSION_HEADER, guest.sessionToken());
+        }
+        if (body != null) {
+            if (contentType != null) {
+                spec = spec.header(HttpHeaders.CONTENT_TYPE, contentType);
+            }
+            spec = spec.body(body);
+        }
+
+        ScenarioWorld.ApiResponse result = spec.exchange((request, response) -> {
+            int status = response.getStatusCode().value();
+            byte[] bytes = readBytes(response);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.putAll(response.getHeaders());
+            MediaType responseType = headers.getContentType();
+            String raw = null;
+            JsonNode json = null;
+            if (responseType != null && responseType.isCompatibleWith(MediaType.APPLICATION_JSON) && bytes.length > 0) {
+                raw = new String(bytes, StandardCharsets.UTF_8);
+                json = objectMapper.readTree(raw);
+            }
+            return new ScenarioWorld.ApiResponse(status, raw, json, headers, bytes);
+        });
+
+        world.setLastRequest(new ScenarioWorld.ApiRequest(method.name(), path, null));
+        world.setLastResponse(result);
+        return result;
+    }
+
     private String url(String basePath, String path) {
         String port = environment.getRequiredProperty("local.server.port");
         return "http://localhost:" + port + basePath + path;
+    }
+
+    private static byte[] readBytes(RestClient.RequestHeadersSpec.ConvertibleClientHttpResponse response) {
+        try {
+            return response.getBody().readAllBytes();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static String readBody(RestClient.RequestHeadersSpec.ConvertibleClientHttpResponse response) {

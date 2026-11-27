@@ -18,6 +18,7 @@ import com.athena.tms.dto.desk.DeskMyToday;
 import com.athena.tms.dto.desk.DeskTask;
 import com.athena.tms.dto.desk.DeskTaskDetail;
 import com.athena.tms.dto.desk.DeskTimelineEntry;
+import com.athena.tms.repair.RepairService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -105,6 +106,7 @@ public class DeskBoardService {
     private final TaskNotInTriageExplainer notInTriageExplainer;
     private final UndoAssignRejectionExplainer undoRejectionExplainer;
     private final DeskTaskMapper deskTaskMapper;
+    private final RepairService repairService;
     private final Clock clock;
 
     public DeskBoardService(
@@ -113,12 +115,14 @@ public class DeskBoardService {
             TaskNotInTriageExplainer notInTriageExplainer,
             UndoAssignRejectionExplainer undoRejectionExplainer,
             DeskTaskMapper deskTaskMapper,
+            RepairService repairService,
             Clock clock) {
         this.jdbcTemplate = jdbcTemplate;
         this.taskEngine = taskEngine;
         this.notInTriageExplainer = notInTriageExplainer;
         this.undoRejectionExplainer = undoRejectionExplainer;
         this.deskTaskMapper = deskTaskMapper;
+        this.repairService = repairService;
         this.clock = clock;
     }
 
@@ -347,7 +351,11 @@ public class DeskBoardService {
                 """,
                 tenantId, taskId).stream()
                 .findFirst()
-                .map(r -> new DeskTaskDetail.Repair((String) r.get("resolution_type"), (String) r.get("verified_by_name")))
+                .map(r -> new DeskTaskDetail.Repair(
+                        (String) r.get("resolution_type"),
+                        (String) r.get("verified_by_name"),
+                        this.repairService.reportPhotos(tenantId, taskId),
+                        this.repairService.completionPhotos(tenantId, taskId)))
                 .orElse(null);
     }
 

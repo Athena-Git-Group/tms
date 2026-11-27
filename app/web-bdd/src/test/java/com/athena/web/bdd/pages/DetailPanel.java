@@ -9,6 +9,7 @@ import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.AriaRole;
 import com.microsoft.playwright.options.WaitForSelectorState;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -289,6 +290,160 @@ public class DetailPanel extends PageObject {
     private Locator namedButtonArea(String name) {
         return panel().getByRole(AriaRole.GROUP, new Locator.GetByRoleOptions().setName(name).setExact(true))
                 .or(region(name));
+    }
+
+    public static final List<String> PHOTO_ROW_TITLES = List.of("報修照片", "完修照片");
+
+    private static final String PHOTO_CELLS = """
+            row => [...row.querySelectorAll('button')].map(cell => {
+              const img = cell.querySelector('img');
+              const r = cell.getBoundingClientRect();
+              const bg = getComputedStyle(cell).backgroundColor;
+              return {
+                text: (cell.innerText || '').replace(/\\s+/g, ' ').trim(),
+                busy: cell.getAttribute('aria-busy') === 'true',
+                src: img ? img.getAttribute('src') || '' : '',
+                loaded: !!img && img.complete && img.naturalWidth > 0,
+                left: r.left, right: r.right, width: r.width, height: r.height,
+                background: bg,
+              };
+            })
+            """;
+
+    private static final String CELLS_SETTLED = """
+            row => [...row.querySelectorAll('button')].every(cell => {
+              if (cell.getAttribute('aria-busy') === 'true') return false;
+              const img = cell.querySelector('img');
+              return img ? img.complete && img.naturalWidth > 0 : (cell.innerText || '').trim().length > 0;
+            })
+            """;
+
+    private static final String IMAGE_BYTES = """
+            async img => {
+              const response = await fetch(img.src);
+              const bytes = new Uint8Array(await response.arrayBuffer());
+              let text = '';
+              for (const b of bytes) text += String.fromCharCode(b);
+              return btoa(text);
+            }
+            """;
+
+    private static final String PANEL_BOUNDS = """
+            panel => {
+              const r = panel.getBoundingClientRect();
+              const scrollsSideways = [panel, ...panel.querySelectorAll('*')].some(el => {
+                const overflowX = getComputedStyle(el).overflowX;
+                return (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 1;
+              });
+              return { left: r.left, right: r.right, scrollsSideways };
+            }
+            """;
+
+    public record PhotoCell(String text, boolean busy, String src, boolean loaded, double left, double right,
+            double width, double height, String background) {
+    }
+
+    public record PanelBounds(double left, double right, boolean scrollsSideways) {
+    }
+
+    public record ViewerReading(String title, String counter, String text, boolean imageLoaded) {
+    }
+
+    public Locator photoRow(String title) {
+        return region(title.strip());
+    }
+
+    public Locator photoRows() {
+        return panel().getByRole(AriaRole.REGION, new Locator.GetByRoleOptions().setName(anyPhotoRowTitle()));
+    }
+
+    private static Pattern anyPhotoRowTitle() {
+        String alternatives = PHOTO_ROW_TITLES.stream()
+                .map(UiWords::anyLanguage)
+                .map(pattern -> pattern.pattern().substring(1, pattern.pattern().length() - 1))
+                .collect(java.util.stream.Collectors.joining("|"));
+        return Pattern.compile("^(?:" + alternatives + ")$");
+    }
+
+    public Locator thumbnails(Locator row) {
+        return row.getByRole(AriaRole.BUTTON);
+    }
+
+    public Locator thumbnail(String rowTitle, int nth) {
+        return thumbnails(photoRow(rowTitle)).nth(nth - 1);
+    }
+
+    public void waitPhotosSettled(Locator row) {
+        page().waitForFunction(CELLS_SETTLED, row.first().elementHandle());
+    }
+
+    public List<PhotoCell> photoCells(Locator row) {
+        List<PhotoCell> cells = new ArrayList<>();
+        for (Map<String, Object> raw : JsResult.objects(row.first().evaluate(PHOTO_CELLS))) {
+            cells.add(new PhotoCell(JsResult.string(raw.get("text")), Boolean.TRUE.equals(raw.get("busy")),
+                    JsResult.string(raw.get("src")), Boolean.TRUE.equals(raw.get("loaded")),
+                    JsResult.number(raw.get("left")).doubleValue(), JsResult.number(raw.get("right")).doubleValue(),
+                    JsResult.number(raw.get("width")).doubleValue(), JsResult.number(raw.get("height")).doubleValue(),
+                    JsResult.string(raw.get("background"))));
+        }
+        return cells;
+    }
+
+    public byte[] imageBytes(Locator img) {
+        return Base64.getDecoder().decode((String) img.first().evaluate(IMAGE_BYTES));
+    }
+
+    public PanelBounds panelBounds() {
+        Map<String, Object> raw = JsResult.object(panel().first().evaluate(PANEL_BOUNDS));
+        return new PanelBounds(JsResult.number(raw.get("left")).doubleValue(),
+                JsResult.number(raw.get("right")).doubleValue(), Boolean.TRUE.equals(raw.get("scrollsSideways")));
+    }
+
+    public Locator photoViewer() {
+        return page().getByRole(AriaRole.DIALOG).filter(new Locator.FilterOptions().setHas(
+                page().getByRole(AriaRole.HEADING, new Page.GetByRoleOptions().setName(anyPhotoRowTitle()))));
+    }
+
+    public Locator viewerButton(String name) {
+        return photoViewer().getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions()
+                .setName(name.strip()).setExact(true));
+    }
+
+    public void waitViewerImageSettled() {
+        waitViewerImageSettled("");
+    }
+
+    public void waitViewerImageSettled(String previousSrc) {
+        page().waitForFunction("""
+                ([dialog, previous, unavailable]) => {
+                  const img = dialog.querySelector('img');
+                  if (img) return img.getAttribute('src') !== previous && img.complete && img.naturalWidth > 0;
+                  const text = dialog.innerText || '';
+                  return unavailable.some(word => text.includes(word));
+                }
+                """, List.of(photoViewer().first().elementHandle(), previousSrc, UNAVAILABLE_WORDS));
+    }
+
+    private static final List<String> UNAVAILABLE_WORDS = java.util.Arrays.stream(UiWords.Language.values())
+            .map(language -> UiWords.in(language, "照片無法顯示")).toList();
+
+    public String viewerImageSrc() {
+        Object src = photoViewer().first().evaluate("d => { const img = d.querySelector('img'); return img ? img.getAttribute('src') : ''; }");
+        return src == null ? "" : (String) src;
+    }
+
+    public ViewerReading readViewer() {
+        Locator dialog = photoViewer().first();
+        Locator heading = dialog.getByRole(AriaRole.HEADING);
+        String title = heading.count() == 0 ? "" : BoardPage.collapse(heading.first().innerText());
+        String text = BoardPage.collapse(dialog.innerText());
+        java.util.regex.Matcher counter = Pattern.compile("(\\d+ / \\d+)").matcher(text);
+        Object loaded = dialog.evaluate("d => { const img = d.querySelector('img'); return !!img && img.complete && img.naturalWidth > 0; }");
+        return new ViewerReading(title, counter.find() ? counter.group(1) : "", text, Boolean.TRUE.equals(loaded));
+    }
+
+    public Locator viewerImage() {
+        return photoViewer().first().locator("img");
     }
 
     private List<String> firstLines(Locator section) {

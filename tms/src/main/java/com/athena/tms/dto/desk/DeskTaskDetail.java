@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 public record DeskTaskDetail(
         @JsonUnwrapped DeskTask task,
@@ -23,5 +24,9 @@ public record DeskTaskDetail(
 
     public record Cancellation(String reason, String byName) {}
 
-    public record Repair(String resolutionType, String verifiedByName) {}
+    public record Repair(
+            String resolutionType,
+            String verifiedByName,
+            List<Map<String, Object>> photos,
+            List<Map<String, Object>> completionPhotos) {}
 }

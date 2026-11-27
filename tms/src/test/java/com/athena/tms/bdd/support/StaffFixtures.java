@@ -85,6 +85,17 @@ public class StaffFixtures {
     }
 
     public CreatedStaff createHousekeeperInTenant(long tenantId, String name, String loginId, String rawPassword) {
+        return insertStaffInTenant(tenantId, name, loginId, rawPassword, "housekeeping");
+    }
+
+    public CreatedStaff createEngineerInTenant(long tenantId, String name) {
+        UUID seed = UuidV7.generate();
+        String loginId = "fx-" + seed.toString().replace("-", "").substring(20);
+        return insertStaffInTenant(tenantId, name, loginId, DEFAULT_PASSWORD, "engineering");
+    }
+
+    private CreatedStaff insertStaffInTenant(
+            long tenantId, String name, String loginId, String rawPassword, String roleAndDept) {
         UUID id = UuidV7.generate();
         OffsetDateTime now = OffsetDateTime.now();
         jdbcClient
@@ -92,11 +103,12 @@ public class StaffFixtures {
                         """
                         INSERT INTO staff_accounts
                             (id, tenant_id, name, login_id, password_hash, role, dept, active, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, 'housekeeping', 'housekeeping', true, 'active', ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, true, 'active', ?, ?)
                         """)
-                .params(id, tenantId, name, loginId, FIXTURE_ENCODER.encode(rawPassword), now, now)
+                .params(id, tenantId, name, loginId, FIXTURE_ENCODER.encode(rawPassword), roleAndDept, roleAndDept,
+                        now, now)
                 .update();
-        JwtService.IssuedToken issued = jwtService.issue(tenantId, id, "housekeeping", "housekeeping");
+        JwtService.IssuedToken issued = jwtService.issue(tenantId, id, roleAndDept, roleAndDept);
         return new CreatedStaff(tenantId, id, loginId, rawPassword, issued.token());
     }
 

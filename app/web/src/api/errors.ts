@@ -79,7 +79,7 @@ export async function fetchJsonResponse<T>(url: string, init: RequestInit): Prom
   }
 }
 
-function toErrorBody(text: string): ApiErrorBody {
+export function toErrorBody(text: string): ApiErrorBody {
   try {
     const parsed: unknown = JSON.parse(text);
     if (isErrorBody(parsed)) return parsed;

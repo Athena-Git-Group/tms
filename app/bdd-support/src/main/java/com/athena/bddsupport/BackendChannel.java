@@ -189,6 +189,10 @@ public class BackendChannel {
     private String frontdeskPasswordHash;
     private final Map<UUID, String> jwtByStaffId = new ConcurrentHashMap<>();
 
+    private final Map<UUID, CreatedStaff> staffById = new ConcurrentHashMap<>();
+
+    private final java.util.concurrent.atomic.AtomicInteger photoSeq = new java.util.concurrent.atomic.AtomicInteger();
+
     public BackendChannel() {
         this.baseUrl = System.getProperty("backend.base.url", "http://127.0.0.1:8080");
         this.dbUrl = System.getProperty("backend.db.url", "jdbc:postgresql://127.0.0.1:5433/tms");
@@ -468,8 +472,10 @@ public class BackendChannel {
             if (id == null) {
                 throw new IllegalStateException("寫入預設帳號 " + staff.loginId() + " 沒有回傳 id");
             }
-            staffByName.put(staff.name(), new CreatedStaff(id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
-                    staff.role(), staff.dept()));
+            CreatedStaff created = new CreatedStaff(id, staff.name(), staff.loginId(), FRONTDESK_PASSWORD,
+                    staff.role(), staff.dept());
+            staffByName.put(staff.name(), created);
+            staffById.put(id, created);
         }
         return staffByName;
     }
@@ -758,13 +764,17 @@ public class BackendChannel {
                     (id, tenant_id, name, login_id, password_hash, role, dept, active, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, id, tenantId, name, loginId, passwordHash, roleCode, deptCode, active, stateCode, now, now);
-        return new CreatedStaff(id, name, loginId, DEFAULT_PASSWORD, roleCode, deptCode);
+        CreatedStaff staff = new CreatedStaff(id, name, loginId, DEFAULT_PASSWORD, roleCode, deptCode);
+        staffById.put(id, staff);
+        return staff;
     }
 
     public void setCredentials(UUID staffId, String loginId, String rawPassword) {
         execute("UPDATE staff_accounts SET login_id = ?, password_hash = ?, updated_at = ? WHERE tenant_id = ? AND id = ?",
                 loginId, passwordEncoder.encode(rawPassword), OffsetDateTime.now(), ensureTenant(), staffId);
         jwtByStaffId.remove(staffId);
+        staffById.computeIfPresent(staffId, (ignored, staff) ->
+                new CreatedStaff(staff.id(), staff.name(), loginId, rawPassword, staff.role(), staff.dept()));
     }
 
     public void setFailedLoginCount(UUID staffId, int count) {
@@ -1377,17 +1387,63 @@ public class BackendChannel {
     }
 
     public void insertReportPhotos(UUID ticketTaskId, UUID uploaderId, int count) {
-        long tenantId = ensureTenant();
-        OffsetDateTime now = OffsetDateTime.now();
+        CreatedStaff uploader = knownStaff(uploaderId);
         for (int i = 0; i < count; i++) {
-            UUID id = UUID.randomUUID();
-            execute("""
-                    INSERT INTO repair_photos
-                        (id, tenant_id, ticket_task_id, purpose, status, storage_ref, taken_at,
-                         uploaded_by, created_at, uploaded_at)
-                    VALUES (?, ?, ?, 'report', 'uploaded', ?, ?, ?, ?, ?)
-                    """, id, tenantId, ticketTaskId, "fixture/" + id + ".jpg", now, uploaderId, now, now);
+            bindPhoto(createUploadedPhoto(uploader, "report"), ticketTaskId);
         }
+    }
+
+    public void replaceRepairPhotos(UUID ticketTaskId, int reportCount, int completionCount) {
+        long tenantId = ensureTenant();
+        execute("DELETE FROM repair_photos WHERE tenant_id = ? AND ticket_task_id = ?", tenantId, ticketTaskId);
+        UUID reporterId = (UUID) queryScalar(
+                "SELECT reporter_id FROM repair_tickets WHERE tenant_id = ? AND task_id = ?", tenantId, ticketTaskId)
+                .orElseThrow(() -> new IllegalStateException("後端沒有這張工務單：" + ticketTaskId));
+        insertReportPhotos(ticketTaskId, reporterId, reportCount);
+        if (completionCount == 0) {
+            return;
+        }
+        UUID assigneeId = (UUID) queryScalar(
+                "SELECT assignee_id FROM tasks WHERE tenant_id = ? AND id = ?", tenantId, ticketTaskId)
+                .orElseThrow(() -> new IllegalStateException("工務單 " + ticketTaskId + " 沒有處理人，放不了完修照片"));
+        CreatedStaff assignee = knownStaff(assigneeId);
+        for (int i = 0; i < completionCount; i++) {
+            bindPhoto(createUploadedPhoto(assignee, "completion"), ticketTaskId);
+        }
+    }
+
+    public void markPhotoWithFakeUploadReference(UUID photoId) {
+        execute("UPDATE repair_photos SET storage_ref = ? WHERE tenant_id = ? AND id = ?",
+                "upload:" + photoId, ensureTenant(), photoId);
+    }
+
+    public List<UUID> repairPhotoIds(UUID ticketTaskId, String purpose) {
+        return queryRows("SELECT id FROM repair_photos WHERE tenant_id = ? AND ticket_task_id = ? AND purpose = ?"
+                        + " ORDER BY taken_at, id", ensureTenant(), ticketTaskId, purpose)
+                .stream().map(row -> (UUID) row.get("id")).toList();
+    }
+
+    public byte[] photoContent(UUID photoId, CreatedStaff staff) {
+        HttpResponse<byte[]> response = sendForBytes(
+                request("GET", "/repair-photos/" + photoId + "/content", jwt(staff)).GET());
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("讀照片失敗：GET /repair-photos/" + photoId + "/content -> HTTP "
+                    + response.statusCode());
+        }
+        return response.body();
+    }
+
+    private CreatedStaff knownStaff(UUID staffId) {
+        CreatedStaff staff = staffById.get(staffId);
+        if (staff == null) {
+            throw new IllegalStateException("測試資料沒有建立過員工 " + staffId + "，不知道他的帳密，無法以他的身分上傳照片");
+        }
+        return staff;
+    }
+
+    private void bindPhoto(UUID photoId, UUID ticketTaskId) {
+        execute("UPDATE repair_photos SET ticket_task_id = ? WHERE tenant_id = ? AND id = ?",
+                ticketTaskId, ensureTenant(), photoId);
     }
 
     public void setRoomHkState(String roomNo, String hkState) {
@@ -1442,15 +1498,19 @@ public class BackendChannel {
     }
 
     private UUID createCompletionPhoto(CreatedStaff uploader) {
+        return createUploadedPhoto(uploader, "completion");
+    }
+
+    private UUID createUploadedPhoto(CreatedStaff uploader, String purpose) {
         Map<String, Object> body = Map.of(
-                "purpose", "completion",
+                "purpose", purpose,
                 "takenAt", OffsetDateTime.now().toString());
         HttpResponse<String> created = send(request("POST", "/repair-photos", jwt(uploader))
                 .header(IDEMPOTENCY_KEY_HEADER, UUID.randomUUID().toString())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(toJson(body), StandardCharsets.UTF_8)));
         if (created.statusCode() != 201 && created.statusCode() != 200) {
-            throw new IllegalStateException("建立完修照片失敗：POST /repair-photos -> HTTP "
+            throw new IllegalStateException("建立照片失敗（" + purpose + "）：POST /repair-photos -> HTTP "
                     + created.statusCode() + "，body=" + created.body());
         }
         UUID photoId = UUID.fromString(parseJson(created.body()).path("id").asText());
@@ -1458,12 +1518,30 @@ public class BackendChannel {
         HttpResponse<String> uploaded = send(
                 request("PUT", "/repair-photos/" + photoId + "/content", jwt(uploader))
                         .header("Content-Type", "image/jpeg")
-                        .PUT(HttpRequest.BodyPublishers.ofByteArray(PLACEHOLDER_JPEG)));
+                        .PUT(HttpRequest.BodyPublishers.ofByteArray(distinctJpeg(photoSeq.incrementAndGet()))));
         if (uploaded.statusCode() < 200 || uploaded.statusCode() >= 300) {
-            throw new IllegalStateException("上傳完修照片失敗：PUT /repair-photos/" + photoId
+            throw new IllegalStateException("上傳照片失敗（" + purpose + "）：PUT /repair-photos/" + photoId
                     + "/content -> HTTP " + uploaded.statusCode() + "，body=" + uploaded.body());
         }
         return photoId;
+    }
+
+    /**
+     * 1 × 1 的 JPEG，在開頭標記後面插一段註解（COM）寫進序號：每張位元組都不同，
+     * 而且仍是解碼器解得開的圖，App 與櫃檯 Web 才顯示得出來。
+     */
+    static byte[] distinctJpeg(int seq) {
+        byte[] text = ("tms-fixture-photo-" + seq).getBytes(StandardCharsets.UTF_8);
+        int segmentLength = text.length + 2;
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        out.write(PLACEHOLDER_JPEG, 0, 2);
+        out.write(0xFF);
+        out.write(0xFE);
+        out.write(segmentLength >> 8);
+        out.write(segmentLength & 0xFF);
+        out.writeBytes(text);
+        out.write(PLACEHOLDER_JPEG, 2, PLACEHOLDER_JPEG.length - 2);
+        return out.toByteArray();
     }
 
     public int allocateNextRepairTicketNo() {
@@ -2967,12 +3045,20 @@ public class BackendChannel {
     }
 
     private HttpResponse<String> send(HttpRequest.Builder builder) {
+        return send(builder, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private HttpResponse<byte[]> sendForBytes(HttpRequest.Builder builder) {
+        return send(builder, HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    private <T> HttpResponse<T> send(HttpRequest.Builder builder, HttpResponse.BodyHandler<T> handler) {
         try {
             return HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_1_1)
                     .connectTimeout(Duration.ofSeconds(5))
                     .build()
-                    .send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                    .send(builder.build(), handler);
         } catch (Exception e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();

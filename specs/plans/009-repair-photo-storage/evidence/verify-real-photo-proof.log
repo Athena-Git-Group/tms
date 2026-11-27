@@ -1,0 +1,10 @@
+generated /tmp/tms-verify-009/real-photo.jpg 190576 bytes, sha256 989c86ba962ff2609de9dbefe92537776ff75b354041800a545af5d7cd48f9eb
+logged in as 阿強 engineering
+created photo 01a21794-6fc8-72cd-9391-d72acdd4f0a9 201
+upload content 200 {"id":"01a21794-6fc8-72cd-9391-d72acdd4f0a9","status":"uploaded"}
+created ticket 201 None W-0002
+readback 200 190576 bytes, sha256 989c86ba962ff2609de9dbefe92537776ff75b354041800a545af5d7cd48f9eb
+SHA256_MATCH True
+storage_ref repair-photos/3/01a21794-6fc8-72cd-9391-d72acdd4f0a9.jpg
+BUCKET_OBJECT repair-photos/3/01a21794-6fc8-72cd-9391-d72acdd4f0a9.jpg size 190576 md5 7IIHGoL9VjDIBbn69uOYtg==
+BUCKET_BYTES_MATCH True

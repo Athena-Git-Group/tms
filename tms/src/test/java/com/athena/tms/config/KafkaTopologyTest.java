@@ -54,6 +54,7 @@ class KafkaTopologyTest {
         registry.add("tms.kafka.topic.task-events", () -> TASK_EVENTS);
         registry.add("tms.kafka.topic.push", () -> PUSH);
         registry.add("tms.kafka.topic.pms-status", () -> PMS_STATUS);
+        SharedContainers.wireStorage(registry, "kafkatopology-photos");
     }
 
     @Autowired

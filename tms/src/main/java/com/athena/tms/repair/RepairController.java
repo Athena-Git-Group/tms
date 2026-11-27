@@ -1,12 +1,19 @@
 package com.athena.tms.repair;
 
+import com.athena.tms.common.error.ApiError;
 import com.athena.tms.common.error.UnprocessableEntityException;
 import com.athena.tms.dto.RepairVerificationOutcome;
 import com.athena.tms.dto.VerifyRepairTicketRequest;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 public class RepairController {
+
+    private static final List<String> PHOTO_PURPOSES = List.of("report", "completion");
+    private static final String ATTACHED_PHOTO_NEVER_CHANGES = "private, max-age=86400, immutable";
+    private static final String PENDING_PHOTO_REVALIDATE = "private, no-cache";
 
     private final RepairService repairService;
 
@@ -53,17 +64,47 @@ public class RepairController {
     }
 
     @PostMapping("/repair-photos")
-    public ResponseEntity<Map<String, Object>> createRepairPhoto(@RequestBody CreatePhotoRequest request) {
-        if (request == null || request.purpose() == null) {
-            throw new UnprocessableEntityException("purpose 必填（report 或 completion）");
+    public ResponseEntity<Map<String, Object>> createRepairPhoto(@RequestBody(required = false) CreatePhotoRequest request) {
+        String purpose = request == null ? null : request.purpose();
+        if (purpose == null || !PHOTO_PURPOSES.contains(purpose)) {
+            throw new UnprocessableEntityException("purpose 必填，只能是 report 或 completion",
+                    List.of(new ApiError.Detail("purpose", "必填，只能是 report 或 completion")));
         }
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(repairService.createPhoto(request.purpose(), request.takenAt()));
+                .body(repairService.createPhoto(purpose, parseTakenAt(request.takenAt())));
+    }
+
+    private static OffsetDateTime parseTakenAt(String takenAt) {
+        if (takenAt == null) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(takenAt);
+        } catch (DateTimeParseException e) {
+            throw new UnprocessableEntityException("takenAt 要是帶時區的 ISO 8601 日期時間",
+                    List.of(new ApiError.Detail("takenAt", "要是帶時區的 ISO 8601 日期時間")));
+        }
     }
 
     @PutMapping("/repair-photos/{photoId}/content")
-    public Map<String, Object> uploadRepairPhotoContent(@PathVariable UUID photoId) {
-        return repairService.markUploaded(photoId);
+    public Map<String, Object> uploadRepairPhotoContent(@PathVariable UUID photoId, HttpServletRequest request)
+            throws IOException {
+        byte[] jpeg = RepairPhotoContent.read(
+                request.getContentType(), request.getContentLengthLong(), request.getInputStream());
+        return repairService.storeContent(photoId, jpeg);
+    }
+
+    @GetMapping("/repair-photos/{photoId}/content")
+    public ResponseEntity<byte[]> getRepairPhotoContent(@PathVariable UUID photoId) {
+        RepairService.PhotoContent content = repairService.readContent(photoId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CACHE_CONTROL, cacheControlFor(content))
+                .body(content.jpeg());
+    }
+
+    private static String cacheControlFor(RepairService.PhotoContent content) {
+        return content.attached() ? ATTACHED_PHOTO_NEVER_CHANGES : PENDING_PHOTO_REVALIDATE;
     }
 
     @PostMapping("/repair-tickets/precheck")

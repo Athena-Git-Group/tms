@@ -50,6 +50,13 @@ Kafka 在中間扮演兩個角色——**廣播站**（`tms.task-events`）只�
 
 ![櫃檯看板（SSE）與手機推播：一步一步發生什麼？](docs/diagrams/tms-sse-push-detail.png)
 
+## 照片存在哪裡？本機與正式環境差在哪？
+
+工務單照片存在雲端儲存（Google Cloud Storage），後端只有一套用官方程式庫的寫法。
+正式環境以 `prod` 設定組啟動（`SPRING_PROFILES_ACTIVE=prod`），並把 `TMS_STORAGE_BUCKET` 設成正式的儲存空間名稱；
+沒帶 `prod` 時後端會去連本機的模擬服務，連不上就啟動失敗，不會悄悄把照片寫到別處。
+本機與自動化測試用 `fake-gcs-server` 模擬雲端儲存：`docker compose up -d` 會跟 Postgres、Kafka 一起把它起在 `localhost:4443`，`docker compose down -v` 會連照片一起清掉。
+
 ## 文件導覽
 
 接手請讀工程交接手冊 `docs/14-handover/`（瀏覽器開 `index.html`；線上版：[TMS 交接手冊](https://claude.ai/artifact/7qcJ1Z1e97ZMfGR58jgpN3)），

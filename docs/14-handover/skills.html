@@ -241,6 +241,7 @@
     <h4><span class="tag">現在的做法</span>關掉自動啟動，主要階段由人推進</h4>
     <p>每一棒做完都會回報產出與「可以進下一棒了嗎」，人看過再打下一個指令，等於每一棒之間都有一道人工關卡。</p>
     <p><b class="lbl">權衡</b>SKILL.md 裡寫的「委派」（例如 <code>/system-analysis</code> 委派 <code>/api-plan</code>）也受這個開關影響：AI 不一定能自動叫起下一棒，所以有些 skill 直接寫明要去讀下一棒的手冊，例如 <code>/dsl-refine</code> 明寫要先讀 <code>../gherkin-and-dsl/SKILL.md</code>。如果 AI 沒有接下去，就自己打該指令，並把工作包路徑告訴它。</p>
+    <p>repo 根目錄的 <code>CLAUDE.md</code>（進版控，Claude Code 每個 session 都會讀）補上另一半：只要改到 <code>*.feature</code>、<code>dsl.md</code>、step 定義、<code>specs/plans/**</code> 或 <code>specs/truth/**</code>，AI 開工前要自己用讀檔的方式讀 <code>.agents/skills/</code> 底下對應的 <code>SKILL.md</code>，照它的步驟與寫入範圍做；派別的 AI 做這些事時，也要在交代工作時點名要讀哪幾個 skill。所以就算沒人打 <code>/名稱</code>，改到規格與測試的工作仍然照同一套流程走。</p>
   </div>
 </section>
 

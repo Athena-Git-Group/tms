@@ -27,7 +27,7 @@
   <p class="eyebrow">交接 · Flutter App</p>
   <h1>員工 App 是怎麼組起來的</h1>
   <p class="stand">一套程式碼、三種殼（房務／工務／主管）。狀態管理、路由、網路都沒有用第三方套件，全部是 Flutter 內建元件自己組的。程式在 <code>app/mobile/</code>，以下路徑都相對它。</p>
-  <p class="readtime">約 8 分鐘</p>
+  <p class="readtime">約 9 分鐘</p>
 </header>
 
 <section id="structure">
@@ -77,7 +77,7 @@
   <p>登入後由 <code>core/landing.dart:6-15</code> 的 <code>landingShellFor</code> 決定殼：主管 → <code>ManagerShell</code>，部門是工務 → <code>EngineeringShell</code>，其他 → <code>HousekeepingShell</code>。主管再細分房務主管（可查房、可驗收）與工務主管（只能驗收），見 <code>core/landing.dart:17-37</code> 的 <code>ManagerKind</code>。</p>
 
   <details>
-    <summary>版本與套件表 <span class="hint">— Flutter／Dart、App 版本、4 個套件、iOS 與 Android 識別碼</span></summary>
+    <summary>版本與套件表 <span class="hint">— Flutter／Dart、App 版本、5 個套件、iOS 與 Android 識別碼</span></summary>
     <div class="in">
     <div class="tablewrap"><table>
       <thead><tr><th>項目</th><th>值</th><th>出處／用途</th></tr></thead>
@@ -88,12 +88,13 @@
         <tr><td><code>firebase_core</code></td><td>^5.1.0</td><td>Firebase 初始化</td></tr>
         <tr><td><code>firebase_messaging</code></td><td>^17.0.1</td><td>FCM 推播（取推播權杖、點通知開啟 App）</td></tr>
         <tr><td><code>shared_preferences</code></td><td>^2.5.6</td><td>存裝置指紋、主管看待認領時選的部門</td></tr>
+        <tr><td><code>image_picker</code></td><td>^1.2.4</td><td>工務單照片：拍照或從相簿選，順便縮小與壓縮</td></tr>
         <tr><td>開發用</td><td><code>flutter_test</code>、<code>flutter_lints ^6.0.0</code></td><td>—</td></tr>
         <tr><td>iOS</td><td>最低 iOS 15.0；bundle id <code>com.athena.tms.tmsStaffApp</code></td><td><code>ios/Runner.xcodeproj/project.pbxproj:365, 389</code></td></tr>
         <tr><td>Android</td><td><code>com.athena.tms.tms_staff_app</code>；SDK 版本跟 Flutter 預設</td><td><code>android/app/build.gradle.kts:13, 23</code></td></tr>
       </tbody>
     </table></div>
-    <p>沒有用的：狀態管理套件、路由套件、HTTP 套件（直接用 <code>dart:io</code> 的 <code>HttpClient</code>）、相機或掃碼套件、多語系套件。工務單拍照在 <code>lib/core/repair_photo_capture.dart</code>。</p>
+    <p>沒有用的：狀態管理套件、路由套件、HTTP 套件（直接用 <code>dart:io</code> 的 <code>HttpClient</code>）、掃碼套件、多語系套件。工務單照片怎麼拍、怎麼傳，見下方<a href="#photos">工務單照片</a>。</p>
     </div>
   </details>
 </section>
@@ -124,13 +125,13 @@
 <section id="network">
   <h2>App 怎麼跟後端說話、怎麼收推播？</h2>
   <div class="key"><b class="lbl">重點</b>
-    <p>連哪個後端是<b>編譯期</b>決定的，換環境要重新編譯。token 只放記憶體，沒有逾時、重試或統一的 401 處理。推播點開後由 <code>core/push_gateway.dart</code> 決定開哪一頁。</p>
+    <p>連哪個後端是<b>編譯期</b>決定的，換環境要重新編譯。token 只放記憶體；一般請求沒有逾時、重試或統一的 401 處理，只有讀照片有 10 秒逾時。推播點開後由 <code>core/push_gateway.dart</code> 決定開哪一頁。</p>
   </div>
   <ul class="plain">
     <li><b>連哪個後端</b>：<code>--dart-define=API_BASE_URL=...</code>，預設 <code>http://localhost:8080/api/v1</code>（<code>core/api_client.dart:9-12</code>）。沒有環境檔、沒有執行期切換畫面；simulator 的 localhost 就是 Mac 本身。</li>
     <li><b>登入</b>：<code>POST /staff-accounts/login</code>，body 只有 <code>{loginId, password}</code>（<code>api_client.dart:35-39</code>）。<b>App 登入畫面沒有飯店代碼欄位</b>，後端怎麼決定飯店見 <a href="backend.html#auth">Java 後端</a>。<code>mustChangePassword</code> 為真時導到強制改密碼頁；429 加 <code>remainingMinutes</code> 表示帳號被鎖。</li>
     <li><b>token 只放記憶體</b>（<code>api_client.dart:22</code>），重開 App 要重新登入；每個請求帶 <code>Authorization: Bearer</code>。</li>
-    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉（<code>api_client.dart:442-479</code>）。沒有逾時、自動重試、攔截器、統一 401 處理。</li>
+    <li><b>傳輸</b>：每個請求新開一個 <code>HttpClient</code>、用完關掉。沒有逾時、自動重試、攔截器、統一 401 處理；唯一的例外是讀照片，連線與整個請求都限 10 秒（<code>api_client.dart:254-261</code>）。</li>
     <li><b>冪等</b>：寫入請求帶 <code>idempotent: true</code> 就自動加 <code>Idempotency-Key</code>（UUID v4，<code>api_client.dart:481-490</code>）——同一操作重送時後端回放上次結果，不會做兩次。</li>
     <li><b>錯誤</b>：非 2xx 丟 <code>ApiException</code>，從 JSON <code>{code, message, context}</code> 解析錯誤碼（<code>api_client.dart:493-533</code>）。</li>
     <li><b>離線</b>：沒有 SSE 或 WebSocket。<code>OfflineQueue</code>（<code>core/connection_status.dart:45-125</code>）離線時暫存寫入、恢復後依序重送（最多 5 次、間隔 300ms）；連線不穩時每 5 秒輪詢今日資料。但這兩個旗標<b>只有測試後門會設定</b>，正式環境沒有偵測網路的程式。</li>
@@ -141,6 +142,12 @@
   <p>點通知有三個來源：FCM 的「App 在背景時點開」、冷啟動時的初始訊息、iOS 原生的 MethodChannel <code>com.athena.tms/push</code>（<code>ios/Runner/AppDelegate.swift</code>）。同一個訊息 5 秒內只處理一次。</p>
   <p>payload 有 <code>target</code> 時解析成 <code>{kind: task | ticket | pool | home, taskId, dept, highlightTaskId}</code>（<code>core/push_target.dart</code>）：<code>task</code> 先打 <code>GET /tasks/{id}</code> 查房號再導頁；<code>pool</code> 切到待認領分頁並高亮；<code>ticket</code> 開工務單頁；<code>home</code> 重建殼。</p>
   <p><code>firebase_messaging</code> 17 把取權杖的舊方法標成過時，但新方法回的是另一種 id、不是後端要的 FCM 註冊權杖，所以程式刻意用 <code>// ignore: deprecated_member_use</code> 繼續用舊方法（檔頭註解有寫原因）。</p>
+
+  <h3 id="photos">工務單照片怎麼拍、怎麼傳、怎麼顯示？</h3>
+  <p>開工務單、房務回報要修、完修回報、補照片，這四個地方都呼叫同一個 <code>pickRepairPhoto</code>（<code>core/repair_photo_capture.dart:95</code>）。它先跳出選單讓人選「拍照」或「從相簿選擇」，再交給 <code>image_picker</code> 拍或選；拍或選的同時就把照片縮到長邊最多 1600 像素、品質 80 的 JPEG（<code>:27-34</code>），一張通常幾百 KB。拿到之後先看開頭三個位元組是不是 JPEG 的記號，不是就提示「這張照片不能用」；手機沒給相機或相簿權限時，提示「沒有相機權限」或「沒有相簿權限」，請人到設定裡打開。iOS 跳權限詢問時顯示的說明寫在 <code>ios/Runner/Info.plist:29-32</code>。</p>
+  <p>上傳分兩步：先 <code>POST /repair-photos</code> 帶用途（報修 <code>report</code> 或完修 <code>completion</code>）與拍攝時間，拿回照片編號；再 <code>PUT /repair-photos/{編號}/content</code> 把 JPEG 原樣送上去。拍照與上傳刻意拆成兩個函式（<code>captureRepairPhoto</code>、<code>uploadRepairPhoto</code>）：上傳失敗按重試時重送的是同一張照片，不會再打開一次相機。</p>
+  <p>顯示照片靠 <code>RepairPhotoImage</code>（<code>core/repair_photo_image.dart</code>）。照片要登入才拿得到，所以不是丟一個網址給圖片元件，而是由 <code>ApiClient</code> 帶著登入憑證去讀 <code>GET /repair-photos/{編號}/content</code>。讀到的照片放在記憶體快取，最多 40 張，快取跟著登入的那個 <code>ApiClient</code> 走，換人登入就是新的一份；讀失敗或逾時不留快取，下次打開會重讀，畫面上則是一個灰框寫「照片無法顯示」。工務單詳情的報修照片、完修照片都用它，主管在待驗收清單點開工務單時，按通過或不通過之前就能看到兩種照片，點完修照片也會打開大圖。</p>
+  <p><b class="lbl">權衡</b>simulator 沒有相機，所以測試版 App（以 <code>TEST_BACKDOOR</code> 編譯）在編譯時就把拍照換成送一張固定的測試照片（<code>repair_photo_capture.dart:22-39</code>），<code>flutter test</code> 也一樣（<code>test/flutter_test_config.dart</code>）。代價是自動化測試從來沒有真的打開過相機或相簿，那段要在真機上手動試。</p>
 </section>
 
 <section id="test-contract">
@@ -153,6 +160,7 @@
     <li>可停用的元件要明確傳 <code>enabled</code>：<code>CupertinoButton(onPressed: null)</code> 不會把停用狀態寫進無障礙樹，測試會判斷錯。</li>
     <li>命名是 <code>畫面.元素</code> 的點分隔小寫，例如 <code>home.screen</code>、<code>engPool.screen</code>、<code>me.logout-button</code>、<code>home.task.&lt;房號&gt;.card</code>、<code>ticket.stepper.&lt;n&gt;--current</code>、<code>system.offline-bar</code>。全專案兩百多處；主管相關的集中在 <code>features/manager/manager_ids.dart</code>。</li>
   </ul>
+  <p>照片格子的無障礙值是 <code>loading</code>、<code>loaded</code>、<code>failed</code> 三者之一（<code>repair_photo_image.dart:9-12</code>），驗收靠它分辨照片真的畫出來了還是灰框。</p>
   <p>測試後門只有以 <code>--dart-define=TEST_BACKDOOR=true</code> 編譯的 App 才會開（<code>core/test_backdoor.dart</code>），在 <code>127.0.0.1:9099</code> 提供撥時鐘、讀狀態、模擬斷線、帶入登入狀態、重置回登入頁等能力，也會寫一份 log 到系統暫存目錄的 <code>tms_backdoor_log.txt</code>。</p>
   <details>
     <summary>測試後門的端點 <span class="hint">— 10 個路徑與用途</span></summary>

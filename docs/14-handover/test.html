@@ -42,13 +42,13 @@
     <p>資料會被測試清掉；驗收後端還開著可以撥動的測試時鐘，你看到的「現在」可能是測試撥過的時間。</p>
   </div>
   <div class="opt great">
-    <h4><span class="tag">現在的做法</span>同一台 Postgres 與 Kafka，另開一套邏輯上獨立的環境</h4>
-    <p>手動環境用自己的 database <code>tms_manual</code>、自己的埠號，Kafka 的 topic 全部加上 <code>manual.</code> 前綴，後端用真實時鐘。所有指令都在 <code>scripts/manual-env/</code>，執行檔、pid、log 與 QR 圖都放在 <code>~/.tms-manual-env/</code>，不放進專案。</p>
-    <p><b class="lbl">權衡</b>兩套環境共用同一台 Postgres 與 Kafka，手動環境起停時，驗收後端的推播會停頓幾秒。完整的環境比較與原因見<a href="setup.html#environments">第一天・三套環境</a>。</p>
+    <h4><span class="tag">現在的做法</span>同一套容器，另開一套邏輯上獨立的環境</h4>
+    <p>手動環境用自己的 database <code>tms_manual</code>、自己的埠號，Kafka 的 topic 全部加上 <code>manual.</code> 前綴，工務單照片放在自己的儲存空間 <code>tms-repair-photos-manual</code>，後端用真實時鐘。所有指令都在 <code>scripts/manual-env/</code>，執行檔、pid、log 與 QR 圖都放在 <code>~/.tms-manual-env/</code>，不放進專案。</p>
+    <p><b class="lbl">權衡</b>兩套環境共用同一組容器（Postgres、Kafka、照片模擬服務），所以 <code>docker compose down -v</code> 會連手動環境的資料與照片一起清掉。完整的環境比較與原因見<a href="setup.html#environments">第一天・三套環境</a>。</p>
   </div>
 
   <details>
-    <summary>手動環境與驗收測試的對照 <span class="hint">— 6 項</span></summary>
+    <summary>手動環境與驗收測試的對照 <span class="hint">— 7 項</span></summary>
     <div class="in">
     <div class="tablewrap"><table>
       <thead><tr><th>項目</th><th>手動環境</th><th>驗收測試（手動時不要碰）</th></tr></thead>
@@ -57,6 +57,7 @@
         <tr><td>櫃檯與住客網頁</td><td><code>http://localhost:5300</code></td><td>5199</td></tr>
         <tr><td>資料庫</td><td>Postgres 5433 的 database <code>tms_manual</code></td><td>5433 的 <code>tms</code></td></tr>
         <tr><td>Kafka</td><td>9092，topic 前綴 <code>manual.</code></td><td>9092，topic <code>tms.*</code></td></tr>
+        <tr><td>工務單照片</td><td>照片模擬服務 4443 的儲存空間 <code>tms-repair-photos-manual</code></td><td>4443 的 <code>tms-repair-photos-local</code></td></tr>
         <tr><td>員工 App</td><td>編譯成連 8083 的版本</td><td>連 8080／8081 的版本</td></tr>
         <tr><td>pid、log、jar、QR 圖</td><td><code>~/.tms-manual-env/</code></td><td><code>app/web-bdd/target/run-feature/</code></td></tr>
       </tbody>
@@ -72,7 +73,7 @@
   </div>
   <p>開始前先確認這幾樣工具都在。怎麼安裝見<a href="setup.html#install">第一天・要裝哪些東西</a>。</p>
   <ul class="check">
-    <li><label><input type="checkbox"><span><b>Docker</b>（OrbStack 或 Docker Desktop）：跑 Postgres 與 Kafka。沒起的話 <code>up.sh</code> 會自己 <code>docker compose up -d</code>。</span></label></li>
+    <li><label><input type="checkbox"><span><b>Docker</b>（OrbStack 或 Docker Desktop）：跑 Postgres、Kafka 與照片模擬服務。<code>up.sh</code> 只在 Postgres 或 Kafka 沒起時才自己 <code>docker compose up -d</code>；這兩個已經在跑、照片模擬服務 <code>tms-fake-gcs</code> 卻沒起時，先自己跑一次 <code>docker compose up -d</code>，不然後端起不來。</span></label></li>
     <li><label><input type="checkbox"><span><b>JDK 25</b>：<code>/usr/libexec/java_home -v 25</code> 要找得到；裝在別處時用 <code>MANUAL_JAVA=/路徑/bin/java</code> 指定。</span></label></li>
     <li><label><input type="checkbox"><span><b>psql</b>（<code>brew install postgresql@15</code>）：灌資料與查房間用。</span></label></li>
     <li><label><input type="checkbox"><span><b>Node.js</b>（20.19 以上或 22.12 以上），並且先在 <code>app/web</code> 跑過一次 <code>npm install</code>。</span></label></li>
@@ -198,8 +199,8 @@ bash scripts/manual-env/stop.sh              <span class="c"># 全停；資料�
   <ol class="flow">
     <li><b>住客送出兩筆需求（住客頁）。</b>跑 <code>bash scripts/manual-env/qr.sh 407 --phone</code> 用手機掃，或跑 <code>bash scripts/manual-env/qr.sh 407</code> 把印出的網址貼到電腦瀏覽器。首頁有「設備報修」與「備品補充」兩張卡片。報修打一句話送出，例如「冷氣不冷」；備品選加毛巾或礦泉水送出。<br>該看到的：兩筆需求都出現在住客頁，報修那筆顯示「已送出」。</li>
     <li><b>櫃檯派單（櫃檯網頁，<code>fd1</code>）。</b>電腦開 <code>http://localhost:5300/demo-hotel/login</code>，用 <code>fd1</code> 登入，看「總覽看板」。報修的文字需求會在「待派單」，就算文字對中「冷氣」這類工務關鍵字也一樣，要櫃檯確認後再派。把它拖到工務。<br>該看到的：系統開出一張工務單，卡片上的單號從 <code>T-</code> 開頭變成 <code>W-</code> 開頭，住客頁那筆變成「已受理」。備品那筆不在待派單，已經直接在房務的「待認領」。</li>
-    <li><b>工務做完（員工 App，<code>mt2</code>）。</b>模擬器上的員工 App 用 <code>mt2</code> 登入，在「待認領」找到這張 <code>W-</code> 單。示範資料裡還有其他房間的單，認房號 407 和你打的那句話。依序按認領、開始，最後做完修回報，結果選「已修好」並附照片，模擬器上可以從相簿挑一張。不要選「不需處理」：那個選項會直接結案、不經主管驗收，下一步就沒單可驗。<br>該看到的：按下開始後，住客頁即時變成「處理中」；完修回報後這張單等主管驗收，還沒結案。</li>
-    <li><b>主管驗收（員工 App，<code>mg1</code>）。</b>App 登出，改用 <code>mg1</code> 登入，打開「待驗收」，點這張單，按通過。<br>該看到的：驗收完這張工務單才算結案。</li>
+    <li><b>工務做完（員工 App，<code>mt2</code>）。</b>模擬器上的員工 App 用 <code>mt2</code> 登入，在「待認領」找到這張 <code>W-</code> 單。示範資料裡還有其他房間的單，認房號 407 和你打的那句話。依序按認領、開始，最後做完修回報，結果選「已修好」並附照片。模擬器沒有相機，附照片時按「從相簿選擇」；相簿是空的話，先在 Mac 上跑 <code>xcrun simctl addmedia booted ~/某張照片.jpg</code> 放一張進去（<code>booted</code> 指目前開機的那台，也可以換成 UDID）。不要選「不需處理」：那個選項會直接結案、不經主管驗收，下一步就沒單可驗。<br>該看到的：按下開始後，住客頁即時變成「處理中」；完修回報後這張單等主管驗收，還沒結案。</li>
+    <li><b>主管驗收（員工 App，<code>mg1</code>）。</b>App 登出，改用 <code>mg1</code> 登入，打開「待驗收」，點這張單，先看工務附的完修照片，再按通過。<br>該看到的：完修照片畫得出來；驗收完這張工務單才算結案。櫃檯網頁點開這張單的詳情面板，也看得到同一張完修照片，點縮圖看大圖。住客網頁沒有照片功能，所以這張單沒有報修照片。</li>
     <li><b>房務做完（員工 App，<code>hk2</code>）。</b>App 改用 <code>hk2</code> 登入，在「待認領」認領備品那筆（同樣認房號 407 和品項），依序按開始、完成。</li>
     <li><b>住客看結果並評分（住客頁）。</b>回到住客頁，不用重新整理。<br>該看到的：兩筆都顯示「已完成」。房務那筆可以給星等；工務單驗收結案後不提供評分，這是規格的設計，不是壞掉。櫃檯看板上也看得到兩張單結案。</li>
   </ol>
@@ -275,9 +276,18 @@ bash scripts/manual-env/qr.sh --all --phone    <span class="c"># 每間在住房
   </details>
 
   <details>
+    <summary>照片顯示「照片無法顯示」</summary>
+    <div class="in">
+      <p>示範資料裡 <code>W-0108</code> 的完修照片是照片功能做好之前留下的假資料，資料庫有這一列、照片模擬服務裡卻沒有內容，所以一定顯示「照片無法顯示」，不是壞掉。自己在 App 上拍或選的照片要畫得出來；畫不出來時，先列出手動環境的儲存空間裡到底存了哪些照片，每張的名字是 <code>repair-photos/{飯店編號}/{照片編號}.jpg</code>：</p>
+      <div class="cmd"><pre class="api">curl -s http://localhost:4443/storage/v1/b/tms-repair-photos-manual/o</pre></div>
+      <p>連不上 4443 就是照片模擬服務沒起，跑 <code>docker compose up -d</code>。後端 log 裡的「照片儲存：模擬服務 … 儲存空間 …」那行，寫著這個後端實際用的是哪個儲存空間。</p>
+    </div>
+  </details>
+
+  <details>
     <summary>後端起不來，或打包失敗</summary>
     <div class="in">
-      <p>看 <code>~/.tms-manual-env/backend.log</code> 的最後幾十行。打包要 JDK 25，<code>up.sh --build</code> 用 <code>/usr/libexec/java_home -v 25</code> 找。8083 被別的程式佔用時 <code>start.sh</code> 會停下來，不會去殺它。網頁的問題看 <code>~/.tms-manual-env/web.log</code>。</p>
+      <p>看 <code>~/.tms-manual-env/backend.log</code> 的最後幾十行。打包要 JDK 25，<code>up.sh --build</code> 用 <code>/usr/libexec/java_home -v 25</code> 找。8083 被別的程式佔用時 <code>start.sh</code> 會停下來，不會去殺它。log 裡出現「照片儲存模擬服務 … 建立儲存空間 … 失敗」，就是照片模擬服務沒起，跑 <code>docker compose up -d</code> 再重起。網頁的問題看 <code>~/.tms-manual-env/web.log</code>。</p>
     </div>
   </details>
 </section>

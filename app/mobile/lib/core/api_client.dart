@@ -2,9 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 class ApiClient {
-  ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl;
+  ApiClient({
+    String? baseUrl,
+    this.photoReadTimeout = const Duration(seconds: 10),
+  }) : baseUrl = baseUrl ?? _defaultBaseUrl;
 
   static const String _defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -18,6 +22,8 @@ class ApiClient {
   static String dropWriteResponsePathPrefix = '';
 
   final String baseUrl;
+
+  final Duration photoReadTimeout;
 
   String? _token;
 
@@ -221,14 +227,17 @@ class ApiClient {
     return RepairTicketDetail.fromJson(json as Map<String, dynamic>);
   }
 
-  Future<String> createRepairPhoto({required String purpose}) async {
+  Future<String> createRepairPhoto({
+    required String purpose,
+    required DateTime takenAt,
+  }) async {
     final json = await _requestJson(
       'POST',
       '/repair-photos',
       idempotent: true,
       body: {
         'purpose': purpose,
-        'takenAt': DateTime.now().toUtc().toIso8601String(),
+        'takenAt': takenAt.toUtc().toIso8601String(),
       },
     );
     return (json as Map<String, dynamic>)['id'] as String;
@@ -240,6 +249,34 @@ class ApiClient {
       '/repair-photos/$photoId/content',
       binaryBody: jpegBytes,
     );
+  }
+
+  Future<Uint8List> fetchRepairPhotoContent(String photoId) async {
+    final client = HttpClient()..connectionTimeout = photoReadTimeout;
+    try {
+      return await _readPhoto(client, photoId).timeout(photoReadTimeout);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<Uint8List> _readPhoto(HttpClient client, String photoId) async {
+    final request = await client.getUrl(
+      Uri.parse('$baseUrl/repair-photos/$photoId/content'),
+    );
+    _authorize(request);
+    final response = await request.close();
+    final bytes = await response.fold<BytesBuilder>(
+      BytesBuilder(copy: false),
+      (builder, chunk) => builder..add(chunk),
+    );
+    if (response.statusCode != HttpStatus.ok) {
+      throw ApiException(
+        statusCode: response.statusCode,
+        body: utf8.decode(bytes.takeBytes(), allowMalformed: true),
+      );
+    }
+    return bytes.takeBytes();
   }
 
   Future<RepairTicketDetail> createRepairTicket({
@@ -446,10 +483,7 @@ class ApiClient {
         uri = uri.replace(queryParameters: {...uri.queryParameters, ...query});
       }
       final request = await client.openUrl(method, uri);
-      final token = _token;
-      if (token != null) {
-        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      }
+      _authorize(request);
       if (idempotent) {
         request.headers.set(
             'Idempotency-Key', idempotencyKey ?? newIdempotencyKey());
@@ -475,6 +509,13 @@ class ApiClient {
       return text.isEmpty ? null : jsonDecode(text);
     } finally {
       client.close();
+    }
+  }
+
+  void _authorize(HttpClientRequest request) {
+    final token = _token;
+    if (token != null) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
     }
   }
 
@@ -830,7 +871,6 @@ class RepairTicketDetail {
     this.urgentDowngradeReason,
     this.originTicketNo,
     this.photos = const [],
-    this.photoCount = 0,
     this.completionPhotos = const [],
     this.lastVerifyFailedReason,
     this.lastVerifyFailedBy,
@@ -880,8 +920,6 @@ class RepairTicketDetail {
 
   final List<RepairTicketPhoto> photos;
 
-  final int photoCount;
-
   final List<RepairTicketPhoto> completionPhotos;
 
   final String? lastVerifyFailedReason;
@@ -918,9 +956,6 @@ class RepairTicketDetail {
         for (final photo in (json['photos'] as List<dynamic>? ?? const []))
           RepairTicketPhoto.fromJson(photo as Map<String, dynamic>),
       ],
-      photoCount:
-          (json['photoCount'] as num?)?.toInt() ??
-          (json['photos'] as List<dynamic>? ?? const []).length,
       completionPhotos: [
         for (final photo
             in (json['completionPhotos'] as List<dynamic>? ?? const []))

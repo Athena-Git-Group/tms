@@ -93,6 +93,27 @@ public class ScenarioWorld {
         return repairTicketTaskIds.containsKey(ticketNo);
     }
 
+    private final Map<String, PhotoLabel> photoLabels = new HashMap<>();
+
+    public record PhotoLabel(String photoId, java.util.Optional<byte[]> content, java.time.OffsetDateTime uploadedAt) {
+    }
+
+    public void rememberPhoto(String label, PhotoLabel photo) {
+        photoLabels.put(label, photo);
+    }
+
+    public PhotoLabel photo(String label) {
+        PhotoLabel photo = photoLabels.get(label);
+        if (photo == null) {
+            throw new IllegalStateException("本案例沒有準備照片「" + label + "」，已知的照片：" + photoLabels.keySet());
+        }
+        return photo;
+    }
+
+    public java.util.Optional<PhotoLabel> findPhoto(String label) {
+        return java.util.Optional.ofNullable(photoLabels.get(label));
+    }
+
     public java.util.List<String> photoIds() {
         return photoIds;
     }
@@ -237,7 +258,13 @@ public class ScenarioWorld {
 
     public record ApiResponse(
             int status, String body, tools.jackson.databind.JsonNode json,
-            org.springframework.http.HttpHeaders headers) {
+            org.springframework.http.HttpHeaders headers, byte[] bytes) {
+
+        public ApiResponse(
+                int status, String body, tools.jackson.databind.JsonNode json,
+                org.springframework.http.HttpHeaders headers) {
+            this(status, body, json, headers, null);
+        }
 
         public ApiResponse(int status, String body, tools.jackson.databind.JsonNode json) {
             this(status, body, json, new org.springframework.http.HttpHeaders());

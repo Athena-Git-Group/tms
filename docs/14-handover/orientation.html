@@ -74,7 +74,7 @@ app/bdd/run-all.sh          <span class="c"># 全部模組，約 60–90 分鐘<
   <div class="opt great">
     <h4><span class="tag">現在的做法</span>現況一份、變更一包包，中間用 truth-delta 對帳</h4>
     <p><code>specs/truth/</code> 只寫現況：<code>contracts/</code> 是 API 契約（入口 <code>openapi.yaml</code>，細節依業務分在 <code>groups/</code>），<code>data/data-model.dbml</code> 是資料模型，<code>features/</code> 是可執行的規格，另有 <code>techstack.md</code> 記技術選型。</p>
-    <p><code>specs/plans/</code> 底下每個 <code>NNN-名稱/</code> 是一次需求變更的工作包，目前有 001 到 008。每包裡的 <code>truth-delta.md</code> 逐列記下這次把 truth 的哪一塊新增、修改、刪除或確認不動，以及理由，常附上程式位置。</p>
+    <p><code>specs/plans/</code> 底下每個 <code>NNN-名稱/</code> 是一次需求變更的工作包，目前有 001 到 009。每包裡的 <code>truth-delta.md</code> 逐列記下這次把 truth 的哪一塊新增、修改、刪除或確認不動，以及理由，常附上程式位置。</p>
     <p><b class="lbl">權衡</b>每次需求都要同時維護兩處，而且 truth 必須在實作前先改好。換來的是現況永遠可直接讀，歷史也查得到。</p>
   </div>
   <details>
@@ -111,7 +111,7 @@ app/bdd/run-all.sh          <span class="c"># 全部模組，約 60–90 分鐘<
     <li><b>讀完整一包 006</b>（<code>specs/plans/006-engineering-pool-repair-ticket/</code>）：照 <code>spec.md</code> → <code>features/acceptance/</code> → <code>plan.md</code> → <code>truth-delta.md</code> → <code>tasks.md</code> → <code>implement-notes.md</code> 的順序。</li>
     <li><b>回到程式碼</b>：<code>truth-delta.md</code> 的理由欄常寫著程式位置，例如 <code>eng_pool_screen.dart:247</code>，照著打開看。</li>
   </ol>
-  <p>選 006 是因為它從住客報修一路走到主管驗收，前後端都碰到。它的 <code>implement-notes.md</code> 同時是目前「已知會紅的測試」清單，第一次跑測試時會用到。</p>
+  <p>選 006 是因為它從住客報修一路走到主管驗收，前後端都碰到。它的 <code>implement-notes.md</code> 也示範了實作時發現的規格缺口怎麼記下來、交回規格流程。</p>
 </section>
 
 <section id="pipeline">
@@ -161,14 +161,14 @@ app/bdd/run-all.sh          <span class="c"># 全部模組，約 60–90 分鐘<
   <div class="key"><b class="lbl">重點</b>
     <p>它是一個 Spring Boot 4.1.1、Java 25 的單一 Maven 專案，分三層：<code>controller</code> 收請求、<code>service</code> 做業務規則、<code>dao</code> 存取資料庫。從網址找到 controller，再一路往下點就讀得懂；行為「應該」怎樣，以規格為準，不以程式為準。</p>
   </div>
-  <p>所有程式在 <code>tms/src/main/java/com/athena/tms/</code>。三層的意思很單純：<b>controller</b> 是門口，每個方法對到一個網址；<b>service</b> 是辦事員，判斷誰能做、狀態能不能變，任務狀態的核心是 <code>TaskEngine</code>，員工操作任務的入口是 <code>TaskExecutionService</code>；<b>dao</b> 是檔案櫃，負責讀寫資料表。資料表的來歷看 <code>tms/src/main/resources/db/migration/</code> 的 Flyway 遷移檔，目前從 <code>V1</code> 到 <code>V29</code>；後端的行為規格測試在 <code>tms/src/test/java/com/athena/tms/bdd/</code>。</p>
+  <p>所有程式在 <code>tms/src/main/java/com/athena/tms/</code>。三層的意思很單純：<b>controller</b> 是門口，每個方法對到一個網址；<b>service</b> 是辦事員，判斷誰能做、狀態能不能變，任務狀態的核心是 <code>TaskEngine</code>，員工操作任務的入口是 <code>TaskExecutionService</code>；<b>dao</b> 是檔案櫃，負責讀寫資料表。資料表的來歷看 <code>tms/src/main/resources/db/migration/</code> 的 Flyway 遷移檔，目前從 <code>V1</code> 到 <code>V33</code>；後端的行為規格測試在 <code>tms/src/test/java/com/athena/tms/bdd/</code>。</p>
   <p>讀的時候有三個實用的入口：</p>
   <ul class="plain">
     <li><b>從網址進去</b>：在 controller 搜 <code>@PostMapping</code>／<code>@GetMapping</code>，對照 <code>specs/truth/contracts/openapi.yaml</code> 的同名路徑，它會指到 <code>groups/</code> 底下寫清楚請求、回應與錯誤碼的那份檔。注意 controller 類別上的 <code>@RequestMapping("/api/v1")</code> 是共同前綴。</li>
     <li><b>用 IntelliJ 的 Find Usages</b>（⌥F7）：看一個方法被誰呼叫，比讀全檔快得多。</li>
     <li><b>先讀規格再讀程式</b>：<code>src/main</code> 是從編譯檔反編譯還原的，原本的註解都不在了，還有不少多餘的型別轉換。想知道某個行為「應該」怎樣，先看 <code>specs/truth/features/backend/</code>。</li>
   </ul>
-  <div class="cmd"><pre class="api"><span class="c"># 起後端（先 docker compose up -d；連 5433 的 Postgres 與 9092 的 Kafka）</span>
+  <div class="cmd"><pre class="api"><span class="c"># 起後端（先 docker compose up -d；連 5433 的 Postgres、9092 的 Kafka、4443 的照片模擬服務）</span>
 TMS_DB_URL=jdbc:postgresql://localhost:5433/tms \
   JAVA_HOME="$(/usr/libexec/java_home -v 25)" ./tms/mvnw -f tms/pom.xml spring-boot:run</pre></div>
   <p><code>TMS_DB_URL</code> 不能省：沒設時資料庫遷移（Flyway）會預設連 5432，與應用本身的 5433 不同。根目錄沒有 <code>./mvnw</code>，後端一律用 <code>./tms/mvnw</code>。套件分法、多飯店隔離、登入與設定檔，見 <a href="backend.html">Java 後端</a>；遷移檔為什麼一個字都不能改，見 <a href="backend.html#flyway">遷移規矩</a>。</p>
@@ -182,13 +182,13 @@ TMS_DB_URL=jdbc:postgresql://localhost:5433/tms \
   <p>下面的路徑都相對於 <code>tms/src/main/java/com/athena/tms/</code>。<b>待送匣（outbox）</b>是資料庫裡的一張表，要送出去的事件先寫在這裡，再由背景工作投遞，所以資料與事件不會一個成功一個失敗。</p>
   <ol class="flow">
     <li><b>門口</b>：<code>controller/TaskExecutionController.java:38</code> 的 <code>@PostMapping("/tasks/{id}/claim")</code>，加上前綴就是 <code>POST /api/v1/tasks/{id}/claim</code>，只把單號轉交給 service。</li>
-    <li><b>判斷能認領哪個部門的單</b>：<code>service/TaskExecutionService.java:108</code> 的 <code>claim</code> 取出飯店與登入者，再由 <code>:120</code> 的 <code>claimDept</code> 決定部門；主管認領別部門的單會在 <code>:127</code> 被拒（403）。</li>
-    <li><b>改狀態</b>：<code>service/TaskEngine.java:176</code> 的 <code>claim</code>（上一行 <code>@Transactional</code> 表示整段是一個交易）把任務從 <code>pool</code> 改成 <code>accepted</code>；條件裡帶著「現在是 <code>pool</code>、部門相符」，兩人同時搶只有一人成功。</li>
-    <li><b>記事件並放進待送匣</b>：同一交易裡呼叫 <code>TaskEngine.java:489</code> 的 <code>recordEvent</code>，<code>:499</code> 寫一筆 <code>task_events</code>，<code>:500</code> 經 <code>OutboxWriter</code> 寫一筆 outbox。</li>
-    <li><b>送上 Kafka</b>：交易一提交，<code>service/OutboxRelay.java:74</code> 被叫醒，把待送事件依序送到 <code>tms.task-events</code>；沒被叫醒也會每 2 秒自己巡一次。</li>
+    <li><b>判斷能認領哪個部門的單</b>：<code>service/TaskExecutionService.java:111</code> 的 <code>claim</code> 取出飯店與登入者，再由 <code>:123</code> 的 <code>claimDept</code> 決定部門；主管認領別部門的單會在 <code>:130</code> 被拒（403）。</li>
+    <li><b>改狀態</b>：<code>service/TaskEngine.java:178</code> 的 <code>claim</code>（上一行 <code>@Transactional</code> 表示整段是一個交易）把任務從 <code>pool</code> 改成 <code>accepted</code>；條件裡帶著「現在是 <code>pool</code>、部門相符」，兩人同時搶只有一人成功。</li>
+    <li><b>記事件並放進待送匣</b>：同一交易裡呼叫 <code>TaskEngine.java:491</code> 的 <code>recordEvent</code>，<code>:501</code> 寫一筆 <code>task_events</code>，<code>:502</code> 經 <code>OutboxWriter</code> 寫一筆 outbox。</li>
+    <li><b>送上 Kafka</b>：交易一提交，<code>service/OutboxRelay.java:52</code> 被叫醒，把待送事件依序送到 <code>tms.task-events</code>；沒被叫醒也會每 2 秒自己巡一次。</li>
     <li><b>推給畫面</b>：<code>service/TaskEventsSseConsumer.java:79</code> 收到事件，更新櫃檯看板，並推給相關員工的即時連線。</li>
   </ol>
-  <p>手機推播走的是另一條路：需要通知人的操作會另外寫一筆推播待送（<code>PushOutboxWriter</code>），送到 <code>tms.push</code>，再由 <code>push/PushDeliveryConsumer.java:40</code> 經 FCM 送出。認領本身不發推播。整個事件流的圖與故障時會怎樣，見 <a href="backend.html#modules">Java 後端：一個狀態變化怎麼變成推播與即時更新</a>；這條規則在規格裡的寫法，見 <code>specs/truth/features/backend/待認領/主管認領自己部門的單.feature</code>。</p>
+  <p>手機推播走的是另一條路：需要通知人的操作會另外寫一筆推播待送（<code>PushOutboxWriter</code>），送到 <code>tms.push</code>，再由 <code>push/PushDeliveryConsumer.java:53</code> 經 FCM 送出。認領本身不發推播。整個事件流的圖與故障時會怎樣，見 <a href="backend.html#modules">Java 後端：一個狀態變化怎麼變成推播與即時更新</a>；這條規則在規格裡的寫法，見 <code>specs/truth/features/backend/待認領/主管認領自己部門的單.feature</code>。</p>
 </section>
 
 <nav class="pager" aria-label="上一頁與下一頁">

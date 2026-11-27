@@ -413,8 +413,25 @@ DeskTaskDetail:
       repair:
         type: object
         nullable: true
-        description: 工務單才有的兩項，type 為 repair 時有值。
+        description: 工務單才有的內容，type 為 repair 時有值；其他類型的單為 null，詳情面板不顯示照片區塊。
+        required:
+        - photos
+        - completionPhotos
         properties:
+          photos:
+            type: array
+            items:
+              $ref: './工務單.yaml#/RepairPhoto'
+            description: >-
+              報修照片（purpose=report），內容與順序同 readRepairTicket 的 RepairTicket.photos：依拍攝時間排序，含開單與之後補的照片。
+              櫃檯 Web 用每張的 id 呼叫 getRepairPhotoContent 顯示縮圖與大圖。櫃檯轉來、代開而沒有附照片的工務單是空陣列。
+          completionPhotos:
+            type: array
+            items:
+              $ref: './工務單.yaml#/RepairPhoto'
+            description: >-
+              這一輪的完修照片，規則同 RepairTicket.completionPhotos：驗收不通過退回過時只回最近一次不通過之後上傳的；
+              還沒完修、退回重修中或以不需處理結案時是空陣列。
           resolutionType:
             type: string
             nullable: true

@@ -7,7 +7,12 @@ Error:
     reason_invalid（422，原因空白或超過 60 字）；
     photo_required（422，「至少需要 1 張照片」）；
     photo_limit（422，「最多 3 張」）；
-    photo_not_uploaded（422，有照片還沒上傳成功）；
+    photo_not_uploaded（422，有照片不存在、屬於別家飯店、還沒上傳成功，或是內容沒有真的存起來的舊版假照片）；
+    photo_purpose_mismatch（422，開單或補照片附了完修照片，或完修附了報修照片）；
+    photo_already_attached（409，照片已附在工務單上：上傳內容時不能再換，開單、補照片、完修時不能再附到另一張單；兩個請求同時附同一張照片時，後到的也回這個）；
+    photo_empty（422，上傳的照片內容是空的）；
+    photo_type_unsupported（415，上傳的照片不是 JPEG：Content-Type 不是 image/jpeg 或內容開頭不是 FF D8 FF）；
+    photo_too_large（413，上傳的照片超過 5 MB）；
     completion_photo_required（422，「需要完修照片」）；
     already_claimed（409，「已被工務認領」）；
     ticket_closed（409，工務單已完修、已結案或已撤回，不能再補照片）；

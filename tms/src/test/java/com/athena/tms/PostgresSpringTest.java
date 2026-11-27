@@ -47,5 +47,6 @@ public abstract class PostgresSpringTest {
         registry.add("spring.datasource.username", () -> "tms_app");
         registry.add("spring.datasource.password", () -> "tms_app");
         registry.add("spring.kafka.admin.auto-create", () -> "false");
+        SharedContainers.wireStorage(registry, database.replace('_', '-') + "-photos");
     }
 }

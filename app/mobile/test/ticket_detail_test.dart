@@ -61,7 +61,7 @@ void main() {
         errorMessage: null,
         onWithdraw: () {},
         onAddPhoto: () {},
-        onOpenPhoto: (_) {},
+        onOpenPhoto: (_, _) {},
       ),
     );
   }
@@ -81,7 +81,7 @@ void main() {
         onStart: () {},
         onReleaseToPool: () {},
         onComplete: () {},
-        onOpenPhoto: (_) {},
+        onOpenPhoto: (_, _) {},
       ),
     );
   }

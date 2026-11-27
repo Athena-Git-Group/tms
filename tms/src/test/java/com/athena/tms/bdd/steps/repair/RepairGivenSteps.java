@@ -2,6 +2,8 @@ package com.athena.tms.bdd.steps.repair;
 
 import com.athena.tms.bdd.ScenarioWorld;
 import com.athena.tms.bdd.support.BddApiClient;
+import com.athena.tms.bdd.support.PhotoFixtures;
+import com.athena.tms.bdd.support.PhotoStorageProbe;
 import com.athena.tms.bdd.support.DbProbe;
 import com.athena.tms.bdd.support.MutableClock;
 import com.athena.tms.bdd.support.ReservationFixtures;
@@ -44,6 +46,7 @@ public class RepairGivenSteps {
     private final VerifyFixtures verifyFixtures;
     private final ObjectMapper objectMapper;
     private final DbProbe dbProbe;
+    private final PhotoStorageProbe photoStorage;
 
     private String lastFailedPhotoId;
 
@@ -59,7 +62,8 @@ public class RepairGivenSteps {
             TaskEngine taskEngine,
             VerifyFixtures verifyFixtures,
             ObjectMapper objectMapper,
-            DbProbe dbProbe) {
+            DbProbe dbProbe,
+            PhotoStorageProbe photoStorage) {
         this.world = world;
         this.apiClient = apiClient;
         this.tenantFixtures = tenantFixtures;
@@ -72,6 +76,7 @@ public class RepairGivenSteps {
         this.verifyFixtures = verifyFixtures;
         this.objectMapper = objectMapper;
         this.dbProbe = dbProbe;
+        this.photoStorage = photoStorage;
     }
 
     @假設("本飯店下一張工務單號為 {string}")
@@ -260,40 +265,33 @@ public class RepairGivenSteps {
             }
 
             for (int i = 0; i < photoCount; i++) {
-                UUID photoId = UuidV7.generate();
-                jdbcClient
-                        .sql(
-                                """
-                                INSERT INTO repair_photos
-                                    (id, tenant_id, ticket_task_id, purpose, status, storage_ref,
-                                     taken_at, uploaded_by, created_at, uploaded_at)
-                                VALUES (?, ?, ?, 'report', 'uploaded', ?, ?, ?, ?, ?)
-                                """)
-                        .params(
-                                photoId, tenantId, taskId, "fixture:" + photoId, OffsetDateTime.now(clock),
-                                reporterId, OffsetDateTime.now(clock), OffsetDateTime.now(clock))
-                        .update();
+                insertStoredPhoto(tenantId, taskId, "report", reporterId);
             }
 
             UUID completionUploader = assigneeId != null ? assigneeId : reporterId;
             for (int i = 0; i < completionPhotoCount; i++) {
-                UUID photoId = UuidV7.generate();
-                jdbcClient
-                        .sql(
-                                """
-                                INSERT INTO repair_photos
-                                    (id, tenant_id, ticket_task_id, purpose, status, storage_ref,
-                                     taken_at, uploaded_by, created_at, uploaded_at)
-                                VALUES (?, ?, ?, 'completion', 'uploaded', ?, ?, ?, ?, ?)
-                                """)
-                        .params(
-                                photoId, tenantId, taskId, "fixture:" + photoId, OffsetDateTime.now(clock),
-                                completionUploader, OffsetDateTime.now(clock), OffsetDateTime.now(clock))
-                        .update();
+                insertStoredPhoto(tenantId, taskId, "completion", completionUploader);
             }
 
             world.rememberRepairTicket(ticketNo, taskId.toString());
         }
+    }
+
+    private void insertStoredPhoto(long tenantId, UUID ticketTaskId, String purpose, UUID uploaderId) {
+        UUID photoId = UuidV7.generate();
+        String key = PhotoStorageProbe.key(tenantId, photoId.toString());
+        photoStorage.put(key, PhotoFixtures.jpeg(photoId.toString()), PhotoFixtures.JPEG);
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        jdbcClient
+                .sql(
+                        """
+                        INSERT INTO repair_photos
+                            (id, tenant_id, ticket_task_id, purpose, status, storage_ref,
+                             taken_at, uploaded_by, created_at, uploaded_at)
+                        VALUES (?, ?, ?, ?, 'uploaded', ?, ?, ?, ?, ?)
+                        """)
+                .params(photoId, tenantId, ticketTaskId, purpose, key, now, uploaderId, now, now)
+                .update();
     }
 
     private UUID ensurePublicAreaRoom(long tenantId) {
@@ -408,12 +406,12 @@ public class RepairGivenSteps {
 
             boolean shouldFail = i >= total - failCount;
             if (!shouldFail) {
-                apiClient.exchange(
+                apiClient.exchangeBytes(
                         HttpMethod.PUT,
                         "/repair-photos/" + photoId + "/content",
                         BddApiClient.Auth.staff(jwt),
-                        "fixture-jpeg-bytes",
-                        null);
+                        PhotoFixtures.jpeg(photoId),
+                        PhotoFixtures.JPEG);
             } else {
                 lastFailedPhotoId = photoId;
             }
@@ -426,12 +424,12 @@ public class RepairGivenSteps {
         if (lastFailedPhotoId == null) {
             throw new IllegalStateException("沒有記錄上傳失敗的照片，請先執行「...的工務單準備了 N 張照片，其中 M 張上傳失敗」");
         }
-        apiClient.exchange(
+        apiClient.exchangeBytes(
                 HttpMethod.PUT,
                 "/repair-photos/" + lastFailedPhotoId + "/content",
                 BddApiClient.Auth.staff(world.jwt(staffName)),
-                "fixture-jpeg-bytes-retry",
-                null);
+                PhotoFixtures.jpeg(lastFailedPhotoId),
+                PhotoFixtures.JPEG);
         lastFailedPhotoId = null;
     }
 
@@ -469,12 +467,12 @@ public class RepairGivenSteps {
                     "createRepairPhoto(completion) 預期回傳 id，實際 status=" + createResp.status()
                             + "，body=" + createResp.body());
         }
-        apiClient.exchange(
+        apiClient.exchangeBytes(
                 HttpMethod.PUT,
                 "/repair-photos/" + photoId + "/content",
                 BddApiClient.Auth.staff(jwt),
-                "fixture-jpeg-bytes",
-                null);
+                PhotoFixtures.jpeg(photoId),
+                PhotoFixtures.JPEG);
 
         Map<String, Object> completeBody = Map.of("photoIds", List.of(photoId));
         apiClient.post("/tasks/" + ticketTaskId + "/complete", BddApiClient.Auth.staff(jwt), completeBody);
